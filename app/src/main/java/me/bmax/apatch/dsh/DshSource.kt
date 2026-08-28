@@ -44,6 +44,10 @@ object DshSource {
         else -> ""
     }
 
+    /**
+     * 源名称。**仅供启动日志**（appendLog）使用，所以保持中文原样 ——
+     * 界面上的源名走 sourceLabelRes() 取资源。
+     */
     fun displayName(source: String): String = when (source) {
         SOURCE_AUTO -> "自动（测速选优）"
         SOURCE_GITHUB -> "GitHub 直连"

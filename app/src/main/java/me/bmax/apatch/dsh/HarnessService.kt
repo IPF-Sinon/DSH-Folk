@@ -76,17 +76,25 @@ class HarnessService : Service() {
         }
     }
 
+    /** 通知条文案。走资源：通知会一直挂在状态栏，是最显眼的一处 UI。 */
     private fun statusText(phase: DshPhase): String = when (phase) {
-        DshPhase.RUNNING -> "DSH 运行中 · http://127.0.0.1:${DshRuntime.state.value.port}"
-        DshPhase.STARTING -> "正在启动 DSH…"
-        DshPhase.DOWNLOADING, DshPhase.EXTRACTING -> "正在安装运行时…"
-        DshPhase.ERROR -> "服务异常，点击查看"
-        DshPhase.NOT_READY -> "服务未启动"
+        DshPhase.RUNNING -> getString(
+            R.string.dsh_notif_running,
+            "http://127.0.0.1:${DshRuntime.state.value.port}",
+        )
+        DshPhase.STARTING -> getString(R.string.dsh_notif_starting)
+        DshPhase.DOWNLOADING, DshPhase.EXTRACTING -> getString(R.string.dsh_notif_installing)
+        DshPhase.ERROR -> getString(R.string.dsh_notif_error)
+        DshPhase.NOT_READY -> getString(R.string.dsh_notif_stopped)
     }
 
     private fun createChannel() {
-        val channel = NotificationChannel(CHANNEL_ID, "DSH 服务", NotificationManager.IMPORTANCE_LOW).apply {
-            description = "DeepSeek Harness 后台服务状态"
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.dsh_notif_channel_name),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = getString(R.string.dsh_notif_channel_desc)
             setShowBadge(false)
         }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -102,13 +110,13 @@ class HarnessService : Service() {
             PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("DSH-Folk")
+            .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(0, "停止", stopIntent)
+            .addAction(0, getString(R.string.dsh_notif_stop_action), stopIntent)
             .build()
     }
 

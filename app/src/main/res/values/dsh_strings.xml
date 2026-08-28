@@ -209,4 +209,16 @@
     <string name="dsh_err_process_exited">The service process exited (see the startup log)</string>
     <string name="dsh_err_start_timeout">Startup timed out (see the startup log)</string>
     <string name="dsh_plugin_open_repo">Open repository</string>
+    <string name="dsh_notif_channel_name">DSH service</string>
+    <string name="dsh_notif_channel_desc">DeepSeek Harness background service status</string>
+    <string name="dsh_notif_running">DSH is running · %1$s</string>
+    <string name="dsh_notif_starting">Starting DSH…</string>
+    <string name="dsh_notif_installing">Installing the runtime…</string>
+    <string name="dsh_notif_error">Service error — tap to inspect</string>
+    <string name="dsh_notif_stopped">Service is not running</string>
+    <string name="dsh_notif_stop_action">Stop</string>
+    <string name="dsh_mode_proot_name">proot (built-in, stable)</string>
+    <string name="dsh_mode_proroot_name">proroot (experimental, no ptrace overhead)</string>
+    <string name="dsh_mode_proot_missing">libproot.so is missing from the APK — the install may be damaged; reinstall</string>
+    <string name="dsh_mode_proroot_missing">%1$d runtime files are missing (%2$s and others). They ship with the APK, so this means the install is incomplete; reinstall</string>
 </resources>

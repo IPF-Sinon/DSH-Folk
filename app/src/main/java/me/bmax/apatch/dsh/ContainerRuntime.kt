@@ -1,6 +1,7 @@
 package me.bmax.apatch.dsh
 
 import android.content.Context
+import me.bmax.apatch.R
 import java.io.File
 
 /**
@@ -16,7 +17,11 @@ interface ContainerRuntime {
     /** 运行时标识（proot | proroot），用于 UI 显示与偏好存储。 */
     fun id(): String
 
-    /** 人类可读名称。 */
+    /**
+     * 人类可读名称。
+     *
+     * 实现需要 Context 取本地化字符串 —— 这两个名字既进首页运行方式卡，也进启动日志。
+     */
     fun displayName(): String
 
     /** 二进制是否齐备、现在就能用。 */
@@ -53,10 +58,10 @@ interface ContainerRuntime {
     /** 现有实现：Termux proot，APK 内置。 */
     class Proot(private val ctx: Context, private val nativeLibProot: File?) : ContainerRuntime {
         override fun id() = "proot"
-        override fun displayName() = "proot（内置，稳定）"
+        override fun displayName() = ctx.getString(R.string.dsh_mode_proot_name)
         override fun available() = nativeLibProot != null && nativeLibProot.exists()
         override fun unavailableReason() =
-            if (available()) "" else "APK 内的 libproot.so 缺失（安装包可能损坏，建议重装）"
+            if (available()) "" else ctx.getString(R.string.dsh_mode_proot_missing)
 
         override fun baseArgv(rootfsDir: File, hardlinkSupported: Boolean): List<String> {
             val argv = ArrayList<String>()
@@ -85,14 +90,14 @@ interface ContainerRuntime {
     /** 实验实现：proroot（coderredlab/proroot），LD_PRELOAD 路径翻译，零 ptrace。 */
     class Proroot(private val ctx: Context, private val dir: File) : ContainerRuntime {
         override fun id() = "proroot"
-        override fun displayName() = "proroot（实验，零 ptrace 开销）"
+        override fun displayName() = ctx.getString(R.string.dsh_mode_proroot_name)
 
         override fun available(): Boolean = LIBS.all { File(dir, it).let { f -> f.isFile && f.length() > 0 } }
 
         override fun unavailableReason(): String {
             val missing = LIBS.filter { File(dir, it).let { f -> !f.isFile || f.length() == 0L } }
             if (missing.isEmpty()) return ""
-            return "缺 ${missing.size} 个运行时文件（${missing.first()} 等）—— 这些随 APK 分发，缺失说明安装包不完整，建议重装"
+            return ctx.getString(R.string.dsh_mode_proroot_missing, missing.size, missing.first())
         }
 
         override fun baseArgv(rootfsDir: File, hardlinkSupported: Boolean): List<String> {

@@ -191,4 +191,16 @@
     <string name="dsh_err_process_exited">服务进程已退出（见启动日志）</string>
     <string name="dsh_err_start_timeout">启动超时（见启动日志）</string>
     <string name="dsh_plugin_open_repo">打开仓库</string>
+    <string name="dsh_notif_channel_name">DSH 服务</string>
+    <string name="dsh_notif_channel_desc">DeepSeek Harness 后台服务状态</string>
+    <string name="dsh_notif_running">DSH 运行中 · %1$s</string>
+    <string name="dsh_notif_starting">正在启动 DSH…</string>
+    <string name="dsh_notif_installing">正在安装运行时…</string>
+    <string name="dsh_notif_error">服务异常，点击查看</string>
+    <string name="dsh_notif_stopped">服务未启动</string>
+    <string name="dsh_notif_stop_action">停止</string>
+    <string name="dsh_mode_proot_name">proot（内置，稳定）</string>
+    <string name="dsh_mode_proroot_name">proroot（实验，零 ptrace 开销）</string>
+    <string name="dsh_mode_proot_missing">APK 内的 libproot.so 缺失（安装包可能损坏，建议重装）</string>
+    <string name="dsh_mode_proroot_missing">缺 %1$d 个运行时文件（%2$s 等）—— 这些随 APK 分发，缺失说明安装包不完整，建议重装</string>
 </resources>
