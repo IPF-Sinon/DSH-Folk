@@ -383,6 +383,12 @@ object DshRuntime {
             fail("获取运行时信息失败，请检查网络或切换镜像源")
             return
         }
+        // 架构必须先对上：自定义源可以指向任何 metadata.json，下错架构的 rootfs 要到
+        // 启动 node 时才报 "Exec format error"，白下 130 MB 还看不懂错在哪。
+        if (meta.arch.isNotEmpty() && !android.os.Build.SUPPORTED_ABIS.contains(meta.arch)) {
+            fail("运行时架构不匹配：包是 ${meta.arch}，本机支持 ${android.os.Build.SUPPORTED_ABIS.joinToString("/")}")
+            return
+        }
         // 空间检查放在下载之前：rootfs 解压后约为压缩包的 3 倍，加上压缩包自身
         // 需要约 4 倍余量。等下载完再查等于白下 100 多 MB。
         if (meta.sizeBytes > 0) {
