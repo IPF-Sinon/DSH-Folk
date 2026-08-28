@@ -45,14 +45,13 @@ object Version {
         return if (time.startsWith("ERROR_")) "读取失败" else time
     }
 
-    fun buildKPVUInt(): UInt {
-        val buildVS = BuildConfig.buildKPV
-        return string2UInt(buildVS)
-    }
+    /**
+     * DSH-Folk 不再随包携带 KernelPatch 镜像，构建脚本里的 buildKPV 常量也一并去掉。
+     * 这两个函数只被历史界面用来显示版本号，返回 0.0.0 表示「没有内置版本」。
+     */
+    fun buildKPVUInt(): UInt = 0u
 
-    fun buildKPVString(): String {
-        return BuildConfig.buildKPV
-    }
+    fun buildKPVString(): String = "0.0.0"
 
     /**
      * installed KernelPatch version (installed kpimg)

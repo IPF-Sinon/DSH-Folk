@@ -52,7 +52,9 @@ object Natives {
     /** 原义为“superKey 能否驱动内核补丁 su”；DSH-Folk 恒为 false。 */
     fun nativeReady(superKey: String): Boolean = false
 
-    fun suPath(): String = APApplication.DEFAULT_SU_PATH
+    // APApplication.DEFAULT_SU_PATH 是 private，这里不去改它的可见性：
+    // DSH-Folk 不提供 su，返回设备上通用路径只是给「信息」类卡片显示用。
+    fun suPath(): String = "/system/bin/su"
     fun suUids(): IntArray = IntArray(0)
 
     // ---- KernelPatch：全部不可用 ----

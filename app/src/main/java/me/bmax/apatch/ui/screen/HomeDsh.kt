@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -141,7 +142,7 @@ fun HomeScreenDsh(
                     if (DshRuntime.runtimeId() == "proroot") R.string.dsh_mode_proroot_desc
                     else R.string.dsh_mode_proot_desc
                 ),
-                onClick = { navigator.navigate(com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination) },
+                onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },
             )
             DshSmallCard(
                 modifier = Modifier.weight(1f),
@@ -149,7 +150,7 @@ fun HomeScreenDsh(
                 title = stringResource(R.string.dsh_permission),
                 value = perm.label,
                 subtitle = permHint(perm),
-                onClick = { navigator.navigate(com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination) },
+                onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },
             )
         }
 

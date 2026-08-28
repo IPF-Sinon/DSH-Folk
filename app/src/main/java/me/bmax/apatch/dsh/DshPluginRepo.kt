@@ -147,7 +147,8 @@ object DshPluginRepo {
         return v
     }
 
-    /** 容器内已安装插件（读 `DSH_HOME/plugins/*/package.json`）。 */
+    // 容器内已安装插件（遍历 DSH_HOME/plugins 下每个目录的 package.json）。
+    // 注意不要把这段写成 KDoc：路径里的通配符会提前闭合块注释。
     suspend fun listInstalled(): List<DshPlugin> = withContext(Dispatchers.IO) {
         val out = DshRuntime.execRootfsForOutput(
             "for d in /root/.dsh/plugins/*/; do " +
