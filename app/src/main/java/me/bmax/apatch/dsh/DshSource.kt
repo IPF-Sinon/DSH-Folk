@@ -180,7 +180,10 @@ object DshSource {
                 }
             }
             val dtSec = (System.currentTimeMillis() - start) / 1000.0
-            if (dtSec <= 0.0 || total <= 0) 0.0 else total / 1024.0 / dtSec
+            // 必须拿满一整块才算：服务端提前断流时 total 很小、dtSec 也很小，
+            // 相除会得出一个虚高的速度（100KB / 0.05s = 2 MB/s），让这个源赢下测速
+            // 然后在真正下载 130MB 时暴露。拿不满就当测速失败（0 = 仅按延迟排序）。
+            if (dtSec <= 0.0 || total < SPEED_PROBE_BYTES) 0.0 else total / 1024.0 / dtSec
         } catch (e: Exception) {
             0.0
         } finally {
