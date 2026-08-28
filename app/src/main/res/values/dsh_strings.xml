@@ -28,8 +28,8 @@
     <string name="dsh_learn_title">About DSH-Folk</string>
     <string name="dsh_learn_desc">Open the project page for docs and issues</string>
     <string name="dsh_stats_plugins">Plugins</string>
-    <string name="dsh_stats_enabled">Enabled</string>
-    <string name="dsh_stats_disabled">Disabled</string>
+    <string name="dsh_stats_enabled">Active</string>
+    <string name="dsh_stats_disabled">Inactive</string>
     <string name="dsh_stats_updatable">Updatable</string>
     <string name="dsh_status">Status</string>
     <string name="dsh_runtime_version">Runtime</string>
