@@ -46,6 +46,10 @@ root / Shizuku / 无线 ADB 都是**可选**的。DSH-Folk 只探测并复用设
 
 从 [Releases](https://github.com/IPF-Sinon/DSH-Folk/releases) 下载 APK 安装。
 
+目前还没有正式版本发布（仓库里唯一的 tag `runtime-latest` 是容器运行时的滚动发布位，不是 App）。
+在那之前请到 [Actions](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml) 里取构建产物：
+选一次成功的运行，下载 `dsh-folk-debug-*` 工件，里面是 APK 与配套的 `.sha256`。
+
 APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出包：在 Actions 里手动触发 **Build DSH-Folk**
 （`workflow_dispatch`，可选 debug / release）。release 需要在仓库 secrets 里配置
 `KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`；没配置时会退回默认调试签名。
