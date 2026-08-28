@@ -30,7 +30,7 @@ try_download() {
   return 1
 }
 
-echo "==> [1/6] 下载 Ubuntu ${UBUNTU_RELEASE} arm64 base rootfs"
+echo "==> [1/7] 下载 Ubuntu ${UBUNTU_RELEASE} arm64 base rootfs"
 BASE_TAR="$WORK/base.tar.gz"
 BASE_PATH="ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz"
 if [ ! -f "$BASE_TAR" ]; then
@@ -47,7 +47,7 @@ rm -rf "$ROOTFS"; mkdir -p "$ROOTFS"
 tar -xzf "$BASE_TAR" -C "$ROOTFS"
 echo "    rootfs 顶层: $(ls "$ROOTFS" | tr '\n' ' ')"
 
-echo "==> [2/6] 安装 Node.js ${NODE_VER} (linux-arm64)"
+echo "==> [2/7] 安装 Node.js ${NODE_VER} (linux-arm64)"
 NODE_TAR="$WORK/node.tar.xz"
 NODE_FILE="node-${NODE_VER}-linux-arm64.tar.xz"
 if [ ! -f "$NODE_TAR" ]; then
@@ -64,7 +64,7 @@ fi
 tar -xJf "$NODE_TAR" -C "$ROOTFS/usr/local" --strip-components=1
 test -x "$ROOTFS/usr/local/bin/node"
 
-echo "==> [3/6] 安装 @deepseek-ai/dsh@${DSH_VERSION}"
+echo "==> [3/7] 安装 @deepseek-ai/dsh@${DSH_VERSION}"
 # 用 runner（x86_64）的 npm 装进目标 rootfs 的前缀。
 # --os/--cpu 必须显式指定：dsh 依赖 sharp 与 koffi，它们通过 optionalDependencies
 # 按宿主平台挑预编译包，不指定就会装进 linux-x64 的 .node，在手机上一 require 就炸。
@@ -111,14 +111,108 @@ fi
 ARM_NATIVE_COUNT="$(find "$ROOTFS/usr/local/lib/node_modules" -name "*.node" 2>/dev/null | wc -l)"
 echo "    原生模块 ${ARM_NATIVE_COUNT} 个，未发现异架构产物"
 
-echo "==> [4/6] 容器内初始设置"
+echo "==> [4/7] 安装 python3（无线 ADB 配对依赖）"
+# 无线 ADB 配对（AdbBridge / adb-pair.py）需要容器内的 python3，
+# 而 ubuntu-base 里没有它。手机上第一次配对才 apt install 的话：
+#  - 要联网、要 apt 在 proot 下正常工作（dpkg 的 postinst 常在 proot 下失败）；
+#  - 用户点「配对」后要等好几分钟，失败原因还很难查。
+# 所以这里直接把 python3 及其依赖解包进 rootfs：
+# 只用 dpkg-deb -x（纯解包，不跑任何 maintainer script，不需要目标架构可执行），
+# postinst 真正做的事（sitecustomize.py 与 dist-packages 目录）下面手工补上。
+PY_PKGS="python3.12-minimal libpython3.12-minimal libpython3.12-stdlib python3.12
+         python3-minimal python3 libpython3-stdlib
+         libexpat1 libsqlite3-0 libreadline8t64 readline-common
+         libnsl2 libtirpc3t64 media-types netbase tzdata"
+APT_MIRRORS="https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports
+             https://mirrors.aliyun.com/ubuntu-ports
+             https://mirror.nju.edu.cn/ubuntu-ports
+             http://ports.ubuntu.com/ubuntu-ports"
+
+DEB_DIR="$WORK/debs"
+mkdir -p "$DEB_DIR"
+INDEX_DIR="$WORK/pkgindex"
+mkdir -p "$INDEX_DIR"
+
+# 找一个能同时给出三个 suite 索引的镜像（noble / -updates / -security：
+# 安全更新里的版本比 noble 里的新，只读 noble 会拿到装不上的旧版本组合）
+APT_BASE=""
+for m in $APT_MIRRORS; do
+  index_ok=1
+  for suite in "$UBUNTU_RELEASE" "$UBUNTU_RELEASE-updates" "$UBUNTU_RELEASE-security"; do
+    if ! curl -fsSL --connect-timeout 15 "$m/dists/$suite/main/binary-arm64/Packages.gz" \
+         | gzip -d > "$INDEX_DIR/$suite.txt" 2>/dev/null; then
+      index_ok=0; break
+    fi
+  done
+  if [ "$index_ok" = 1 ]; then APT_BASE="$m"; echo "    包索引镜像: $m"; break; fi
+done
+test -n "$APT_BASE"
+
+# 从索引里挑每个包的最高版本（跨三个 suite 比较）
+resolve_deb() {
+  local pkg="$1" best_ver="" best_fn="" ver fn block
+  for suite in "$UBUNTU_RELEASE" "$UBUNTU_RELEASE-updates" "$UBUNTU_RELEASE-security"; do
+    # RS="" 段落模式下 $0 是整段，用正则 ~ 会把 "Package: python3" 误配到
+    # "Package: python3.12" 那一段；改成逐字段精确等值比较
+    block="$(awk -v want="Package: $pkg" 'BEGIN{RS="";FS="\n";ORS="\n\n"}
+      { for (i=1;i<=NF;i++) if ($i==want) { print; next } }' "$INDEX_DIR/$suite.txt")"
+    [ -n "$block" ] || continue
+    ver="$(printf '%s\n' "$block" | sed -n 's/^Version: //p' | head -1)"
+    fn="$(printf '%s\n' "$block" | sed -n 's/^Filename: //p' | head -1)"
+    [ -n "$ver" ] || continue
+    if [ -z "$best_ver" ] || dpkg --compare-versions "$ver" gt "$best_ver"; then
+      best_ver="$ver"; best_fn="$fn"
+    fi
+  done
+  [ -n "$best_fn" ] || return 1
+  printf '%s\t%s\n' "$best_ver" "$best_fn"
+}
+
+for pkg in $PY_PKGS; do
+  info="$(resolve_deb "$pkg")" || { echo "!! 索引里找不到 $pkg"; exit 1; }
+  ver="$(printf '%s' "$info" | cut -f1)"
+  fn="$(printf '%s' "$info" | cut -f2)"
+  echo "    $pkg $ver"
+  curl -fsSL --connect-timeout 20 --retry 2 -o "$DEB_DIR/$pkg.deb" "$APT_BASE/$fn"
+  # 纯解包：不执行 maintainer script（它们要在 arm64 上跑，runner 是 x86_64）。
+  # 副作用：dpkg 数据库里没有这些包的记录，容器内 apt 仍会认为 python3 未安装 ——
+  # 用户真去 apt install python3 时会重新装一遍并覆盖，属可接受（不会坏）。
+  dpkg-deb -x "$DEB_DIR/$pkg.deb" "$ROOTFS"
+done
+
+# postinst 真正会做的两件事，手工补：
+# 1) sitecustomize.py：python3.12 的 lib 里那个是指向 /etc 的符号链接，缺文件即 dangling
+install -d "$ROOTFS/etc/python3.12"
+printf '# Empty sitecustomize.py to avoid a dangling symlink\n' \
+  > "$ROOTFS/etc/python3.12/sitecustomize.py"
+# 2) /usr/local/lib/python3.12/dist-packages：pip --break-system-packages 的落点
+install -d "$ROOTFS/usr/local/lib/python3.12/dist-packages"
+install -d "$ROOTFS/usr/lib/python3/dist-packages"
+
+# 自检：解包出来的解释器必须是 arm64，且 stdlib 齐全（缺 lib-dynload 会在手机上才炸）
+test -x "$ROOTFS/usr/bin/python3.12"
+head -c 20 "$ROOTFS/usr/bin/python3.12" | od -An -tx1 | tr -d ' \n' | grep -q '^7f454c46' \
+  || { echo "!! python3.12 不是 ELF"; exit 1; }
+PY_ARCH="$(od -An -tu1 -j18 -N1 "$ROOTFS/usr/bin/python3.12" | tr -d ' ')"
+test "$PY_ARCH" = "183" || { echo "!! python3.12 不是 aarch64 (e_machine=$PY_ARCH)"; exit 1; }
+test -L "$ROOTFS/usr/bin/python3"
+DYNLOAD_COUNT="$(ls "$ROOTFS/usr/lib/python3.12/lib-dynload"/*.so 2>/dev/null | wc -l)"
+test "$DYNLOAD_COUNT" -ge 40 || { echo "!! lib-dynload 只有 $DYNLOAD_COUNT 个模块"; exit 1; }
+for m in _ssl _hashlib _sqlite3 _ctypes _decimal; do
+  ls "$ROOTFS/usr/lib/python3.12/lib-dynload/$m."*.so >/dev/null 2>&1 \
+    || { echo "!! 缺少 python 模块 $m"; exit 1; }
+done
+test -f "$ROOTFS/usr/lib/python3.12/ssl.py"
+echo "    python3 已就绪 · lib-dynload $DYNLOAD_COUNT 个模块"
+
+echo "==> [5/7] 容器内初始设置"
 install -d -m 700 "$ROOTFS/root/.dsh"
 install -d -m 1777 "$ROOTFS/tmp"
 # APT 换国内源（用户在容器里 apt install 时不至于卡住）；DNS 由 App 在安装后写入
 cat > "$ROOTFS/etc/apt/sources.list.d/ubuntu.sources" <<EOF
 Types: deb
 URIs: https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/
-Suites: ${UBUNTU_RELEASE} ${UBUNTU_RELEASE}-updates ${UBUNTU_RELEASE}-backports
+Suites: ${UBUNTU_RELEASE} ${UBUNTU_RELEASE}-updates ${UBUNTU_RELEASE}-security ${UBUNTU_RELEASE}-backports
 Components: main restricted universe multiverse
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 EOF
@@ -132,7 +226,7 @@ export LANG=C.UTF-8
 export TERM=xterm-256color
 EOF
 
-echo "==> [5/6] 打包 rootfs.tar.gz"
+echo "==> [6/7] 打包 rootfs.tar.gz"
 TARBALL="$OUT/rootfs.tar.gz"
 rm -f "$TARBALL"
 # numeric-owner + 不带前导目录：App 侧 TarGzipExtractor 直接铺到 filesDir/rootfs
@@ -141,7 +235,7 @@ SIZE=$(stat -c %s "$TARBALL")
 SHA=$(sha256sum "$TARBALL" | cut -d' ' -f1)
 echo "    $TARBALL  $((SIZE / 1024 / 1024)) MB  sha256=$SHA"
 
-echo "==> [6/6] 生成 metadata.json"
+echo "==> [7/7] 生成 metadata.json"
 REPO="${GITHUB_REPOSITORY:-IPF-Sinon/DSH-Folk}"
 TAG="${RELEASE_TAG:-runtime-latest}"
 ASSET="https://github.com/${REPO}/releases/download/${TAG}/rootfs.tar.gz"
