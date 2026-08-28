@@ -512,12 +512,22 @@ object DshRuntime {
         val dest = DshEnv.rootfs(appContext)
         if (dest.exists()) dest.deleteRecursively()
         dest.mkdirs()
-        TarGzipExtractor.extract(tarball, dest)
-        val hasBash = File(dest, "usr/bin/bash").exists() || File(dest, "bin/bash").exists()
-        if (!hasBash) {
-            appendLog("! 解压后 rootfs 缺少 bash")
+        TarGzipExtractor.extractRootfs(tarball, dest)
+        // 关键文件自检：解压不完整（断流 / 空间耗尽）时越早发现越好，
+        // 否则要等到启动 dsh web 才报一句看不懂的错。
+        // File.exists() 跟随符号链接，所以 python3 -> python3.12 这类条目也一并验证了。
+        val missing = listOf(
+            "usr/bin/bash" to "bash",
+            "usr/local/bin/node" to "node",
+            "usr/local/lib/node_modules/@deepseek-ai/dsh/package.json" to "dsh",
+        ).filterNot { File(dest, it.first).exists() }
+        if (missing.isNotEmpty()) {
+            appendLog("! 解压后 rootfs 缺少: " + missing.joinToString("、") { it.second })
             return@runCatching false
         }
+        // 下面两个缺了不致命（插件装不了 / 无线 ADB 配不了，但 DSH 本身能跑），只记一行
+        if (!File(dest, "usr/bin/python3").exists()) appendLog("! 运行时缺少 python3，无线 ADB 配对不可用")
+        if (!File(dest, "usr/local/bin/pnpm").exists()) appendLog("! 运行时缺少 pnpm，插件安装不可用")
         true
     }.getOrElse {
         appendLog("! 解压失败: ${it.javaClass.simpleName}: ${it.message}")

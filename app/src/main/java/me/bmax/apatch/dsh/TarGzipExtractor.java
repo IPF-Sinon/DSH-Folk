@@ -32,6 +32,19 @@ public final class TarGzipExtractor {
 
     private TarGzipExtractor() {}
 
+    /**
+     * 解压容器 rootfs（dest 即容器的 /）。
+     *
+     * 与备份恢复的区别：tar 里的绝对符号链接（{@code /etc/alternatives/awk}）在容器里
+     * 是**相对 rootfs 根**解析的，必须原样写下来；按宿主语义当成「指向系统文件」丢掉的话，
+     * Ubuntu 的 alternatives 链（awk / which / pager / rmt）就全没了。
+     */
+    public static void extractRootfs(File tarball, File dest) throws IOException {
+        try (InputStream raw = new FileInputStream(tarball)) {
+            extractAuto(raw, dest, 0, false, false, true);
+        }
+    }
+
     public static void extract(File tarball, File dest) throws IOException {
         extract(tarball, dest, 0);
     }
@@ -73,6 +86,12 @@ public final class TarGzipExtractor {
     /** 完整参数：rejectLinks=true 时遇到 symlink/hardlink 直接判非法（严格来源用）。 */
     public static void extractAuto(InputStream raw, File dest, int strip, boolean lenient,
                                    boolean rejectLinks) throws IOException {
+        extractAuto(raw, dest, strip, lenient, rejectLinks, false);
+    }
+
+    /** containerRoot=true：dest 是容器根，绝对符号链接目标按 dest 解析并原样写入。 */
+    public static void extractAuto(InputStream raw, File dest, int strip, boolean lenient,
+                                   boolean rejectLinks, boolean containerRoot) throws IOException {
         PushbackInputStream pin = new PushbackInputStream(new BufferedInputStream(raw, 1 << 16), 2);
         int b0 = pin.read();
         int b1 = pin.read();
@@ -82,10 +101,10 @@ public final class TarGzipExtractor {
         }
         if (b0 == 0x1f && b1 == 0x8b) {
             try (GZIPInputStream gz = new GZIPInputStream(pin)) {
-                extractTar(gz, dest, strip, lenient, rejectLinks);
+                extractTar(gz, dest, strip, lenient, rejectLinks, containerRoot);
             }
         } else {
-            extractTar(pin, dest, strip, lenient, rejectLinks);
+            extractTar(pin, dest, strip, lenient, rejectLinks, containerRoot);
         }
     }
 
@@ -103,6 +122,11 @@ public final class TarGzipExtractor {
 
     public static void extractTar(InputStream tar, File dest, int strip, boolean lenient,
                                   boolean rejectLinks) throws IOException {
+        extractTar(tar, dest, strip, lenient, rejectLinks, false);
+    }
+
+    public static void extractTar(InputStream tar, File dest, int strip, boolean lenient,
+                                  boolean rejectLinks, boolean containerRoot) throws IOException {
         InputStream in = (tar instanceof BufferedInputStream) ? tar : new BufferedInputStream(tar, 1 << 16);
         byte[] header = new byte[BLOCK];
         byte[] buf = new byte[8192];
@@ -221,8 +245,9 @@ public final class TarGzipExtractor {
                         throw new IOException("预构建包损坏（禁止符号链接条目: " + safeName(name) + "）");
                     }
                     if (out.getParentFile() != null) out.getParentFile().mkdirs();
-                    // 符号链接目标安全校验：目标必须在 dest 内（绝不指向系统文件/外部目录）
-                    if (linkSafeWithin(dest, out, linkname, false)) {
+                    // 符号链接目标安全校验：目标必须在 dest 内（绝不指向系统文件/外部目录）。
+                    // containerRoot 时绝对目标按 dest 解析 —— 容器里的 / 就是 dest。
+                    if (linkSafeWithin(dest, out, linkname, false, containerRoot)) {
                         try {
                             Os.symlink(linkname, out.getAbsolutePath());
                         } catch (Throwable ignored) {
@@ -237,7 +262,7 @@ public final class TarGzipExtractor {
                     if (out.getParentFile() != null) out.getParentFile().mkdirs();
                     // 硬链接目标同样必须留在 dest 内（不允许链到已有敏感文件）
                     // 硬链接按 dest 基准校验，与下面 new File(dest, linkname) 保持一致
-                    if (linkSafeWithin(dest, out, linkname, true)) {
+                    if (linkSafeWithin(dest, out, linkname, true, containerRoot)) {
                         try {
                             Os.link(new File(dest, linkname).getAbsolutePath(), out.getAbsolutePath());
                         } catch (Throwable ignored) {
@@ -260,13 +285,19 @@ public final class TarGzipExtractor {
      *  硬链接实际却用 new File(dest, linkname) —— 校验和使用对不上，
      *  形如 ../../etc/x 的 linkname 能通过校验却链到 dest 之外。 */
     private static boolean linkSafeWithin(File dest, File out, String linkname,
-                                          boolean relativeToDest) {
+                                          boolean relativeToDest, boolean containerRoot) {
         if (linkname == null || linkname.isEmpty()) return false;
         String trimmed = new File(linkname).getPath();
-        if (new File(trimmed).isAbsolute()) return false;
+        boolean absolute = new File(trimmed).isAbsolute();
+        // 宿主语义下绝对目标一律拒绝（会指向系统文件）；容器语义下它相对 dest 解析。
+        if (absolute && !containerRoot) return false;
+        if (absolute) {
+            while (trimmed.startsWith("/")) trimmed = trimmed.substring(1);
+            if (trimmed.isEmpty()) return false;
+        }
         try {
             java.nio.file.Path root = dest.toPath().toAbsolutePath().normalize();
-            java.nio.file.Path base = relativeToDest || out.getParentFile() == null
+            java.nio.file.Path base = absolute || relativeToDest || out.getParentFile() == null
                     ? root
                     : out.getParentFile().toPath().toAbsolutePath().normalize();
             java.nio.file.Path target = base.resolve(trimmed).normalize();
