@@ -69,11 +69,23 @@ object PermissionManager {
     private val _status = MutableStateFlow(Status())
     val status: StateFlow<Status> = _status.asStateFlow()
 
-    /** 全量探测。会执行 shell，放 IO 线程调用。 */
-    fun refresh(ctx: Context): Status {
+    /**
+     * 全量探测。会执行 shell，放 IO 线程调用。
+     *
+     * @param allowRootPrompt 是否允许真跑 `su -c id`。默认 **false**：那条命令会让
+     *   Magisk/KernelSU 弹授权框，而 refresh 在首页与功能页的 LaunchedEffect 里被调用 ——
+     *   于是用户每次打开首页都被弹一次，什么也没做。只有用户主动点「刷新权限」时才该弹。
+     *   验过的结果记在 prefs 里，后续免弹框即可判定。
+     */
+    fun refresh(ctx: Context, allowRootPrompt: Boolean = false): Status {
         val su = detectSu()
         val provider = if (su) detectRootProvider(ctx) else ""
-        val rootOk = su && verifyRoot()
+        // 之前验过就直接信：su 授权是持久的，撤销后用户会来点「刷新权限」重验
+        val rootOk = su && if (allowRootPrompt) {
+            verifyRoot().also { prefs(ctx).edit().putBoolean(KEY_ROOT_VERIFIED, it).apply() }
+        } else {
+            prefs(ctx).getBoolean(KEY_ROOT_VERIFIED, false)
+        }
         val shizukuRunning = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
         val shizukuGranted = shizukuRunning && runCatching {
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
@@ -126,6 +138,11 @@ object PermissionManager {
         }
         return ""
     }
+
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
+
+    /** 上次 `su -c id` 是否真的拿到了 uid 0（避免每次进首页都弹授权框）。 */
+    private const val KEY_ROOT_VERIFIED = "root_verified"
 
     private val SU_PATHS = listOf(
         "/system/bin/su",

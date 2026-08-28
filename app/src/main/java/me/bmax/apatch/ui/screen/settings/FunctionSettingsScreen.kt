@@ -216,8 +216,9 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     },
                     perm = perm,
                     onRefreshPerm = {
+                        // 用户主动点刷新才允许弹 su 授权框（refresh 默认不弹）
                         scope.launch(Dispatchers.IO) {
-                            PermissionManager.refresh(context.applicationContext)
+                            PermissionManager.refresh(context.applicationContext, allowRootPrompt = true)
                         }
                     },
                     onRequestShizuku = {
