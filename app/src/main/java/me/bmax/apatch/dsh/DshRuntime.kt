@@ -422,11 +422,19 @@ object DshRuntime {
         )
     }.getOrNull()
 
+    /**
+     * 逐个下载源尝试，第一个成功即返回。
+     *
+     * metadata 的 mirrors 本身就是加了代理前缀的 URL，再给它们叠一次前缀只会产生
+     * 重复项 —— 去重前实测 6 个候选里有 3 个是重的，等于同一个失败的 URL 连试两次。
+     */
     private fun downloadWithFallback(meta: DshMeta, target: File): Boolean {
         val prefix = DshSource.proxyPrefix(DshSource.resolve(appContext))
         val raw = listOf(meta.url) + meta.mirrors
-        val candidates = if (prefix.isEmpty()) raw else
-            raw.map { if (it.startsWith("https://github.com/")) prefix + it else it } + raw
+        val candidates = (
+            if (prefix.isEmpty()) raw
+            else raw.map { if (it.startsWith("https://github.com/")) prefix + it else it } + raw
+            ).distinct()
         for ((i, url) in candidates.withIndex()) {
             appendLog("> 尝试下载源 [${i + 1}/${candidates.size}]: $url")
             _state.update { it.copy(message = "正在下载运行时（${meta.version}）…", speedBytesPerSec = 0L) }
