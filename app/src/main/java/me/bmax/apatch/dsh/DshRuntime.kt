@@ -673,7 +673,9 @@ object DshRuntime {
         } catch (e: Exception) {
             val detail = "启动失败：${e.message ?: e.javaClass.simpleName}"
             appendLog("! $detail")
-            if (runtimeId() == "proroot") noteProrootFailure(detail)
+            if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
+                appendLog("> 已切回 proot，请重新启动服务")
+            }
             _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
             return
         }
@@ -721,13 +723,23 @@ object DshRuntime {
             if (serverProcess?.isAlive == false) {
                 val detail = "服务进程已退出（见启动日志）"
                 appendLog("! $detail")
-                if (runtimeId() == "proroot") noteProrootFailure(detail)
+                if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
+                    appendLog("> 已切回 proot，请重新启动服务")
+                }
                 _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
                 return
             }
             delay(1_000)
         }
-        _state.update { it.copy(phase = DshPhase.ERROR, message = "启动超时（见启动日志）") }
+        // 超时同样算 proroot 一次失败：进程没退但服务始终起不来（proroot 在部分内核上
+        // 卡在 seccomp/ptrace 上就是这种表现），只记「进程退出」那一路会让用户永远
+        // 卡在坏运行时上，自动回退 proot 的兜底形同不存在。
+        val detail = "启动超时（见启动日志）"
+        appendLog("! $detail")
+        if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
+            appendLog("> 已切回 proot，请重新启动服务")
+        }
+        _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
     }
 
     private fun portOpen(port: Int): Boolean = runCatching {
