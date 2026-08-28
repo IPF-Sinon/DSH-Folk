@@ -407,7 +407,10 @@ object DshRuntime {
         }
         appendLog("> 下载完成（${tarball.length() / 1024 / 1024} MB），校验 sha256…")
         if (!verifySha256(tarball, meta.sha256)) {
-            fail("运行时校验失败（sha256 不匹配）")
+            // 校验失败说明这份文件本身是坏的（续传时拼错、镜像给了旧包）——
+            // 必须删掉，否则下次续传会一直基于这份坏数据往后接，永远校验不过。
+            runCatching { tarball.delete() }
+            fail("运行时校验失败（sha256 不匹配），已清除损坏文件，请重试")
             return
         }
         // 二次确认：metadata 里的 sizeBytes 可能与实际有偏差，用真实体积再算一次
@@ -485,28 +488,43 @@ object DshRuntime {
         return false
     }
 
+    /**
+     * 下载单个文件，支持断点续传。
+     *
+     * 130 MB 的包在手机网络上断一次很常见，原来每次失败都从 0 开始重下。GitHub Release
+     * 与两个代理都支持 Range（实测返回 206 + content-range），所以已下载部分够大时带上
+     * `Range: bytes=N-` 续传；服务端不给 206 就退回从头下载并截断旧文件。
+     */
     private fun downloadFile(url: String, target: File, sizeBytes: Long): Boolean {
         var conn: HttpURLConnection? = null
         var input: InputStream? = null
         var out: OutputStream? = null
         var ok = false
         return try {
+            // 太小的残片不值得续传（可能是上次刚建好文件就断了），直接重下
+            val have = if (target.isFile && target.length() > 1L * 1024 * 1024) target.length() else 0L
             conn = URL(url).openConnection() as HttpURLConnection
             conn.connectTimeout = 15_000
             conn.readTimeout = 30_000
             conn.instanceFollowRedirects = true
+            if (have > 0) conn.setRequestProperty("Range", "bytes=$have-")
             if (conn.responseCode !in 200..299) return false
-            val contentLength = if (sizeBytes > 0) sizeBytes else conn.contentLengthLong
+            // 206 才是真的续传；服务端忽略 Range 返回 200 时必须从头写
+            val resumed = have > 0 && conn.responseCode == 206
+            if (have > 0 && !resumed) appendLog("> 服务端不支持续传，从头下载")
+            if (resumed) appendLog("> 断点续传：已有 ${have / 1024 / 1024} MB")
+            val contentLength = if (sizeBytes > 0) sizeBytes
+                else conn.contentLengthLong.let { if (it > 0 && resumed) it + have else it }
             target.parentFile?.mkdirs()
-            out = BufferedOutputStream(FileOutputStream(target))
+            out = BufferedOutputStream(FileOutputStream(target, resumed))
             input = conn.inputStream
             val buf = ByteArray(64 * 1024)
-            var total = 0L
-            var lastUpdate = 0L
+            var total = if (resumed) have else 0L
+            var lastUpdate = total
             var lastLoggedBucket = -1
             var speedBps = 0L
             var lastSpeedAt = System.currentTimeMillis()
-            var lastSpeedTotal = 0L
+            var lastSpeedTotal = total
             while (true) {
                 val n = input.read(buf)
                 if (n < 0) break
@@ -537,7 +555,15 @@ object DshRuntime {
                         }
                     }
                 }
-                if (contentLength > 0 && total > contentLength) return false
+                // 超出预期大小：文件已经错了，删掉再报失败 —— 留着的话下次续传会
+                // 从一个比目标还长的偏移接着请求，服务端只会回 416。
+                if (contentLength > 0 && total > contentLength) {
+                    appendLog("! 下载超出预期大小（$total > $contentLength），丢弃重下")
+                    runCatching { out?.close() }
+                    out = null
+                    runCatching { target.delete() }
+                    return false
+                }
             }
             if (contentLength > 0 && total != contentLength) {
                 appendLog("! 下载不完整: 预期 $contentLength 实际 $total")
@@ -552,7 +578,9 @@ object DshRuntime {
             runCatching { input?.close() }
             runCatching { out?.close() }
             runCatching { conn?.disconnect() }
-            if (!ok) runCatching { target.delete() }
+            // 失败时保留已下载部分供下次续传；只有明显不可续（大小超出预期）时才删，
+            // 那种情况由上面的 return false 之前就地处理。
+            if (!ok && target.length() < 1L * 1024 * 1024) runCatching { target.delete() }
         }
     }
 
