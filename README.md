@@ -55,9 +55,9 @@ APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出
 DSH-Folk (Android app)
   └─ proot / proroot                      ← 打包在 APK 里的可执行 .so
        └─ Ubuntu 24.04 arm64 rootfs       ← 首次启动时在线下载
-            ├─ Node.js 24 + @deepseek-ai/dsh
-            └─ python3（无线 ADB 配对用，已预装在 rootfs 里）
-                 └─ dsh web --port 3080   ← 只监听 127.0.0.1
+            ├─ python3                     ← 无线 ADB 配对用，已预装
+            └─ Node.js 24 + @deepseek-ai/dsh
+                 └─ dsh web --port 3080    ← 只监听 127.0.0.1
                       └─ 手机浏览器 / 应用内打开
 ```
 
