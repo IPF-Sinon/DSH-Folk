@@ -42,6 +42,9 @@ fun BackupSettingsContent(
     onDshExport: () -> Unit,
     onDshImport: () -> Unit,
     onDshOpenDir: () -> Unit,
+    /** 运行时 exports 目录里的备份（容器内，文件管理器看不到）。 */
+    dshRemoteBackups: List<String>,
+    onDshListRemote: () -> Unit,
     flat: Boolean = false,
     highlightKey: String? = null,
 ) {
@@ -108,6 +111,9 @@ fun BackupSettingsContent(
                         TextButton(onClick = onDshOpenDir) {
                             Text(stringResource(R.string.dsh_backup_open_dir))
                         }
+                        TextButton(onClick = onDshListRemote, enabled = !dshBusy) {
+                            Text(stringResource(R.string.dsh_backup_remote_refresh))
+                        }
                         if (dshBusy) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         }
@@ -119,6 +125,31 @@ fun BackupSettingsContent(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+
+                    if (dshRemoteBackups.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_backup_remote_list),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 160.dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            for (line in dshRemoteBackups) {
+                                Text(
+                                    text = line,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
 
                     if (dshMessage.isNotBlank()) {
                         Spacer(Modifier.height(10.dp))

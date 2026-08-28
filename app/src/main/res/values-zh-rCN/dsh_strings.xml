@@ -161,4 +161,7 @@
     <string name="dsh_plugin_installed">已安装</string>
     <string name="dsh_plugin_no_npm">目录未登记 npm 包名，请打开仓库手动安装</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>
+    <string name="dsh_backup_remote_list">运行时里的备份</string>
+    <string name="dsh_backup_remote_refresh">列出运行时备份</string>
+    <string name="dsh_backup_remote_empty">运行时里还没有备份文件。</string>
 </resources>

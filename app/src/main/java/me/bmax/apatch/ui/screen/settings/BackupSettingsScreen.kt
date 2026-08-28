@@ -60,6 +60,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var dshBusy by rememberSaveable { mutableStateOf(false) }
     var dshMessage by rememberSaveable { mutableStateOf("") }
     var dshPassword by rememberSaveable { mutableStateOf("") }
+    var dshRemote by rememberSaveable { mutableStateOf(listOf<String>()) }
 
     val notRunning = stringResource(R.string.dsh_backup_needs_running)
     val pluginMissing = stringResource(R.string.dsh_backup_plugin_missing)
@@ -68,6 +69,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     val openDirFailed = stringResource(R.string.dsh_backup_open_dir_failed)
     val webdavOk = stringResource(R.string.dsh_backup_webdav_ok)
     val webdavFailed = stringResource(R.string.dsh_backup_webdav_failed)
+    val remoteEmpty = stringResource(R.string.dsh_backup_remote_empty)
 
     val importPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -153,6 +155,27 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         }
                     },
                     onDshImport = { importPicker.launch("*/*") },
+                    dshRemoteBackups = dshRemote,
+                    onDshListRemote = {
+                        dshBusy = true
+                        scope.launch(Dispatchers.IO) {
+                            val list = DshConfigBackup.listRemoteBackups()
+                            val lines = list.map { b ->
+                                buildString {
+                                    append(b.name)
+                                    if (b.sizeBytes > 0) {
+                                        append("  ").append(b.sizeBytes / 1024).append(" KB")
+                                    }
+                                    if (b.note.isNotEmpty()) append("  ").append(b.note)
+                                }
+                            }
+                            withContext(Dispatchers.Main) {
+                                dshRemote = lines
+                                if (lines.isEmpty()) dshMessage = remoteEmpty
+                                dshBusy = false
+                            }
+                        }
+                    },
                     onDshOpenDir = {
                         val dir = DshConfigBackup.backupDir()
                         dir.mkdirs()

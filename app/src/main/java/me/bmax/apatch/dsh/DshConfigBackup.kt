@@ -71,6 +71,10 @@ object DshConfigBackup {
         val file: File? = null,
         val sizeBytes: Long = 0,
         val message: String = "",
+        /** 实际导出的分区数（插件 report.included.size）。 */
+        val sections: Int = 0,
+        /** 整包是否加密（提供了密码即为 true）。 */
+        val encrypted: Boolean = false,
     )
 
     /**
@@ -104,24 +108,80 @@ object DshConfigBackup {
         val dest = File(dir, zipPath.substringAfterLast('/'))
         val bytes = download(zipPath, dest)
         if (bytes <= 0) return@withContext ExportResult(false, message = "下载导出文件失败")
-        ExportResult(true, dest, bytes, "已导出 ${dest.name}")
+
+        // report / manifest 里有真正落盘的分区与加密状态，比我们请求的 only 更权威
+        val report = o.optJSONObject("report")
+        val sections = report?.optJSONArray("included")?.length() ?: 0
+        val encrypted = report?.optJSONObject("security")?.optBoolean("encrypted", false)
+            ?: password.isNotEmpty()
+        val warnings = report?.optJSONArray("warnings")
+        val warnText = buildString {
+            if (warnings != null) {
+                for (i in 0 until warnings.length()) {
+                    val w = warnings.optString(i)
+                    if (w.isNotEmpty()) append("\n! ").append(w)
+                }
+            }
+        }
+        ExportResult(
+            ok = true,
+            file = dest,
+            sizeBytes = bytes,
+            message = buildString {
+                append("已导出 ").append(dest.name)
+                if (sections > 0) append("（").append(sections).append(" 个分区）")
+                if (encrypted) append("，已加密")
+                append(warnText)
+            },
+            sections = sections,
+            encrypted = encrypted,
+        )
     }
 
-    /** 备份文件列表（插件侧 exports 目录，不含手机本地已拷出的副本）。 */
-    suspend fun listRemoteBackups(): List<String> = withContext(Dispatchers.IO) {
-        val raw = request("GET", "/backup-files", null) ?: return@withContext emptyList()
+    /** 运行时 exports 目录里的一个备份文件。 */
+    data class RemoteBackup(
+        val name: String,
+        val sizeBytes: Long = 0,
+        val mtimeMs: Long = 0,
+        val note: String = "",
+    )
+
+    /**
+     * 备份文件列表（插件侧 exports 目录，不含手机本地已拷出的副本）。
+     *
+     * 插件返回 BackupFileMeta：name / path / sizeBytes / mtimeMs / source / note，
+     * 已按 mtime 倒序。这些备份在容器里，用文件管理器看不到，所以要能在 App 里列出来。
+     */
+    suspend fun listRemoteBackups(): List<RemoteBackup> = withContext(Dispatchers.IO) {
+        val raw = request("GET", "/backup-files", null, timeoutMs = 30_000)
+            ?: return@withContext emptyList()
         val arr = runCatching { JSONObject(raw).optJSONArray("files") }.getOrNull()
             ?: return@withContext emptyList()
         (0 until arr.length()).mapNotNull { i ->
             when (val v = arr.opt(i)) {
-                is JSONObject -> v.optString("name").ifEmpty { null }
-                is String -> v
+                is JSONObject -> v.optString("name").ifEmpty { null }?.let { n ->
+                    RemoteBackup(
+                        name = n,
+                        sizeBytes = v.optLong("sizeBytes", 0L),
+                        mtimeMs = v.optLong("mtimeMs", 0L),
+                        note = v.optString("note"),
+                    )
+                }
+                is String -> RemoteBackup(v)
                 else -> null
             }
         }
     }
 
     data class ImportResult(val ok: Boolean, val message: String, val detail: String = "")
+
+    /**
+     * 插件 ImportResult 的字段名（lib/client.d.ts）：
+     * ok / executed[]{itemId,status,message,skippedByUser} / needsRestart /
+     * missingSecrets[] / warnings[] / rollback{full,restored,failed[]} / snapshotId。
+     * 注意**不是** items —— 按 items 解析会永远得到「导入完成：0 项」。
+     */
+    private const val KEY_EXECUTED = "executed"
 
     /**
      * 导入一个导出 ZIP：upload → analyze → plan → execute。
@@ -194,26 +254,62 @@ object DshConfigBackup {
         val execErr = execObj.optString("error")
         if (execErr.isNotEmpty()) return@withContext ImportResult(false, execErr)
 
-        val items = execObj.optJSONArray("items")
-        val total = items?.length() ?: 0
+        val executed = execObj.optJSONArray(KEY_EXECUTED)
+        val total = executed?.length() ?: 0
         var failed = 0
+        var skipped = 0
+        var warned = 0
         val notes = StringBuilder()
         for (i in 0 until total) {
-            val it = items?.optJSONObject(i) ?: continue
-            val st = it.optString("status")
-            if (st == "failed") {
-                failed++
-                notes.append("✗ ").append(it.optString("itemId")).append(' ')
-                    .append(it.optString("message")).append('\n')
+            val item = executed?.optJSONObject(i) ?: continue
+            val id = item.optString("itemId")
+            val note = item.optString("message")
+            when (item.optString("status")) {
+                "failed" -> {
+                    failed++
+                    notes.append("✗ ").append(id)
+                    if (note.isNotEmpty()) notes.append(' ').append(note)
+                    notes.append('\n')
+                }
+                "warning" -> {
+                    warned++
+                    notes.append("! ").append(id)
+                    if (note.isNotEmpty()) notes.append(' ').append(note)
+                    notes.append('\n')
+                }
+                "skipped" -> skipped++
             }
         }
-        val needsRestart = execObj.optBoolean("needsRestart", planObj.optBoolean("needsRestart", false))
-        val head = buildString {
-            append("导入完成：$total 项")
-            if (failed > 0) append("，$failed 项失败")
-            if (needsRestart) append("；需要重启 DSH 生效")
+        // 插件顶层 warnings / missingSecrets 与逐项结果同样重要：
+        // 缺凭据的项会「成功」但运行时用不了，不列出来用户根本不知道要补什么
+        for (key in listOf("warnings", "missingSecrets")) {
+            val arr = execObj.optJSONArray(key) ?: continue
+            for (i in 0 until arr.length()) {
+                val v = arr.optString(i)
+                if (v.isEmpty()) continue
+                notes.append(if (key == "warnings") "! " else "? ").append(v)
+                notes.append('\n')
+            }
         }
-        ImportResult(failed == 0, head, notes.toString())
+        // 回滚发生说明这次导入整体没落地，必须显式说出来
+        val rollback = execObj.optJSONObject("rollback")
+        if (rollback != null) {
+            notes.append(if (rollback.optBoolean("full")) "↩ 已完整回滚" else "↩ 已部分回滚")
+            notes.append('\n')
+        }
+        val needsRestart = execObj.optBoolean("needsRestart", planObj.optBoolean("needsRestart", false))
+        val ok = execObj.optBoolean("ok", failed == 0) && rollback == null
+        val head = buildString {
+            append(if (ok) "导入完成：" else "导入未完成：")
+            append("$total 项")
+            if (failed > 0) append("，$failed 项失败")
+            if (warned > 0) append("，$warned 项告警")
+            if (skipped > 0) append("，$skipped 项跳过")
+            if (needsRestart) append("；需要重启 DSH 生效")
+            execObj.optString("snapshotId").takeIf { it.isNotEmpty() }
+                ?.let { append("；回滚快照 $it") }
+        }
+        ImportResult(ok, head, notes.toString())
     }
 
     /** 把 SAF 选中的文件先落到应用可控目录，再上传（ContentResolver 的 Uri 不能直接给 HTTP）。 */

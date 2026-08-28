@@ -179,4 +179,7 @@
     <string name="dsh_plugin_installed">Installed</string>
     <string name="dsh_plugin_no_npm">No npm package registered — open the repository to install manually</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>
+    <string name="dsh_backup_remote_list">Backups inside the runtime</string>
+    <string name="dsh_backup_remote_refresh">List runtime backups</string>
+    <string name="dsh_backup_remote_empty">No backup files in the runtime yet.</string>
 </resources>
