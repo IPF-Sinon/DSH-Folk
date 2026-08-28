@@ -5,7 +5,7 @@
 DSHA 设备 shell 工具（ADB 无线通道，免 Shizuku）。
 用法：
   adb-shell.py <command...>         # 在设备上以 shell(uid=2000) 身份执行
-  /root/dsh-bin/adb-shell "命令"     # 包装命令（PATH 内）
+  adb-shell "命令"                  # 包装命令（装在 /usr/local/bin，PATH 内）
 连接端口优先级：--port > /root/.dsh/adbkeys/connect_port > 5555
 输出：stdout + "\n[EXIT=n]"（与 3090 桥保持一致的格式）
 """
