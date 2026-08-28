@@ -15,14 +15,22 @@ import org.json.JSONObject
  * FolkPatch 原来查的是它自己的服务端（folk.mysqil.com/api/version，返回裸 versionCode）。
  * DSH-Folk 没有服务端，改为直接读 GitHub 的 latest release：
  *  - tag 形如 `v0.1.0` / `0.1.0`，与 `versionName` 比较；
- *  - 版本号按点分段做数值比较，避免 "0.10.0" < "0.9.0" 这类字符串比较错误；
+ *  - 版本号比较走 [me.bmax.apatch.dsh.compareVersions]（含预发布标识）；
  *  - 匿名 GitHub API 限流 60/h，所以沿用 FolkApiClient 的 TTL 缓存。
+ *
+ * 必须先验 tag 长得像版本号：同一个仓库里还有 `runtime-latest` 这个滚动 tag（容器
+ * 运行时的发布位），仓库里没有正式版本发布时 `releases/latest` 返回的就是它 ——
+ * 而 compareVersions("runtime-latest", "0.1.0") > 0（首段不是数字，按字典序比），
+ * 于是每次启动都弹「有新版本」。
  */
 object UpdateChecker {
     private const val TAG = "UpdateChecker"
     private const val LATEST_API_URL =
         "https://api.github.com/repos/IPF-Sinon/DSH-Folk/releases/latest"
     private const val RELEASES_URL = "https://github.com/IPF-Sinon/DSH-Folk/releases"
+
+    /** 版本 tag：可选 v 前缀 + 至少两段数字 + 可选预发布后缀。 */
+    private val VERSION_TAG = Regex("""^[vV]?\d+(\.\d+)+([-+].*)?$""")
 
     suspend fun checkUpdate(): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -36,6 +44,11 @@ object UpdateChecker {
             val tag = JSONObject(body).optString("tag_name").trim()
             if (tag.isEmpty()) {
                 Log.w(TAG, "latest release has no tag_name")
+                return@withContext false
+            }
+            if (!VERSION_TAG.matches(tag)) {
+                // 不是版本 tag（例如 runtime-latest）：当作「没有可用更新」
+                Log.i(TAG, "ignoring non-version tag: $tag")
                 return@withContext false
             }
 
