@@ -2,6 +2,7 @@ package me.bmax.apatch.ui.screen
 
 import android.app.Activity.RESULT_OK
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -194,6 +196,19 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
                                     }
                                 }
                             },
+                            onOpenRepo = {
+                                val url = plugin.homepage.ifEmpty { plugin.repo }
+                                if (url.isNotEmpty()) {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                    }.onFailure {
+                                        scope.launch { announce(context.getString(R.string.dsh_no_browser)) }
+                                    }
+                                }
+                            },
                         )
                     }
                     item { HomeBottomSpacer() }
@@ -208,6 +223,7 @@ private fun StorePluginCard(
     plugin: DshPlugin,
     installed: Boolean,
     onInstall: () -> Unit,
+    onOpenRepo: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -268,16 +284,26 @@ private fun StorePluginCard(
                     }
                 }
                 Spacer(Modifier.size(12.dp))
+                // 目录里 13/41 条没登记 npm 包名，装不了 —— 但仓库地址都有。
+                // 给一个永远点不动的下载键等于死路，这里直接换成「打开仓库」。
+                val canOpenRepo = plugin.homepage.isNotEmpty() || plugin.repo.isNotEmpty()
                 FilledTonalIconButton(
-                    onClick = onInstall,
-                    enabled = plugin.installable && !installed,
+                    onClick = if (plugin.installable) onInstall else onOpenRepo,
+                    enabled = if (plugin.installable) !installed else canOpenRepo,
                     modifier = Modifier.size(48.dp),
                 ) {
                     Icon(
-                        imageVector = if (installed) Icons.Outlined.Check else Icons.Outlined.Download,
+                        imageVector = when {
+                            !plugin.installable -> Icons.Outlined.OpenInNew
+                            installed -> Icons.Outlined.Check
+                            else -> Icons.Outlined.Download
+                        },
                         contentDescription = stringResource(
-                            if (installed) R.string.dsh_plugin_installed
-                            else R.string.dsh_plugin_install
+                            when {
+                                !plugin.installable -> R.string.dsh_plugin_open_repo
+                                installed -> R.string.dsh_plugin_installed
+                                else -> R.string.dsh_plugin_install
+                            }
                         ),
                     )
                 }
@@ -286,7 +312,7 @@ private fun StorePluginCard(
                 Text(
                     text = stringResource(R.string.dsh_plugin_no_npm),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (plugin.description.isNotEmpty()) {

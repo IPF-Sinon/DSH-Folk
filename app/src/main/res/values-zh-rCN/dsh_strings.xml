@@ -159,7 +159,7 @@
     <string name="dsh_source_no_speed">不可达</string>
     <string name="dsh_plugin_install">安装</string>
     <string name="dsh_plugin_installed">已安装</string>
-    <string name="dsh_plugin_no_npm">目录未登记 npm 包名，请打开仓库手动安装</string>
+    <string name="dsh_plugin_no_npm">未发布到 npm，点右侧按钮打开仓库按其说明安装</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>
     <string name="dsh_backup_remote_list">运行时里的备份</string>
     <string name="dsh_backup_remote_refresh">列出运行时备份</string>
@@ -190,4 +190,5 @@
     <string name="dsh_err_start_failed">启动失败：%1$s</string>
     <string name="dsh_err_process_exited">服务进程已退出（见启动日志）</string>
     <string name="dsh_err_start_timeout">启动超时（见启动日志）</string>
+    <string name="dsh_plugin_open_repo">打开仓库</string>
 </resources>

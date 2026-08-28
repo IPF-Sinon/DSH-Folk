@@ -177,7 +177,7 @@
     <string name="dsh_source_no_speed">unreachable</string>
     <string name="dsh_plugin_install">Install</string>
     <string name="dsh_plugin_installed">Installed</string>
-    <string name="dsh_plugin_no_npm">No npm package registered — open the repository to install manually</string>
+    <string name="dsh_plugin_no_npm">Not on npm — tap to open the repository and follow its install steps</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>
     <string name="dsh_backup_remote_list">Backups inside the runtime</string>
     <string name="dsh_backup_remote_refresh">List runtime backups</string>
@@ -208,4 +208,5 @@
     <string name="dsh_err_start_failed">Start failed: %1$s</string>
     <string name="dsh_err_process_exited">The service process exited (see the startup log)</string>
     <string name="dsh_err_start_timeout">Startup timed out (see the startup log)</string>
+    <string name="dsh_plugin_open_repo">Open repository</string>
 </resources>
