@@ -645,9 +645,6 @@ KernelPatch は boot イメージをパッチする必要があります。
     <string name="settings_multi_background_mode">マルチ背景モード</string>
     <string name="settings_multi_background_mode_summary">ページごとの背景画像を設定します。</string>
     <string name="settings_select_home_background">ホームページの背景</string>
-    <string name="settings_select_kernel_background">カーネルモジュールの背景</string>
-    <string name="settings_select_superuser_background">スーパーユーザーの背景</string>
-    <string name="settings_select_system_module_background">システムモジュールの背景</string>
     <string name="settings_select_settings_background">設定の背景</string>
     <string name="settings_advanced_title_style">高度なタイトルスタイル</string>
     <string name="settings_advanced_title_style_summary">トップバータイトルをカスタム画像に置き換えます。</string>

@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">FolkPatch</string>
     <string name="app_title_apatch">APatch</string>
     <string name="app_title_apatch_folk">APatch Folk</string>
     <string name="app_title_apatchx">APatch X</string>
@@ -708,9 +707,6 @@ KernelPatch 需要修补 boot 镜像才能工作喵。
     <string name="settings_multi_background_mode">开多背景模式喵</string>
     <string name="settings_multi_background_mode_summary">不同页面设不同背景图喵！</string>
     <string name="settings_select_home_background">首页背景图喵</string>
-    <string name="settings_select_kernel_background">内核模块背景图喵</string>
-    <string name="settings_select_superuser_background">超级用户背景图喵</string>
-    <string name="settings_select_system_module_background">系统模块背景图喵</string>
     <string name="settings_select_settings_background">设置页背景图喵</string>
 
     <string name="settings_advanced_title_style">高级标题样式喵</string>

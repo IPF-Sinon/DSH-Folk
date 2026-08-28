@@ -1,6 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">FolkPatch</string>
 
     <string name="desktop_app_name">桌面應用程式名稱</string>
 
@@ -690,9 +689,6 @@ KernelPatch 需要修補 boot 映像檔。
     <string name="settings_multi_background_mode">啟用多背景模式</string>
     <string name="settings_multi_background_mode_summary">為不同頁面設定不同的背景圖片</string>
     <string name="settings_select_home_background">首頁背景</string>
-    <string name="settings_select_kernel_background">核心模組背景</string>
-    <string name="settings_select_superuser_background">超級使用者背景</string>
-    <string name="settings_select_system_module_background">系統模組背景</string>
     <string name="settings_select_settings_background">設定頁面背景</string>
 
     <string name="settings_advanced_title_style">進階標題樣式</string>

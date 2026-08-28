@@ -1,6 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">FolkPatch</string>
 
     <string name="desktop_app_name">魔法应用名称</string>
 
@@ -696,9 +695,6 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="settings_multi_background_mode">次元多魔法</string>
     <string name="settings_multi_background_mode_summary">为不同页面设置不同的魔法背景图片</string>
     <string name="settings_select_home_background">首页魔法背景</string>
-    <string name="settings_select_kernel_background">内核模块魔法背景</string>
-    <string name="settings_select_superuser_background">超级用户魔法背景</string>
-    <string name="settings_select_system_module_background">系统模块魔法背景</string>
     <string name="settings_select_settings_background">设置页面魔法背景</string>
 
     <string name="settings_advanced_title_style">高级魔法标题样式</string>

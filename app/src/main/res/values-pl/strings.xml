@@ -633,9 +633,6 @@ Kontynuować mimo to?</string>
     <string name="settings_multi_background_mode">Wielotłowe tła</string>
     <string name="settings_multi_background_mode_summary">Ustaw różne obrazy tła dla różnych stron</string>
     <string name="settings_select_home_background">Tło strony głównej</string>
-    <string name="settings_select_kernel_background">Tło modułu jądra</string>
-    <string name="settings_select_superuser_background">Tło strony Superuser</string>
-    <string name="settings_select_system_module_background">Tło modułu systemowego</string>
     <string name="settings_select_settings_background">Tło strony ustawień</string>
     <string name="settings_advanced_title_style">Zaawansowany styl tytułu</string>
     <string name="settings_advanced_title_style_summary">Zastąp tytuł górnego paska niestandardowym obrazem</string>
@@ -744,7 +741,6 @@ Kontynuować mimo to?</string>
     <string name="settings_auto_backup_boot">Automatyczna kopia zapasowa Boot</string>
     <string name="settings_auto_backup_boot_summary">Automatycznie kopiuj Boot do lokalnego magazynu (Downloads/FolkPatch/BootBackups)</string>
     <!-- Auto-added missing strings -->
-    <string name="app_name" translatable="false">FolkPatch</string>
     <!-- Home Layout Strings -->
     <string name="settings_home_layout_style">Styl strony głównej</string>
     <string name="settings_home_layout_default">Lista</string>

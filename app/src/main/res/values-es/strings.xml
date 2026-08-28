@@ -1,6 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">FolkPatch</string>
 
     <string name="desktop_app_name">Nombre de la aplicación de escritorio</string>
 
@@ -679,9 +678,6 @@ Aquí hay algunas posibles razones para el fallo de autenticación—por favor v
     <string name="settings_multi_background_mode">Modo Multi-Fondo</string>
     <string name="settings_multi_background_mode_summary">Establecer diferentes fondos para diferentes páginas</string>
     <string name="settings_select_home_background">Fondo de Inicio</string>
-    <string name="settings_select_kernel_background">Fondo Módulos de Kernel</string>
-    <string name="settings_select_superuser_background">Fondo Superusuario</string>
-    <string name="settings_select_system_module_background">Fondo Módulos del Sistema</string>
     <string name="settings_select_settings_background">Fondo Ajustes</string>
 
     <string name="settings_advanced_title_style">Estilo de Título Avanzado</string>

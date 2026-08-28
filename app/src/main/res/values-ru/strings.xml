@@ -1,6 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">FolkPatch</string>
 
     <string name="desktop_app_name">Имя настольного приложения</string>
 
@@ -695,9 +694,6 @@ KernelPatch требует образ boot для патча.
     <string name="settings_multi_background_mode">Режим множественных фонов</string>
     <string name="settings_multi_background_mode_summary">Установить разные фоновые изображения для разных страниц</string>
     <string name="settings_select_home_background">Фон главной страницы</string>
-    <string name="settings_select_kernel_background">Фон модуля ядра</string>
-    <string name="settings_select_superuser_background">Фон суперпользователя</string>
-    <string name="settings_select_system_module_background">Фон системного модуля</string>
     <string name="settings_select_settings_background">Фон страницы настроек</string>
 
     <string name="settings_advanced_title_style">Расширенный стиль заголовка</string>

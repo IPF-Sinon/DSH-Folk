@@ -1,6 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">FolkPatch</string>
 
     <string name="desktop_app_name">Nama Aplikasi Desktop</string>
 
@@ -690,9 +689,6 @@ Berikut adalah beberapa kemungkinan penyebab kegagalan autentikasi—silakan cek
     <string name="settings_multi_background_mode">Mode Multi-Latar Belakang</string>
     <string name="settings_multi_background_mode_summary">Atur gambar latar belakang yang berbeda untuk halaman yang berbeda</string>
     <string name="settings_select_home_background">Latar Belakang Halaman Utama</string>
-    <string name="settings_select_kernel_background">Latar Belakang Modul Kernel</string>
-    <string name="settings_select_superuser_background">Latar Belakang Superuser</string>
-    <string name="settings_select_system_module_background">Latar Belakang Modul Sistem</string>
     <string name="settings_select_settings_background">Latar Belakang Halaman Pengaturan</string>
 
     <string name="settings_advanced_title_style">Gaya Judul Lanjutan</string>

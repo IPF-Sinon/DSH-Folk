@@ -1,6 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">FolkPatch</string>
 
     <string name="desktop_app_name">Nome do Aplicativo da Área de Trabalho</string>
 
@@ -686,9 +685,6 @@ Aqui estão algumas possíveis razões para a falha de autenticação—verifiqu
     <string name="settings_multi_background_mode">Modo Multi-Fundo</string>
     <string name="settings_multi_background_mode_summary">Definir imagens de fundo diferentes para páginas diferentes</string>
     <string name="settings_select_home_background">Fundo da Página Inicial</string>
-    <string name="settings_select_kernel_background">Fundo Módulos de Kernel</string>
-    <string name="settings_select_superuser_background">Fundo Superusuário</string>
-    <string name="settings_select_system_module_background">Fundo Módulos de Sistema</string>
     <string name="settings_select_settings_background">Fundo Configurações</string>
 
     <string name="settings_advanced_title_style">Estilo de Título Avançado</string>

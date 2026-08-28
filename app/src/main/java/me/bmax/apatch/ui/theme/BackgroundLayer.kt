@@ -32,11 +32,11 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.VideoView
 import androidx.compose.ui.viewinterop.AndroidView
-import com.ramcosta.composedestinations.generated.destinations.APModuleScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.KPModuleScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.DshPluginScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.DshPluginStoreScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.DshTerminalScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.SettingScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.SuperUserScreenDestination
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.spring
@@ -205,9 +205,12 @@ fun BackgroundLayer(
                 val rawTargetUri = if (BackgroundConfig.isMultiBackgroundEnabled) {
                     when (route) {
                         HomeScreenDestination.route -> BackgroundConfig.homeBackgroundUri
-                        KPModuleScreenDestination.route -> BackgroundConfig.kernelBackgroundUri
-                        SuperUserScreenDestination.route -> BackgroundConfig.superuserBackgroundUri
-                        APModuleScreenDestination.route -> BackgroundConfig.systemModuleBackgroundUri
+                        // DSH-Folk：底栏三个页面接管了原来的槽位（终端←超级用户、
+                        // 插件←系统模块、插件商店←内核模块）。SharedPreferences 键名
+                        // 保持不变，老 theme.json 的多背景配置仍然生效。
+                        DshTerminalScreenDestination.route -> BackgroundConfig.superuserBackgroundUri
+                        DshPluginScreenDestination.route -> BackgroundConfig.systemModuleBackgroundUri
+                        DshPluginStoreScreenDestination.route -> BackgroundConfig.kernelBackgroundUri
                         SettingScreenDestination.route -> BackgroundConfig.settingsBackgroundUri
                         else -> BackgroundConfig.homeBackgroundUri
                     }
@@ -222,9 +225,9 @@ fun BackgroundLayer(
             val rawTargetUri = if (BackgroundConfig.isMultiBackgroundEnabled) {
                 when (currentRoute) {
                     HomeScreenDestination.route -> BackgroundConfig.homeBackgroundUri
-                    KPModuleScreenDestination.route -> BackgroundConfig.kernelBackgroundUri
-                    SuperUserScreenDestination.route -> BackgroundConfig.superuserBackgroundUri
-                    APModuleScreenDestination.route -> BackgroundConfig.systemModuleBackgroundUri
+                    DshTerminalScreenDestination.route -> BackgroundConfig.superuserBackgroundUri
+                    DshPluginScreenDestination.route -> BackgroundConfig.systemModuleBackgroundUri
+                    DshPluginStoreScreenDestination.route -> BackgroundConfig.kernelBackgroundUri
                     SettingScreenDestination.route -> BackgroundConfig.settingsBackgroundUri
                     else -> BackgroundConfig.homeBackgroundUri
                 }

@@ -756,9 +756,9 @@ Here are some possible reasons for authentication failure—please check which o
     <string name="settings_multi_background_mode">Multi-Background Mode</string>
     <string name="settings_multi_background_mode_summary">Set different background images for different pages</string>
     <string name="settings_select_home_background">Home Page Background</string>
-    <string name="settings_select_kernel_background">Kernel Module Background</string>
-    <string name="settings_select_superuser_background">Superuser Background</string>
-    <string name="settings_select_system_module_background">System Module Background</string>
+    <string name="settings_select_kernel_background">Plugin Store Background</string>
+    <string name="settings_select_superuser_background">Terminal Background</string>
+    <string name="settings_select_system_module_background">Plugins Background</string>
     <string name="settings_select_settings_background">Settings Background</string>
 
     <string name="settings_advanced_title_style">Advanced Title Style</string>
@@ -845,14 +845,14 @@ Here are some possible reasons for authentication failure—please check which o
     <string name="apm_first_use_text">Welcome to System Modules, this uses modules compatible with the Magisk ecosystem. Click the button in the bottom right corner to install modules. You can also use the installer at the top to batch install modules. A feature to backup all modules with one click is also provided, but note that this solution may not be suitable for all modules, so you should make your own backups.</string>
 
     <!-- Welcome Guide -->
-    <string name="welcome_title_1">Welcome to FolkPatch</string>
-    <string name="welcome_desc_1">A highly customizable and portable Root manager based on KernelPatch. Make your device truly yours.</string>
+    <string name="welcome_title_1">Welcome to DSH-Folk</string>
+    <string name="welcome_desc_1">Run DeepSeek Harness on your phone. DSH-Folk downloads a Linux runtime, starts it in a container, and opens its Web UI locally.</string>
     <string name="welcome_title_2">Full Customization</string>
-    <string name="welcome_desc_2">Customize everything — colors, backgrounds, fonts, sounds, and even haptic feedback. Browse the Theme Store to discover more styles!</string>
-    <string name="welcome_title_3">Kernel Controls</string>
-    <string name="welcome_desc_3">Advanced kernel features are one tap away. Open Settings and tap the tune icon in the top-right corner to access FolkPatch Hide, Umount, Path Hide, and more.</string>
+    <string name="welcome_desc_2">Customize everything — colors, backgrounds, fonts, sounds, and even haptic feedback. Existing FolkPatch theme.json files still work.</string>
+    <string name="welcome_title_3">Runtime and Permissions</string>
+    <string name="welcome_desc_3">Pick proot or proroot as the container backend on the home screen. DSH-Folk never patches your kernel: it detects and reuses existing root, Shizuku, or wireless ADB.</string>
     <string name="welcome_title_4">Ready to Go</string>
-    <string name="welcome_desc_4">You\'re all set! Start exploring the most flexible Root management experience. Happy hacking!</string>
+    <string name="welcome_desc_4">Tap start on the home screen and DSH-Folk fetches the runtime, launches dsh web, and hands you the URL. Happy hacking!</string>
     <string name="welcome_prev">Previous</string>
     <string name="welcome_next">Next</string>
     <string name="welcome_skip">Skip</string>
