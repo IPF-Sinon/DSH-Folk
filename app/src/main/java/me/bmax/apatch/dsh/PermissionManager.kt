@@ -114,15 +114,37 @@ object PermissionManager {
     /** PATH 上是否存在 su（存在≠已授权）。 */
     private fun detectSu(): Boolean = SU_PATHS.any { File(it).exists() }
 
-    /** 真跑一次 `su -c id` 确认能拿到 uid 0（会弹授权框，由用户决定）。 */
+    /**
+     * 真跑一次 `su -c id` 确认能拿到 uid 0（会弹授权框，由用户决定）。
+     *
+     * 读流放单独线程：readText() 阻塞到 EOF，而授权框摆在那儿没人点时 su 不会退出 ——
+     * 先读再 waitFor(10s) 的写法里那个超时是无效的，调用线程会被永久钉住。
+     */
     private fun verifyRoot(): Boolean = runCatching {
         val p = ProcessBuilder("su", "-c", "id -u").redirectErrorStream(true).start()
-        val out = p.inputStream.bufferedReader().readText().trim()
-        if (!p.waitFor(10, TimeUnit.SECONDS)) {
+        val sb = StringBuilder()
+        val reader = Thread {
+            runCatching {
+                p.inputStream.bufferedReader().use { r ->
+                    val buf = CharArray(256)
+                    while (true) {
+                        val n = r.read(buf)
+                        if (n < 0) break
+                        synchronized(sb) { sb.appendRange(buf, 0, n) }
+                    }
+                }
+            }
+        }
+        reader.isDaemon = true
+        reader.start()
+        reader.join(TimeUnit.SECONDS.toMillis(10))
+        if (reader.isAlive) {
             p.destroyForcibly()
+            reader.join(500)
             return@runCatching false
         }
-        out.lines().lastOrNull()?.trim() == "0"
+        if (!p.waitFor(2, TimeUnit.SECONDS)) p.destroyForcibly()
+        synchronized(sb) { sb.toString() }.trim().lines().lastOrNull()?.trim() == "0"
     }.getOrDefault(false)
 
     /** 通过已安装包名判断 root 实现（只读包管理器，无副作用）。 */
