@@ -358,15 +358,18 @@ class MainActivity : AppCompatActivity() {
         me.bmax.apatch.util.DPIUtils.load(this)
         me.bmax.apatch.util.DPIUtils.applyDpi(this)
         
-        // 检查并请求权限
-        if (!PermissionUtils.hasExternalStoragePermission(this) || 
-            !PermissionUtils.hasWriteExternalStoragePermission(this)) {
+        // 检查并请求权限（存储 + Android 13 起的通知权限：
+        // 没有通知权限时 HarnessService 的前台通知不显示，用户看不到运行状态）
+        if (!PermissionUtils.hasExternalStoragePermission(this) ||
+            !PermissionUtils.hasWriteExternalStoragePermission(this) ||
+            !PermissionUtils.hasNotificationPermission(this)) {
             permissionHandler.requestPermissions(
                 onGranted = {
                     // 权限已授予
                 },
                 onDenied = {
-                    // 权限被拒绝，可以显示一个提示
+                    // 拒绝也不阻塞：容器与 web 服务照常能跑，只是通知条与
+                    // 公共目录导出不可用（导出会自动退回应用专属目录）
                 }
             )
         }

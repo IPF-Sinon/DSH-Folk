@@ -48,11 +48,17 @@ object PermissionUtils {
     }
     
     /**
-     * 获取所需权限列表
+     * 获取所需权限列表。
+     *
+     * Android 13 起 POST_NOTIFICATIONS 也是运行时权限：没有它，HarnessService 的
+     * 前台通知不显示 —— 服务照样跑，但用户看不到运行状态、也点不到「停止」。
      */
     fun getRequiredPermissions(): Array<String> {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(Manifest.permission.READ_MEDIA_IMAGES)
+            arrayOf(
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.POST_NOTIFICATIONS,
+            )
         } else {
             arrayOf(
                 Manifest.permission.READ_EXTERNAL_STORAGE,
@@ -60,6 +66,14 @@ object PermissionUtils {
             )
         }
     }
+
+    /** 前台服务通知是否能显示（Android 13 以下恒为 true）。 */
+    fun hasNotificationPermission(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
 }
 
 /**
