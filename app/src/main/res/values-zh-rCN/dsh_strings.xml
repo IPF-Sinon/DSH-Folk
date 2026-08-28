@@ -133,4 +133,6 @@
     <string name="dsh_plugin_settings_summary">更新检查、插件详情、排序</string>
     <string name="dsh_autostart">开机自启</string>
     <string name="dsh_autostart_summary">设备启动完成后自动拉起 Harness（仅在运行时已安装时生效）</string>
+    <string name="dsh_backup_webdav_ok">已同时上传到 WebDAV</string>
+    <string name="dsh_backup_webdav_failed">WebDAV 上传失败：%1$s</string>
 </resources>

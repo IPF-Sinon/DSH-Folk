@@ -5,27 +5,17 @@
 
     <string name="home">魔法大厅</string>
 
-    <string name="success">变身成功</string>
     <string name="failure">变身失败</string>
 
-    <string name="patch_warnning">施展魔法有风险，请确保已保存珍贵的回忆。</string>
-    <string name="patch">施展魔法</string>
 
-    <string name="kernel_patch">心之契约</string>
-    <string name="android_patch">星之守护</string>
 
     <string name="settings_nav_layout_title">星图导航设定</string>
     <string name="settings_nav_layout_summary">隐藏或显示星图导航的部分组件</string>
     <string name="settings_nav_scheme">星图导航方案</string>
-    <string name="settings_nav_mode">星图导航栏模式</string>
-    <string name="settings_nav_mode_summary">选择星图导航栏的显示方式</string>
     <string name="settings_nav_mode_auto">魔法自动传统</string>
     <string name="settings_nav_mode_bottom">始终底部星图导航栏</string>
     <string name="settings_nav_mode_rail">始终侧边星图导航栏</string>
     <string name="settings_nav_mode_floating">悬浮底部星图导航栏</string>
-    <string name="settings_show_apm">显示星之魔法阵</string>
-    <string name="settings_show_kpm">显示心之结晶</string>
-    <string name="settings_show_superuser">显示魔法使</string>
     <string name="settings_floating_auto_hide">魔法底栏自动隐遁</string>
     <string name="settings_floating_auto_hide_summary">3秒无魔法操作后底栏自动隐遁</string>
     <string name="settings_floating_swipe_hide">魔法底栏滑动隐遁</string>
@@ -44,15 +34,8 @@
     <string name="settings_compact_rounded_bar">紧凑圆角风格</string>
     <string name="settings_compact_rounded_bar_summary">使用带圆角和紧凑间距的浮动底栏</string>
     <string name="settings_stats_top_layout">顶部魔法阵</string>
-    <string name="settings_stats_top_layout_summary">选择顶部信息魔法卡样式</string>
     <string name="settings_stats_top_layout_list">列表魔法卡</string>
     <string name="settings_stats_top_layout_grid">网格魔法卡</string>
-    <string name="settings_block_kernelpatch_update">封印心之契约更新感应</string>
-    <string name="settings_block_kernelpatch_update_summary">不再接收来自心之契约的更新讯号</string>
-    <string name="settings_block_androidpatch_update">封印魔法阵法更新感应</string>
-    <string name="settings_block_androidpatch_update_summary">不再接收来自魔法阵法的更新讯号</string>
-    <string name="settings_disable_module_update_check">禁用魔法阵更新检查</string>
-    <string name="settings_disable_module_update_check_summary">禁用星之魔法阵的自动更新检查</string>
 
     <string name="reboot">重新觉醒</string>
     <string name="settings">魔法设定</string>
@@ -65,103 +48,27 @@
     <string name="developer_and_maintainer">施法者 | 守护者</string>
     <string name="settings_app_language">魔法语言</string>
     <string name="system_default">默认魔法</string>
-    <string name="settings_global_namespace_mode">全域魔法领域</string>
-    <string name="settings_global_namespace_mode_summary">所有变身仪式共享同一个魔法空间</string>
-    <string name="settings_clear_super_key_dialog">确定要继续施展这个魔法吗？</string>
-    <string name="settings_sucompat">旧版魔法使兼容</string>
-    <string name="settings_sucompat_summary">启用 path_probe 探路魔钩，以承旧版魔法使之路</string>
-    <string name="settings_selinux_hide">隐藏结界修改（测试）</string>
-    <string name="settings_selinux_hide_summary">隐藏魔法结界的修改，防止被凡间进程探测到（此魔法可能不稳定）。安全模式可令其失效。</string>
-    <string name="settings_selinux_hide_warning_title">警告</string>
-    <string name="settings_selinux_hide_warning_below_5_10">此魔法仅在 5.10 及以上内核测试过，低版本内核上可能不稳定。</string>
-    <string name="settings_selinux_hide_warning_non_gki">非GKI内核风险更大，可能导致无法开机，请确保已备份数据。</string>
 
-    <string name="home_learn_apatch">了解心之契约</string>
-    <string name="home_click_to_learn_apatch">了解心之契约的魔力及使用方法</string>
     <string name="settings_hide_apatch_card">隐藏"了解心之契约"魔法阵</string>
     <string name="settings_hide_apatch_card_summary">隐藏魔法大厅的"了解心之契约"魔法阵</string>
 
-    <string name="about_source_code"><![CDATA[<p>在 %1$s 查看魔法书<p/>加入我们的 %2$s 魔法学院<p/>加入我们的 %3$s 魔法少女公会]]></string>
     <string name="send_log">发送魔法记录</string>
     <string name="settings_clean_storage">净化魔法数据</string>
     <string name="settings_clean_storage_summary">消除残留魔力，避免下载或应用失败</string>
     <string name="settings_clean_storage_confirm">将消除已下载的魔法主题、导入的乐曲、音效与全部缓存，并重构相关结界。契约设定将被保留。要继续吗？</string>
     <string name="settings_clean_storage_done">净化完成</string>
-    <string name="save_log">保存魔法记录</string>
-    <string name="log_saved">魔法记录已保存</string>
-    <string name="safe_mode">安全变身模式</string>
     <string name="github">GitHub</string>
-    <string name="telegram">Telegram</string>
-    <string name="support_or_donate">支持 / 捐赠魔法</string>
 
-    <string name="super_key">心之密钥</string>
-    <string name="clear_super_key">清除心之密钥</string>
-    <string name="patch_set_superkey">设定心之密钥</string>
-    <string name="home_patch_set_key_desc">心之契约的唯一认证咒语</string>
-    <string name="home_patch_next_step">下一步咒语</string>
 
-    <string name="home_not_installed">尚未觉醒</string>
-    <string name="home_install_unknown">未觉醒或未认证</string>
-    <string name="home_install_unknown_summary">点击觉醒魔法</string>
-    <string name="home_click_to_install">点击觉醒</string>
-    <string name="home_working">神域展开</string>
-    <string name="home_kp_need_update">发现新的魔法咒语</string>
-    <string name="home_kp_cando_update">更新咒语</string>
 
-    <string name="home_installing">正在觉醒中</string>
 
-    <string name="kpatch_version">魔法等级: %s</string>
-    <string name="apatch_version">契约等级: %s</string>
 
-    <string name="kpatch_version_update" formatted="false">魔法等级: %s -> %s</string>
-    <string name="kpatch_shadow_path_title">心之契约</string>
-    <string name="home_auth_key_title">吟唱心之密钥</string>
-    <string name="home_auth_key_desc">认证通过后开始使用魔法</string>
-    <string name="home_kpatch_info_title">魔法情报</string>
 
-    <string name="home_ap_cando_install">觉醒</string>
 
-    <string name="home_ap_cando_uninstall">解除契约</string>
-    <string name="home_ap_cando_reboot">重新觉醒</string>
 
-    <string name="patch_title">施展魔法</string>
 
-    <string name="patch_config_title">魔法阵</string>
-    <string name="patch_mode_bootimg_patch">模式：魔法附魔</string>
-    <string name="patch_mode_patch_and_install">模式：附魔并觉醒</string>
-    <string name="patch_mode_install_to_next_slot">模式：转移到备用星之容器 (OTA仪式后)</string>
-    <string name="patch_mode_uninstall_patch">模式：解除心之契约</string>
-    <string name="patch_select_bootimg_btn">选择魔法容器</string>
-    <string name="patch_embed_kpm_btn">镶嵌星之魔法阵</string>
-    <string name="patch_start_patch_btn">开始施法</string>
-    <string name="patch_start_unpatch_btn">解除附魔</string>
-    <string name="patch_item_error">!!魔法反噬!!</string>
-    <string name="patch_item_bootimg">魔法容器</string>
-    <string name="patch_item_bootimg_slot">星之位置:</string>
-    <string name="patch_item_bootimg_dev">魔法道具:</string>
-    <string name="patch_item_kernel">心之核心</string>
-    <string name="patch_item_kpimg">契约印记</string>
-    <string name="patch_item_kpimg_version">魔法等级:</string>
-    <string name="patch_item_kpimg_comile_time">施法时间:</string>
-    <string name="patch_item_kpimg_config">魔法配置:</string>
-    <string name="patch_item_new_extra_kpm">镶嵌新星之魔法阵</string>
-    <string name="patch_item_existed_extra_kpm">已存在</string>
-    <string name="patch_item_extra_name">魔法名称:</string>
-    <string name="patch_item_extra_version">魔法等级:</string>
-    <string name="patch_item_extra_author">创造者:</string>
-    <string name="patch_item_extra_kpm_license">魔法契约:</string>
-    <string name="patch_item_extra_kpm_desciption">魔法描述:</string>
-    <string name="patch_item_extra_args">咒语参数:</string>
-    <string name="patch_item_extra_event">触发事件:</string>
-    <string name="patch_item_skey">心之密钥</string>
-    <string name="patch_custom_superkey">自定义心之密钥</string>
-    <string name="patch_custom_superkey_summary">你仍可设心之密钥来管理魔法，魔法书已获内印授权</string>
-    <string name="patch_item_set_skey_label">心之密钥长度应为8-63个字符，包含星光和月辉，不能含有混沌之力。</string>
-    <string name="patch_confirm_superkey">再次凝炼心之密钥</string>
-    <string name="patch_skey_mismatch">两次心之密钥不契合</string>
 
     <string name="home_kernel">心之核心等级</string>
-    <string name="home_manager_version">契约管理器等级</string>
     <string name="home_fingerprint">魔法指纹</string>
 
     <string name="home_selinux_status">魔法结界状态</string>
@@ -170,130 +77,21 @@
     <string name="home_selinux_status_permissive">结界宽容模式</string>
     <string name="home_selinux_status_unknown">结界状态未知</string>
 
-    <string name="settings_selinux_mode">魔法结界模式</string>
-    <string name="settings_selinux_mode_summary">选择魔法结界的执行模式</string>
-    <string name="settings_selinux_mode_enforcing">强制执行 (严格)</string>
-    <string name="settings_selinux_mode_permissive">宽容模式 (宽松)</string>
-    <string name="settings_selinux_current_mode">当前: %s</string>
-    <string name="settings_selinux_mode_enforcing_summary">魔法结界将严格执行所有魔法规则</string>
-    <string name="settings_selinux_mode_permissive_summary">魔法结界仅记录违规行为，不会阻止</string>
 
     <string name="home_device_info">魔法道具</string>
     <string name="home_system_version">星界系统等级</string>
-    <string name="home_kpatch_version">心之契约等级</string>
-    <string name="home_su_path">魔法使路径</string>
-    <string name="home_apatch_version">魔法少女工坊版本</string>
 
-    <string name="kpm">心之结晶</string>
-    <string name="kpm_kp_not_installed">心之契约尚未觉醒</string>
-    <string name="kpm_add_kpm">添加心之结晶</string>
-    <string name="kpm_load">激活</string>
-    <string name="kpm_install">契约</string>
-    <string name="kpm_embed">融合</string>
-    <string name="kpm_embedded">已融合</string>
-    <string name="kpm_installed">已激活</string>
-    <string name="kpm_disabled">已封印（重启后生效）</string>
-    <string name="kpm_embedded_unload_invalid">融合的心之结晶无法拆解；重启后仍会保持。</string>
-    <string name="kpm_loaded">已激活</string>
-    <string name="kpm_load_toast_succ">激活成功</string>
-    <string name="kpm_install_toast_succ">安装成功，魔晶充能后生效</string>
-    <string name="kpm_load_toast_failed">激活失败</string>
-    <string name="kpm_unload_confirm">卸载%s心之结晶？</string>
-    <string name="kpm_unload">解除契约</string>
-    <string name="kpm_control">操控</string>
-    <string name="kpm_apm_empty">未激活心之结晶</string>
-    <string name="kpm_custom_order">切换自定义心之结晶顺序</string>
-    <string name="kpm_load_failed">加载内核魔法阵失败</string>
-    <string name="kpm_version">魔法等级</string>
-    <string name="kpm_license">魔法契约</string>
-    <string name="kpm_author">创造者</string>
-    <string name="kpm_desc">魔法描述</string>
-    <string name="kpm_args">咒语参数</string>
 
-    <string name="su_title">魔法使</string>
-    <string name="su_selinux_via_hook">通过魔法阵绕过结界</string>
-    <string name="su_pkg_excluded_label">魔法免疫</string>
-    <string name="su_batch_exclude_title">批量免疫</string>
-    <string name="su_batch_exclude_content">为全部非魔法使施加免疫咒语,请选择一个魔法</string>
-    <string name="su_exclude_btn">施加免疫</string>
-    <string name="su_exclude_reverse_btn">解除免疫</string>
 
     <!-- 超级用户应用操作弹窗 -->
-    <string name="su_app_action_title">魔法操作</string>
-    <string name="su_app_action_content">请选择一个魔法来对应用施放</string>
-    <string name="su_app_action_launch">召唤应用</string>
-    <string name="su_app_action_force_stop">封印应用</string>
-    <string name="su_app_action_launch_success">正在召唤 %s</string>
-    <string name="su_app_action_force_stop_success">已封印 %s</string>
-    <string name="su_app_action_failed">魔法失效: %s</string>
 
     <!-- SU Audit Log -->
-    <string name="su_audit_log_title">授权日志</string>
-    <string name="su_audit_log_empty">暂无授权记录</string>
-    <string name="su_audit_log_clear">清除日志</string>
-    <string name="su_audit_log_clear_confirm">确认清除所有授权记录？</string>
-    <string name="su_audit_action_grant">已授权</string>
-    <string name="su_audit_action_revoke">已撤销</string>
-    <string name="su_audit_action_exclude">已排除</string>
-    <string name="su_audit_tab_usage">使用记录</string>
-    <string name="su_audit_tab_operations">操作记录</string>
 
-    <string name="su_pkg_excluded_setting_title">免疫设置</string>
-    <string name="su_pkg_excluded_setting_summary">启用此选项将允许魔法工坊恢复此应用所受的魔法影响。</string>
-    <string name="su_pkg_root_setting_title">魔法使</string>
-    <string name="su_pkg_root_setting_summary">启用此选项为你的应用启动魔法少女之力，应用能够使用魔法咒语</string>
-    <string name="su_pkg_normal_setting_title">凡人模式</string>
-    <string name="su_pkg_normal_setting_summary">凡人状态，无魔法少女之力加持，不能使用魔法咒语。</string>
-    <string name="su_show_system_apps">显示系统魔法使</string>
-    <string name="su_hide_system_apps">隐藏系统魔法使</string>
-    <string name="su_refresh">刷新魔法阵</string>
-    <string name="su_multi_select_title">选择应用</string>
-    <string name="su_multi_select_count">已选择 %d 个</string>
-    <string name="su_multi_select_grant_root">授予 ROOT</string>
-    <string name="su_multi_select_revoke_root">撤销 ROOT</string>
-    <string name="su_multi_select_exclude">排除</string>
-    <string name="su_multi_select_confirm_grant">授予 ROOT 给 %d 个应用？</string>
-    <string name="su_multi_select_confirm_revoke">撤销 %d 个应用的 ROOT 权限？</string>
-    <string name="su_multi_select_confirm_exclude">排除 %d 个应用？</string>
-    <string name="su_multi_select_enter">多选</string>
 
-    <string name="apm">星之魔法阵</string>
-    <string name="apm_not_installed">星之守护尚未觉醒</string>
-    <string name="apm_failed_to_enable">激活魔法阵失败: %s</string>
-    <string name="apm_failed_to_disable">解除魔法阵失败: %s</string>
-    <string name="apm_empty">未契约魔法阵</string>
-    <string name="apm_load_failed">魔法阵召唤失败</string>
     <string name="apm_remove">移除</string>
-    <string name="apm_undo">恢复契约</string>
-    <string name="apm_install">契约</string>
-    <string name="apm_uninstall_confirm">解除%s魔法阵契约？</string>
-    <string name="apm_uninstall_success">%s已解除契约</string>
-    <string name="apm_uninstall_failed">解除契约失败: %s</string>
-    <string name="apm_undo_uninstall_success">%s契约恢复成功</string>
-    <string name="apm_undo_uninstall_failed">契约恢复失败：%s</string>
-    <string name="apm_version">魔法等级</string>
-    <string name="apm_author">创造者</string>
-    <string name="apm_desc">魔法描述</string>
-    <string name="apm_overlay_fs_not_available">星之回廊被心之核心封印，魔法阵不可用！</string>
-    <string name="apm_magisk_conflict">由于与Magisk魔法阵冲突，此魔法阵不可用！</string>
-    <string name="apm_mount_warning_title">重要提示</string>
-    <string name="apm_mount_warning_message">默认不挂载魔法阵，请使用内置挂载系统或者元魔法阵</string>
-    <string name="apm_mount_warning_button">我知道了</string>
-    <string name="apm_reboot_to_apply">重新觉醒后生效</string>
-    <string name="apm_changelog">魔法更新记录</string>
     <string name="apm_update">更新魔法</string>
-    <string name="apm_downloading">正在下载魔法阵: %s</string>
-    <string name="apm_start_downloading">开始下载: %s</string>
-    <string name="apm_new_version_available">发现新版本%s魔法阵，点击升级。</string>
 
-    <string name="hide_apatch_manager">隐藏魔法工坊</string>
-    <string name="hide_apatch_manager_summary">安装一个随机包名和自定义魔法名的代理魔法使</string>
-    <string name="hide_apatch_dialog_new_manager_name">新魔法使名称</string>
-    <string name="hide_apatch_dialog_summary">这将作为显示在星界中的新魔法使名称</string>
-    <string name="hide_apatch_manager_failure">隐藏失败。请报告此魔法错误！</string>
 
-    <string name="setting_reset_su_path">重置魔法使路径</string>
-    <string name="setting_reset_su_new_path">新完整魔法路径</string>
 
     <string name="settings_folkx_engine_title">FolkX魔法动画引擎</string>
     <string name="settings_folkx_engine_summary">在顶层魔法页面切换时使用流畅的物理弹簧动画</string>
@@ -305,68 +103,12 @@
     <string name="settings_folkx_animation_vertical">魔法垂直滑动</string>
     <string name="settings_folkx_animation_diagonal">魔法对角滑动</string>
 
-    <string name="apm_webui_open">开启</string>
-    <string name="apm_action">魔法操作</string>
-    <string name="module_shortcut_add">魔法传送门</string>
-    <string name="module_shortcut_not_supported">魔法使召唤界面不支持桌面魔法传送门。</string>
-    <string name="module_shortcut_created">已在桌面创建魔法传送门。</string>
-    <string name="module_shortcut_updated">魔法传送门已更新。</string>
-    <string name="module_shortcut_permission_tip_xiaomi">请在小米魔法界面的设置中为本魔法使启用"创建桌面魔法传送门"权限。</string>
-    <string name="module_shortcut_permission_tip_oppo">请在OPPO魔法界面的设置中为本魔法使启用"桌面魔法传送门"权限。</string>
-    <string name="module_shortcut_permission_tip_default">若创建魔法传送门失败，请在魔法阵设置中为本魔法使启用桌面魔法传送门权限。</string>
-    <string name="module_shortcut_name">魔法传送门名称</string>
-    <string name="module_shortcut_icon">魔法传送门图标</string>
-    <string name="module_shortcut_type">魔法传送门类型</string>
-    <string name="module_shortcut_type_webui">WebUI</string>
-    <string name="module_shortcut_type_action">Action</string>
-    <string name="module_shortcut_icon_default">使用默认图标</string>
-    <string name="module_shortcut_icon_select">选择图标</string>
     <string name="enable_web_debugging">启用魔法阵调试</string>
     <string name="enable_web_debugging_summary">可用于调试星界魔法阵。请仅在需要时启用。</string>
-    <string name="settings_apm_install_confirm">安装魔法阵确认</string>
-    <string name="settings_apm_install_confirm_summary">安装魔法阵前显示确认魔法阵</string>
-    <string name="settings_apm_stay_on_page">留在魔法阵页面</string>
-    <string name="settings_apm_stay_on_page_summary">星之魔法阵执行完魔法后不自动返回</string>
-    <string name="settings_enable_module_shortcut_add">启用魔法传送门添加按钮</string>
-    <string name="settings_enable_module_shortcut_add_summary">在系统魔法阵页面显示 WebUI 魔法传送门添加按钮</string>
-    <string name="settings_module_sort_optimization">魔法阵排序优化</string>
-    <string name="settings_module_sort_optimization_summary">让系统魔法阵带有WebUI和Action的魔法阵排在前面</string>
-    <string name="apm_custom_order">自定义魔法阵顺序</string>
-    <string name="apm_drag_to_reorder">拖动调整顺序</string>
-    <string name="apm_reset_order">恢复自动排序</string>
-    <string name="settings_fold_system_module">折叠系统魔法阵</string>
-    <string name="settings_fold_system_module_summary">点击魔法阵卡片展开/折叠操作按钮</string>
-    <string name="settings_simple_list_bottom_bar">简约魔法底栏</string>
-    <string name="settings_simple_list_bottom_bar_summary">魔法阵符法使用纯图标按钮样式，灵感来自APatch</string>
-    <string name="settings_spliced_card_group">Spliced Card Group</string>
-    <string name="settings_spliced_card_group_summary">Use M3E continuous card group style for module list</string>
-    <string name="settings_show_kpm_status_badge">显示心之结晶状态徽章</string>
-    <string name="settings_show_kpm_status_badge_summary">在心之结晶卡片上显示已融合/已激活状态徽章</string>
-    <string name="settings_show_more_module_info">显示魔法阵详细信息</string>
-    <string name="settings_show_more_module_info_summary">在魔法阵列表中显示魔法阵 ID 和大小</string>
-    <string name="apm_install_confirm_title">安装魔法阵</string>
-    <string name="apm_install_confirm_content">确定要契约%s魔法阵吗？</string>
-    <string name="apm_disable_all_title">禁用所有魔法阵</string>
-    <string name="apm_disable_all_confirm">确定禁用全部魔法阵吗？此操作将停用所有已安装的魔法阵</string>
     <string name="apm_enable_module_banner">启用魔法阵横幅</string>
     <string name="apm_enable_module_banner_summary">为支持的魔法阵显示横幅图片</string>
     <string name="apm_enable_folk_banner">自定义魔法阵横幅</string>
     <string name="apm_enable_folk_banner_summary">长按魔法阵卡片自选横幅图片</string>
-    <string name="apm_folk_banner_title">Модуль засвар</string>
-    <string name="apm_folk_banner_select">选择图片</string>
-    <string name="apm_folk_banner_clear">清除 FolkBanner</string>
-    <string name="apm_folk_banner_saved">已为 %s 注入 FolkBanner。</string>
-    <string name="apm_folk_banner_cleared">已为 %s 清除 FolkBanner。</string>
-    <string name="apm_folk_banner_failed">为 %s 更新 FolkBanner 失败。</string>
-    <string name="folk_banner_custom_info_title">模块信息</string>
-    <string name="folk_banner_custom_info_name">名称</string>
-    <string name="folk_banner_custom_info_version">版本</string>
-    <string name="folk_banner_custom_info_author">作者</string>
-    <string name="folk_banner_custom_info_description">简介</string>
-    <string name="folk_banner_custom_info_save">保存</string>
-    <string name="folk_banner_custom_info_reset">重置</string>
-    <string name="folk_banner_custom_info_saved">已保存 %s 的模块自定义信息</string>
-    <string name="folk_banner_custom_info_reset_done">已重置 %s 的模块自定义信息</string>
     <string name="apm_banner_api_mode">API模式</string>
     <string name="apm_banner_api_mode_summary">使用随机图API或本地目录为模块提供横幅</string>
     <string name="apm_banner_api_source">配置API源</string>
@@ -396,109 +138,23 @@
     <string name="settings_banner_custom_opacity_summary">自定义横幅透光率，不再跟随桌布模式</string>
     <string name="settings_banner_opacity">横幅不透光率</string>
 
-    <string name="settings_donot_store_superkey">不在本地存储心之密钥</string>
-    <string name="settings_donot_store_superkey_summary">每次启动魔法工坊时验证心之密钥</string>
-
-    <string name="mode_select_page_title">觉醒</string>
-    <string name="mode_select_page_patch_and_install">附魔并觉醒</string>
-    <string name="mode_select_page_select_file">选择要附魔的魔法容器</string>
-    <string name="mode_select_page_install_inactive_slot">契约到备用星之容器 (OTA仪式后)</string>
-    <string name="mode_select_page_install_inactive_slot_warning">你的魔法道具将在重新觉醒后**强制**启动到当前未激活的星之位置！\n仅在OTA仪式完成后使用此选项。\n继续吗？</string>
-    <string name="mode_select_page_select_kpimg">使用本地魔法补丁 (KPimg)</string>
-    <string name="mode_select_page_init_boot_warning_title">拿错了魔法材料！</string>
-    <string name="mode_select_page_init_boot_warning_message">这份材料看起来是 init_boot 或 vendor_boot 的魔力残渣。
-KernelPatch 魔法阵需要 boot 核心来施展。
-
-请选取正确的 boot 核心（通常名为 boot.img）。
-
-仍要强行施法？</string>
-    <string name="patch_custom_kpimg_label">自定义 KPimg</string>
-    <string name="patch_custom_kpimg_file">文件: %s</string>
-    <string name="patch_select_kpimg_btn">选择 KPimg</string>
-
-    <string name="home_dialog_auth_fail_title">认证失败</string>
-    <string name="home_dialog_auth_fail_content">无法认证心之密钥，导致 FolkPatch 激活失败。
-以下是认证失败的一些可能原因——请对号入座：
 
 
-\n1. 你根本没使用心之契约来附魔 boot.img，或者忘了自己到底做了啥。
-\n2. 附魔完的 boot.img 还躺在电脑里睡觉，根本没激活进魔法道具。
-\n3. 心之密钥输错了，或者夹杂了混沌符号，比如来自异界符文的字符。
-\n4. 你的魔法道具可能并不兼容 FolkPatch 和心之契约，强行施法也是徒勞。
-\n5. 你可能搞了一些神秘操作——比如用了某些排除咒语的魔法把 FolkPatch 给屏蔽了，结果把自己整出局了。
-\n请先好好检查一遍，再试一次。如果问题依旧，欢迎到官方魔法塔的 issue 页面提问。
-毕竟，有些问题可能纯粹是您自己亲手造成的！
-祝你好运啊！顺带一提，你点击下面的魔导书按钮准没错！</string>
 
     <string name="home_more_menu_feedback_or_suggestion">反馈或建议</string>
     <string name="home_more_menu_about">关于</string>
-    <string name="home_more_menu_document">魔导书</string>
 
     <string name="home_more_menu_music_play">播放音乐</string>
     <string name="home_more_menu_music_pause">暂停音乐</string>
 
     <!-- Plugin strings -->
-    <string name="plugin_title">插件</string>
-    <string name="plugin_refresh">刷新</string>
-    <string name="plugin_summary_title">APD Lua Plugin</string>
-    <string name="plugin_summary_not_installed">APD 未安装 · 插件不可用</string>
-    <string name="plugin_state_enabled">已启用</string>
-    <string name="plugin_state_disabled">已停用</string>
-    <string name="plugin_toggle_failed">插件状态修改失败</string>
-    <string name="plugin_empty">尚未安装插件</string>
-    <string name="plugin_empty_hint">将 main.lua 放到 /data/adb/plugins/&lt;id&gt;/ 即可添加插件。</string>
-    <string name="plugin_load_failed">插件加载失败</string>
-    <string name="plugin_manage_summary">管理轻量级 Lua 插件</string>
-    <string name="plugin_install">安装插件</string>
-    <string name="plugin_install_success">插件安装成功</string>
-    <string name="plugin_install_failed">插件安装失败</string>
-    <string name="plugin_uninstall_title">卸载插件</string>
-    <string name="plugin_uninstall">卸载</string>
-    <string name="plugin_uninstall_confirm">确定卸载插件 %1$s？</string>
-    <string name="plugin_uninstall_success">插件已卸载</string>
-    <string name="plugin_uninstall_failed">插件卸载失败</string>
-    <string name="plugin_action">运行</string>
-    <string name="plugin_action_success">操作执行成功</string>
-    <string name="plugin_action_failed">操作执行失败</string>
-    <string name="plugin_quick_action_success">执行成功</string>
-    <string name="plugin_quick_action_failed">执行失败</string>
-    <string name="plugin_config">配置</string>
-    <string name="plugin_config_title">配置 %1$s</string>
-    <string name="plugin_config_saved">配置已保存</string>
-    <string name="plugin_log_title">执行输出</string>
-    <string name="plugin_log_empty">暂无执行日志</string>
-    <string name="plugin_log_page_title">插件日志</string>
-    <string name="plugin_log_all_empty">所有插件均暂无日志</string>
-    <string name="plugin_log_clear">清除日志</string>
-    <string name="plugin_log_cleared">日志已清除</string>
-    <string name="plugin_log_export">导出日志</string>
 
-    <string name="home_dialog_uninstall_title">解除契约</string>
     
-    <string name="home_dialog_uninstall_ap_only">仅解除魔法契约</string>
-    <string name="home_dialog_uninstall_ap_only_desc">仅移除魔法契约，保留部分魔力</string>
-    <string name="home_dialog_uninstall_all">完全解除契约</string>
-    <string name="home_dialog_uninstall_all_desc">移除魔法契约并进入完整解除流程。</string>
     
     <!-- Install Mode Select -->
-    <string name="kp_install_methods">魔法契约修补/安装</string>
-    <string name="restore_boot_methods">选择一个启动镜像来恢复到引导分区</string>
-    <string name="restore_select_file">选择一个要还原的分区引导文件</string>
 
-    <string name="kpm_control_dialog_title">操控心之结晶</string>
-    <string name="kpm_control_dialog_content">请输入操控咒语：</string>
-    <string name="kpm_control_paramters">咒语参数</string>
-    <string name="kpm_control_outMsg">魔法输出</string>
-    <string name="kpm_control_ok">魔法成功！</string>
-    <string name="kpm_control_failed">魔法失败！</string>
     
-    <string name="settings_night_mode_follow_sys">星夜模式跟随星界</string>
-    <string name="settings_night_mode_follow_sys_summary">根据星界设置自动切换星夜模式</string>
-    <string name="settings_night_theme_enabled">星夜模式</string>
     
-    <string name="settings_use_system_color_theme">星界颜色主题</string>
-    <string name="settings_use_system_color_theme_summary">使用星界根据魔法阵生成的颜色主题</string>
-    <string name="settings_custom_color_theme">颜色魔法主题</string>
 
     <string name="amber_theme">琥珀之光</string>
     <string name="blue_theme">星空之蓝</string>
@@ -523,80 +179,23 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="theme_light">光之形态</string>
     <string name="theme_dark">暗之形态</string>
     <string name="theme_system">魔法世界</string>
-    <string name="loading_modules">正在召唤魔法阵…</string>
-    <string name="loading_scripts">正在搜寻魔法咒语…</string>
     <string name="loading_themes">正在加载魔法主题…</string>
     <string name="loading_apis">正在加载魔法源…</string>
     <string name="retry">重试</string>
 
-    <string name="about_app_desc">一个基于心之核心的魔法变身解决方案，支持心之结晶和心之函数hook，无需重新锻造心之核心。</string>
     <string name="about_powered_by">由%1$s提供魔力</string>
-    <string name="about_telegram_group">魔法少女通讯群组</string>
     
     <!-- Online Module Strings -->
-    <string name="online_module_title">在线星之魔法阵</string>
-    <string name="online_module_download_start">开始召唤: %s</string>
-    <string name="online_module_download_complete">召唤完成: %s</string>
-    <string name="online_module_download_notification">正在召唤%s。请查看魔法水晶球了解进度，召唤完成后请查看魔法仓库。</string>
 
     <!-- Online Module Source Strings -->
-    <string name="online_module_source_official">官方魔法源</string>
-    <string name="online_module_source_cluster">魔法仓库集群</string>
-    <string name="online_module_source_custom">自设魔法仓库</string>
-    <string name="online_module_source_title">魔法阵之源</string>
-    <string name="online_module_repo_url_title">魔法仓库地址</string>
-    <string name="online_module_repo_url_hint">https://example.com/modules.json</string>
-    <string name="online_module_repo_settings">魔法仓库设置</string>
 
     <!-- Repo Module Detail Strings -->
-    <string name="repo_module_detail_links">魔法链接</string>
-    <string name="repo_module_detail_homepage">魔法主页</string>
-    <string name="repo_module_detail_source">魔法源码</string>
-    <string name="repo_module_detail_support">魔法反馈</string>
-    <string name="repo_module_detail_versions">魔法版本史</string>
-    <string name="repo_module_detail_download">召唤并施展</string>
-    <string name="repo_module_detail_by_author">作者：%1$s</string>
-    <string name="online_module_repo_browse_title">浏览魔法仓库</string>
-    <string name="online_module_view_modules">查看魔法阵</string>
-    <string name="online_module_select_repo_hint">选择魔法仓库以浏览魔法阵</string>
-    <string name="online_module_enter_url_hint">输入魔法仓库地址</string>
-    <string name="online_module_invalid_url">请输入有效的魔法地址</string>
-    <string name="online_module_explore_repos">探索魔法仓库</string>
-    <string name="online_module_repo_count">%1$d 个魔法仓库</string>
-    <string name="online_module_module_count">%1$d+ 个魔法阵</string>
-    <string name="online_module_select_repo">选择魔法仓库</string>
-    <string name="online_module_enter_url_manually">手动输入魔法地址</string>
-    <string name="online_module_default_repo">默认魔法仓库</string>
-    <string name="online_module_repo_list_title">魔法仓库列表</string>
-    <string name="online_module_load_error">召唤失败，请刷新重试</string>
-    <string name="online_module_no_search_results">未找到匹配的魔法阵</string>
-    <string name="online_module_module_detail_download_count">下载次数：%1$s</string>
-    <string name="online_module_module_detail_last_update">最后更新：%1$s</string>
-    <string name="online_module_module_detail_version">版本：%1$s</string>
-    <string name="online_module_module_detail_size">大小：%1$s</string>
-    <string name="online_module_module_detail_author">作者：%1$s</string>
-    <string name="online_module_module_detail_description">描述：%1$s</string>
-    <string name="online_module_module_detail_suitable">适用于：%1$s</string>
-    <string name="online_module_module_detail_changelog">更新日志：%1$s</string>
-    <string name="online_module_module_detail_instructions">使用说明：%1$s</string>
 
     <!-- Online KPM Strings -->
-    <string name="online_kpm_title">在线心之结晶</string>
-    <string name="online_kpm_download_start">开始召唤: %s</string>
-    <string name="online_kpm_download_complete">召唤完成: %s</string>
-    <string name="online_kpm_download_notification">正在召唤%s。请查看魔法水晶球了解进度，召唤完成后请查看魔法仓库。</string>
 
     <!-- Online Plugin Strings -->
-    <string name="online_plugin_title">在线魔法插件</string>
-    <string name="online_plugin_download_start">开始召唤: %s</string>
-    <string name="online_plugin_download_complete">召唤完成: %s</string>
-    <string name="online_plugin_download_notification">正在召唤%s。请查看魔法水晶球了解进度，召唤完成后请查看魔法仓库。</string>
 
     <!-- Online Script Strings -->
-    <string name="online_script_title">在线魔法咒语</string>
-    <string name="online_script_download_start">开始召唤: %s</string>
-    <string name="online_script_download_complete">召唤完成: %s</string>
-    <string name="online_script_download_notification">正在召唤%s</string>
 
     <!-- Crash Handle Strings -->
     <string name="crash_handle_title">魔法事故报告</string>
@@ -605,72 +204,16 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <!-- About Screen Strings -->
     <string name="about_app_version">应用魔法等级: %s</string>
     <string name="about_github">魔法书仓库</string>
-    <string name="about_telegram_channel">魔法少女通讯频道</string>
 
     <string name="settings_app_dpi">魔法使清晰度</string>
     <string name="dpi_apply_settings">适月</string>
-    <string name="dpi_confirm_title">确认更改DPI</string>
-    <string name="dpi_confirm_message">将应用DPI从%1$s更改为%2$s？</string>
-    <string name="settings_magic_mount">Folk Mount API</string>
-    <string name="settings_magic_mount_summary">启用内置的魔法阵挂载系统</string>
-    <string name="settings_new_app_profile_enabled">新魔法使自动授法</string>
-    <string name="settings_new_app_profile_enabled_summary">开启后，新契约的魔法使会自动套用下方预设的授法模式</string>
-    <string name="settings_new_app_profile_mode">默认授法模式</string>
-    <string name="settings_new_app_profile_normal">日常形态</string>
-    <string name="settings_new_app_profile_root">魔法形态</string>
-    <string name="settings_new_app_profile_exclude">驱逐</string>
-    <string name="settings_hide_service">FolkPatch Hide</string>
-    <string name="settings_hide_service_summary">用魔法阵隐藏Bootloader解锁状态</string>
 
-    <string name="settings_shizuku_service">Shizuku 魔法服务</string>
-    <string name="settings_shizuku_service_summary">为支持 Shizuku 的应用展开 ADB 级魔法阵（内置法阵，无需外借法器）</string>
-    <string name="settings_shizuku_service_running">Shizuku 魔法阵运转中</string>
-    <string name="settings_shizuku_started">Shizuku 魔法已生效</string>
-    <string name="settings_shizuku_start_failed">Shizuku 魔法释放失败</string>
-    <string name="settings_shizuku_stopped">Shizuku 魔法已消散</string>
-    <string name="settings_shizuku_stop_failed">Shizuku 魔法驱散失败</string>
-    <string name="shizuku_permission_title">允许 %1$s 施展 Shizuku 魔法？</string>
-    <string name="shizuku_permission_message">该应用将通过 Shizuku 以 root 魔力调用系统 API 魔法阵</string>
-    <string name="shizuku_permission_allow">允许施法</string>
-    <string name="shizuku_permission_allow_once">仅施放一次</string>
-    <string name="shizuku_permission_deny">禁止施法</string>
-    <string name="shizuku_permission_allow_summary">永久授予访问权限</string>
-    <string name="shizuku_permission_allow_once_summary">仅本次会话允许使用</string>
-    <string name="shizuku_permission_deny_summary">拒绝授予访问权限</string>
-    <string name="shizuku_permission_binder_timeout">无法连接 Shizuku 服务，请重启服务后重试</string>
-    <string name="shizuku_management_title">Shizuku 魔法授权</string>
-    <string name="shizuku_management_empty">未发现通晓 Shizuku 魔法的应用</string>
-    <string name="shizuku_management_unavailable">Shizuku 魔法阵未运转</string>
-    <string name="shizuku_management_load_failed">魔法名录加载失败</string>
-    <string name="shizuku_management_uid">UID %1$d</string>
-    <string name="shizuku_management_granted">已允许</string>
-    <string name="shizuku_management_denied">未允许</string>
-    <string name="shizuku_management_update_failed">授权更新失败</string>
-    <string name="shizuku_management_root_access">施法权限</string>
-    <string name="shizuku_management_allowed_title">接入 Shizuku 魔法</string>
-    <string name="shizuku_management_root_access_desc">以施法者（root）身份施展命令。关闭则降为凡人（shell，UID 2000），无法读取受护数据</string>
-    <string name="shizuku_management_badge_allowed">已允</string>
-    <string name="shizuku_management_badge_denied">已拒</string>
-    <string name="shizuku_management_badge_root">ROOT</string>
-    <string name="shizuku_management_badge_shell">SHELL</string>
-    <string name="shizuku_log_title">Shizuku 魔法记录</string>
-    <string name="shizuku_log_empty">暂无魔法记录</string>
-    <string name="shizuku_log_refresh">重铸</string>
-    <string name="shizuku_log_clear">净化记录</string>
-    <string name="shizuku_log_cleared">记录已净化</string>
-    <string name="shizuku_log_export">誊录</string>
-    <string name="shizuku_log_copy">复刻</string>
-    <string name="shizuku_log_copied">已复刻至剪贴板</string>
-    <string name="shizuku_log_source_server">施法端记录</string>
-    <string name="shizuku_log_source_logcat">Logcat</string>
-    <string name="shizuku_log_search_hint">查找魔法记录</string>
 <string name="settings_app_title">魔法使名称</string>
     <string name="app_title_custom">自定义魔法名</string>
     <string name="settings_custom_app_title">设置魔法使名称</string>
     <string name="custom_app_title_dialog_title">自定义魔法使名称</string>
     <string name="custom_app_title_dialog_hint">请输入魔法使名称</string>
     <string name="custom_app_title_dialog_confirm">确认</string>
-    <string name="custom_app_title_dialog_empty">名称不能为空</string>
     <string name="cancel">取消</string>
     <string name="settings_custom_background">自定义魔法背景</string>
     <string name="settings_custom_background_enabled">已启用自定义魔法背景</string>
@@ -712,20 +255,9 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="settings_title_image_dim">背景魔法暗度</string>
     <string name="settings_title_image_offset_x">水平位置</string>
 
-    <string name="settings_launcher_icon">魔法使徽章</string>
-    <string name="su_exclude_all_title">批量免疫</string>
-    <string name="su_exclude_all_confirm">确定要将所有未觉醒的魔法使施加免疫咒语吗？</string>
 
     <!-- 隐藏设定字符串 -->
-    <string name="home_hide_su_path">隐藏魔法使路径</string>
-    <string name="home_hide_kpatch_version">隐藏心之核心契约等级</string>
     <string name="home_hide_fingerprint">隐藏魔法指纹</string>
-    <string name="home_hide_zygisk">隐藏 Zygisk 魔法实现</string>
-    <string name="home_hide_mount">隐藏魔法结界</string>
-    <string name="home_hide_su_path_summary">在魔法情报卡片中隐藏魔法使路径</string>
-    <string name="home_hide_kpatch_version_summary">在魔法情报卡片中隐藏心之核心契约等级信息</string>
-    <string name="home_hide_zygisk_summary">在魔法情报卡片中隐藏 Zygisk 魔法实现信息</string>
-    <string name="home_hide_mount_summary">在魔法情报卡片中隐藏魔法结界信息</string>
     <string name="home_hide_fingerprint_summary">在魔法情报卡片中隐藏魔法指纹信息</string>
     <string name="settings_grid_working_card_hide_check">魔法少女隐身术</string>
     <string name="settings_grid_working_card_hide_check_summary">隐藏魔法少女卡片上的魔法符印或警示标记</string>
@@ -751,23 +283,6 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     
 
     <!-- APM Bulk Install Strings -->
-    <string name="apm_bulk_install_title">星之魔法阵批量契约</string>
-    <string name="apm_bulk_install_list_title">魔法阵列表</string>
-    <string name="apm_bulk_install_add">添加魔法阵</string>
-    <string name="apm_bulk_install_empty">未添加魔法阵</string>
-    <string name="apm_bulk_install_action">批量契约</string>
-    <string name="apm_bulk_install_log_title">批量契约记录</string>
-    <string name="apm_bulk_install_log_start">开始批量契约...</string>
-    <string name="apm_bulk_install_log_installing">正在契约 %1$s</string>
-    <string name="apm_batch_install_full_process">完整批量契约仪式</string>
-    <string name="apm_batch_install_full_process_summary">使用完整仪式进行魔法阵批量契约</string>
-    <string name="next_module">下一个魔法阵</string>
-    <string name="apm_bulk_install_log_installed">魔法阵 %s 契约完成。</string>
-    <string name="apm_bulk_install_log_done">所有魔法仪式已完成。</string>
-    <string name="apm_bulk_install_first_use_text">这个功能允许你一次性施展多个魔法阵，属于快速施法，适合施展一些过程中没有涉及咒语咏唱的魔法阵，涉及咏唱古代咒语的请去设置启用完整仪式模式</string>
-    <string name="apm_bulk_install_remove">移除</string>
-    <string name="apm_first_use_title">欢迎使用星之魔法阵</string>
-    <string name="apm_first_use_text">欢迎使用星之魔法阵，这里使用的是兼容Magisk生态的魔法阵，点击右下角的按钮可以施展魔法阵，你也可以使用顶部的施法器批量施展魔法阵，还提供了一个功能一键备份全部魔法阵，但是注意这种方案不一定适用全部魔法阵，还是自己多加备份</string>
 
     <!-- Welcome Guide -->
     <string name="welcome_title_1">欢迎来到 FolkPatch 魔法领域</string>
@@ -786,8 +301,6 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     
 
     <!-- Module Backup/Restore Strings -->
-    <string name="apm_copy_list_title">抄录魔法名录</string>
-    <string name="apm_copy_list_success">名录已抄录完毕</string>
 
     <!-- Font Settings -->
     <string name="settings_custom_font">魔法少女变身</string>
@@ -800,18 +313,8 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="settings_clear_font">恢复变身前</string>
     <string name="settings_clear_font_confirm">确定要解除变身吗？</string>
     <string name="settings_font_cleared">已恢复变身前的状态</string>
-    <string name="settings_font_select_hint">请选择一个星尘卷轴(TTF)</string>
 
     <!-- Auto Backup Strings -->
-    <string name="settings_auto_backup_module">魔法星阵自动护存</string>
-    <string name="settings_auto_backup_module_summary">觉醒时自动将星之魔法阵保存到私人魔法宝箱</string>
-    <string name="settings_open_backup_dir">打开魔法宝箱</string>
-    <string name="backup_dir_empty">魔法宝箱空空如也</string>
-    <string name="backup_dir_open_failed">无法打开魔法宝箱</string>
-    <string name="auto_backup_failed">星之魔法阵保存失败: %s</string>
-    <string name="auto_backup_success">星之魔法阵保存成功: %s</string>
-    <string name="settings_auto_backup_boot">自动封印Boot圣物</string>
-    <string name="settings_auto_backup_boot_summary">自动将Boot圣物封印至魔法宝箱 (Downloads/FolkPatch/BootBackups)</string>
 
     <!-- Auto-added missing strings -->
 
@@ -820,14 +323,10 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="settings_home_layout_default">ListUI</string>
     <string name="settings_home_layout_grid">GridUI</string>
     <string name="settings_home_layout_focus">FocusUI</string>
-    <string name="settings_home_layout_sign">SignUI</string>
     <string name="settings_home_layout_circle">CircleUI</string>
     <string name="settings_home_layout_dashboard_pro">DashboardUI</string>
 
     <!-- Unofficial Version Strings -->
-    <string name="unofficial_version_title">非正统魔法工坊✨</string>
-    <string name="unofficial_version_message">你所使用的FolkPatch并非星界认证的正统魔法工坊~ 请前往官方魔法屋获取正版工坊，以避免魔法反噬或契约失效！</string>
-    <string name="go_to_github">前往Github星界魔法屋~☆</string>
     <string name="settings_save_theme">封印魔法主题</string>
     <string name="settings_import_theme">唤醒魔法主题</string>
     <string name="settings_theme_saved">魔法主题已封印</string>
@@ -852,7 +351,6 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="theme_export_action">封印</string>
     <string name="theme_import_action">唤醒</string>
     <string name="theme_import_confirm">确定要唤醒此魔法主题吗？</string>
-    <string name="theme_info">魔法主题情报</string>
 
     <!-- Grid Working Card Background -->
     <string name="settings_grid_working_card_background">魔法契约卡片背景</string>
@@ -879,11 +377,9 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="theme_store_search_hint">搜索魔法主题...</string>
     <string name="theme_source_official">魔女工坊直供</string>
     <string name="theme_source_third_party">同好魔法分享</string>
-    <string name="theme_source_local">本地</string>
     <string name="theme_store_author">编织师: %s</string>
     <string name="theme_store_version">咒语版本: %s</string>
     <string name="theme_source">魔力源流</string>
-    <string name="theme_store_download_failed">呜哇！魔力传输失败啦</string>
 <string name="theme_store_download">点亮魔法下载</string>
 
     <!-- Update Check Strings -->
@@ -895,14 +391,11 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="update_action">升级魔法</string>
     <string name="update_close">关闭</string>
     <string name="update_latest">您已掌握最新的魔法</string>
-    <string name="update_error">检查魔法升级时出错</string>
     <!--折叠选项-->
     <string name="settings_category_general">魔法基础</string>
     <string name="settings_category_appearance">变身装束</string>
     <string name="settings_appearance_font">字体魔法</string>
-    <string name="settings_appearance_font_summary">自定义字体魔法配置</string>
     <string name="settings_appearance_theme">星之主题</string>
-    <string name="settings_appearance_theme_summary">主题商店、保存、导入和重置</string>
 
     <string name="settings_nav_custom_icons">星之导航魔法印记</string>
     <string name="settings_nav_custom_icons_summary">用自定义魔法印记替换底部导航栏图标</string>
@@ -911,7 +404,6 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="nav_icon_superuser">超魔印记</string>
     <string name="nav_icon_apm">魔法模块印记</string>
     <string name="nav_icon_settings">魔法设置印记</string>
-    <string name="nav_icon_select_image">选择魔法印记</string>
     <string name="nav_icon_clear">重置为默认</string>
     <string name="nav_icon_custom_selected">自定义</string>
     <string name="nav_icon_default">默认</string>
@@ -934,13 +426,9 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="theme_mode_switch_title">切换星之模式</string>
     <string name="theme_mode_switch_msg">更改模式将影响主题魔法的浏览和施展方式。是否继续？</string>
     <string name="settings_appearance_banner">魔法横幅</string>
-    <string name="settings_appearance_banner_summary">模块横幅配置</string>
     <string name="settings_appearance_layout">星之布局</string>
-    <string name="settings_appearance_layout_summary">首页布局、导航和卡片自定义</string>
     <string name="settings_appearance_background">星之背景</string>
-    <string name="settings_appearance_background_summary">自定义背景、视频和多背景</string>
     <string name="settings_appearance_night_mode">暗夜模式</string>
-    <string name="settings_appearance_night_mode_summary">深色主题和颜色配置</string>
     <string name="settings_amoled_theme">AMOLED 纯黑主题</string>
     <string name="settings_amoled_theme_desc">为深色模式使用纯黑背景</string>
     <string name="settings_switch_icon">启用魔法按钮指示器</string>
@@ -949,9 +437,6 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="settings_discrete_slider_desc">为魔法滑块轨道添加刻度标记</string>
     <string name="settings_category_behavior">咒语指令</string>
     <string name="settings_category_function">魔法功能</string>
-    <string name="settings_use_legacy_su_page">单页超级用户授权喵</string>
-    <string name="settings_use_legacy_su_page_summary">超级用户页面改用单页授权设计喵</string>
-    <string name="settings_category_module">魔法模组</string>
     <string name="settings_category_security">结界守护</string>
     
     <!-- 背景音乐字符串（魔法少女风格版） -->
@@ -975,8 +460,7 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="settings_category_behavior_summary">万维除错、魔法植入、魔法殿堂展示</string>
     <string name="settings_category_security_summary">魔法印鉴认证与魔法阵操作验证</string>
     <string name="settings_category_backup_summary">本地魔法书、云端魔法书、WebDAV</string>
-    <string name="settings_category_module_summary">魔法信息、星序排列、批量施法</string>
-    <string name="settings_category_function_summary">FolkPatch隐匿、卸载魔法侍从</string>
+    <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">背景魔法颂歌、魔法音效、魔力振动</string>
     <string name="settings_music_playback_control">颂歌控法阵</string>
     <string name="settings_music_looping">无限吟唱</string>
@@ -996,7 +480,6 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="settings_video_background_summary">使用魔法影像作为背景</string>
     <string name="settings_select_video">选择魔法影像</string>
     <string name="settings_video_selected">已选择魔法影像</string>
-    <string name="settings_video_background_enabled">魔法影像背景已激活</string>
     <string name="settings_clear_video_background">清除魔法影像</string>
     <string name="settings_clear_video_background_confirm">确定要清除魔法影像吗？</string>
     <string name="settings_video_volume">魔法影像音量</string>
@@ -1019,34 +502,13 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="home_storage_ram">魔法记忆</string>
     <string name="home_storage_zram">魔法压缩</string>
     <string name="home_storage_swap">魔法交换</string>
-    <string name="home_info_kernel">魔法核心</string>
-    <string name="home_info_superkey">心之密钥</string>
     <string name="home_info_auth_auth">已认证</string>
     <string name="home_info_auth_na">不可用</string>
-    <string name="home_info_device_slot">魔法槽位</string>
     <string name="home_info_device_model">魔法形态</string>
-    <string name="home_info_running_mode">运行模式</string>
-    <string name="home_info_mode_full">完整</string>
-    <string name="home_info_mode_half">不完整</string>
-    <string name="home_version">魔法: %s</string>
-    <string name="home_zygisk_implement">Zygisk 魔法实现</string>
-    <string name="home_mount_implement">魔法结界</string>
 
-    <string name="settings_app_list_loading_scheme">魔法使召唤方案</string>
-    <string name="settings_app_list_loading_scheme_summary">选择如何召唤魔法使列表</string>
-    <string name="app_list_loading_scheme_root_service">魔法阵召唤 (默认)</string>
-    <string name="app_list_loading_scheme_package_manager">星界召唤 (星界 API)</string>
-    <string name="app_list_loading_scheme_dialog_title">召唤方案</string>
-    <string name="su_backup_list">封印魔法使</string>
-    <string name="su_restore_list">解封魔法使</string>
-    <string name="backup_success">封印成功</string>
-    <string name="restore_success">唤醒成功</string>
     <!-- Badge Count Settings -->
     <string name="enable_badge_count">魔法印记设定</string>
     <string name="enable_badge_count_summary">配置星图导航的魔法印记显示</string>
-    <string name="badge_superuser">显示魔法使印记</string>
-    <string name="badge_apm">显示星之魔法阵印记</string>
-    <string name="badge_kernel">显示心之结晶印记</string>
     <string name="settings_sound_effect">魔法音效</string>
     <string name="settings_sound_effect_summary">施法（点击）时回响魔法音效</string>
     <string name="settings_sound_effect_enabled">魔法音效已激活</string>
@@ -1085,9 +547,6 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="webdav_password">魔力印记</string>
     <string name="webdav_test_success">契约缔结成功</string>
     <string name="webdav_test_failed">契约缔结失败: %s</string>
-    <string name="webdav_uploading">正在传送魔法...</string>
-    <string name="webdav_backup_success">异界投影成功</string>
-    <string name="webdav_backup_failed">异界投影失败: %s</string>
     <string name="save">缔结</string>
     <string name="test">试炼</string>
     <string name="webdav_path_label">次源路径 (如 /Backup)</string>
@@ -1095,38 +554,10 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="webdav_backup_logs_title">投影记录</string>
     <string name="webdav_no_logs">魔法书是空的</string>
     <string name="webdav_clear_logs">遗忘</string>
-    <string name="settings_enable_local_backup">开启现世留影</string>
-    <string name="settings_enable_local_backup_summary">将道具留影在现世 (Downloads/FolkPatch/ModuleBackups)</string>
     <string name="close">合上魔法书</string>
-    <string name="settings_backup_password">守护咒语</string>
-    <string name="settings_backup_password_hint">吟唱守护咒语</string>
 
-    <string name="patch_output_written_to"> 魔法炼成成功，魔法书书写至 </string>
-    <string name="patch_write_failed"> 魔法炼成失败，魔力反噬</string>
 
     <!-- Script Library Strings -->
-    <string name="script_library">魔法咒语书架</string>
-    <string name="script_library_title">魔法咒语书架</string>
-    <string name="script_library_empty">书架空空如也，点击添加咒语</string>
-    <string name="script_library_add">添加咒语</string>
-    <string name="script_library_add_title">添加咒语</string>
-    <string name="script_library_select_file">选择咒语卷轴</string>
-    <string name="script_library_alias">咒名</string>
-    <string name="script_library_alias_hint">输入咒语名称（可选）</string>
-    <string name="script_library_run">施展</string>
-    <string name="script_library_delete">遗忘</string>
-    <string name="script_library_path">魔法路径：%s</string>
-    <string name="script_library_confirm_delete">真的要遗忘这个咒语吗？</string>
-    <string name="script_library_delete_success">咒语已遗忘</string>
-    <string name="script_library_delete_failed">遗忘咒语失败</string>
-    <string name="script_library_add_success">咒语已添加</string>
-    <string name="script_library_add_failed">添加咒语失败：%s</string>
-    <string name="script_library_load_failed">打开魔法书失败</string>
-    <string name="script_library_output">魔法显现</string>
-    <string name="script_library_no_output">没有显现</string>
-    <string name="script_library_save_log">记录施展历史</string>
-    <string name="script_library_log_saved">施展历史已记录到 %s</string>
-    <string name="script_library_log_save_failed">记录施展历史失败：%s</string>
 
     <string name="settings_vibration">魔力共鸣</string>
     <string name="settings_vibration_summary">触碰时产生魔力反馈</string>
@@ -1135,24 +566,8 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="settings_vibration_scope">共鸣结界范围</string>
     <string name="settings_vibration_scope_global">全域 (魔法世界)</string>
     <string name="settings_vibration_scope_bottom_bar">仅基座法阵</string>
-    <string name="superuser">魔法使</string>
-    <string name="module">星之魔法阵</string>
-    <string name="search_modules">搜索魔法阵...</string>
-    <string name="search_scripts">搜索魔法卷轴...</string>
 
     <!-- Umount Service -->
-    <string name="settings_umount_service">Umount Service</string>
-    <string name="settings_umount_service_summary">配置仪式开始时自动解除的魔法连接点</string>
-    <string name="umount_config_title">Umount 魔法阵设定</string>
-    <string name="umount_config_enabled">启用 Umount</string>
-    <string name="umount_config_enabled_summary">仪式开始时自动解除指定的魔法连接点</string>
-    <string name="umount_config_paths_label">魔法连接点坐标（每行一个）</string>
-    <string name="umount_config_paths_placeholder">/system/vendor/app\n/system/vendor/priv-app</string>
-    <string name="umount_config_paths_helper">每行输入一个需要解除的魔法连接点坐标</string>
-    <string name="umount_config_save">施展</string>
-    <string name="umount_config_save_confirm">确认施展并保存魔法阵？</string>
-    <string name="umount_config_save_success">魔法施展成功，配置已保存</string>
-    <string name="umount_config_save_failed">魔法施展失败，配置保存失败</string>
 
     <!-- 我的魔法领域页面 -->
     <string name="my_themes_title">我的魔法领域</string>
@@ -1164,27 +579,18 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="my_themes_deleted">主题已遗忘</string>
     <string name="my_themes_applied">主题已施展</string>
     <string name="my_themes_apply_failed">施展主题失败 — 长按遗忘后重新召唤吧</string>
-    <string name="my_themes_details">主题魔法详情</string>
 
     <!-- 下载对话框 -->
     <string name="theme_download_title">正在召唤主题</string>
     <string name="theme_download_completed">召唤完成</string>
     <string name="theme_download_failed">召唤失败</string>
-    <string name="theme_file_corrupt">主题魔法已失谐，请重新召唤</string>
-    <string name="theme_file_incomplete">主题魔法不完整，请重新召唤</string>
     <string name="theme_download_progress">召唤进度</string>
     <string name="theme_download_file">主题魔法书</string>
     <string name="theme_download_image">魔法预览</string>
     <string name="theme_download_cancel">终止召唤</string>
     <string name="theme_download_pause">暂停召唤</string>
-    <string name="theme_download_resume">继续召唤</string>
-    <string name="theme_download_retry">重新召唤</string>
     <string name="theme_download_apply">施展主题</string>
     <string name="theme_download_go_to_my_themes">我的魔法领域</string>
-    <string name="theme_download_retrying">重新召唤中 (%d/3)...</string>
-    <string name="theme_download_preparing">准备召唤...</string>
-    <string name="theme_download_downloading_file">正在下载主题魔法书...</string>
-    <string name="theme_download_downloading_image">正在下载魔法预览...</string>
     <string name="theme_download_finalizing">魔法凝聚中...</string>
     <string name="settings_predictive_back">预知回溯魔法手势</string>
     <string name="settings_predictive_back_summary">启用 Android 14+ 的预知回溯魔法动画</string>
@@ -1192,82 +598,27 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="home_device_status_battery_charging">魔力充盈中</string>
     <string name="home_device_status_cpu_temp">魔法温度</string>
     <string name="home_device_status_memory_trend">魔法趋势</string>
-    <string name="home_storage_partitions">魔法分区</string>
     <string name="home_device_status_cpu_freq">魔法频率</string>
     <string name="home_network_rx">魔法汲取</string>
     <string name="home_network_tx">魔法传送</string>
     <string name="settings_home_layout_stats">StatsUI</string>
-    <string name="home_stats_more_options">更多魔法</string>
-    <string name="home_stats_kp_label">KP</string>
-    <string name="home_stats_manager_label">魔法管</string>
     <string name="home_device_status_gpu_load">魔法负载</string>
-    <string name="home_stats_kernel_modules">内核魔法书</string>
-    <string name="home_stats_apm_modules">APM 魔法书</string>
-    <string name="home_stats_superusers">大魔法师</string>
-    <string name="settings_kernel_spoof">内核伪装魔法</string>
-    <string name="settings_kernel_spoof_summary">伪装内核版本和施法时间</string>
-    <string name="settings_kernel_spoof_version">内核魔法版本</string>
-    <string name="settings_kernel_spoof_build_time">内核施法时间</string>
-    <string name="settings_kernel_spoof_restore">恢复魔法</string>
 
-    <string name="kernel_spoof_enabled">内核伪装魔法已施放</string>
-    <string name="kernel_spoof_disabled_restored">内核伪装魔法已解除并恢复</string>
-    <string name="kernel_spoof_failed">内核伪装魔法施放失败: %d</string>
-    <string name="kernel_spoof_applied">内核伪装魔法已生效</string>
 
-    <string name="settings_path_hide">魔法路径隐藏</string>
-    <string name="settings_path_hide_summary">在魔法核心层面向应用隐藏文件和目录</string>
-    <string name="path_hide_paths_label">隐藏魔法路径（每行一个）</string>
 
-    <string name="path_hide_paths_helper">每行输入一个魔法路径。匹配的路径将返回 ENOENT。</string>
-    <string name="path_hide_save">保存魔法</string>
-    <string name="path_hide_enabled">魔法路径隐藏已启用</string>
-    <string name="path_hide_disabled">魔法路径隐藏已禁用</string>
-    <string name="path_hide_applied">魔法路径隐藏配置已应用</string>
-    <string name="path_hide_failed">魔法路径隐藏操作失败：%d</string>
-    <string name="path_hide_uid_mode">UID 魔法执行模式</string>
-    <string name="path_hide_uid_mode_summary">仅对指定魔法应用 UID 隐藏路径</string>
-    <string name="path_hide_uids_label">目标 UID（每行一个）</string>
-    <string name="path_hide_uids_helper">输入魔法应用 UID，仅这些应用的魔法路径会被隐藏。</string>
-    <string name="path_hide_uid_save">保存魔法 UID</string>
-    <string name="path_hide_uid_mode_enabled">UID 魔法执行模式已启用</string>
-    <string name="path_hide_uid_mode_disabled">UID 魔法执行模式已禁用</string>
-    <string name="path_hide_filter_system">过滤系统 UID</string>
-    <string name="path_hide_filter_system_summary">同时对 root 和系统进程（UID &lt; 10000）隐藏魔法路径</string>
-    <string name="path_hide_filter_system_enabled">系统 UID 过滤已启用</string>
-    <string name="path_hide_filter_system_disabled">系统 UID 过滤已禁用</string>
-    <string name="path_hide_filter_system_warning_title">魔法警告</string>
-    <string name="path_hide_filter_system_warning_message">启用后将同时对 root 和系统进程（UID &lt; 10000）隐藏魔法路径。这可能导致部分魔法功能异常，请谨慎施法。</string>
-    <string name="path_hide_uid_applied">UID 魔法白名单已应用</string>
-    <string name="path_hide_select_apps">选择魔法应用</string>
-    <string name="path_hide_no_apps_selected">未选择魔法应用</string>
-    <string name="path_hide_app_removed">已移除 %d 个已卸载魔法应用的配置</string>
-    <string name="path_hide_search_apps">搜索魔法应用…</string>
-    <string name="path_hide_show_system">显示系统魔法应用</string>
-    <string name="netisolate_title">魔法网络隔离</string>
-    <string name="netisolate_enable">魔法网络隔离已启用</string>
-    <string name="netisolate_disable">魔法网络隔离已禁用</string>
-    <string name="netisolate_enable_summary">在魔法核心层面阻止所选应用的网络访问</string>
-    <string name="netisolate_uids_label">已隔离魔法应用</string>
-    <string name="netisolate_uids_hint">输入要隔离的魔法 UID（每行一个）</string>
-    <string name="netisolate_no_uids">暂无隔离魔法应用</string>
     <string name="settings_search_title">Тохиргоо хайх</string>
-    <string name="settings_search_hint">Тохиргоо хайх…</string>
     <string name="settings_search_empty_hint">Бүх тохиргоог хайхын тулд бичнэ үү…</string>
     <string name="settings_no_results">Илэрц олдсонгүй</string>
 
     <!-- 色彩生成 -->
     <string name="color_generation_classic">经典魔法</string>
     <string name="color_generation_custom">自定义魔法</string>
-    <string name="color_generation_label">色彩魔法模式</string>
 
     <!-- 色彩标准 -->
     <string name="color_standard_md3_2021">MD3 2021</string>
     <string name="color_standard_m3e_2025">M3e 2025</string>
-    <string name="color_standard_label">色彩魔法标准</string>
 
     <!-- 色彩风格 -->
-    <string name="color_style_label">色彩魔法风格</string>
     <string name="color_style_tonal_spot">色调魔法</string>
     <string name="color_style_vibrant">活力魔法</string>
     <string name="color_style_content">内容魔法</string>
@@ -1280,7 +631,6 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="settings_focus_card_background">FocusUI 卡片壁纸</string>
     <string name="settings_focus_card_background_enabled">FocusUI 卡片壁纸已开启，长按卡片管理壁纸</string>
     <string name="settings_focus_card_background_summary">启用 FocusUI 卡片壁纸及长按壁纸管理</string>
-    <string name="settings_focus_card_dim">卡片壁纸暗度</string>
     <string name="settings_focus_card_dual_dim">开启昼夜双暗度魔法</string>
     <string name="settings_focus_card_dual_dim_desc">自动随明暗主题调整卡片壁纸暗度</string>
     <string name="settings_focus_card_day_dim">白日模式卡片壁纸暗度</string>
@@ -1319,22 +669,7 @@ KernelPatch 魔法阵需要 boot 核心来施展。
     <string name="settings_background_permission_required">需要魔法仓库权限才能选择背景画卷</string>
     <string name="settings_sound_effect_save_failed">音效魔法保存失败</string>
     <string name="settings_startup_sound_save_failed">启动音效魔法保存失败</string>
-    <string name="script_library_downloaded_to">已召唤到：%s</string>
-    <string name="script_library_download_failed">召唤失败：%s</string>
-    <string name="settings_new_app_profile_update_failed">新魔法使配置更新失败：%s</string>
     <string name="settings_info_copy">长按抄录信息</string>
     <string name="settings_info_copy_summary">长按首页信息栏中的条目即可抄录其内容</string>
     <string name="home_info_copied">%1$s 已抄录完毕</string>
-    <string name="settings_jailbreak_mode">解封模式</string>
-    <string name="settings_jailbreak_mode_summary">在原生内核上加载 KernelPatch 心之契约。该模式下不允许施展修补魔法。</string>
-    <string name="settings_jailbreak_soft_reboot">轻灵重生</string>
-    <string name="settings_jailbreak_soft_reboot_message">心之契约已加载，是否立即轻灵重生？</string>
-    <string name="settings_jailbreak_restart_framework">轻灵重生框架</string>
-    <string name="settings_jailbreak_restart_framework_message">心之契约已加载，是否立即重启 Android 框架？此举将轻灵重生，仅重启框架，不会重启内核。</string>
-    <string name="settings_jailbreak_loaded">解封契约已加载</string>
-    <string name="settings_jailbreak_failed">解封契约加载失败</string>
-    <string name="jailbreak_no_patch">解封模式下不允许施展修补魔法。</string>
-    <string name="jailbreak">解封</string>
-    <string name="jailbreak_triggered">解封已触发，等待获得魔法使权能后轻灵重生。</string>
-    <string name="reboot_soft">轻灵重生</string>
 </resources>

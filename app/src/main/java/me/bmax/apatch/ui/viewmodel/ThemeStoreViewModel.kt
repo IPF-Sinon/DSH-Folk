@@ -14,7 +14,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import me.bmax.apatch.apApp
 import me.bmax.apatch.ui.theme.ThemeManager
 import me.bmax.apatch.util.DownloadStatus
 import me.bmax.apatch.util.DownloadProgress
@@ -146,10 +145,7 @@ class ThemeStoreViewModel(private val context: Context) : ViewModel() {
             isRefreshing = true
             errorMessage = null
             try {
-                val token = me.bmax.apatch.Natives.getApiToken(apApp)
-                val url = if (THEMES_URL.contains("?")) "$THEMES_URL&token=$token" else "$THEMES_URL?token=$token"
-
-                val result = FolkApiClient.fetchJson(url)
+                val result = FolkApiClient.fetchJson(THEMES_URL)
                 val jsonString = result.getOrNull()
                 if (jsonString != null) {
                     val jsonArray = JSONArray(jsonString)

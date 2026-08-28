@@ -74,7 +74,6 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
     companion object {
         /** 供 root shell 的 PATH/BUSYBOX 使用：设备上若装了 APatch，这个目录里有 busybox。 */
         const val APATCH_FOLDER = "/data/adb/ap/"
-        const val DEFAULT_SCONTEXT = "u:r:untrusted_app:s0"
 
         const val SP_NAME = "config"
         private const val SHOW_BACKUP_WARN = "show_backup_warning"

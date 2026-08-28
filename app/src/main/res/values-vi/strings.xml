@@ -5,27 +5,17 @@
 
     <string name="home">Trang chủ</string>
 
-    <string name="success">Thành công</string>
     <string name="failure">Thất bại</string>
 
-    <string name="patch_warnning">Việc vá có rủi ro, vui lòng đảm bảo bạn đã sao lưu dữ liệu.</string>
-    <string name="patch">Vá</string>
 
-    <string name="kernel_patch">N bản vá nhân</string>
-    <string name="android_patch">N bản vá hệ thống</string>
 
     <string name="settings_nav_layout_title">Cài đặt bố cục điều hướng</string>
     <string name="settings_nav_layout_summary">Ẩn hoặc hiển thị một số thành phần điều hướng</string>
     <string name="settings_nav_scheme">Phương thức điều hướng</string>
-    <string name="settings_nav_mode">Chế độ thanh điều hướng</string>
-    <string name="settings_nav_mode_summary">Chọn cách hiển thị thanh điều hướng</string>
     <string name="settings_nav_mode_auto">Tự động Truyền thống</string>
     <string name="settings_nav_mode_bottom">Luôn ở thanh dưới</string>
     <string name="settings_nav_mode_rail">Luôn ở thanh bên</string>
     <string name="settings_nav_mode_floating">Thanh dưới nổi</string>
-    <string name="settings_show_apm">Hiển thị mô-đun hệ thống</string>
-    <string name="settings_show_kpm">Hiển thị KPM</string>
-    <string name="settings_show_superuser">Hiển thị SuperUser</string>
     <string name="settings_floating_auto_hide">Tự động ẩn thanh nổi</string>
     <string name="settings_floating_auto_hide_summary">Tự động ẩn thanh nổi sau 3 giây không hoạt động</string>
     <string name="settings_floating_swipe_hide">Vuốt để ẩn thanh nổi</string>
@@ -44,15 +34,8 @@
     <string name="settings_compact_rounded_bar">Kiểu bo tròn nhỏ gọn</string>
     <string name="settings_compact_rounded_bar_summary">Dùng thanh nổi nhỏ gọn với góc bo tròn và khoảng cách hẹp hơn</string>
     <string name="settings_stats_top_layout">Bố cục trên</string>
-    <string name="settings_stats_top_layout_summary">Chọn kiểu thẻ thông tin trên</string>
     <string name="settings_stats_top_layout_list">Danh sách</string>
     <string name="settings_stats_top_layout_grid">Lưới</string>
-    <string name="settings_block_kernelpatch_update">Chặn cập nhật KernelPatch</string>
-    <string name="settings_block_kernelpatch_update_summary">Không hiển thị thông báo cập nhật KernelPatch</string>
-    <string name="settings_block_androidpatch_update">Chặn cập nhật bản vá hệ thống</string>
-    <string name="settings_block_androidpatch_update_summary">Không hiển thị thông báo cập nhật bản vá hệ thống (APD)</string>
-    <string name="settings_disable_module_update_check">Vô hiệu hóa kiểm tra cập nhật module</string>
-    <string name="settings_disable_module_update_check_summary">Vô hiệu hóa kiểm tra cập nhật tự động cho module hệ thống</string>
 
     <string name="reboot">Khởi động lại</string>
     <string name="settings">Cài đặt</string>
@@ -65,103 +48,27 @@
     <string name="developer_and_maintainer">Nhà phát triển | Người bảo trì</string>
     <string name="settings_app_language">Ngôn ngữ</string>
     <string name="system_default">Mặc định hệ thống</string>
-    <string name="settings_global_namespace_mode">Chế độ không gian tên toàn cục</string>
-    <string name="settings_global_namespace_mode_summary">Tất cả phiên làm việc root sử dụng không gian tên gắn kết toàn cục</string>
-    <string name="settings_clear_super_key_dialog">Bạn có chắc chắn muốn tiếp tục?</string>
-    <string name="settings_sucompat">Tương thích su cũ</string>
-    <string name="settings_sucompat_summary">Bật tương thích su cũ (cho khi su không hoạt động)</string>
-    <string name="settings_selinux_hide">Ẩn thay đổi SELinux (Thử nghiệm)</string>
-    <string name="settings_selinux_hide_summary">Ẩn các thay đổi SELinux để các tiến trình người dùng không phát hiện được (tính năng này có thể không ổn định). Chế độ an toàn có thể tắt tính năng này.</string>
-    <string name="settings_selinux_hide_warning_title">Cảnh báo</string>
-    <string name="settings_selinux_hide_warning_below_5_10">Tính năng này chỉ được thử nghiệm trên kernel 5.10 trở lên và có thể không ổn định trên các phiên bản kernel thấp hơn.</string>
-    <string name="settings_selinux_hide_warning_non_gki">Kernel không phải GKI có rủi ro cao hơn và có thể gây lỗi khởi động. Đảm bảo rằng bạn đã sao lưu dữ liệu.</string>
 
-    <string name="home_learn_apatch">Tìm hiểu về FolkPatch</string>
-    <string name="home_click_to_learn_apatch">Tìm hiểu về chức năng và cách sử dụng FolkPatch</string>
-    <string name="settings_hide_apatch_card">Ẩn thẻ "Tìm hiểu về FolkPatch"</string>
-    <string name="settings_hide_apatch_card_summary">Ẩn thẻ "Tìm hiểu về FolkPatch" trên trang chủ</string>
+    <string name="settings_hide_apatch_card">Ẩn thẻ "Tìm hiểu về DSH-Folk"</string>
+    <string name="settings_hide_apatch_card_summary">Ẩn thẻ "Tìm hiểu về DSH-Folk" trên trang chủ</string>
 
-    <string name="about_source_code"><![CDATA[<p>Xem mã nguồn tại %1$s<p/>Tham gia kênh %2$s của chúng tôi<p/>Tham gia nhóm %3$s của chúng tôi]]></string>
     <string name="send_log">Gửi nhật ký</string>
     <string name="settings_clean_storage">Dọn dẹp dữ liệu ứng dụng</string>
     <string name="settings_clean_storage_summary">Khắc phục lỗi tải xuống hoặc áp dụng do tệp còn sót lại</string>
     <string name="settings_clean_storage_confirm">Thao tác này sẽ xóa các chủ đề đã tải xuống, nhạc đã nhập, hiệu ứng âm thanh và toàn bộ bộ nhớ đệm, sau đó tạo lại thư mục. Cài đặt sẽ được giữ nguyên. Tiếp tục?</string>
     <string name="settings_clean_storage_done">Dọn dẹp hoàn tất</string>
-    <string name="save_log">Lưu nhật ký</string>
-    <string name="log_saved">Nhật ký đã được lưu</string>
-    <string name="safe_mode">Chế độ an toàn</string>
     <string name="github">GitHub</string>
-    <string name="telegram">Telegram</string>
-    <string name="support_or_donate">Hỗ trợ / Quyên góp</string>
 
-    <string name="super_key">Khóa siêu cấp</string>
-    <string name="clear_super_key">Xóa khóa siêu cấp</string>
-    <string name="patch_set_superkey">Đặt khóa siêu cấp</string>
-    <string name="home_patch_set_key_desc">Bản ghi chứng thực duy nhất của KernelPatch</string>
-    <string name="home_patch_next_step">Bước tiếp theo</string>
 
-    <string name="home_not_installed">Chưa cài đặt</string>
-    <string name="home_install_unknown">Chưa cài đặt hoặc chưa xác thực</string>
-    <string name="home_install_unknown_summary">Nhấn để cài đặt</string>
-    <string name="home_click_to_install">Nhấn để cài đặt</string>
-    <string name="home_working">Đang hoạt động</string>
-    <string name="home_kp_need_update">Có phiên bản mới có sẵn</string>
-    <string name="home_kp_cando_update">Cập nhật</string>
 
-    <string name="home_installing">Đang cài đặt</string>
 
-    <string name="kpatch_version">Phiên bản: %s</string>
-    <string name="apatch_version">Phiên bản: %s</string>
 
-    <string name="kpatch_version_update" formatted="false">Phiên bản: %s -&gt; %s</string>
-    <string name="kpatch_shadow_path_title">kpatch</string>
-    <string name="home_auth_key_title">Nhập khóa siêu cấp</string>
-    <string name="home_auth_key_desc">Xác thực để bắt đầu sử dụng</string>
-    <string name="home_kpatch_info_title">Thông tin</string>
 
-    <string name="home_ap_cando_install">Cài đặt</string>
 
-    <string name="home_ap_cando_uninstall">Gỡ cài đặt</string>
-    <string name="home_ap_cando_reboot">Khởi động lại</string>
 
-    <string name="patch_title">Vá</string>
 
-    <string name="patch_config_title">N bản vá</string>
-    <string name="patch_mode_bootimg_patch">Chế độ: Vá</string>
-    <string name="patch_mode_patch_and_install">Chế độ: Vá và cài đặt</string>
-    <string name="patch_mode_install_to_next_slot">Chế độ: Cài đặt vào slot chưa kích hoạt (sau OTA)</string>
-    <string name="patch_mode_uninstall_patch">Chế độ: Gỡ cài đặt KPatch</string>
-    <string name="patch_select_bootimg_btn">Chọn ảnh đệm</string>
-    <string name="patch_embed_kpm_btn">Nhúng KPM</string>
-    <string name="patch_start_patch_btn">Bắt đầu</string>
-    <string name="patch_start_unpatch_btn">Khôi phục</string>
-    <string name="patch_item_error">!!Lỗi!!</string>
-    <string name="patch_item_bootimg">Ảnh boot</string>
-    <string name="patch_item_bootimg_slot">Slot:</string>
-    <string name="patch_item_bootimg_dev">Thiết bị:</string>
-    <string name="patch_item_kernel">Nhân</string>
-    <string name="patch_item_kpimg">kpimg</string>
-    <string name="patch_item_kpimg_version">Phiên bản:</string>
-    <string name="patch_item_kpimg_comile_time">Thời gian:</string>
-    <string name="patch_item_kpimg_config">Cấu hình:</string>
-    <string name="patch_item_new_extra_kpm">Nhúng module mới</string>
-    <string name="patch_item_existed_extra_kpm">Đã tồn tại</string>
-    <string name="patch_item_extra_name">Tên:</string>
-    <string name="patch_item_extra_version">Phiên bản:</string>
-    <string name="patch_item_extra_author">Tác giả:</string>
-    <string name="patch_item_extra_kpm_license">Giấy phép:</string>
-    <string name="patch_item_extra_kpm_desciption">Mô tả:</string>
-    <string name="patch_item_extra_args">Tham số:</string>
-    <string name="patch_item_extra_event">Sự kiện:</string>
-    <string name="patch_item_skey">Khóa siêu cấp</string>
-    <string name="patch_custom_superkey">Khóa siêu cấp tùy chỉnh</string>
-    <string name="patch_custom_superkey_summary">Bạn vẫn có thể đặt khóa siêu cấp để quản lý Root và kernel, trình quản lý đã được ủy quyền bằng chữ ký tích hợp</string>
-    <string name="patch_item_set_skey_label">Độ dài khóa siêu cấp phải từ 8-63 ký tự, bao gồm chữ số và chữ cái, không chứa ký tự đặc biệt.</string>
-    <string name="patch_confirm_superkey">Xác nhận khóa siêu cấp</string>
-    <string name="patch_skey_mismatch">Khóa siêu cấp không khớp</string>
 
     <string name="home_kernel">Phiên bản nhân</string>
-    <string name="home_manager_version">Phiên bản trình quản lý</string>
     <string name="home_fingerprint">Bản in vân tay</string>
 
     <string name="home_selinux_status">Trạng thái SELinux</string>
@@ -170,127 +77,21 @@
     <string name="home_selinux_status_permissive">Chế độ khoan dung</string>
     <string name="home_selinux_status_unknown">Không xác định</string>
 
-    <string name="settings_selinux_mode">Chế độ SELinux</string>
-    <string name="settings_selinux_mode_summary">Chọn chế độ thực thi SELinux</string>
-    <string name="settings_selinux_mode_enforcing">Thực thi (Nghiêm ngặt)</string>
-    <string name="settings_selinux_mode_permissive">Khoan dung (Nới lỏng)</string>
-    <string name="settings_selinux_current_mode">Hiện tại: %s</string>
-    <string name="settings_selinux_mode_enforcing_summary">SELinux thực thi đầy đủ các quy tắc truy cập</string>
-    <string name="settings_selinux_mode_permissive_summary">SELinux chỉ ghi lại vi phạm, không từ chối</string>
 
     <string name="home_device_info">Thiết bị</string>
     <string name="home_system_version">Phiên bản hệ thống</string>
-    <string name="home_kpatch_version">Phiên bản bản vá nhân</string>
-    <string name="home_su_path">Tệp thực thi su</string>
-    <string name="home_apatch_version">Phiên bản FolkPatch</string>
 
-    <string name="kpm">Module nhân</string>
-    <string name="kpm_kp_not_installed">Chưa cài đặt bản vá nhân</string>
-    <string name="kpm_add_kpm">Thêm KPM</string>
-    <string name="kpm_load">Tải</string>
-    <string name="kpm_install">Cài đặt</string>
-    <string name="kpm_embed">Nhúng</string>
-    <string name="kpm_embedded">Đã nhúng</string>
-    <string name="kpm_loaded">Đã tải</string>
-    <string name="kpm_load_toast_succ">Tải thành công</string>
-    <string name="kpm_install_toast_succ">Đã cài đặt thành công; có hiệu lực sau khi khởi động lại</string>
-    <string name="kpm_load_toast_failed">Tải thất bại</string>
-    <string name="kpm_unload_confirm">Bạn có muốn gỡ module %s không?</string>
-    <string name="kpm_unload">Gỡ tải</string>
-    <string name="kpm_control">Kiểm soát</string>
-    <string name="kpm_apm_empty">Chưa tải module</string>
-    <string name="kpm_custom_order">Chuyển đổi thứ tự module tùy chỉnh</string>
-    <string name="kpm_load_failed">Không thể tải module kernel</string>
-    <string name="kpm_version">Phiên bản</string>
-    <string name="kpm_license">Giấy phép</string>
-    <string name="kpm_author">Tác giả</string>
-    <string name="kpm_desc">Mô tả</string>
-    <string name="kpm_args">Tham số</string>
 
-    <string name="su_title">Người dùng siêu cấp</string>
-    <string name="su_selinux_via_hook">Bỏ qua qua hook</string>
-    <string name="su_pkg_excluded_label">Loại trừ</string>
-    <string name="su_batch_exclude_title">Loại trừ hàng loạt</string>
-    <string name="su_batch_exclude_content">Loại trừ chèn cho tất cả phần mềm không có quyền ROOT, vui lòng chọn một hành động</string>
-    <string name="su_exclude_btn">Loại trừ</string>
-    <string name="su_exclude_reverse_btn">Loại trừ ngược</string>
 
     <!-- SuperUser App Action Dialog -->
-    <string name="su_app_action_title">Thao tác ứng dụng</string>
-    <string name="su_app_action_content">Vui lòng chọn một hành động để thực hiện trên ứng dụng</string>
-    <string name="su_app_action_launch">Khởi chạy ứng dụng</string>
-    <string name="su_app_action_force_stop">Buộc dừng</string>
-    <string name="su_app_action_launch_success">Đang khởi chạy %s</string>
-    <string name="su_app_action_force_stop_success">Đã buộc dừng %s</string>
-    <string name="su_app_action_failed">Thao tác thất bại: %s</string>
 
     <!-- SU Audit Log -->
-    <string name="su_audit_log_title">Nhật ký ủy quyền</string>
-    <string name="su_audit_log_empty">Chưa có bản ghi ủy quyền</string>
-    <string name="su_audit_log_clear">Xóa nhật ký</string>
-    <string name="su_audit_log_clear_confirm">Xác nhận xóa tất cả bản ghi ủy quyền?</string>
-    <string name="su_audit_action_grant">Đã cấp quyền</string>
-    <string name="su_audit_action_revoke">Đã thu hồi</string>
-    <string name="su_audit_action_exclude">Đã loại trừ</string>
-    <string name="su_audit_tab_usage">Nhật ký sử dụng</string>
-    <string name="su_audit_tab_operations">Nhật ký thao tác</string>
 
-    <string name="su_pkg_excluded_setting_title">Chỉnh sửa loại trừ</string>
-    <string name="su_pkg_excluded_setting_summary">Bật tùy chọn này sẽ cho phép FolkPatch khôi phục mọi tệp đã được module ứng dụng này sửa đổi。</string>
-    <string name="su_pkg_root_setting_title">Superuser</string>
-    <string name="su_pkg_root_setting_summary">Bật tùy chọn này để cấp quyền superuser cho ứng dụng của bạn, ứng dụng có thể sử dụng lệnh SU</string>
-    <string name="su_pkg_normal_setting_title">Chế độ thường</string>
-    <string name="su_pkg_normal_setting_summary">Không cấp quyền root, ứng dụng chạy không có đặc quyền superuser.</string>
-    <string name="su_show_system_apps">Hiển thị ứng dụng hệ thống</string>
-    <string name="su_hide_system_apps">Ẩn ứng dụng hệ thống</string>
-    <string name="su_refresh">Làm mới</string>
-    <string name="su_multi_select_title">Chọn ứng dụng</string>
-    <string name="su_multi_select_count">Đã chọn %d</string>
-    <string name="su_multi_select_grant_root">Cấp ROOT</string>
-    <string name="su_multi_select_revoke_root">Thu hồi ROOT</string>
-    <string name="su_multi_select_exclude">Loại trừ</string>
-    <string name="su_multi_select_confirm_grant">Cấp ROOT cho %d ứng dụng?</string>
-    <string name="su_multi_select_confirm_revoke">Thu hồi ROOT từ %d ứng dụng?</string>
-    <string name="su_multi_select_confirm_exclude">Loại trừ %d ứng dụng?</string>
-    <string name="su_multi_select_enter">Chọn nhiều</string>
 
-    <string name="apm">Module hệ thống</string>
-    <string name="apm_not_installed">Chưa cài đặt bản vá hệ thống</string>
-    <string name="apm_failed_to_enable">Không thể bật module: %s</string>
-    <string name="apm_failed_to_disable">Không thể vô hiệu hóa module: %s</string>
-    <string name="apm_empty">Chưa cài đặt module</string>
-    <string name="apm_load_failed">Không thể tải module</string>
     <string name="apm_remove">Xóa</string>
-    <string name="apm_undo">Hoàn tác</string>
-    <string name="apm_install">Cài đặt</string>
-    <string name="apm_uninstall_confirm">Bạn có muốn gỡ cài đặt module %s không?</string>
-    <string name="apm_uninstall_success">%s đã được gỡ cài đặt</string>
-    <string name="apm_uninstall_failed">Gỡ cài đặt thất bại: %s</string>
-    <string name="apm_undo_uninstall_success">Đã khôi phục %s</string>
-    <string name="apm_undo_uninstall_failed">Khôi phục thất bại: %s</string>
-    <string name="apm_version">Phiên bản</string>
-    <string name="apm_author">Tác giả</string>
-    <string name="apm_desc">Mô tả</string>
-    <string name="apm_overlay_fs_not_available">OverlayFS bị nhân vô hiệu hóa, module không khả dụng!</string>
-    <string name="apm_magisk_conflict">Module không khả dụng do xung đột với Magisk!</string>
-    <string name="apm_mount_warning_title">Thông báo quan trọng</string>
-    <string name="apm_mount_warning_message">Theo mặc định, module không được gắn kết. Vui lòng sử dụng hệ thống gắn kết tích hợp hoặc metamodule.</string>
-    <string name="apm_mount_warning_button">Đã hiểu</string>
-    <string name="apm_reboot_to_apply">Khởi động lại để áp dụng</string>
-    <string name="apm_changelog">Nhật ký cập nhật</string>
     <string name="apm_update">Cập nhật</string>
-    <string name="apm_downloading">Đang tải module: %s</string>
-    <string name="apm_start_downloading">Bắt đầu tải: %s</string>
-    <string name="apm_new_version_available">Phiên bản mới %s có sẵn, nhấn để nâng cấp.</string>
 
-    <string name="hide_apatch_manager">Ẩn trình quản lý APatch</string>
-    <string name="hide_apatch_manager_summary">Cài đặt một ứng dụng proxy với tên gói ngẫu nhiên và tên ứng dụng tùy chỉnh</string>
-    <string name="hide_apatch_dialog_new_manager_name">Tên trình quản lý mới</string>
-    <string name="hide_apatch_dialog_summary">Đây sẽ là tên ứng dụng mới hiển thị trong trình khởi chạy</string>
-    <string name="hide_apatch_manager_failure">Ẩn thất bại. Vui lòng báo cáo lỗi này!</string>
 
-    <string name="setting_reset_su_path">Đặt lại đường dẫn su</string>
-    <string name="setting_reset_su_new_path">Đường dẫn đầy đủ mới</string>
 
     <string name="settings_folkx_engine_title">Động cơ hoạt hình FolkX</string>
     <string name="settings_folkx_engine_summary">Sử dụng hoạt hình lò xo vật lý mượt mà khi chuyển đổi các trang cấp cao nhất</string>
@@ -302,68 +103,12 @@
     <string name="settings_folkx_animation_vertical">Trượt theo chiều dọc</string>
     <string name="settings_folkx_animation_diagonal">Trượt theo đường chéo</string>
 
-    <string name="apm_webui_open">Mở</string>
-    <string name="apm_action">Hành động</string>
-    <string name="module_shortcut_add">Lối tắt</string>
-    <string name="module_shortcut_not_supported">Bộ khởi chạy không hỗ trợ lối tắt màn hình chính.</string>
-    <string name="module_shortcut_created">Đã tạo lối tắt trên màn hình chính.</string>
-    <string name="module_shortcut_updated">Lối tắt đã được cập nhật.</string>
-    <string name="module_shortcut_permission_tip_xiaomi">Vui lòng bật quyền "Tạo lối tắt màn hình chính" cho ứng dụng này trong cài đặt của Xiaomi.</string>
-    <string name="module_shortcut_permission_tip_oppo">Vui lòng bật quyền "Lối tắt màn hình chính" cho ứng dụng này trong cài đặt của OPPO.</string>
-    <string name="module_shortcut_permission_tip_default">Nếu việc tạo lối tắt không thành công, vui lòng bật quyền lối tắt màn hình chính cho ứng dụng này trong cài đặt hệ thống.</string>
-    <string name="module_shortcut_name">Tên lối tắt</string>
-    <string name="module_shortcut_icon">Biểu tượng lối tắt</string>
-    <string name="module_shortcut_type">Loại lối tắt</string>
-    <string name="module_shortcut_type_webui">WebUI</string>
-    <string name="module_shortcut_type_action">Action</string>
-    <string name="module_shortcut_icon_default">Sử dụng biểu tượng mặc định</string>
-    <string name="module_shortcut_icon_select">Chọn biểu tượng</string>
     <string name="enable_web_debugging">Bật gỡ lỗi WebView</string>
     <string name="enable_web_debugging_summary">Có thể dùng để gỡ lỗi WebUI. Vui lòng chỉ bật khi cần.</string>
-    <string name="settings_apm_install_confirm">Xác nhận cài đặt module</string>
-    <string name="settings_apm_install_confirm_summary">Hiển thị hộp thoại xác nhận trước khi cài đặt module</string>
-    <string name="settings_apm_stay_on_page">Ở lại trang hành động</string>
-    <string name="settings_apm_stay_on_page_summary">Module hệ thống không tự trả về sau khi thực hiện hành động</string>
-    <string name="settings_enable_module_shortcut_add">Bật nút thêm lối tắt</string>
-    <string name="settings_enable_module_shortcut_add_summary">Hiển thị nút thêm lối tắt WebUI trên trang module hệ thống</string>
-    <string name="settings_module_sort_optimization">Tối ưu hóa sắp xếp module</string>
-    <string name="settings_module_sort_optimization_summary">Đưa các module hệ thống có WebUI và Action lên đầu danh sách</string>
-    <string name="apm_custom_order">Thứ tự module tùy chỉnh</string>
-    <string name="apm_drag_to_reorder">Kéo để sắp xếp lại</string>
-    <string name="apm_reset_order">Khôi phục sắp xếp tự động</string>
-    <string name="settings_fold_system_module">Gấp gọn module hệ thống</string>
-    <string name="settings_fold_system_module_summary">Nhấp vào thẻ module để mở rộng/gộp lại các hành động</string>
-    <string name="settings_simple_list_bottom_bar">Thanh dưới đơn giản</string>
-    <string name="settings_simple_list_bottom_bar_summary">Sử dụng kiểu nút chỉ có biểu tượng cho các hành động module, lấy cảm hứng từ APatch</string>
-    <string name="settings_spliced_card_group">Spliced Card Group</string>
-    <string name="settings_spliced_card_group_summary">Use M3E continuous card group style for module list</string>
-    <string name="settings_show_kpm_status_badge">Hiển thị Huy hiệu Trạng thái KPM</string>
-    <string name="settings_show_kpm_status_badge_summary">Hiển thị huy hiệu Đã nhúng/Đã tải trên thẻ KPM</string>
-    <string name="apm_install_confirm_title">Cài đặt module</string>
-    <string name="apm_install_confirm_content">Bạn có chắc chắn muốn cài đặt %s không?</string>
-    <string name="settings_show_more_module_info">Hiển thị chi tiết module</string>
-    <string name="settings_show_more_module_info_summary">Hiển thị ID và kích thước module trong danh sách module</string>
-    <string name="apm_disable_all_title">Vô hiệu hóa tất cả module</string>
-    <string name="apm_disable_all_confirm">Bạn có chắc chắn muốn vô hiệu hóa tất cả module không? Điều này sẽ vô hiệu hóa tất cả các module đã cài đặt.</string>
     <string name="apm_enable_module_banner">Bật banner module</string>
     <string name="apm_enable_module_banner_summary">Hiển thị ảnh banner cho module nếu có sẵn</string>
     <string name="apm_enable_folk_banner">Tùy chỉnh banner module</string>
     <string name="apm_enable_folk_banner_summary">Nhấn giữ thẻ module để chọn ảnh banner</string>
-    <string name="apm_folk_banner_title">Trình chỉnh sửa mô-đun</string>
-    <string name="apm_folk_banner_select">Chọn ảnh</string>
-    <string name="apm_folk_banner_clear">Xóa FolkBanner</string>
-    <string name="apm_folk_banner_saved">Đã thêm FolkBanner cho %s.</string>
-    <string name="apm_folk_banner_cleared">Đã xóa FolkBanner cho %s.</string>
-    <string name="apm_folk_banner_failed">Cập nhật FolkBanner cho %s thất bại.</string>
-    <string name="folk_banner_custom_info_title">Thông tin module</string>
-    <string name="folk_banner_custom_info_name">Tên</string>
-    <string name="folk_banner_custom_info_version">Phiên bản</string>
-    <string name="folk_banner_custom_info_author">Tác giả</string>
-    <string name="folk_banner_custom_info_description">Mô tả</string>
-    <string name="folk_banner_custom_info_save">Lưu</string>
-    <string name="folk_banner_custom_info_reset">Đặt lại</string>
-    <string name="folk_banner_custom_info_saved">Đã lưu thông tin module cho %s</string>
-    <string name="folk_banner_custom_info_reset_done">Đã đặt lại thông tin module cho %s</string>
     <string name="apm_banner_api_mode">Chế độ API</string>
     <string name="apm_banner_api_mode_summary">Sử dụng API hình ảnh ngẫu nhiên hoặc thư mục cục bộ cho banner mô-đun</string>
     <string name="apm_banner_api_source">Cấu hình nguồn API</string>
@@ -393,107 +138,23 @@
     <string name="settings_banner_custom_opacity_summary">Sử dụng độ mờ tùy chỉnh cho banner thay vì theo chế độ hình nền</string>
     <string name="settings_banner_opacity">Độ đặc của banner</string>
 
-    <string name="settings_donot_store_superkey">Không lưu khóa siêu cấp tại địa phương</string>
-    <string name="settings_donot_store_superkey_summary">Xác thực khóa siêu cấp mỗi khi khởi chạy trình quản lý</string>
 
-    <string name="mode_select_page_title">Cài đặt</string>
-    <string name="mode_select_page_patch_and_install">Vá và cài đặt</string>
-    <string name="mode_select_page_select_file">Chọn ảnh đệm để vá</string>
-    <string name="mode_select_page_install_inactive_slot">Cài đặt vào slot chưa kích hoạt (sau OTA)</string>
-    <string name="mode_select_page_install_inactive_slot_warning">Thiết bị của bạn SẼ BỊ BẮT BUỘC khởi động vào slot chưa kích hoạt hiện tại sau khi khởi động lại!\nChỉ sử dụng tùy chọn này sau khi OTA hoàn tất.\nTiếp tục?</string>
-    <string name="mode_select_page_select_kpimg">Sử dụng tệp vá cục bộ (KPimg)</string>
-    <string name="mode_select_page_init_boot_warning_title">Đã chọn sai image</string>
-    <string name="mode_select_page_init_boot_warning_message">Tệp đã chọn có vẻ là image init_boot hoặc vendor_boot.
-KernelPatch yêu cầu image boot để vá.
 
-Vui lòng chọn đúng image boot (thường là boot.img).
-
-Vẫn tiếp tục?</string>
-    <string name="patch_custom_kpimg_label">KPimg tùy chỉnh</string>
-    <string name="patch_custom_kpimg_file">Tệp: %s</string>
-    <string name="patch_select_kpimg_btn">Chọn KPimg</string>
-
-    <string name="home_dialog_auth_fail_title">Xác thực thất bại</string>
-    <string name="home_dialog_auth_fail_content">Không thể xác thực khóa siêu cấp, gây ra việc kích hoạt FolkPatch thất bại.
-Dưới đây là một số nguyên nhân có thể gây ra thất bại xác thực—vui lòng kiểm tra xem nguyên nhân nào áp dụng với bạn:
-
-\n1. Bạn hoàn toàn không sử dụng KernelPatch để vá boot.img, hoặc quên những gì bạn thực sự đã làm.
-\n2. boot.img đã vá vẫn đang nằm trên máy tính của bạn ngủ, chưa bao giờ được flash vào thiết bị.
-\n3. Khóa siêu cấp được nhập sai, hoặc chứa các ký tự bí ẩn, như các ký tự từ ngôn ngữ ngoài hành tinh.
-\n4. Thiết bị của bạn có thể không tương thích với FolkPatch và KernelPatch, cố gắng ép buộc là vô ích.
-\n5. Bạn có thể đã thực hiện một số thao tác bí ẩn—như sử dụng một số mô-đun loại trừ tên gói đã chặn FolkPatch, dẫn đến việc tự loại bỏ mình khỏi trò chơi.
-
-</string>
 
     <string name="home_more_menu_feedback_or_suggestion">Phản hồi hoặc đề xuất</string>
     <string name="home_more_menu_about">Về</string>
-    <string name="home_more_menu_document">Tài liệu</string>
 
     <string name="home_more_menu_music_play">Phát nhạc</string>
     <string name="home_more_menu_music_pause">Tạm dừng nhạc</string>
 
     <!-- Plugin strings -->
-    <string name="plugin_title">Plugin</string>
-    <string name="plugin_refresh">Làm mới</string>
-    <string name="plugin_summary_title">APD Lua Plugin</string>
-    <string name="plugin_summary_not_installed">APD chưa cài · plugin không khả dụng</string>
-    <string name="plugin_state_enabled">Đã bật</string>
-    <string name="plugin_state_disabled">Đã tắt</string>
-    <string name="plugin_toggle_failed">Không thể thay đổi trạng thái plugin</string>
-    <string name="plugin_empty">Chưa cài đặt plugin</string>
-    <string name="plugin_empty_hint">Đặt main.lua vào /data/adb/plugins/&lt;id&gt;/ để thêm plugin.</string>
-    <string name="plugin_load_failed">Không thể tải plugin</string>
-    <string name="plugin_manage_summary">Quản lý plugin Lua nhẹ</string>
-    <string name="plugin_install">Cài đặt plugin</string>
-    <string name="plugin_install_success">Đã cài đặt plugin</string>
-    <string name="plugin_install_failed">Cài đặt plugin thất bại</string>
-    <string name="plugin_uninstall_title">Gỡ cài đặt plugin</string>
-    <string name="plugin_uninstall">Gỡ cài đặt</string>
-    <string name="plugin_uninstall_confirm">Gỡ cài đặt plugin %1$s?</string>
-    <string name="plugin_uninstall_success">Đã gỡ plugin</string>
-    <string name="plugin_uninstall_failed">Không thể gỡ plugin</string>
-    <string name="plugin_action">Chạy</string>
-    <string name="plugin_action_success">Đã thực thi thao tác</string>
-    <string name="plugin_action_failed">Thao tác thất bại</string>
-    <string name="plugin_quick_action_success">Thực thi thành công</string>
-    <string name="plugin_quick_action_failed">Thực thi thất bại</string>
-    <string name="plugin_config">Cấu hình</string>
-    <string name="plugin_config_title">Cấu hình %1$s</string>
-    <string name="plugin_config_saved">Đã lưu cấu hình</string>
-    <string name="plugin_log_title">Kết quả thực thi</string>
-    <string name="plugin_log_empty">Chưa có nhật ký thực thi</string>
-    <string name="plugin_log_page_title">Nhật ký Plugin</string>
-    <string name="plugin_log_all_empty">Chưa có plugin nào tạo nhật ký</string>
-    <string name="plugin_log_clear">Xóa nhật ký</string>
-    <string name="plugin_log_cleared">Đã xóa nhật ký</string>
-    <string name="plugin_log_export">Xuất nhật ký</string>
 
-    <string name="home_dialog_uninstall_title">Gỡ cài đặt</string>
     
-    <string name="home_dialog_uninstall_ap_only">Chỉ gỡ bản vá</string>
-    <string name="home_dialog_uninstall_ap_only_desc">Chỉ gỡ AndroidPatch và giữ lại trình quản lý.</string>
-    <string name="home_dialog_uninstall_all">Gỡ hoàn toàn</string>
-    <string name="home_dialog_uninstall_all_desc">Gỡ AndroidPatch và bắt đầu quy trình gỡ cài đặt hoàn toàn.</string>
     
     <!-- Install Mode Select -->
-    <string name="kp_install_methods">KernelPatch Vá/安装</string>
-    <string name="restore_boot_methods">Chọn một boot để khôi phục vào phân vùng boot</string>
-    <string name="restore_select_file">Chọn tệp boot phân vùng để khôi phục</string>
 
-    <string name="kpm_control_dialog_title">Kiểm soát KPM</string>
-    <string name="kpm_control_dialog_content">Vui lòng nhập tham số kiểm soát:</string>
-    <string name="kpm_control_paramters">Tham số</string>
-    <string name="kpm_control_outMsg">Đầu ra</string>
-    <string name="kpm_control_ok">Thành công!</string>
-    <string name="kpm_control_failed">Thất bại!</string>
     
-    <string name="settings_night_mode_follow_sys">Chế độ tối theo hệ thống</string>
-    <string name="settings_night_mode_follow_sys_summary">Tự động chuyển đổi chế độ tối theo cài đặt hệ thống</string>
-    <string name="settings_night_theme_enabled">Chế độ tối</string>
     
-    <string name="settings_use_system_color_theme">Chủ đề màu hệ thống</string>
-    <string name="settings_use_system_color_theme_summary">Sử dụng chủ đề màu mà hệ thống tạo từ hình nền</string>
-    <string name="settings_custom_color_theme">Chủ đề màu</string>
 
     <string name="amber_theme">Màu cam sa</string>
     <string name="blue_theme">Màu xanh dương</string>
@@ -518,80 +179,23 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="theme_light">Sáng</string>
     <string name="theme_dark">Tối</string>
     <string name="theme_system">Hệ thống</string>
-    <string name="loading_modules">Đang tải mô-đun…</string>
-    <string name="loading_scripts">Đang tìm kiếm tập lệnh…</string>
     <string name="loading_themes">Đang tải chủ đề…</string>
     <string name="loading_apis">Đang tải nguồn API…</string>
     <string name="retry">Thử lại</string>
 
-    <string name="about_app_desc">Cài đặt Root dựa trên KernelPatch, cho phép hook hàm nhân mà không cần biên dịch lại nhân.</string>
     <string name="about_powered_by">Được hỗ trợ bởi %1$s</string>
-    <string name="about_telegram_group">Nhóm Telegram</string>
     
     <!-- Online Module Strings -->
-    <string name="online_module_title">Module hệ thống trực tuyến</string>
-    <string name="online_module_download_start">Bắt đầu tải: %s</string>
-    <string name="online_module_download_complete">Tải hoàn tất: %s</string>
-    <string name="online_module_download_notification">Đang tải %s. Vui lòng xem thanh thông báo để biết tiến độ, vui lòng xem thư mục tải sau khi tải hoàn tất.</string>
 
     <!-- Online Module Source Strings -->
-    <string name="online_module_source_official">Nguồn chính thức</string>
-    <string name="online_module_source_cluster">Cụm kho lưu trữ</string>
-    <string name="online_module_source_custom">Kho lưu trữ tùy chỉnh</string>
-    <string name="online_module_source_title">Nguồn mô-đun</string>
-    <string name="online_module_repo_url_title">URL kho lưu trữ</string>
-    <string name="online_module_repo_url_hint">https://example.com/modules.json</string>
-    <string name="online_module_repo_settings">Cài đặt kho lưu trữ</string>
 
     <!-- Repo Module Detail Strings -->
-    <string name="repo_module_detail_links">Liên kết</string>
-    <string name="repo_module_detail_homepage">Trang chủ</string>
-    <string name="repo_module_detail_source">Mã nguồn</string>
-    <string name="repo_module_detail_support">Hỗ trợ</string>
-    <string name="repo_module_detail_versions">Lịch sử phiên bản</string>
-    <string name="repo_module_detail_download">Tải xuống và cài đặt</string>
-    <string name="repo_module_detail_by_author">bởi %1$s</string>
-    <string name="online_module_repo_browse_title">Duyệt kho lưu trữ</string>
-    <string name="online_module_view_modules">Xem mô-đun</string>
-    <string name="online_module_select_repo_hint">Chọn kho lưu trữ để duyệt mô-đun</string>
-    <string name="online_module_enter_url_hint">Nhập URL kho lưu trữ</string>
-    <string name="online_module_invalid_url">Vui lòng nhập URL hợp lệ</string>
-    <string name="online_module_explore_repos">Khám phá kho lưu trữ</string>
-    <string name="online_module_repo_count">%1$d kho lưu trữ</string>
-    <string name="online_module_module_count">%1$d+ mô-đun</string>
-    <string name="online_module_select_repo">Chọn kho lưu trữ</string>
-    <string name="online_module_enter_url_manually">Nhập URL thủ công</string>
-    <string name="online_module_default_repo">Kho lưu trữ mặc định</string>
-    <string name="online_module_repo_list_title">Danh sách kho lưu trữ</string>
-    <string name="online_module_load_error">Tải không thành công, vui lòng làm mới và thử lại</string>
-    <string name="online_module_no_search_results">Không tìm thấy mô-đun phù hợp</string>
-    <string name="online_module_module_detail_download_count">Lượt tải: %1$s</string>
-    <string name="online_module_module_detail_last_update">Cập nhật lần cuối: %1$s</string>
-    <string name="online_module_module_detail_version">Phiên bản: %1$s</string>
-    <string name="online_module_module_detail_size">Kích thước: %1$s</string>
-    <string name="online_module_module_detail_author">Tác giả: %1$s</string>
-    <string name="online_module_module_detail_description">Mô tả: %1$s</string>
-    <string name="online_module_module_detail_suitable">Phù hợp với: %1$s</string>
-    <string name="online_module_module_detail_changelog">Nhật ký thay đổi: %1$s</string>
-    <string name="online_module_module_detail_instructions">Hướng dẫn: %1$s</string>
 
     <!-- Online KPM Strings -->
-    <string name="online_kpm_title">Module nhân trực tuyến</string>
-    <string name="online_kpm_download_start">Bắt đầu tải: %s</string>
-    <string name="online_kpm_download_complete">Tải hoàn tất: %s</string>
-    <string name="online_kpm_download_notification">Đang tải %s. Vui lòng xem thanh thông báo để biết tiến độ, vui lòng xem thư mục tải sau khi tải hoàn tất.</string>
 
     <!-- Online Plugin Strings -->
-    <string name="online_plugin_title">Plugin trực tuyến</string>
-    <string name="online_plugin_download_start">Bắt đầu tải: %s</string>
-    <string name="online_plugin_download_complete">Tải hoàn tất: %s</string>
-    <string name="online_plugin_download_notification">Đang tải %s. Vui lòng xem thanh thông báo để biết tiến độ, vui lòng xem thư mục tải sau khi tải hoàn tất.</string>
 
     <!-- Online Script Strings -->
-    <string name="online_script_title">Kịch bản trực tuyến</string>
-    <string name="online_script_download_start">Bắt đầu tải: %s</string>
-    <string name="online_script_download_complete">Tải hoàn tất: %s</string>
-    <string name="online_script_download_notification">Đang tải %s</string>
 
     <!-- Crash Handle Strings -->
     <string name="crash_handle_title">Báo cáo lỗi sập</string>
@@ -600,72 +204,16 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <!-- About Screen Strings -->
     <string name="about_app_version">Phiên bản ứng dụng: %s</string>
     <string name="about_github">GitHub</string>
-    <string name="about_telegram_channel">Kênh Telegram</string>
 
     <string name="settings_app_dpi">DPI ứng dụng</string>
     <string name="dpi_apply_settings">Áp dụng</string>
-    <string name="dpi_confirm_title">Xác nhận thay đổi DPI</string>
-    <string name="dpi_confirm_message">Thay đổi DPI ứng dụng từ %1$s sang %2$s?</string>
-    <string name="settings_magic_mount">Folk Mount API</string>
-    <string name="settings_magic_mount_summary">Bật hệ thống gắn kết mô-đun tích hợp</string>
-    <string name="settings_new_app_profile_enabled">Tự động cấp quyền cho ứng dụng mới</string>
-    <string name="settings_new_app_profile_enabled_summary">Khi bật, ứng dụng mới cài đặt sẽ tự động áp dụng chế độ ủy quyền đã chọn bên dưới</string>
-    <string name="settings_new_app_profile_mode">Chế độ ủy quyền mặc định</string>
-    <string name="settings_new_app_profile_normal">KHÔNG ROOT</string>
-    <string name="settings_new_app_profile_root">ROOT</string>
-    <string name="settings_new_app_profile_exclude">Loại trừ</string>
-    <string name="settings_hide_service">FolkPatch Hide</string>
-    <string name="settings_hide_service_summary">Ẩn trạng thái mở khóa bootloader ở một mức độ nhất định</string>
 
-    <string name="settings_shizuku_service">Dịch vụ Shizuku</string>
-    <string name="settings_shizuku_service_summary">Cung cấp quyền truy cập API cấp ADB cho các ứng dụng hỗ trợ Shizuku (dịch vụ tích hợp, không cần ứng dụng bên thứ ba)</string>
-    <string name="settings_shizuku_service_running">Máy chủ Shizuku đang chạy</string>
-    <string name="settings_shizuku_started">Dịch vụ Shizuku đã khởi động</string>
-    <string name="settings_shizuku_start_failed">Khởi động dịch vụ Shizuku thất bại</string>
-    <string name="settings_shizuku_stopped">Dịch vụ Shizuku đã dừng</string>
-    <string name="settings_shizuku_stop_failed">Dừng dịch vụ Shizuku thất bại</string>
-    <string name="shizuku_permission_title">Cho phép %1$s sử dụng Shizuku?</string>
-    <string name="shizuku_permission_message">Ứng dụng sẽ có thể gọi API hệ thống với quyền root thông qua Shizuku.</string>
-    <string name="shizuku_permission_allow">Cho phép</string>
-    <string name="shizuku_permission_allow_once">Chỉ một lần</string>
-    <string name="shizuku_permission_deny">Từ chối</string>
-    <string name="shizuku_permission_allow_summary">Cấp quyền truy cập vĩnh viễn</string>
-    <string name="shizuku_permission_allow_once_summary">Chỉ cho phép lần này</string>
-    <string name="shizuku_permission_deny_summary">Từ chối truy cập</string>
-    <string name="shizuku_permission_binder_timeout">Không thể kết nối với dịch vụ Shizuku. Vui lòng khởi động lại dịch vụ và thử lại.</string>
-    <string name="shizuku_management_title">Ủy quyền Shizuku</string>
-    <string name="shizuku_management_empty">Không tìm thấy ứng dụng tương thích với Shizuku</string>
-    <string name="shizuku_management_unavailable">Dịch vụ Shizuku không đang chạy</string>
-    <string name="shizuku_management_load_failed">Không thể tải các ứng dụng đã ủy quyền</string>
-    <string name="shizuku_management_uid">UID %1$d</string>
-    <string name="shizuku_management_granted">Đã cho phép</string>
-    <string name="shizuku_management_denied">Không cho phép</string>
-    <string name="shizuku_management_update_failed">Không thể cập nhật ủy quyền</string>
-    <string name="shizuku_management_root_access">Quyền root</string>
-    <string name="shizuku_management_allowed_title">Truy cập Shizuku</string>
-    <string name="shizuku_management_root_access_desc">Chạy lệnh với quyền root. Tắt để chạy với quyền shell (UID 2000), không thể đọc dữ liệu được bảo vệ.</string>
-    <string name="shizuku_management_badge_allowed">ĐÃ CHO PHÉP</string>
-    <string name="shizuku_management_badge_denied">TỪ CHỐI</string>
-    <string name="shizuku_management_badge_root">ROOT</string>
-    <string name="shizuku_management_badge_shell">SHELL</string>
-    <string name="shizuku_log_title">Nhật ký Shizuku</string>
-    <string name="shizuku_log_empty">Không có nhật ký</string>
-    <string name="shizuku_log_refresh">Làm mới</string>
-    <string name="shizuku_log_clear">Xóa nhật ký</string>
-    <string name="shizuku_log_cleared">Đã xóa nhật ký</string>
-    <string name="shizuku_log_export">Xuất nhật ký</string>
-    <string name="shizuku_log_copy">Sao chép</string>
-    <string name="shizuku_log_copied">Đã sao chép vào bộ nhớ tạm</string>
-    <string name="shizuku_log_source_server">Nhật ký máy chủ</string>
-    <string name="shizuku_log_source_logcat">Logcat</string>
-    <string name="shizuku_log_search_hint">Tìm kiếm nhật ký</string>
 <string name="settings_app_title">Tên ứng dụng</string>
     <string name="app_title_custom">Tùy chỉnh</string>
     <string name="settings_custom_app_title">Đặt tên ứng dụng</string>
     <string name="custom_app_title_dialog_title">Tên ứng dụng tùy chỉnh</string>
     <string name="custom_app_title_dialog_hint">Nhập tên ứng dụng</string>
     <string name="custom_app_title_dialog_confirm">Xác nhận</string>
-    <string name="custom_app_title_dialog_empty">Tên không được để trống</string>
     <string name="cancel">Hủy</string>
     <string name="settings_custom_background">Hình nền tùy chỉnh</string>
     <string name="settings_custom_background_enabled">Đã bật hình nền tùy chỉnh</string>
@@ -686,7 +234,6 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="settings_clear_font">Khôi phục font chữ mặc định</string>
     <string name="settings_clear_font_confirm">Bạn có chắc chắn muốn khôi phục font chữ mặc định không?</string>
     <string name="settings_font_cleared">Đã khôi phục font chữ mặc định</string>
-    <string name="settings_font_select_hint">Vui lòng chọn một tệp font chữ TTF</string>
     <string name="settings_select_background_image">Chọn hình ảnh nền</string>
     <string name="settings_custom_background_summary">Đặt hình ảnh nền tùy chỉnh</string>
     <string name="settings_custom_background_saved">Lưu nền thành công</string>
@@ -720,7 +267,6 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="settings_title_image_dim">Độ Tối Của Nền</string>
     <string name="settings_title_image_offset_x">Vị Trí Ngang</string>
 
-    <string name="settings_launcher_icon">Biểu tượng màn hình chính</string>
     <string name="settings_grid_working_card_hide_check">Ẩn biểu tượng trạng thái</string>
     <string name="settings_grid_working_card_hide_check_summary">Ẩn dấu kiểm hoặc biểu tượng cảnh báo trên thẻ đang hoạt động</string>
     <string name="settings_grid_working_card_hide_text">Ẩn văn bản trạng thái</string>
@@ -742,41 +288,14 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="settings_grid_working_card_day_opacity">Độ trong suốt thẻ ban ngày</string>
     <string name="settings_grid_working_card_night_opacity">Độ trong suốt thẻ ban đêm</string>
     
-    <string name="su_exclude_all_title">Loại trừ hàng loạt</string>
-    <string name="su_exclude_all_confirm">Bạn có chắc chắn muốn đặt tất cả ứng dụng chưa được cấp quyền Root thành loại trừ không?</string>
 
     <!-- 隐藏设定字符串 -->
-    <string name="home_hide_su_path">Ẩn đường dẫn tệp thực thi su</string>
-    <string name="home_hide_kpatch_version">Ẩn bản vá phiên bản nhân</string>
     <string name="home_hide_fingerprint">Ẩn thông tin vân tay</string>
-    <string name="home_hide_zygisk">Ẩn triển khai Zygisk</string>
-    <string name="home_hide_mount">Ẩn triển khai gắn kết</string>
-    <string name="home_hide_su_path_summary">Ẩn đường dẫn tệp thực thi su trong thẻ thông tin</string>
-    <string name="home_hide_kpatch_version_summary">Ẩn thông tin bản vá phiên bản nhân trong thẻ thông tin</string>
-    <string name="home_hide_zygisk_summary">Ẩn triển khai Zygisk trong thẻ thông tin</string>
-    <string name="home_hide_mount_summary">Ẩn triển khai gắn kết trong thẻ thông tin</string>
     <string name="home_hide_fingerprint_summary">Ẩn thông tin vân tay trong thẻ thông tin</string>
     <!-- KPM AutoLoad Strings -->
     
 
     <!-- APM Bulk Install Strings -->
-    <string name="apm_bulk_install_title">Cài đặt hàng loạt module hệ thống</string>
-    <string name="apm_bulk_install_list_title">Danh sách module</string>
-    <string name="apm_bulk_install_add">Thêm module</string>
-    <string name="apm_bulk_install_empty">Chưa thêm module</string>
-    <string name="apm_bulk_install_action">Flash hàng loạt</string>
-    <string name="apm_bulk_install_log_title">Nhật ký flash hàng loạt</string>
-    <string name="apm_bulk_install_log_start">Bắt đầu flash hàng loạt...</string>
-    <string name="apm_bulk_install_log_installing">Đang flash %1$s</string>
-    <string name="apm_batch_install_full_process">Quy trình cài đặt hàng loạt hoàn chỉnh</string>
-    <string name="apm_batch_install_full_process_summary">Cài đặt hàng loạt mô-đun hệ thống được thực hiện sử dụng quy trình hoàn chỉnh</string>
-    <string name="next_module">Mô-đun tiếp theo</string>
-    <string name="apm_bulk_install_log_installed">Module %s flash hoàn tất.</string>
-    <string name="apm_bulk_install_log_done">Tất cả hành động đã hoàn tất.</string>
-    <string name="apm_bulk_install_first_use_text">Tính năng này cho phép bạn flash nhiều module một lần, thuộc loại flash nhanh, phù hợp để flash các module không liên quan đến thao tác nút trong quá trình, vui lòng bật chế độ flash quy trình hoàn chỉnh trong cài đặt cho các thao tác liên quan đến nhấn nút âm lượng v.v.</string>
-    <string name="apm_bulk_install_remove">Xóa</string>
-    <string name="apm_first_use_title">Chào mừng bạn sử dụng module hệ thống</string>
-    <string name="apm_first_use_text">Chào mừng bạn sử dụng module hệ thống, nơi này sử dụng module tương thích với hệ sinh thái Magisk, nhấn nút góc dưới bên phải để cài đặt module, bạn cũng có thể sử dụng trình cài đặt ở đầu trang để cài đặt module hàng loạt, cũng cung cấp một chức năng sao lưu tất cả module một nút, nhưng lưu ý phương án này có thể không áp dụng cho tất cả module, vẫn hãy tự sao lưu thêm</string>
 
     <!-- Welcome Guide -->
     <string name="welcome_title_1">Chao mung den voi FolkPatch</string>
@@ -795,31 +314,16 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     
 
     <!-- Module Backup/Restore Strings -->
-    <string name="apm_copy_list_title">Sao chép danh sách</string>
-    <string name="apm_copy_list_success">Đã sao chép danh sách mô-đun</string>
 
     <!-- Auto Backup Strings -->
-    <string name="settings_auto_backup_module">Sao lưu tự động module hệ thống</string>
-    <string name="settings_auto_backup_module_summary">Tự động sao lưu tệp vào thư mục riêng khi cài đặt module</string>
-    <string name="settings_open_backup_dir">Mở thư mục sao lưu</string>
-    <string name="backup_dir_empty">Thư mục sao lưu trống</string>
-    <string name="backup_dir_open_failed">Mở thư mục sao lưu thất bại</string>
-    <string name="auto_backup_failed">Sao lưu tự động thất bại: %s</string>
-    <string name="auto_backup_success">Sao lưu tự động thành công: %s</string>
-    <string name="settings_auto_backup_boot">Sao lưu tự động Boot</string>
-    <string name="settings_auto_backup_boot_summary">Tự động sao lưu Boot vào bộ nhớ cục bộ (Downloads/FolkPatch/BootBackups)</string>
 
     <!-- Home Layout Strings -->
     <string name="settings_home_layout_style">Kiểu bố cục trang chủ</string>
     <string name="settings_home_layout_default">ListUI</string>
     <string name="settings_home_layout_grid">GridUI</string>
     <string name="settings_home_layout_focus">FocusUI</string>
-    <string name="settings_home_layout_sign">SignUI</string>
     <string name="settings_home_layout_circle">CircleUI</string>
     <string name="settings_home_layout_dashboard_pro">DashboardUI</string>
-    <string name="unofficial_version_title">Phiên bản không chính thức</string>
-    <string name="unofficial_version_message">Bạn đang sử dụng trình quản lý FolkPatch phiên bản thứ ba, có thể gây thiệt hại tài sản, vui lòng tải APP bản quyền sử dụng!</string>
-    <string name="go_to_github">Đi đến Github</string>
     <string name="settings_save_theme">Lưu chủ đề</string>
     <string name="settings_import_theme">Nhập chủ đề</string>
     <string name="settings_theme_saved">Chủ đề đã được lưu</string>
@@ -844,7 +348,6 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="theme_export_action">Xuất</string>
     <string name="theme_import_action">Nhập</string>
     <string name="theme_import_confirm">Bạn có chắc chắn muốn nhập chủ đề này không?</string>
-    <string name="theme_info">Thông tin chủ đề</string>
 
     <!-- Grid Working Card Background -->
     <string name="settings_grid_working_card_background">Nền thẻ làm việc</string>
@@ -871,12 +374,7 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="theme_store_search_hint">Tìm kiếm chủ đề...</string>
     <string name="theme_source_official">Chính thức</string>
     <string name="theme_source_third_party">Bên thứ ba</string>
-    <string name="theme_source_local">Cục bộ</string>
     <string name="theme_source">Nguồn</string>
-    <string name="theme_install">Cài đặt</string>
-    <string name="theme_install_success">Cài đặt thành công</string>
-    <string name="theme_install_failed">Cài đặt thất bại</string>
-    <string name="theme_download">Tải xuống</string>
     <string name="theme_store_author">Tác giả</string>
     <string name="theme_store_version">Phiên bản</string>
 
@@ -889,16 +387,11 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="update_action">Cập nhật</string>
     <string name="update_close">Đóng</string>
     <string name="update_latest">Bạn đang sử dụng phiên bản mới nhất</string>
-    <string name="update_error">Lỗi kiểm tra cập nhật</string>
     <!--Tùy chọn thu gọn-->
     <string name="settings_category_general">Chung</string>
-    <string name="superuser">Người dùng siêu cấp</string>
-    <string name="module">Module hệ thống</string>
     <string name="settings_category_appearance">Giao diện</string>
     <string name="settings_appearance_font">Cài đặt phông chữ</string>
-    <string name="settings_appearance_font_summary">Cấu hình phông chữ tùy chỉnh</string>
     <string name="settings_appearance_theme">Cài đặt主题</string>
-    <string name="settings_appearance_theme_summary">Cửa hàng theme, lưu, nhập và đặt lại</string>
 
     <string name="settings_nav_custom_icons">Biểu tượng điều hướng tùy chỉnh</string>
     <string name="settings_nav_custom_icons_summary">Thay thế biểu tượng thanh dưới bằng hình ảnh tùy chỉnh</string>
@@ -907,7 +400,6 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="nav_icon_superuser">Biểu tượng SuperUser</string>
     <string name="nav_icon_apm">Biểu tượng mô-đun hệ thống</string>
     <string name="nav_icon_settings">Biểu tượng cài đặt</string>
-    <string name="nav_icon_select_image">Chọn hình ảnh</string>
     <string name="nav_icon_clear">Đặt lại mặc định</string>
     <string name="nav_icon_custom_selected">Tùy chỉnh</string>
     <string name="nav_icon_default">Mặc định</string>
@@ -930,13 +422,9 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="theme_mode_switch_title">Chuyển chế độ theme</string>
     <string name="theme_mode_switch_msg">Thay đổi chế độ sẽ ảnh hưởng đến cách bạn duyệt và cài đặt theme. Tiếp tục?</string>
     <string name="settings_appearance_banner">Cài đặt banner</string>
-    <string name="settings_appearance_banner_summary">Cấu hình banner module</string>
     <string name="settings_appearance_layout">Cài đặt layout</string>
-    <string name="settings_appearance_layout_summary">Layout trang chủ, navigation và tùy chỉnh card</string>
     <string name="settings_appearance_background">Cài đặt background</string>
-    <string name="settings_appearance_background_summary">Background tùy chỉnh, video và multi-background</string>
     <string name="settings_appearance_night_mode">Cài đặt chế độ tối</string>
-    <string name="settings_appearance_night_mode_summary">Theme tối và cấu hình màu</string>
     <string name="settings_amoled_theme">Chủ đề Đen AMOLED</string>
     <string name="settings_amoled_theme_desc">Nền đen hoàn toàn cho chế độ tối</string>
     <string name="settings_switch_icon">Bật chỉ báo nút</string>
@@ -945,9 +433,6 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="settings_discrete_slider_desc">Hiển thị vạch đánh dấu trên đường trượt</string>
     <string name="settings_category_behavior">Hành vi</string>
     <string name="settings_category_function">Chức năng</string>
-    <string name="settings_use_legacy_su_page">Ủy quyền siêu người dùng một trang</string>
-    <string name="settings_use_legacy_su_page_summary">Trang siêu người dùng chuyển sang thiết kế ủy quyền một trang</string>
-    <string name="settings_category_module">Mô-đun</string>
     <string name="settings_category_security">Bảo mật</string>
     
     <!-- Background Music Strings -->
@@ -971,8 +456,7 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="settings_category_behavior_summary">Gỡ lỗi Web, hành vi cài đặt, hiển thị trang chủ</string>
     <string name="settings_category_security_summary">Xác thực ứng dụng và xác minh thao tác mô-đun</string>
     <string name="settings_category_backup_summary">Sao lưu cục bộ, sao lưu đám mây, WebDAV</string>
-    <string name="settings_category_module_summary">Thông tin mô-đun, sắp xếp, cài đặt hàng loạt</string>
-    <string name="settings_category_function_summary">Ẩn FolkPatch, dịch vụ Umount</string>
+    <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">Nhạc nền, âm thanh, rung</string>
     <string name="settings_music_playback_control">Điều khiển phát nhạc</string>
     <string name="settings_music_looping">Lặp lại</string>
@@ -992,7 +476,6 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="settings_video_background_summary">Sử dụng video làm nền</string>
     <string name="settings_select_video">Chọn Video</string>
     <string name="settings_video_selected">Đã Chọn Video</string>
-    <string name="settings_video_background_enabled">Nền Video Đã Bật</string>
     <string name="settings_clear_video_background">Xóa hình nền video</string>
     <string name="settings_clear_video_background_confirm">Bạn có chắc chắn muốn xóa hình nền video không?</string>
     <string name="settings_video_volume">Âm Lượng Video</string>
@@ -1015,33 +498,13 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="home_storage_ram">RAM</string>
     <string name="home_storage_zram">ZRAM</string>
     <string name="home_storage_swap">Tệp trao đổi</string>
-    <string name="home_info_kernel">Nhân</string>
-    <string name="home_info_superkey">Khóa siêu cấp</string>
     <string name="home_info_auth_auth">Xác thực</string>
     <string name="home_info_auth_na">N/A</string>
-    <string name="home_info_device_slot">Khe thiết bị</string>
     <string name="home_info_device_model">Mô hình thiết bị</string>
-    <string name="home_info_running_mode">Chế độ chạy</string>
-    <string name="home_info_mode_full">Đầy đủ</string>
-    <string name="home_info_mode_half">Một phần</string>
-    <string name="home_version">Phiên bản: %s</string>
-    <string name="home_zygisk_implement">Triển khai Zygisk</string>
-    <string name="home_mount_implement">Triển khai gắn kết</string>
 
-    <string name="settings_app_list_loading_scheme">Sơ đồ tải danh sách ứng dụng</string>
-    <string name="settings_app_list_loading_scheme_summary">Chọn cách tải danh sách ứng dụng</string>
-    <string name="app_list_loading_scheme_root_service">RootService (Mặc định)</string>
-    <string name="app_list_loading_scheme_package_manager">PackageManager (API hệ thống)</string>
-    <string name="app_list_loading_scheme_dialog_title">Sơ đồ tải</string>
-    <string name="su_backup_list">Danh sách sao lưu</string>
-    <string name="su_restore_list">Danh sách khôi phục</string>
-    <string name="backup_success">Sao lưu thành công</string>
     <!-- Badge Count Settings -->
     <string name="enable_badge_count">Cài đặt đếm huy hiệu</string>
     <string name="enable_badge_count_summary">Cấu hình hiển thị số đếm huy hiệu cho các mục điều hướng</string>
-    <string name="badge_superuser">Hiển thị huy hiệu siêu người dùng</string>
-    <string name="badge_apm">Hiển thị huy hiệu mô-đun hệ thống</string>
-    <string name="badge_kernel">Hiển thị huy hiệu mô-đun hạt nhân</string>
     <string name="settings_sound_effect">Hiệu ứng âm thanh</string>
     <string name="settings_sound_effect_summary">Phát âm thanh khi nhấn</string>
     <string name="settings_sound_effect_enabled">Đã bật</string>
@@ -1075,9 +538,6 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="webdav_url">URL WebDAV</string>
     <string name="webdav_username">Tên người dùng</string>
     <string name="webdav_password">Mật khẩu</string>
-    <string name="webdav_uploading">Đang tải lên WebDAV...</string>
-    <string name="webdav_backup_success">Sao lưu WebDAV thành công</string>
-    <string name="webdav_backup_failed">Sao lưu WebDAV thất bại: %s</string>
     <string name="save">Lưu</string>
     <string name="test">Kiểm tra</string>
     <string name="webdav_path_label">Đường dẫn (ví dụ: /Backup)</string>
@@ -1085,61 +545,16 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="webdav_backup_logs_title">Nhật ký sao lưu</string>
     <string name="webdav_no_logs">Không có nhật ký</string>
     <string name="webdav_clear_logs">Xóa</string>
-    <string name="settings_enable_local_backup">Bật sao lưu cục bộ</string>
-    <string name="settings_enable_local_backup_summary">Sao lưu mô-đun vào bộ nhớ cục bộ (Downloads/FolkPatch/ModuleBackups)</string>
     <string name="close">Đóng</string>
 
     <!-- Backup Settings -->
     <string name="settings_category_backup">Cài đặt sao lưu</string>
     <string name="settings_enable_cloud_backup">Bật sao lưu đám mây</string>
-    <string name="settings_webdav_url">URL WebDAV</string>
-    <string name="settings_webdav_username">Tên người dùng WebDAV</string>
-    <string name="settings_webdav_password">Mật khẩu WebDAV</string>
-    <string name="settings_test_webdav">Kiểm tra kết nối WebDAV</string>
     <string name="webdav_test_success">Kiểm tra thành công</string>
     <string name="webdav_test_failed">Kiểm tra thất bại: %s</string>
-    <string name="settings_backup_now">Sao lưu ngay</string>
-    <string name="backup_failed">Sao lưu thất bại: %s</string>
-    <string name="settings_restore_backup">Khôi phục sao lưu</string>
-    <string name="restore_success">Khôi phục thành công</string>
-    <string name="restore_failed">Khôi phục thất bại: %s</string>
-    <string name="settings_auto_backup">Sao lưu tự động</string>
-    <string name="settings_auto_backup_summary">Tự động sao lưu một lần mỗi ngày</string>
-    <string name="settings_delete_remote_backup">Xóa sao lưu đám mây</string>
-    <string name="delete_remote_backup_confirm">Bạn có chắc chắn muốn xóa sao lưu đám mây không?</string>
-    <string name="delete_success">Xóa thành công</string>
-    <string name="delete_failed">Xóa thất bại: %s</string>
-    <string name="settings_encrypt_backup">Mã hóa sao lưu</string>
-    <string name="settings_encrypt_backup_summary">Mã hóa tệp sao lưu bằng mật khẩu</string>
-    <string name="settings_backup_password">Mật khẩu sao lưu</string>
-    <string name="settings_backup_password_hint">Nhập mật khẩu sao lưu</string>
 
-    <string name="patch_output_written_to"> Vá thành công, tệp được ghi vào </string>
-    <string name="patch_write_failed"> Ghi boot.img đã vá thất bại</string>
 
     <!-- Script Library Strings -->
-    <string name="script_library">Thư viện Script</string>
-    <string name="script_library_title">Thư viện Script</string>
-    <string name="script_library_empty">Không có script nào, nhấn nút thêm để thêm</string>
-    <string name="script_library_add">Thêm Script</string>
-    <string name="script_library_add_title">Thêm Script</string>
-    <string name="script_library_select_file">Chọn tệp script</string>
-    <string name="script_library_alias">Bí danh</string>
-    <string name="script_library_alias_hint">Nhập bí danh script (tùy chọn)</string>
-    <string name="script_library_run">Chạy</string>
-    <string name="script_library_delete">Xóa</string>
-    <string name="script_library_path">Đường dẫn: %s</string>
-    <string name="script_library_confirm_delete">Xác nhận xóa script?</string>
-    <string name="script_library_delete_success">Xóa script thành công</string>
-    <string name="script_library_delete_failed">Xóa script thất bại</string>
-    <string name="script_library_add_success">Thêm script thành công</string>
-    <string name="script_library_add_failed">Thêm script thất bại: %s</string>
-    <string name="script_library_load_failed">Tải thư viện script thất bại</string>
-    <string name="script_library_output">Kết quả thực thi</string>
-    <string name="script_library_no_output">Không có kết quả</string>
-    <string name="script_library_save_log">Lưu nhật ký</string>
-    <string name="script_library_log_saved">Nhật ký đã lưu vào %s</string>
-    <string name="script_library_log_save_failed">Lưu nhật ký thất bại: %s</string>
     <string name="settings_vibration">Rung &amp; Phản hồi xúc giác</string>
     <string name="settings_vibration_summary">Rung khi chạm</string>
     <string name="settings_vibration_enabled">Bật rung</string>
@@ -1147,22 +562,8 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="settings_vibration_scope">Phạm vi rung</string>
     <string name="settings_vibration_scope_global">Toàn cầu (Mọi nơi)</string>
     <string name="settings_vibration_scope_bottom_bar">Chỉ thanh dưới cùng</string>
-    <string name="search_modules">Tìm kiếm module...</string>
-    <string name="search_scripts">Tìm kiếm script...</string>
 
     <!-- Umount Service -->
-    <string name="settings_umount_service">Umount Service</string>
-    <string name="settings_umount_service_summary">Cấu hình điểm mount để tự động unmount khi khởi động</string>
-    <string name="umount_config_title">Cấu hình Umount</string>
-    <string name="umount_config_enabled">Bật Umount</string>
-    <string name="umount_config_enabled_summary">Tự động unmount các điểm mount đã chỉ định khi khởi động</string>
-    <string name="umount_config_paths_label">Đường dẫn điểm mount (mỗi dòng một cái)</string>
-    <string name="umount_config_paths_placeholder">/system/vendor/app\n/system/vendor/priv-app</string>
-    <string name="umount_config_paths_helper">Nhập một đường dẫn điểm mount để unmount trên mỗi dòng</string>
-    <string name="umount_config_save">Lưu</string>
-    <string name="umount_config_save_confirm">Xác nhận lưu cấu hình?</string>
-    <string name="umount_config_save_success">Lưu cấu hình thành công</string>
-    <string name="umount_config_save_failed">Lưu cấu hình thất bại</string>
 
     <!-- Trang Chủ đề của tôi -->
     <string name="my_themes_title">Chủ đề của tôi</string>
@@ -1174,27 +575,18 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="my_themes_deleted">Đã xóa chủ đề</string>
     <string name="my_themes_applied">Đã áp dụng chủ đề</string>
     <string name="my_themes_apply_failed">Không thể áp dụng chủ đề — nhấn giữ để xóa và tải lại</string>
-    <string name="my_themes_details">Chi tiết chủ đề</string>
 
     <!-- Hộp thoại Tải xuống -->
     <string name="theme_download_title">Đang tải xuống chủ đề</string>
     <string name="theme_download_completed">Tải xuống hoàn tất</string>
     <string name="theme_download_failed">Tải xuống thất bại</string>
-    <string name="theme_file_corrupt">Tệp chủ đề bị hỏng, vui lòng tải lại</string>
-    <string name="theme_file_incomplete">Tệp chủ đề không đầy đủ, vui lòng tải lại</string>
     <string name="theme_download_progress">Tiến độ</string>
     <string name="theme_download_file">Tệp chủ đề</string>
     <string name="theme_download_image">Hình ảnh xem trước</string>
     <string name="theme_download_cancel">Hủy</string>
     <string name="theme_download_pause">Tạm dừng</string>
-    <string name="theme_download_resume">Tiếp tục</string>
-    <string name="theme_download_retry">Thử lại</string>
     <string name="theme_download_apply">Áp dụng chủ đề</string>
     <string name="theme_download_go_to_my_themes">Chủ đề của tôi</string>
-    <string name="theme_download_retrying">Đang thử lại (%d/3)...</string>
-    <string name="theme_download_preparing">Đang chuẩn bị tải xuống...</string>
-    <string name="theme_download_downloading_file">Đang tải xuống tệp chủ đề...</string>
-    <string name="theme_download_downloading_image">Đang tải xuống hình ảnh xem trước...</string>
     <string name="theme_download_finalizing">Đang hoàn tất...</string>
     <string name="settings_predictive_back">Cử chỉ quay lại dự đoán</string>
     <string name="settings_predictive_back_summary">Bật hoạt ảnh cử chỉ quay lại dự đoán Android 14+</string>
@@ -1202,82 +594,27 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="home_device_status_battery_charging">Đang sạc</string>
     <string name="home_device_status_cpu_temp">Nhiệt độ CPU</string>
     <string name="home_device_status_memory_trend">Xu hướng bộ nhớ</string>
-    <string name="home_storage_partitions">Phân vùng lưu trữ</string>
     <string name="home_device_status_cpu_freq">Tần số CPU</string>
     <string name="home_network_rx">Tải xuống</string>
     <string name="home_network_tx">Tải lên</string>
     <string name="settings_home_layout_stats">StatsUI</string>
-    <string name="home_stats_more_options">Tùy chọn khác</string>
-    <string name="home_stats_kp_label">KP</string>
-    <string name="home_stats_manager_label">Trình quản lý</string>
     <string name="home_device_status_gpu_load">GPU</string>
-    <string name="home_stats_kernel_modules">Mô-đun nhân</string>
-    <string name="home_stats_apm_modules">Mô-đun hệ thống</string>
-    <string name="home_stats_superusers">Siêu người dùng</string>
-    <string name="settings_kernel_spoof">Cấu hình giả mạo nhân</string>
-    <string name="settings_kernel_spoof_summary">Giả mạo phiên bản nhân và thời gian xây dựng</string>
-    <string name="settings_kernel_spoof_version">Phiên bản nhân</string>
-    <string name="settings_kernel_spoof_build_time">Thời gian xây dựng nhân</string>
-    <string name="settings_kernel_spoof_restore">Khôi phục</string>
 
-    <string name="kernel_spoof_enabled">Giả mạo nhân đã bật</string>
-    <string name="kernel_spoof_disabled_restored">Giả mạo nhân đã tắt và khôi phục</string>
-    <string name="kernel_spoof_failed">Giả mạo nhân thất bại: %d</string>
-    <string name="kernel_spoof_applied">Giả mạo nhân đã áp dụng</string>
 
-    <string name="settings_path_hide">Ẩn đường dẫn</string>
-    <string name="settings_path_hide_summary">Ẩn tệp và thư mục khỏi ứng dụng ở cấp độ nhân</string>
-    <string name="path_hide_paths_label">Đường dẫn ẩn (mỗi dòng một đường dẫn)</string>
 
-    <string name="path_hide_paths_helper">Nhập một đường dẫn mỗi dòng. Các đường dẫn khớp sẽ trả về ENOENT.</string>
-    <string name="path_hide_save">Lưu</string>
-    <string name="path_hide_enabled">Ẩn đường dẫn đã bật</string>
-    <string name="path_hide_disabled">Ẩn đường dẫn đã tắt</string>
-    <string name="path_hide_applied">Cấu hình ẩn đường dẫn đã áp dụng</string>
-    <string name="path_hide_failed">Thao tác ẩn đường dẫn thất bại: %d</string>
-    <string name="path_hide_uid_mode">Chế độ thực thi theo UID</string>
-    <string name="path_hide_uid_mode_summary">Chỉ ẩn đường dẫn cho các UID ứng dụng cụ thể</string>
-    <string name="path_hide_uids_label">UID mục tiêu (mỗi dòng một UID)</string>
-    <string name="path_hide_uids_helper">Nhập UID ứng dụng. Chỉ những ứng dụng này mới có đường dẫn bị ẩn.</string>
-    <string name="path_hide_uid_save">Lưu UID</string>
-    <string name="path_hide_uid_mode_enabled">Đã bật chế độ thực thi theo UID</string>
-    <string name="path_hide_uid_mode_disabled">Đã tắt chế độ thực thi theo UID</string>
-    <string name="path_hide_filter_system">Lọc UID hệ thống</string>
-    <string name="path_hide_filter_system_summary">Đồng thời ẩn đường dẫn khỏi tiến trình root và hệ thống (UID &lt; 10000)</string>
-    <string name="path_hide_filter_system_enabled">Đã bật lọc UID hệ thống</string>
-    <string name="path_hide_filter_system_disabled">Đã tắt lọc UID hệ thống</string>
-    <string name="path_hide_filter_system_warning_title">Cảnh báo</string>
-    <string name="path_hide_filter_system_warning_message">Bật tính năng này sẽ đồng thời ẩn đường dẫn khỏi tiến trình root và hệ thống (UID &lt; 10000). Điều này có thể gây lỗi một số chức năng hệ thống. Vui lòng thận trọng.</string>
-    <string name="path_hide_uid_applied">Đã áp dụng danh sách trắng UID</string>
-    <string name="path_hide_select_apps">Chọn ứng dụng</string>
-    <string name="path_hide_no_apps_selected">Chưa chọn ứng dụng nào</string>
-    <string name="path_hide_app_removed">Đã xóa %d cấu hình của ứng dụng đã gỡ cài đặt</string>
-    <string name="path_hide_search_apps">Tìm ứng dụng…</string>
-    <string name="path_hide_show_system">Hiển thị ứng dụng hệ thống</string>
-    <string name="netisolate_title">Cách ly mạng</string>
-    <string name="netisolate_enable">Cách ly mạng đã bật</string>
-    <string name="netisolate_disable">Cách ly mạng đã tắt</string>
-    <string name="netisolate_enable_summary">Chặn truy cập mạng cho các ứng dụng đã chọn ở cấp kernel</string>
-    <string name="netisolate_uids_label">Ứng dụng bị chặn</string>
-    <string name="netisolate_uids_hint">Nhập UID cần chặn (mỗi dòng một)</string>
-    <string name="netisolate_no_uids">Không có ứng dụng bị chặn</string>
     <string name="settings_search_title">Tìm kiếm cài đặt</string>
-    <string name="settings_search_hint">Tìm kiếm cài đặt…</string>
     <string name="settings_search_empty_hint">Nhập để tìm kiếm tất cả cài đặt…</string>
     <string name="settings_no_results">Không tìm thấy kết quả</string>
 
     <!-- Color Generation -->
     <string name="color_generation_classic">Cổ điển</string>
     <string name="color_generation_custom">Tùy chỉnh</string>
-    <string name="color_generation_label">Chế độ màu</string>
 
     <!-- Color Standard -->
     <string name="color_standard_md3_2021">MD3 2021</string>
     <string name="color_standard_m3e_2025">M3e 2025</string>
-    <string name="color_standard_label">Chuẩn màu</string>
 
     <!-- Color Style -->
-    <string name="color_style_label">Phong cách màu</string>
     <string name="color_style_tonal_spot">Tông màu</string>
     <string name="color_style_vibrant">Rực rỡ</string>
     <string name="color_style_content">Nội dung</string>
@@ -1290,7 +627,6 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="settings_focus_card_background">Hình nền thẻ FocusUI</string>
     <string name="settings_focus_card_background_enabled">Hình nền thẻ FocusUI đã bật; nhấn giữ thẻ để quản lý hình nền</string>
     <string name="settings_focus_card_background_summary">Bật hình nền thẻ FocusUI và quản lý hình nền bằng nhấn giữ</string>
-    <string name="settings_focus_card_dim">Độ mờ nền thẻ</string>
     <string name="settings_focus_card_dual_dim">Bật điều chỉnh độ mờ kép ngày/đêm</string>
     <string name="settings_focus_card_dual_dim_desc">Tự động điều chỉnh độ mờ nền thẻ cho chủ đề sáng và tối</string>
     <string name="settings_focus_card_day_dim">Độ mờ nền thẻ chế độ ngày</string>
@@ -1329,25 +665,7 @@ Dưới đây là một số nguyên nhân có thể gây ra thất bại xác t
     <string name="settings_background_permission_required">Vui lòng cấp quyền lưu trữ để chọn ảnh nền</string>
     <string name="settings_sound_effect_save_failed">Lưu hiệu ứng âm thanh thất bại</string>
     <string name="settings_startup_sound_save_failed">Lưu âm thanh khởi động thất bại</string>
-    <string name="script_library_downloaded_to">Đã tải xuống: %s</string>
-    <string name="script_library_download_failed">Tải xuống thất bại: %s</string>
-    <string name="settings_new_app_profile_update_failed">Cập nhật hồ sơ ứng dụng mới thất bại: %s</string>
     <string name="settings_info_copy">Nhấn giữ để sao chép thông tin</string>
     <string name="settings_info_copy_summary">Nhấn giữ một mục trong bảng thông tin trang chủ để sao chép nội dung</string>
     <string name="home_info_copied">Đã sao chép %1$s</string>
-    <string name="settings_jailbreak_mode">Chế độ jailbreak</string>
-    <string name="settings_jailbreak_mode_summary">Tải mô-đun KernelPatch trên kernel gốc. Không được phép vá trong chế độ này.</string>
-    <string name="settings_jailbreak_soft_reboot">Khởi động lại mềm</string>
-    <string name="settings_jailbreak_soft_reboot_message">Đã tải mô-đun. Khởi động lại hệ thống ngay bây giờ?</string>
-    <string name="settings_jailbreak_restart_framework">Khởi động lại framework</string>
-    <string name="settings_jailbreak_restart_framework_message">Đã tải mô-đun. Khởi động lại framework Android ngay bây giờ? Thao tác này sẽ khởi động lại mềm thiết bị (chỉ khởi động lại framework, không khởi động lại kernel).</string>
-    <string name="settings_jailbreak_loaded">Đã tải mô-đun jailbreak</string>
-    <string name="settings_jailbreak_failed">Không thể tải mô-đun jailbreak</string>
-    <string name="jailbreak_no_patch">Không được phép vá trong chế độ jailbreak.</string>
-    <string name="jailbreak">Jailbreak</string>
-    <string name="jailbreak_triggered">Đã kích hoạt jailbreak. Chờ lấy quyền root, sau đó khởi động lại mềm.</string>
-    <string name="reboot_soft">Khởi động lại mềm</string>
-    <string name="kpm_installed">Đã cài đặt</string>
-    <string name="kpm_disabled">Đã tắt (có hiệu lực sau khi khởi động lại)</string>
-    <string name="kpm_embedded_unload_invalid">Không thể tải KPM đã nhúng; chúng vẫn hoạt động sau khi khởi động lại.</string>
 </resources>

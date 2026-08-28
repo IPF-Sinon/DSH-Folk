@@ -5,27 +5,17 @@
 
     <string name="home">Ana Sayfa</string>
 
-    <string name="success">Başarılı</string>
     <string name="failure">Başarısız</string>
 
-    <string name="patch_warnning">Kurulum riskler içerir. Lütfen verilerinizin yedeklendiğinden emin olun.</string>
-    <string name="patch">Yama</string>
 
-    <string name="kernel_patch">KernelPatch</string>
-    <string name="android_patch">AndroidPatch</string>
 
     <string name="settings_nav_layout_title">Gezinme Düzeni Ayarları</string>
     <string name="settings_nav_layout_summary">Bazı gezinme bileşenlerini gizle veya göster</string>
     <string name="settings_nav_scheme">Gezinme Şeması</string>
-    <string name="settings_nav_mode">Gezinme Çubuğu Modu</string>
-    <string name="settings_nav_mode_summary">Gezinme çubuğunun nasıl görüntüleneceğini seçin</string>
     <string name="settings_nav_mode_auto">Otomatik Geleneksel</string>
     <string name="settings_nav_mode_bottom">Her Zaman Alt Çubuk</string>
     <string name="settings_nav_mode_rail">Her Zaman Yan Çubuk</string>
     <string name="settings_nav_mode_floating">Kayan Alt Çubuk</string>
-    <string name="settings_show_apm">Sistem Modüllerini Göster</string>
-    <string name="settings_show_kpm">KPM Göster</string>
-    <string name="settings_show_superuser">SuperUser Göster</string>
     <string name="settings_floating_auto_hide">Otomatik Gizle</string>
     <string name="settings_floating_auto_hide_summary">3 saniye işlem yapılmadığında kayan çubuğu otomatik gizle</string>
     <string name="settings_floating_swipe_hide">Kaydırarak Gizle</string>
@@ -44,13 +34,8 @@
     <string name="settings_compact_rounded_bar">Kompakt yuvarlak stil</string>
     <string name="settings_compact_rounded_bar_summary">Yuvarlak köşeli ve daha sıkı aralıklı kompakt yüzer çubuk kullan</string>
     <string name="settings_stats_top_layout">Üst Yerleşim</string>
-    <string name="settings_stats_top_layout_summary">Üst bilgi kartı stilini seçin</string>
     <string name="settings_stats_top_layout_list">Liste</string>
     <string name="settings_stats_top_layout_grid">Izgara</string>
-    <string name="settings_block_kernelpatch_update">KernelPatch Güncellemesini Engelle</string>
-    <string name="settings_block_kernelpatch_update_summary">KernelPatch güncelleme bildirimlerini gösterme</string>
-    <string name="settings_block_androidpatch_update">Sistem Yaması Güncellemesini Engelle</string>
-    <string name="settings_block_androidpatch_update_summary">Sistem yaması (APD) güncelleme bildirimlerini gösterme</string>
 
     <string name="reboot">Yeniden Başlat</string>
     <string name="settings">Ayarlar</string>
@@ -63,11 +48,6 @@
     <string name="developer_and_maintainer">Geliştirici | Bakımcı</string>
     <string name="settings_app_language">Dil</string>
     <string name="system_default">Sistem varsayılanı</string>
-    <string name="settings_global_namespace_mode">Global ad alanı modu</string>
-    <string name="settings_global_namespace_mode_summary">Tüm root oturumları global mount ad alanını kullanır</string>
-    <string name="settings_clear_super_key_dialog">Gerçekten devam etmek istiyor musunuz?</string>
-    <string name="settings_sucompat">Eski su uyumluluğu</string>
-    <string name="settings_sucompat_summary">Eski su uyumluluğu için path_probe kancalarını etkinleştir</string>
     <string name="settings_grid_working_card_hide_check">Durum simgesini gizle</string>
     <string name="settings_grid_working_card_hide_check_summary">Çalışma kartındaki onay veya uyarı simgesini gizle</string>
     <string name="settings_grid_working_card_hide_text">Durum metnini gizle</string>
@@ -86,100 +66,26 @@
     <string name="settings_folkx_animation_vertical">Dikey Kaydırma</string>
     <string name="settings_folkx_animation_diagonal">Çapraz Kaydırma</string>
 
-    <string name="su_exclude_all_title">Tümünü Hariç Tut</string>
-    <string name="su_exclude_all_confirm">Root olmayan tüm uygulamaları hariç tutmak istediğinize emin misiniz?</string>
-    <string name="su_batch_exclude_title">Toplu Hariç Tutma</string>
-    <string name="su_batch_exclude_content">ROOT olmayan tüm uygulamalar için enjeksiyonu hariç tut, lütfen bir işlem seçin</string>
-	<string name="su_exclude_btn">Hariç Tut</string>
-    <string name="su_exclude_reverse_btn">Tersine Çevir</string>
 
-    <string name="home_learn_apatch">FolkPatch’i Öğren</string>
-    <string name="home_click_to_learn_apatch">FolkPatch özelliklerini ve nasıl kullanılacağını öğrenin</string>
-    <string name="settings_hide_apatch_card">FolkPatch’i Öğren kartını gizle</string>
-    <string name="settings_hide_apatch_card_summary">Ana ekrandaki FolkPatch’i Öğren kartını gizle</string>
+    <string name="settings_hide_apatch_card">DSH-Folk’i Öğren kartını gizle</string>
+    <string name="settings_hide_apatch_card_summary">Ana ekrandaki DSH-Folk’i Öğren kartını gizle</string>
 
-    <string name="about_source_code"><![CDATA[<p>Kaynak kodunu görüntüle: %1$s<p/>%2$s kanalımıza katıl<p/>%3$s grubumuza katıl]]></string>
     <string name="send_log">Günlükleri gönder</string>
     <string name="settings_clean_storage">Uygulama verilerini temizle</string>
     <string name="settings_clean_storage_summary">Kalıntı dosyaların neden olduğu indirme veya uygulama hatalarını düzeltir</string>
     <string name="settings_clean_storage_confirm">Bu işlem indirilen temaları, içe aktarılan müzikleri, ses efektlerini ve tüm önbelleği siler, ardından dizinleri yeniden oluşturur. Ayarlar korunur. Devam edilsin mi?</string>
     <string name="settings_clean_storage_done">Temizlik tamamlandı</string>
-    <string name="save_log">Günlükleri kaydet</string>
-    <string name="log_saved">Günlükler kaydedildi</string>
-    <string name="safe_mode">Güvenli mod</string>
     <string name="github">GitHub</string>
-    <string name="telegram">Telegram</string>
-    <string name="support_or_donate">Destek / Bağış</string>
 	
-    <string name="super_key">SuperKey</string>
-    <string name="clear_super_key">SuperKey’i Temizle</string>
-    <string name="patch_set_superkey">SuperKey Ayarla</string>
-    <string name="home_patch_set_key_desc">KernelPatch için tek kimlik bilgisi</string>
-    <string name="home_patch_next_step">Sonraki adım</string>
 
-    <string name="home_not_installed">Yüklü değil</string>
-    <string name="home_install_unknown">Yüklü değil veya doğrulanmamış</string>
-    <string name="home_install_unknown_summary">Yüklemek için tıklayın</string>
-    <string name="home_click_to_install">Yüklemek için tıklayın</string>
-    <string name="home_working">Çalışıyor</string>
-    <string name="home_version">Sürüm: %s</string>
-    <string name="home_kp_need_update">Yeni sürüm mevcut</string>
-    <string name="home_kp_cando_update">Güncelle</string>
 
-    <string name="home_installing">Yükleniyor</string>
-    <string name="kpatch_version">Sürüm: %s</string>
-    <string name="apatch_version">Sürüm: %s</string>
 
-    <string name="kpatch_version_update" formatted="false">Sürüm: %s -&gt; %s</string>
-    <string name="kpatch_shadow_path_title">kpatch</string>
-    <string name="home_auth_key_title">SuperKey Girin</string>
-    <string name="home_auth_key_desc">Doğrulama sonrası başlat</string>
-    <string name="home_kpatch_info_title">Bilgi</string>
 
-    <string name="home_ap_cando_install">Yükle</string>
 
-    <string name="home_ap_cando_uninstall">Kaldır</string>
-    <string name="home_ap_cando_reboot">Yeniden Başlat</string>
 
-    <string name="patch_title">Yama</string>
 
-    <string name="patch_config_title">Yamalar</string>
-    <string name="patch_mode_bootimg_patch">Mod: Yama</string>
-    <string name="patch_mode_patch_and_install">Mod: Yama ve yükle</string>
-    <string name="patch_mode_install_to_next_slot">Mod: Etkin olmayan slota yükle (OTA sonrası)</string>
-    <string name="patch_mode_restore">Mod: Geri Yükle</string>
-    <string name="patch_mode_uninstall_patch">Mod: KPatch’i Kaldır</string>
-    <string name="patch_select_bootimg_btn">Boot seç</string>
-    <string name="patch_embed_kpm_btn">KPM Göm</string>
-    <string name="patch_start_patch_btn">Başlat</string>
-    <string name="patch_start_unpatch_btn">Yamayı Kaldır</string>
-    <string name="patch_item_error">!!HATA!!</string>
-    <string name="patch_item_bootimg">bootimg</string>
-    <string name="patch_item_bootimg_slot">Slot:</string>
-    <string name="patch_item_bootimg_dev">Cihaz:</string>
-    <string name="patch_item_kernel">Kernel</string>
-    <string name="patch_item_kpimg">kpimg</string>
-    <string name="patch_item_kpimg_version">Sürüm:</string>
-    <string name="patch_item_kpimg_comile_time">Zaman:</string>
-    <string name="patch_item_kpimg_config">Yapılandırma:</string>
-    <string name="patch_item_new_extra_kpm">Yeni göm</string>
-    <string name="patch_item_existed_extra_kpm">Mevcut</string>
-    <string name="patch_item_extra_name">Ad:</string>
-    <string name="patch_item_extra_version">Sürüm:</string>
-    <string name="patch_item_extra_author">Yazar:</string>
-    <string name="patch_item_extra_kpm_license">Lisans:</string>
-    <string name="patch_item_extra_kpm_desciption">Açıklama:</string>
-    <string name="patch_item_extra_args">Argümanlar:</string>
-    <string name="patch_item_extra_event">Olay:</string>
-    <string name="patch_item_skey">SuperKey</string>
-    <string name="patch_custom_superkey">Özel SuperKey</string>
-    <string name="patch_custom_superkey_summary">Hâlâ root ve kernel yönetimi için SuperKey kullanabilirsiniz, yönetici çekirdek tarafından yerleşik imza ile yetkilendirilmiştir</string>
-    <string name="patch_item_set_skey_label">SuperKey 8-63 karakter uzunluğunda olmalı; rakam ve harf içermeli, özel karakter içermemelidir.</string>
-    <string name="patch_confirm_superkey">SuperKey Onayla</string>
-    <string name="patch_skey_mismatch">SuperKey eşleşmiyor</string>
 
     <string name="home_kernel">Kernel sürümü</string>
-    <string name="home_manager_version">Yönetici sürümü</string>
     <string name="home_fingerprint">Parmak izi</string>
 
     <string name="home_selinux_status">SELinux durumu</string>
@@ -188,168 +94,25 @@
     <string name="home_selinux_status_permissive">İzin verici</string>
     <string name="home_selinux_status_unknown">Bilinmiyor</string>
  
-	<string name="settings_selinux_mode">SELinux Modu</string>
-    <string name="settings_selinux_mode_summary">SELinux zorunluluk modunu seçin</string>
-    <string name="settings_selinux_mode_enforcing">Zorlayıcı (Sıkı)</string>
-    <string name="settings_selinux_mode_permissive">İzin verici (Esnek)</string>
-    <string name="settings_selinux_current_mode">Geçerli: %s</string>
-    <string name="settings_selinux_mode_enforcing_summary">SELinux erişim kurallarını tamamen uygular</string>
-    <string name="settings_selinux_mode_permissive_summary">SELinux yalnızca ihlalleri kaydeder, engellemez</string>
 
     <string name="home_device_info">Cihaz</string>
     <string name="home_system_version">Sistem sürümü</string>
-    <string name="home_kpatch_version">KernelPatch sürümü</string>
-    <string name="home_su_path">Çalıştırılabilir su</string>
-    <string name="home_apatch_version">FolkPatch sürümü</string>
-
-    <string name="kpm">KPModule</string>
-    <string name="kpm_kp_not_installed">KernelPatch yüklü değil</string>
-    <string name="kpm_add_kpm">KPM Ekle</string>
-    <string name="kpm_load">Yükle</string>
-    <string name="kpm_install">Kur</string>
-    <string name="kpm_embed">Göm</string>
-    <string name="kpm_embedded">Gömülü</string>
-    <string name="kpm_loaded">Yüklü</string>
-    <string name="kpm_load_toast_succ">Yükleme başarılı</string>
-    <string name="kpm_load_toast_failed">Yükleme başarısız</string>
-    <string name="kpm_unload_confirm">%s modülü kaldırılsın mı?</string>
-    <string name="kpm_unload">Kaldır</string>
-    <string name="kpm_control">Kontrol</string>
-    <string name="kpm_apm_empty">Yüklü modül yok</string>
-    <string name="kpm_custom_order">Özel modül sırasını değiştir</string>
-    <string name="kpm_load_failed">Çekirdek modülleri yüklenemedi</string>
-    <string name="kpm_version">Sürüm</string>
-    <string name="kpm_license">Lisans</string>
-    <string name="kpm_author">Yazar</string>
-    <string name="kpm_desc">Açıklama</string>
-    <string name="kpm_args">Argümanlar</string>
-
-    <string name="su_title">Superuser</string>
-    <string name="su_selinux_via_hook">Hook ile baypas</string>
-    <string name="su_pkg_excluded_label">Hariç tut</string>
-    <string name="su_pkg_excluded_setting_title">Değişiklikleri hariç tut</string>
-    <string name="su_pkg_excluded_setting_summary">Bu seçenek etkinleştirildiğinde FolkPatch, bu uygulamanın modülleri tarafından değiştirilen dosyaları geri yükleyebilir.</string>
-    <string name="su_pkg_root_setting_title">Superuser</string>
-    <string name="su_pkg_root_setting_summary">Bu seçenek etkinleştirildiğinde uygulamaya superuser erişimi verilir ve SU komutlarını kullanmasına izin verilir.</string>
-    <string name="su_pkg_normal_setting_title">Normal Mod</string>
-    <string name="su_pkg_normal_setting_summary">Root erişimi verilmedi, uygulama superuser yetkileri olmadan çalışır.</string>
-    <string name="su_show_system_apps">Sistem uygulamalarını göster</string>
-    <string name="su_hide_system_apps">Sistem uygulamalarını gizle</string>
-    <string name="su_refresh">Yenile</string>
-    <string name="su_multi_select_title">Uygulamaları Seç</string>
-    <string name="su_multi_select_count">%d seçildi</string>
-    <string name="su_multi_select_grant_root">ROOT Ver</string>
-    <string name="su_multi_select_revoke_root">ROOT\'u Kaldır</string>
-    <string name="su_multi_select_exclude">Hariç Tut</string>
-    <string name="su_multi_select_confirm_grant">%d uygulamaya ROOT verilsin mi?</string>
-    <string name="su_multi_select_confirm_revoke">%d uygulamadan ROOT kaldırılsın mı?</string>
-    <string name="su_multi_select_confirm_exclude">%d uygulama hariç tutulsun mu?</string>
-    <string name="su_multi_select_enter">Çoklu Seçim</string>
-    <string name="apm">Sistem Modülü</string>
 
 
-    <string name="apm_not_installed">AndroidPatch yüklü değil</string>
-    <string name="apm_failed_to_enable">Modül etkinleştirilemedi: %s</string>
-    <string name="apm_failed_to_disable">Modül devre dışı bırakılamadı: %s</string>
-    <string name="apm_empty">Yüklü modül yok</string>
-    <string name="apm_load_failed">Modüller yüklenemedi</string>
+
+
     <string name="apm_remove">Kaldır</string>
-    <string name="apm_undo">Geri al</string>
-    <string name="apm_install">Kur</string>
-    <string name="apm_uninstall_confirm">%s modülü kaldırılsın mı?</string>
-    <string name="apm_uninstall_success">%s kaldırıldı</string>
-    <string name="apm_uninstall_failed">Kaldırılamadı: %s</string>
-    <string name="apm_undo_uninstall_success">%s geri yüklendi</string>
-    <string name="apm_undo_uninstall_failed">Geri yükleme başarısız: %s</string>
-    <string name="apm_version">Sürüm</string>
-    <string name="apm_author">Yazar</string>
-    <string name="apm_desc">Açıklama</string>
-    <string name="apm_overlay_fs_not_available">Kernel tarafından OverlayFS devre dışı bırakıldığı için modüller kullanılamıyor!</string>
-    <string name="apm_magisk_conflict">Magisk ile çakışma nedeniyle modüller kullanılamıyor!</string>
-    <string name="apm_mount_warning_title">Önemli Uyarı</string>
-    <string name="apm_mount_warning_message">Modüller varsayılan olarak bağlanmaz. Lütfen dahili bağlama sistemini veya metamodule kullanın.</string>
-    <string name="apm_mount_warning_button">Anladım</string>
-    <string name="apm_reboot_to_apply">Uygulamak için yeniden başlat</string>
-    <string name="apm_changelog">Değişiklik günlüğü</string>
     <string name="apm_update">Güncelle</string>
-    <string name="apm_downloading">Modül indiriliyor: %s</string>
-    <string name="apm_start_downloading">İndirme başlatılıyor: %s</string>
-    <string name="apm_new_version_available">Yeni sürüm %s mevcut, yükseltmek için tıklayın.</string>
 
-    <string name="hide_apatch_manager">APatch Manager’ı Gizle</string>
-    <string name="hide_apatch_manager_summary">Rastgele paket kimliği ve özel uygulama etiketiyle bir proxy uygulama yükle</string>
-    <string name="hide_apatch_dialog_new_manager_name">Yeni yönetici adı</string>
-    <string name="hide_apatch_dialog_summary">Launcher’da gösterilecek yeni uygulama etiketi olarak kullanılacaktır</string>
-    <string name="hide_apatch_manager_failure">Gizleme başarısız. Lütfen hatayı bildirin!</string>
 
-    <string name="setting_reset_su_path">su yolunu sıfırla</string>
-    <string name="setting_reset_su_new_path">Yeni tam yol</string>
  
  
-	<string name="apm_webui_open">Aç</string>
-    <string name="apm_action">Eylem</string>
-    <string name="module_shortcut_add">Kısayol</string>
-    <string name="module_shortcut_not_supported">Launcher masaüstü kısayollarını desteklemiyor.</string>
-    <string name="module_shortcut_created">Masaüstünde kısayol oluşturuldu.</string>
-    <string name="module_shortcut_updated">Kısayol güncellendi.</string>
-    <string name="module_shortcut_permission_tip_xiaomi">Lütfen Xiaomi ayarlarında bu uygulama için \"Masaüstü kısayolu oluştur\" iznini etkinleştirin.</string>
-    <string name="module_shortcut_permission_tip_oppo">Lütfen OPPO ayarlarında bu uygulama için \"Masaüstü kısayolu\" iznini etkinleştirin.</string>
-    <string name="module_shortcut_permission_tip_default">Kısayol oluşturma başarısız olursa, sistem ayarlarında bu uygulama için masaüstü kısayolu iznini etkinleştirin.</string>
     <string name="enable_web_debugging">WebView hata ayıklamayı etkinleştir</string>
     <string name="enable_web_debugging_summary">WebUI hata ayıklamak için kullanılabilir. Yalnızca gerektiğinde etkinleştirin.</string>
-    <string name="settings_apm_install_confirm">Kurulumdan önce onay iste</string>
-    <string name="settings_apm_install_confirm_summary">Modüller kurulmadan önce onay iletişim kutusu göster</string>
-    <string name="settings_show_more_module_info">Modül ayrıntılarını göster</string>
-    <string name="settings_show_more_module_info_summary">Modül listesinde modül kimliğini ve boyutunu göster</string>
-    <string name="settings_apm_stay_on_page">İşlem sayfasında kal</string>
-    <string name="settings_apm_stay_on_page_summary">Modül işlemi tamamlandıktan sonra otomatik geri dönme</string>
-    <string name="settings_enable_module_shortcut_add">Kısayol ekleme düğmesini etkinleştir</string>
-    <string name="settings_enable_module_shortcut_add_summary">WebUI kısayol ekleme düğmesini göster</string>
-    <string name="settings_disable_module_update_check">Modül güncelleme kontrolünü devre dışı bırak</string>
-    <string name="settings_disable_module_update_check_summary">Sistem modülleri için otomatik güncelleme kontrolünü kapat</string>
-    <string name="settings_module_sort_optimization">Modül Sıralama Optimizasyonu</string>
-    <string name="settings_module_sort_optimization_summary">WebUI ve Eylem içeren sistem modüllerini en üste taşı</string>
-    <string name="apm_custom_order">Özel modül sırası</string>
-    <string name="apm_drag_to_reorder">Sürükleyerek yeniden sırala</string>
-    <string name="apm_reset_order">Otomatik sıralamayı geri yükle</string>
-    <string name="settings_fold_system_module">Sistem Modüllerini Katla</string>
-    <string name="settings_fold_system_module_summary">Eylemleri genişletmek/daraltmak için modül kartına tıkla</string>
-    <string name="settings_simple_list_bottom_bar">Basit Liste Alt Çubuğu</string>
-    <string name="settings_simple_list_bottom_bar_summary">Modül eylemleri için yalnızca simge düğmeleri kullan (APatch’ten esinlenmiştir)</string>
-    <string name="settings_spliced_card_group">Spliced Card Group</string>
-    <string name="settings_spliced_card_group_summary">Use M3E continuous card group style for module list</string>
-    <string name="settings_show_kpm_status_badge">KPM Durum Rozetini Göster</string>
-    <string name="settings_show_kpm_status_badge_summary">KPM kartında Gömülü/Yüklenmiş durum rozetini göster</string>
-    <string name="apm_install_confirm_title">Modül Kur</string>
-    <string name="apm_install_confirm_content">%s kurulmak istiyor musunuz?</string>
-    <string name="apm_disable_all_title">Tüm Modülleri Devre Dışı Bırak</string>
-    <string name="module_shortcut_name">Kısayol adı</string>
-    <string name="module_shortcut_icon">Kısayol simgesi</string>
-    <string name="module_shortcut_type">Kısayol türü</string>
-    <string name="module_shortcut_type_webui">WebUI</string>
-    <string name="module_shortcut_type_action">Eylem</string>
-    <string name="module_shortcut_icon_default">Varsayılan simgeyi kullan</string>
-    <string name="module_shortcut_icon_select">Simge seç</string>
-    <string name="apm_disable_all_confirm">Tüm modülleri devre dışı bırakmak istediğinize emin misiniz? Bu, yüklü tüm modülleri devre dışı bırakacaktır.</string>
     <string name="apm_enable_module_banner">Modül Banner’ını Etkinleştir</string>
     <string name="apm_enable_module_banner_summary">Mevcutsa modüller için banner görseli göster</string>
     <string name="apm_enable_folk_banner">Modül Banner’ını Özelleştir</string>
     <string name="apm_enable_folk_banner_summary">Banner görselini seçmek için modül kartına uzun basın</string>
-    <string name="apm_folk_banner_title">Modül Düzenleyici</string>
-    <string name="apm_folk_banner_select">Görsel seç</string>
-    <string name="apm_folk_banner_clear">FolkBanner’ı Temizle</string>
-    <string name="apm_folk_banner_saved">%s için FolkBanner eklendi.</string>
-    <string name="apm_folk_banner_cleared">%s için FolkBanner temizlendi.</string>
-    <string name="apm_folk_banner_failed">%s için FolkBanner güncellenemedi.</string>
-    <string name="folk_banner_custom_info_title">Modül Bilgisi</string>
-    <string name="folk_banner_custom_info_name">Ad</string>
-    <string name="folk_banner_custom_info_version">Sürüm</string>
-    <string name="folk_banner_custom_info_author">Yazar</string>
-    <string name="folk_banner_custom_info_description">Açıklama</string>
-    <string name="folk_banner_custom_info_save">Kaydet</string>
-    <string name="folk_banner_custom_info_reset">Sıfırla</string>
-    <string name="folk_banner_custom_info_saved">%s için modül bilgisi kaydedildi</string>
-    <string name="folk_banner_custom_info_reset_done">%s için modül bilgisi sıfırlandı</string>
     <string name="apm_banner_api_mode">API Modu</string>
     <string name="apm_banner_api_mode_summary">Modül bannerları için rastgele görsel API veya yerel dizin kullan</string>
     <string name="apm_banner_api_source">API Kaynağını Yapılandır</string>
@@ -378,106 +141,23 @@
     <string name="settings_banner_custom_opacity_summary">Duvar kağıdı modunu takip etmek yerine banner’lar için özel opaklık kullan</string>
     <string name="settings_banner_opacity">Banner şeffaflığı</string>
 
-    <string name="settings_donot_store_superkey">SuperKey’i yerelde saklama</string>
-    <string name="settings_donot_store_superkey_summary">Yönetici her başlatıldığında SuperKey doğrulaması iste</string>
 
 
 
-    <string name="mode_select_page_title">Kur</string>
-    <string name="mode_select_page_patch_and_install">Yamala ve kur</string>
-    <string name="mode_select_page_select_file">Yamalanacak boot imajını seçin</string>
-    <string name="restore_select_file">Geri yüklenecek boot bölüm dosyasını seçin</string>
-    <string name="mode_select_page_install_inactive_slot">Etkin olmayan slota kur (OTA sonrası)</string>
-    <string name="mode_select_page_install_inactive_slot_warning">Cihazınız yeniden başlatma sonrası mevcut etkin olmayan slottan **ZORLA** açılacaktır!\nBu seçeneği yalnızca OTA tamamlandıktan sonra kullanın.\nDevam edilsin mi?</string>
-    <string name="mode_select_page_select_kpimg">Yerel yama dosyası kullan (KPimg)</string>
-    <string name="mode_select_page_init_boot_warning_title">Yanlış imaj seçildi</string>
-    <string name="mode_select_page_init_boot_warning_message">Seçilen dosya bir init_boot veya vendor_boot imajı gibi görünüyor.
-KernelPatch, yama için boot imajı gerektirir.
 
-Lütfen doğru boot imajını seçin (genellikle boot.img).
-
-Yine de devam edilsin mi?</string>
-    <string name="patch_custom_kpimg_label">Özel KPimg</string>
-    <string name="patch_custom_kpimg_file">Dosya: %s</string>
-    <string name="patch_select_kpimg_btn">KPimg Seç</string>
-
-    <string name="home_dialog_auth_fail_title">Kimlik doğrulama başarısız</string>
-    <string name="home_dialog_auth_fail_content">SuperKey doğrulanamadı, bu da FolkPatch aktivasyonunun başarısız olmasına neden oldu.
-Kimlik doğrulama başarısızlığının bazı olası nedenleri aşağıdadır—lütfen hangisinin sizin için geçerli olduğunu kontrol edin:
-
-\n1. KernelPatch ile boot.img dosyasını düzlemediniz veya gerçekten ne yaptığınızı unuttunuz.
-\n2. Düzeltme yapılmış boot.img hala bilgisayarınızda uyuyor, cihaza asla flashlanmadı.
-\n3. SuperKey yanlış girildi veya gizemli semboller içeriyor, örneğin uzaylı dillerinden karakterler.
-\n4. Cihazınız FolkPatch ve KernelPatch ile uyumlu olmayabilir, zorlama girişleri boşunadır.
-\n5. Bazı gizemli işlemler yapmış olabilirsiniz—örneğin, FolkPatch\'i engelleyen ve sonunda sizi oyunun dışına iten paket adı dışlama modülleri kullanmak gibi.
-\nLütfen önce dikkatlice kontrol edin, sonra tekrar deneyin. Sorun devam ederse, sorular sormak için resmi deponun issues sayfasına davetlisiniz.
-Sonuçta, bazı sorunlar tamamen sizin kendi yapmanızdan kaynaklanıyor olabilir!
-Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</string>
 
     <string name="home_more_menu_feedback_or_suggestion">Geri bildirim veya öneri</string>
     <string name="home_more_menu_about">Hakkında</string>
-    <string name="home_more_menu_document">Belge</string>
 
     <string name="home_more_menu_music_play">Müziği çal</string>
     <string name="home_more_menu_music_pause">Müziği duraklat</string>
 
     <!-- Plugin strings -->
-    <string name="plugin_title">Eklentiler</string>
-    <string name="plugin_refresh">Yenile</string>
-    <string name="plugin_summary_title">APD Lua Plugin</string>
-    <string name="plugin_summary_not_installed">APD yüklü değil · eklentiler kullanılamıyor</string>
-    <string name="plugin_state_enabled">Etkin</string>
-    <string name="plugin_state_disabled">Devre dışı</string>
-    <string name="plugin_toggle_failed">Eklenti durumu değiştirilemedi</string>
-    <string name="plugin_empty">Yüklü eklenti yok</string>
-    <string name="plugin_empty_hint">Eklemek için /data/adb/plugins/&lt;id&gt;/ altına bir main.lua yerleştirin.</string>
-    <string name="plugin_load_failed">Eklentiler yüklenemedi</string>
-    <string name="plugin_manage_summary">Hafif Lua eklentilerini yönet</string>
-    <string name="plugin_install">Eklenti yükle</string>
-    <string name="plugin_install_success">Eklenti yüklendi</string>
-    <string name="plugin_install_failed">Eklenti yükleme başarısız</string>
-    <string name="plugin_uninstall_title">Eklentiyi kaldır</string>
-    <string name="plugin_uninstall">Kaldır</string>
-    <string name="plugin_uninstall_confirm">%1$s eklentisi kaldırılsın mı?</string>
-    <string name="plugin_uninstall_success">Eklenti kaldırıldı</string>
-    <string name="plugin_uninstall_failed">Eklenti kaldırılamadı</string>
-    <string name="plugin_action">Çalıştır</string>
-    <string name="plugin_action_success">İşlem yürütüldü</string>
-    <string name="plugin_action_failed">İşlem başarısız</string>
-    <string name="plugin_quick_action_success">Başarıyla yürütüldü</string>
-    <string name="plugin_quick_action_failed">Yürütme başarısız</string>
-    <string name="plugin_config">Yapılandır</string>
-    <string name="plugin_config_title">%1$s yapılandır</string>
-    <string name="plugin_config_saved">Yapılandırma kaydedildi</string>
-    <string name="plugin_log_title">Yürütme Çıktısı</string>
-    <string name="plugin_log_empty">Henüz yürütme günlüğü yok</string>
-    <string name="plugin_log_page_title">Eklenti Günlükleri</string>
-    <string name="plugin_log_all_empty">Henüz hiçbir eklenti günlük üretmedi</string>
-    <string name="plugin_log_clear">Günlükleri temizle</string>
-    <string name="plugin_log_cleared">Günlükler temizlendi</string>
-    <string name="plugin_log_export">Günlükleri dışa aktar</string>
 
-    <string name="home_dialog_uninstall_title">Kaldır</string>
     
-    <string name="home_dialog_uninstall_ap_only">Yalnızca yamayı kaldır</string>
-    <string name="home_dialog_uninstall_all">Tamamen kaldır</string>
-    <string name="home_dialog_uninstall_ap_only_desc">Yalnızca AndroidPatch’i kaldır ve yöneticiyi koru.</string>
-    <string name="home_dialog_uninstall_all_desc">AndroidPatch’i kaldır ve tam kaldırma sürecini başlat.</string>
 
-    <string name="kpm_control_dialog_title">KPM Kontrolü</string>
-    <string name="kpm_control_dialog_content">Lütfen kontrol parametrelerini girin:</string>
-    <string name="kpm_control_paramters">Parametreler</string>
-    <string name="kpm_control_outMsg">Çıktı</string>
-    <string name="kpm_control_ok">Başarılı!</string>
-    <string name="kpm_control_failed">Başarısız!</string>
     
-    <string name="settings_night_mode_follow_sys">Koyu tema sistemle uyumlu</string>
-    <string name="settings_night_mode_follow_sys_summary">Koyu temayı sistem ayarlarına göre otomatik değiştir</string>
-    <string name="settings_night_theme_enabled">Koyu tema</string>
     
-    <string name="settings_use_system_color_theme">Sistem renk teması</string>
-    <string name="settings_use_system_color_theme_summary">Sistem tarafından duvar kağıdından oluşturulan renk temasını kullan</string>
-    <string name="settings_custom_color_theme">Renk teması</string>
 
     <string name="amber_theme">Amber</string>
     <string name="blue_theme">Mavi</string>
@@ -502,80 +182,23 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="theme_light">Açık</string>
     <string name="theme_dark">Koyu</string>
     <string name="theme_system">Sistem</string>
-    <string name="loading_modules">Modüller yükleniyor…</string>
-    <string name="loading_scripts">Betikler aranıyor…</string>
     <string name="loading_themes">Temalar yükleniyor…</string>
     <string name="loading_apis">API kaynakları yükleniyor…</string>
     <string name="retry">Yeniden dene</string>
 
-    <string name="about_app_desc">Çekirdeği yeniden derlemeden kernel modüllerini ve kernel fonksiyon hook’larını destekleyen, kernel tabanlı bir root çözümü.</string>
     <string name="about_powered_by">%1$s tarafından desteklenmektedir</string>
-    <string name="about_telegram_group">Telegram Grubu</string>
     
     <!-- Online Module Strings -->
-    <string name="online_module_title">Çevrim İçi Sistem Modülü</string>
-    <string name="online_module_download_start">İndirme başlatılıyor: %s</string>
-    <string name="online_module_download_complete">İndirme tamamlandı: %s</string>
-    <string name="online_module_download_notification">%s indiriliyor. İlerleme için bildirim panelini, tamamlanan dosya için İndirilenler klasörünü kontrol edin.</string>
 
     <!-- Online Module Source Strings -->
-    <string name="online_module_source_official">Resmî kaynak</string>
-    <string name="online_module_source_cluster">Depo kümesi</string>
-    <string name="online_module_source_custom">Özel depo</string>
-    <string name="online_module_source_title">Modül kaynağı</string>
-    <string name="online_module_repo_url_title">Depo URL’si</string>
-    <string name="online_module_repo_url_hint">https://example.com/modules.json</string>
-    <string name="online_module_repo_settings">Depo ayarları</string>
 
     <!-- Repo Module Detail Strings -->
-    <string name="repo_module_detail_links">Bağlantılar</string>
-    <string name="repo_module_detail_homepage">Ana sayfa</string>
-    <string name="repo_module_detail_source">Kaynak kodu</string>
-    <string name="repo_module_detail_support">Destek</string>
-    <string name="repo_module_detail_versions">Sürüm geçmişi</string>
-    <string name="repo_module_detail_download">İndir ve kur</string>
-    <string name="repo_module_detail_by_author">%1$s tarafından</string>
-    <string name="online_module_repo_browse_title">Depolara göz at</string>
-    <string name="online_module_view_modules">Modülleri görüntüle</string>
-    <string name="online_module_select_repo_hint">Modüllere göz atmak için bir depo seçin</string>
-    <string name="online_module_enter_url_hint">Depo URL’sini girin</string>
-    <string name="online_module_invalid_url">Lütfen geçerli bir URL girin</string>
-    <string name="online_module_explore_repos">Depoları keşfet</string>
-    <string name="online_module_repo_count">%1$d depo</string>
-    <string name="online_module_module_count">%1$d+ modül</string>
-    <string name="online_module_select_repo">Bir depo seçin</string>
-    <string name="online_module_enter_url_manually">URL’yi elle gir</string>
-    <string name="online_module_default_repo">Varsayılan depo</string>
-    <string name="online_module_repo_list_title">Depo listesi</string>
-    <string name="online_module_load_error">Yüklenemedi, lütfen yenileyip tekrar deneyin</string>
-    <string name="online_module_no_search_results">Eşleşen modül bulunamadı</string>
-    <string name="online_module_module_detail_download_count">İndirme sayısı: %1$s</string>
-    <string name="online_module_module_detail_last_update">Son güncelleme: %1$s</string>
-    <string name="online_module_module_detail_version">Sürüm: %1$s</string>
-    <string name="online_module_module_detail_size">Boyut: %1$s</string>
-    <string name="online_module_module_detail_author">Yazar: %1$s</string>
-    <string name="online_module_module_detail_description">Açıklama: %1$s</string>
-    <string name="online_module_module_detail_suitable">Uygun: %1$s</string>
-    <string name="online_module_module_detail_changelog">Değişiklik günlüğü: %1$s</string>
-    <string name="online_module_module_detail_instructions">Kullanım talimatları: %1$s</string>
 
     <!-- Online KPM Strings -->
-    <string name="online_kpm_title">Çevrim İçi Kernel Modülleri</string>
-    <string name="online_kpm_download_start">İndirme başlatılıyor: %s</string>
-    <string name="online_kpm_download_complete">İndirme tamamlandı: %s</string>
-    <string name="online_kpm_download_notification">%s indiriliyor. İlerleme için bildirim panelini, tamamlanan dosya için İndirilenler klasörünü kontrol edin.</string>
 
     <!-- Online Plugin Strings -->
-    <string name="online_plugin_title">Çevrim İçi Eklentiler</string>
-    <string name="online_plugin_download_start">İndirme başlat: %s</string>
-    <string name="online_plugin_download_complete">İndirme tamamlandı: %s</string>
-    <string name="online_plugin_download_notification">%s indiriliyor. İlerleme için bildirim panelini, tamamlanan dosya için İndirilenler klasörünü kontrol edin.</string>
 
     <!-- Online Script Strings -->
-    <string name="online_script_title">Çevrim İçi Betikler</string>
-    <string name="online_script_download_start">İndirme başlatılıyor: %s</string>
-    <string name="online_script_download_complete">İndirme tamamlandı: %s</string>
-    <string name="online_script_download_notification">%s indiriliyor</string>
 
     <!-- Crash Handle Strings -->
     <string name="crash_handle_title">Çökme Raporu</string>
@@ -584,7 +207,6 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <!-- About Screen Strings -->
     <string name="about_app_version">Uygulama Sürümü: %s</string>
     <string name="about_github">GitHub</string>
-    <string name="about_telegram_channel">Telegram Kanalı</string>
 
     <!-- App Title Strings -->
     <string name="app_title_fpatch">FPatch</string>
@@ -601,68 +223,13 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
 
     <string name="settings_app_dpi">Uygulama DPI</string>
     <string name="dpi_apply_settings">Uygula</string>
-    <string name="dpi_confirm_title">DPI değişikliğini onayla</string>
-    <string name="dpi_confirm_message">Uygulama DPI değerini %1$s ile %2$s arasında değiştirmek ister misiniz?</string>
-    <string name="settings_magic_mount">Folk Mount API</string>
-    <string name="settings_magic_mount_summary">Dahili modül bağlama sistemini etkinleştir</string>
-    <string name="settings_new_app_profile_enabled">Yeni Uygulamalar için Otomatik Yetkilendirme</string>
-    <string name="settings_new_app_profile_enabled_summary">Etkinleştirildiğinde, yeni yüklenen uygulamalar aşağıda seçilen yetkilendirme modunu otomatik olarak uygular</string>
-    <string name="settings_new_app_profile_mode">Varsayılan Yetkilendirme Modu</string>
-    <string name="settings_new_app_profile_normal">ROOT YOK</string>
-    <string name="settings_new_app_profile_root">ROOT</string>
-    <string name="settings_new_app_profile_exclude">Hariç tut</string>
-    <string name="settings_hide_service">FolkPatch Hide</string>
-    <string name="settings_hide_service_summary">Bootloader kilidi açık durumunu bir ölçüde gizle</string>
 
-    <string name="settings_shizuku_service">Shizuku Hizmeti</string>
-    <string name="settings_shizuku_service_summary">Shizuku destekleyen uygulamalar için ADB düzeyinde API erişimi sağlar (yerleşik hizmet, üçüncü taraf uygulama gerekmez)</string>
-    <string name="settings_shizuku_service_running">Shizuku sunucusu çalışıyor</string>
-    <string name="settings_shizuku_started">Shizuku hizmeti başlatıldı</string>
-    <string name="settings_shizuku_start_failed">Shizuku hizmeti başlatılamadı</string>
-    <string name="settings_shizuku_stopped">Shizuku hizmeti durduruldu</string>
-    <string name="settings_shizuku_stop_failed">Shizuku hizmeti durdurulamadı</string>
-    <string name="shizuku_permission_title">%1$s uygulamasının Shizuku kullanmasına izin verilsin mi?</string>
-    <string name="shizuku_permission_message">Uygulama, Shizuku aracılığıyla root ayrıcalıklarıyla sistem API\'lerini çağırabilecek.</string>
-    <string name="shizuku_permission_allow">İzin ver</string>
-    <string name="shizuku_permission_allow_once">Yalnızca bir kez</string>
-    <string name="shizuku_permission_deny">Reddet</string>
-    <string name="shizuku_permission_allow_summary">Kalıcı erişim ver</string>
-    <string name="shizuku_permission_allow_once_summary">Yalnızca bu kez izin ver</string>
-    <string name="shizuku_permission_deny_summary">Erişimi reddet</string>
-    <string name="shizuku_permission_binder_timeout">Shizuku hizmetine bağlanılamadı. Lütfen hizmeti yeniden başlatıp tekrar deneyin.</string>
-    <string name="shizuku_management_title">Shizuku Yetkilendirme</string>
-    <string name="shizuku_management_empty">Shizuku uyumlu uygulama bulunamadı</string>
-    <string name="shizuku_management_unavailable">Shizuku hizmeti çalışmıyor</string>
-    <string name="shizuku_management_load_failed">Yetkili uygulamalar yüklenemedi</string>
-    <string name="shizuku_management_uid">UID %1$d</string>
-    <string name="shizuku_management_granted">İzin verildi</string>
-    <string name="shizuku_management_denied">İzin verilmedi</string>
-    <string name="shizuku_management_update_failed">Yetkilendirme güncellenemedi</string>
-    <string name="shizuku_management_root_access">Root erişimi</string>
-    <string name="shizuku_management_allowed_title">Shizuku erişimi</string>
-    <string name="shizuku_management_root_access_desc">Komutları root olarak çalıştırır. Kapatıldığında shell (UID 2000) olarak çalışır ve korumalı verileri okuyamaz.</string>
-    <string name="shizuku_management_badge_allowed">İZİNLİ</string>
-    <string name="shizuku_management_badge_denied">REDDEDİLDİ</string>
-    <string name="shizuku_management_badge_root">ROOT</string>
-    <string name="shizuku_management_badge_shell">SHELL</string>
-    <string name="shizuku_log_title">Shizuku günlükleri</string>
-    <string name="shizuku_log_empty">Günlük yok</string>
-    <string name="shizuku_log_refresh">Yenile</string>
-    <string name="shizuku_log_clear">Günlükleri temizle</string>
-    <string name="shizuku_log_cleared">Günlükler temizlendi</string>
-    <string name="shizuku_log_export">Günlükleri dışa aktar</string>
-    <string name="shizuku_log_copy">Kopyala</string>
-    <string name="shizuku_log_copied">Panoya kopyalandı</string>
-    <string name="shizuku_log_source_server">Sunucu günlüğü</string>
-    <string name="shizuku_log_source_logcat">Logcat</string>
-    <string name="shizuku_log_search_hint">Günlüklerde ara</string>
 <string name="settings_app_title">Uygulama Başlığı</string>
     <string name="app_title_custom">Özel</string>
     <string name="settings_custom_app_title">Uygulama adını ayarla</string>
     <string name="custom_app_title_dialog_title">Özel uygulama adı</string>
     <string name="custom_app_title_dialog_hint">Uygulama adını girin</string>
     <string name="custom_app_title_dialog_confirm">Onayla</string>
-    <string name="custom_app_title_dialog_empty">Ad boş olamaz</string>
     <string name="cancel">İptal</string>
     <string name="settings_custom_background">Özel Arka Plan</string>
     <string name="settings_custom_background_enabled">Özel Arka Plan Etkin</string>
@@ -705,7 +272,6 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="settings_clear_font">Varsayılan Yazı Tipine Dön</string>
     <string name="settings_clear_font_confirm">Varsayılan yazı tipini geri yüklemek istediğinize emin misiniz?</string>
     <string name="settings_font_cleared">Varsayılan yazı tipi geri yüklendi</string>
-    <string name="settings_font_select_hint">Bir TTF yazı tipi dosyası seçin</string>
     <string name="settings_select_background_image">Arka Plan Görseli Seç</string>
     <string name="settings_custom_background_summary">Özel bir arka plan görseli ayarla</string>
     <string name="settings_custom_background_saved">Arka plan başarıyla kaydedildi</string>
@@ -730,34 +296,14 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="settings_video_selected">Video Seçildi</string>
     <string name="settings_clear_video_background">Video Arka Planını Temizle</string>
     <string name="settings_clear_video_background_confirm">Video arka planını temizlemek istediğinize emin misiniz?</string>
-    <string name="settings_video_background_enabled">Video Arka Plan Etkin</string>
     <string name="settings_video_volume">Video Sesi</string>
     
     <!-- KPM AutoLoad Strings -->
     
     
     <!-- Module Backup/Restore Strings -->
-    <string name="apm_copy_list_title">Listeyi Kopyala</string>
-    <string name="apm_copy_list_success">Modül listesi kopyalandı</string>
 
     <!-- APM Bulk Install Strings -->
-    <string name="apm_bulk_install_title">Sistem Modülü Toplu Kurulum</string>
-    <string name="apm_bulk_install_list_title">Modül Listesi</string>
-    <string name="apm_bulk_install_add">Modül Ekle</string>
-    <string name="apm_bulk_install_empty">Eklenmiş modül yok</string>
-    <string name="apm_bulk_install_action">Toplu Kurulum</string>
-    <string name="apm_bulk_install_log_title">Toplu Kurulum Günlüğü</string>
-    <string name="apm_bulk_install_log_start">Toplu kurulum başlatılıyor...</string>
-    <string name="apm_bulk_install_log_installing">%1$s kuruluyor</string>
-    <string name="apm_batch_install_full_process">Tam toplu kurulum süreci</string>
-    <string name="apm_batch_install_full_process_summary">Sistem modüllerinin toplu kurulumu tam süreç kullanılarak yapılır</string>
-    <string name="next_module">Sonraki modül</string>
-    <string name="apm_bulk_install_log_installed">%s modülü kuruldu.</string>
-    <string name="apm_bulk_install_log_done">Tüm işlemler tamamlandı.</string>
-    <string name="apm_bulk_install_first_use_text">Bu özellik, birden fazla modülü aynı anda kurmanıza olanak tanır. Kurulum sırasında tuş etkileşimi gerektirmeyen modüller için uygun, hızlı bir kurulum yöntemidir. Ses tuşu etkileşimi gerektiren modüller için ayarlardan tam süreç kurulum modunu etkinleştirin.</string>
-    <string name="apm_bulk_install_remove">Kaldır</string>
-    <string name="apm_first_use_title">Sistem Modüllerine Hoş Geldiniz</string>
-    <string name="apm_first_use_text">Sistem Modüllerine hoş geldiniz. Bu bölüm, Magisk ekosistemiyle uyumlu modülleri kullanır. Modül yüklemek için sağ alt köşedeki düğmeye tıklayın. Üst kısımdaki yükleyiciyi kullanarak modülleri toplu olarak da kurabilirsiniz. Tek tıkla tüm modülleri yedekleme özelliği de sunulmaktadır; ancak bu yöntemin tüm modüller için uygun olmayabileceğini unutmayın, bu yüzden kendi yedeklerinizi almanız önerilir.</string>
 
     <!-- Welcome Guide -->
     <string name="welcome_title_1">FolkPatch\'e Hos Geldiniz</string>
@@ -777,41 +323,20 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     
 
     <!-- Hide Settings Strings -->
-    <string name="home_hide_su_path">su çalıştırılabilir yolunu gizle</string>
-    <string name="home_hide_kpatch_version">Kernel patch sürümünü gizle</string>
     <string name="home_hide_fingerprint">Parmak izini gizle</string>
-    <string name="home_hide_zygisk">Zygisk uygulamasını gizle</string>
-    <string name="home_hide_mount">Mount uygulamasını gizle</string>
-    <string name="home_hide_su_path_summary">Bilgi kartında su çalıştırılabilir yolunu gizle</string>
-    <string name="home_hide_kpatch_version_summary">Bilgi kartında kernel patch sürümünü gizle</string>
     <string name="home_hide_fingerprint_summary">Bilgi kartında parmak izini gizle</string>
-    <string name="home_hide_zygisk_summary">Bilgi kartında Zygisk uygulamasını gizle</string>
-    <string name="home_hide_mount_summary">Bilgi kartında mount uygulamasını gizle</string>
 
 
 
     <!-- Auto Backup Strings -->
-    <string name="settings_auto_backup_module">Sistem Modüllerini Otomatik Yedekle</string>
-    <string name="settings_auto_backup_module_summary">Kurulum sırasında modül dosyasını özel dizine otomatik olarak yedekle</string>
-    <string name="settings_open_backup_dir">Yedekleme Dizinini Aç</string>
-    <string name="backup_dir_empty">Yedekleme dizini boş</string>
-    <string name="backup_dir_open_failed">Yedekleme dizini açılamadı</string>
-    <string name="auto_backup_failed">Otomatik yedekleme başarısız: %s</string>
-    <string name="auto_backup_success">Otomatik yedekleme başarılı: %s</string>
-    <string name="settings_auto_backup_boot">Boot’u Otomatik Yedekle</string>
-    <string name="settings_auto_backup_boot_summary">Boot’u yerel depolamaya otomatik yedekle (Downloads/FolkPatch/BootBackups)</string>
 
     <!-- Home Layout Strings -->
     <string name="settings_home_layout_style">Ana Sayfa Düzen Stili</string>
     <string name="settings_home_layout_default">ListUI</string>
     <string name="settings_home_layout_grid">GridUI</string>
     <string name="settings_home_layout_focus">FocusUI</string>
-    <string name="settings_home_layout_sign">SignUI</string>
     <string name="settings_home_layout_circle">CircleUI</string>
     <string name="settings_home_layout_dashboard_pro">DashboardUI</string>
-    <string name="unofficial_version_title">Resmi Olmayan Sürüm</string>
-    <string name="unofficial_version_message">Resmi olmayan bir FolkPatch sürümü kullanıyorsunuz, lütfen resmi uygulamayı indirin!</string>
-    <string name="go_to_github">GitHub’a Git</string>
     <string name="settings_save_theme">Temayı Kaydet</string>
     <string name="settings_import_theme">Temayı İçe Aktar</string>
     <string name="settings_theme_saved">Tema kaydedildi</string>
@@ -836,7 +361,6 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="theme_export_action">Dışa Aktar</string>
     <string name="theme_import_action">İçe Aktar</string>
     <string name="theme_import_confirm">Bu temayı içe aktarmak istediğinize emin misiniz?</string>
-    <string name="theme_info">Tema Bilgisi</string>
 
     <!-- Grid Working Card Background -->
     <string name="settings_grid_working_card_background">Çalışma Kartı Arka Planı</string>
@@ -866,11 +390,9 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="theme_store_title">Tema Mağazası</string>
     <string name="theme_source_official">Resmi</string>
     <string name="theme_source_third_party">Üçüncü Taraf</string>
-    <string name="theme_source_local">Yerel</string>
     <string name="theme_store_author">Yazar: %s</string>
     <string name="theme_store_version">Sürüm: %s</string>
     <string name="theme_source">Kaynak</string>
-    <string name="theme_store_download_failed">İndirme başarısız</string>
     <string name="theme_store_download">İndir</string>
     <string name="theme_store_search_hint">Tema ara...</string>
 
@@ -883,20 +405,10 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="update_action">Güncelle</string>
     <string name="update_close">Kapat</string>
     <string name="update_latest">En güncel sürümü kullanıyorsunuz</string>
-    <string name="update_error">Güncelleme kontrol edilirken hata oluştu</string>
     <string name="settings_category_general">Genel</string>
-    <string name="settings_app_list_loading_scheme">Uygulama Listesi Yükleme Şeması</string>
-    <string name="settings_app_list_loading_scheme_summary">Uygulama listesinin nasıl yükleneceğini seçin</string>
-    <string name="app_list_loading_scheme_root_service">RootService (Varsayılan)</string>
-    <string name="app_list_loading_scheme_package_manager">PackageManager (Sistem API)</string>
-    <string name="app_list_loading_scheme_dialog_title">Yükleme Şeması</string>
-    <string name="superuser">Superuser</string>
-    <string name="module">Modüller</string>
     <string name="settings_category_appearance">Görünüm</string>
     <string name="settings_appearance_font">Yazı Tipi Ayarları</string>
-    <string name="settings_appearance_font_summary">Özel yazı tipi yapılandırması</string>
     <string name="settings_appearance_theme">Tema Ayarları</string>
-    <string name="settings_appearance_theme_summary">Tema mağazası, kaydetme, içe aktarma ve sıfırlama</string>
 
     <string name="settings_nav_custom_icons">Özel Navigasyon Simgeleri</string>
     <string name="settings_nav_custom_icons_summary">Alt çubuk simgelerini özel görüntülerle değiştirin</string>
@@ -905,7 +417,6 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="nav_icon_superuser">SuperUser Simgesi</string>
     <string name="nav_icon_apm">Sistem Modülü Simgesi</string>
     <string name="nav_icon_settings">Ayarlar Simgesi</string>
-    <string name="nav_icon_select_image">Görüntü Seç</string>
     <string name="nav_icon_clear">Varsayılana Sıfırla</string>
     <string name="nav_icon_custom_selected">Özel</string>
     <string name="nav_icon_default">Varsayılan</string>
@@ -928,13 +439,9 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="theme_mode_switch_title">Tema Modunu Değiştir</string>
     <string name="theme_mode_switch_msg">Modu değiştirmek, temalara göz atma ve yükleme şeklinizi etkileyecektir. Devam etmek istiyor musunuz?</string>
     <string name="settings_appearance_banner">Banner Ayarları</string>
-    <string name="settings_appearance_banner_summary">Modül banner yapılandırması</string>
     <string name="settings_appearance_layout">Düzen Ayarları</string>
-    <string name="settings_appearance_layout_summary">Ana sayfa düzeni, gezinme ve kart özelleştirme</string>
     <string name="settings_appearance_background">Arka Plan Ayarları</string>
-    <string name="settings_appearance_background_summary">Özel arka plan, video ve çoklu arka plan</string>
     <string name="settings_appearance_night_mode">Gece Modu Ayarları</string>
-    <string name="settings_appearance_night_mode_summary">Koyu tema ve renk yapılandırması</string>
     <string name="settings_amoled_theme">AMOLED Siyah Tema</string>
     <string name="settings_amoled_theme_desc">Karanlık mod için tam siyah arka plan</string>
     <string name="settings_switch_icon">Düğme Göstergesi</string>
@@ -943,7 +450,6 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="settings_discrete_slider_desc">Kaydırıcı yolunda işaret çizgilerini göster</string>
     <string name="settings_category_behavior">Davranış</string>
     <string name="settings_category_function">Fonksiyon</string>
-    <string name="settings_category_module">Modüller</string>
     <string name="settings_category_security">Güvenlik</string>
     
     <!-- Background Music Strings -->
@@ -969,11 +475,8 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="settings_category_behavior_summary">Web hata ayıklama, kurulum davranışı, ana sayfa görüntüsü</string>
     <string name="settings_category_security_summary">Uygulama kimlik doğrulaması ve modül işlem doğrulaması</string>
     <string name="settings_category_backup_summary">Yerel yedekleme, bulut yedekleme, WebDAV</string>
-    <string name="settings_category_module_summary">Modül bilgisi, sıralama, toplu kurulum</string>
-    <string name="settings_category_function_summary">FolkPatch Gizle, Umount hizmeti</string>
+    <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">Arka plan müziği, sesler, titreşim</string>
-    <string name="settings_use_legacy_su_page">Tek sayfalı Superuser yetkilendirmesi</string>
-    <string name="settings_use_legacy_su_page_summary">Superuser sayfasını tek sayfalı yetkilendirme tasarımına geçir</string>
     <string name="settings_music_playback_control">Oynatma Kontrolü</string>
 
     <!-- Theme Store Filter -->
@@ -1006,17 +509,9 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="home_storage_ram">RAM</string>
     <string name="home_storage_zram">ZRAM</string>
     <string name="home_storage_swap">Swap Dosyası</string>
-    <string name="home_info_kernel">Kernel</string>
-    <string name="home_info_superkey">SuperKey</string>
     <string name="home_info_auth_auth">Yetkili</string>
     <string name="home_info_auth_na">Yok</string>
-    <string name="home_info_device_slot">Cihaz Slotu</string>
     <string name="home_info_device_model">Cihaz Modeli</string>
-    <string name="home_info_running_mode">Çalışma Modu</string>
-    <string name="home_info_mode_full">Tam</string>
-    <string name="home_info_mode_half">Yarım</string>
-    <string name="home_zygisk_implement">Zygisk Uygulaması</string>
-    <string name="home_mount_implement">Mount Uygulaması</string>
 
     <string name="settings_list_card_hide_status_badge">Klasik Emoji Kullan</string>
     <string name="settings_list_card_hide_status_badge_summary">Ana sayfa durum rozetini klasik emojiye dönüştür</string>
@@ -1026,44 +521,17 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="settings_custom_badge_text_summary">Rozetin metin gösterimini değiştir, sadece eğlence amaçlı</string>
 
     <!-- Install Mode Select -->
-    <string name="kp_install_methods">KernelPatch Yamala/Kur</string>
-    <string name="restore_boot_methods">Geri yüklenecek boot bölümünü seçin</string>
 
 
-    <string name="su_backup_list">Yedekleme Listesi</string>
-    <string name="su_restore_list">Geri Yükleme Listesi</string>
-    <string name="backup_success">Yedekleme başarılı</string>
-    <string name="restore_success">Geri yükleme başarılı</string>
 
     <!-- SuperUser App Action Dialog -->
-    <string name="su_app_action_title">Uygulama Eylemi</string>
-    <string name="su_app_action_content">Uygulama üzerinde yapılacak işlemi seçin</string>
-    <string name="su_app_action_launch">Uygulamayı Aç</string>
-    <string name="su_app_action_force_stop">Zorla Durdur</string>
-    <string name="su_app_action_launch_success">%s başlatılıyor</string>
-    <string name="su_app_action_force_stop_success">%s zorla durduruldu</string>
-    <string name="su_app_action_failed">İşlem başarısız: %s</string>
 
     <!-- SU Audit Log -->
-    <string name="su_audit_log_title">Yetkilendirme Günlüğü</string>
-    <string name="su_audit_log_empty">Henüz yetkilendirme kaydı yok</string>
-    <string name="su_audit_log_clear">Günlüğü Temizle</string>
-    <string name="su_audit_log_clear_confirm">Tüm yetkilendirme kayıtları temizlensin mi?</string>
-    <string name="su_audit_action_grant">İzin Verildi</string>
-    <string name="su_audit_action_revoke">İptal Edildi</string>
-    <string name="su_audit_action_exclude">Dışlandı</string>
-    <string name="su_audit_tab_usage">Kullanım Günlüğü</string>
-    <string name="su_audit_tab_operations">İşlem Günlüğü</string>
 
-    <string name="patch_output_written_to"> Çıktı dosyası şuraya yazıldı: </string>
-    <string name="patch_write_failed"> Yamalanmış boot.img yazılamadı</string>
 
     <!-- Badge Count Settings -->
     <string name="enable_badge_count">Rozet Sayısı Ayarları</string>
     <string name="enable_badge_count_summary">Gezinme öğeleri için rozet sayısı gösterimini yapılandır</string>
-    <string name="badge_superuser">SuperUser Rozetini Göster</string>
-    <string name="badge_apm">Sistem Modülü Rozetini Göster</string>
-    <string name="badge_kernel">Kernel Modülü Rozetini Göster</string>
     <string name="settings_sound_effect">Ses Efekti</string>
     <string name="settings_sound_effect_summary">Tıklamada ses efekti çal</string>
     <string name="settings_sound_effect_enabled">Etkin</string>
@@ -1102,9 +570,6 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="webdav_password">Parola</string>
     <string name="webdav_test_success">Test Başarılı</string>
     <string name="webdav_test_failed">Test Başarısız: %s</string>
-    <string name="webdav_uploading">WebDAV’a yükleniyor...</string>
-    <string name="webdav_backup_success">WebDAV Yedekleme Başarılı</string>
-    <string name="webdav_backup_failed">WebDAV Yedekleme Başarısız: %s</string>
     <string name="save">Kaydet</string>
     <string name="test">Test</string>
     <string name="webdav_path_label">Yol (örn. /Backup)</string>
@@ -1112,34 +577,10 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="webdav_backup_logs_title">Yedekleme Günlükleri</string>
     <string name="webdav_no_logs">Günlük bulunamadı.</string>
     <string name="webdav_clear_logs">Temizle</string>
-    <string name="settings_enable_local_backup">Yerel Yedeklemeyi Etkinleştir</string>
-    <string name="settings_enable_local_backup_summary">Modülleri yerel depolamaya yedekle (Downloads/FolkPatch/ModuleBackups)</string>
     <string name="close">Kapat</string>
 
 
 
-    <string name="script_library">Betik Kütüphanesi</string>
-    <string name="script_library_title">Betik Kütüphanesi</string>
-    <string name="script_library_empty">Betik yok, eklemek için ekle düğmesine tıklayın</string>
-    <string name="script_library_add">Betik Ekle</string>
-    <string name="script_library_add_title">Betik Ekle</string>
-    <string name="script_library_select_file">Betik Dosyası Seç</string>
-    <string name="script_library_alias">Takma Ad</string>
-    <string name="script_library_alias_hint">Betik takma adını girin (isteğe bağlı)</string>
-    <string name="script_library_run">Çalıştır</string>
-    <string name="script_library_delete">Sil</string>
-    <string name="script_library_path">Yol: %s</string>
-    <string name="script_library_confirm_delete">Betiği silmeyi onaylıyor musunuz?</string>
-    <string name="script_library_delete_success">Betik başarıyla silindi</string>
-    <string name="script_library_delete_failed">Betik silinemedi</string>
-    <string name="script_library_add_success">Betik başarıyla eklendi</string>
-    <string name="script_library_add_failed">Betik eklenemedi: %s</string>
-    <string name="script_library_load_failed">Betik kütüphanesi yüklenemedi</string>
-    <string name="script_library_output">Çalıştırma Çıktısı</string>
-    <string name="script_library_no_output">Çıktı yok</string>
-    <string name="script_library_save_log">Günlüğü Kaydet</string>
-    <string name="script_library_log_saved">Günlük şuraya kaydedildi: %s</string>
-    <string name="script_library_log_save_failed">Günlük kaydedilemedi: %s</string>
     <string name="settings_vibration">Titreşim ve Dokunma</string>
     <string name="settings_vibration_summary">Dokunma olaylarında titret</string>
     <string name="settings_vibration_enabled">Titreşimi etkinleştir</string>
@@ -1147,22 +588,8 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="settings_vibration_scope">Titreşim kapsamı</string>
     <string name="settings_vibration_scope_global">Küresel (Her yer)</string>
     <string name="settings_vibration_scope_bottom_bar">Sadece alt çubuk</string>
-    <string name="search_modules">Modülleri ara...</string>
-    <string name="search_scripts">Script ara...</string>
 
     <!-- Umount Service -->
-    <string name="settings_umount_service">Umount Service</string>
-    <string name="settings_umount_service_summary">Önyükleme sırasında otomatik olarak bağlantısı kesilecek bağlama noktalarını yapılandırın</string>
-    <string name="umount_config_title">Umount Yapılandırması</string>
-    <string name="umount_config_enabled">Umount\'u Etkinleştir</string>
-    <string name="umount_config_enabled_summary">Önyükleme sırasında belirtilen bağlama noktalarını otomatik olarak bağlantıyı kes</string>
-    <string name="umount_config_paths_label">Bağlama Noktası Yolları (satır başına bir)</string>
-    <string name="umount_config_paths_placeholder">/system/vendor/app\n/system/vendor/priv-app</string>
-    <string name="umount_config_paths_helper">Bağlantısı kesilecek her satıra bir bağlama noktası yolu girin</string>
-    <string name="umount_config_save">Kaydet</string>
-    <string name="umount_config_save_confirm">Yapılandırmayı kaydetmeyi onaylıyor musunuz?</string>
-    <string name="umount_config_save_success">Yapılandırma başarıyla kaydedildi</string>
-    <string name="umount_config_save_failed">Yapılandırma kaydedilemedi</string>
 
     <!-- My Themes Page -->
     <string name="my_themes_title">Temalarım</string>
@@ -1174,27 +601,18 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="my_themes_deleted">Tema silindi</string>
     <string name="my_themes_applied">Tema uygulandı</string>
     <string name="my_themes_apply_failed">Tema uygulanamadı — silmek ve yeniden indirmek için uzun basın</string>
-    <string name="my_themes_details">Tema Detayları</string>
 
     <!-- İndirme Diyaloğu -->
     <string name="theme_download_title">Tema İndiriliyor</string>
     <string name="theme_download_completed">İndirme tamamlandı</string>
     <string name="theme_download_failed">İndirme başarısız</string>
-    <string name="theme_file_corrupt">Tema dosyası bozuk, lütfen yeniden indirin</string>
-    <string name="theme_file_incomplete">Tema dosyası eksik, lütfen yeniden indirin</string>
     <string name="theme_download_progress">İlerleme</string>
     <string name="theme_download_file">Tema Dosyası</string>
     <string name="theme_download_image">Önizleme Resmi</string>
     <string name="theme_download_cancel">İptal</string>
     <string name="theme_download_pause">Duraklat</string>
-    <string name="theme_download_resume">Devam Et</string>
-    <string name="theme_download_retry">Yeniden Dene</string>
     <string name="theme_download_apply">Temayı Uygula</string>
     <string name="theme_download_go_to_my_themes">Temalarım</string>
-    <string name="theme_download_retrying">Yeniden deneniyor (%d/3)...</string>
-    <string name="theme_download_preparing">İndirme hazırlanıyor...</string>
-    <string name="theme_download_downloading_file">Tema dosyası indiriliyor...</string>
-    <string name="theme_download_downloading_image">Önizleme resmi indiriliyor...</string>
     <string name="theme_download_finalizing">Tamamlanıyor...</string>
     <string name="settings_predictive_back">Tahmin Edici Geri Hareketi</string>
     <string name="settings_predictive_back_summary">Android 14+ tahmin edici geri hareketi animasyonunu etkinleştir</string>
@@ -1202,82 +620,27 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="home_device_status_battery_charging">Şarj Oluyor</string>
     <string name="home_device_status_cpu_temp">CPU Sıcaklığı</string>
     <string name="home_device_status_memory_trend">Bellek Trendi</string>
-    <string name="home_storage_partitions">Depolama Bölümleri</string>
     <string name="home_device_status_cpu_freq">CPU Frekansı</string>
     <string name="home_network_rx">İndirme</string>
     <string name="home_network_tx">Yükleme</string>
     <string name="settings_home_layout_stats">StatsUI</string>
-    <string name="home_stats_more_options">Diğer seçenekler</string>
-    <string name="home_stats_kp_label">KP</string>
-    <string name="home_stats_manager_label">Yönetici</string>
     <string name="home_device_status_gpu_load">GPU</string>
-    <string name="home_stats_kernel_modules">Çekirdek Modüller</string>
-    <string name="home_stats_apm_modules">Sistem Modülleri</string>
-    <string name="home_stats_superusers">Süper Kullanıcılar</string>
-    <string name="settings_kernel_spoof">Çekirdek Sahtekarlık Yapılandırması</string>
-    <string name="settings_kernel_spoof_summary">Çekirdek sürümünü ve yapım zamanını sahtele</string>
-    <string name="settings_kernel_spoof_version">Çekirdek Sürümü</string>
-    <string name="settings_kernel_spoof_build_time">Çekirdek Yapım Zamanı</string>
-    <string name="settings_kernel_spoof_restore">Geri Yükle</string>
 
-    <string name="kernel_spoof_enabled">Çekirdek sahtekarlığı etkinleştirildi</string>
-    <string name="kernel_spoof_disabled_restored">Çekirdek sahtekarlığı devre dışı bırakıldı ve geri yüklendi</string>
-    <string name="kernel_spoof_failed">Çekirdek sahtekarlığı başarısız: %d</string>
-    <string name="kernel_spoof_applied">Çekirdek sahtekarlığı uygulandı</string>
 
-    <string name="settings_path_hide">Yolu Gizle</string>
-    <string name="settings_path_hide_summary">Dosya ve dizinleri uygulamalardan çekirdek seviyesinde gizle</string>
-    <string name="path_hide_paths_label">Gizli Yollar (her satıra bir tane)</string>
 
-    <string name="path_hide_paths_helper">Her satıra bir yol girin. Eşleşen yollar ENOENT döndürecektir.</string>
-    <string name="path_hide_save">Kaydet</string>
-    <string name="path_hide_enabled">Yol gizleme etkinleştirildi</string>
-    <string name="path_hide_disabled">Yol gizleme devre dışı bırakıldı</string>
-    <string name="path_hide_applied">Yol gizleme yapılandırması uygulandı</string>
-    <string name="path_hide_failed">Yol gizleme işlemi başarısız: %d</string>
-    <string name="path_hide_uid_mode">UID Yürütme Modu</string>
-    <string name="path_hide_uid_mode_summary">Yolları yalnızca belirli uygulama UID\'leri için gizle</string>
-    <string name="path_hide_uids_label">Hedef UID\'ler (her satıra bir tane)</string>
-    <string name="path_hide_uids_helper">Uygulama UID\'lerini girin. Yalnızca bu uygulamaların yolları gizlenir.</string>
-    <string name="path_hide_uid_save">UID\'leri Kaydet</string>
-    <string name="path_hide_uid_mode_enabled">UID yürütme modu etkinleştirildi</string>
-    <string name="path_hide_uid_mode_disabled">UID yürütme modu devre dışı bırakıldı</string>
-    <string name="path_hide_filter_system">Sistem UID\'lerini Filtrele</string>
-    <string name="path_hide_filter_system_summary">Yol ayrıca root ve sistem süreçlerinden (UID &lt; 10000) gizlensin</string>
-    <string name="path_hide_filter_system_enabled">Sistem UID filtreleme etkinleştirildi</string>
-    <string name="path_hide_filter_system_disabled">Sistem UID filtreleme devre dışı bırakıldı</string>
-    <string name="path_hide_filter_system_warning_title">Uyarı</string>
-    <string name="path_hide_filter_system_warning_message">Bunu etkinleştirmek, root ve sistem süreçlerinden (UID &lt; 10000) yolları da gizleyecektir. Bazı sistem özelliklerinin düzgün çalışmamasına neden olabilir. Dikkatli olun.</string>
-    <string name="path_hide_uid_applied">UID beyaz liste uygulandı</string>
-    <string name="path_hide_select_apps">Uygulama seç</string>
-    <string name="path_hide_no_apps_selected">Hiçbir uygulama seçilmedi</string>
-    <string name="path_hide_app_removed">%d kaldırılan uygulamanın yapılandırması temizlendi</string>
-    <string name="path_hide_search_apps">Uygulama ara…</string>
-    <string name="path_hide_show_system">Sistem uygulamalarını göster</string>
-    <string name="netisolate_title">Ağ İzolasyonu</string>
-    <string name="netisolate_enable">Ağ İzolasyonu etkinleştirildi</string>
-    <string name="netisolate_disable">Ağ İzolasyonu devre dışı bırakıldı</string>
-    <string name="netisolate_enable_summary">Seçilen uygulamaların ağ erişimini çekirdek düzeyinde engelle</string>
-    <string name="netisolate_uids_label">Engellenen Uygulamalar</string>
-    <string name="netisolate_uids_hint">Engellenecek UID\'leri girin (satır başına bir)</string>
-    <string name="netisolate_no_uids">Engellenen uygulama yok</string>
     <string name="settings_search_title">Arama Ayarları</string>
-    <string name="settings_search_hint">Ayar ara…</string>
     <string name="settings_search_empty_hint">Tüm ayarları aramak için yazın…</string>
     <string name="settings_no_results">Sonuç bulunamadı</string>
 
     <!-- Color Generation -->
     <string name="color_generation_classic">Klasik</string>
     <string name="color_generation_custom">Özel</string>
-    <string name="color_generation_label">Renk Modu</string>
 
     <!-- Color Standard -->
     <string name="color_standard_md3_2021">MD3 2021</string>
     <string name="color_standard_m3e_2025">M3e 2025</string>
-    <string name="color_standard_label">Renk Standardı</string>
 
     <!-- Color Style -->
-    <string name="color_style_label">Renk Stili</string>
     <string name="color_style_tonal_spot">Tonal Nokta</string>
     <string name="color_style_vibrant">Canlı</string>
     <string name="color_style_content">İçerik</string>
@@ -1290,7 +653,6 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="settings_focus_card_background">FocusUI Kart Duvar Kağıdı</string>
     <string name="settings_focus_card_background_enabled">FocusUI kart duvar kağıtları etkin; bir kartı yönetmek için uzun basın</string>
     <string name="settings_focus_card_background_summary">FocusUI kart duvar kağıtlarını ve uzun basarak duvar kağıdı yönetimini etkinleştir</string>
-    <string name="settings_focus_card_dim">Kart duvar kağıdı karartması</string>
     <string name="settings_focus_card_dual_dim">Çift gün/gece karartmayı etkinleştir</string>
     <string name="settings_focus_card_dual_dim_desc">Açık ve koyu temalar için kart duvar kağıdı karartmasını otomatik ayarla</string>
     <string name="settings_focus_card_day_dim">Gündüz modunda kart duvar kağıdı karartması</string>
@@ -1329,22 +691,7 @@ Bol şans! Ayrıca, aşağıdaki belge butonuna tıklamak kesinlikle doğru!</st
     <string name="settings_background_permission_required">Arka plan görseli seçmek için depolama izni verin</string>
     <string name="settings_sound_effect_save_failed">Ses efekti kaydedilemedi</string>
     <string name="settings_startup_sound_save_failed">Başlangıç sesi kaydedilemedi</string>
-    <string name="script_library_downloaded_to">İndirilen konum: %s</string>
-    <string name="script_library_download_failed">İndirme başarısız: %s</string>
-    <string name="settings_new_app_profile_update_failed">Yeni uygulama profili güncellenemedi: %s</string>
     <string name="settings_info_copy">Bilgiyi kopyalamak için basılı tutun</string>
     <string name="settings_info_copy_summary">İçeriğini kopyalamak için ana ekrandaki bilgi kartındaki bir öğeyi basılı tutun</string>
     <string name="home_info_copied">%1$s kopyalandı</string>
-    <string name="settings_jailbreak_mode">Jailbreak modu</string>
-    <string name="settings_jailbreak_mode_summary">KernelPatch modülünü orijinal çekirdeğe yükler. Bu modda yama yapmaya izin verilmez.</string>
-    <string name="settings_jailbreak_soft_reboot">Yumuşak yeniden başlatma</string>
-    <string name="settings_jailbreak_soft_reboot_message">Modül yüklendi. Sistem şimdi yeniden başlatılsın mı?</string>
-    <string name="settings_jailbreak_restart_framework">"Framework'ü yeniden başlat"</string>
-    <string name="settings_jailbreak_restart_framework_message">Modül yüklendi. Android framework şimdi yeniden başlatılsın mı? Bu işlem cihazı yumuşak yeniden başlatır (yalnızca framework yeniden başlatılır, çekirdek değil).</string>
-    <string name="settings_jailbreak_loaded">Jailbreak modülü yüklendi</string>
-    <string name="settings_jailbreak_failed">Jailbreak modülü yüklenemedi</string>
-    <string name="jailbreak_no_patch">Jailbreak modunda yama yapmaya izin verilmez.</string>
-    <string name="jailbreak">Jailbreak</string>
-    <string name="jailbreak_triggered">Jailbreak tetiklendi. Root bekleyin, ardından yumuşak yeniden başlatma yapın.</string>
-    <string name="reboot_soft">Yumuşak yeniden başlatma</string>
 </resources>

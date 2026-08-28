@@ -151,4 +151,6 @@
     <string name="dsh_plugin_settings_summary">Update check, plugin details, sorting</string>
     <string name="dsh_autostart">Start on boot</string>
     <string name="dsh_autostart_summary">Launch the harness automatically after the device finishes booting (only when the runtime is already installed)</string>
+    <string name="dsh_backup_webdav_ok">Also uploaded to WebDAV</string>
+    <string name="dsh_backup_webdav_failed">WebDAV upload failed: %1$s</string>
 </resources>

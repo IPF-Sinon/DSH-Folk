@@ -5,27 +5,17 @@
 
     <string name="home">后厨操作台</string>
 
-    <string name="success">搞定了</string>
     <string name="failure">翻车了</string>
 
-    <string name="patch_warnning">火大无王，小心别把自己给烫着！</string>
-    <string name="patch">动火</string>
 
-    <string name="kernel_patch">秘酱料</string>
-    <string name="android_patch">大菜谱</string>
 
     <string name="settings_nav_layout_title">菜单编排风格</string>
     <string name="settings_nav_layout_summary">想秀啥就秀啥</string>
     <string name="settings_nav_scheme">菜单编排方案</string>
-    <string name="settings_nav_mode">菜单展示模式</string>
-    <string name="settings_nav_mode_summary">挑喜欢的菜单样式</string>
     <string name="settings_nav_mode_auto">自动传统</string>
     <string name="settings_nav_mode_bottom">老在下面</string>
     <string name="settings_nav_mode_rail">老在左边</string>
     <string name="settings_nav_mode_floating">飘在下边</string>
-    <string name="settings_show_apm">摆出来招牌菜</string>
-    <string name="settings_show_kpm">摆出来特酱料</string>
-    <string name="settings_show_superuser">摆出来首席大厨</string>
     <string name="settings_floating_auto_hide">底栏自动收起来</string>
     <string name="settings_floating_auto_hide_summary">3秒没操作就把底栏藏起来</string>
     <string name="settings_floating_swipe_hide">滑动收起底栏</string>
@@ -44,13 +34,8 @@
     <string name="settings_compact_rounded_bar">紧凑圆角风格</string>
     <string name="settings_compact_rounded_bar_summary">使用圆角紧凑间距的浮动底栏</string>
     <string name="settings_stats_top_layout">顶部摆盘</string>
-    <string name="settings_stats_top_layout_summary">选择顶部信息卡片摆盘样式</string>
     <string name="settings_stats_top_layout_list">列表摆盘</string>
     <string name="settings_stats_top_layout_grid">网格摆盘</string>
-    <string name="settings_block_kernelpatch_update">别嚷嚷秘酱料更新</string>
-    <string name="settings_block_kernelpatch_update_summary">专心做菜，别老提示秘酱料换口味</string>
-    <string name="settings_block_androidpatch_update">别嚷嚷招牌菜更新</string>
-    <string name="settings_block_androidpatch_update_summary">专心做菜，别老提示招牌菜换配方</string>
 
     <string name="reboot">重新起火</string>
     <string name="settings">烹饪秘籍</string>
@@ -63,21 +48,9 @@
     <string name="developer_and_maintainer">掌勺大厨 | 传人</string>
     <string name="settings_app_language">方言</string>
     <string name="system_default">照旧</string>
-    <string name="settings_global_namespace_mode">共用备料区</string>
-    <string name="settings_global_namespace_mode_summary">大家伙用同一块地儿备料</string>
-    <string name="settings_clear_super_key_dialog">大厨，真要继续干？</string>
-    <string name="settings_sucompat">旧版 su 菜谱兼容</string>
-    <string name="settings_sucompat_summary">启用 path_probe 后厨探路钩，就能兼容旧版 su 菜谱</string>
-    <string name="settings_selinux_hide">隐藏卫生检查记录（测试）</string>
-    <string name="settings_selinux_hide_summary">把后厨的整改记录藏起来，不让食客进程看到（这做法可能不稳）。安全模式会暂停这招。</string>
-    <string name="settings_selinux_hide_warning_title">大厨警告</string>
-    <string name="settings_selinux_hide_warning_below_5_10">这招只在5.10及以上的灶台上试过，老灶台可能不稳。</string>
-    <string name="settings_selinux_hide_warning_non_gki">非GKI灶台风险更大，可能直接熄火，记得先存好食材。</string>
 
-    <string name="home_learn_apatch">了解 FolkPatch 餐厅</string>
-    <string name="home_click_to_learn_apatch">了解 FolkPatch 餐厅的功能及烹饪使用方法</string>
-    <string name="settings_hide_apatch_card">隐藏"了解 FolkPatch 餐厅"菜单</string>
-    <string name="settings_hide_apatch_card_summary">隐藏主厨台面的"了解 FolkPatch 餐厅"菜单</string>
+    <string name="settings_hide_apatch_card">隐藏"了解 DSH-Folk 餐厅"菜单</string>
+    <string name="settings_hide_apatch_card_summary">隐藏主厨台面的"了解 DSH-Folk 餐厅"菜单</string>
     <string name="settings_grid_working_card_hide_check">不显对勾</string>
     <string name="settings_grid_working_card_hide_check_summary">工牌上的小勾勾或警告全藏起</string>
     <string name="settings_grid_working_card_hide_text">不显状态字</string>
@@ -95,89 +68,23 @@
     <string name="settings_folkx_animation_vertical">垂直滑动</string>
     <string name="settings_folkx_animation_diagonal">对角滑动</string>
 
-    <string name="about_source_code"><![CDATA[<p>在 %1$s 查看菜谱源码<p/>加入我们的 %2$s 频道<p/>加入我们的 %3$s 群组]]></string>
     <string name="send_log">发送烹饪日志</string>
     <string name="settings_clean_storage">清理后厨存货</string>
     <string name="settings_clean_storage_summary">清掉残渣，免得下载或应用翻车</string>
     <string name="settings_clean_storage_confirm">会把下载的主题、导入的音乐、厨房声响和全部缓存统统倒掉，重新备好台面。设置不会动。要开工吗？</string>
     <string name="settings_clean_storage_done">打扫完毕</string>
-    <string name="save_log">保存烹饪日志</string>
-    <string name="log_saved">烹饪日志已保存</string>
-    <string name="safe_mode">安全烹饪模式</string>
     <string name="github">GitHub</string>
-    <string name="telegram">Telegram</string>
-    <string name="support_or_donate">支持 / 打赏</string>
 
-    <string name="super_key">传世秘方</string>
-    <string name="clear_super_key">销毁传世秘方</string>
-    <string name="patch_set_superkey">设置传世秘方</string>
-    <string name="home_patch_set_key_desc">KernelPatch 的唯一烹饪凭证</string>
-    <string name="home_patch_next_step">下一步烹饪</string>
 
-    <string name="home_not_installed">未上菜</string>
-    <string name="home_install_unknown">未上菜或未验证</string>
-    <string name="home_install_unknown_summary">点击上菜</string>
-    <string name="home_click_to_install">点击上菜</string>
-    <string name="home_working">烹饪中</string>
-    <string name="home_version">菜谱版本: %s</string>
-    <string name="home_kp_need_update">有新菜谱可用</string>
-    <string name="home_kp_cando_update">更新菜谱</string>
 
-    <string name="home_installing">正在烹饪</string>
 
-    <string name="kpatch_version">酱料版本: %s</string>
-    <string name="apatch_version">餐厅版本: %s</string>
 
-    <string name="kpatch_version_update" formatted="false">酱料版本: %s -&gt; %s</string>
-    <string name="kpatch_shadow_path_title">秘制酱料</string>
-    <string name="home_auth_key_title">输入传世秘方</string>
-    <string name="home_auth_key_desc">验证后开始烹饪</string>
-    <string name="home_kpatch_info_title">菜谱信息</string>
 
-    <string name="home_ap_cando_install">上菜</string>
 
-    <string name="home_ap_cando_uninstall">撤下菜品</string>
-    <string name="home_ap_cando_reboot">重新开火</string>
 
-    <string name="patch_title">烹饪</string>
 
-    <string name="patch_config_title">菜谱</string>
-    <string name="patch_mode_bootimg_patch">模式：烹饪</string>
-    <string name="patch_mode_patch_and_install">模式：烹饪并上菜</string>
-    <string name="patch_mode_install_to_next_slot">模式：烹饪到备用灶台 (OTA 后)</string>
-    <string name="patch_mode_restore">模式：恢复原味</string>
-    <string name="patch_mode_uninstall_patch">模式：撤下酱料</string>
-    <string name="patch_select_bootimg_btn">选择食材</string>
-    <string name="patch_embed_kpm_btn">添加特制酱料</string>
-    <string name="patch_start_patch_btn">开始烹饪</string>
-    <string name="patch_start_unpatch_btn">恢复原味</string>
-    <string name="patch_item_error">!!厨房翻车!!</string>
-    <string name="patch_item_bootimg">食材镜像</string>
-    <string name="patch_item_bootimg_slot">灶台:</string>
-    <string name="patch_item_bootimg_dev">厨房设备:</string>
-    <string name="patch_item_kernel">核心食材</string>
-    <string name="patch_item_kpimg">酱料包</string>
-    <string name="patch_item_kpimg_version">版本:</string>
-    <string name="patch_item_kpimg_comile_time">烹饪时间:</string>
-    <string name="patch_item_kpimg_config">菜谱配置:</string>
-    <string name="patch_item_new_extra_kpm">添加新调料</string>
-    <string name="patch_item_existed_extra_kpm">已有调料</string>
-    <string name="patch_item_extra_name">菜名:</string>
-    <string name="patch_item_extra_version">版本:</string>
-    <string name="patch_item_extra_author">主厨:</string>
-    <string name="patch_item_extra_kpm_license">许可:</string>
-    <string name="patch_item_extra_kpm_desciption">菜品描述:</string>
-    <string name="patch_item_extra_args">调料参数:</string>
-    <string name="patch_item_extra_event">烹饪事件:</string>
-    <string name="patch_item_skey">传世秘方</string>
-    <string name="patch_custom_superkey">自定传世秘方</string>
-    <string name="patch_custom_superkey_summary">你仍可设秘方来管理后厨，掌柜已获内务府印信授权</string>
-    <string name="patch_item_set_skey_label">传世秘方长度应为 8-63 个字符，包含数字和字母，不能包含特殊符号。</string>
-    <string name="patch_confirm_superkey">再次确认传世秘方</string>
-    <string name="patch_skey_mismatch">两次传世秘方不一致</string>
 
     <string name="home_kernel">核心食材版本</string>
-    <string name="home_manager_version">餐厅经理版本</string>
     <string name="home_fingerprint">菜品指纹</string>
 
     <string name="home_selinux_status">厨房卫生状态</string>
@@ -186,174 +93,23 @@
     <string name="home_selinux_status_permissive">宽松模式</string>
     <string name="home_selinux_status_unknown">未知状态</string>
 
-    <string name="settings_selinux_mode">厨房卫生模式</string>
-    <string name="settings_selinux_mode_summary">选择厨房卫生检查模式</string>
-    <string name="settings_selinux_mode_enforcing">严格检查 (高标准)</string>
-    <string name="settings_selinux_mode_permissive">宽松模式 (低标准)</string>
-    <string name="settings_selinux_current_mode">当前: %s</string>
-    <string name="settings_selinux_mode_enforcing_summary">完全严格执行厨房卫生规则</string>
-    <string name="settings_selinux_mode_permissive_summary">仅记录卫生违规，不会拒绝</string>
 
     <string name="home_device_info">厨房设备</string>
     <string name="home_system_version">餐厅系统版本</string>
-    <string name="home_kpatch_version">酱料版本</string>
-    <string name="home_su_path">su 可执行菜谱</string>
-    <string name="home_apatch_version">FolkPatch 餐厅版本</string>
 
-    <string name="kpm">特制酱料</string>
-    <string name="kpm_kp_not_installed">未添加秘制酱料</string>
-    <string name="kpm_add_kpm">添加酱料</string>
-    <string name="kpm_load">添加</string>
-    <string name="kpm_install">安装</string>
-    <string name="kpm_embed">融入</string>
-    <string name="kpm_embedded">已融入</string>
-    <string name="kpm_installed">已加料</string>
-    <string name="kpm_disabled">已封存（重启后生效）</string>
-    <string name="kpm_embedded_unload_invalid">已融入的酱料不能撤下；重启后仍会保持。</string>
-    <string name="kpm_loaded">已加料</string>
-    <string name="kpm_load_toast_succ">酱料添加成功</string>
-    <string name="kpm_install_toast_succ">备菜完成，下锅（重启）后上菜</string>
-    <string name="kpm_load_toast_failed">酱料添加失败</string>
-    <string name="kpm_unload_confirm">撤下 %s 酱料？</string>
-    <string name="kpm_unload">撤下</string>
-    <string name="kpm_control">控制</string>
-    <string name="kpm_apm_empty">未添加酱料</string>
-    <string name="kpm_custom_order">切换自定义酱料顺序</string>
-    <string name="kpm_load_failed">加载内核酱料失败</string>
-    <string name="kpm_version">版本</string>
-    <string name="kpm_license">许可</string>
-    <string name="kpm_author">主厨</string>
-    <string name="kpm_desc">描述</string>
-    <string name="kpm_args">参数</string>
 
-    <string name="su_title">首席大厨</string>
-    <string name="su_selinux_via_hook">通过后门绕过</string>
-    <string name="su_pkg_excluded_label">排除</string>
-    <string name="su_batch_exclude_title">批量排除</string>
-    <string name="su_batch_exclude_content">为全部非大厨权限餐厅软件排除注入,请选择一个烹饪操作</string>
-    <string name="su_exclude_btn">排除</string>
-    <string name="su_exclude_reverse_btn">反排除</string>
-    <string name="su_pkg_excluded_setting_title">排除修改</string>
-    <string name="su_pkg_excluded_setting_summary">启用此选项将允许 FolkPatch 恢复此餐厅招牌菜修改的任何菜谱。</string>
-    <string name="su_pkg_root_setting_title">首席大厨权限</string>
-    <string name="su_pkg_root_setting_summary">启用该选项为你的餐厅软件启动首席大厨,餐厅软件能够使用 SU 命令</string>
-    <string name="su_pkg_normal_setting_title">学徒模式</string>
-    <string name="su_pkg_normal_setting_summary">普通学徒状态，无首席大厨权限，不能使用特殊菜谱。</string>
-    <string name="su_show_system_apps">显示餐厅菜谱</string>
-    <string name="su_hide_system_apps">隐藏餐厅菜谱</string>
-    <string name="su_refresh">刷新</string>
-    <string name="su_multi_select_title">选择应用</string>
-    <string name="su_multi_select_count">已选择 %d 个</string>
-    <string name="su_multi_select_grant_root">授予 ROOT</string>
-    <string name="su_multi_select_revoke_root">撤销 ROOT</string>
-    <string name="su_multi_select_exclude">排除</string>
-    <string name="su_multi_select_confirm_grant">授予 ROOT 给 %d 个应用？</string>
-    <string name="su_multi_select_confirm_revoke">撤销 %d 个应用的 ROOT 权限？</string>
-    <string name="su_multi_select_confirm_exclude">排除 %d 个应用？</string>
-    <string name="su_multi_select_enter">多选</string>
 
-    <string name="apm">招牌菜</string>
-    <string name="apm_not_installed">未添加招牌菜</string>
-    <string name="apm_failed_to_enable">启用招牌菜失败: %s</string>
-    <string name="apm_failed_to_disable">禁用招牌菜失败: %s</string>
-    <string name="apm_empty">菜单空白</string>
-    <string name="apm_load_failed">菜单加载失败</string>
     <string name="apm_remove">移除</string>
-    <string name="apm_undo">还要吃</string>
-    <string name="apm_install">上菜</string>
-    <string name="apm_uninstall_confirm">撤下 %s 这道招牌菜？</string>
-    <string name="apm_uninstall_success">%s 已撤下</string>
-    <string name="apm_uninstall_failed">撤下失败: %s</string>
-    <string name="apm_undo_uninstall_success">%s 已恢复</string>
-    <string name="apm_undo_uninstall_failed">恢复失败: %s</string>
-    <string name="apm_version">版本</string>
-    <string name="apm_author">主厨</string>
-    <string name="apm_desc">描述</string>
-    <string name="apm_overlay_fs_not_available">OverlayFS 被核心食材禁用，招牌菜不可用！</string>
-    <string name="apm_magisk_conflict">由于与 Magisk 冲突，招牌菜不可用！</string>
-    <string name="apm_mount_warning_title">重要提示</string>
-    <string name="apm_mount_warning_message">默认不挂载招牌菜，请使用内置上菜系统或者元招牌菜</string>
-    <string name="apm_mount_warning_button">我知道了</string>
-    <string name="apm_reboot_to_apply">重新开火后生效</string>
-    <string name="apm_changelog">新菜谱日志</string>
     <string name="apm_update">更新菜谱</string>
-    <string name="apm_downloading">正在采购招牌菜: %s</string>
-    <string name="apm_start_downloading">开始采购: %s</string>
-    <string name="apm_new_version_available">新菜谱版本 %s 可用，点击升级烹饪。</string>
 
-    <string name="hide_apatch_manager">隐藏 FolkPatch 管理器</string>
-    <string name="hide_apatch_manager_summary">烹饪一个随机包名和自定义餐厅名称的代理餐厅软件</string>
-    <string name="hide_apatch_dialog_new_manager_name">新管理器名称</string>
-    <string name="hide_apatch_dialog_summary">这将作为显示在启动器中的新餐厅软件名称</string>
-    <string name="hide_apatch_manager_failure">隐藏失败。请报告这个厨房事故！</string>
 
-    <string name="setting_reset_su_path">重置 su 菜谱路径</string>
-    <string name="setting_reset_su_new_path">新完整路径</string>
 
-    <string name="apm_webui_open">菜单</string>
-    <string name="apm_action">烹饪操作</string>
-    <string name="module_shortcut_add">快捷</string>
-    <string name="module_shortcut_not_supported">启动器不支持桌面快捷方式。</string>
-    <string name="module_shortcut_created">已在桌面烹饪快捷方式。</string>
-    <string name="module_shortcut_updated">快捷方式已更新。</string>
-    <string name="module_shortcut_permission_tip_xiaomi">请在 Xiaomi 烹饪设置中为本餐厅软件启用"烹饪桌面快捷方式"厨房权限。</string>
-    <string name="module_shortcut_permission_tip_oppo">请在 OPPO 烹饪设置中为本餐厅软件启用"桌面快捷方式"厨房权限。</string>
-    <string name="module_shortcut_permission_tip_default">若烹饪快捷方式失败，请在餐厅系统设置中为本餐厅软件启用桌面快捷方式厨房权限。</string>
     <string name="enable_web_debugging">启用 WebView 调试</string>
     <string name="enable_web_debugging_summary">可用于调试 WebUI。请仅在烹饪需要时启用。</string>
-    <string name="settings_apm_install_confirm">烹饪招牌菜确认</string>
-    <string name="settings_apm_install_confirm_summary">烹饪招牌菜前显示确认对话框</string>
-    <string name="settings_show_more_module_info">显示招牌菜详细信息</string>
-    <string name="settings_show_more_module_info_summary">在招牌菜列表中显示招牌菜 ID 和大小</string>
-    <string name="settings_apm_stay_on_page">留在烹饪操作页面</string>
-    <string name="settings_apm_stay_on_page_summary">招牌菜执行完烹饪操作后不自动返回</string>
-    <string name="settings_enable_module_shortcut_add">启用快捷添加按钮</string>
-    <string name="settings_enable_module_shortcut_add_summary">显示 WebUI 快捷方式添加按钮</string>
-    <string name="settings_disable_module_update_check">禁用招牌菜菜谱更新检查</string>
-    <string name="settings_disable_module_update_check_summary">禁用招牌菜的自动菜谱更新检查</string>
-    <string name="settings_module_sort_optimization">招牌菜排序优化</string>
-    <string name="module_shortcut_name">快捷方式名称</string>
-    <string name="module_shortcut_icon">快捷方式图标</string>
-    <string name="module_shortcut_type">快捷方式类型</string>
-    <string name="module_shortcut_type_webui">WebUI</string>
-    <string name="module_shortcut_type_action">烹饪操作</string>
-    <string name="module_shortcut_icon_default">使用默认图标</string>
-    <string name="module_shortcut_icon_select">选择图标</string>
-    <string name="settings_module_sort_optimization_summary">让招牌菜带有 WebUI 和 烹饪操作的招牌菜排在前面</string>
-    <string name="apm_custom_order">自定义招牌菜顺序</string>
-    <string name="apm_drag_to_reorder">拖动调整顺序</string>
-    <string name="apm_reset_order">恢复自动排序</string>
-    <string name="settings_fold_system_module">折叠餐厅系统招牌菜</string>
-    <string name="settings_fold_system_module_summary">点击招牌菜卡片展开/折叠烹饪操作按钮</string>
-    <string name="settings_simple_list_bottom_bar">简约列表底栏</string>
-    <string name="settings_simple_list_bottom_bar_summary">招牌菜烹饪操作使用纯图标按钮样式，灵感来自 FolkPatch</string>
-    <string name="settings_spliced_card_group">拼接招牌菜</string>
-    <string name="settings_spliced_card_group_summary">招牌菜列表使用连续拼接卡片样式</string>
-    <string name="settings_show_kpm_status_badge">显示金色传说徽章</string>
-    <string name="settings_show_kpm_status_badge_summary">在金色传说卡片上显示已融入/已出炉状态徽章</string>
-    <string name="apm_install_confirm_title">烹饪招牌菜</string>
-    <string name="apm_install_confirm_content">确定要烹饪 %s 吗？</string>
-    <string name="apm_disable_all_title">禁用所有招牌菜</string>
-    <string name="apm_disable_all_confirm">确定禁用全部招牌菜吗？此操作将停用所有已安装的招牌菜</string>
     <string name="apm_enable_module_banner">启用招牌菜横幅</string>
     <string name="apm_enable_module_banner_summary">为支持的招牌菜显示横幅图片</string>
     <string name="apm_enable_folk_banner">自定义招牌菜横幅</string>
     <string name="apm_enable_folk_banner_summary">长按招牌菜卡片自选横幅图片</string>
-    <string name="apm_folk_banner_title">模块编辑</string>
-    <string name="apm_folk_banner_select">选择图片</string>
-    <string name="apm_folk_banner_clear">清除 FolkBanner</string>
-    <string name="apm_folk_banner_saved">已为 %s 注入 FolkBanner。</string>
-    <string name="apm_folk_banner_cleared">已为 %s 清除 FolkBanner。</string>
-    <string name="apm_folk_banner_failed">为 %s 更新 FolkBanner 失败。</string>
-    <string name="folk_banner_custom_info_title">招牌菜信息</string>
-    <string name="folk_banner_custom_info_name">菜名</string>
-    <string name="folk_banner_custom_info_version">菜谱版本</string>
-    <string name="folk_banner_custom_info_author">大厨</string>
-    <string name="folk_banner_custom_info_description">菜品简介</string>
-    <string name="folk_banner_custom_info_save">存菜谱</string>
-    <string name="folk_banner_custom_info_reset">恢复默认</string>
-    <string name="folk_banner_custom_info_saved">已保存 %s 的招牌菜自定义信息</string>
-    <string name="folk_banner_custom_info_reset_done">已重置 %s 的招牌菜自定义信息</string>
     <string name="apm_banner_api_mode">配菜图鉴模式</string>
     <string name="apm_banner_api_mode_summary">用随机配菜图库或本地食材库给每道菜配装饰图</string>
     <string name="apm_banner_api_source">配置配菜源</string>
@@ -383,104 +139,21 @@
     <string name="settings_banner_custom_opacity_summary">自定义横幅透明度，不再跟随壁纸模式</string>
     <string name="settings_banner_opacity">横幅不透明度</string>
 
-    <string name="settings_donot_store_superkey">不在本地存储传世秘方</string>
-    <string name="settings_donot_store_superkey_summary">每次启动管理器时验证传世秘方</string>
 
-    <string name="mode_select_page_title">烹饪</string>
-    <string name="mode_select_page_patch_and_install">烹饪并上菜</string>
-    <string name="mode_select_page_select_file">选择要烹饪的食材</string>
-    <string name="restore_select_file">选择一个要恢复原味的分区引导文件</string>
-    <string name="mode_select_page_install_inactive_slot">烹饪到备用灶台 (OTA 后)</string>
-    <string name="mode_select_page_install_inactive_slot_warning">您的设备将在重新开火后**强制**启动到当前未激活的灶台！\n仅在 OTA 完成后使用此烹饪选项。\n继续烹饪吗？</string>
-    <string name="mode_select_page_select_kpimg">使用本地秘方补丁 (KPimg)</string>
-    <string name="mode_select_page_init_boot_warning_title">拿错食材了！</string>
-    <string name="mode_select_page_init_boot_warning_message">这份食材看起来是 init_boot 或 vendor_boot 的边角料。
-KernelPatch 这道菜需要用 boot 主料来烹饪。
 
-请选用正确的 boot 食材（通常名为 boot.img）。
-
-硬要用这个？</string>
-    <string name="patch_custom_kpimg_label">自定义 KPimg</string>
-    <string name="patch_custom_kpimg_file">文件: %s</string>
-    <string name="patch_select_kpimg_btn">选择 KPimg</string>
-
-    <string name="home_dialog_auth_fail_title">验证失败</string>
-    <string name="home_dialog_auth_fail_content">无法验证传世秘方，导致 FolkPatch 激活失败。
-以下是验证失败的一些可能原因——请对号入座：
-\n1. 您根本没使用 KernelPatch 来烹饪 boot.img，或者忘了自己到底做了啥烹饪操作。
-\n2. 烹饪完的 boot.img 还躺在电脑里睡觉，根本没放进厨房。
-\n3. 传世秘方输错了,或者夹杂了神秘符号，比如来自外星文的字符。
-\n4. 您的厨房设备可能并不兼容 FolkPatch 和 KernelPatch，强行折腾也是徒劳。
-\n5. 您可能搞了一些神秘烹饪操作——比如用了某些排除包名的招牌菜把 FolkPatch 给屏蔽了，结果把自己整出局了。
-\n请先好好检查一遍，再试一次烹饪。如果问题依旧，欢迎到官方仓库的 issue 页面提问。
-毕竟，有些问题可能纯粹是您自己亲手造成的烹饪事故!
-祝你好运 啊!顺带一提,您点击下面的文档按钮准没错!
-</string>
 
     <string name="home_more_menu_feedback_or_suggestion">反馈或建议</string>
     <string name="home_more_menu_about">关于</string>
-    <string name="home_more_menu_document">菜谱文档</string>
 
     <string name="home_more_menu_music_play">播放小曲</string>
     <string name="home_more_menu_music_pause">暂停小曲</string>
 
     <!-- Plugin strings -->
-    <string name="plugin_title">菜谱插件</string>
-    <string name="plugin_refresh">刷新菜单</string>
-    <string name="plugin_summary_title">APD Lua Plugin</string>
-    <string name="plugin_summary_not_installed">APD 未上灶 · 调不了味</string>
-    <string name="plugin_state_enabled">已上架</string>
-    <string name="plugin_state_disabled">已下架</string>
-    <string name="plugin_toggle_failed">上架/下架失败</string>
-    <string name="plugin_empty">菜单上还没有插件</string>
-    <string name="plugin_empty_hint">将 main.lua 放入 /data/adb/plugins/&lt;id&gt;/ 即可上架新菜。</string>
-    <string name="plugin_load_failed">菜单加载失败</string>
-    <string name="plugin_manage_summary">管理轻量 Lua 调味插件</string>
-    <string name="plugin_install">上架插件</string>
-    <string name="plugin_install_success">插件已上架</string>
-    <string name="plugin_install_failed">插件上架失败</string>
-    <string name="plugin_uninstall_title">撤下插件</string>
-    <string name="plugin_uninstall">撤下</string>
-    <string name="plugin_uninstall_confirm">确定撤下插件 %1$s？</string>
-    <string name="plugin_uninstall_success">插件已撤下</string>
-    <string name="plugin_uninstall_failed">插件撤下失败</string>
-    <string name="plugin_action">开炒</string>
-    <string name="plugin_action_success">烹饪完成</string>
-    <string name="plugin_action_failed">烹饪失败</string>
-    <string name="plugin_quick_action_success">出锅成功</string>
-    <string name="plugin_quick_action_failed">出锅失败</string>
-    <string name="plugin_config">调味</string>
-    <string name="plugin_config_title">调味 %1$s</string>
-    <string name="plugin_config_saved">调味完成</string>
-    <string name="plugin_log_title">烹饪日志</string>
-    <string name="plugin_log_empty">暂无烹饪记录</string>
-    <string name="plugin_log_page_title">插件日志</string>
-    <string name="plugin_log_all_empty">所有插件都还没开过火</string>
-    <string name="plugin_log_clear">清空日志</string>
-    <string name="plugin_log_cleared">日志已清空</string>
-    <string name="plugin_log_export">导出日志</string>
 
-    <string name="home_dialog_uninstall_title">撤下菜品</string>
 
-    <string name="home_dialog_uninstall_ap_only">仅撤下配方</string>
-    <string name="home_dialog_uninstall_all">完全撤下</string>
-    <string name="home_dialog_uninstall_ap_only_desc">仅移除主菜配方，保留管理器。</string>
-    <string name="home_dialog_uninstall_all_desc">移除主菜配方并进入完整撤下烹饪流程。</string>
 
-    <string name="kpm_control_dialog_title">控制酱料</string>
-    <string name="kpm_control_dialog_content">请输入控制烹饪参数：</string>
-    <string name="kpm_control_paramters">参数</string>
-    <string name="kpm_control_outMsg">输出</string>
-    <string name="kpm_control_ok">烹饪成功！</string>
-    <string name="kpm_control_failed">烹饪失败！</string>
 
-    <string name="settings_night_mode_follow_sys">深色模式跟随餐厅系统</string>
-    <string name="settings_night_mode_follow_sys_summary">根据餐厅系统烹饪设置自动切换深色模式</string>
-    <string name="settings_night_theme_enabled">深色模式</string>
 
-    <string name="settings_use_system_color_theme">餐厅系统颜色主题</string>
-    <string name="settings_use_system_color_theme_summary">使用餐厅系统根据壁纸生成的颜色主题</string>
-    <string name="settings_custom_color_theme">颜色主题</string>
 
     <string name="amber_theme">琥珀色</string>
     <string name="blue_theme">蓝色</string>
@@ -505,80 +178,23 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="theme_light">浅色</string>
     <string name="theme_dark">深色</string>
     <string name="theme_system">系统</string>
-    <string name="loading_modules">正在获取模块…</string>
-    <string name="loading_scripts">正在查找脚本…</string>
     <string name="loading_themes">正在加载主题…</string>
     <string name="loading_apis">正在加载 API 配菜…</string>
     <string name="retry">再试</string>
 
-    <string name="about_app_desc">基于 KernelPatch 的 Root 实现，无需重新烹饪内核的同时，允许 Hook 内核函数。</string>
     <string name="about_powered_by">由 %1$s 提供支持</string>
-    <string name="about_telegram_group">Telegram 群组</string>
 
     <!-- Online Module Strings -->
-    <string name="online_module_title">在线招牌菜</string>
-    <string name="online_module_download_start">开始弄: %s</string>
-    <string name="online_module_download_complete">弄好了: %s</string>
-    <string name="online_module_download_notification">正在弄 %s，瞧瞧通知栏的进度，弄完记得去下菜文件夹瞅一眼</string>
 
     <!-- Online Module Source Strings -->
-    <string name="online_module_source_official">大厨直供</string>
-    <string name="online_module_source_cluster">菜谱库集群</string>
-    <string name="online_module_source_custom">自家菜谱库</string>
-    <string name="online_module_source_title">菜谱来源</string>
-    <string name="online_module_repo_url_title">菜谱库地址</string>
-    <string name="online_module_repo_url_hint">https://example.com/modules.json</string>
-    <string name="online_module_repo_settings">菜谱库设置</string>
 
     <!-- Repo Module Detail Strings -->
-    <string name="repo_module_detail_links">相关链接</string>
-    <string name="repo_module_detail_homepage">主厨主页</string>
-    <string name="repo_module_detail_source">菜谱源码</string>
-    <string name="repo_module_detail_support">找茬反馈</string>
-    <string name="repo_module_detail_versions">版本菜谱史</string>
-    <string name="repo_module_detail_download">采购并开火</string>
-    <string name="repo_module_detail_by_author">大厨：%1$s</string>
-    <string name="online_module_repo_browse_title">逛逛菜谱库</string>
-    <string name="online_module_view_modules">看看招牌菜</string>
-    <string name="online_module_select_repo_hint">挑个菜谱库看看招牌菜</string>
-    <string name="online_module_enter_url_hint">输入菜谱库地址</string>
-    <string name="online_module_invalid_url">地址不对劲，重新输下</string>
-    <string name="online_module_explore_repos">探索菜谱库</string>
-    <string name="online_module_repo_count">%1$d 个菜谱库</string>
-    <string name="online_module_module_count">%1$d+ 道招牌菜</string>
-    <string name="online_module_select_repo">挑个菜谱库</string>
-    <string name="online_module_enter_url_manually">手动输地址</string>
-    <string name="online_module_default_repo">默认菜谱库</string>
-    <string name="online_module_repo_list_title">菜谱库清单</string>
-    <string name="online_module_load_error">加载翻车了，刷新再试试</string>
-    <string name="online_module_no_search_results">没找到对口的招牌菜</string>
-    <string name="online_module_module_detail_download_count">下载次数：%1$s</string>
-    <string name="online_module_module_detail_last_update">最后更新：%1$s</string>
-    <string name="online_module_module_detail_version">版本：%1$s</string>
-    <string name="online_module_module_detail_size">大小：%1$s</string>
-    <string name="online_module_module_detail_author">作者：%1$s</string>
-    <string name="online_module_module_detail_description">描述：%1$s</string>
-    <string name="online_module_module_detail_suitable">适合：%1$s</string>
-    <string name="online_module_module_detail_changelog">更新日志：%1$s</string>
-    <string name="online_module_module_detail_instructions">使用说明：%1$s</string>
 
     <!-- Online KPM Strings -->
-    <string name="online_kpm_title">在线酱料</string>
-    <string name="online_kpm_download_start">开始弄: %s</string>
-    <string name="online_kpm_download_complete">弄好了: %s</string>
-    <string name="online_kpm_download_notification">正在弄 %s，瞧瞧通知栏的进度，弄完记得去下菜文件夹瞅一眼</string>
 
     <!-- Online Plugin Strings -->
-    <string name="online_plugin_title">在线小菜</string>
-    <string name="online_plugin_download_start">开始弄: %s</string>
-    <string name="online_plugin_download_complete">弄好了: %s</string>
-    <string name="online_plugin_download_notification">正在弄 %s，瞧瞧通知栏的进度，弄完记得去下菜文件夹瞅一眼</string>
 
     <!-- Online Script Strings -->
-    <string name="online_script_title">在线烹饪菜谱</string>
-    <string name="online_script_download_start">开始弄: %s</string>
-    <string name="online_script_download_complete">弄好了: %s</string>
-    <string name="online_script_download_notification">正在弄 %s</string>
 
     <!-- Crash Handle Strings -->
     <string name="crash_handle_title">厨房事故报告</string>
@@ -587,72 +203,16 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <!-- About Screen Strings -->
     <string name="about_app_version">店里的版本: %s</string>
     <string name="about_github">代码仓库</string>
-    <string name="about_telegram_channel">Telegram 频道</string>
 
     <string name="settings_app_dpi">软件 DPI</string>
     <string name="dpi_apply_settings">确定</string>
-    <string name="dpi_confirm_title">确认更改软件DPI</string>
-    <string name="dpi_confirm_message">将软件DPI从%1$s更改为%2$s？</string>
-    <string name="settings_magic_mount">Folk Mount API</string>
-    <string name="settings_magic_mount_summary">启用招牌菜挂载系统</string>
-    <string name="settings_new_app_profile_enabled">新菜自动入味</string>
-    <string name="settings_new_app_profile_enabled_summary">开启后，新菜会自动套用下方预设的调味模式</string>
-    <string name="settings_new_app_profile_mode">默认调味模式</string>
-    <string name="settings_new_app_profile_normal">家常</string>
-    <string name="settings_new_app_profile_root">招牌</string>
-    <string name="settings_new_app_profile_exclude">退菜</string>
-    <string name="settings_hide_service">FolkPatch Hide</string>
-    <string name="settings_hide_service_summary">把Bootloader解锁状态藏起来呗</string>
 
-    <string name="settings_shizuku_service">Shizuku 服务</string>
-    <string name="settings_shizuku_service_summary">给支持 Shizuku 的应用端上 ADB 级 API 这盘菜（自家厨房出品，不用去别家点菜）</string>
-    <string name="settings_shizuku_service_running">Shizuku 正在锅里咕嘟咕嘟</string>
-    <string name="settings_shizuku_started">Shizuku 开火啦</string>
-    <string name="settings_shizuku_start_failed">Shizuku 没点着火</string>
-    <string name="settings_shizuku_stopped">Shizuku 关火啦</string>
-    <string name="settings_shizuku_stop_failed">Shizuku 火关不掉</string>
-    <string name="shizuku_permission_title">让 %1$s 尝尝 Shizuku 的菜？</string>
-    <string name="shizuku_permission_message">这应用要通过 Shizuku 拿 root 大勺炒系统 API 的菜</string>
-    <string name="shizuku_permission_allow">上菜</string>
-    <string name="shizuku_permission_allow_once">只尝一口</string>
-    <string name="shizuku_permission_deny">撤菜</string>
-    <string name="shizuku_permission_allow_summary">永久让用</string>
-    <string name="shizuku_permission_allow_once_summary">就这顿让用</string>
-    <string name="shizuku_permission_deny_summary">不让用了哈</string>
-    <string name="shizuku_permission_binder_timeout">连不上 Shizuku 服务，重新开一下服务再试哈</string>
-    <string name="shizuku_management_title">Shizuku 授权菜单</string>
-    <string name="shizuku_management_empty">没找到会做 Shizuku 菜的店哈</string>
-    <string name="shizuku_management_unavailable">Shizuku 厨房还没开火哈</string>
-    <string name="shizuku_management_load_failed">授权菜单加载失败哈</string>
-    <string name="shizuku_management_uid">UID %1$d</string>
-    <string name="shizuku_management_granted">可上菜</string>
-    <string name="shizuku_management_denied">不上菜</string>
-    <string name="shizuku_management_update_failed">授权没更新成哈</string>
-    <string name="shizuku_management_root_access">大厨权限</string>
-    <string name="shizuku_management_allowed_title">Shizuku 后厨通行</string>
-    <string name="shizuku_management_root_access_desc">以大厨（root）身份掌勺。关火就降成帮厨（shell，UID 2000），尝不到私房菜哈</string>
-    <string name="shizuku_management_badge_allowed">可上菜</string>
-    <string name="shizuku_management_badge_denied">不上菜</string>
-    <string name="shizuku_management_badge_root">ROOT</string>
-    <string name="shizuku_management_badge_shell">SHELL</string>
-    <string name="shizuku_log_title">Shizuku 烹饪日志</string>
-    <string name="shizuku_log_empty">暂无烹饪记录</string>
-    <string name="shizuku_log_refresh">重烹</string>
-    <string name="shizuku_log_clear">清灶</string>
-    <string name="shizuku_log_cleared">灶台已净</string>
-    <string name="shizuku_log_export">装盘</string>
-    <string name="shizuku_log_copy">抄录</string>
-    <string name="shizuku_log_copied">已抄录至剪贴板</string>
-    <string name="shizuku_log_source_server">后厨日志</string>
-    <string name="shizuku_log_source_logcat">Logcat</string>
-    <string name="shizuku_log_search_hint">翻找记录</string>
 <string name="settings_app_title">软件名</string>
     <string name="app_title_custom">自个儿起</string>
     <string name="settings_custom_app_title">设置软件名</string>
     <string name="custom_app_title_dialog_title">自定义软件名</string>
     <string name="custom_app_title_dialog_hint">写个名儿呗</string>
     <string name="custom_app_title_dialog_confirm">中</string>
-    <string name="custom_app_title_dialog_empty">咋能没名儿呢</string>
     <string name="cancel">算了</string>
     <string name="settings_custom_background">自定背景</string>
     <string name="settings_custom_background_enabled">已开自定背景</string>
@@ -694,7 +254,6 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="settings_clear_font">用回默认字体</string>
     <string name="settings_clear_font_confirm">真要恢复默认字体吗？</string>
     <string name="settings_font_cleared">已用回默认字体</string>
-    <string name="settings_font_select_hint">请挑一个 TTF 字体文件</string>
     <string name="settings_select_background_image">挑背景图</string>
     <string name="settings_custom_background_summary">设背景图</string>
     <string name="settings_custom_background_saved">背景存好了</string>
@@ -719,44 +278,16 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="settings_video_selected">已选择视频</string>
     <string name="settings_clear_video_background">清除视频壁纸</string>
     <string name="settings_clear_video_background_confirm">确定要清除视频壁纸吗？</string>
-    <string name="settings_video_background_enabled">视频背景已启用</string>
     <string name="settings_video_volume">视频音量</string>
 
-    <string name="su_exclude_all_title">批量排除</string>
-    <string name="su_exclude_all_confirm">确定要将所有未授权大厨的餐厅软件设为排除吗？</string>
 
     <!-- 隐藏设定字符串 -->
-    <string name="home_hide_su_path">隐藏 su 可执行菜谱路径</string>
-    <string name="home_hide_kpatch_version">隐藏酱料版本</string>
     <string name="home_hide_fingerprint">隐藏菜品指纹信息</string>
-    <string name="home_hide_zygisk">隐藏 Zygisk 实现</string>
-    <string name="home_hide_mount">隐藏上菜实现</string>
-    <string name="home_hide_su_path_summary">在信息卡片中隐藏 su 可执行菜谱路径</string>
-    <string name="home_hide_kpatch_version_summary">在信息卡片中隐藏酱料版本信息</string>
     <string name="home_hide_fingerprint_summary">在信息卡片中隐藏菜品指纹信息</string>
-    <string name="home_hide_zygisk_summary">在信息卡片中隐藏 Zygisk 实现信息</string>
-    <string name="home_hide_mount_summary">在信息卡片中隐藏上菜实现信息</string>
     <!-- KPM AutoLoad Strings -->
     
 
     <!-- APM Bulk Install Strings -->
-    <string name="apm_bulk_install_title">招牌菜批量烹饪</string>
-    <string name="apm_bulk_install_list_title">招牌菜列表</string>
-    <string name="apm_bulk_install_add">添加招牌菜</string>
-    <string name="apm_bulk_install_empty">未添加招牌菜</string>
-    <string name="apm_bulk_install_action">批量烹饪</string>
-    <string name="apm_bulk_install_log_title">批量烹饪日志</string>
-    <string name="apm_bulk_install_log_start">开始批量烹饪...</string>
-    <string name="apm_bulk_install_log_installing">正在烹饪 %1$s</string>
-    <string name="apm_batch_install_full_process">完整批量烹饪流程</string>
-    <string name="apm_batch_install_full_process_summary">使用完整流程进行招牌菜批量烹饪</string>
-    <string name="next_module">下一道招牌菜</string>
-    <string name="apm_bulk_install_log_installed">招牌菜 %s 烹饪完成。</string>
-    <string name="apm_bulk_install_log_done">所有烹饪操作已完成。</string>
-    <string name="apm_bulk_install_first_use_text">这个功能允许你一次性烹饪多道招牌菜,属于快速烹饪,适合烹饪一些过程中没有涉及按键操作的招牌菜,涉及点按音量键等操作的请去烹饪设置启用完整流程烹饪模式</string>
-    <string name="apm_bulk_install_remove">撤菜</string>
-    <string name="apm_first_use_title">欢迎使用招牌菜</string>
-    <string name="apm_first_use_text">欢迎使用招牌菜，这里使用的是兼容 Magisk 生态的招牌菜，点击右下角的按钮可以烹饪招牌菜，你也可以使用顶部的烹饪器批量烹饪招牌菜，还提供了一个功能一键备份全部招牌菜，但是注意这种方案不一定适用全部招牌菜，还是自己多加备份</string>
 
     <!-- Welcome Guide -->
     <string name="welcome_title_1">欢迎光临 FolkPatch 餐厅</string>
@@ -775,31 +306,16 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     
 
     <!-- Module Backup/Restore Strings -->
-    <string name="apm_copy_list_title">复制列表</string>
-    <string name="apm_copy_list_success">招牌菜列表已复制</string>
 
     <!-- Auto Backup Strings -->
-    <string name="settings_auto_backup_module">招牌菜自动留份</string>
-    <string name="settings_auto_backup_module_summary">招牌菜上桌后，自动留份到储物柜</string>
-    <string name="settings_open_backup_dir">打开备菜柜</string>
-    <string name="backup_dir_empty">备菜柜是空的</string>
-    <string name="backup_dir_open_failed">打不开备菜柜</string>
-    <string name="auto_backup_failed">留份失败: %s</string>
-    <string name="auto_backup_success">留份成功: %s</string>
-    <string name="settings_auto_backup_boot">Boot 自动留份</string>
-    <string name="settings_auto_backup_boot_summary">自动把 Boot 留份到本地储物柜 (Downloads/FolkPatch/BootBackups)</string>
 
     <!-- Home Layout Strings -->
     <string name="settings_home_layout_style">主厨台面风格</string>
     <string name="settings_home_layout_default">ListUI</string>
     <string name="settings_home_layout_grid">GridUI</string>
     <string name="settings_home_layout_focus">FocusUI</string>
-    <string name="settings_home_layout_sign">SignUI</string>
     <string name="settings_home_layout_circle">CircleUI</string>
     <string name="settings_home_layout_dashboard_pro">DashboardUI</string>
-    <string name="unofficial_version_title">非官方版本</string>
-    <string name="unofficial_version_message">您正在用的是第三方 FolkPatch 管理器，可能会出岔子。要吃正宗的，请去官方渠道下正版！</string>
-    <string name="go_to_github">去 Github 瞧瞇瞇</string>
     <string name="settings_save_theme">存起主题</string>
     <string name="settings_import_theme">导入主题</string>
     <string name="settings_theme_saved">主题已存起</string>
@@ -824,7 +340,6 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="theme_export_action">打包</string>
     <string name="theme_import_action">导入</string>
     <string name="theme_import_confirm">真要导入这个装修风格吗？</string>
-    <string name="theme_info">装修信息</string>
 
     <!-- Grid Working Card Background -->
     <string name="settings_grid_working_card_background">工牌背景</string>
@@ -854,11 +369,9 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="theme_store_title">主题商店</string>
     <string name="theme_source_official">官方</string>
     <string name="theme_source_third_party">第三方</string>
-    <string name="theme_source_local">本地</string>
     <string name="theme_store_author">主厨: %s</string>
     <string name="theme_store_version">版本: %s</string>
     <string name="theme_source">来源</string>
-    <string name="theme_store_download_failed">采购失败</string>
     <string name="theme_store_download">采购</string>
     <string name="theme_store_search_hint">搜索主题...</string>
 
@@ -871,21 +384,11 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="update_action">搞新菜谱</string>
     <string name="update_close">关咯</string>
     <string name="update_latest">菜谱挺新的</string>
-    <string name="update_error">看新菜谱时出岔子</string>
     <!--折叠选项-->
     <string name="settings_category_general">餐厅规矩</string>
-    <string name="settings_app_list_loading_scheme">餐厅软件列表加载方案</string>
-    <string name="settings_app_list_loading_scheme_summary">选择如何加载餐厅软件列表</string>
-    <string name="app_list_loading_scheme_root_service">RootService (默认)</string>
-    <string name="app_list_loading_scheme_package_manager">PackageManager (餐厅系统 API)</string>
-    <string name="app_list_loading_scheme_dialog_title">加载方案</string>
-    <string name="superuser">首席大厨</string>
-    <string name="module">招牌菜</string>
     <string name="settings_category_appearance">餐厅布局</string>
     <string name="settings_appearance_font">字体样式</string>
-    <string name="settings_appearance_font_summary">自定义字体配置</string>
     <string name="settings_appearance_theme">主题装修</string>
-    <string name="settings_appearance_theme_summary">主题商店、保存、导入和重置</string>
 
     <string name="settings_nav_custom_icons">自定义导航图标</string>
     <string name="settings_nav_custom_icons_summary">用自定义贴图替换底部导航栏图标</string>
@@ -894,7 +397,6 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="nav_icon_superuser">管理员图标</string>
     <string name="nav_icon_apm">插件图标</string>
     <string name="nav_icon_settings">设置图标</string>
-    <string name="nav_icon_select_image">选择贴图</string>
     <string name="nav_icon_clear">重置为默认</string>
     <string name="nav_icon_custom_selected">自定义</string>
     <string name="nav_icon_default">默认</string>
@@ -917,13 +419,9 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="theme_mode_switch_title">切换皮肤模式</string>
     <string name="theme_mode_switch_msg">更改模式将影响皮肤浏览和安装的方式。是否继续？</string>
     <string name="settings_appearance_banner">横幅挂牌</string>
-    <string name="settings_appearance_banner_summary">模块横幅配置</string>
     <string name="settings_appearance_layout">后厨布局</string>
-    <string name="settings_appearance_layout_summary">首页布局、导航和卡片自定义</string>
     <string name="settings_appearance_background">后厨背景</string>
-    <string name="settings_appearance_background_summary">自定义背景、视频和多背景</string>
     <string name="settings_appearance_night_mode">夜间打烊模式</string>
-    <string name="settings_appearance_night_mode_summary">深色主题和颜色配置</string>
     <string name="settings_amoled_theme">AMOLED 纯黑主题</string>
     <string name="settings_amoled_theme_desc">为深色模式使用纯黑背景</string>
     <string name="settings_switch_icon">启用按钮指示器</string>
@@ -932,9 +430,6 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="settings_discrete_slider_desc">在菜单轨道上显示份量标记</string>
     <string name="settings_category_behavior">吃饭行为</string>
     <string name="settings_category_function">餐厅功能</string>
-    <string name="settings_use_legacy_su_page">单页首席大厨授权</string>
-    <string name="settings_use_legacy_su_page_summary">首席大厨页面改用单页授权设计</string>
-    <string name="settings_category_module">招牌菜肴</string>
     <string name="settings_category_security">饭菜安全</string>
 
     <!-- 背景音乐字符串 -->
@@ -960,8 +455,7 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="settings_category_behavior_summary">Web调试、上菜行为、招牌展示</string>
     <string name="settings_category_security_summary">应用认证与招牌菜操作验证</string>
     <string name="settings_category_backup_summary">本地留份、云端留份、WebDAV</string>
-    <string name="settings_category_module_summary">招牌菜信息、排序、批量上菜</string>
-    <string name="settings_category_function_summary">FolkPatch隐身、Umount服务</string>
+    <string name="settings_category_function_summary">執行方式、權限通道、無線 ADB 配對</string>
     <string name="settings_category_multimedia_summary">背景音乐、音效、振动</string>
     <string name="settings_music_playback_control">音乐控制</string>
 
@@ -995,17 +489,9 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="home_storage_ram">操作台内存</string>
     <string name="home_storage_zram">ZRAM</string>
     <string name="home_storage_swap">交换空间</string>
-    <string name="home_info_kernel">核心食材</string>
-    <string name="home_info_superkey">传世秘方</string>
     <string name="home_info_auth_auth">已验证</string>
     <string name="home_info_auth_na">不可用</string>
-    <string name="home_info_device_slot">设备灶台</string>
     <string name="home_info_device_model">设备型号</string>
-    <string name="home_info_running_mode">运行模式</string>
-    <string name="home_info_mode_full">完整</string>
-    <string name="home_info_mode_half">不完全</string>
-    <string name="home_zygisk_implement">Zygisk 实现</string>
-    <string name="home_mount_implement">上菜实现</string>
 
     <string name="settings_list_card_hide_status_badge">使用经典表情</string>
     <string name="settings_list_card_hide_status_badge_summary">主厨台面的状态徽章即刻变身经典表情</string>
@@ -1015,43 +501,16 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="settings_custom_badge_text_summary">修改角标的文本显示，仅供娱乐</string>
 
     <!-- Install Mode Select -->
-    <string name="kp_install_methods">KernelPatch 烹饪/烹饪</string>
-    <string name="restore_boot_methods">选择一个启动来恢复到引导分区</string>
 
-    <string name="su_backup_list">备份列表</string>
-    <string name="su_restore_list">恢复列表</string>
-    <string name="backup_success">备份成功</string>
-    <string name="restore_success">恢复成功</string>
 
     <!-- 超级用户应用操作弹窗 -->
-    <string name="su_app_action_title">餐厅软件烹饪操作</string>
-    <string name="su_app_action_content">请选择一个烹饪操作来对餐厅软件执行</string>
-    <string name="su_app_action_launch">启动餐厅软件</string>
-    <string name="su_app_action_force_stop">强行停止</string>
-    <string name="su_app_action_launch_success">正在启动 %s</string>
-    <string name="su_app_action_force_stop_success">已强行停止 %s</string>
-    <string name="su_app_action_failed">烹饪操作失败: %s</string>
 
     <!-- SU Audit Log -->
-    <string name="su_audit_log_title">授权日志</string>
-    <string name="su_audit_log_empty">暂无授权记录</string>
-    <string name="su_audit_log_clear">清除日志</string>
-    <string name="su_audit_log_clear_confirm">确认清除所有授权记录？</string>
-    <string name="su_audit_action_grant">已授权</string>
-    <string name="su_audit_action_revoke">已撤销</string>
-    <string name="su_audit_action_exclude">已排除</string>
-    <string name="su_audit_tab_usage">使用记录</string>
-    <string name="su_audit_tab_operations">操作记录</string>
 
-    <string name="patch_output_written_to"> 烹饪成功，菜品输出到 </string>
-    <string name="patch_write_failed"> 烹饪失败，发生了厨房事故</string>
 
     <!-- Badge Count Settings -->
     <string name="enable_badge_count">角标统计烹饪设置</string>
     <string name="enable_badge_count_summary">配置菜单项的角标统计显示</string>
-    <string name="badge_superuser">显示首席大厨角标</string>
-    <string name="badge_apm">显示招牌菜角标</string>
-    <string name="badge_kernel">显示特制酱料角标</string>
 
     <string name="settings_sound_effect">厨房声响</string>
     <string name="settings_sound_effect_summary">操作时发出厨房声响</string>
@@ -1099,9 +558,6 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="webdav_password">钥匙</string>
     <string name="webdav_test_success">仓库连接正常</string>
     <string name="webdav_test_failed">连接失败: %s</string>
-    <string name="webdav_uploading">正在送到云端仓库...</string>
-    <string name="webdav_backup_success">云端留份成功</string>
-    <string name="webdav_backup_failed">云端留份失败: %s</string>
     <string name="save">保存</string>
     <string name="test">测试</string>
     <string name="webdav_path_label">路径 (例如 /Backup)</string>
@@ -1109,49 +565,11 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="webdav_backup_logs_title">留份记录</string>
     <string name="webdav_no_logs">暂无留份记录</string>
     <string name="webdav_clear_logs">清空记录</string>
-    <string name="settings_enable_local_backup">启用本地留份</string>
-    <string name="settings_enable_local_backup_summary">将招牌菜留份到本地储物柜 (Downloads/FolkPatch/ModuleBackups)</string>
     <string name="close">关闭</string>
 
     <!-- Script Library Strings -->
-    <string name="script_library">烹饪菜谱库</string>
-    <string name="script_library_title">烹饪菜谱库</string>
-    <string name="script_library_empty">暂无菜谱，点击添加按钮添加一个</string>
-    <string name="script_library_add">添加菜谱</string>
-    <string name="script_library_add_title">添加菜谱</string>
-    <string name="script_library_select_file">选择菜谱文件</string>
-    <string name="script_library_alias">别名</string>
-    <string name="script_library_alias_hint">输入菜谱别名（可选）</string>
-    <string name="script_library_run">烹饪</string>
-    <string name="script_library_delete">删除</string>
-    <string name="script_library_path">路径：%s</string>
-    <string name="script_library_confirm_delete">确认删除菜谱？</string>
-    <string name="script_library_delete_success">菜谱删除成功</string>
-    <string name="script_library_delete_failed">删除菜谱失败</string>
-    <string name="script_library_add_success">菜谱添加成功</string>
-    <string name="script_library_add_failed">添加菜谱失败：%s</string>
-    <string name="script_library_load_failed">加载菜谱库失败</string>
-    <string name="script_library_output">烹饪输出</string>
-    <string name="script_library_no_output">无输出</string>
-    <string name="script_library_save_log">保存烹饪日志</string>
-    <string name="script_library_log_saved">烹饪日志已保存至 %s</string>
-    <string name="script_library_log_save_failed">保存烹饪日志失败：%s</string>
-    <string name="search_modules">搜索菜品...</string>
-    <string name="search_scripts">搜索后厨秘籍...</string>
 
     <!-- Umount Service -->
-    <string name="settings_umount_service">Umount Service</string>
-    <string name="settings_umount_service_summary">配置开炉自动撤回的摆盘位置</string>
-    <string name="umount_config_title">Umount 食谱</string>
-    <string name="umount_config_enabled">启用 Umount</string>
-    <string name="umount_config_enabled_summary">开炉自动撤回指定的摆盘位置</string>
-    <string name="umount_config_paths_label">摆盘位置路径（每行一个）</string>
-    <string name="umount_config_paths_placeholder">/system/vendor/app\n/system/vendor/priv-app</string>
-    <string name="umount_config_paths_helper">每行输入一个需要撤回的摆盘位置路径</string>
-    <string name="umount_config_save">开吃</string>
-    <string name="umount_config_save_confirm">确认开吃并保存食谱？</string>
-    <string name="umount_config_save_success">开炉成功，食谱保存成功</string>
-    <string name="umount_config_save_failed">厨师长反对，食谱保存失败</string>
 
     <!-- 我的餐厅页面 -->
     <string name="my_themes_title">我的餐厅</string>
@@ -1163,27 +581,18 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="my_themes_deleted">主题已删除</string>
     <string name="my_themes_applied">主题已应用</string>
     <string name="my_themes_apply_failed">装修失败，食材可能不新鲜了。长按这个菜谱删了重新下单吧</string>
-    <string name="my_themes_details">主题详情</string>
 
     <!-- 下载对话 -->
     <string name="theme_download_title">正在采购主题</string>
     <string name="theme_download_completed">采购完成</string>
     <string name="theme_download_failed">采购失败</string>
-    <string name="theme_file_corrupt">菜谱文件坏掉了，请重新下单</string>
-    <string name="theme_file_incomplete">菜谱文件不完整，请重新下单</string>
     <string name="theme_download_progress">采购进度</string>
     <string name="theme_download_file">主题菜谱</string>
     <string name="theme_download_image">菜品预览</string>
     <string name="theme_download_cancel">取消采购</string>
     <string name="theme_download_pause">暂停采购</string>
-    <string name="theme_download_resume">继续采购</string>
-    <string name="theme_download_retry">重新采购</string>
     <string name="theme_download_apply">应用主题</string>
     <string name="theme_download_go_to_my_themes">我的餐厅</string>
-    <string name="theme_download_retrying">重新采购中 (%d/3)...</string>
-    <string name="theme_download_preparing">准备采购...</string>
-    <string name="theme_download_downloading_file">正在下载主题菜谱...</string>
-    <string name="theme_download_downloading_image">正在下载菜品预览...</string>
     <string name="theme_download_finalizing">准备上菜...</string>
     <string name="settings_predictive_back">预测性返回手势</string>
     <string name="settings_predictive_back_summary">启用 Android 14+ 的预测性返回手势动画</string>
@@ -1191,81 +600,26 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="home_device_status_battery_charging">烤箱加热中</string>
     <string name="home_device_status_cpu_temp">灶台温度</string>
     <string name="home_device_status_memory_trend">备料趋势</string>
-    <string name="home_storage_partitions">储物分区</string>
     <string name="home_device_status_cpu_freq">灶台频率</string>
     <string name="home_network_rx">进货</string>
     <string name="home_network_tx">出餐</string>
     <string name="settings_home_layout_stats">StatsUI</string>
-    <string name="home_stats_more_options">更多菜谱</string>
-    <string name="home_stats_kp_label">KP</string>
-    <string name="home_stats_manager_label">厨管</string>
     <string name="home_device_status_gpu_load">烤箱负载</string>
-    <string name="home_stats_kernel_modules">内核菜谱</string>
-    <string name="home_stats_apm_modules">APM 菜谱</string>
-    <string name="home_stats_superusers">主厨权限</string>
-    <string name="settings_kernel_spoof">内核伪装配方</string>
-    <string name="settings_kernel_spoof_summary">伪装内核版本和出炉时间</string>
-    <string name="settings_kernel_spoof_version">内核版本</string>
-    <string name="settings_kernel_spoof_build_time">内核出炉时间</string>
-    <string name="settings_kernel_spoof_restore">重新出炉</string>
 
-    <string name="kernel_spoof_enabled">内核伪装配方已启用</string>
-    <string name="kernel_spoof_disabled_restored">内核伪装配方已停用并重新出炉</string>
-    <string name="kernel_spoof_failed">内核伪装配方失败: %d</string>
-    <string name="kernel_spoof_applied">内核伪装配方已上菜</string>
 
-    <string name="settings_path_hide">路径藏起来</string>
-    <string name="settings_path_hide_summary">在内核层面把文件和目录藏起来，不让别的应用看到</string>
-    <string name="path_hide_paths_label">要藏的路径（每行一个）</string>
-    <string name="path_hide_paths_helper">每行写一个路径，匹配的路径就跟不存在一样</string>
-    <string name="path_hide_save">保存</string>
-    <string name="path_hide_enabled">路径隐藏已开火</string>
-    <string name="path_hide_disabled">路径隐藏已熄火</string>
-    <string name="path_hide_applied">路径隐藏已上菜</string>
-    <string name="path_hide_failed">路径隐藏翻车了: %d</string>
-    <string name="path_hide_uid_mode">UID 精准火候模式</string>
-    <string name="path_hide_uid_mode_summary">只对指定应用的 UID 下隐藏路径</string>
-    <string name="path_hide_uids_label">目标 UID（每行一个，列好清单）</string>
-    <string name="path_hide_uids_helper">每行写一个应用 UID，只有这些应用的路径会被藏起来</string>
-    <string name="path_hide_uid_save">保存 UID 配方</string>
-    <string name="path_hide_uid_mode_enabled">UID 精准火候模式已开火</string>
-    <string name="path_hide_uid_mode_disabled">UID 精准火候模式已熄火</string>
-    <string name="path_hide_filter_system">过滤系统 UID 菜品</string>
-    <string name="path_hide_filter_system_summary">同时对 root 和系统进程（UID &lt; 10000）隐藏食材路径</string>
-    <string name="path_hide_filter_system_enabled">系统 UID 过滤已开灶</string>
-    <string name="path_hide_filter_system_disabled">系统 UID 过滤已熄火</string>
-    <string name="path_hide_filter_system_warning_title">厨房警告</string>
-    <string name="path_hide_filter_system_warning_message">开灶后将同时对 root 和系统进程（UID &lt; 10000）隐藏食材路径。这可能导致部分厨房功能异常，请谨慎操作。</string>
-    <string name="path_hide_uid_applied">UID 白名单已上菜</string>
-    <string name="path_hide_select_apps">点选应用</string>
-    <string name="path_hide_no_apps_selected">莫得应用被选中</string>
-    <string name="path_hide_app_removed">已铲掉 %d 个卸载了的应用的锅气</string>
-    <string name="path_hide_search_apps">找应用…</string>
-    <string name="path_hide_show_system">亮出系统应用</string>
-    <string name="netisolate_title">断网隔离</string>
-    <string name="netisolate_enable">断网隔离已开火</string>
-    <string name="netisolate_disable">断网隔离已熄火</string>
-    <string name="netisolate_enable_summary">在内核层面断掉所选应用的网络连接</string>
-    <string name="netisolate_uids_label">已断网应用</string>
-    <string name="netisolate_uids_hint">输入要断网的 UID（每行一个）</string>
-    <string name="netisolate_no_uids">莫得断网应用</string>
     <string name="settings_search_title">菜谱检索</string>
-    <string name="settings_search_hint">检索菜谱…</string>
     <string name="settings_search_empty_hint">输入以检索所有菜谱配方…</string>
     <string name="settings_no_results">莫得这个菜谱</string>
 
     <!-- 色彩生成 -->
     <string name="color_generation_classic">经典配方</string>
     <string name="color_generation_custom">自选配方</string>
-    <string name="color_generation_label">色彩火候</string>
 
     <!-- 色彩标准 -->
     <string name="color_standard_md3_2021">MD3 2021</string>
     <string name="color_standard_m3e_2025">M3e 2025</string>
-    <string name="color_standard_label">色彩菜谱标准</string>
 
     <!-- 色彩风格 -->
-    <string name="color_style_label">色彩风味</string>
     <string name="color_style_tonal_spot">火候</string>
     <string name="color_style_vibrant">爆炒</string>
     <string name="color_style_content">食材</string>
@@ -1278,7 +632,6 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="settings_focus_card_background">FocusUI 卡片壁纸</string>
     <string name="settings_focus_card_background_enabled">FocusUI 卡片壁纸已开启，长按卡片管理壁纸</string>
     <string name="settings_focus_card_background_summary">启用 FocusUI 卡片壁纸及长按壁纸管理</string>
-    <string name="settings_focus_card_dim">卡片壁纸暗度</string>
     <string name="settings_focus_card_dual_dim">启用昼夜双暗度</string>
     <string name="settings_focus_card_dual_dim_desc">自动根据明暗主题调整卡片壁纸暗度</string>
     <string name="settings_focus_card_day_dim">日间模式卡片壁纸暗度</string>
@@ -1317,22 +670,7 @@ KernelPatch 这道菜需要用 boot 主料来烹饪。
     <string name="settings_background_permission_required">得先给仓库权限才能选厨房壁纸</string>
     <string name="settings_sound_effect_save_failed">音效酱料保存失败</string>
     <string name="settings_startup_sound_save_failed">开灶音效保存失败</string>
-    <string name="script_library_downloaded_to">已出锅到：%s</string>
-    <string name="script_library_download_failed">下载翻车了：%s</string>
-    <string name="settings_new_app_profile_update_failed">新菜品配置更新翻车了：%s</string>
     <string name="settings_info_copy">长按复制菜谱信息</string>
     <string name="settings_info_copy_summary">长按后厨首页信息栏中的条目即可复制其内容</string>
     <string name="home_info_copied">%1$s 已复制</string>
-    <string name="settings_jailbreak_mode">解禁模式</string>
-    <string name="settings_jailbreak_mode_summary">在原生内核上加载 KernelPatch 秘方。该模式下不允许动火修补。</string>
-    <string name="settings_jailbreak_soft_reboot">小火回锅</string>
-    <string name="settings_jailbreak_soft_reboot_message">秘方已下锅，是否现在小火回锅？</string>
-    <string name="settings_jailbreak_restart_framework">回锅重启框架</string>
-    <string name="settings_jailbreak_restart_framework_message">秘方已下锅，是否现在重启 Android 框架？此举将小火回锅，只回锅框架，不会重启内核。</string>
-    <string name="settings_jailbreak_loaded">解禁秘方已下锅</string>
-    <string name="settings_jailbreak_failed">解禁秘方下锅翻车了</string>
-    <string name="jailbreak_no_patch">解禁模式下不允许动火修补。</string>
-    <string name="jailbreak">解禁</string>
-    <string name="jailbreak_triggered">解禁已触发，等拿到 root 就小火回锅。</string>
-    <string name="reboot_soft">小火回锅</string>
 </resources>

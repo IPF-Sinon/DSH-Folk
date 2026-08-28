@@ -1,20 +1,14 @@
 package me.bmax.apatch.ui.screen.settings
 
-import android.content.Intent
 import me.bmax.apatch.util.ui.showToast
-import androidx.core.content.FileProvider
-import me.bmax.apatch.BuildConfig
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SettingsBackupRestore
-import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,7 +20,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
-import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.SplicedColumnGroup
@@ -37,12 +30,9 @@ import me.bmax.apatch.util.WebDavUtils
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
-import androidx.compose.ui.graphics.vector.ImageVector
 
 @Composable
 fun BackupSettingsContent(
-    autoBackupModule: Boolean,
-    onAutoBackupModuleChange: (Boolean) -> Unit,
     /** DSH 配置备份：是否正在跑（导出/导入期间禁用按钮）。 */
     dshBusy: Boolean,
     /** 最近一次导出/导入的结果文本。 */
@@ -55,7 +45,6 @@ fun BackupSettingsContent(
     flat: Boolean = false,
     highlightKey: String? = null,
 ) {
-    val prefs = APApplication.sharedPreferences
     val context = LocalContext.current
 
     val showWebDavDialog = remember { mutableStateOf(false) }
@@ -141,93 +130,6 @@ fun BackupSettingsContent(
                                 .fillMaxWidth()
                                 .heightIn(max = 200.dp)
                                 .verticalScroll(rememberScrollState()),
-                        )
-                    }
-                }
-            }
-        }
-
-        item(key = "backup_local") {
-            ToggleSettingCard(
-                flat = flat,
-                icon = Icons.Filled.Save,
-                title = stringResource(id = R.string.settings_enable_local_backup),
-                description = stringResource(id = R.string.settings_enable_local_backup_summary),
-                checked = autoBackupModule,
-                onCheckedChange = {
-                    onAutoBackupModuleChange(it)
-                    prefs.edit().putBoolean("auto_backup_module", it).apply()
-                }
-            )
-        }
-
-        item(key = "backup_boot") {
-            var autoBackupBoot by remember { mutableStateOf(prefs.getBoolean("auto_backup_boot", false)) }
-            ToggleSettingCard(
-                flat = flat,
-                icon = Icons.Filled.RestartAlt,
-                title = stringResource(id = R.string.settings_auto_backup_boot),
-                description = stringResource(id = R.string.settings_auto_backup_boot_summary),
-                checked = autoBackupBoot,
-                onCheckedChange = {
-                    autoBackupBoot = it
-                    prefs.edit().putBoolean("auto_backup_boot", it).apply()
-                }
-            )
-        }
-
-        item(key = "backup_open_dir", visible = autoBackupModule) {
-            val openBackupDirTitle = stringResource(id = R.string.settings_open_backup_dir)
-            ExpressiveCard(
-                flat = flat,
-                onClick = {
-                    val backupDir = java.io.File(me.bmax.apatch.util.getSafeDownloadsDir(context), "DSH-Folk/PluginBackups")
-                    if (!backupDir.exists()) backupDir.mkdirs()
-
-                    try {
-                        val intent = Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        try {
-                            val uri = FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.fileprovider", backupDir)
-                            val intent = Intent(Intent.ACTION_VIEW)
-                            intent.setDataAndType(uri, "resource/folder")
-                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            try {
-                                context.startActivity(intent)
-                            } catch (e2: Exception) {
-                                val intent2 = Intent(Intent.ACTION_VIEW)
-                                intent2.setDataAndType(uri, "*/*")
-                                intent2.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                intent2.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(Intent.createChooser(intent2, context.getString(R.string.settings_open_backup_dir)))
-                            }
-                        } catch (e3: Exception) {
-                            showToast(context, R.string.backup_dir_open_failed)
-                        }
-                    }
-                }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.FolderOpen,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp),
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = openBackupDirTitle,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 }

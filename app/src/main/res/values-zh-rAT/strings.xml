@@ -5,27 +5,17 @@
 
     <string name="home">圣光之殿</string>
 
-    <string name="success">神恩降临</string>
     <string name="failure">神恩未至</string>
 
-    <string name="patch_warnning">施与神力有风险，请确保已珍藏圣域记忆。</string>
-    <string name="patch">神力降临</string>
 
-    <string name="kernel_patch">灵魂之力</string>
-    <string name="android_patch">圣域守护</string>
 
     <string name="settings_nav_layout_title">神谕圣所导航圣图设定</string>
     <string name="settings_nav_layout_summary">隐去或现出神谕圣所导航圣图之部分组件</string>
     <string name="settings_nav_scheme">神谕圣所导航圣图方案</string>
-    <string name="settings_nav_mode">神谕圣所导航圣图模式</string>
-    <string name="settings_nav_mode_summary">选择神谕圣所导航圣图之现出方式</string>
     <string name="settings_nav_mode_auto">神谕自动传统</string>
     <string name="settings_nav_mode_bottom">永恒现于神谕圣所底部圣图</string>
     <string name="settings_nav_mode_rail">永恒现于神谕圣所侧方圣图</string>
     <string name="settings_nav_mode_floating">悬浮底部圣图</string>
-    <string name="settings_show_apm">现星辰圣光阵</string>
-    <string name="settings_show_kpm">现灵魂晶石</string>
-    <string name="settings_show_superuser">现圣光使者</string>
     <string name="settings_floating_auto_hide">圣光底栏自动隐匿</string>
     <string name="settings_floating_auto_hide_summary">3秒无圣光操作后底栏自动隐匿</string>
     <string name="settings_floating_swipe_hide">圣光底栏滑动隐匿</string>
@@ -44,15 +34,8 @@
     <string name="settings_compact_rounded_bar">紧凑圆角风格</string>
     <string name="settings_compact_rounded_bar_summary">使用圆角紧凑间距的浮动底栏</string>
     <string name="settings_stats_top_layout">顶部圣光阵</string>
-    <string name="settings_stats_top_layout_summary">选择顶部信息圣卡样式</string>
     <string name="settings_stats_top_layout_list">列表圣卡</string>
     <string name="settings_stats_top_layout_grid">网格圣卡</string>
-    <string name="settings_block_kernelpatch_update">封印灵魂之力更新神谕</string>
-    <string name="settings_block_kernelpatch_update_summary">拒绝接收来自灵魂之力的神谕更新</string>
-    <string name="settings_block_androidpatch_update">封印圣光阵法更新神谕</string>
-    <string name="settings_block_androidpatch_update_summary">拒绝接收来自圣光阵法的更新神谕</string>
-    <string name="settings_disable_module_update_check">禁用圣光阵更新检查</string>
-    <string name="settings_disable_module_update_check_summary">禁用星辰圣光阵的自动更新检查</string>
 
     <string name="reboot">神翼再生</string>
     <string name="settings">神谕圣所</string>
@@ -65,102 +48,26 @@
     <string name="developer_and_maintainer">圣光使者 | 圣域守护者</string>
     <string name="settings_app_language">圣域语言</string>
     <string name="system_default">天意默认</string>
-    <string name="settings_global_namespace_mode">全域圣境领域</string>
-    <string name="settings_global_namespace_mode_summary">所有祝福仪式共享同一个圣域空间</string>
-    <string name="settings_clear_super_key_dialog">确定要继续施与这份神力吗？</string>
-    <string name="settings_sucompat">旧版圣光兼容</string>
-    <string name="settings_sucompat_summary">启用 path_probe 圣光探路钩，以承旧版圣者之缘</string>
-    <string name="settings_selinux_hide">隐藏圣境结界修改（测试）</string>
-    <string name="settings_selinux_hide_summary">隐藏圣境结界的变更，防止被凡间进程察觉（此神术可能不稳）。安全模式可令其失效。</string>
-    <string name="settings_selinux_hide_warning_title">神谕警告</string>
-    <string name="settings_selinux_hide_warning_below_5_10">此神术仅在 5.10 及以上内核验证过，低版本内核上可能不稳。</string>
-    <string name="settings_selinux_hide_warning_non_gki">非GKI内核风险更高，可能导致无法苏醒，请确保已备份圣物。</string>
 
-    <string name="home_learn_apatch">探寻灵魂之力</string>
-    <string name="home_click_to_learn_apatch">探寻灵魂之力的奥秘及使用方法</string>
     <string name="settings_hide_apatch_card">隐藏"探寻灵魂之力"圣阵</string>
     <string name="settings_hide_apatch_card_summary">隐藏圣光之殿的"探寻灵魂之力"圣阵</string>
 
-    <string name="about_source_code"><![CDATA[<p>在 %1$s 查看圣域神典<p/>加入我们的 %2$s 圣光殿堂<p/>加入我们的 %3$s 天使之国]]></string>
     <string name="send_log">发送神谕日志</string>
     <string name="settings_clean_storage">净化圣所数据</string>
     <string name="settings_clean_storage_summary">涤除残留遗物引发的下载或应用失败</string>
     <string name="settings_clean_storage_confirm">将涤除已降临的主题、引入的乐章、圣音与全部缓存，并重筑相关圣所。圣典设定将被保留。是否继续？</string>
     <string name="settings_clean_storage_done">净化完成</string>
-    <string name="save_log">保存神谕日志</string>
-    <string name="log_saved">神谕日志已保存</string>
-    <string name="safe_mode">圣域守护模式</string>
     <string name="github">GitHub</string>
-    <string name="telegram">Telegram</string>
-    <string name="support_or_donate">神力支持 / 圣光捐赠</string>
 
-    <string name="super_key">圣光之心</string>
-    <string name="clear_super_key">净化圣光之心</string>
-    <string name="patch_set_superkey">祝祷圣光之心</string>
-    <string name="home_patch_set_key_desc">灵魂之力的唯一神谕密印</string>
-    <string name="home_patch_next_step">下一步神谕</string>
 
-    <string name="home_not_installed">尚未蒙恩</string>
-    <string name="home_install_unknown">未蒙恩或未祝祷</string>
-    <string name="home_install_unknown_summary">点击接受神恩</string>
-    <string name="home_click_to_install">点击蒙恩</string>
-    <string name="home_working">圣境开启</string>
-    <string name="home_kp_need_update">发现新的神谕秘语</string>
-    <string name="home_kp_cando_update">更新神谕</string>
 
-    <string name="home_installing">正在接受神恩</string>
 
-    <string name="kpatch_version">神恩等级: %s</string>
-    <string name="apatch_version">祝福等级: %s</string>
 
-    <string name="kpatch_version_update" formatted="false">神恩等级: %s -> %s</string>
-    <string name="kpatch_shadow_path_title">灵魂之力</string>
-    <string name="home_auth_key_title">祈祷圣光之心</string>
-    <string name="home_auth_key_desc">祝祷通过后开始使用神力</string>
-    <string name="home_kpatch_info_title">圣域情报</string>
 
-    <string name="home_ap_cando_install">蒙恩</string>
-    <string name="home_ap_cando_uninstall">解除祝福</string>
-    <string name="home_ap_cando_reboot">神翼再生</string>
 
-    <string name="patch_title">神力降临</string>
 
-    <string name="patch_config_title">圣光阵</string>
-    <string name="patch_mode_bootimg_patch">模式：圣光加持</string>
-    <string name="patch_mode_patch_and_install">模式：加持并蒙恩</string>
-    <string name="patch_mode_install_to_next_slot">模式：转移到备用星辰容器 (圣典仪式后)</string>
-    <string name="patch_mode_uninstall_patch">模式：解除灵魂之力</string>
-    <string name="patch_select_bootimg_btn">选择圣器容器</string>
-    <string name="patch_embed_kpm_btn">镶嵌星辰圣光阵</string>
-    <string name="patch_start_patch_btn">开始祈祷</string>
-    <string name="patch_start_unpatch_btn">解除加持</string>
-    <string name="patch_item_error">!!神力失控!!</string>
-    <string name="patch_item_bootimg">圣器容器</string>
-    <string name="patch_item_bootimg_slot">星辰位置:</string>
-    <string name="patch_item_bootimg_dev">圣光道具:</string>
-    <string name="patch_item_kernel">灵魂核心</string>
-    <string name="patch_item_kpimg">圣光印记</string>
-    <string name="patch_item_kpimg_version">神恩等级:</string>
-    <string name="patch_item_kpimg_comile_time">祈祷时间:</string>
-    <string name="patch_item_kpimg_config">圣光配置:</string>
-    <string name="patch_item_new_extra_kpm">镶嵌新星之圣光阵</string>
-    <string name="patch_item_existed_extra_kpm">已存在</string>
-    <string name="patch_item_extra_name">圣光名称:</string>
-    <string name="patch_item_extra_version">神恩等级:</string>
-    <string name="patch_item_extra_author">创造者:</string>
-    <string name="patch_item_extra_kpm_license">圣契:</string>
-    <string name="patch_item_extra_kpm_desciption">圣光描述:</string>
-    <string name="patch_item_extra_args">神谕参数:</string>
-    <string name="patch_item_extra_event">触发事件:</string>
-    <string name="patch_item_skey">圣光之心</string>
-    <string name="patch_custom_superkey">自选圣光之心</string>
-    <string name="patch_custom_superkey_summary">你仍可设圣光之心来管理神恩，圣器已获神印授权</string>
-    <string name="patch_item_set_skey_label">圣光之心长度应为8-63个字符，包含星辰和月华，不能含有混沌之力。</string>
-    <string name="patch_confirm_superkey">再次祝祷圣光之心</string>
-    <string name="patch_skey_mismatch">两次圣光之心不契合</string>
 
     <string name="home_kernel">灵魂核心等级</string>
-    <string name="home_manager_version">神谕管理器等级</string>
     <string name="home_fingerprint">圣光印记</string>
 
     <string name="home_selinux_status">圣境结界状态</string>
@@ -169,130 +76,21 @@
     <string name="home_selinux_status_permissive">结界宽容模式</string>
     <string name="home_selinux_status_unknown">结界状态未知</string>
 
-    <string name="settings_selinux_mode">圣界结界模式</string>
-    <string name="settings_selinux_mode_summary">选择圣界结界的执行模式</string>
-    <string name="settings_selinux_mode_enforcing">强制执行 (严格)</string>
-    <string name="settings_selinux_mode_permissive">宽容模式 (宽松)</string>
-    <string name="settings_selinux_current_mode">当前: %s</string>
-    <string name="settings_selinux_mode_enforcing_summary">圣界结界将严格执行所有神圣法则</string>
-    <string name="settings_selinux_mode_permissive_summary">圣界结界仅记录违规行为，不会阻止</string>
 
     <string name="home_device_info">圣光道具</string>
     <string name="home_system_version">天界系统等级</string>
-    <string name="home_kpatch_version">灵魂之力等级</string>
-    <string name="home_su_path">圣者路径</string>
-    <string name="home_apatch_version">圣光工坊版本</string>
 
-    <string name="kpm">灵魂晶石</string>
-    <string name="kpm_kp_not_installed">灵魂之力尚未开启</string>
-    <string name="kpm_add_kpm">添加灵魂晶石</string>
-    <string name="kpm_load">唤醒</string>
-    <string name="kpm_install">祝祷</string>
-    <string name="kpm_embed">融合</string>
-    <string name="kpm_embedded">已融合</string>
-    <string name="kpm_installed">已唤醒</string>
-    <string name="kpm_disabled">已沉睡（重启后生效）</string>
-    <string name="kpm_embedded_unload_invalid">已融合的灵魂晶石无法解除；重启后仍会保持。</string>
-    <string name="kpm_loaded">已唤醒</string>
-    <string name="kpm_load_toast_succ">唤醒成功</string>
-    <string name="kpm_install_toast_succ">安装完成，圣境重启后降世</string>
-    <string name="kpm_load_toast_failed">唤醒失败</string>
-    <string name="kpm_unload_confirm">解除%s灵魂晶石？</string>
-    <string name="kpm_unload">解除祝福</string>
-    <string name="kpm_control">引导</string>
-    <string name="kpm_apm_empty">未唤醒灵魂晶石</string>
-    <string name="kpm_custom_order">切换自定义灵魂晶石顺序</string>
-    <string name="kpm_load_failed">加载圣晶失败</string>
-    <string name="kpm_version">神恩等级</string>
-    <string name="kpm_license">圣契</string>
-    <string name="kpm_author">创造者</string>
-    <string name="kpm_desc">圣光描述</string>
-    <string name="kpm_args">神谕参数</string>
 
-    <string name="su_title">圣光使者</string>
-    <string name="su_selinux_via_hook">通过圣光阵穿越结界</string>
-    <string name="su_pkg_excluded_label">圣光免疫</string>
-    <string name="su_batch_exclude_title">群体免疫</string>
-    <string name="su_batch_exclude_content">为全部非圣光使者施加圣光护佑,请选择一项神力</string>
-    <string name="su_exclude_btn">施加圣佑</string>
-    <string name="su_exclude_reverse_btn">解除圣佑</string>
 
     <!-- 超级用户应用操作弹窗 -->
-    <string name="su_app_action_title">圣器操作</string>
-    <string name="su_app_action_content">请选择一个神力来对圣器执行</string>
-    <string name="su_app_action_launch">降临圣器</string>
-    <string name="su_app_action_force_stop">圣罚止息</string>
-    <string name="su_app_action_launch_success">正在降临圣器 %s</string>
-    <string name="su_app_action_force_stop_success">已圣罚止息 %s</string>
-    <string name="su_app_action_failed">神恩未至: %s</string>
 
     <!-- SU Audit Log -->
-    <string name="su_audit_log_title">授权日志</string>
-    <string name="su_audit_log_empty">暂无授权记录</string>
-    <string name="su_audit_log_clear">清除日志</string>
-    <string name="su_audit_log_clear_confirm">确认清除所有授权记录？</string>
-    <string name="su_audit_action_grant">已授权</string>
-    <string name="su_audit_action_revoke">已撤销</string>
-    <string name="su_audit_action_exclude">已排除</string>
-    <string name="su_audit_tab_usage">使用记录</string>
-    <string name="su_audit_tab_operations">操作记录</string>
 
-    <string name="su_pkg_excluded_setting_title">圣佑设置</string>
-    <string name="su_pkg_excluded_setting_summary">启用此选项将允许圣光工坊恢复此应用所受的神力影响。</string>
-    <string name="su_pkg_root_setting_title">圣光使者</string>
-    <string name="su_pkg_root_setting_summary">启用此选项为你的圣光使者赋予圣光之辉，能使用圣光咒语</string>
-    <string name="su_pkg_normal_setting_title">凡尘模式</string>
-    <string name="su_pkg_normal_setting_summary">凡尘状态，无圣光之辉，不赋予圣光使者之力。</string>
-    <string name="su_show_system_apps">显示系统圣光使者</string>
-    <string name="su_hide_system_apps">隐藏系统圣光使者</string>
-    <string name="su_refresh">更新圣光阵</string>
-    <string name="su_multi_select_title">选择应用</string>
-    <string name="su_multi_select_count">已选择 %d 个</string>
-    <string name="su_multi_select_grant_root">授予 ROOT</string>
-    <string name="su_multi_select_revoke_root">撤销 ROOT</string>
-    <string name="su_multi_select_exclude">排除</string>
-    <string name="su_multi_select_confirm_grant">授予 ROOT 给 %d 个应用？</string>
-    <string name="su_multi_select_confirm_revoke">撤销 %d 个应用的 ROOT 权限？</string>
-    <string name="su_multi_select_confirm_exclude">排除 %d 个应用？</string>
-    <string name="su_multi_select_enter">多选</string>
 
-    <string name="apm">星辰圣光阵</string>
-    <string name="apm_not_installed">星辰守护尚未开启</string>
-    <string name="apm_failed_to_enable">唤醒圣光阵失败: %s</string>
-    <string name="apm_failed_to_disable">解除圣光阵失败: %s</string>
-    <string name="apm_empty">未祝祷圣光阵</string>
-    <string name="apm_load_failed">圣光阵祝祷失败</string>
     <string name="apm_remove">移除</string>
-    <string name="apm_undo">撤销</string>
-    <string name="apm_install">祝祷</string>
-    <string name="apm_uninstall_confirm">解除%s圣光阵祝祷？</string>
-    <string name="apm_uninstall_success">%s已解除祝祷</string>
-    <string name="apm_uninstall_failed">解除祝祷失败: %s</string>
-    <string name="apm_undo_uninstall_success">%s已恢复祝祷</string>
-    <string name="apm_undo_uninstall_failed">恢复祝祷失败: %s</string>
-    <string name="apm_version">神恩等级</string>
-    <string name="apm_author">创造者</string>
-    <string name="apm_desc">圣光描述</string>
-    <string name="apm_overlay_fs_not_available">星辰回廊被灵魂核心封印，圣光阵不可用！</string>
-    <string name="apm_magisk_conflict">由于与Magisk圣光阵冲突，此圣光阵不可用！</string>
-    <string name="apm_mount_warning_title">重要提示</string>
-    <string name="apm_mount_warning_message">默认不挂载圣光阵，请使用内置挂载系统或者元圣光阵</string>
-    <string name="apm_mount_warning_button">我知道了</string>
-    <string name="apm_reboot_to_apply">神翼再生后生效</string>
-    <string name="apm_changelog">圣光更新记录</string>
     <string name="apm_update">更新神恩</string>
-    <string name="apm_downloading">正在下载圣光阵: %s</string>
-    <string name="apm_start_downloading">开始下载: %s</string>
-    <string name="apm_new_version_available">发现新版本%s圣光阵，点击升级。</string>
 
-    <string name="hide_apatch_manager">隐藏圣光工坊</string>
-    <string name="hide_apatch_manager_summary">安装一个随机包名和自定义圣光名的代理圣光使者</string>
-    <string name="hide_apatch_dialog_new_manager_name">新圣光使者名称</string>
-    <string name="hide_apatch_dialog_summary">这将作为显示在天界中的新圣光使者名称</string>
-    <string name="hide_apatch_manager_failure">隐藏失败。请报告此神力错误！</string>
 
-    <string name="setting_reset_su_path">重置圣光使者路径</string>
-    <string name="setting_reset_su_new_path">新完整圣光路径</string>
 
     <string name="settings_folkx_engine_title">FolkX圣光动画引擎</string>
     <string name="settings_folkx_engine_summary">在顶层圣阵页面切换时使用圣域之光般的物理弹跳动画</string>
@@ -304,68 +102,12 @@
     <string name="settings_folkx_animation_vertical">圣光垂直滑动</string>
     <string name="settings_folkx_animation_diagonal">圣光对角滑动</string>
 
-    <string name="apm_webui_open">开启</string>
-    <string name="apm_action">圣光操作</string>
-    <string name="module_shortcut_add">圣光传送门</string>
-    <string name="module_shortcut_not_supported">天使召唤界面不支持桌面圣光传送门。</string>
-    <string name="module_shortcut_created">已在桌面创建圣光传送门。</string>
-    <string name="module_shortcut_updated">圣光传送门已更新。</string>
-    <string name="module_shortcut_permission_tip_xiaomi">请在小米天使界面的设置中为本天使启用"创建桌面圣光传送门"权限。</string>
-    <string name="module_shortcut_permission_tip_oppo">请在OPPO天使界面的设置中为本天使启用"桌面圣光传送门"权限。</string>
-    <string name="module_shortcut_permission_tip_default">若创建圣光传送门失败，请在天界圣光阵设置中为本天使启用桌面圣光传送门权限。</string>
-    <string name="module_shortcut_name">圣光传送门名称</string>
-    <string name="module_shortcut_icon">圣光传送门图标</string>
-    <string name="module_shortcut_type">圣光传送门类型</string>
-    <string name="module_shortcut_type_webui">WebUI</string>
-    <string name="module_shortcut_type_action">Action</string>
-    <string name="module_shortcut_icon_default">使用默认图标</string>
-    <string name="module_shortcut_icon_select">选择图标</string>
     <string name="enable_web_debugging">启用圣光阵调试</string>
     <string name="enable_web_debugging_summary">可用于调试天界圣光阵。请仅在需要时启用。</string>
-    <string name="settings_apm_install_confirm">安装圣光阵确认</string>
-    <string name="settings_apm_install_confirm_summary">安装圣光阵前显示确认圣光阵</string>
-    <string name="settings_apm_stay_on_page">留在圣光阵页面</string>
-    <string name="settings_apm_stay_on_page_summary">星辰圣光阵执行完神力后不自动返回</string>
-    <string name="settings_enable_module_shortcut_add">启用圣光传送门添加按钮</string>
-    <string name="settings_enable_module_shortcut_add_summary">在系统圣光阵页面显示 WebUI 圣光传送门添加按钮</string>
-    <string name="settings_module_sort_optimization">圣光阵排序优化</string>
-    <string name="settings_module_sort_optimization_summary">让系统圣光阵带有WebUI和Action的圣光阵排在前面</string>
-    <string name="apm_custom_order">自定义圣光阵顺序</string>
-    <string name="apm_drag_to_reorder">拖动调整顺序</string>
-    <string name="apm_reset_order">恢复自动排序</string>
-    <string name="settings_fold_system_module">折叠系统圣光阵</string>
-    <string name="settings_fold_system_module_summary">点击圣光阵卡片展开/折叠操作按钮</string>
-        <string name="settings_simple_list_bottom_bar">简约圣光底栏</string>
-        <string name="settings_simple_list_bottom_bar_summary">圣光阵符法使用纯图标按钮样式，灵感来自APatch</string>
-    <string name="settings_spliced_card_group">拼接圣光阵符</string>
-    <string name="settings_spliced_card_group_summary">圣光阵符法使用连续拼接卡片样式</string>
-    <string name="settings_show_kpm_status_badge">显示魂晶石状态徽记</string>
-    <string name="settings_show_kpm_status_badge_summary">在魂晶石卡上显化已融合/已激活的状态徽记</string>
-    <string name="apm_install_confirm_title">安装圣光阵</string>
-    <string name="settings_show_more_module_info">显示圣光阵详细信息</string>
-    <string name="settings_show_more_module_info_summary">在圣光阵列表中显示圣光阵 ID 和大小</string>
-    <string name="apm_install_confirm_content">确定要祝祷%s圣光阵吗？</string>
-    <string name="apm_disable_all_title">禁用所有圣光阵</string>
-    <string name="apm_disable_all_confirm">确定禁用全部圣光阵吗？此操作将停用所有已安装的圣光阵</string>
     <string name="apm_enable_module_banner">启用圣光阵横幅</string>
     <string name="apm_enable_module_banner_summary">为支持的圣光阵显示横幅图片</string>
     <string name="apm_enable_folk_banner">自定义圣光阵横幅</string>
     <string name="apm_enable_folk_banner_summary">长按圣光阵卡片自选横幅图片</string>
-    <string name="apm_folk_banner_title">模組編輯</string>
-    <string name="apm_folk_banner_select">选择圣像</string>
-    <string name="apm_folk_banner_clear">净化 FolkBanner</string>
-    <string name="apm_folk_banner_saved">已为 %s 附上 FolkBanner 圣光。</string>
-    <string name="apm_folk_banner_cleared">%s 的 FolkBanner 圣光已净化。</string>
-    <string name="apm_folk_banner_failed">为 %s 附上 FolkBanner 圣光失败。</string>
-    <string name="folk_banner_custom_info_title">圣光阵信息</string>
-    <string name="folk_banner_custom_info_name">圣名</string>
-    <string name="folk_banner_custom_info_version">神恩等级</string>
-    <string name="folk_banner_custom_info_author">圣者</string>
-    <string name="folk_banner_custom_info_description">圣光述</string>
-    <string name="folk_banner_custom_info_save">圣封</string>
-    <string name="folk_banner_custom_info_reset">归元</string>
-    <string name="folk_banner_custom_info_saved">已为 %s 封存圣光阵信息</string>
-    <string name="folk_banner_custom_info_reset_done">已归元 %s 的圣光阵信息</string>
     <string name="apm_banner_api_mode">圣光图鉴模式</string>
     <string name="apm_banner_api_mode_summary">以圣光图鉴之术或凡间图库为圣光阵提供圣图</string>
     <string name="apm_banner_api_source">布置圣光图鉴</string>
@@ -395,102 +137,21 @@
     <string name="settings_banner_custom_opacity_summary">自定义圣光阵横幅透明度，不再跟随天界背景模式</string>
     <string name="settings_banner_opacity">圣光阵横幅不透明度</string>
 
-    <string name="settings_donot_store_superkey">不在本地存储圣光之心</string>
-    <string name="settings_donot_store_superkey_summary">每次启动圣光工坊时验证圣光之心</string>
 
-    <string name="mode_select_page_title">蒙恩</string>
-    <string name="mode_select_page_patch_and_install">加持并蒙恩</string>
-    <string name="mode_select_page_select_file">选择要加持的圣器容器</string>
-    <string name="mode_select_page_install_inactive_slot">祝祷到备用星辰容器 (圣典仪式后)</string>
-    <string name="mode_select_page_install_inactive_slot_warning">你的圣光道具将在神翼再生后**强制**启动到当前未激活的星辰位置！\n仅在圣典仪式完成后使用此选项。\n继续吗？</string>
-    <string name="mode_select_page_select_kpimg">使用本地圣光补丁 (KPimg)</string>
-    <string name="mode_select_page_init_boot_warning_title">选择了被亵渎的圣物</string>
-    <string name="mode_select_page_init_boot_warning_message">此圣物似乎是 init_boot 或 vendor_boot 的残片。
-圣光补丁需要降临于 boot 圣物之上。
 
-请呈上正确的 boot 圣物（通常名为 boot.img）。
-
-仍要强行施展？</string>
-    <string name="patch_custom_kpimg_label">自定义 KPimg</string>
-    <string name="patch_custom_kpimg_file">文件: %s</string>
-    <string name="patch_select_kpimg_btn">选择 KPimg</string>
-
-    <string name="home_dialog_auth_fail_title">祝祷失败</string>
-    <string name="home_dialog_auth_fail_content">无法祝祷圣光之心，导致 FolkPatch 激活失败。
-以下是祝祷失败的一些可能原因——请对号入座：
-\n1. 你根本没使用 KernelPatch 来加持 boot.img，或者忘了自己到底做了啥。
-\n2. 加持完的 boot.img 还躺在电脑里休眠，根本没启圣到设备。
-\n3. 圣光之心输错了，或者夹杂了混沌符号，比如来自异界符文的字符。
-\n4. 你的圣光道具可能并不兼容 FolkPatch 和 KernelPatch，强行施法也是徒劳。
-\n5. 你可能搞了一些神秘操作——比如用了某些排除圣名的魔法把 FolkPatch 给屏蔽了，结果把自己整出局了。
-\n请先好好检查一遍，再试一次。如果问题依旧，欢迎到官方圣光塔的 issue 页面提问。
-毕竟，有些问题可能纯粹是您自己亲手造成的！
-祝你好运啊！顺带一提，你点击下面的文档按钮准没错！</string>
 
     <string name="home_more_menu_feedback_or_suggestion">反馈或建议</string>
     <string name="home_more_menu_about">关于</string>
-    <string name="home_more_menu_document">文档</string>
 
     <string name="home_more_menu_music_play">播放圣乐</string>
     <string name="home_more_menu_music_pause">暂停圣乐</string>
 
     <!-- Plugin strings -->
-    <string name="plugin_title">圣光插件</string>
-    <string name="plugin_refresh">刷新圣光</string>
-    <string name="plugin_summary_title">APD Lua Plugin</string>
-    <string name="plugin_summary_not_installed">APD 未降临 · 圣光不可用</string>
-    <string name="plugin_state_enabled">已启</string>
-    <string name="plugin_state_disabled">已禁</string>
-    <string name="plugin_toggle_failed">祝福失败</string>
-    <string name="plugin_empty">尚未祝福插件</string>
-    <string name="plugin_empty_hint">将 main.lua 置于 /data/adb/plugins/&lt;id&gt;/ 即可祝福插件。</string>
-    <string name="plugin_load_failed">圣光引渡失败</string>
-    <string name="plugin_manage_summary">管理轻量 Lua 圣光插件</string>
-    <string name="plugin_install">祝祷插件</string>
-    <string name="plugin_install_success">插件祝祷成功</string>
-    <string name="plugin_install_failed">插件祝祷失败</string>
-    <string name="plugin_uninstall_title">解除圣契</string>
-    <string name="plugin_uninstall">解除</string>
-    <string name="plugin_uninstall_confirm">确定解除插件 %1$s 的圣契？</string>
-    <string name="plugin_uninstall_success">圣契已解除</string>
-    <string name="plugin_uninstall_failed">圣契解除失败</string>
-    <string name="plugin_action">施行</string>
-    <string name="plugin_action_success">圣术施行成功</string>
-    <string name="plugin_action_failed">圣术施行失败</string>
-    <string name="plugin_quick_action_success">施行成功</string>
-    <string name="plugin_quick_action_failed">施行失败</string>
-    <string name="plugin_config">圣设</string>
-    <string name="plugin_config_title">圣设 %1$s</string>
-    <string name="plugin_config_saved">圣设已存</string>
-    <string name="plugin_log_title">圣光输出</string>
-    <string name="plugin_log_empty">暂无施行日志</string>
-    <string name="plugin_log_page_title">插件圣录</string>
-    <string name="plugin_log_all_empty">诸插件皆无日志</string>
-    <string name="plugin_log_clear">涤净日志</string>
-    <string name="plugin_log_cleared">日志已涤净</string>
-    <string name="plugin_log_export">导出日志</string>
 
-    <string name="home_dialog_uninstall_title">解除祝福</string>
     
-    <string name="home_dialog_uninstall_ap_only">仅解除天使祝福</string>
-    <string name="home_dialog_uninstall_ap_only_desc">仅移除天使祝福，保留天使管理器</string>
-    <string name="home_dialog_uninstall_all">完全解除祝福</string>
-    <string name="home_dialog_uninstall_all_desc">移除天使祝福并进入完整解除流程</string>
 
-    <string name="kpm_control_dialog_title">引导灵魂晶石</string>
-    <string name="kpm_control_dialog_content">请输入神谕密语：</string>
-    <string name="kpm_control_paramters">神谕参数</string>
-    <string name="kpm_control_outMsg">神力输出</string>
-    <string name="kpm_control_ok">神力生效！</string>
-    <string name="kpm_control_failed">神力失效！</string>
     
-    <string name="settings_night_mode_follow_sys">星夜模式跟随天界</string>
-    <string name="settings_night_mode_follow_sys_summary">根据天界设置自动切换星夜模式</string>
-    <string name="settings_night_theme_enabled">星夜模式</string>
     
-    <string name="settings_use_system_color_theme">天界颜色主题</string>
-    <string name="settings_use_system_color_theme_summary">使用天界根据圣光阵生成的颜色主题</string>
-    <string name="settings_custom_color_theme">圣光颜色主题</string>
 
     <string name="amber_theme">圣光琥珀</string>
     <string name="blue_theme">天穹之蓝</string>
@@ -515,80 +176,23 @@
     <string name="theme_light">浅色</string>
     <string name="theme_dark">深色</string>
     <string name="theme_system">系统</string>
-    <string name="loading_modules">正在获取模块…</string>
-    <string name="loading_scripts">正在查找脚本…</string>
     <string name="loading_themes">正在加载主题…</string>
     <string name="loading_apis">正在加载 API 法门…</string>
     <string name="retry">重试</string>
 
-    <string name="about_app_desc">一个基于灵魂核心的圣光化身解决方案，支持灵魂晶石和灵魂函数hook，无需重新锻造灵魂核心。</string>
     <string name="about_powered_by">由%1$s提供圣光力量</string>
-    <string name="about_telegram_group">圣光殿堂群组</string>
     
     <!-- Online Module Strings -->
-    <string name="online_module_title">在线星辰圣光阵</string>
-    <string name="online_module_download_start">开始祈召: %s</string>
-    <string name="online_module_download_complete">祈召完成: %s</string>
-    <string name="online_module_download_notification">正在祈召%s。请查看圣光水晶球了解进度，祈召完成后请查看圣光仓库。</string>
 
     <!-- Online Module Source Strings -->
-    <string name="online_module_source_official">圣庭官方</string>
-    <string name="online_module_source_cluster">圣光仓库集群</string>
-    <string name="online_module_source_custom">自设圣光仓库</string>
-    <string name="online_module_source_title">圣光之源</string>
-    <string name="online_module_repo_url_title">圣光仓库地址</string>
-    <string name="online_module_repo_url_hint">https://example.com/modules.json</string>
-    <string name="online_module_repo_settings">圣光仓库设置</string>
 
     <!-- Repo Module Detail Strings -->
-    <string name="repo_module_detail_links">圣光链接</string>
-    <string name="repo_module_detail_homepage">圣域主页</string>
-    <string name="repo_module_detail_source">圣光源码</string>
-    <string name="repo_module_detail_support">圣光反馈</string>
-    <string name="repo_module_detail_versions">圣光版本史</string>
-    <string name="repo_module_detail_download">祈召并施展</string>
-    <string name="repo_module_detail_by_author">作者：%1$s</string>
-    <string name="online_module_repo_browse_title">浏览圣光仓库</string>
-    <string name="online_module_view_modules">查看圣光阵</string>
-    <string name="online_module_select_repo_hint">选择圣光仓库以浏览圣光阵</string>
-    <string name="online_module_enter_url_hint">输入圣光仓库地址</string>
-    <string name="online_module_invalid_url">请输入有效的圣光地址</string>
-    <string name="online_module_explore_repos">探索圣光仓库</string>
-    <string name="online_module_repo_count">%1$d 座圣光仓库</string>
-    <string name="online_module_module_count">%1$d+ 座圣光阵</string>
-    <string name="online_module_select_repo">选择圣光仓库</string>
-    <string name="online_module_enter_url_manually">手动输入圣光地址</string>
-    <string name="online_module_default_repo">默认圣光仓库</string>
-    <string name="online_module_repo_list_title">圣光仓库列表</string>
-    <string name="online_module_load_error">祈召失败，请刷新再试</string>
-    <string name="online_module_no_search_results">未找到匹配的圣光阵</string>
-    <string name="online_module_module_detail_download_count">下载次数：%1$s</string>
-    <string name="online_module_module_detail_last_update">最后更新：%1$s</string>
-    <string name="online_module_module_detail_version">版本：%1$s</string>
-    <string name="online_module_module_detail_size">大小：%1$s</string>
-    <string name="online_module_module_detail_author">作者：%1$s</string>
-    <string name="online_module_module_detail_description">描述：%1$s</string>
-    <string name="online_module_module_detail_suitable">适用于：%1$s</string>
-    <string name="online_module_module_detail_changelog">更新日志：%1$s</string>
-    <string name="online_module_module_detail_instructions">使用说明：%1$s</string>
 
     <!-- Online KPM Strings -->
-    <string name="online_kpm_title">在线灵魂晶石</string>
-    <string name="online_kpm_download_start">开始祈召: %s</string>
-    <string name="online_kpm_download_complete">祈召完成: %s</string>
-    <string name="online_kpm_download_notification">正在祈召%s。请查看圣光水晶球了解进度，祈召完成后请查看圣光仓库。</string>
 
     <!-- Online Plugin Strings -->
-    <string name="online_plugin_title">在线圣光插件</string>
-    <string name="online_plugin_download_start">开始祈召: %s</string>
-    <string name="online_plugin_download_complete">祈召完成: %s</string>
-    <string name="online_plugin_download_notification">正在祈召%s。请查看圣光水晶球了解进度，祈召完成后请查看圣光仓库。</string>
 
     <!-- Online Script Strings -->
-    <string name="online_script_title">在线圣光咒语</string>
-    <string name="online_script_download_start">开始祈召: %s</string>
-    <string name="online_script_download_complete">祈召完成: %s</string>
-    <string name="online_script_download_notification">正在祈召%s</string>
 
     <!-- Crash Handle Strings -->
     <string name="crash_handle_title">圣境事故报告</string>
@@ -597,72 +201,16 @@
     <!-- About Screen Strings -->
     <string name="about_app_version">应用魔法等级: %s</string>
     <string name="about_github">天使书仓库</string>
-    <string name="about_telegram_channel">天使圣堂频道</string>
 
     <string name="settings_app_dpi">天使使清晰度</string>
     <string name="dpi_apply_settings">确认</string>
-    <string name="dpi_confirm_title">确认更改天使使清晰度</string>
-    <string name="dpi_confirm_message">将天使使清晰度从%1$s更改为%2$s？</string>
-    <string name="settings_magic_mount">Folk Mount API</string>
-    <string name="settings_magic_mount_summary">启用内置的圣光阵挂载系统</string>
-    <string name="settings_new_app_profile_enabled">新天使使自动圣授</string>
-    <string name="settings_new_app_profile_enabled_summary">开启后，新降临的天使使会自动套用下方预设的圣授权式</string>
-    <string name="settings_new_app_profile_mode">默认圣授权式</string>
-    <string name="settings_new_app_profile_normal">凡人</string>
-    <string name="settings_new_app_profile_root">圣者</string>
-    <string name="settings_new_app_profile_exclude">驱逐</string>
-    <string name="settings_hide_service">FolkPatch Hide</string>
-    <string name="settings_hide_service_summary">以圣光遮蔽Bootloader解锁状态</string>
 
-    <string name="settings_shizuku_service">Shizuku 圣泉</string>
-    <string name="settings_shizuku_service_summary">为信奉 Shizuku 的应用降下 ADB 级 API 圣光（内置圣泉，无需外物）</string>
-    <string name="settings_shizuku_service_running">Shizuku 圣泉奔涌中</string>
-    <string name="settings_shizuku_started">Shizuku 圣泉已涌动</string>
-    <string name="settings_shizuku_start_failed">Shizuku 圣泉涌动失败</string>
-    <string name="settings_shizuku_stopped">Shizuku 圣泉已平息</string>
-    <string name="settings_shizuku_stop_failed">Shizuku 圣泉平息失败</string>
-    <string name="shizuku_permission_title">是否赐福 %1$s 使用 Shizuku？</string>
-    <string name="shizuku_permission_message">该应用将通过 Shizuku 以 root 圣权调用系统 API</string>
-    <string name="shizuku_permission_allow">赐福</string>
-    <string name="shizuku_permission_allow_once">仅此一瞬</string>
-    <string name="shizuku_permission_deny">拒绝赐福</string>
-    <string name="shizuku_permission_allow_summary">永久授予访问权限</string>
-    <string name="shizuku_permission_allow_once_summary">仅此一瞬</string>
-    <string name="shizuku_permission_deny_summary">拒绝赐予访问</string>
-    <string name="shizuku_permission_binder_timeout">无法连接 Shizuku 服务，请重启服务后重试</string>
-    <string name="shizuku_management_title">Shizuku 圣权册</string>
-    <string name="shizuku_management_empty">未寻得通晓 Shizuku 之法器</string>
-    <string name="shizuku_management_unavailable">Shizuku 圣泉尚未涌动</string>
-    <string name="shizuku_management_load_failed">圣权名录载入失败</string>
-    <string name="shizuku_management_uid">UID %1$d</string>
-    <string name="shizuku_management_granted">已赐福</string>
-    <string name="shizuku_management_denied">未赐福</string>
-    <string name="shizuku_management_update_failed">授权更新失败</string>
-    <string name="shizuku_management_root_access">圣权</string>
-    <string name="shizuku_management_allowed_title">御使 Shizuku</string>
-    <string name="shizuku_management_root_access_desc">以圣权（root）行令。关闭则降为凡尘之躯（shell，UID 2000），不得窥探受护之藏</string>
-    <string name="shizuku_management_badge_allowed">已允</string>
-    <string name="shizuku_management_badge_denied">已拒</string>
-    <string name="shizuku_management_badge_root">ROOT</string>
-    <string name="shizuku_management_badge_shell">SHELL</string>
-    <string name="shizuku_log_title">Shizuku 神谕日志</string>
-    <string name="shizuku_log_empty">暂无神谕日志</string>
-    <string name="shizuku_log_refresh">重览</string>
-    <string name="shizuku_log_clear">焚卷</string>
-    <string name="shizuku_log_cleared">神谕已焚</string>
-    <string name="shizuku_log_export">誊录</string>
-    <string name="shizuku_log_copy">拓印</string>
-    <string name="shizuku_log_copied">已拓印至剪贴板</string>
-    <string name="shizuku_log_source_server">神谕端日志</string>
-    <string name="shizuku_log_source_logcat">Logcat</string>
-    <string name="shizuku_log_search_hint">检索神谕</string>
 <string name="settings_app_title">天使使名称</string>
     <string name="app_title_custom">自定义圣名</string>
     <string name="settings_custom_app_title">设置天使使名称</string>
     <string name="custom_app_title_dialog_title">自定义天使使名称</string>
     <string name="custom_app_title_dialog_hint">请赐予圣名</string>
     <string name="custom_app_title_dialog_confirm">赐名</string>
-    <string name="custom_app_title_dialog_empty">圣名不可为空</string>
     <string name="cancel">取消赐名</string>
     <string name="settings_custom_background">自定义天使背景</string>
     <string name="settings_custom_background_enabled">已启用自定义天使背景</string>
@@ -704,18 +252,9 @@
     <string name="settings_title_image_dim">背景天使暗度</string>
     <string name="settings_title_image_offset_x">水平位置</string>
 
-    <string name="settings_launcher_icon">天使使徽章</string>
 
     <!-- 隐藏设定字符串 -->
-    <string name="home_hide_su_path">隐藏天使使路径</string>
-    <string name="home_hide_kpatch_version">隐藏心之魔法祝福等级</string>
     <string name="home_hide_fingerprint">隐藏魔法指纹</string>
-    <string name="home_hide_zygisk">隐藏 Zygisk 圣化</string>
-    <string name="home_hide_mount">隐藏圣光结界</string>
-    <string name="home_hide_su_path_summary">在天使情报卡片中隐藏天使使路径</string>
-    <string name="home_hide_kpatch_version_summary">在天使情报卡片中隐藏心之魔法祝福等级信息</string>
-    <string name="home_hide_zygisk_summary">在天使情报卡片中隐藏 Zygisk 圣化信息</string>
-    <string name="home_hide_mount_summary">在天使情报卡片中隐藏圣光结界信息</string>
     <string name="home_hide_fingerprint_summary">在天使情报卡片中隐藏魔法指纹信息</string>
     
     <string name="settings_grid_working_card_hide_check">隐藏天使光环</string>
@@ -743,23 +282,6 @@
     
 
     <!-- APM Bulk Install Strings -->
-    <string name="apm_bulk_install_title">星之魔法阵批量祝福</string>
-    <string name="apm_bulk_install_list_title">魔法阵列表</string>
-    <string name="apm_bulk_install_add">添加魔法阵</string>
-    <string name="apm_bulk_install_empty">未添加魔法阵</string>
-    <string name="apm_bulk_install_action">批量祝福</string>
-    <string name="apm_bulk_install_log_title">批量祝福记录</string>
-    <string name="apm_bulk_install_log_start">开始批量祝福...</string>
-    <string name="apm_bulk_install_log_installing">正在祝福 %1$s</string>
-    <string name="apm_batch_install_full_process">完整批量祝福仪式</string>
-    <string name="apm_batch_install_full_process_summary">使用完整仪式进行星之魔法阵批量祝福</string>
-    <string name="next_module">下一个魔法阵</string>
-    <string name="apm_bulk_install_log_installed">魔法阵 %s 祝福完成。</string>
-    <string name="apm_bulk_install_log_done">所有魔法仪式已完成。</string>
-    <string name="apm_bulk_install_first_use_text">这个功能允许你一次性施展多个魔法阵，属于快速施法，适合施展一些过程中没有涉及咒语咏唱的魔法阵，涉及咏唱古代咒语的请去设置启用完整仪式模式</string>
-    <string name="apm_bulk_install_remove">移除</string>
-    <string name="apm_first_use_title">欢迎使用星之魔法阵</string>
-    <string name="apm_first_use_text">欢迎使用星之魔法阵，这里使用的是兼容Magisk生态的魔法阵，点击右下角的按钮可以施展魔法阵，你也可以使用顶部的施法器批量施展魔法阵，还提供了一个功能一键备份全部魔法阵，但是注意这种方案不一定适用全部魔法阵，还是自己多加备份</string>
 
     <!-- Welcome Guide -->
     <string name="welcome_title_1">欢迎来到 FolkPatch 圣域</string>
@@ -778,8 +300,6 @@
 
     
     <!-- Module Backup/Restore Strings -->
-    <string name="apm_copy_list_title">抄录圣光名录</string>
-    <string name="apm_copy_list_success">名录已抄录完毕</string>
 
     <!-- Font Settings -->
     <string name="settings_custom_font">天使变身</string>
@@ -792,18 +312,8 @@
     <string name="settings_clear_font">恢复变身前</string>
     <string name="settings_clear_font_confirm">确定要解除变身吗？</string>
     <string name="settings_font_cleared">已恢复变身前的状态</string>
-    <string name="settings_font_select_hint">请选择一个星尘卷轴(TTF)</string>
     
     <!-- Auto Backup Strings -->
-    <string name="settings_auto_backup_module">魔法星阵自动护存</string>
-    <string name="settings_auto_backup_module_summary">觉醒时自动将星之魔法阵保存到私人魔法宝箱</string>
-    <string name="settings_open_backup_dir">打开魔法宝箱</string>
-    <string name="backup_dir_empty">魔法宝箱空空如也</string>
-    <string name="backup_dir_open_failed">无法打开魔法宝箱</string>
-    <string name="auto_backup_failed">星之魔法阵保存失败: %s</string>
-    <string name="auto_backup_success">星之魔法阵保存成功: %s</string>
-    <string name="settings_auto_backup_boot">自动保存Boot圣器</string>
-    <string name="settings_auto_backup_boot_summary">自动将Boot圣器保存至神圣宝库 (Downloads/FolkPatch/BootBackups)</string>
 
     <!-- Auto-added missing strings -->
 
@@ -812,14 +322,10 @@
     <string name="settings_home_layout_default">ListUI</string>
     <string name="settings_home_layout_grid">GridUI</string>
     <string name="settings_home_layout_focus">FocusUI</string>
-    <string name="settings_home_layout_sign">SignUI</string>
     <string name="settings_home_layout_circle">CircleUI</string>
     <string name="settings_home_layout_dashboard_pro">DashboardUI</string>
 
     <!-- Unofficial Version Strings -->
-    <string name="unofficial_version_title">非正统天使工坊✨</string>
-    <string name="unofficial_version_message">你所使用的FolkPatch并非星界认证的正统天使工坊~ 请前往官方天使屋获取正版工坊，以避免魔法反噬或祝福失效！</string>
-    <string name="go_to_github">前往Github天使屋~☆</string>
     <string name="settings_save_theme">封印魔法主题</string>
     <string name="settings_import_theme">唤醒魔法主题</string>
     <string name="settings_theme_saved">魔法主题已封印</string>
@@ -844,7 +350,6 @@
     <string name="theme_export_action">封印</string>
     <string name="theme_import_action">唤醒</string>
     <string name="theme_import_confirm">确定要唤醒此魔法主题吗？</string>
-    <string name="theme_info">魔法主题情报</string>
 
     <!-- Grid Working Card Background -->
     <string name="settings_grid_working_card_background">魔法卡片背景</string>
@@ -871,11 +376,9 @@
     <string name="theme_store_search_hint">搜索魔法主题...</string>
     <string name="theme_source_official">天使工坊直供</string>
     <string name="theme_source_third_party">同好魔法分享</string>
-    <string name="theme_source_local">本地</string>
     <string name="theme_store_author">编织师: %s</string>
     <string name="theme_store_version">咒语版本: %s</string>
     <string name="theme_source">魔力源流</string>
-    <string name="theme_store_download_failed">呜哇！魔力传输失败啦</string>
     <string name="theme_store_download">点亮魔法下载</string>
 
     <!-- Update Check Strings -->
@@ -887,19 +390,12 @@
     <string name="update_action">升级魔法</string>
     <string name="update_close">关闭</string>
     <string name="update_latest">您已掌握最新的魔法</string>
-    <string name="update_error">检查魔法升级时出错</string>
     
     <!--折叠选项-->
     <string name="settings_category_general">天使基础</string>
-    <string name="superuser">圣光使者</string>
-    <string name="module">星辰圣光阵</string>
-    <string name="settings_use_legacy_su_page">单页圣光使者授权</string>
-    <string name="settings_use_legacy_su_page_summary">圣光使者页面改用单页神恩设计</string>
     <string name="settings_category_appearance">圣光外观</string>
     <string name="settings_appearance_font">圣域字体设置</string>
-    <string name="settings_appearance_font_summary">自定义圣域文字样式</string>
     <string name="settings_appearance_theme">圣殿主题设置</string>
-    <string name="settings_appearance_theme_summary">主题商店、保存、导入和重置</string>
 
     <string name="settings_nav_custom_icons">圣域导航圣印</string>
     <string name="settings_nav_custom_icons_summary">用自定义圣印替换底部导航栏图标</string>
@@ -908,7 +404,6 @@
     <string name="nav_icon_superuser">超神圣印</string>
     <string name="nav_icon_apm">系统模块圣印</string>
     <string name="nav_icon_settings">设置圣印</string>
-    <string name="nav_icon_select_image">选择圣印</string>
     <string name="nav_icon_clear">重置为默认</string>
     <string name="nav_icon_custom_selected">自定义</string>
     <string name="nav_icon_default">默认</string>
@@ -931,13 +426,9 @@
     <string name="theme_mode_switch_title">切换主题模式</string>
     <string name="theme_mode_switch_msg">更改小宇宙模式将影响主题浏览和安装方式。是否继续？</string>
     <string name="settings_appearance_banner">圣光横幅设置</string>
-    <string name="settings_appearance_banner_summary">模块横幅配置</string>
     <string name="settings_appearance_layout">圣所布局设置</string>
-    <string name="settings_appearance_layout_summary">首页布局、导航和卡片自定义</string>
     <string name="settings_appearance_background">圣域背景设置</string>
-    <string name="settings_appearance_background_summary">自定义背景、视频和多背景</string>
     <string name="settings_appearance_night_mode">暗夜模式设置</string>
-    <string name="settings_appearance_night_mode_summary">深色主题和颜色配置</string>
     <string name="settings_amoled_theme">AMOLED 纯黑主题</string>
     <string name="settings_amoled_theme_desc">为深色模式使用纯黑背景</string>
     <string name="settings_switch_icon">启用按钮指示器</string>
@@ -946,7 +437,6 @@
     <string name="settings_discrete_slider_desc">在圣光轨道上显示刻度标记</string>
     <string name="settings_category_behavior">神谕指令</string>
     <string name="settings_category_function">圣光功能</string>
-    <string name="settings_category_module">魔法模组</string>
     <string name="settings_category_security">结界守护</string>
     
     <!-- Multimedia Category Strings -->
@@ -956,8 +446,7 @@
     <string name="settings_category_behavior_summary">万维除错、降临仪式、圣殿展示</string>
     <string name="settings_category_security_summary">天使印鉴认证与魔法阵操作验证</string>
     <string name="settings_category_backup_summary">本地圣典、云端圣典、WebDAV</string>
-    <string name="settings_category_module_summary">魔法信息、天使排列、批量降临</string>
-    <string name="settings_category_function_summary">FolkPatch隐匿、卸载圣侍</string>
+    <string name="settings_category_function_summary">執行方式、權限通道、無線 ADB 配對</string>
     <string name="settings_category_multimedia_summary">背景圣歌、天使音效、圣光振动</string>
     
     <!-- Background Music Strings -->
@@ -980,9 +469,6 @@
     <string name="settings_music_looping_summary">圣乐回响永恒不息</string>
     
     <!-- Install Mode Select -->
-    <string name="kp_install_methods">天使祝福修补/安装</string>
-    <string name="restore_boot_methods">选择一个启动镜像来恢复到引导分区</string>
-    <string name="restore_select_file">选择一个要还原的分区引导文件</string>
     
     <!-- Theme Store Filter -->
     <string name="theme_store_filter_title">筛选圣光主题</string>
@@ -999,7 +485,6 @@
     <string name="settings_video_background_summary">使用圣光影像作为背景</string>
     <string name="settings_select_video">选择圣光影像</string>
     <string name="settings_video_selected">已选择圣光影像</string>
-    <string name="settings_video_background_enabled">圣光影像背景已启用</string>
     <string name="settings_clear_video_background">清除圣光影像</string>
     <string name="settings_clear_video_background_confirm">确定要清除圣光影像吗？</string>
     <string name="settings_video_volume">圣光影像音量</string>
@@ -1022,34 +507,13 @@
     <string name="home_storage_ram">神念内存</string>
     <string name="home_storage_zram">圣域压缩</string>
     <string name="home_storage_swap">神念交换</string>
-    <string name="home_info_kernel">灵魂内核</string>
-    <string name="home_info_superkey">圣光之心</string>
     <string name="home_info_auth_auth">已认证</string>
     <string name="home_info_auth_na">不可用</string>
-    <string name="home_info_device_slot">神念槽位</string>
     <string name="home_info_device_model">圣域形态</string>
-    <string name="home_info_running_mode">运行模式</string>
-    <string name="home_info_mode_full">完整</string>
-    <string name="home_info_mode_half">不完整</string>
-    <string name="home_version">圣迹: %s</string>
-    <string name="home_zygisk_implement">Zygisk 圣化</string>
-    <string name="home_mount_implement">圣光结界</string>
 
-    <string name="settings_app_list_loading_scheme">圣光使召唤方案</string>
-    <string name="settings_app_list_loading_scheme_summary">选择如何召唤圣光使列表</string>
-    <string name="app_list_loading_scheme_root_service">圣光阵召唤 (默认)</string>
-    <string name="app_list_loading_scheme_package_manager">天界召唤 (天界 API)</string>
-    <string name="app_list_loading_scheme_dialog_title">召唤方案</string>
-    <string name="su_backup_list">封存圣光记忆</string>
-    <string name="su_restore_list">取出圣光记忆</string>
-    <string name="backup_success">圣光记忆封存成功</string>
-    <string name="restore_success">圣光记忆取出成功</string>
     <!-- Badge Count Settings -->
     <string name="enable_badge_count">神恩印记设定</string>
     <string name="enable_badge_count_summary">配置神谕圣所的神恩印记显示</string>
-    <string name="badge_superuser">显示圣光使者印记</string>
-    <string name="badge_apm">显示星辰圣光阵印记</string>
-    <string name="badge_kernel">显示灵魂晶石印记</string>
     <string name="settings_sound_effect">圣音</string>
     <string name="settings_sound_effect_summary">点击时回响圣音</string>
     <string name="settings_sound_effect_enabled">圣音已降临</string>
@@ -1088,9 +552,6 @@
     <string name="webdav_password">灵魂印记</string>
     <string name="webdav_test_success">通道共鸣成功</string>
     <string name="webdav_test_failed">通道共鸣失败: %s</string>
-    <string name="webdav_uploading">正在传送至异界...</string>
-    <string name="webdav_backup_success">圣域投影成功</string>
-    <string name="webdav_backup_failed">圣域投影失败: %s</string>
     <string name="save">铭刻</string>
     <string name="test">共鸣</string>
     <string name="webdav_path_label">虚空路径 (如 /Backup)</string>
@@ -1098,38 +559,10 @@
     <string name="webdav_backup_logs_title">投影神谕</string>
     <string name="webdav_no_logs">暂无神谕</string>
     <string name="webdav_clear_logs">净化</string>
-    <string name="settings_enable_local_backup">开启现世留存</string>
-    <string name="settings_enable_local_backup_summary">将圣物留存于现世 (Downloads/FolkPatch/ModuleBackups)</string>
     <string name="close">封印</string>
-    <string name="settings_backup_password">封印咒语</string>
-    <string name="settings_backup_password_hint">吟唱封印咒语</string>
 
-    <string name="patch_output_written_to"> 圣光降临，圣物铭刻至 </string>
-    <string name="patch_write_failed"> 圣光黯淡，深渊降临</string>
 
     <!-- Script Library Strings -->
-    <string name="script_library">圣光咒语卷轴</string>
-    <string name="script_library_title">圣光咒语卷轴</string>
-    <string name="script_library_empty">暂无咒语，点击添加咒语卷轴</string>
-    <string name="script_library_add">添加咒语</string>
-    <string name="script_library_add_title">添加咒语</string>
-    <string name="script_library_select_file">选择咒语卷轴</string>
-    <string name="script_library_alias">咒名</string>
-    <string name="script_library_alias_hint">输入咒名（可选）</string>
-    <string name="script_library_run">咏唱</string>
-    <string name="script_library_delete">净化</string>
-    <string name="script_library_path">圣域路径：%s</string>
-    <string name="script_library_confirm_delete">确认净化此咒语？</string>
-    <string name="script_library_delete_success">咒语已净化</string>
-    <string name="script_library_delete_failed">净化咒语失败</string>
-    <string name="script_library_add_success">咒语添加成功</string>
-    <string name="script_library_add_failed">添加咒语失败：%s</string>
-    <string name="script_library_load_failed">打开咒语卷轴失败</string>
-    <string name="script_library_output">咒语显化</string>
-    <string name="script_library_no_output">无显化</string>
-    <string name="script_library_save_log">保存咏唱记录</string>
-    <string name="script_library_log_saved">咏唱记录已保存至 %s</string>
-    <string name="script_library_log_save_failed">保存咏唱记录失败：%s</string>
 
     <string name="settings_vibration">圣光之触</string>
     <string name="settings_vibration_summary">感知神圣的震颤</string>
@@ -1138,22 +571,8 @@
     <string name="settings_vibration_scope">圣光范围</string>
     <string name="settings_vibration_scope_global">普世(任意位置)</string>
     <string name="settings_vibration_scope_bottom_bar">仅限祭坛(底部栏)</string>
-    <string name="search_modules">搜索圣光阵...</string>
-    <string name="search_scripts">搜索神谕圣言...</string>
 
     <!-- Umount Service -->
-    <string name="settings_umount_service">Umount Service</string>
-    <string name="settings_umount_service_summary">配置祷告自动卸载的神圣连接点</string>
-    <string name="umount_config_title">Umount 圣言</string>
-    <string name="umount_config_enabled">启用 Umount</string>
-    <string name="umount_config_enabled_summary">祷告自动卸载指定的神圣连接点</string>
-    <string name="umount_config_paths_label">神圣连接点路径（每行一个）</string>
-    <string name="umount_config_paths_placeholder">/system/vendor/app\n/system/vendor/priv-app</string>
-    <string name="umount_config_paths_helper">每行输入一个需要卸载的神圣连接点路径</string>
-    <string name="umount_config_save">圣言保存</string>
-    <string name="umount_config_save_confirm">确认以圣言保存配置？</string>
-    <string name="umount_config_save_success">圣言已传达，配置保存成功</string>
-    <string name="umount_config_save_failed">圣言传达失败，配置保存失败</string>
 
     <!-- 我的圣域页面 -->
     <string name="my_themes_title">我的圣域</string>
@@ -1165,27 +584,18 @@
     <string name="my_themes_deleted">主题已净化</string>
     <string name="my_themes_applied">主题已施展</string>
     <string name="my_themes_apply_failed">施展魔法主题失败，圣典可能已受损。长按主题将其遗忘后重新召唤吧</string>
-    <string name="my_themes_details">主题圣物详情</string>
 
     <!-- 下载圣光阵 -->
     <string name="theme_download_title">正在祈召主题</string>
     <string name="theme_download_completed">祈召完成</string>
     <string name="theme_download_failed">祈召失败</string>
-    <string name="theme_file_corrupt">魔法主题圣典已受损，请重新召唤</string>
-    <string name="theme_file_incomplete">魔法主题圣典不完整，请重新召唤</string>
     <string name="theme_download_progress">圣光进度</string>
     <string name="theme_download_file">主题圣物</string>
     <string name="theme_download_image">圣光预览</string>
     <string name="theme_download_cancel">终止祈召</string>
     <string name="theme_download_pause">暂停祈召</string>
-    <string name="theme_download_resume">继续祈召</string>
-    <string name="theme_download_retry">重新祈召</string>
     <string name="theme_download_apply">施展主题</string>
     <string name="theme_download_go_to_my_themes">我的圣域</string>
-    <string name="theme_download_retrying">重新祈召中 (%d/3)...</string>
-    <string name="theme_download_preparing">准备祈召...</string>
-    <string name="theme_download_downloading_file">正在下载主题圣物...</string>
-    <string name="theme_download_downloading_image">正在下载圣光预览...</string>
     <string name="theme_download_finalizing">圣光凝聚中...</string>
     <string name="settings_predictive_back">圣预返回手势</string>
     <string name="settings_predictive_back_summary">启用圣域 Android 14+ 的预知返回圣光动画</string>
@@ -1193,82 +603,27 @@
     <string name="home_device_status_battery_charging">圣光充能中</string>
     <string name="home_device_status_cpu_temp">神念温度</string>
     <string name="home_device_status_memory_trend">神念趋势</string>
-    <string name="home_storage_partitions">圣域分区</string>
     <string name="home_device_status_cpu_freq">神念频率</string>
     <string name="home_network_rx">圣光汲取</string>
     <string name="home_network_tx">圣光传送</string>
     <string name="settings_home_layout_stats">StatsUI</string>
-    <string name="home_stats_more_options">更多圣光</string>
-    <string name="home_stats_kp_label">KP</string>
-    <string name="home_stats_manager_label">圣管</string>
     <string name="home_device_status_gpu_load">圣光负载</string>
-    <string name="home_stats_kernel_modules">内核圣物</string>
-    <string name="home_stats_apm_modules">APM 圣物</string>
-    <string name="home_stats_superusers">至高权限</string>
-    <string name="settings_kernel_spoof">内核圣伪装</string>
-    <string name="settings_kernel_spoof_summary">伪装内核版本和神圣时刻</string>
-    <string name="settings_kernel_spoof_version">内核圣版本</string>
-    <string name="settings_kernel_spoof_build_time">内核神圣时刻</string>
-    <string name="settings_kernel_spoof_restore">恢复神圣</string>
 
-    <string name="kernel_spoof_enabled">内核圣伪装已开启</string>
-    <string name="kernel_spoof_disabled_restored">内核圣伪装已关闭并恢复</string>
-    <string name="kernel_spoof_failed">内核圣伪装失败: %d</string>
-    <string name="kernel_spoof_applied">内核圣伪装已生效</string>
 
-    <string name="settings_path_hide">路径圣隐匿</string>
-    <string name="settings_path_hide_summary">于灵魂之力层面施展圣隐匿，令凡俗应用无法感知文件与目录</string>
-    <string name="path_hide_paths_label">隐匿路径（每行一道）</string>
 
-    <string name="path_hide_paths_helper">每行书写一个路径，匹配之路径将被圣光笼罩，查无可寻</string>
-    <string name="path_hide_save">圣光封存</string>
-    <string name="path_hide_enabled">路径圣隐匿已开启</string>
-    <string name="path_hide_disabled">路径圣隐匿已关闭</string>
-    <string name="path_hide_applied">路径圣隐匿已降临生效</string>
-    <string name="path_hide_failed">路径圣隐匿失败: %d</string>
-    <string name="path_hide_uid_mode">UID 圣裁模式</string>
-    <string name="path_hide_uid_mode_summary">仅对受圣光选中之 UID 施以圣隐匿</string>
-    <string name="path_hide_uids_label">圣选 UID（每行一道）</string>
-    <string name="path_hide_uids_helper">书写应用 UID，唯蒙圣光眷顾者方受圣隐匿庇护</string>
-    <string name="path_hide_uid_save">圣光封存 UID</string>
-    <string name="path_hide_uid_mode_enabled">UID 圣裁模式已开启</string>
-    <string name="path_hide_uid_mode_disabled">UID 圣裁模式已关闭</string>
-    <string name="path_hide_filter_system">净化系统 UID</string>
-    <string name="path_hide_filter_system_summary">同时对 root 和系统进程（UID &lt; 10000）遮蔽路径</string>
-    <string name="path_hide_filter_system_enabled">系统 UID 净化已开启</string>
-    <string name="path_hide_filter_system_disabled">系统 UID 净化已关闭</string>
-    <string name="path_hide_filter_system_warning_title">神谕警示</string>
-    <string name="path_hide_filter_system_warning_message">开启后将同时对 root 和系统进程（UID &lt; 10000）遮蔽路径。这可能导致部分圣域功能异常，请谨慎施与神力。</string>
-    <string name="path_hide_uid_applied">UID 圣选名录已降临生效</string>
-    <string name="path_hide_select_apps">遴选应用</string>
-    <string name="path_hide_no_apps_selected">未遴选任何应用</string>
-    <string name="path_hide_app_removed">已涤除 %d 个已废黜应用之旧制</string>
-    <string name="path_hide_search_apps">搜寻应用…</string>
-    <string name="path_hide_show_system">昭示系统应用</string>
-    <string name="netisolate_title">圣光网络封印</string>
-    <string name="netisolate_enable">网络封印已施展</string>
-    <string name="netisolate_disable">网络封印已解除</string>
-    <string name="netisolate_enable_summary">于灵魂之力层面封印所选应用之网络连接</string>
-    <string name="netisolate_uids_label">已封印应用</string>
-    <string name="netisolate_uids_hint">输入要封印的 UID（每行一道）</string>
-    <string name="netisolate_no_uids">暂无被封印应用</string>
     <string name="settings_search_title">神谕搜寻</string>
-    <string name="settings_search_hint">搜寻神谕指引…</string>
     <string name="settings_search_empty_hint">输入以搜寻所有天使法则…</string>
     <string name="settings_no_results">未寻得神谕</string>
 
     <!-- 色彩生成 -->
     <string name="color_generation_classic">经典</string>
     <string name="color_generation_custom">自定义</string>
-    <string name="color_generation_label">色彩圣域</string>
 
     <!-- 色彩标准 -->
     <string name="color_standard_md3_2021">MD3 2021</string>
     <string name="color_standard_m3e_2025">M3e 2025</string>
-    <string name="color_standard_label">色彩圣典</string>
 
     <!-- 色彩风格 -->
-    <string name="color_style_label">色彩圣仪</string>
     <string name="color_style_tonal_spot">圣光色调</string>
     <string name="color_style_vibrant">圣辉</string>
     <string name="color_style_content">圣蕴</string>
@@ -1281,7 +636,6 @@
     <string name="settings_focus_card_background">FocusUI 卡片壁纸</string>
     <string name="settings_focus_card_background_enabled">FocusUI 卡片壁纸已开启，长按卡片管理壁纸</string>
     <string name="settings_focus_card_background_summary">启用 FocusUI 卡片壁纸及长按壁纸管理</string>
-    <string name="settings_focus_card_dim">卡片壁纸暗度</string>
     <string name="settings_focus_card_dual_dim">启用昼夜双暗度</string>
     <string name="settings_focus_card_dual_dim_desc">自动根据明暗主题调整卡片壁纸暗度</string>
     <string name="settings_focus_card_day_dim">日间模式卡片壁纸暗度</string>
@@ -1320,22 +674,7 @@
     <string name="settings_background_permission_required">需授予圣库权限方可选取圣境</string>
     <string name="settings_sound_effect_save_failed">圣音铭刻失败</string>
     <string name="settings_startup_sound_save_failed">启圣之音铭刻失败</string>
-    <string name="script_library_downloaded_to">圣典已降于：%s</string>
-    <string name="script_library_download_failed">圣典降临失败：%s</string>
-    <string name="settings_new_app_profile_update_failed">新信徒圣谕更新失败：%s</string>
     <string name="settings_info_copy">长按抄录圣典信息</string>
     <string name="settings_info_copy_summary">长按主页信息栏中的条目即可抄录其内容</string>
     <string name="home_info_copied">%1$s 已抄录完毕</string>
-    <string name="settings_jailbreak_mode">圣辉解禁模式</string>
-    <string name="settings_jailbreak_mode_summary">在原生内核上降下 KernelPatch 圣光。该模式下不允许神术修补。</string>
-    <string name="settings_jailbreak_soft_reboot">圣翼轻旋</string>
-    <string name="settings_jailbreak_soft_reboot_message">圣光已降临，是否立即圣翼轻旋？</string>
-    <string name="settings_jailbreak_restart_framework">圣翼重启框架</string>
-    <string name="settings_jailbreak_restart_framework_message">圣光已降临，是否立即重启 Android 框架？此举将圣翼轻旋，仅重启框架，不会重启内核。</string>
-    <string name="settings_jailbreak_loaded">圣辉解禁已降临</string>
-    <string name="settings_jailbreak_failed">圣辉解禁降临失败</string>
-    <string name="jailbreak_no_patch">圣辉解禁模式下不允许神术修补。</string>
-    <string name="jailbreak">圣辉解禁</string>
-    <string name="jailbreak_triggered">圣辉解禁已触发，等待获得神恩后圣翼轻旋。</string>
-    <string name="reboot_soft">圣翼轻旋</string>
 </resources>

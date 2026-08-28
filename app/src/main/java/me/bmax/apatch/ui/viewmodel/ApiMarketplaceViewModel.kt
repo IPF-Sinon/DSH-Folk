@@ -9,9 +9,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import me.bmax.apatch.apApp
-import me.bmax.apatch.Natives
 import me.bmax.apatch.ui.model.ApiMarketplaceItem
-import me.bmax.apatch.ui.screen.BannerApiService
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.util.FolkApiClient
 import okhttp3.Request
@@ -57,10 +55,7 @@ class ApiMarketplaceViewModel : ViewModel() {
             isLoading = true
             errorMessage = null
             try {
-                val token = Natives.getApiToken(apApp)
-                val url = "$MARKETPLACE_URL?token=$token"
-
-                val result = FolkApiClient.fetchJson(url)
+                val result = FolkApiClient.fetchJson(MARKETPLACE_URL)
                 val jsonString = result.getOrNull()
                 if (jsonString != null) {
                     val jsonArray = JSONArray(jsonString)

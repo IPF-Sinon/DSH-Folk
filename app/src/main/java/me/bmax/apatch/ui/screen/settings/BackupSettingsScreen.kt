@@ -38,11 +38,12 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import me.bmax.apatch.APApplication
 import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.ui.theme.BackgroundConfig
+import me.bmax.apatch.ui.theme.BackupConfig
+import me.bmax.apatch.util.WebDavUtils
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
 
@@ -50,9 +51,6 @@ import me.bmax.apatch.util.ui.NavigationBarsSpacer
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String? = null) {
-    val prefs = APApplication.sharedPreferences
-    var autoBackupModule by rememberSaveable { mutableStateOf(prefs.getBoolean("auto_backup_module", false)) }
-
     val snackBarHost = LocalSnackbarHost.current
     val flat = BackgroundConfig.isCustomBackgroundEnabled || BackgroundConfig.settingsBackgroundUri != null
     val context = LocalContext.current
@@ -68,6 +66,8 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     val exporting = stringResource(R.string.dsh_backup_exporting)
     val importing = stringResource(R.string.dsh_backup_importing)
     val openDirFailed = stringResource(R.string.dsh_backup_open_dir_failed)
+    val webdavOk = stringResource(R.string.dsh_backup_webdav_ok)
+    val webdavFailed = stringResource(R.string.dsh_backup_webdav_failed)
 
     val importPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -115,8 +115,6 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
         ) {
             item {
                 BackupSettingsContent(
-                    autoBackupModule = autoBackupModule,
-                    onAutoBackupModuleChange = { autoBackupModule = it },
                     dshBusy = dshBusy,
                     dshMessage = dshMessage,
                     dshPassword = dshPassword,
@@ -131,7 +129,22 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                                 if (status.error.isEmpty()) pluginMissing else notRunning
                             } else {
                                 val r = DshConfigBackup.export(password = dshPassword)
-                                if (r.ok) "${r.message}\n${r.file?.absolutePath ?: ""}" else r.message
+                                if (!r.ok) r.message else {
+                                    val local = "${r.message}\n${r.file?.absolutePath ?: ""}"
+                                    // 开了云备份就顺手推一份到 WebDAV，失败只追加一行说明，不影响本地备份
+                                    val zip = r.file
+                                    if (BackupConfig.isBackupEnabled && zip != null && BackupConfig.webdavUrl.isNotBlank()) {
+                                        val up = WebDavUtils.uploadFile(
+                                            baseUrl = BackupConfig.webdavUrl,
+                                            user = BackupConfig.webdavUsername,
+                                            pass = BackupConfig.webdavPassword,
+                                            file = zip,
+                                            subDir = BackupConfig.webdavPath.trim('/').ifEmpty { "DSH-Folk" },
+                                        )
+                                        local + "\n" + if (up.isSuccess) webdavOk
+                                            else webdavFailed.format(up.exceptionOrNull()?.message ?: "")
+                                    } else local
+                                }
                             }
                             withContext(Dispatchers.Main) {
                                 dshMessage = text

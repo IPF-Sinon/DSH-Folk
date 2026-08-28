@@ -104,9 +104,6 @@ object SettingsRegistry {
 
             // === Backup ===
             add(SettingEntry("backup_dsh_config", R.string.dsh_backup_section, R.string.dsh_backup_summary, SettingCategory.BACKUP))
-            add(SettingEntry("backup_local", R.string.settings_enable_local_backup, R.string.settings_enable_local_backup_summary, SettingCategory.BACKUP))
-            add(SettingEntry("backup_boot", R.string.settings_auto_backup_boot, R.string.settings_auto_backup_boot_summary, SettingCategory.BACKUP))
-            add(SettingEntry("backup_open_dir", R.string.settings_open_backup_dir, category = SettingCategory.BACKUP))
             add(SettingEntry("backup_cloud", R.string.settings_enable_cloud_backup, R.string.settings_enable_cloud_backup_summary, SettingCategory.BACKUP))
             add(SettingEntry("backup_webdav", R.string.settings_configure_webdav, category = SettingCategory.BACKUP))
 
