@@ -22,7 +22,8 @@ object AdbBridge {
     /** 脚本版本：改脚本就 +1，旧版残留会因版本不符被强制重注入。 */
     private const val SCRIPT_VERSION = "1"
 
-    private const val WHEELS_ASSET = "adb-wheels.tar.gz"
+    // 源文件是 adb-wheels.tar.gz，但 AGP 会在打包时解压并去掉 .gz 后缀
+    private val WHEELS_ASSET_NAMES = listOf("adb-wheels.tar.gz", "adb-wheels.tar")
 
     /** 脚本是否已注入且版本一致。 */
     fun injected(): Boolean = injectedState() == "YES"
@@ -59,7 +60,11 @@ object AdbBridge {
 
     /** 安装 python 依赖：优先离线 wheels（随 APK），失败回落 pip 联网。 */
     fun installDeps(ctx: Context): String {
-        val wheels = runCatching { ctx.assets.open(WHEELS_ASSET).readBytes() }.getOrNull()
+        // AGP 打包 assets 时会把 .gz 解开并去掉扩展名，APK 里实际是 adb-wheels.tar。
+        // 两个名字都试，取到哪个都行 —— 下面的 shell 用文件头判断要不要 -z。
+        val wheels = WHEELS_ASSET_NAMES.firstNotNullOfOrNull { name ->
+            runCatching { ctx.assets.open(name).readBytes() }.getOrNull()
+        }
         if (wheels != null) {
             val dst = java.io.File(DshEnv.dshHome(ctx), "adb-wheels.tar.gz")
             dst.parentFile?.mkdirs()
