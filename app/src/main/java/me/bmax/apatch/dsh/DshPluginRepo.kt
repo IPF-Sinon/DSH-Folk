@@ -329,6 +329,17 @@ object DshPluginRepo {
      * dsh 是 wrapper 脚本，和启动 web 一样得先 readlink 出真正的 bin.js 再交给 node
      * （`--expose-internals` 只能作为命令行参数传）。pnpm 装包要几分钟，输出只留尾部。
      */
+    /** 成功与否的唯一可靠依据：这一行里的退出码。 */
+    const val EXIT_MARKER = "[DSH-Folk-exit]"
+
+    /**
+     * 跑 `dsh plugin --profile web <args>` 并回读输出。
+     *
+     * 结尾必须带退出码：`| tail -30` 会把管道的退出状态换成 tail 的（永远 0），
+     * 所以原来只能靠在输出里找 "pnpm failed" 之类的字样猜成败 —— pnpm 换个措辞、
+     * 或者报错行正好被 tail 截掉，就会把失败当成功（表现为「装好了但插件不在」）。
+     * 这里用 PIPESTATUS 取 node 自己的退出码，单独打一行给调用方判。
+     */
     private fun dshPlugin(args: String, timeoutMs: Long): String {
         val out = DshRuntime.execRootfsForOutput(
             "export DSH_HOME=/root/.dsh; cd /root; " +
@@ -337,7 +348,8 @@ object DshPluginRepo {
                 "echo '[DSH-Folk] 容器内找不到 pnpm，请在设置中重装运行时'; exit 1; fi; " +
                 "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); " +
                 "node --expose-internals \"\$DSH_REAL\" plugin --profile " + PROFILE + " " + args +
-                " 2>&1 | tail -30",
+                " 2>&1 | tail -30; " +
+                "echo \"" + EXIT_MARKER + " \${PIPESTATUS[0]}\"",
             timeoutMs,
         )
         return out.ifBlank { "没有输出（可能超时或容器未启动）" }

@@ -129,17 +129,37 @@ class DshPluginViewModel : ViewModel() {
     private fun run(action: suspend () -> String, onDone: (String) -> Unit) {
         viewModelScope.launch {
             isRefreshing = true
-            val out = action()
+            val raw = action()
+            val failed = looksFailed(raw)
+            // 退出码标记是给程序看的，别显示给用户
+            val out = raw.lineSequence()
+                .filterNot { it.startsWith(DshPluginRepo.EXIT_MARKER) }
+                .joinToString("\n")
+                .trim()
+                .ifEmpty { raw }
             lastOutput = out
             isRefreshing = false
-            if (!looksFailed(out)) needsRestart = true
+            if (!failed) needsRestart = true
             onDone(out)
             refresh()
         }
     }
 
-    /** pnpm 失败时 dsh 会打印这几行；识别不出来就当成功（宁可多提示一次重启）。 */
-    private fun looksFailed(out: String): Boolean =
-        out.contains("pnpm failed") || out.contains("pnpm not found") ||
+    /**
+     * 这次 dsh plugin 是不是失败了。
+     *
+     * 首选 [DshPluginRepo.EXIT_MARKER] 那行里的真实退出码 —— 输出里找关键字是猜：
+     * pnpm 换个措辞、或者报错行被 `tail -30` 截掉，失败就会被当成成功，用户看到
+     * 「已安装」但插件其实没进 bundles。找不到标记行时（超时、容器没起来）才退回
+     * 关键字匹配。
+     */
+    private fun looksFailed(out: String): Boolean {
+        val marker = out.lineSequence().lastOrNull { it.startsWith(DshPluginRepo.EXIT_MARKER) }
+        if (marker != null) {
+            val code = marker.removePrefix(DshPluginRepo.EXIT_MARKER).trim().toIntOrNull()
+            if (code != null) return code != 0
+        }
+        return out.contains("pnpm failed") || out.contains("pnpm not found") ||
             out.contains("[DSH-Folk]") || out.contains("ERR_PNPM")
+    }
 }
