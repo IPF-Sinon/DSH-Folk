@@ -181,6 +181,9 @@ object DshRuntime {
     private fun ensureRuntimeFiles() {
         val libDir = File(appContext.filesDir, "lib").apply { mkdirs() }
         DshEnv.tmpDir(appContext).mkdirs()
+        // 每条 exec 路径都要保证 DNS 在：冷启动直接进插件页 / 终端页时不会走 bootstrap，
+        // 少了这一步容器里 pnpm、apt 全是 EAI_AGAIN。已存在则原样保留（用户可能改过）。
+        ensureContainerDns()
         if (runtime().id() != "proot") return
         // jniLibs 里叫 libtalloc.so / libandroidshmem.so，proot 按 SONAME 找
         copyExec(nativeLib("libtalloc.so"), File(libDir, "libtalloc.so.2"))
@@ -535,15 +538,44 @@ object DshRuntime {
     }
 
     /** 写容器 DNS（国内解析优先，谷歌/CF 兜底）。 */
+    /**
+     * 写入容器的 DNS 与 hosts。
+     *
+     * Android 不暴露 /etc/resolv.conf（DNS 走 netd 的 binder 接口），容器里的 glibc
+     * 只会读文件，所以必须自己写一份，否则容器内所有域名解析都失败 —— 表现是
+     * npm/pnpm/apt 全部 EAI_AGAIN。base rootfs 里的 resolv.conf 与 hosts 都是 0 字节。
+     *
+     * localhost 也得手动补：dsh web 绑 127.0.0.1，容器内插件回连 http://localhost:3080
+     * 时没有这一行就解析不出来。
+     */
     private fun setupResolvConf() {
         runCatching {
-            val rc = File(DshEnv.rootfs(appContext), "etc/resolv.conf")
-            rc.parentFile?.mkdirs()
-            if (rc.exists()) rc.delete()
-            rc.writeText(
-                "nameserver 223.5.5.5\nnameserver 119.29.29.29\nnameserver 8.8.8.8\nnameserver 1.1.1.1\n",
-                StandardCharsets.UTF_8,
-            )
+            // 安装/重装后强制重写：换网络环境后旧的 nameserver 可能已不可达
+            File(DshEnv.rootfs(appContext), "etc/resolv.conf").delete()
+        }
+        ensureContainerDns()
+    }
+
+    /** 缺失或空文件才写（不覆盖用户自己改过的内容）。 */
+    private fun ensureContainerDns() {
+        runCatching {
+            val rootfs = DshEnv.rootfs(appContext)
+            if (!File(rootfs, "etc").isDirectory) return@runCatching
+            val rc = File(rootfs, "etc/resolv.conf")
+            if (rc.length() == 0L) {
+                rc.writeText(
+                    "nameserver 223.5.5.5\nnameserver 119.29.29.29\n" +
+                        "nameserver 8.8.8.8\nnameserver 1.1.1.1\n",
+                    StandardCharsets.UTF_8,
+                )
+            }
+            val hosts = File(rootfs, "etc/hosts")
+            if (hosts.length() == 0L) {
+                hosts.writeText(
+                    "127.0.0.1\tlocalhost\n::1\tlocalhost ip6-localhost ip6-loopback\n",
+                    StandardCharsets.UTF_8,
+                )
+            }
         }
     }
 
