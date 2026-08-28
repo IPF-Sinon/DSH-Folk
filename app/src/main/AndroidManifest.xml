@@ -21,9 +21,16 @@
         tools:ignore="QueryAllPackagesPermission" />
 
     <!-- DSH 前台服务：proot + node 是本进程子进程，进程被冻结/回收 WebUI 就断，
-         必须以前台服务常驻。dataSync 类型对应「本地服务 + 数据同步」用途。 -->
+         必须以前台服务常驻。
+
+         类型必须是 specialUse，不能用 dataSync：targetSdk 35+ 起 dataSync 有
+         「24 小时内累计 6 小时」上限，到点系统回调 Service.onTimeout()，几秒内不
+         stopSelf 就抛 RemoteServiceException 把进程打掉；而且 BOOT_COMPLETED 接收器
+         被明令禁止拉起 dataSync 类型（会抛 ForegroundServiceStartNotAllowedException），
+         我们的开机自启正好就是这条路径。specialUse 两条限制都不适用。
+         （specialUse 的用途说明只在上架 Google Play 时被审核，本项目走 GitHub 分发。） -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 无线 ADB 配对需要读 WiFi 状态解析本机 IP 与 mDNS 发现 -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -188,7 +195,11 @@
         <service
             android:name=".dsh.HarnessService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs a local DeepSeek Harness (Node.js) server inside a proot container for as long as the user keeps it enabled; the server is the app's primary function and must stay alive while the UI is in the background." />
+        </service>
 
     </application>
 
