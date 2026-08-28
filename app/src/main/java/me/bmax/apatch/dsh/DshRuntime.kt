@@ -754,12 +754,20 @@ object DshRuntime {
     fun stopServer() {
         runCatching {
             // proot 不隔离 PID，容器内 /proc 看到宿主全部进程 —— 只杀 bin.js web / dsh web，
-            // 绝不裸 pkill -f node（会误杀 agent 或用户自己的 node 进程）
+            // 绝不裸 pkill -f node（会误杀 agent 或用户自己的 node 进程）。
+            //
+            // 必须排除自己：这条清理命令的 cmdline 里就含 'bin.js web' 字面量，pgrep -f 会
+            // 把执行它的 bash、以及 $() 命令替换 fork 出的子 shell 一起匹配上（子 shell 与
+            // 父进程共享 cmdline，所以比对 PID 挡不住它）。做法是在命令里埋一个哨兵字符串，
+            // 再按 /proc/<pid>/cmdline 把带哨兵的进程全部跳过 —— 否则 kill -KILL 会先把这条
+            // 清理命令自己杀掉，真正的 dsh web 反而留着。
             execRootfs(
-                "for _p in \$(pgrep -f 'bin.js web' 2>/dev/null; pgrep -f 'dsh web' 2>/dev/null); do " +
-                    "kill \"\$_p\" 2>/dev/null; done; sleep 1; " +
-                    "for _p in \$(pgrep -f 'bin.js web' 2>/dev/null; pgrep -f 'dsh web' 2>/dev/null); do " +
-                    "kill -9 \"\$_p\" 2>/dev/null; done"
+                ": DSHFOLK_STOP_SENTINEL; " +
+                "_kill() { for _p in " +
+                "\$(pgrep -f 'bin.js web' 2>/dev/null; pgrep -f 'dsh web' 2>/dev/null); do " +
+                "grep -qa DSHFOLK_STOP_SENTINEL \"/proc/\$_p/cmdline\" 2>/dev/null && continue; " +
+                "kill \"\$1\" \"\$_p\" 2>/dev/null; done; }; " +
+                "_kill -TERM; sleep 1; _kill -KILL"
             ).waitFor(8, TimeUnit.SECONDS)
         }
         runCatching { serverProcess?.destroyForcibly() }
