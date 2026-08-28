@@ -285,12 +285,44 @@ object DshRuntime {
             .toTypedArray()
     }
 
-    /** 同步执行并读回输出（带超时，默认 60s）。 */
+    /**
+     * 同步执行并读回输出（带超时，默认 60s）。
+     *
+     * 读流必须放到单独线程：readText() 会一直阻塞到 EOF，先读再 waitFor(timeout) 的写法
+     * 里超时是彻底无效的 —— 子进程挂住不退出（等 stdin、卡在网络、pnpm 死锁）就会把调用
+     * 线程永久钉死，容器进程也泄漏。这里改成读线程 + join(超时) + destroyForcibly。
+     *
+     * 超时返回已读到的部分而不是空串：pnpm / pip 那种半途卡死的情况，前面几百行输出
+     * 往往正好说明卡在哪。
+     */
     fun execRootfsForOutput(bashCommand: String, timeoutMs: Long = 60_000L): String = runCatching {
         val p = execRootfs(bashCommand)
-        val out = p.inputStream.bufferedReader().readText()
-        if (!p.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) p.destroyForcibly()
-        out
+        val sb = StringBuilder()
+        val reader = Thread {
+            runCatching {
+                p.inputStream.bufferedReader().use { r ->
+                    val buf = CharArray(8192)
+                    while (true) {
+                        val n = r.read(buf)
+                        if (n < 0) break
+                        synchronized(sb) { sb.appendRange(buf, 0, n) }
+                    }
+                }
+            }
+        }
+        reader.isDaemon = true
+        reader.start()
+        reader.join(timeoutMs)
+        if (reader.isAlive) {
+            // 超时：先杀进程让读流拿到 EOF，再给读线程一点时间收尾
+            p.destroyForcibly()
+            reader.join(1_000)
+            appendLog("! 命令超时（${timeoutMs / 1000}s）已终止: ${bashCommand.take(120)}")
+        } else if (!p.waitFor(2, TimeUnit.SECONDS)) {
+            // 流已关但进程还在（少见：子孙进程继承了 stdout 又提前关掉）
+            p.destroyForcibly()
+        }
+        synchronized(sb) { sb.toString() }
     }.getOrElse { "" }
 
     // ────────────────────────── 引导（下载 + 解压 + 启动）──────────────────────────
