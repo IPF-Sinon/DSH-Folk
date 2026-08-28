@@ -38,6 +38,10 @@ skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentia
 root / Shizuku / 无线 ADB 都是**可选**的。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）与已授权的 Shizuku / Sui，
 自身不打任何内核补丁、不安装 su、不内置 Shizuku Server。
 
+配对成功后容器里多出一个 `adb-shell` 命令（以 shell / uid 2000 身份在设备上执行）。默认只放行只读命令
+（`getprop` / `dumpsys` / `ls` / `cat` 之类）；写操作和 `--su` 提权要在 **设置 → 功能** 里分别打开开关，
+没打开时命令会被拒绝并提示开关位置。
+
 ## 安装
 
 从 [Releases](https://github.com/IPF-Sinon/DSH-Folk/releases) 下载 APK 安装。

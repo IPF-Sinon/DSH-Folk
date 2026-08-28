@@ -46,12 +46,12 @@ def main():
             port = int(args[1])
         args = args[2:]
     # --su：以 root 身份执行（需手机本身已 root）。
-    # 必须用户在 App 设置 → 权限 里打开开关（生成 ROOT_ALLOW_FILE）才放行，
+    # 必须用户在 App 设置 → 功能 里打开开关（生成 ROOT_ALLOW_FILE）才放行，
     # 未授权一律拒绝 —— 防止 agent 擅自提权。
     if args and args[0] == '--su':
         if not os.path.exists(ROOT_ALLOW_FILE):
             print('ROOT_NOT_ALLOWED: 未授权 root shell')
-            print('要放开：App → 设置 → 权限 → 打开「容器内允许 root shell」')
+            print('要放开：App → 设置 → 功能 → 打开「容器内允许 root shell」')
             print('[EXIT=1]')
             sys.exit(1)
         use_su = True
@@ -90,7 +90,7 @@ def main():
     # grep 3090 只剩这个脚本自己），所以原逻辑等于「所有写命令永远被拒绝，
     # 并提示用户去检查一个不存在的东西」。
     #
-    # 改为显式授权文件：用户在 App 设置 → 权限 里打开「容器内直接用 ADB shell」
+    # 改为显式授权文件：用户在 App 设置 → 功能 里打开「容器内允许 ADB 写操作」
     # 才会生成 ALLOW_FILE。没开时只读命令照常放行，写命令明确拒绝并告诉用户开哪儿。
     # DSH_INTERNAL=1 是 App 自己的调用（AdbBridge.shell），一律放行。
     if os.environ.get('DSH_INTERNAL') != '1' and not is_readonly_cmd(cmd):
@@ -98,7 +98,7 @@ def main():
             print('NOT_AUTHORIZED: 写操作未获授权，命令未执行')
             print('  命令：%s' % cmd)
             print('  只读命令（getprop/dumpsys/ls/cat 等）无需授权即可执行。')
-            print('  要放开写操作：App → 设置 → 权限 → 打开「容器内直接使用 ADB shell」')
+            print('  要放开写操作：App → 设置 → 功能 → 打开「容器内允许 ADB 写操作」')
             print('[EXIT=1]')
             sys.exit(1)
 
