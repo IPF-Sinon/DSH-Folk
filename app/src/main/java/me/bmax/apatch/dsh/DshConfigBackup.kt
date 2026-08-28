@@ -32,7 +32,13 @@ import org.json.JSONObject
 object DshConfigBackup {
     private const val BASE = "/api/dsh-config-manager"
 
-    /** 默认导出的分区：与插件「推荐分区」一致，去掉体积巨大的 sessions。 */
+    /**
+     * 默认导出的分区。
+     *
+     * 与插件 defaultIncluded=true 的集合一致，另外**显式**加上 pluginFiles
+     * （插件侧默认关，但手机迁移时插件自己的配置文件该跟着走）；
+     * 只有 sessions 不导 —— 会话记录体积能到几百 MB。
+     */
     val DEFAULT_SECTIONS = listOf(
         "settings", "ui", "providers", "plugins", "mcp", "prompts",
         "skills", "agentPresets", "agentInstructions", "workspaces",

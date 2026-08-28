@@ -20,17 +20,19 @@ DSH-Folk 把 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)�
 | --- | --- |
 | **主页** | 一键启动 / 停止 / 重启 DSH，显示运行阶段、Web UI 地址、当前运行方式与权限通道，带可复制的启动日志 |
 | **终端** | 容器内的真 PTY 终端（基于 Termux 的 `terminal-view`），直接 `bash` 进容器 |
-| **插件** | 管理容器里 DSH 的插件，展示 npm 周下载量与 GitHub star，内置 dsh-market 插件商店，支持本地安装 |
+| **插件** | 管理容器里 DSH 的插件，展示 npm 周下载量、GitHub star 与 dsh-market 点赞，内置 dsh-market 插件商店，支持本地安装 |
 | **设置** | 常规 / 外观 / 行为 / 功能 / 安全 / 备份 / 插件 / 多媒体，界面主题体系沿用 FolkPatch（`theme.json` 完全兼容） |
 
-**配置备份**与 DSH 桌面端的 `dsh-config-manager` 插件使用**同一套导出格式**，
-所以手机上导出的 zip 能直接在电脑上导入，反之亦然（设置、模型提供者、插件清单、MCP 服务器、技能、工作区；凭据不导出）。
+**配置备份**与 DSH 桌面端的 `dsh-config-manager` 插件使用**同一套导出格式**（走它的回环 HTTP API，不是另写一份 ZIP 打包器），
+所以手机上导出的 zip 能直接在电脑上导入，反之亦然。默认导出 settings / ui / providers / plugins / mcp / prompts /
+skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentialsStatus / self，
+不导 sessions（会话记录体积能到几百 MB）；凭据值不导出，可选整包 AES-256-GCM 加密。
 
 ## 环境要求
 
 - Android 8.0 (API 26) 或更高
 - **arm64-v8a** 设备（不支持 32 位）
-- 首次启动需要联网下载运行时（数百 MB，可在设置里选镜像或自动测速）
+- 首次启动需要联网下载运行时（约 130 MB 压缩包，解压后约 530 MB；可在设置里选镜像或自动测速）
 - 存储空间建议预留 2 GB 以上
 
 root / Shizuku / 无线 ADB 都是**可选**的。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）与已授权的 Shizuku / Sui，
@@ -53,7 +55,8 @@ APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出
 DSH-Folk (Android app)
   └─ proot / proroot                      ← 打包在 APK 里的可执行 .so
        └─ Ubuntu 24.04 arm64 rootfs       ← 首次启动时在线下载
-            └─ Node.js 24 + @deepseek-ai/dsh
+            ├─ Node.js 24 + @deepseek-ai/dsh
+            └─ python3（无线 ADB 配对用，已预装在 rootfs 里）
                  └─ dsh web --port 3080   ← 只监听 127.0.0.1
                       └─ 手机浏览器 / 应用内打开
 ```
