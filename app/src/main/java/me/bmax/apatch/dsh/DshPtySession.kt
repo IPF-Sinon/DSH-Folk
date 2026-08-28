@@ -20,7 +20,15 @@ import com.termux.terminal.TerminalSessionClient
  * 这个类只管会话与回调转发，不碰任何 View：UI 侧实现 [Listener] 即可，不必去实现
  * TerminalSessionClient 那十几个方法。
  */
-class DshPtySession private constructor(private val listener: Listener) : TerminalSessionClient {
+class DshPtySession private constructor(listener: Listener) : TerminalSessionClient {
+
+    /**
+     * 当前的回调宿主。**必须可换**：会话跨页面存活，每次回到终端页都是一个新的
+     * TerminalView，而复用的会话若还指着上一个 View 的回调，新 View 就永远不重绘
+     * （表现为「切走再回来终端不动了」）。
+     */
+    @Volatile
+    private var listener: Listener = listener
 
     /** UI 侧只关心这几件事。回调都在 PTY 读线程上来，实现方自己切主线程。 */
     interface Listener {
@@ -70,8 +78,12 @@ class DshPtySession private constructor(private val listener: Listener) : Termin
     override fun onTitleChanged(changedSession: TerminalSession) =
         listener.onTitle(changedSession.title ?: "")
 
-    override fun onSessionFinished(finishedSession: TerminalSession) =
+    override fun onSessionFinished(finishedSession: TerminalSession) {
+        // 会话已死，别让单例继续指着它：否则下次进终端页 attachOrStart 拿到的仍是
+        // 这个已退出的对象（isRunning 为 false 才会重开，但引用会一直留着不放）
+        if (current === this) current = null
         listener.onExit(finishedSession.exitStatus)
+    }
 
     override fun onCopyTextToClipboard(session: TerminalSession, text: String?) =
         listener.onCopy(text ?: "")
@@ -115,9 +127,12 @@ class DshPtySession private constructor(private val listener: Listener) : Termin
         @Volatile
         private var current: DshPtySession? = null
 
-        /** 已有活会话就复用，否则新起一个。 */
+        /** 已有活会话就复用（并把回调重新指向新宿主），否则新起一个。 */
         fun attachOrStart(cols: Int, rows: Int, listener: Listener): DshPtySession {
-            current?.takeIf { it.isRunning() }?.let { return it }
+            current?.takeIf { it.isRunning() }?.let {
+                it.listener = listener
+                return it
+            }
             val ps = DshPtySession(listener)
             val argv = DshRuntime.ptyArgv()
             val env = DshRuntime.ptyEnv()
@@ -139,8 +154,5 @@ class DshPtySession private constructor(private val listener: Listener) : Termin
             runCatching { s?.finish() }
         }
 
-        internal fun clearIfSame(s: DshPtySession) {
-            if (current === s) current = null
-        }
     }
 }
