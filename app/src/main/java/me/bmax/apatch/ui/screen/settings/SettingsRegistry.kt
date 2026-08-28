@@ -123,6 +123,8 @@ object SettingsRegistry {
 
             // === Function ===
             add(SettingEntry("function_run_mode", R.string.dsh_run_mode, R.string.dsh_run_mode_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_autostart", R.string.dsh_autostart, R.string.dsh_autostart_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_download_source", R.string.dsh_source_section, R.string.dsh_source_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_permission", R.string.dsh_perm_section, R.string.dsh_perm_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_wireless_adb", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.FUNCTION))
         }

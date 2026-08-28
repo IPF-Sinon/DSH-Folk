@@ -42,6 +42,7 @@ import me.bmax.apatch.dsh.AdbBridge
 import me.bmax.apatch.dsh.ContainerRuntime
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
@@ -66,6 +67,12 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
 
     var runtimeId by rememberSaveable { mutableStateOf(DshRuntime.runtimeId()) }
     var autostart by rememberSaveable { mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_AUTOSTART, false)) }
+    var downloadSource by rememberSaveable { mutableStateOf(DshSource.setting(context)) }
+    var customMetaUrl by rememberSaveable { mutableStateOf(DshSource.customMetaUrl(context)) }
+    // 生效源：auto 时是缓存/测速结果。解析要走网络，所以只在 IO 线程算，初值用设置值兜底。
+    var effectiveSource by rememberSaveable { mutableStateOf(downloadSource) }
+    var speedTesting by rememberSaveable { mutableStateOf(false) }
+    var speedResults by rememberSaveable { mutableStateOf(listOf<String>()) }
     var adbPairCode by rememberSaveable { mutableStateOf("") }
     var adbPairPort by rememberSaveable { mutableStateOf("") }
     var adbConnectPort by rememberSaveable { mutableStateOf("") }
@@ -74,6 +81,18 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var adbOutput by rememberSaveable { mutableStateOf("") }
 
     val runtimeInstalled = DshEnv.isRuntimeInstalled(context)
+
+    val noSpeedText = stringResource(R.string.dsh_source_no_speed)
+    val resultFmt = stringResource(R.string.dsh_source_result)
+    val sourceNames = DshSource.let {
+        mapOf(
+            DshSource.SOURCE_AUTO to stringResource(R.string.dsh_source_auto),
+            DshSource.SOURCE_GITHUB to stringResource(R.string.dsh_source_github),
+            DshSource.SOURCE_GHPROXY_CF to stringResource(R.string.dsh_source_ghproxy_cf),
+            DshSource.SOURCE_GHPROXY_AXISNOW to stringResource(R.string.dsh_source_ghproxy_axisnow),
+            DshSource.SOURCE_CUSTOM to stringResource(R.string.dsh_source_custom),
+        )
+    }
 
     // proroot 的可用性要读它自己的目录，放 IO 线程算一次即可。
     var prorootAvailable by rememberSaveable { mutableStateOf(false) }
@@ -89,9 +108,13 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
             )
             val ok = proroot.available()
             val reason = if (ok) "" else proroot.unavailableReason()
+            // resolve() 在 auto 且无缓存时会真的测速，所以放在同一个 IO 块里
+            val resolved = runCatching { DshSource.resolve(context.applicationContext) }
+                .getOrDefault(DshSource.setting(context.applicationContext))
             withContext(Dispatchers.Main) {
                 prorootAvailable = ok
                 prorootReason = reason
+                effectiveSource = resolved
             }
         }
     }
@@ -133,6 +156,56 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     onAutostartChange = { on ->
                         autostart = on
                         dshPrefs.edit().putBoolean(DshEnv.KEY_AUTOSTART, on).apply()
+                    },
+                    downloadSource = downloadSource,
+                    onDownloadSourceChange = { src ->
+                        downloadSource = src
+                        DshSource.setSetting(context, src)
+                        if (src != DshSource.SOURCE_AUTO) effectiveSource = src
+                        else scope.launch(Dispatchers.IO) {
+                            val r = runCatching { DshSource.resolve(context.applicationContext) }
+                                .getOrDefault(src)
+                            withContext(Dispatchers.Main) { effectiveSource = r }
+                        }
+                    },
+                    customMetaUrl = customMetaUrl,
+                    onCustomMetaUrlChange = { url ->
+                        customMetaUrl = url
+                        DshSource.setCustomMetaUrl(context, url)
+                    },
+                    effectiveSource = effectiveSource,
+                    speedTesting = speedTesting,
+                    speedResults = speedResults,
+                    onSpeedTest = {
+                        speedTesting = true
+                        scope.launch(Dispatchers.IO) {
+                            val results = runCatching { DshSource.speedTest() }.getOrDefault(emptyList())
+                            val lines = results
+                                .sortedBy { it.estimatedMs }
+                                .map { r ->
+                                    val speed = if (r.speedKBps > 0.0) {
+                                        String.format("%.0f KB/s", r.speedKBps)
+                                    } else {
+                                        noSpeedText
+                                    }
+                                    val latency = if (r.latencyMs >= Long.MAX_VALUE / 4) -1
+                                    else r.latencyMs.toInt()
+                                    String.format(
+                                        resultFmt,
+                                        sourceNames[r.source] ?: r.source,
+                                        latency,
+                                        speed,
+                                    )
+                                }
+                            val picked = runCatching {
+                                DshSource.pickBest(results, context.applicationContext)
+                            }.getOrDefault(effectiveSource)
+                            withContext(Dispatchers.Main) {
+                                speedResults = lines
+                                speedTesting = false
+                                if (downloadSource == DshSource.SOURCE_AUTO) effectiveSource = picked
+                            }
+                        }
                     },
                     perm = perm,
                     onRefreshPerm = {

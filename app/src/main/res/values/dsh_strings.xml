@@ -161,4 +161,18 @@
     <string name="dsh_log_empty">No log yet. Tap Start to install and run DeepSeek Harness.</string>
     <string name="dsh_term_exited">Session ended (exit code %1$d)</string>
     <string name="dsh_term_start_failed">Terminal failed to start: %1$s</string>
+    <string name="dsh_source_section">Runtime download source</string>
+    <string name="dsh_source_summary">Where the Linux rootfs is downloaded from on first start</string>
+    <string name="dsh_source_auto">Automatic (pick fastest)</string>
+    <string name="dsh_source_auto_desc">Measure latency and throughput, then keep the best for 24 h</string>
+    <string name="dsh_source_github">GitHub direct</string>
+    <string name="dsh_source_ghproxy_cf">gh-proxy (Cloudflare)</string>
+    <string name="dsh_source_ghproxy_axisnow">gh-proxy (AxisNow)</string>
+    <string name="dsh_source_custom">Custom mirror</string>
+    <string name="dsh_source_custom_hint">metadata.json URL</string>
+    <string name="dsh_source_effective">In effect: %1$s</string>
+    <string name="dsh_source_speedtest">Run speed test</string>
+    <string name="dsh_source_testing">Testing…</string>
+    <string name="dsh_source_result">%1$s: %2$d ms · %3$s</string>
+    <string name="dsh_source_no_speed">unreachable</string>
 </resources>

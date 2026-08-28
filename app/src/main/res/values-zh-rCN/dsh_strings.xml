@@ -143,4 +143,18 @@
     <string name="dsh_log_empty">尚无日志。点击「启动」开始安装并运行 DeepSeek Harness。</string>
     <string name="dsh_term_exited">会话已结束（退出码 %1$d）</string>
     <string name="dsh_term_start_failed">终端启动失败：%1$s</string>
+    <string name="dsh_source_section">运行时下载源</string>
+    <string name="dsh_source_summary">首次启动时从哪里下载 Linux rootfs</string>
+    <string name="dsh_source_auto">自动（测速选优）</string>
+    <string name="dsh_source_auto_desc">测延迟与吞吐，结果缓存 24 小时</string>
+    <string name="dsh_source_github">GitHub 直连</string>
+    <string name="dsh_source_ghproxy_cf">gh-proxy（Cloudflare）</string>
+    <string name="dsh_source_ghproxy_axisnow">gh-proxy（AxisNow）</string>
+    <string name="dsh_source_custom">自定义镜像</string>
+    <string name="dsh_source_custom_hint">metadata.json 地址</string>
+    <string name="dsh_source_effective">当前生效：%1$s</string>
+    <string name="dsh_source_speedtest">开始测速</string>
+    <string name="dsh_source_testing">测速中…</string>
+    <string name="dsh_source_result">%1$s：%2$d ms · %3$s</string>
+    <string name="dsh_source_no_speed">不可达</string>
 </resources>

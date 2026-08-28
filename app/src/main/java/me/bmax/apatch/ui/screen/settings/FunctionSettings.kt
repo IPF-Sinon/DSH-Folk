@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Security
@@ -38,6 +39,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.SplicedColumnGroup
@@ -61,6 +63,17 @@ fun FunctionSettingsContent(
     /** 开机自启（BootCompletedReceiver 会读同一个 pref）。 */
     autostart: Boolean,
     onAutostartChange: (Boolean) -> Unit,
+    /** 运行时下载源：DshSource.SOURCE_* 之一。 */
+    downloadSource: String,
+    onDownloadSourceChange: (String) -> Unit,
+    customMetaUrl: String,
+    onCustomMetaUrlChange: (String) -> Unit,
+    /** 已解析的生效源（auto 时是测速结果）。 */
+    effectiveSource: String,
+    speedTesting: Boolean,
+    /** 测速结果行，已格式化好。 */
+    speedResults: List<String>,
+    onSpeedTest: () -> Unit,
     perm: PermissionManager.Status,
     onRefreshPerm: () -> Unit,
     onRequestShizuku: () -> Unit,
@@ -130,6 +143,92 @@ fun FunctionSettingsContent(
                 checked = autostart,
                 onCheckedChange = onAutostartChange,
             )
+        }
+
+        // ───────── 运行时下载源 ─────────
+        item(key = "function_download_source") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    SectionHeader(
+                        icon = { Icon(Icons.Filled.CloudDownload, null, Modifier.size(20.dp)) },
+                        title = stringResource(R.string.dsh_source_section),
+                        summary = stringResource(R.string.dsh_source_summary),
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    RuntimeOption(
+                        selected = downloadSource == DshSource.SOURCE_AUTO,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_source_auto),
+                        summary = stringResource(R.string.dsh_source_auto_desc),
+                        onSelect = { onDownloadSourceChange(DshSource.SOURCE_AUTO) },
+                    )
+                    for (src in listOf(
+                        DshSource.SOURCE_GHPROXY_AXISNOW,
+                        DshSource.SOURCE_GHPROXY_CF,
+                        DshSource.SOURCE_GITHUB,
+                        DshSource.SOURCE_CUSTOM,
+                    )) {
+                        RuntimeOption(
+                            selected = downloadSource == src,
+                            enabled = true,
+                            title = stringResource(sourceLabelRes(src)),
+                            summary = "",
+                            onSelect = { onDownloadSourceChange(src) },
+                        )
+                    }
+
+                    AnimatedVisibility(visible = downloadSource == DshSource.SOURCE_CUSTOM) {
+                        OutlinedTextField(
+                            value = customMetaUrl,
+                            onValueChange = onCustomMetaUrlChange,
+                            label = { Text(stringResource(R.string.dsh_source_custom_hint)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.dsh_source_effective,
+                            stringResource(sourceLabelRes(effectiveSource)),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedButton(onClick = onSpeedTest, enabled = !speedTesting) {
+                            Text(
+                                stringResource(
+                                    if (speedTesting) R.string.dsh_source_testing
+                                    else R.string.dsh_source_speedtest
+                                )
+                            )
+                        }
+                        if (speedTesting) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        }
+                    }
+
+                    if (speedResults.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        for (line in speedResults) {
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         // ───────── 权限通道 ─────────
@@ -363,6 +462,16 @@ private fun RuntimeOption(
             )
         }
     }
+}
+
+/** 下载源 id → 可本地化标签；DshSource.displayName 只用于日志。 */
+internal fun sourceLabelRes(source: String): Int = when (source) {
+    DshSource.SOURCE_AUTO -> R.string.dsh_source_auto
+    DshSource.SOURCE_GITHUB -> R.string.dsh_source_github
+    DshSource.SOURCE_GHPROXY_CF -> R.string.dsh_source_ghproxy_cf
+    DshSource.SOURCE_GHPROXY_AXISNOW -> R.string.dsh_source_ghproxy_axisnow
+    DshSource.SOURCE_CUSTOM -> R.string.dsh_source_custom
+    else -> R.string.dsh_source_auto
 }
 
 private fun yesNo(b: Boolean): String = if (b) "✓" else "✗"
