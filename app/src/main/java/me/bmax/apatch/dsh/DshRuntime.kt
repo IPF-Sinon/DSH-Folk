@@ -348,6 +348,16 @@ object DshRuntime {
             fail("获取运行时信息失败，请检查网络或切换镜像源")
             return
         }
+        // 空间检查放在下载之前：rootfs 解压后约为压缩包的 3 倍，加上压缩包自身
+        // 需要约 4 倍余量。等下载完再查等于白下 100 多 MB。
+        if (meta.sizeBytes > 0) {
+            val free = availableSpace(appContext.filesDir)
+            val need = meta.sizeBytes * 4
+            if (free in 1..need) {
+                fail("存储空间不足（可用 ${free / 1024 / 1024}MB，需约 ${need / 1024 / 1024}MB），请清理后重试")
+                return
+            }
+        }
         val tarball = DshEnv.downloadZip(appContext)
         appendLog("> 开始下载运行时 v${meta.version}（node ${meta.nodeVersion} · dsh ${meta.dsh}）")
         if (!downloadWithFallback(meta, tarball)) {
@@ -359,6 +369,7 @@ object DshRuntime {
             fail("运行时校验失败（sha256 不匹配）")
             return
         }
+        // 二次确认：metadata 里的 sizeBytes 可能与实际有偏差，用真实体积再算一次
         val free = availableSpace(appContext.filesDir)
         val need = (tarball.length() * 3.0).toLong()
         if (free in 1..need) {
