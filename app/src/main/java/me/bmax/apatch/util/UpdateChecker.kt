@@ -39,10 +39,10 @@ object UpdateChecker {
                 return@withContext false
             }
 
-            val remote = parseVersion(tag)
-            val local = parseVersion(BuildConfig.VERSION_NAME)
             Log.d(TAG, "remote=$tag local=${BuildConfig.VERSION_NAME}")
-            compareVersions(remote, local) > 0
+            // 用 DshPluginRepo 那套 semver 比较：预发布标识必须参与，否则装着
+            // v0.1.0-rc.1 的用户看不到 v0.1.0 正式版的更新
+            me.bmax.apatch.dsh.compareVersions(tag, BuildConfig.VERSION_NAME) > 0
         } catch (e: Exception) {
             Log.e(TAG, "Check update failed", e)
             false
@@ -57,20 +57,5 @@ object UpdateChecker {
         } catch (e: Exception) {
             Log.e(TAG, "Cannot open releases page", e)
         }
-    }
-
-    /** `v0.1.0-rc.1` -> [0, 1, 0]；预发布后缀直接忽略。 */
-    private fun parseVersion(raw: String): List<Int> =
-        raw.removePrefix("v").removePrefix("V")
-            .substringBefore('-')
-            .split('.')
-            .map { it.filter(Char::isDigit).toIntOrNull() ?: 0 }
-
-    private fun compareVersions(a: List<Int>, b: List<Int>): Int {
-        for (i in 0 until maxOf(a.size, b.size)) {
-            val d = (a.getOrElse(i) { 0 }) - (b.getOrElse(i) { 0 })
-            if (d != 0) return d
-        }
-        return 0
     }
 }
