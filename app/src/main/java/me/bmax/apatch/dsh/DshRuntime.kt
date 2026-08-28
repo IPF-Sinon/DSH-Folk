@@ -84,8 +84,24 @@ object DshRuntime {
 
     @Volatile private var hardlinkOk: Boolean? = null
 
-    fun attach(context: Context) {
+    /**
+     * 只绑定 Context，不做任何 IO。**必须在任何 Composable 读取本对象之前调用**
+     * （APApplication.onCreate 里）。
+     *
+     * 原来只有 attach() 一个入口，而它是在首页的 LaunchedEffect 里调的 —— 那时
+     * 首次 composition 已经跑完了，composition 期间读 runtimeId() / port() 会撞上
+     * 未初始化的 lateinit 直接崩掉（真机实测：进首页几秒后
+     * UninitializedPropertyAccessException）。
+     */
+    fun init(context: Context) {
         if (!::appContext.isInitialized) appContext = context.applicationContext
+    }
+
+    /** Context 是否已绑定。未绑定时所有读接口给默认值而不是抛异常。 */
+    private val ready: Boolean get() = ::appContext.isInitialized
+
+    fun attach(context: Context) {
+        init(context)
         val installed = DshEnv.isRuntimeInstalled(appContext)
         _state.update {
             it.copy(
@@ -99,12 +115,15 @@ object DshRuntime {
 
     private fun prefs() = appContext.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
 
-    fun port(): Int = prefs().getInt(DshEnv.KEY_PORT, DshEnv.DEFAULT_PORT).let {
-        if (it in 1..65535) it else DshEnv.DEFAULT_PORT
+    fun port(): Int {
+        if (!ready) return DshEnv.DEFAULT_PORT
+        return prefs().getInt(DshEnv.KEY_PORT, DshEnv.DEFAULT_PORT).let {
+            if (it in 1..65535) it else DshEnv.DEFAULT_PORT
+        }
     }
 
     fun setPort(p: Int) {
-        if (p !in 1..65535) return
+        if (!ready || p !in 1..65535) return
         prefs().edit().putInt(DshEnv.KEY_PORT, p).apply()
         _state.update { it.copy(port = p) }
     }
@@ -112,9 +131,11 @@ object DshRuntime {
     // ────────────────────────── 容器运行时选择 ──────────────────────────
 
     /** 当前选择的运行时 id（默认 proot：稳定优先）。 */
-    fun runtimeId(): String = prefs().getString(DshEnv.KEY_RUNTIME, "proot") ?: "proot"
+    fun runtimeId(): String =
+        if (!ready) "proot" else prefs().getString(DshEnv.KEY_RUNTIME, "proot") ?: "proot"
 
     fun setRuntimeId(id: String) {
+        if (!ready) return
         prefs().edit().putString(DshEnv.KEY_RUNTIME, id).putInt(DshEnv.KEY_PROROOT_FAIL, 0).apply()
     }
 
@@ -901,7 +922,7 @@ object DshRuntime {
     }.getOrDefault(-1L)
 
     /** 运行时占用统计（设置页存储信息用）。 */
-    fun rootfsSizeBytes(): Long = dirSize(DshEnv.rootfs(appContext))
+    fun rootfsSizeBytes(): Long = if (!ready) 0L else dirSize(DshEnv.rootfs(appContext))
 
     private fun dirSize(dir: File): Long {
         if (!dir.exists()) return 0L

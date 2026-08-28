@@ -124,6 +124,11 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
         apApp = this
         sharedPreferences = getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
 
+        // DSH 运行时的 Context 必须在任何 Composable 之前绑定：首页 composition
+        // 期间就会读 runtimeId() / port()，只靠首页 LaunchedEffect 里的 attach()
+        // 太晚（那时首帧已经在 measure 了），会撞未初始化的 lateinit 直接崩。
+        me.bmax.apatch.dsh.DshRuntime.init(this)
+
         // 主题/音效/背景等配置必须在任何 Composable 读取之前同步载入
         MusicConfig.load(this)
         me.bmax.apatch.ui.theme.SoundEffectConfig.load(this)
