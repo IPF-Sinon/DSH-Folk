@@ -68,7 +68,7 @@ import java.io.File
  *
  * 目录来自 dsh-market.com，下载量取自 npm registry，星标取自 GitHub —— 三者独立，
  * 任一不可用时对应标签显示「—」而不是让整页失败。
- * 右下角 FAB 为**本地安装**：选一个 npm 包 tarball（.tgz），复制进 rootfs 后走容器内 npm。
+ * 右下角 FAB 为**本地安装**：选一个 npm 包 tarball（.tgz），复制进 rootfs 后交给 dsh plugin add。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>
@@ -90,7 +90,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
         if (result.resultCode != RESULT_OK) return@rememberLauncherForActivityResult
         val uri = result.data?.data ?: return@rememberLauncherForActivityResult
         scope.launch {
-            // 容器内 npm 只能读 rootfs 里的路径，先把用户选的 tgz 落到 /root/.dsh/incoming
+            // 容器内只能读 rootfs 里的路径，先把用户选的 tgz 落到 /root/.dsh/incoming
             val guest = withContext(Dispatchers.IO) {
                 runCatching {
                     val dir = File(DshEnv.dshHome(context), "incoming").apply { mkdirs() }

@@ -93,8 +93,8 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
         if (viewModel.plugins.isEmpty()) viewModel.refresh()
     }
 
-    // 本地安装：容器内 npm 只看得到 rootfs 内的路径，所以先把用户选的 .tgz 落到
-    // /root/.dsh/incoming，再把容器路径交给 npm
+    // 本地安装：容器内只看得到 rootfs 内的路径，所以先把用户选的 .tgz 落到
+    // /root/.dsh/incoming，再把容器绝对路径交给 dsh plugin add
     val pickTarball = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
