@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DSH-Folk 专属字符串（与 FolkPatch 原有 strings.xml 分开，便于维护与同步上游） -->
+
+    <!-- 底栏 -->
+    <string name="dsh_terminal">Terminal</string>
+    <string name="dsh_plugins">Plugins</string>
+
+    <!-- 首页布局选项 -->
+    <string name="settings_home_layout_dsh">Harness dashboard</string>
+
+    <!-- 首页 -->
+    <string name="dsh_app_title" translatable="false">DeepSeek Harness</string>
+    <string name="dsh_run_mode">Run mode</string>
+    <string name="dsh_permission">Permission</string>
+    <string name="dsh_boot_log">Startup log</string>
+    <string name="dsh_copy_log">Copy log</string>
+    <string name="dsh_log_copied">Log copied</string>
+    <string name="dsh_open_webui">Open Web UI</string>
+    <string name="dsh_start">Start</string>
+    <string name="dsh_stop">Stop</string>
+    <string name="dsh_restart">Restart</string>
+
+    <!-- 运行方式 -->
+    <string name="dsh_mode_proot" translatable="false">proot</string>
+    <string name="dsh_mode_proroot" translatable="false">proroot</string>
+    <string name="dsh_mode_proot_desc">Built-in, stable (ptrace based)</string>
+    <string name="dsh_mode_proroot_desc">Experimental, zero ptrace overhead</string>
+
+    <!-- 权限通道 -->
+    <string name="dsh_perm_none">None</string>
+    <string name="dsh_perm_root">Root</string>
+    <string name="dsh_perm_shizuku">Shizuku</string>
+    <string name="dsh_perm_adb">Wireless ADB</string>
+
+    <!-- 运行时状态 -->
+    <string name="dsh_phase_not_ready">Not installed</string>
+    <string name="dsh_phase_downloading">Downloading</string>
+    <string name="dsh_phase_extracting">Installing</string>
+    <string name="dsh_phase_starting">Starting</string>
+    <string name="dsh_phase_running">Running</string>
+    <string name="dsh_phase_error">Error</string>
+
+    <!-- 插件页 -->
+    <string name="dsh_plugin_store">Plugin store</string>
+    <string name="dsh_plugin_downloads">Downloads</string>
+    <string name="dsh_plugin_stars">Stars</string>
+    <string name="dsh_local_install">Install locally</string>
+
+    <!-- 关于 / 致谢 -->
+    <string name="dsh_about_repo" translatable="false">https://github.com/IPF-Sinon/DSH-Folk</string>
+    <string name="dsh_acknowledgements">Acknowledgements</string>
+    <string name="dsh_qq_group">QQ group</string>
+    <string name="dsh_qq_group_id" translatable="false">1109060326</string>
+    <string name="dsh_qq_group_url" translatable="false">https://qm.qq.com/q/t7HDoR5ACk</string>
+    <string name="dsh_dev_url" translatable="false">https://github.com/IPF-Sinon</string>
+    <string name="dsh_dev_motto">Run DeepSeek Harness on your phone.</string>
+
+    <!-- 终端页 -->
+    <string name="dsh_term_font_smaller">Smaller font</string>
+    <string name="dsh_term_font_larger">Larger font</string>
+    <string name="dsh_term_restart">Restart session</string>
+    <string name="dsh_term_session_ended">Session ended, tap restart to reopen</string>
+    <string name="dsh_term_not_ready">Runtime is not installed yet. Go to Home and tap Start.</string>
+
+    <!-- 插件页文案 -->
+    <string name="dsh_plugin_empty">No plugins installed. Open the plugin store from the top right.</string>
+    <string name="dsh_plugin_loading">Reading plugins…</string>
+    <string name="dsh_plugin_catalog_loading">Fetching plugin catalog…</string>
+    <string name="dsh_plugin_catalog_failed">Could not fetch the plugin catalog. Check the network and refresh.</string>
+    <string name="dsh_plugin_local_read_failed">Cannot read the selected file</string>
+    <string name="dsh_plugin_done">Done</string>
+
+    <!-- 关于页 -->
+    <string name="dsh_about_desc">An Android launcher for DeepSeek Harness: it runs the Node.js CLI and its Web UI inside a Linux container (proot / proroot), so the whole harness works on a phone.</string>
+    <string name="dsh_about_powered_by" translatable="false">DeepSeek Harness · Node.js · proot</string>
+    <string name="dsh_ack_dsh">DeepSeek Harness — the CLI and Web UI this launcher runs</string>
+    <string name="dsh_ack_dsha">DSHA — container bootstrap, wireless ADB pairing, PTY terminal (MIT, qiannianhuanxiang)</string>
+    <string name="dsh_ack_dshm">DSHM — online runtime delivery and mirror racing (GPL-3.0)</string>
+    <string name="dsh_ack_folkpatch">FolkPatch — the Compose UI and theme system this app is built on (GPL-3.0, LyraVoid / matsuzaka-yuki)</string>
+    <string name="dsh_ack_termux">Termux terminal-view / terminal-emulator — the PTY and terminal emulation (Apache-2.0)</string>
+
+    <!-- 功能设置：运行方式 + 权限 -->
+    <string name="dsh_run_mode_summary">Which container engine runs the Linux rootfs</string>
+    <string name="dsh_run_mode_current">Current: %1$s</string>
+    <string name="dsh_run_mode_restart_hint">Takes effect the next time the harness starts.</string>
+
+    <string name="dsh_perm_section">Permission channel</string>
+    <string name="dsh_perm_summary">DSH-Folk does not patch the kernel. It detects and reuses what the device already has.</string>
+    <string name="dsh_perm_current">In effect: %1$s</string>
+    <string name="dsh_perm_refresh">Re-detect</string>
+    <string name="dsh_perm_root_detail">su found: %1$s · provider: %2$s</string>
+    <string name="dsh_perm_shizuku_detail">Service running: %1$s · granted: %2$s</string>
+    <string name="dsh_perm_request_shizuku">Request Shizuku permission</string>
+    <string name="dsh_perm_none_hint">No elevated channel. DSH still runs inside the container; only system-path access and some plugins are limited.</string>
+
+    <string name="dsh_adb_section">Wireless ADB pairing</string>
+    <string name="dsh_adb_summary">Pair with the system wireless-debugging service to get shell (uid 2000) without root or Shizuku.</string>
+    <string name="dsh_adb_pair_code">Pairing code</string>
+    <string name="dsh_adb_pair_port">Pairing port</string>
+    <string name="dsh_adb_connect_port">Connect port</string>
+    <string name="dsh_adb_host">Host (optional)</string>
+    <string name="dsh_adb_install_deps">Install dependencies</string>
+    <string name="dsh_adb_pair">Pair</string>
+    <string name="dsh_adb_paired">Paired</string>
+    <string name="dsh_adb_not_paired">Not paired</string>
+    <string name="dsh_adb_needs_runtime">Install the runtime from Home first.</string>
+    <string name="dsh_adb_open_devsettings">Open developer options</string>
+    <string name="dsh_output">Output</string>
+
+    <!-- 备份：对齐 dsh-config-manager 导出格式 -->
+    <string name="dsh_backup_section">DSH configuration backup</string>
+    <string name="dsh_backup_summary">Uses the same export format as the dsh-config-manager plugin, so a backup made here imports on desktop and vice versa.</string>
+    <string name="dsh_backup_export">Export configuration</string>
+    <string name="dsh_backup_export_summary">Settings, providers, plugin list, MCP servers, skills and workspaces. Credentials are never exported.</string>
+    <string name="dsh_backup_import">Import a backup</string>
+    <string name="dsh_backup_import_summary">Pick an exported .zip; conflicts are merged conservatively and a rollback snapshot is taken first.</string>
+    <string name="dsh_backup_open_dir">Open backup folder</string>
+    <string name="dsh_backup_password">Backup password (optional)</string>
+    <string name="dsh_backup_password_summary">When set, the whole archive is encrypted with AES-256-GCM. The same password is required to import it.</string>
+    <string name="dsh_backup_needs_running">DSH must be running before configuration can be exported or imported.</string>
+    <string name="dsh_backup_plugin_missing">dsh-config-manager is not installed in the runtime. Install it from the plugin store first.</string>
+    <string name="dsh_backup_exporting">Exporting…</string>
+    <string name="dsh_backup_importing">Importing…</string>
+    <string name="dsh_backup_open_dir_failed">Could not open the folder; it is at Download/DSH-Folk/ConfigBackups.</string>
+</resources>

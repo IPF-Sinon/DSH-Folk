@@ -1,0 +1,146 @@
+name: Build DSH-Folk
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: [ 'app/**', 'gradle/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml', '.github/actions/**' ]
+  pull_request:
+    branches: [ main, develop ]
+    paths: [ 'app/**', 'gradle/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml', '.github/actions/**' ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options: [ debug, release, both ]
+
+# 同一分支的新推送取消上一次仍在跑的构建（Gradle 构建很吃 runner 时间）
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      build_debug: ${{ steps.set.outputs.debug }}
+      build_release: ${{ steps.set.outputs.release }}
+    steps:
+      - id: set
+        run: |
+          TYPE="${{ inputs.build_type }}"
+          # 非手动触发只出 debug：release 需要签名 secrets，PR 里拿不到
+          [ "${{ github.event_name }}" != "workflow_dispatch" ] && TYPE="debug"
+          DEBUG=false; RELEASE=false
+          case "$TYPE" in
+            debug)   DEBUG=true ;;
+            release) RELEASE=true ;;
+            both)    DEBUG=true; RELEASE=true ;;
+          esac
+          echo "debug=$DEBUG"     >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+
+  build_debug:
+    name: Build Debug
+    needs: prepare
+    if: needs.prepare.outputs.build_debug == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # versionCode/branchName 由 git 元数据推导，需要完整历史
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-build-env
+
+      - run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: |
+          SHORT="${GITHUB_SHA::7}"
+          APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::debug APK not produced"
+            find app/build/outputs -type f -name "*.apk" || true
+            exit 1
+          fi
+          mv "$APK" "DSH-Folk-Debug-${SHORT}.apk"
+          sha256sum "DSH-Folk-Debug-${SHORT}.apk" > "DSH-Folk-Debug-${SHORT}.apk.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-folk-debug-${{ github.sha }}
+          path: |
+            DSH-Folk-Debug-*.apk
+            DSH-Folk-Debug-*.apk.sha256
+          retention-days: 30
+
+  build_release:
+    name: Build Release
+    needs: prepare
+    if: needs.prepare.outputs.build_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-build-env
+
+      - name: Check signing secrets
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            # 没配 keystore 也要能出包：Gradle 会退回 debug.keystore 默认签名
+            echo "::notice::KEYSTORE_BASE64 not set, release will use the fallback debug key"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Decode keystore
+        if: steps.signing.outputs.present == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > dsh-folk.jks
+          # 用 printf 而非 heredoc 展开，避免密码里的特殊字符被 shell 解释
+          {
+            printf 'KEYSTORE_FILE=../dsh-folk.jks\n'
+            printf 'KEYSTORE_PASSWORD=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'KEY_ALIAS=%s\n' "$KEY_ALIAS"
+            printf 'KEY_PASSWORD=%s\n' "$KEY_PASSWORD"
+          } > keystore.properties
+
+      - run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: |
+          SHORT="${GITHUB_SHA::7}"
+          APK=$(find app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::release APK not produced"
+            find app/build/outputs -type f -name "*.apk" || true
+            exit 1
+          fi
+          mv "$APK" "DSH-Folk-Release-${SHORT}.apk"
+          sha256sum "DSH-Folk-Release-${SHORT}.apk" > "DSH-Folk-Release-${SHORT}.apk.sha256"
+
+      - name: Remove signing material
+        if: always()
+        run: rm -f dsh-folk.jks keystore.properties
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-folk-release-${{ github.sha }}
+          path: |
+            DSH-Folk-Release-*.apk
+            DSH-Folk-Release-*.apk.sha256
+          retention-days: 30

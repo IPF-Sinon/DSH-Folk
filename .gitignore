@@ -1,0 +1,27 @@
+*.iml
+.gradle
+.idea
+.DS_Store
+build
+captures
+.cxx
+*.keystore
+*.jks
+keystore.properties
+local.properties
+auth.properties
+
+# 签名材料一律不入库
+app/*.jks
+dsh-folk.jks
+keystore.properties
+.vscode
+.kotlin
+app/src/main/resources/
+private
+.claude/
+.opencode
+.qoder
+
+# 运行时构建产物（rootfs.tar.gz 等，只经 Release 分发）
+runtime-builder/out/

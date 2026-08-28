@@ -1,0 +1,75 @@
+name: Build DSH runtime rootfs
+
+on:
+  workflow_dispatch:
+    inputs:
+      dsh_version:
+        description: '@deepseek-ai/dsh version (npm dist-tag or exact)'
+        required: false
+        default: 'latest'
+      node_version:
+        description: 'Node.js version (e.g. v24.19.0)'
+        required: false
+        default: 'v24.19.0'
+      publish:
+        description: 'Publish to the runtime-latest release'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  rootfs:
+    name: Assemble arm64 rootfs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Build rootfs
+        env:
+          DSH_VERSION: ${{ inputs.dsh_version }}
+          NODE_VER: ${{ inputs.node_version }}
+          OUT: ${{ github.workspace }}/out
+          RELEASE_TAG: runtime-latest
+        run: bash runtime-builder/build-rootfs.sh
+
+      - name: Summarize
+        run: |
+          ls -la out
+          {
+            echo '### DSH runtime'
+            echo
+            echo '```json'
+            cat out/metadata.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-runtime-rootfs
+          path: |
+            out/rootfs.tar.gz
+            out/metadata.json
+          retention-days: 7
+
+      # runtime-latest 是一个滚动 tag：App 里的 DshSource.META_URL 固定指向它，
+      # 所以这里必须覆盖同名资产而不是新建 tag。
+      - name: Publish to runtime-latest release
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view runtime-latest >/dev/null 2>&1; then
+            gh release create runtime-latest \
+              --title 'DSH runtime (rolling)' \
+              --notes 'Rolling container runtime for DSH-Folk. Assets are replaced in place; metadata.json always describes the current rootfs.tar.gz.' \
+              --latest=false
+          fi
+          gh release upload runtime-latest \
+            out/rootfs.tar.gz out/metadata.json --clobber

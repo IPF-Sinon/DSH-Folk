@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DSH-Folk 专属字符串（简体中文） -->
+
+    <string name="dsh_terminal">终端</string>
+    <string name="dsh_plugins">插件</string>
+
+    <string name="settings_home_layout_dsh">Harness 面板</string>
+
+    <string name="dsh_run_mode">运行方式</string>
+    <string name="dsh_permission">权限</string>
+    <string name="dsh_boot_log">启动日志</string>
+    <string name="dsh_copy_log">复制日志</string>
+    <string name="dsh_log_copied">日志已复制</string>
+    <string name="dsh_open_webui">打开 Web 界面</string>
+    <string name="dsh_start">启动</string>
+    <string name="dsh_stop">停止</string>
+    <string name="dsh_restart">重启</string>
+
+    <string name="dsh_about_powered_by" translatable="false">DeepSeek Harness · Node.js · proot</string>
+
+    <string name="dsh_mode_proot_desc">内置，稳定（基于 ptrace）</string>
+    <string name="dsh_mode_proroot_desc">实验，零 ptrace 开销</string>
+
+    <string name="dsh_perm_none">未获取</string>
+    <string name="dsh_perm_root">Root</string>
+    <string name="dsh_perm_shizuku">Shizuku</string>
+    <string name="dsh_perm_adb">无线 ADB</string>
+
+    <string name="dsh_phase_not_ready">未安装</string>
+    <string name="dsh_phase_downloading">下载中</string>
+    <string name="dsh_phase_extracting">安装中</string>
+    <string name="dsh_phase_starting">启动中</string>
+    <string name="dsh_phase_running">运行中</string>
+    <string name="dsh_phase_error">出错</string>
+
+    <string name="dsh_plugin_store">插件商店</string>
+    <string name="dsh_plugin_downloads">下载量</string>
+    <string name="dsh_plugin_stars">星标</string>
+    <string name="dsh_local_install">本地安装</string>
+
+    <string name="dsh_acknowledgements">致谢</string>
+    <string name="dsh_qq_group">QQ 群</string>
+
+    <string name="dsh_dev_motto">让 DeepSeek Harness 跑在手机上。</string>
+
+    <string name="dsh_term_font_smaller">缩小字号</string>
+    <string name="dsh_term_font_larger">放大字号</string>
+    <string name="dsh_term_restart">重启会话</string>
+    <string name="dsh_term_session_ended">会话已结束，点右上角重启</string>
+    <string name="dsh_term_not_ready">运行时还没装好。回到主页点「启动」下载安装后再来。</string>
+
+    <string name="dsh_plugin_empty">尚未安装任何插件。点右上角进入插件商店。</string>
+    <string name="dsh_plugin_loading">正在读取插件…</string>
+    <string name="dsh_plugin_catalog_loading">正在获取插件目录…</string>
+    <string name="dsh_plugin_catalog_failed">暂时取不到插件目录，请检查网络后刷新。</string>
+    <string name="dsh_plugin_local_read_failed">无法读取所选文件</string>
+    <string name="dsh_plugin_done">完成</string>
+
+    <string name="dsh_about_desc">DeepSeek Harness 的 Android 启动器：把 Node.js 命令行与 Web 界面跑在 Linux 容器（proot / proroot）里，让整套 harness 能在手机上使用。</string>
+    <string name="dsh_ack_dsh">DeepSeek Harness —— 本应用运行的命令行与 Web 界面</string>
+    <string name="dsh_ack_dsha">DSHA —— 容器引导、无线 ADB 配对、PTY 终端（MIT，qiannianhuanxiang）</string>
+    <string name="dsh_ack_dshm">DSHM —— 运行时在线分发与镜像竞速（GPL-3.0）</string>
+    <string name="dsh_ack_folkpatch">FolkPatch —— 本应用的 Compose 界面与主题系统（GPL-3.0，LyraVoid / matsuzaka-yuki）</string>
+    <string name="dsh_ack_termux">Termux terminal-view / terminal-emulator —— PTY 与终端模拟（Apache-2.0）</string>
+
+    <string name="dsh_run_mode_summary">用哪个容器引擎运行 Linux rootfs</string>
+    <string name="dsh_run_mode_current">当前：%1$s</string>
+    <string name="dsh_run_mode_restart_hint">下次启动 harness 时生效。</string>
+
+    <string name="dsh_perm_section">权限通道</string>
+    <string name="dsh_perm_summary">DSH-Folk 不打内核补丁，只探测并复用设备上已有的提权途径。</string>
+    <string name="dsh_perm_current">当前生效：%1$s</string>
+    <string name="dsh_perm_refresh">重新探测</string>
+    <string name="dsh_perm_root_detail">找到 su：%1$s · 提供者：%2$s</string>
+    <string name="dsh_perm_shizuku_detail">服务运行中：%1$s · 已授权：%2$s</string>
+    <string name="dsh_perm_request_shizuku">申请 Shizuku 权限</string>
+    <string name="dsh_perm_none_hint">没有可用的提权通道。DSH 仍能在容器里运行，只是访问系统路径与部分插件功能受限。</string>
+
+    <string name="dsh_adb_section">无线 ADB 配对</string>
+    <string name="dsh_adb_summary">通过系统「无线调试」配对，在没有 root 也没有 Shizuku 时拿到 shell（uid 2000）权限。</string>
+    <string name="dsh_adb_pair_code">配对码</string>
+    <string name="dsh_adb_pair_port">配对端口</string>
+    <string name="dsh_adb_connect_port">连接端口</string>
+    <string name="dsh_adb_host">本机 IP（可选）</string>
+    <string name="dsh_adb_install_deps">安装依赖</string>
+    <string name="dsh_adb_pair">配对</string>
+    <string name="dsh_adb_paired">已配对</string>
+    <string name="dsh_adb_not_paired">未配对</string>
+    <string name="dsh_adb_needs_runtime">请先在主页安装运行时。</string>
+    <string name="dsh_adb_open_devsettings">打开开发者选项</string>
+    <string name="dsh_output">输出</string>
+
+    <string name="dsh_backup_section">DSH 配置备份</string>
+    <string name="dsh_backup_summary">与 dsh-config-manager 插件同一套导出格式，手机导出的备份能直接在电脑上导入，反之亦然。</string>
+    <string name="dsh_backup_export">导出配置</string>
+    <string name="dsh_backup_export_summary">包含设置、模型提供者、插件清单、MCP 服务器、技能与工作区；凭据不导出。</string>
+    <string name="dsh_backup_import">导入备份</string>
+    <string name="dsh_backup_import_summary">选择导出的 .zip；冲突按保守策略合并，执行前先建回滚快照。</string>
+    <string name="dsh_backup_open_dir">打开备份目录</string>
+    <string name="dsh_backup_password">备份密码（可选）</string>
+    <string name="dsh_backup_password_summary">填写后整包用 AES-256-GCM 加密，导入时需要同一密码。</string>
+    <string name="dsh_backup_needs_running">导出/导入配置前需要先启动 DSH。</string>
+    <string name="dsh_backup_plugin_missing">运行时里没有 dsh-config-manager，请先从插件商店安装。</string>
+    <string name="dsh_backup_exporting">正在导出…</string>
+    <string name="dsh_backup_importing">正在导入…</string>
+    <string name="dsh_backup_open_dir_failed">打不开目录，文件在 Download/DSH-Folk/ConfigBackups。</string>
+</resources>

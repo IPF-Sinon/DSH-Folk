@@ -1,0 +1,23 @@
+# 默认按 LF 规范化文本文件
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件绝不做行尾转换（.tar.gz / .so 被改一个字节就废了）
+*.so binary
+*.tar.gz binary
+*.tgz binary
+*.zip binary
+*.jar binary
+*.apk binary
+*.jks binary
+*.keystore binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.wav binary
+*.mp3 binary
+*.ogg binary

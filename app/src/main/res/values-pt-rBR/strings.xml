@@ -1,0 +1,1359 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">FolkPatch</string>
+
+    <string name="desktop_app_name">Nome do Aplicativo da Área de Trabalho</string>
+
+    <string name="home">Início</string>
+
+    <string name="success">Sucesso</string>
+    <string name="failure">Falha</string>
+
+    <string name="patch_warnning">A instalação envolve riscos. Por favor, certifique-se de que seus dados possuem backup.</string>
+    <string name="patch">Patch</string>
+
+    <string name="kernel_patch">KernelPatch</string>
+    <string name="android_patch">AndroidPatch</string>
+
+    <string name="settings_nav_layout_title">Configuração do Layout de Navegação</string>
+    <string name="settings_nav_layout_summary">Ocultar ou mostrar alguns componentes de navegação</string>
+    <string name="settings_nav_scheme">Esquema de navegação</string>
+    <string name="settings_nav_mode">Modo da barra de navegação</string>
+    <string name="settings_nav_mode_summary">Escolha como a barra de navegação é exibida</string>
+    <string name="settings_nav_mode_auto">Automático Tradicional</string>
+    <string name="settings_nav_mode_bottom">Sempre barra inferior</string>
+    <string name="settings_nav_mode_rail">Sempre barra lateral</string>
+    <string name="settings_nav_mode_floating">Barra inferior flutuante</string>
+    <string name="settings_show_apm">Mostrar módulos do sistema</string>
+    <string name="settings_show_kpm">Mostrar KPM</string>
+    <string name="settings_show_superuser">Mostrar SuperUser</string>
+    <string name="settings_floating_auto_hide">Ocultar Automaticamente</string>
+    <string name="settings_floating_auto_hide_summary">Ocultar automaticamente a barra flutuante após 3 segundos de inatividade</string>
+    <string name="settings_floating_swipe_hide">Ocultar ao Deslizar</string>
+    <string name="settings_floating_swipe_hide_summary">Ocultar a barra ao deslizar para baixo, mostrar ao deslizar para cima</string>
+    <string name="settings_navbar_glass_effect">Efeito de vidro fosco</string>
+    <string name="settings_navbar_glass_effect_summary">Aplicar efeito de vidro fosco na barra de navegação flutuante</string>
+    <string name="settings_navbar_glass_blur_strength">Intensidade do desfoque</string>
+    <string name="settings_navbar_glass_transparency">Transparência do fundo</string>
+    <string name="settings_navbar_glass_highlight_strength">Intensidade do destaque</string>
+    <string name="settings_navbar_glass_specular">Reflexo especular</string>
+    <string name="settings_navbar_glass_specular_summary">Ativar reflexo espelhado na parte superior da barra de navegação</string>
+    <string name="settings_navbar_glass_inner_glow">Brilho interno</string>
+    <string name="settings_navbar_glass_inner_glow_summary">Ativar sutil efeito de brilho na parte inferior da barra de navegação</string>
+    <string name="settings_navbar_glass_border">Borda de vidro</string>
+    <string name="settings_navbar_glass_border_summary">Ativar sutil borda ao redor da barra de navegação</string>
+    <string name="settings_compact_rounded_bar">Estilo compacto arredondado</string>
+    <string name="settings_compact_rounded_bar_summary">Usar barra flutuante compacta com cantos arredondados e menor espaçamento</string>
+    <string name="settings_stats_top_layout">Layout Superior</string>
+    <string name="settings_stats_top_layout_summary">Escolha o estilo do cartão de informações superior</string>
+    <string name="settings_stats_top_layout_list">Lista</string>
+    <string name="settings_stats_top_layout_grid">Grade</string>
+    <string name="settings_block_kernelpatch_update">Bloquear atualização do KernelPatch</string>
+    <string name="settings_block_kernelpatch_update_summary">Não mostrar notificações de atualização do KernelPatch</string>
+    <string name="settings_block_androidpatch_update">Bloquear atualização do patch do sistema</string>
+    <string name="settings_block_androidpatch_update_summary">Não mostrar notificações de atualização do patch do sistema (APD)</string>
+    <string name="settings_disable_module_update_check">Desativar verificação de atualização de módulos</string>
+    <string name="settings_disable_module_update_check_summary">Desativar verificação automática de atualizações para módulos do sistema</string>
+
+    <string name="reboot">Reiniciar</string>
+    <string name="settings">Configurações</string>
+    <string name="reboot_recovery">Reiniciar no Recovery</string>
+    <string name="reboot_bootloader">Reiniciar no Bootloader</string>
+    <string name="reboot_download">Reiniciar em modo Download</string>
+    <string name="reboot_edl">Reiniciar em modo EDL</string>
+    <string name="reboot_fastbootd">Reiniciar em modo FastbootD</string>
+    <string name="about">Sobre</string>
+    <string name="developer_and_maintainer">Desenvolvedor | Mantenedor</string>
+    <string name="settings_app_language">Idioma</string>
+    <string name="system_default">Padrão do sistema</string>
+    <string name="settings_global_namespace_mode">Modo Namespace Global</string>
+    <string name="settings_global_namespace_mode_summary">Todas as sessões root usam o namespace de montagem global</string>
+    <string name="settings_clear_super_key_dialog">Você realmente deseja prosseguir?</string>
+    <string name="settings_sucompat">Compatibilidade su legada</string>
+    <string name="settings_sucompat_summary">Ativar compatibilidade su (para quando su não funciona)</string>
+    <string name="settings_selinux_hide">Ocultar modificação do SELinux (Teste)</string>
+    <string name="settings_selinux_hide_summary">Oculta as alterações do SELinux para não serem detectadas por processos do usuário (este recurso pode ser instável). O modo de segurança pode desativar este recurso.</string>
+    <string name="settings_selinux_hide_warning_title">Aviso</string>
+    <string name="settings_selinux_hide_warning_below_5_10">Este recurso só foi testado em kernels 5.10 ou superiores e pode ser instável em versões inferiores.</string>
+    <string name="settings_selinux_hide_warning_non_gki">Kernels não-GKI apresentam um risco maior e podem causar falha na inicialização. Certifique-se de que seus dados estão com backup.</string>
+    <string name="settings_grid_working_card_hide_check">Ocultar ícone de status</string>
+    <string name="settings_grid_working_card_hide_check_summary">Ocultar o ícone de confirmação ou aviso no cartão de status</string>
+    <string name="settings_grid_working_card_hide_text">Ocultar texto de status</string>
+    <string name="settings_grid_working_card_hide_text_summary">Ocultar o texto \'Funcionando\' ou \'Não instalado\' no cartão de status</string>
+    <string name="settings_grid_working_card_hide_mode">Ocultar modo de operação</string>
+    <string name="settings_grid_working_card_hide_mode_summary">Ocultar o texto \'Completo\' ou \'Metade\' no cartão de status</string>
+
+    <string name="settings_folkx_engine_title">FolkX Animation Engine</string>
+    <string name="settings_folkx_engine_summary">Usar animação de mola baseada em física suave ao alternar entre páginas de nível superior</string>
+    <string name="settings_folkx_animation_type">Tipo de Animação</string>
+    <string name="settings_folkx_animation_speed">Velocidade da Animação</string>
+    <string name="settings_folkx_animation_linear">Movimento Linear</string>
+    <string name="settings_folkx_animation_spatial">Movimento Espacial</string>
+    <string name="settings_folkx_animation_fade">Fade In/Out</string>
+    <string name="settings_folkx_animation_vertical">Deslize Vertical</string>
+    <string name="settings_folkx_animation_diagonal">Deslize Diagonal</string>
+
+    <string name="su_exclude_all_title">Excluir Tudo</string>
+    <string name="su_exclude_all_confirm">Tem certeza de que deseja excluir todos os apps não-root?</string>
+    <string name="su_batch_exclude_title">Exclusão em Lote</string>
+    <string name="su_batch_exclude_content">Excluir injeção para todos os apps não-ROOT; por favor, selecione uma ação</string>
+    <string name="su_exclude_btn">Excluir</string>
+    <string name="su_exclude_reverse_btn">Reverter</string>
+
+    <!-- SuperUser App Action Dialog -->
+    <string name="su_app_action_title">Ação do Aplicativo</string>
+    <string name="su_app_action_content">Por favor selecione uma ação para o aplicativo</string>
+    <string name="su_app_action_launch">Iniciar Aplicativo</string>
+    <string name="su_app_action_force_stop">Forçar Parada</string>
+    <string name="su_app_action_launch_success">Iniciando %s</string>
+    <string name="su_app_action_force_stop_success">%s forçado a parar</string>
+    <string name="su_app_action_failed">Operação falhou: %s</string>
+
+    <!-- SU Audit Log -->
+    <string name="su_audit_log_title">Registro de autorização</string>
+    <string name="su_audit_log_empty">Nenhum registro de autorização</string>
+    <string name="su_audit_log_clear">Limpar registro</string>
+    <string name="su_audit_log_clear_confirm">Limpar todos os registros de autorização?</string>
+    <string name="su_audit_action_grant">Concedido</string>
+    <string name="su_audit_action_revoke">Revogado</string>
+    <string name="su_audit_action_exclude">Excluído</string>
+    <string name="su_audit_tab_usage">Registro de Uso</string>
+    <string name="su_audit_tab_operations">Registro de Operações</string>
+
+    <string name="home_learn_apatch">Aprenda FolkPatch</string>
+    <string name="home_click_to_learn_apatch">Saiba mais sobre os recursos do FolkPatch e como usar</string>
+    <string name="settings_hide_apatch_card">Ocultar cartão Aprenda FolkPatch</string>
+    <string name="settings_hide_apatch_card_summary">Ocultar o cartão informativo do FolkPatch na tela inicial</string>
+
+    <string name="about_source_code"><![CDATA[<p>Veja o código fonte em %1$s<p/>Entre no nosso canal %2$s<p/>Entre no nosso grupo %3$s]]></string>
+    <string name="send_log">Enviar logs</string>
+    <string name="settings_clean_storage">Limpar dados do aplicativo</string>
+    <string name="settings_clean_storage_summary">Corrige falhas de download ou aplicação causadas por arquivos residuais</string>
+    <string name="settings_clean_storage_confirm">Isso excluirá os temas baixados, músicas importadas, efeitos sonoros e todo o cache, recriando os diretórios. As configurações serão mantidas. Continuar?</string>
+    <string name="settings_clean_storage_done">Limpeza concluída</string>
+    <string name="save_log">Salvar logs</string>
+    <string name="log_saved">Logs salvos</string>
+    <string name="safe_mode">Modo de Segurança</string>
+    <string name="github">GitHub</string>
+    <string name="telegram">Telegram</string>
+    <string name="support_or_donate">Apoiar / Doar</string>
+
+    <string name="super_key">SuperKey</string>
+    <string name="clear_super_key">Limpar SuperKey</string>
+    <string name="patch_set_superkey">Definir SuperKey</string>
+    <string name="home_patch_set_key_desc">Única credencial para o KernelPatch</string>
+    <string name="home_patch_next_step">Próximo passo</string>
+
+    <string name="home_not_installed">Não instalado</string>
+    <string name="home_install_unknown">Não instalado ou autenticado</string>
+    <string name="home_install_unknown_summary">Clique para instalar</string>
+    <string name="home_click_to_install">Clique para instalar</string>
+    <string name="home_working">Funcionando</string>
+    <string name="home_kp_need_update">Nova versão disponível</string>
+    <string name="home_kp_cando_update">Atualizar</string>
+
+    <string name="home_installing">Instalando</string>
+
+    <string name="kpatch_version">Versão: %s</string>
+    <string name="apatch_version">Versão: %s</string>
+
+    <string name="kpatch_version_update" formatted="false">Versão: %s -&gt; %s</string>
+    <string name="kpatch_shadow_path_title">kpatch</string>
+    <string name="home_auth_key_title">Inserir SuperKey</string>
+    <string name="home_auth_key_desc">Iniciar após certificação</string>
+    <string name="home_kpatch_info_title">Info</string>
+
+    <string name="home_ap_cando_install">Instalar</string>
+
+    <string name="home_ap_cando_uninstall">Desinstalar</string>
+    <string name="home_ap_cando_reboot">Reiniciar</string>
+
+    <string name="patch_title">Patch</string>
+
+    <string name="patch_config_title">Patches</string>
+    <string name="patch_mode_bootimg_patch">Modo: Patch (Arquivo)</string>
+    <string name="patch_mode_patch_and_install">Modo: Patch e Instalar (Direto)</string>
+    <string name="patch_mode_install_to_next_slot">Modo: Instalar no slot inativo (Após OTA)</string>
+    <string name="patch_mode_restore">Modo: Restaurar</string>
+    <string name="patch_mode_uninstall_patch">Modo: Desinstalar KPatch</string>
+    <string name="patch_select_bootimg_btn">Selecionar boot</string>
+    <string name="patch_embed_kpm_btn">Embutir KPM</string>
+    <string name="patch_start_patch_btn">Iniciar</string>
+    <string name="patch_start_unpatch_btn">Remover Patch</string>
+    <string name="patch_item_error">!!ERRO!!</string>
+    <string name="patch_item_bootimg">bootimg</string>
+    <string name="patch_item_bootimg_slot">Slot:</string>
+    <string name="patch_item_bootimg_dev">Dispositivo:</string>
+    <string name="patch_item_kernel">Kernel</string>
+    <string name="patch_item_kpimg">kpimg</string>
+    <string name="patch_item_kpimg_version">Versão:</string>
+    <string name="patch_item_kpimg_comile_time">Data:</string>
+    <string name="patch_item_kpimg_config">Config:</string>
+    <string name="patch_item_new_extra_kpm">Embutir novo</string>
+    <string name="patch_item_existed_extra_kpm">Existente</string>
+    <string name="patch_item_extra_name">Nome:</string>
+    <string name="patch_item_extra_version">Versão:</string>
+    <string name="patch_item_extra_author">Autor:</string>
+    <string name="patch_item_extra_kpm_license">Licença:</string>
+    <string name="patch_item_extra_kpm_desciption">Descrição:</string>
+    <string name="patch_item_extra_args">Args:</string>
+    <string name="patch_item_extra_event">Evento:</string>
+    <string name="patch_item_skey">SuperKey</string>
+    <string name="patch_custom_superkey">SuperKey personalizado</string>
+    <string name="patch_custom_superkey_summary">Você ainda pode definir um SuperKey para gerenciar o Root e o kernel, o gerenciador já está autorizado pela assinatura integrada do kernel</string>
+    <string name="patch_item_set_skey_label">A SuperKey deve ter de 8 a 63 caracteres e incluir números e letras, mas sem caracteres especiais.</string>
+    <string name="patch_confirm_superkey">Confirmar SuperKey</string>
+    <string name="patch_skey_mismatch">SuperKey não confere</string>
+
+    <string name="home_kernel">Versão do Kernel</string>
+    <string name="home_manager_version">Versão do Manager</string>
+    <string name="home_fingerprint">Fingerprint</string>
+
+    <string name="home_selinux_status">Status do SELinux</string>
+    <string name="home_selinux_status_disabled">Desativado</string>
+    <string name="home_selinux_status_enforcing">Enforcing (Restrito)</string>
+    <string name="home_selinux_status_permissive">Permissive (Permissivo)</string>
+    <string name="home_selinux_status_unknown">Desconhecido</string>
+
+    <string name="settings_selinux_mode">Modo SELinux</string>
+    <string name="settings_selinux_mode_summary">Selecionar modo de imposição do SELinux</string>
+    <string name="settings_selinux_mode_enforcing">Enforcing (Restrito)</string>
+    <string name="settings_selinux_mode_permissive">Permissive (Permissivo)</string>
+    <string name="settings_selinux_current_mode">Atual: %s</string>
+    <string name="settings_selinux_mode_enforcing_summary">SELinux aplica totalmente as regras de acesso</string>
+    <string name="settings_selinux_mode_permissive_summary">SELinux apenas registra violações, não bloqueia</string>
+
+    <string name="home_device_info">Dispositivo</string>
+    <string name="home_system_version">Versão do sistema</string>
+    <string name="home_kpatch_version">Versão KernelPatch</string>
+    <string name="home_su_path">Executável su</string>
+    <string name="home_apatch_version">Versão FolkPatch</string>
+
+    <string name="kpm">KPModule (Kernel)</string>
+    <string name="kpm_kp_not_installed">KernelPatch não instalado</string>
+    <string name="kpm_add_kpm">Adic. KPM</string>
+    <string name="kpm_load">Carregar</string>
+    <string name="kpm_install">Instalar</string>
+    <string name="kpm_embed">Embutir</string>
+    <string name="kpm_embedded">Embutido</string>
+    <string name="kpm_loaded">Carregado</string>
+    <string name="kpm_load_toast_succ">Carregado com sucesso</string>
+    <string name="kpm_install_toast_succ">Instalado com sucesso; entra em vigor após reiniciar</string>
+    <string name="kpm_load_toast_failed">Falha ao carregar</string>
+    <string name="kpm_unload_confirm">Descarregar módulo %s?</string>
+    <string name="kpm_unload">Descarregar</string>
+    <string name="kpm_control">Controle</string>
+    <string name="kpm_apm_empty">Nenhum módulo carregado</string>
+    <string name="kpm_custom_order">Alternar ordem personalizada de módulos</string>
+    <string name="kpm_load_failed">Falha ao carregar módulos do kernel</string>
+    <string name="kpm_version">Versão</string>
+    <string name="kpm_license">Licença</string>
+    <string name="kpm_author">Autor</string>
+    <string name="kpm_desc">Desc</string>
+    <string name="kpm_args">Args</string>
+
+    <string name="su_title">Superusuário</string>
+    <string name="su_selinux_via_hook">Ignorar via hook (Bypass)</string>
+    <string name="su_pkg_excluded_label">Excluir</string>
+    <string name="su_pkg_excluded_setting_title">Excluir modificações</string>
+    <string name="su_pkg_excluded_setting_summary">Ativar esta opção permitirá ao FolkPatch restaurar quaisquer arquivos modificados pelos módulos para este app.</string>
+    <string name="su_pkg_root_setting_title">Superusuário</string>
+    <string name="su_pkg_root_setting_summary">Ativar esta opção para conceder acesso de superusuário ao seu app, permitindo usar comandos SU</string>
+    <string name="su_pkg_normal_setting_title">Modo Normal</string>
+    <string name="su_pkg_normal_setting_summary">Nenhum acesso root concedido, o aplicativo é executado sem privilégios de superusuário.</string>
+    <string name="su_show_system_apps">Mostrar apps do sistema</string>
+    <string name="su_hide_system_apps">Ocultar apps do sistema</string>
+    <string name="su_refresh">Atualizar</string>
+    <string name="su_multi_select_title">Selecionar aplicativos</string>
+    <string name="su_multi_select_count">%d selecionados</string>
+    <string name="su_multi_select_grant_root">Conceder ROOT</string>
+    <string name="su_multi_select_revoke_root">Revogar ROOT</string>
+    <string name="su_multi_select_exclude">Excluir</string>
+    <string name="su_multi_select_confirm_grant">Conceder ROOT a %d aplicativos?</string>
+    <string name="su_multi_select_confirm_revoke">Revogar ROOT de %d aplicativos?</string>
+    <string name="su_multi_select_confirm_exclude">Excluir %d aplicativos?</string>
+    <string name="su_multi_select_enter">Multisseleção</string>
+
+    <string name="apm">Módulo do Sistema</string>
+    <string name="apm_not_installed">AndroidPatch não instalado</string>
+    <string name="apm_failed_to_enable">Falha ao ativar módulo: %s</string>
+    <string name="apm_failed_to_disable">Falha ao desativar módulo: %s</string>
+    <string name="apm_empty">Nenhum módulo instalado</string>
+    <string name="apm_load_failed">Falha ao carregar módulos</string>
+    <string name="apm_remove">Remover</string>
+    <string name="apm_undo">Desfazer</string>
+    <string name="apm_install">Instalar</string>
+    <string name="apm_uninstall_confirm">Desinstalar o módulo %s?</string>
+    <string name="apm_uninstall_success">%s desinstalado</string>
+    <string name="apm_uninstall_failed">Falha ao desinstalar: %s</string>
+    <string name="apm_undo_uninstall_success">%s restaurado com sucesso</string>
+    <string name="apm_undo_uninstall_failed">Falha ao restaurar: %s</string>
+    <string name="apm_version">Versão</string>
+    <string name="apm_author">Autor</string>
+    <string name="apm_desc">Desc</string>
+    <string name="apm_overlay_fs_not_available">Módulos indisponíveis pois o OverlayFS está desativado pelo kernel!</string>
+    <string name="apm_magisk_conflict">Módulos indisponíveis devido a conflito com Magisk!</string>
+    <string name="apm_mount_warning_title">Aviso importante</string>
+    <string name="apm_mount_warning_message">Por padrão, os módulos não são montados. Use o sistema de montagem integrado ou metamódulos.</string>
+    <string name="apm_mount_warning_button">Entendido</string>
+    <string name="apm_reboot_to_apply">Reinicie para aplicar</string>
+    <string name="apm_changelog">Changelog</string>
+    <string name="apm_update">Atualizar</string>
+    <string name="apm_downloading">Baixando módulo: %s</string>
+    <string name="apm_start_downloading">Iniciando download: %s</string>
+    <string name="apm_new_version_available">Nova versão %s disponível, clique para atualizar.</string>
+
+    <string name="hide_apatch_manager">Ocultar APatch Manager</string>
+    <string name="hide_apatch_manager_summary">Instalar um app proxy com ID de pacote aleatório e nome personalizado</string>
+    <string name="hide_apatch_dialog_new_manager_name">Novo nome do manager</string>
+    <string name="hide_apatch_dialog_summary">Será usado como o novo nome do app exibido no launcher</string>
+    <string name="hide_apatch_manager_failure">Falha ao ocultar. Por favor, reporte o bug!</string>
+
+    <string name="setting_reset_su_path">Redefinir caminho do su</string>
+    <string name="setting_reset_su_new_path">Novo caminho completo</string>
+
+    <string name="apm_webui_open">Abrir</string>
+    <string name="apm_action">Ação</string>
+    <string name="module_shortcut_add">Atalho</string>
+    <string name="module_shortcut_not_supported">O launcher não suporta atalhos da área de trabalho.</string>
+    <string name="module_shortcut_created">Atalho criado na área de trabalho.</string>
+    <string name="module_shortcut_updated">Atalho atualizado.</string>
+    <string name="module_shortcut_permission_tip_xiaomi">Por favor, habilite a permissão "Criar atalhos da área de trabalho" para este aplicativo nas configurações do Xiaomi.</string>
+    <string name="module_shortcut_permission_tip_oppo">Por favor, habilite a permissão "Atalho da área de trabalho" para este aplicativo nas configurações do OPPO.</string>
+    <string name="module_shortcut_permission_tip_default">Se a criação do atalho falhar, por favor, habilite a permissão de atalho da área de trabalho para este aplicativo nas configurações do sistema.</string>
+    <string name="module_shortcut_name">Nome do atalho</string>
+    <string name="module_shortcut_icon">Ícone do atalho</string>
+    <string name="module_shortcut_type">Tipo de atalho</string>
+    <string name="module_shortcut_type_webui">WebUI</string>
+    <string name="module_shortcut_type_action">Action</string>
+    <string name="module_shortcut_icon_default">Usar ícone padrão</string>
+    <string name="module_shortcut_icon_select">Selecionar ícone</string>
+    <string name="enable_web_debugging">Ativar depuração WebView</string>
+    <string name="enable_web_debugging_summary">Pode ser usado para depurar WebUI. Ative apenas se necessário.</string>
+    <string name="settings_apm_install_confirm">Confirmar antes de instalar</string>
+    <string name="settings_apm_install_confirm_summary">Mostrar uma caixa de diálogo antes de instalar módulos</string>
+    <string name="settings_show_more_module_info">Mostrar detalhes do módulo</string>
+    <string name="settings_show_more_module_info_summary">Mostrar ID e tamanho do módulo na lista</string>
+    <string name="settings_apm_stay_on_page">Permanecer na página</string>
+    <string name="settings_apm_stay_on_page_summary">Não retornar automaticamente após execução de ação no módulo</string>
+    <string name="settings_enable_module_shortcut_add">Ativar botão de adicionar atalho</string>
+    <string name="settings_enable_module_shortcut_add_summary">Mostrar botão de adicionar atalho WebUI na página de módulos do sistema</string>
+    <string name="settings_module_sort_optimization">Otimização de Ordem dos Módulos</string>
+    <string name="settings_module_sort_optimization_summary">Fazer módulos de sistema com WebUI e Ação aparecerem no topo</string>
+    <string name="apm_custom_order">Ordem personalizada de módulos</string>
+    <string name="apm_drag_to_reorder">Arraste para reordenar</string>
+    <string name="apm_reset_order">Restaurar ordem automática</string>
+    <string name="settings_fold_system_module">Dobrar Módulos do Sistema</string>
+    <string name="settings_fold_system_module_summary">Clique no cartão do módulo para expandir/colapsar ações</string>
+        <string name="settings_simple_list_bottom_bar">Barra Inferior Simples</string>
+        <string name="settings_simple_list_bottom_bar_summary">Usar estilo de botões somente com ícones para ações de módulo, inspirado no APatch</string>
+    <string name="settings_spliced_card_group">Spliced Card Group</string>
+    <string name="settings_spliced_card_group_summary">Use M3E continuous card group style for module list</string>
+    <string name="settings_show_kpm_status_badge">Mostrar Selo de Status do KPM</string>
+    <string name="settings_show_kpm_status_badge_summary">Mostrar selo Embutido/Carregado nos cartões KPM</string>
+    <string name="apm_install_confirm_title">Instalar Módulo</string>
+    <string name="apm_install_confirm_content">Tem certeza de que deseja instalar %s?</string>
+    <string name="apm_disable_all_title">Desativar Todos os Módulos</string>
+    <string name="apm_disable_all_confirm">Tem certeza de que deseja desativar todos os módulos? Isso desativará todos os módulos instalados.</string>
+    <string name="apm_enable_module_banner">Ativar banner de módulo</string>
+    <string name="apm_enable_module_banner_summary">Exibir imagem de banner para módulos se disponível</string>
+    <string name="apm_enable_folk_banner">Personalizar banner de módulo</string>
+    <string name="apm_enable_folk_banner_summary">Pressione longo no cartão do módulo para selecionar a imagem do banner</string>
+    <string name="apm_folk_banner_title">Editor de módulos</string>
+    <string name="apm_folk_banner_select">Selecionar imagem</string>
+    <string name="apm_folk_banner_clear">Limpar FolkBanner</string>
+    <string name="apm_folk_banner_saved">FolkBanner injetado para %s.</string>
+    <string name="apm_folk_banner_cleared">FolkBanner limpo para %s.</string>
+    <string name="apm_folk_banner_failed">Falha ao atualizar FolkBanner para %s.</string>
+    <string name="folk_banner_custom_info_title">Info do Módulo</string>
+    <string name="folk_banner_custom_info_name">Nome</string>
+    <string name="folk_banner_custom_info_version">Versão</string>
+    <string name="folk_banner_custom_info_author">Autor</string>
+    <string name="folk_banner_custom_info_description">Descrição</string>
+    <string name="folk_banner_custom_info_save">Salvar</string>
+    <string name="folk_banner_custom_info_reset">Redefinir</string>
+    <string name="folk_banner_custom_info_saved">Info do módulo salva para %s</string>
+    <string name="folk_banner_custom_info_reset_done">Info do módulo redefinida para %s</string>
+    <string name="apm_banner_api_mode">Modo API</string>
+    <string name="apm_banner_api_mode_summary">Usar API de imagens aleatórias ou diretório local para banners de módulos</string>
+    <string name="apm_banner_api_source">Configurar fonte API</string>
+    <string name="apm_banner_api_source_hint">Insira URL da API ou caminho local</string>
+    <string name="apm_banner_api_source_saved">Fonte API salva</string>
+    <string name="apm_banner_api_source_not_configured">Não configurado</string>
+    <string name="apm_banner_api_url_configured">URL da API configurada</string>
+    <string name="apm_banner_local_dir_configured">Diretório local configurado</string>
+    <string name="apm_banner_clear_cache">Limpar cache</string>
+    <string name="apm_banner_cache_cleared">Cache de banners limpo</string>
+    <string name="apm_banner_api_config_title">Configurar fonte API</string>
+    <string name="apm_banner_api_config_desc">Insira uma URL de API de imagens aleatórias ou caminho de diretório local. Cada módulo receberá um banner único.</string>
+    <string name="apm_banner_api_examples_title">Exemplos:</string>
+    <string name="apm_banner_api_examples">API: https://picsum.photos/800/400\nLocal: /sdcard/Pictures/Banners</string>
+    <!-- Marketplace de API -->
+    <string name="apm_api_marketplace_title">Marketplace de API</string>
+    <string name="apm_api_preview">Visualizar</string>
+    <string name="apm_api_apply">Aplicar</string>
+    <string name="apm_api_preview_title">Visualização de API</string>
+    <string name="apm_api_preview_failed">Falha ao carregar visualização</string>
+    <string name="apm_api_url_label">URL da API:</string>
+    <string name="apm_api_apply_success">Fonte de API aplicada com sucesso</string>
+    <string name="apm_api_verifying">Verificando…</string>
+    <string name="apm_api_retry">Tentar novamente</string>
+    <string name="apm_api_empty">Nenhuma fonte de API disponível</string>
+    <string name="settings_banner_custom_opacity">Opacidade do banner</string>
+    <string name="settings_banner_custom_opacity_summary">Usar opacidade personalizada para banners em vez de seguir o modo de papel de parede</string>
+    <string name="settings_banner_opacity">Transparência do banner</string>
+
+    <string name="settings_donot_store_superkey">Não armazenar SuperKey localmente</string>
+    <string name="settings_donot_store_superkey_summary">Autenticar a SuperKey toda vez que o gerenciador iniciar</string>
+
+    <string name="mode_select_page_title">Instalar</string>
+    <string name="mode_select_page_patch_and_install">Aplicar Patch e Instalar</string>
+    <string name="mode_select_page_select_file">Selecione uma imagem de boot para aplicar o patch</string>
+    <string name="restore_select_file">Selecione um arquivo de boot para restaurar na partição</string>
+    <string name="mode_select_page_install_inactive_slot">Instalar no slot inativo (Após OTA)</string>
+    <string name="mode_select_page_install_inactive_slot_warning">Seu dispositivo será **FORÇADO** a inicializar no slot inativo atual após reiniciar!\nUse esta opção apenas após o término da OTA.\nContinuar?</string>
+    <string name="mode_select_page_select_kpimg">Usar arquivo de patch local (KPimg)</string>
+    <string name="mode_select_page_init_boot_warning_title">Imagem incorreta selecionada</string>
+    <string name="mode_select_page_init_boot_warning_message">O arquivo selecionado parece ser uma imagem init_boot ou vendor_boot.
+O KernelPatch requer uma imagem boot para patch.
+
+Selecione a imagem boot correta (geralmente boot.img).
+
+Continuar mesmo assim?</string>
+    <string name="patch_custom_kpimg_label">KPimg personalizado</string>
+    <string name="patch_custom_kpimg_file">Arquivo: %s</string>
+    <string name="patch_select_kpimg_btn">Selecionar KPimg</string>
+
+    <string name="home_dialog_auth_fail_title">Falha na autenticação</string>
+    <string name="home_dialog_auth_fail_content">Não foi possível autenticar a SuperKey, causando falha na ativação do FolkPatch.
+Aqui estão algumas possíveis razões para a falha de autenticação—verifique qual se aplica a você:
+\n1. Você não usou KernelPatch para aplicar patch no boot.img, ou esqueceu o que realmente fez.
+\n2. O boot.img com patch ainda está dormindo no seu computador, nunca foi flashado no dispositivo.
+\n3. A SuperKey foi inserida incorretamente, ou contém símbolos misteriosos, como caracteres de línguas alienígenas.
+\n4. Seu dispositivo pode não ser compatível com FolkPatch e KernelPatch, tentativas forçadas são em vão.
+\n5. Você pode ter feito algumas operações misteriosas—como usar certos módulos que excluem nomes de pacotes que bloquearam o FolkPatch, resultando em se eliminar do jogo.
+
+</string>
+
+    <string name="home_more_menu_feedback_or_suggestion">Feedback ou sugestão</string>
+    <string name="home_more_menu_about">Sobre</string>
+    <string name="home_more_menu_document">Documentação</string>
+
+    <string name="home_more_menu_music_play">Reproduzir música</string>
+    <string name="home_more_menu_music_pause">Pausar música</string>
+
+    <!-- Plugin strings -->
+    <string name="plugin_title">Plugins</string>
+    <string name="plugin_refresh">Atualizar</string>
+    <string name="plugin_summary_title">APD Lua Plugin</string>
+    <string name="plugin_summary_not_installed">APD não instalado · plugins indisponíveis</string>
+    <string name="plugin_state_enabled">Ativado</string>
+    <string name="plugin_state_disabled">Desativado</string>
+    <string name="plugin_toggle_failed">Falha ao alterar o estado do plugin</string>
+    <string name="plugin_empty">Nenhum plugin instalado</string>
+    <string name="plugin_empty_hint">Coloque um main.lua em /data/adb/plugins/&lt;id&gt;/ para adicionar um.</string>
+    <string name="plugin_load_failed">Falha ao carregar plugins</string>
+    <string name="plugin_manage_summary">Gerenciar plugins Lua leves</string>
+    <string name="plugin_install">Instalar plugin</string>
+    <string name="plugin_install_success">Plugin instalado</string>
+    <string name="plugin_install_failed">Falha na instalação do plugin</string>
+    <string name="plugin_uninstall_title">Desinstalar plugin</string>
+    <string name="plugin_uninstall">Desinstalar</string>
+    <string name="plugin_uninstall_confirm">Desinstalar o plugin %1$s?</string>
+    <string name="plugin_uninstall_success">Plugin removido</string>
+    <string name="plugin_uninstall_failed">Falha ao remover plugin</string>
+    <string name="plugin_action">Executar</string>
+    <string name="plugin_action_success">Ação executada</string>
+    <string name="plugin_action_failed">A ação falhou</string>
+    <string name="plugin_quick_action_success">Executado com sucesso</string>
+    <string name="plugin_quick_action_failed">A execução falhou</string>
+    <string name="plugin_config">Configurar</string>
+    <string name="plugin_config_title">Configurar %1$s</string>
+    <string name="plugin_config_saved">Configuração salva</string>
+    <string name="plugin_log_title">Saída da Execução</string>
+    <string name="plugin_log_empty">Ainda sem registro de execução</string>
+    <string name="plugin_log_page_title">Registros de Plugins</string>
+    <string name="plugin_log_all_empty">Nenhum plugin gerou registros ainda</string>
+    <string name="plugin_log_clear">Limpar registros</string>
+    <string name="plugin_log_cleared">Registros limpos</string>
+    <string name="plugin_log_export">Exportar registros</string>
+
+    <string name="home_dialog_uninstall_title">Desinstalar</string>
+    
+    <string name="home_dialog_uninstall_ap_only">Desinstalar apenas o patch</string>
+    <string name="home_dialog_uninstall_all">Desinstalar completamente</string>
+    <string name="home_dialog_uninstall_ap_only_desc">Remove apenas o AndroidPatch e mantém o gerenciador.</string>
+    <string name="home_dialog_uninstall_all_desc">Remove o AndroidPatch e inicia o fluxo de desinstalação completa.</string>
+
+    <string name="kpm_control_dialog_title">Controlar KPM</string>
+    <string name="kpm_control_dialog_content">Por favor, insira parâmetros de controle:</string>
+    <string name="kpm_control_paramters">Parâmetros</string>
+    <string name="kpm_control_outMsg">Saída</string>
+    <string name="kpm_control_ok">Sucesso!</string>
+    <string name="kpm_control_failed">Falhou!</string>
+    
+    <string name="settings_night_mode_follow_sys">Tema escuro segue o sistema</string>
+    <string name="settings_night_mode_follow_sys_summary">Alternar tema escuro automaticamente baseado nas configurações do sistema</string>
+    <string name="settings_night_theme_enabled">Tema escuro</string>
+    
+    <string name="settings_use_system_color_theme">Tema de cor do sistema</string>
+    <string name="settings_use_system_color_theme_summary">Usar tema de cores gerado a partir do papel de parede pelo sistema</string>
+    <string name="settings_custom_color_theme">Tema de cor</string>
+
+    <string name="amber_theme">Âmbar</string>
+    <string name="blue_theme">Azul</string>
+    <string name="blue_grey_theme">Azul Acinzentado</string>
+    <string name="brown_theme">Marrom</string>
+    <string name="cyan_theme">Ciano</string>
+    <string name="deep_orange_theme">Laranja Escuro</string>
+    <string name="deep_purple_theme">Roxo Escuro</string>
+    <string name="green_theme">Verde</string>
+    <string name="indigo_theme">Índigo</string>
+    <string name="light_blue_theme">Azul Claro</string>
+    <string name="light_green_theme">Verde Claro</string>
+    <string name="lime_theme">Lima</string>
+    <string name="orange_theme">Laranja</string>
+    <string name="pink_theme">Rosa</string>
+    <string name="purple_theme">Roxo</string>
+    <string name="red_theme">Vermelho</string>
+    <string name="sakura_theme">Sakura</string>
+    <string name="teal_theme">Verde-azulado (Teal)</string>
+    <string name="yellow_theme">Amarelo</string>
+    <string name="theme_color">Cor do tema</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_dark">Escuro</string>
+    <string name="theme_system">Sistema</string>
+    <string name="loading_modules">Carregando módulos…</string>
+    <string name="loading_scripts">Procurando scripts…</string>
+    <string name="loading_themes">Carregando temas…</string>
+    <string name="loading_apis">Carregando fontes de API…</string>
+    <string name="retry">Tentar novamente</string>
+
+    <string name="about_app_desc">Uma implementação Root baseada em KernelPatch, permitindo hooks de função do kernel sem recompilar o kernel.</string>
+    <string name="about_powered_by">Desenvolvido por %1$s</string>
+    <string name="about_telegram_group">Grupo no Telegram</string>
+    
+    <!-- Online Module Strings -->
+    <string name="online_module_title">Módulos de Sistema Online</string>
+    <string name="online_module_download_start">Iniciando download: %s</string>
+    <string name="online_module_download_complete">Download completo: %s</string>
+    <string name="online_module_download_notification">Baixando %s. Verifique o painel de notificações para progresso e a pasta Download para o arquivo.</string>
+
+    <!-- Online Module Source Strings -->
+    <string name="online_module_source_official">Fonte oficial</string>
+    <string name="online_module_source_cluster">Cluster de repositórios</string>
+    <string name="online_module_source_custom">Repositório personalizado</string>
+    <string name="online_module_source_title">Origem dos módulos</string>
+    <string name="online_module_repo_url_title">URL do repositório</string>
+    <string name="online_module_repo_url_hint">https://example.com/modules.json</string>
+    <string name="online_module_repo_settings">Configurações do repositório</string>
+
+    <!-- Repo Module Detail Strings -->
+    <string name="repo_module_detail_links">Links</string>
+    <string name="repo_module_detail_homepage">Página inicial</string>
+    <string name="repo_module_detail_source">Código-fonte</string>
+    <string name="repo_module_detail_support">Suporte</string>
+    <string name="repo_module_detail_versions">Histórico de versões</string>
+    <string name="repo_module_detail_download">Baixar e instalar</string>
+    <string name="repo_module_detail_by_author">por %1$s</string>
+    <string name="online_module_repo_browse_title">Explorar repositórios</string>
+    <string name="online_module_view_modules">Ver módulos</string>
+    <string name="online_module_select_repo_hint">Selecione um repositório para explorar módulos</string>
+    <string name="online_module_enter_url_hint">Insira a URL do repositório</string>
+    <string name="online_module_invalid_url">Insira uma URL válida</string>
+    <string name="online_module_explore_repos">Descobrir repositórios</string>
+    <string name="online_module_repo_count">%1$d repositórios</string>
+    <string name="online_module_module_count">%1$d+ módulos</string>
+    <string name="online_module_select_repo">Selecione um repositório</string>
+    <string name="online_module_enter_url_manually">Inserir URL manualmente</string>
+    <string name="online_module_default_repo">Repositório padrão</string>
+    <string name="online_module_repo_list_title">Lista de repositórios</string>
+    <string name="online_module_load_error">Falha ao carregar; atualize e tente novamente</string>
+    <string name="online_module_no_search_results">Nenhum módulo correspondente encontrado</string>
+    <string name="online_module_module_detail_download_count">Downloads: %1$s</string>
+    <string name="online_module_module_detail_last_update">Última atualização: %1$s</string>
+    <string name="online_module_module_detail_version">Versão: %1$s</string>
+    <string name="online_module_module_detail_size">Tamanho: %1$s</string>
+    <string name="online_module_module_detail_author">Autor: %1$s</string>
+    <string name="online_module_module_detail_description">Descrição: %1$s</string>
+    <string name="online_module_module_detail_suitable">Adequado para: %1$s</string>
+    <string name="online_module_module_detail_changelog">Registro de alterações: %1$s</string>
+    <string name="online_module_module_detail_instructions">Instruções: %1$s</string>
+
+    <!-- Online KPM Strings -->
+    <string name="online_kpm_title">Módulos de Kernel Online</string>
+    <string name="online_kpm_download_start">Iniciando download: %s</string>
+    <string name="online_kpm_download_complete">Download completo: %s</string>
+    <string name="online_kpm_download_notification">Baixando %s. Verifique o painel de notificações para progresso e a pasta Download para o arquivo.</string>
+
+    <!-- Online Plugin Strings -->
+    <string name="online_plugin_title">Plugins Online</string>
+    <string name="online_plugin_download_start">Iniciar download: %s</string>
+    <string name="online_plugin_download_complete">Download concluído: %s</string>
+    <string name="online_plugin_download_notification">Baixando %s. Verifique o painel de notificações para progresso e a pasta Download para o arquivo.</string>
+
+    <!-- Online Script Strings -->
+    <string name="online_script_title">Scripts Online</string>
+    <string name="online_script_download_start">Iniciando download: %s</string>
+    <string name="online_script_download_complete">Download completo: %s</string>
+    <string name="online_script_download_notification">Baixando %s</string>
+
+    <!-- Crash Handle Strings -->
+    <string name="crash_handle_title">Relatório de Erro</string>
+    <string name="crash_handle_copy">Copiar</string>
+
+    <!-- About Screen Strings -->
+    <string name="about_app_version">Versão do App: %s</string>
+    <string name="about_github">GitHub</string>
+    <string name="about_telegram_channel">Canal do Telegram</string>
+
+    <string name="settings_app_dpi">DPI do App</string>
+    <string name="dpi_apply_settings">Aplicar</string>
+    <string name="dpi_confirm_title">Confirmar alteração de DPI</string>
+    <string name="dpi_confirm_message">Alterar DPI do app de %1$s para %2$s?</string>
+    <string name="settings_alt_icon">Ícone alternativo</string>
+    <string name="alt_icon_summary">Usar ícone alternativo do lançador</string>
+    <string name="settings_magic_mount">Folk Mount API</string>
+    <string name="settings_magic_mount_summary">Ativar o sistema de montagem de módulos integrado</string>
+    <string name="settings_new_app_profile_enabled">Autorização automática de novos apps</string>
+    <string name="settings_new_app_profile_enabled_summary">Ao ativar, os aplicativos recém-instalados aplicarão automaticamente o modo de autorização selecionado abaixo</string>
+    <string name="settings_new_app_profile_mode">Modo de autorização padrão</string>
+    <string name="settings_new_app_profile_normal">SEM ROOT</string>
+    <string name="settings_new_app_profile_root">ROOT</string>
+    <string name="settings_new_app_profile_exclude">Excluir</string>
+    <string name="settings_hide_service">FolkPatch Hide</string>
+    <string name="settings_hide_service_summary">Ocultar o status de desbloqueio do bootloader em certa medida</string>
+
+    <string name="settings_shizuku_service">Serviço Shizuku</string>
+    <string name="settings_shizuku_service_summary">Fornece acesso à API de nível ADB para aplicativos compatíveis com Shizuku (serviço integrado, sem apps de terceiros)</string>
+    <string name="settings_shizuku_service_running">O servidor Shizuku está em execução</string>
+    <string name="settings_shizuku_started">Serviço Shizuku iniciado</string>
+    <string name="settings_shizuku_start_failed">Falha ao iniciar o serviço Shizuku</string>
+    <string name="settings_shizuku_stopped">Serviço Shizuku interrompido</string>
+    <string name="settings_shizuku_stop_failed">Falha ao interromper o serviço Shizuku</string>
+    <string name="shizuku_permission_title">Permitir que %1$s use o Shizuku?</string>
+    <string name="shizuku_permission_message">O aplicativo poderá chamar APIs do sistema com privilégios de root através do Shizuku.</string>
+    <string name="shizuku_permission_allow">Permitir</string>
+    <string name="shizuku_permission_allow_once">Apenas uma vez</string>
+    <string name="shizuku_permission_deny">Negar</string>
+    <string name="shizuku_permission_allow_summary">Conceder acesso permanente</string>
+    <string name="shizuku_permission_allow_once_summary">Permitir apenas desta vez</string>
+    <string name="shizuku_permission_deny_summary">Negar acesso</string>
+    <string name="shizuku_permission_binder_timeout">Não foi possível conectar ao serviço Shizuku. Reinicie o serviço e tente novamente.</string>
+    <string name="shizuku_management_title">Autorização do Shizuku</string>
+    <string name="shizuku_management_empty">Nenhum aplicativo compatível com Shizuku encontrado</string>
+    <string name="shizuku_management_unavailable">O serviço do Shizuku não está em execução</string>
+    <string name="shizuku_management_load_failed">Falha ao carregar os aplicativos autorizados</string>
+    <string name="shizuku_management_uid">UID %1$d</string>
+    <string name="shizuku_management_granted">Permitido</string>
+    <string name="shizuku_management_denied">Não permitido</string>
+    <string name="shizuku_management_update_failed">Falha ao atualizar a autorização</string>
+    <string name="shizuku_management_root_access">Acesso root</string>
+    <string name="shizuku_management_allowed_title">Acesso ao Shizuku</string>
+    <string name="shizuku_management_root_access_desc">Executa comandos como root. Desative para executar como shell (UID 2000), que não pode ler dados protegidos.</string>
+    <string name="shizuku_management_badge_allowed">PERMITIDO</string>
+    <string name="shizuku_management_badge_denied">NEGADO</string>
+    <string name="shizuku_management_badge_root">ROOT</string>
+    <string name="shizuku_management_badge_shell">SHELL</string>
+    <string name="shizuku_log_title">Logs do Shizuku</string>
+    <string name="shizuku_log_empty">Sem logs</string>
+    <string name="shizuku_log_refresh">Atualizar</string>
+    <string name="shizuku_log_clear">Limpar logs</string>
+    <string name="shizuku_log_cleared">Logs limpos</string>
+    <string name="shizuku_log_export">Exportar logs</string>
+    <string name="shizuku_log_copy">Copiar</string>
+    <string name="shizuku_log_copied">Copiado para a área de transferência</string>
+    <string name="shizuku_log_source_server">Log do servidor</string>
+    <string name="shizuku_log_source_logcat">Logcat</string>
+    <string name="shizuku_log_search_hint">Pesquisar logs</string>
+<string name="settings_app_title">Título do App</string>
+    <string name="app_title_custom">Personalizado</string>
+    <string name="settings_custom_app_title">Definir nome do app</string>
+    <string name="custom_app_title_dialog_title">Nome personalizado do app</string>
+    <string name="custom_app_title_dialog_hint">Digite o nome do app</string>
+    <string name="custom_app_title_dialog_confirm">Confirmar</string>
+    <string name="custom_app_title_dialog_empty">O nome não pode ficar vazio</string>
+    <string name="cancel">Cancelar</string>
+    <string name="settings_custom_background">Fundo Personalizado</string>
+    <string name="settings_custom_background_enabled">Fundo Personalizado Ativo</string>
+    <string name="settings_custom_background_opacity">Opacidade do cartão</string>
+    <string name="settings_custom_background_blur">Desfoque do fundo</string>
+    <string name="settings_custom_background_dim">Escurecimento do fundo</string>
+    <string name="settings_custom_background_dual_dim">Escurecimento duplo (dia/noite)</string>
+    <string name="settings_custom_background_dual_dim_desc">Ajustar automaticamente o escurecimento do fundo para temas claros e escuros</string>
+    <string name="settings_custom_background_day_dim">Escurecimento modo dia</string>
+    <string name="settings_custom_background_night_dim">Escurecimento modo noite</string>
+    <string name="settings_multi_background_mode">Modo Multi-Fundo</string>
+    <string name="settings_multi_background_mode_summary">Definir imagens de fundo diferentes para páginas diferentes</string>
+    <string name="settings_select_home_background">Fundo da Página Inicial</string>
+    <string name="settings_select_kernel_background">Fundo Módulos de Kernel</string>
+    <string name="settings_select_superuser_background">Fundo Superusuário</string>
+    <string name="settings_select_system_module_background">Fundo Módulos de Sistema</string>
+    <string name="settings_select_settings_background">Fundo Configurações</string>
+
+    <string name="settings_advanced_title_style">Estilo de Título Avançado</string>
+    <string name="settings_advanced_title_style_summary">Substituir o título da barra superior por uma imagem personalizada</string>
+    <string name="settings_advanced_title_style_enabled">Estilo de título avançado ativado</string>
+    <string name="settings_select_title_image">Selecionar Imagem de Título</string>
+    <string name="settings_title_image_selected">Imagem de título selecionada</string>
+    <string name="settings_title_image_saved">Imagem de título salva com sucesso</string>
+    <string name="settings_title_image_error">Falha ao salvar imagem de título</string>
+    <string name="settings_clear_title_image">Limpar Imagem de Título</string>
+    <string name="settings_clear_title_image_confirm">Tem certeza de que deseja limpar a imagem de título?</string>
+    <string name="settings_title_image_cleared">Imagem de título limpa</string>
+    <string name="settings_title_image_day_opacity">Opacidade do Modo Diurno</string>
+    <string name="settings_title_image_night_opacity">Opacidade do Modo Noturno</string>
+    <string name="settings_title_image_dim">Escurecimento do Fundo</string>
+    <string name="settings_title_image_offset_x">Posição Horizontal</string>
+
+    <!-- Font Settings -->
+    <string name="settings_custom_font">Fonte Personalizada</string>
+    <string name="settings_select_font_file">Selecionar Arquivo de Fonte</string>
+    <string name="settings_custom_font_enabled">Fonte Personalizada Ativa</string>
+    <string name="settings_custom_font_summary">Usar uma fonte TTF personalizada para o app</string>
+    <string name="settings_font_selected">Fonte Personalizada Selecionada</string>
+    <string name="settings_custom_font_error">Falha ao salvar arquivo de fonte</string>
+    <string name="settings_custom_font_saved">Fonte personalizada salva com sucesso</string>
+    <string name="settings_clear_font">Restaurar Fonte Padrão</string>
+    <string name="settings_clear_font_confirm">Tem certeza de que deseja restaurar a fonte padrão?</string>
+    <string name="settings_font_cleared">Fonte padrão restaurada</string>
+    <string name="settings_font_select_hint">Selecione um arquivo de fonte TTF</string>
+    <string name="settings_select_background_image">Selecionar Imagem de Fundo</string>
+    <string name="settings_custom_background_summary">Definir uma imagem de fundo personalizada</string>
+    <string name="settings_custom_background_saved">Fundo salvo com sucesso</string>
+    <string name="settings_custom_background_error">Falha ao salvar fundo</string>
+    <string name="settings_crop_not_supported">Recorte não suportado neste dispositivo, salvando imagem original</string>
+    <string name="settings_crop_dialog_title">Recortar fundo</string>
+    <string name="settings_crop_dialog_message">Recortar a imagem?</string>
+    <string name="settings_crop_dialog_crop">Sim</string>
+    <string name="settings_crop_dialog_direct">Não</string>
+    <string name="settings_background_selected">Fundo selecionado</string>
+    <string name="settings_background_image_cleared">Imagem de fundo limpa</string>
+    <string name="settings_clear_background">Limpar Fundo</string>
+    <string name="settings_clear_background_confirm">Tem certeza de que deseja limpar a imagem de fundo?</string>
+
+    <string name="settings_launcher_icon">Ícone do Launcher</string>
+
+    <!-- Video Background Settings -->
+    <string name="settings_video_background">Fundo de Vídeo</string>
+    <string name="settings_video_background_summary">Usar um vídeo como fundo</string>
+    <string name="settings_select_video">Selecionar Vídeo</string>
+    <string name="settings_video_selected">Vídeo Selecionado</string>
+    <string name="settings_clear_video_background">Limpar Fundo de Vídeo</string>
+    <string name="settings_clear_video_background_confirm">Tem certeza de que deseja limpar o fundo de vídeo?</string>
+    <string name="settings_video_background_enabled">Fundo de Vídeo Ativado</string>
+    <string name="settings_video_volume">Volume do Vídeo</string>
+    
+    <!-- KPM AutoLoad Strings -->
+    
+    
+    <!-- Module Backup/Restore Strings -->
+    <string name="apm_copy_list_title">Copiar lista</string>
+    <string name="apm_copy_list_success">Lista de módulos copiada</string>
+
+    <!-- APM Bulk Install Strings -->
+    <string name="apm_bulk_install_title">Instalação em Lote de Módulos do Sistema</string>
+    <string name="apm_bulk_install_list_title">Lista de Módulos</string>
+    <string name="apm_bulk_install_add">Adicionar Módulos</string>
+    <string name="apm_bulk_install_empty">Nenhum módulo adicionado</string>
+    <string name="apm_bulk_install_action">Instalar em Lote</string>
+    <string name="apm_bulk_install_log_title">Log da Instalação em Lote</string>
+    <string name="apm_bulk_install_log_start">Iniciando instalação em lote...</string>
+    <string name="apm_bulk_install_log_installing">Instalando %1$s</string>
+    <string name="apm_batch_install_full_process">Processo de instalação em lote completo</string>
+    <string name="apm_batch_install_full_process_summary">A instalação em lote de módulos do sistema é realizada usando o processo completo</string>
+    <string name="next_module">Próximo módulo</string>
+    <string name="apm_bulk_install_log_installed">Módulo %s instalado.</string>
+    <string name="apm_bulk_install_log_done">Todas as operações concluídas.</string>
+    <string name="apm_bulk_install_first_use_text">Este recurso permite instalar vários módulos de uma vez. É um método rápido adequado para módulos que não envolvem operações de tecla durante a instalação. Para módulos que exigem interações com as teclas de volume, ative o modo de instalação completa nas configurações.</string>
+    <string name="apm_bulk_install_remove">Remover</string>
+    <string name="apm_first_use_title">Bem-vindo aos Módulos de Sistema</string>
+    <string name="apm_first_use_text">Bem-vindo aos Módulos de Sistema. Aqui são usados módulos compatíveis com o ecossistema Magisk. Clique no botão no canto inferior direito para instalar módulos. Você também pode usar o instalador no topo para instalação em lote. Um recurso para backup de todos os módulos com um clique também é fornecido, mas note que esta solução pode não ser adequada para todos os módulos, então faça seus próprios backups.</string>
+
+    <!-- Welcome Guide -->
+    <string name="welcome_title_1">Bem-vindo ao FolkPatch</string>
+    <string name="welcome_desc_1">Um gerenciador Root altamente personalizavel e portatil baseado no KernelPatch. Faca seu dispositivo realmente seu.</string>
+    <string name="welcome_title_2">Personalizacao completa</string>
+    <string name="welcome_desc_2">Personalize tudo — cores, fundos, fontes, sons e ate a vibracao. Explore a Loja de Temas!</string>
+    <string name="welcome_title_3">Controles do Kernel</string>
+    <string name="welcome_desc_3">Recursos avancados do kernel a um toque. Abra as Configuracoes e toque no icone de ajuste para acessar FolkPatch Hide, Umount, Path Hide e mais.</string>
+    <string name="welcome_title_4">Pronto para comecar</string>
+    <string name="welcome_desc_4">Esta tudo pronto! Comece a explorar a experiencia Root mais flexivel. Divirta-se!</string>
+    <string name="welcome_prev">Anterior</string>
+    <string name="welcome_next">Proximo</string>
+    <string name="welcome_skip">Pular</string>
+    <string name="welcome_got_it">Comecar</string>
+
+
+    
+
+    <!-- Hide Settings Strings -->
+    <string name="home_hide_su_path">Ocultar caminho do executável su</string>
+    <string name="home_hide_kpatch_version">Ocultar versão do kernel patch</string>
+    <string name="home_hide_fingerprint">Ocultar fingerprint</string>
+    <string name="home_hide_zygisk">Ocultar implementação Zygisk</string>
+    <string name="home_hide_mount">Ocultar implementação de montagem</string>
+    <string name="home_hide_su_path_summary">Ocultar caminho do su no cartão de info</string>
+    <string name="home_hide_kpatch_version_summary">Ocultar versão do kernel patch no cartão de info</string>
+    <string name="home_hide_zygisk_summary">Ocultar implementação Zygisk no cartão de info</string>
+    <string name="home_hide_mount_summary">Ocultar implementação de montagem no cartão de info</string>
+    <string name="home_hide_fingerprint_summary">Ocultar fingerprint no cartão de info</string>
+
+
+    <!-- Auto Backup Strings -->
+    <string name="settings_auto_backup_module">Backup Automático de Módulos</string>
+    <string name="settings_auto_backup_module_summary">Fazer backup automático do arquivo do módulo para diretório privado ao instalar</string>
+    <string name="settings_open_backup_dir">Abrir Diretório de Backup</string>
+    <string name="backup_dir_empty">O diretório de backup está vazio</string>
+    <string name="backup_dir_open_failed">Falha ao abrir o diretório de backup</string>
+    <string name="auto_backup_failed">Falha no backup automático: %s</string>
+    <string name="auto_backup_success">Sucesso no backup automático: %s</string>
+    <string name="settings_auto_backup_boot">Backup Automático do Boot</string>
+    <string name="settings_auto_backup_boot_summary">Fazer backup automático do Boot para armazenamento local (Downloads/FolkPatch/BootBackups)</string>
+
+    <!-- Home Layout Strings -->
+    <string name="settings_home_layout_style">Estilo de Layout Inicial</string>
+    <string name="settings_home_layout_default">Lista (ListUI)</string>
+    <string name="settings_home_layout_grid">Grade (GridUI)</string>
+    <string name="settings_home_layout_focus">Foco (FocusUI)</string>
+    <string name="settings_home_layout_sign">SignUI</string>
+    <string name="settings_home_layout_circle">CircleUI</string>
+    <string name="settings_home_layout_dashboard_pro">DashboardUI</string>
+    <string name="unofficial_version_title">Versão Não Oficial</string>
+    <string name="unofficial_version_message">Você está usando o FolkPatch que não é o app oficial, por favor baixe o app oficial!</string>
+    <string name="go_to_github">Ir para Github</string>
+    <string name="settings_save_theme">Salvar tema</string>
+    <string name="settings_import_theme">Importar tema</string>
+    <string name="settings_theme_saved">Tema salvo</string>
+    <string name="settings_theme_imported">Tema importado</string>
+    <string name="settings_theme_save_failed">Falha ao salvar tema</string>
+    <string name="settings_theme_import_failed">Falha ao importar tema</string>
+    <string name="settings_reset_theme">Redefinir tema</string>
+    <string name="settings_reset_theme_confirm">Tem certeza de que deseja redefinir todas as configurações do tema para os padrões? Isso limpará todos os planos de fundo, fontes, músicas e efeitos sonoros personalizados.</string>
+    <string name="settings_theme_reset">Tema redefinido</string>
+    <string name="settings_theme_reset_failed">Falha ao redefinir tema</string>
+
+    <!-- Theme Strings -->
+    <string name="theme_export_title">Exportar Tema</string>
+    <string name="theme_import_title">Importar Tema</string>
+    <string name="theme_name">Nome do Tema</string>
+    <string name="theme_type">Tipo de Tema</string>
+    <string name="theme_type_phone">Celular</string>
+    <string name="theme_type_tablet">Tablet</string>
+    <string name="theme_version">Versão</string>
+    <string name="theme_author">Autor</string>
+    <string name="theme_description">Descrição</string>
+    <string name="theme_export_action">Exportar</string>
+    <string name="theme_import_action">Importar</string>
+    <string name="theme_import_confirm">Tem certeza de que deseja importar este tema?</string>
+    <string name="theme_info">Info do Tema</string>
+
+    <!-- Grid Working Card Background -->
+    <string name="settings_grid_working_card_background">Fundo do Cartão de Status</string>
+    <string name="settings_grid_working_card_background_enabled">Fundo personalizado do cartão ativo</string>
+    <string name="settings_grid_working_card_background_summary">Imagem de fundo personalizada para o cartão de status</string>
+    <string name="settings_grid_working_card_background_selected">Fundo selecionado</string>
+    <string name="settings_grid_working_card_dual_opacity">Opacidade dupla dia/noite</string>
+    <string name="settings_grid_working_card_dual_opacity_desc">Ajustar automaticamente a opacidade do cartão para temas claros e escuros</string>
+    <string name="settings_grid_working_card_day_opacity">Opacidade do cartão (dia)</string>
+    <string name="settings_grid_working_card_night_opacity">Opacidade do cartão (noite)</string>
+    <string name="settings_clear_grid_working_card_background">Limpar Fundo do Cartão</string>
+    <string name="settings_clear_grid_working_card_background_confirm">Tem certeza de que deseja limpar a imagem de fundo do cartão?</string>
+    <string name="settings_grid_working_card_background_saved">Fundo do cartão salvo com sucesso</string>
+    <string name="settings_grid_working_card_background_error">Falha ao salvar fundo do cartão</string>
+    <string name="settings_grid_working_card_background_cleared">Fundo do cartão limpo</string>
+
+    <!-- Biometric Strings -->
+    <string name="action_biometric">Autenticação Biométrica</string>
+    <string name="msg_biometric">Por favor, verifique sua identidade biométrica</string>
+    <string name="msg_enable_biometric">Ativar autenticação biométrica para exigir verificação ao abrir o aplicativo?</string>
+    <string name="settings_biometric_login">Login Biométrico</string>
+    <string name="settings_biometric_login_summary">Exigir autenticação biométrica ao abrir o app</string>
+    <string name="settings_strong_biometric">Autenticação Biométrica Forte</string>
+    <string name="settings_strong_biometric_summary">Exigir autenticação para instalar/desinstalar/desativar módulos</string>
+
+    <!-- Theme Store Strings -->
+    <string name="theme_store_title">Loja de Temas</string>
+    <string name="theme_source_official">Oficial</string>
+    <string name="theme_source_third_party">Terceiros</string>
+    <string name="theme_store_author">Autor: %s</string>
+    <string name="theme_store_version">Versão: %s</string>
+    <string name="theme_source">Fonte</string>
+    <string name="theme_store_download_failed">Download falhou</string>
+    <string name="theme_store_download">Baixar</string>
+    <string name="theme_store_search_hint">Buscar temas...</string>
+
+    <!-- Update Check Strings -->
+    <string name="settings_auto_update_check">Verificação Automática de Atualização</string>
+    <string name="settings_auto_update_check_summary">Verificar atualizações automaticamente ao iniciar o app</string>
+    <string name="settings_check_update">Verificar Atualizações</string>
+    <string name="update_available_title">Atualização Disponível</string>
+    <string name="update_available_message">Detectado que sua versão é antiga, deseja baixar a nova versão?</string>
+    <string name="update_action">Atualizar</string>
+    <string name="update_close">Fechar</string>
+    <string name="update_latest">Você está na versão mais recente</string>
+    <string name="update_error">Erro ao verificar atualizações</string>
+    <string name="settings_category_general">Geral</string>
+    <string name="settings_category_appearance">Aparência</string>
+    <string name="settings_appearance_font">Configuração de fonte</string>
+    <string name="settings_appearance_font_summary">Configuração de fonte personalizada</string>
+    <string name="settings_appearance_theme">Configuração de tema</string>
+    <string name="settings_appearance_theme_summary">Loja de temas, salvar, importar e redefinir</string>
+
+    <string name="settings_nav_custom_icons">Ícones de navegação personalizados</string>
+    <string name="settings_nav_custom_icons_summary">Substituir ícones da barra inferior por imagens personalizadas</string>
+    <string name="nav_icon_home">Ícone de início</string>
+    <string name="nav_icon_kpm">Ícone de KPM</string>
+    <string name="nav_icon_superuser">Ícone de SuperUser</string>
+    <string name="nav_icon_apm">Ícone de módulo do sistema</string>
+    <string name="nav_icon_settings">Ícone de configurações</string>
+    <string name="nav_icon_select_image">Selecionar imagem</string>
+    <string name="nav_icon_clear">Redefinir para padrão</string>
+    <string name="nav_icon_custom_selected">Personalizado</string>
+    <string name="nav_icon_default">Padrão</string>
+    <string name="nav_icon_cleared">Ícone redefinido</string>
+    <string name="nav_icon_set">Ícone atualizado</string>
+    <string name="nav_icon_set_failed">Falha ao salvar o ícone</string>
+
+    <string name="settings_theme_mode">Configuração de modo</string>
+    <string name="settings_theme_mode_summary">Alternar entre a loja integrada e o modo de compatibilidade do navegador</string>
+    <string name="theme_mode_builtin">Modo Integrado</string>
+    <string name="theme_mode_builtin_desc">Use a loja de temas integrada para navegar, baixar e aplicar temas</string>
+    <string name="theme_mode_compat">Modo de Compatibilidade</string>
+    <string name="theme_mode_compat_desc">Usar o navegador para baixar temas diretamente (para dispositivos com problemas de importação)</string>
+    <string name="theme_mode_onboarding_title">Escolher modo de tema</string>
+    <string name="theme_mode_onboarding_msg">Como você gostaria de navegar e instalar temas? Você pode alterar isso depois nas configurações.</string>
+    <string name="theme_mode_builtin_label">Loja Integrada</string>
+    <string name="theme_mode_compat_label">Modo Navegador</string>
+    <string name="theme_mode_switched">Modo de tema alterado para %s</string>
+    <string name="theme_mode_current">Atual: %s</string>
+    <string name="theme_mode_switch_title">Alternar modo de tema</string>
+    <string name="theme_mode_switch_msg">Alterar o modo afetará como você navega e instala temas. Continuar?</string>
+    <string name="settings_appearance_banner">Configuração de banner</string>
+    <string name="settings_appearance_banner_summary">Configuração de banner do módulo</string>
+    <string name="settings_appearance_layout">Configuração de layout</string>
+    <string name="settings_appearance_layout_summary">Layout da tela inicial, navegação e personalização de cartões</string>
+    <string name="settings_appearance_background">Configuração de fundo</string>
+    <string name="settings_appearance_background_summary">Fundo personalizado, vídeo e multi-fundo</string>
+    <string name="settings_appearance_night_mode">Configuração de modo noturno</string>
+    <string name="settings_appearance_night_mode_summary">Tema escuro e configuração de cor</string>
+    <string name="settings_amoled_theme">Tema Preto AMOLED</string>
+    <string name="settings_amoled_theme_desc">Fundo preto puro para o modo escuro</string>
+    <string name="settings_switch_icon">Indicador de botão</string>
+    <string name="settings_switch_icon_desc">Mostrar ícones de status nos interruptores</string>
+    <string name="settings_discrete_slider">Controle deslizante discreto</string>
+    <string name="settings_discrete_slider_desc">Mostrar marcas na trilha do controle deslizante</string>
+    <string name="settings_category_behavior">Comportamento</string>
+    <string name="settings_category_function">Função</string>
+    <string name="settings_use_legacy_su_page">Autorização de superusuário de página única</string>
+    <string name="settings_use_legacy_su_page_summary">Página de superusuário alterada para design de autorização de página única</string>
+    <string name="settings_category_module">Módulos</string>
+    <string name="settings_category_security">Segurança</string>
+    
+    <!-- Background Music Strings -->
+    <string name="settings_background_music">Música de Fundo</string>
+    <string name="settings_background_music_summary">Tocar música de fundo quando o app estiver em primeiro plano</string>
+    <string name="settings_background_music_playing">Tocando: %s</string>
+    <string name="settings_background_music_enabled">Música de Fundo Ativada</string>
+    <string name="settings_select_music_file">Selecionar arquivo de música</string>
+    <string name="settings_music_selected">Música selecionada</string>
+    <string name="settings_clear_music">Limpar música</string>
+    <string name="settings_clear_music_confirm">Tem certeza de que deseja limpar a música de fundo?</string>
+    <string name="settings_music_auto_play">Reprodução automática</string>
+    <string name="settings_music_auto_play_summary">Tocar música automaticamente ao abrir o app</string>
+    <string name="settings_music_looping">Reprodução em loop</string>
+    <string name="settings_music_looping_summary">Repetir a música atual</string>
+    <string name="settings_music_volume">Volume</string>
+    <string name="settings_music_saved">Arquivo de música salvo</string>
+    <string name="settings_music_save_error">Falha ao salvar arquivo de música</string>
+    <string name="settings_music_cleared">Música limpa</string>
+    <string name="settings_category_multimedia">Multimídia</string>
+    <string name="settings_category_general_summary">Idioma, atualizações, SELinux, ajustes do sistema</string>
+    <string name="settings_category_appearance_summary">Tema, cores, layout, fundo, fontes</string>
+    <string name="settings_category_behavior_summary">Depuração Web, comportamento de instalação, exibição inicial</string>
+    <string name="settings_category_security_summary">Autenticação do aplicativo e verificação de operações de módulos</string>
+    <string name="settings_category_backup_summary">Backup local, backup na nuvem, WebDAV</string>
+    <string name="settings_category_module_summary">Informações do módulo, classificação, instalação em lote</string>
+    <string name="settings_category_function_summary">Ocultar FolkPatch, serviço Umount</string>
+    <string name="settings_category_multimedia_summary">Música de fundo, sons, vibração</string>
+    <string name="settings_music_playback_control">Controle de Reprodução</string>
+
+    <!-- Theme Store Filter -->
+    <string name="theme_store_filter_title">Filtrar Temas</string>
+    <string name="theme_store_filter_author">Autor</string>
+    <string name="theme_store_filter_author_hint">Digite o nome do autor</string>
+    <string name="theme_store_filter_source">Fonte</string>
+    <string name="theme_store_filter_source_all">Todos</string>
+    <string name="theme_store_filter_type">Tipo de Dispositivo</string>
+    <string name="theme_store_filter_apply">Aplicar</string>
+    <string name="theme_store_filter_reset">Redefinir</string>
+
+    <!-- File Picker -->
+    <string name="file_picker_permission_required">Permissão Necessária</string>
+    <string name="file_picker_permission_desc">Para navegar nos arquivos, conceda permissão de \'Acesso a todos os arquivos\'.</string>
+    <string name="file_picker_grant_permission">Conceder Permissão</string>
+    <string name="file_picker_cancel">Cancelar</string>
+    <string name="file_picker_internal_storage">Armazenamento Interno</string>
+    <string name="file_picker_no_files">Sem arquivos</string>
+    <string name="file_picker_filtered_files">Mostrando %1$s arquivos</string>
+    <string name="file_picker_close">Fechar seletor de arquivos</string>
+
+    <!-- HomeV3 Strings -->
+    <string name="home_device_status_title">Status do Dispositivo</string>
+    <string name="home_device_status_battery_temp">Temp. Bateria</string>
+    <string name="home_device_status_cpu_load">Carga CPU</string>
+    <string name="home_device_status_battery_level">Nível Bateria</string>
+    <string name="home_storage_title">Armazenamento</string>
+    <string name="home_storage_internal">Armaz. Interno</string>
+    <string name="home_storage_ram">RAM</string>
+    <string name="home_storage_zram">ZRAM</string>
+    <string name="home_storage_swap">Arquivo Swap</string>
+    <string name="home_info_kernel">Kernel</string>
+    <string name="home_info_superkey">SuperKey</string>
+    <string name="home_info_auth_auth">Autenticado</string>
+    <string name="home_info_auth_na">N/A</string>
+    <string name="home_info_device_slot">Slot do Dispositivo</string>
+    <string name="home_info_device_model">Modelo</string>
+    <string name="home_info_running_mode">Modo de Execução</string>
+    <string name="home_info_mode_full">Completo</string>
+    <string name="home_info_mode_half">Metade (Half)</string>
+    <string name="home_version">Versão: %s</string>
+    <string name="home_zygisk_implement">Implementação Zygisk</string>
+    <string name="home_mount_implement">Implementação de Montagem</string>
+
+    <string name="settings_list_card_hide_status_badge">Usar Emoji Clássico</string>
+    <string name="settings_list_card_hide_status_badge_summary">O emblema de status na página inicial se transforma em emoji clássico</string>
+    <string name="settings_list_info_show_icons">Ícones dos itens de informação</string>
+    <string name="settings_list_info_show_icons_summary">Mostrar um ícone ao lado de cada item no cartão de informações</string>
+    <string name="settings_custom_badge_text">Personalizar Texto do Emblema</string>
+    <string name="settings_custom_badge_text_summary">Modificar a exibição de texto do emblema, apenas por diversão</string>
+
+    <!-- Install Mode Select -->
+    <string name="kp_install_methods">Aplicar Patch/Instalar KernelPatch</string>
+    <string name="restore_boot_methods">Selecione um boot para restaurar na partição boot</string>
+
+    <string name="settings_app_list_loading_scheme">Esquema de Carregamento da Lista de Apps</string>
+    <string name="settings_app_list_loading_scheme_summary">Escolha como carregar a lista de aplicativos</string>
+    <string name="app_list_loading_scheme_root_service">RootService (Padrão)</string>
+    <string name="app_list_loading_scheme_package_manager">PackageManager (API do Sistema)</string>
+    <string name="app_list_loading_scheme_dialog_title">Esquema de Carregamento</string>
+    <string name="su_backup_list">Lista de backup</string>
+    <string name="su_restore_list">Lista de restauração</string>
+    <string name="backup_success">Backup bem-sucedido</string>
+    <!-- Badge Count Settings -->
+    <string name="enable_badge_count">Configurações do contador de selos</string>
+    <string name="enable_badge_count_summary">Configurar a exibição do contador de selos para itens de navegação</string>
+    <string name="badge_superuser">Mostrar selo de superusuário</string>
+    <string name="badge_apm">Mostrar selo de módulo do sistema</string>
+    <string name="badge_kernel">Mostrar selo de módulo do kernel</string>
+    <string name="settings_sound_effect">Efeito sonoro</string>
+    <string name="settings_sound_effect_summary">Tocar efeito sonoro ao clicar</string>
+    <string name="settings_sound_effect_enabled">Ativado</string>
+    <string name="settings_sound_effect_playing">Selecionado: %s</string>
+    <string name="settings_sound_effect_source">Fonte do som</string>
+    <string name="settings_sound_effect_source_local">Arquivo local</string>
+    <string name="settings_sound_effect_source_preset">Predefinição</string>
+    <string name="settings_sound_effect_preset_title">Sons predefinidos</string>
+    <string name="settings_select_sound_effect">Selecionar arquivo de som</string>
+    <string name="settings_sound_effect_selected">Arquivo de som selecionado</string>
+    <string name="settings_sound_effect_scope">Escopo do efeito</string>
+    <string name="settings_sound_effect_scope_global">Global (Em qualquer lugar)</string>
+    <string name="settings_sound_effect_scope_bottom_bar">Apenas barra inferior</string>
+    <string name="settings_clear_sound_effect">Limpar efeito sonoro</string>
+    <string name="settings_clear_sound_effect_confirm">Tem certeza que deseja limpar o efeito sonoro?</string>
+    <string name="settings_sound_effect_cleared">Efeito sonoro limpo</string>
+
+    <string name="settings_startup_sound">Som de inicialização</string>
+    <string name="settings_startup_sound_summary">Tocar som ao iniciar o aplicativo</string>
+    <string name="settings_startup_sound_enabled">Som de inicialização ativado</string>
+    <string name="settings_startup_sound_playing">Tocando: %s</string>
+    <string name="settings_select_startup_sound">Selecionar som de inicialização</string>
+    <string name="settings_startup_sound_selected">Som de inicialização selecionado</string>
+    <string name="settings_clear_startup_sound">Limpar som de inicialização</string>
+    <string name="settings_clear_startup_sound_confirm">Tem certeza que deseja limpar o som de inicialização?</string>
+    <string name="settings_startup_sound_cleared">Som de inicialização limpo</string>
+
+    <string name="settings_enable_cloud_backup_summary">Backup automático na nuvem</string>
+    <string name="settings_configure_webdav">Configurar serviço WebDAV</string>
+    <string name="webdav_config_title">Configuração WebDAV</string>
+    <string name="webdav_url">URL WebDAV</string>
+    <string name="webdav_username">Nome de usuário</string>
+    <string name="webdav_password">Senha</string>
+    <string name="webdav_uploading">Enviando para WebDAV...</string>
+    <string name="webdav_backup_success">Backup WebDAV bem-sucedido</string>
+    <string name="webdav_backup_failed">Falha no backup WebDAV: %s</string>
+    <string name="save">Salvar</string>
+    <string name="test">Testar</string>
+    <string name="webdav_path_label">Caminho (ex. /Backup)</string>
+    <string name="webdav_view_logs">Ver logs</string>
+    <string name="webdav_backup_logs_title">Logs de Backup</string>
+    <string name="webdav_no_logs">Sem logs</string>
+    <string name="webdav_clear_logs">Limpar</string>
+    <string name="settings_enable_local_backup">Ativar backup local</string>
+    <string name="settings_enable_local_backup_summary">Backup de módulos para armazenamento local (Downloads/FolkPatch/ModuleBackups)</string>
+    <string name="close">Fechar</string>
+
+    <!-- Backup Settings -->
+    <string name="settings_category_backup">Configurações de Backup</string>
+    <string name="settings_enable_cloud_backup">Ativar backup na nuvem</string>
+    <string name="settings_webdav_url">URL do WebDAV</string>
+    <string name="settings_webdav_username">Usuário do WebDAV</string>
+    <string name="settings_webdav_password">Senha do WebDAV</string>
+    <string name="settings_test_webdav">Testar conexão WebDAV</string>
+    <string name="webdav_test_success">Teste bem-sucedido</string>
+    <string name="webdav_test_failed">Teste falhou: %s</string>
+    <string name="settings_backup_now">Fazer backup agora</string>
+    <string name="backup_failed">Falha no backup: %s</string>
+    <string name="settings_restore_backup">Restaurar backup</string>
+    <string name="restore_success">Restauração bem-sucedida</string>
+    <string name="restore_failed">Falha na restauração: %s</string>
+    <string name="settings_auto_backup">Backup automático</string>
+    <string name="settings_auto_backup_summary">Backup automático uma vez por dia</string>
+    <string name="settings_delete_remote_backup">Excluir backup na nuvem</string>
+    <string name="delete_remote_backup_confirm">Tem certeza de que deseja excluir o backup na nuvem?</string>
+    <string name="delete_success">Exclusão bem-sucedida</string>
+    <string name="delete_failed">Falha na exclusão: %s</string>
+    <string name="settings_encrypt_backup">Criptografar backup</string>
+    <string name="settings_encrypt_backup_summary">Criptografar arquivo de backup com senha</string>
+    <string name="settings_backup_password">Senha de backup</string>
+    <string name="settings_backup_password_hint">Digite a senha de backup</string>
+
+    <string name="patch_output_written_to"> Patch aplicado com sucesso, arquivo escrito em </string>
+    <string name="patch_write_failed"> Falha ao escrever boot.img com patch</string>
+
+    <!-- Script Library Strings -->
+    <string name="script_library">Biblioteca de Scripts</string>
+    <string name="script_library_title">Biblioteca de Scripts</string>
+    <string name="script_library_empty">Sem scripts, clique no botão adicionar para adicionar</string>
+    <string name="script_library_add">Adicionar Script</string>
+    <string name="script_library_add_title">Adicionar Script</string>
+    <string name="script_library_select_file">Selecionar arquivo de script</string>
+    <string name="script_library_alias">Apelido</string>
+    <string name="script_library_alias_hint">Digite o apelido do script (opcional)</string>
+    <string name="script_library_run">Executar</string>
+    <string name="script_library_delete">Excluir</string>
+    <string name="script_library_path">Caminho: %s</string>
+    <string name="script_library_confirm_delete">Confirmar exclusão do script?</string>
+    <string name="script_library_delete_success">Script excluído com sucesso</string>
+    <string name="script_library_delete_failed">Falha ao excluir script</string>
+    <string name="script_library_add_success">Script adicionado com sucesso</string>
+    <string name="script_library_add_failed">Falha ao adicionar script: %s</string>
+    <string name="script_library_load_failed">Falha ao carregar biblioteca de scripts</string>
+    <string name="script_library_output">Saída de execução</string>
+    <string name="script_library_no_output">Sem saída</string>
+    <string name="script_library_save_log">Salvar log</string>
+    <string name="script_library_log_saved">Log salvo em %s</string>
+    <string name="script_library_log_save_failed">Falha ao salvar log: %s</string>
+    <string name="settings_vibration">Vibração e tato</string>
+    <string name="settings_vibration_summary">Vibrar ao tocar</string>
+    <string name="settings_vibration_enabled">Ativar vibração</string>
+    <string name="settings_vibration_intensity">Intensidade da vibração</string>
+    <string name="settings_vibration_scope">Escopo da vibração</string>
+    <string name="settings_vibration_scope_global">Global (Em todo lugar)</string>
+    <string name="settings_vibration_scope_bottom_bar">Apenas barra inferior</string>
+    <string name="superuser">Superusuário</string>
+    <string name="module">Módulo</string>
+    <string name="search_modules">Buscar módulos...</string>
+    <string name="search_scripts">Buscar scripts...</string>
+
+    <!-- Umount Service -->
+    <string name="settings_umount_service">Umount Service</string>
+    <string name="settings_umount_service_summary">Configurar pontos de montagem para desmontar automaticamente na inicialização</string>
+    <string name="umount_config_title">Configuração do Umount</string>
+    <string name="umount_config_enabled">Ativar Umount</string>
+    <string name="umount_config_enabled_summary">Desmontar automaticamente pontos de montagem especificados na inicialização</string>
+    <string name="umount_config_paths_label">Caminhos dos pontos de montagem (um por linha)</string>
+    <string name="umount_config_paths_placeholder">/system/vendor/app\n/system/vendor/priv-app</string>
+    <string name="umount_config_paths_helper">Digite um caminho de ponto de montagem por linha para desmontar</string>
+    <string name="umount_config_save">Salvar</string>
+    <string name="umount_config_save_confirm">Confirmar salvar configuração?</string>
+    <string name="umount_config_save_success">Configuração salva com sucesso</string>
+    <string name="umount_config_save_failed">Falha ao salvar configuração</string>
+
+    <!-- Página Meus Temas -->
+    <string name="my_themes_title">Meus Temas</string>
+    <string name="my_themes_empty">Ainda não há temas</string>
+    <string name="my_themes_empty_action">Navegar pela Loja de Temas</string>
+    <string name="my_themes_apply">Aplicar Tema</string>
+    <string name="my_themes_delete">Excluir Tema</string>
+    <string name="my_themes_delete_confirm">Tem certeza de que deseja excluir este tema?</string>
+    <string name="my_themes_deleted">Tema excluído</string>
+    <string name="my_themes_applied">Tema aplicado</string>
+    <string name="my_themes_apply_failed">Falha ao aplicar tema — pressione longamente para excluir e baixar novamente</string>
+    <string name="my_themes_details">Detalhes do Tema</string>
+
+    <!-- Diálogo de Download -->
+    <string name="theme_download_title">Baixando Tema</string>
+    <string name="theme_download_completed">Download concluído</string>
+    <string name="theme_download_failed">Download falhou</string>
+    <string name="theme_file_corrupt">Arquivo do tema corrompido, faça o download novamente</string>
+    <string name="theme_file_incomplete">Arquivo do tema incompleto, faça o download novamente</string>
+    <string name="theme_download_progress">Progresso</string>
+    <string name="theme_download_file">Arquivo do Tema</string>
+    <string name="theme_download_image">Imagem de Visualização</string>
+    <string name="theme_download_cancel">Cancelar</string>
+    <string name="theme_download_pause">Pausar</string>
+    <string name="theme_download_resume">Retomar</string>
+    <string name="theme_download_retry">Tentar Novamente</string>
+    <string name="theme_download_apply">Aplicar Tema</string>
+    <string name="theme_download_go_to_my_themes">Meus Temas</string>
+    <string name="theme_download_retrying">Tentando Novamente (%d/3)...</string>
+    <string name="theme_download_preparing">Preparando download...</string>
+    <string name="theme_download_downloading_file">Baixando arquivo do tema...</string>
+    <string name="theme_download_downloading_image">Baixando imagem de visualização...</string>
+    <string name="theme_download_finalizing">Finalizando...</string>
+    <string name="settings_predictive_back">Gesto de voltar preditivo</string>
+    <string name="settings_predictive_back_summary">Ativar animação do gesto de voltar preditivo do Android 14+</string>
+
+    <string name="home_device_status_battery_charging">Carregando</string>
+    <string name="home_device_status_cpu_temp">Temp. CPU</string>
+    <string name="home_device_status_memory_trend">Tendência de Memória</string>
+    <string name="home_storage_partitions">Partições de Armazenamento</string>
+    <string name="home_device_status_cpu_freq">Frequência CPU</string>
+    <string name="home_network_rx">Download</string>
+    <string name="home_network_tx">Upload</string>
+    <string name="settings_home_layout_stats">StatsUI</string>
+    <string name="home_stats_more_options">Mais opções</string>
+    <string name="home_stats_kp_label">KP</string>
+    <string name="home_stats_manager_label">Gerenciador</string>
+    <string name="home_device_status_gpu_load">GPU</string>
+    <string name="home_stats_kernel_modules">Módulos do Kernel</string>
+    <string name="home_stats_apm_modules">Módulos do Sistema</string>
+    <string name="home_stats_superusers">Superusuários</string>
+    <string name="settings_kernel_spoof">Configuração de Falsificação do Kernel</string>
+    <string name="settings_kernel_spoof_summary">Falsificar versão do kernel e tempo de compilação</string>
+    <string name="settings_kernel_spoof_version">Versão do Kernel</string>
+    <string name="settings_kernel_spoof_build_time">Tempo de Compilação do Kernel</string>
+    <string name="settings_kernel_spoof_restore">Restaurar</string>
+
+    <string name="kernel_spoof_enabled">Falsificação do kernel ativada</string>
+    <string name="kernel_spoof_disabled_restored">Falsificação do kernel desativada e restaurada</string>
+    <string name="kernel_spoof_failed">Falha na falsificação do kernel: %d</string>
+    <string name="kernel_spoof_applied">Falsificação do kernel aplicada</string>
+
+    <string name="settings_path_hide">Ocultar caminho</string>
+    <string name="settings_path_hide_summary">Ocultar arquivos e diretórios de aplicativos em nível de kernel</string>
+    <string name="path_hide_paths_label">Caminhos ocultos (um por linha)</string>
+
+    <string name="path_hide_paths_helper">Insira um caminho por linha. Caminhos correspondentes retornarão ENOENT.</string>
+    <string name="path_hide_save">Salvar</string>
+    <string name="path_hide_enabled">Ocultar caminho ativado</string>
+    <string name="path_hide_disabled">Ocultar caminho desativado</string>
+    <string name="path_hide_applied">Configuração de ocultar caminho aplicada</string>
+    <string name="path_hide_failed">Falha na operação de ocultar caminho: %d</string>
+    <string name="path_hide_uid_mode">Modo de execução por UID</string>
+    <string name="path_hide_uid_mode_summary">Ocultar caminhos apenas para UIDs de aplicativos específicos</string>
+    <string name="path_hide_uids_label">UIDs de destino (um por linha)</string>
+    <string name="path_hide_uids_helper">Insira os UIDs dos aplicativos. Apenas estes aplicativos terão caminhos ocultos.</string>
+    <string name="path_hide_uid_save">Salvar UIDs</string>
+    <string name="path_hide_uid_mode_enabled">Modo de execução por UID ativado</string>
+    <string name="path_hide_uid_mode_disabled">Modo de execução por UID desativado</string>
+    <string name="path_hide_filter_system">Filtrar UIDs do sistema</string>
+    <string name="path_hide_filter_system_summary">Também ocultar caminhos de processos root e do sistema (UID &lt; 10000)</string>
+    <string name="path_hide_filter_system_enabled">Filtragem de UIDs do sistema ativada</string>
+    <string name="path_hide_filter_system_disabled">Filtragem de UIDs do sistema desativada</string>
+    <string name="path_hide_filter_system_warning_title">Aviso</string>
+    <string name="path_hide_filter_system_warning_message">Ativar isso também ocultará caminhos de processos root e do sistema (UID &lt; 10000). Isso pode causar mau funcionamento de alguns recursos do sistema. Prossiga com cautela.</string>
+    <string name="path_hide_uid_applied">Lista de permissão de UIDs aplicada</string>
+    <string name="path_hide_select_apps">Selecionar apps</string>
+    <string name="path_hide_no_apps_selected">Nenhum app selecionado</string>
+    <string name="path_hide_app_removed">Removidas %d entradas de apps desinstalados</string>
+    <string name="path_hide_search_apps">Pesquisar apps…</string>
+    <string name="path_hide_show_system">Mostrar apps do sistema</string>
+    <string name="netisolate_title">Isolamento de rede</string>
+    <string name="netisolate_enable">Isolamento de rede ativado</string>
+    <string name="netisolate_disable">Isolamento de rede desativado</string>
+    <string name="netisolate_enable_summary">Bloquear acesso à rede dos apps selecionados no nível do kernel</string>
+    <string name="netisolate_uids_label">Apps bloqueados</string>
+    <string name="netisolate_uids_hint">Insira os UIDs para bloquear (um por linha)</string>
+    <string name="netisolate_no_uids">Nenhum app bloqueado</string>
+    <string name="settings_search_title">Pesquisar configurações</string>
+    <string name="settings_search_hint">Pesquisar configurações…</string>
+    <string name="settings_search_empty_hint">Digite para pesquisar todas as configurações…</string>
+    <string name="settings_no_results">Nenhum resultado</string>
+
+    <!-- Color Generation -->
+    <string name="color_generation_classic">Clássico</string>
+    <string name="color_generation_custom">Personalizado</string>
+    <string name="color_generation_label">Modo de cor</string>
+
+    <!-- Color Standard -->
+    <string name="color_standard_md3_2021">MD3 2021</string>
+    <string name="color_standard_m3e_2025">M3e 2025</string>
+    <string name="color_standard_label">Padrão de cor</string>
+
+    <!-- Color Style -->
+    <string name="color_style_label">Estilo de cor</string>
+    <string name="color_style_tonal_spot">Tonal</string>
+    <string name="color_style_vibrant">Vibrante</string>
+    <string name="color_style_content">Conteúdo</string>
+    <string name="color_style_expressive">Expressivo</string>
+    <string name="color_style_rainbow">Arco-íris</string>
+    <string name="color_style_fruit_salad">Salada de frutas</string>
+    <string name="color_style_monochrome">Monocromático</string>
+    <string name="color_style_neutral">Neutro</string>
+    <string name="color_style_fidelity">Fidelidade</string>
+    <string name="settings_focus_card_background">Papel de parede do cartão FocusUI</string>
+    <string name="settings_focus_card_background_enabled">Papéis de parede do cartão FocusUI ativados; pressione longamente um cartão para gerenciar seu papel de parede</string>
+    <string name="settings_focus_card_background_summary">Ativar papéis de parede do cartão FocusUI e gerenciamento por pressão longa</string>
+    <string name="settings_focus_card_dim">Escurecimento do papel de parede do cartão</string>
+    <string name="settings_focus_card_dual_dim">Ativar escurecimento duplo dia/noite</string>
+    <string name="settings_focus_card_dual_dim_desc">Ajustar automaticamente o escurecimento do papel de parede para temas claro e escuro</string>
+    <string name="settings_focus_card_day_dim">Escurecimento do papel de parede no modo dia</string>
+    <string name="settings_focus_card_night_dim">Escurecimento do papel de parede no modo noite</string>
+    <string name="settings_focus_card_opacity">Opacidade do papel de parede do cartão</string>
+    <string name="settings_focus_card_dual_opacity">Ativar opacidade dupla dia/noite</string>
+    <string name="settings_focus_card_dual_opacity_desc">Ajustar automaticamente a opacidade do papel de parede para temas claro e escuro</string>
+    <string name="settings_focus_card_day_opacity">Opacidade do papel de parede no modo dia</string>
+    <string name="settings_focus_card_night_opacity">Opacidade do papel de parede no modo noite</string>
+    <string name="settings_focus_card_kernel">Cartão do kernel</string>
+    <string name="settings_focus_card_app">Cartão de aplicativos</string>
+    <string name="settings_focus_card_device">Cartão de status do dispositivo</string>
+    <string name="settings_focus_card_storage">Cartão de armazenamento</string>
+    <string name="settings_focus_card_wallpaper_selected">Papel de parede definido</string>
+    <string name="dashboard_card_background_title">Papel de parede do cartão do painel</string>
+    <string name="settings_dashboard_card_background">Papel de parede do cartão do painel</string>
+    <string name="settings_dashboard_card_background_enabled">Papel de parede do painel ativado; pressione longamente o cartão do painel para gerenciar</string>
+    <string name="settings_dashboard_card_background_summary">Ativar papel de parede para o cartão do painel DashboardUI</string>
+    <string name="dashboard_card_background_clear">Limpar papel de parede do painel</string>
+    <string name="dashboard_card_background_clear_confirm">Tem certeza de que deseja limpar o papel de parede do cartão do painel?</string>
+    <string name="dashboard_card_background_saved">Papel de parede do painel salvo com sucesso</string>
+    <string name="dashboard_card_background_error">Falha ao salvar papel de parede do painel</string>
+    <string name="dashboard_card_background_cleared">Papel de parede do painel limpo</string>
+    <string name="dashboard_card_background_restore">Restaurar padrão</string>
+    <string name="dashboard_card_background_restored">Papel de parede do painel restaurado</string>
+    <string name="settings_dashboard_card_dual_dim">Ativar escurecimento duplo dia/noite</string>
+    <string name="settings_dashboard_card_dual_dim_desc">Ajustar automaticamente o escurecimento do papel de parede do painel para temas claro e escuro</string>
+    <string name="settings_dashboard_card_day_dim">Escurecimento do papel de parede do painel no modo dia</string>
+    <string name="settings_dashboard_card_night_dim">Escurecimento do papel de parede do painel no modo noite</string>
+    <string name="settings_dashboard_card_opacity">Opacidade do papel de parede do painel</string>
+    <string name="settings_dashboard_card_dual_opacity">Ativar opacidade dupla dia/noite</string>
+    <string name="settings_dashboard_card_dual_opacity_desc">Ajustar automaticamente a opacidade do papel de parede do painel para temas claro e escuro</string>
+    <string name="settings_dashboard_card_day_opacity">Opacidade do papel de parede do painel no modo dia</string>
+    <string name="settings_dashboard_card_night_opacity">Opacidade do papel de parede do painel no modo noite</string>
+    <string name="settings_title_image_permission_required">Conceda a permissão de armazenamento para selecionar uma imagem de título</string>
+    <string name="settings_background_permission_required">Conceda a permissão de armazenamento para selecionar uma imagem de fundo</string>
+    <string name="settings_sound_effect_save_failed">Falha ao salvar o efeito sonoro</string>
+    <string name="settings_startup_sound_save_failed">Falha ao salvar o som de inicialização</string>
+    <string name="script_library_downloaded_to">Baixado em: %s</string>
+    <string name="script_library_download_failed">Falha no download: %s</string>
+    <string name="settings_new_app_profile_update_failed">Falha ao atualizar o perfil de novo app: %s</string>
+    <string name="settings_info_copy">Toque longo para copiar informações</string>
+    <string name="settings_info_copy_summary">Toque e segure um item do painel de informações da tela inicial para copiar seu conteúdo</string>
+    <string name="home_info_copied">%1$s copiado</string>
+    <string name="settings_jailbreak_mode">Modo jailbreak</string>
+    <string name="settings_jailbreak_mode_summary">Carrega o módulo KernelPatch em um kernel original. Não é permitido fazer patch neste modo.</string>
+    <string name="settings_jailbreak_soft_reboot">Reinicialização suave</string>
+    <string name="settings_jailbreak_soft_reboot_message">O módulo foi carregado. Reiniciar o sistema agora?</string>
+    <string name="settings_jailbreak_restart_framework">Reiniciar framework</string>
+    <string name="settings_jailbreak_restart_framework_message">O módulo foi carregado. Reiniciar o framework do Android agora? Esta operação fará uma reinicialização suave do dispositivo (reinicia apenas o framework, não o kernel).</string>
+    <string name="settings_jailbreak_loaded">Módulo de jailbreak carregado</string>
+    <string name="settings_jailbreak_failed">Falha ao carregar o módulo de jailbreak</string>
+    <string name="jailbreak_no_patch">Não é permitido fazer patch no modo jailbreak.</string>
+    <string name="jailbreak">Jailbreak</string>
+    <string name="jailbreak_triggered">Jailbreak acionado. Aguarde o root e, em seguida, reinicie em modo suave.</string>
+    <string name="reboot_soft">Reinicialização suave</string>
+    <string name="kpm_installed">Instalado</string>
+    <string name="kpm_disabled">Desativado (entra em vigor após reiniciar)</string>
+    <string name="kpm_embedded_unload_invalid">Não é possível descarregar KPMs embutidos; eles continuarão ativos após reiniciar.</string>
+</resources>

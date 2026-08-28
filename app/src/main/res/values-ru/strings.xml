@@ -1,0 +1,1358 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">FolkPatch</string>
+
+    <string name="desktop_app_name">Имя настольного приложения</string>
+
+    <string name="home">Главная</string>
+
+    <string name="settings_apm_stay_on_page">Оставаться на странице операции</string>
+    <string name="settings_apm_stay_on_page_summary">Не возвращаться автоматически после выполнения действия модуля</string>
+
+    <string name="success">Успешно</string>
+    <string name="failure">Ошибка</string>
+
+    <string name="patch_warnning">Установка сопряжена с рисками. Убедитесь, что у вас есть резервная копия данных.</string>
+    <string name="patch">Патч</string>
+
+    <string name="kernel_patch">KernelPatch</string>
+    <string name="android_patch">AndroidPatch</string>
+
+    <string name="settings_nav_layout_title">Настройки макета навигации</string>
+    <string name="settings_nav_layout_summary">Скрыть или показать некоторые компоненты навигации</string>
+    <string name="settings_nav_scheme">Схема навигации</string>
+    <string name="settings_nav_mode">Режим навигационной панели</string>
+    <string name="settings_nav_mode_summary">Выберите способ отображения навигационной панели</string>
+    <string name="settings_nav_mode_auto">Автоматически Традиционный</string>
+    <string name="settings_nav_mode_bottom">Всегда нижняя панель</string>
+    <string name="settings_nav_mode_rail">Всегда боковая панель</string>
+    <string name="settings_nav_mode_floating">Плавающая нижняя панель</string>
+    <string name="settings_show_apm">Показать системные модули</string>
+    <string name="settings_show_kpm">Показать KPM</string>
+    <string name="settings_show_superuser">Показать Суперпользователя</string>
+    <string name="settings_floating_auto_hide">Автоскрытие панели</string>
+    <string name="settings_floating_auto_hide_summary">Автоматически скрывать плавающую панель через 3 секунды</string>
+    <string name="settings_floating_swipe_hide">Скрытие при прокрутке</string>
+    <string name="settings_floating_swipe_hide_summary">Скрывать панель при прокрутке вниз, показывать при прокрутке вверх</string>
+    <string name="settings_navbar_glass_effect">Эффект матового стекла</string>
+    <string name="settings_navbar_glass_effect_summary">Применить эффект матового стекла к плавающей панели навигации</string>
+    <string name="settings_navbar_glass_blur_strength">Сила размытия</string>
+    <string name="settings_navbar_glass_transparency">Прозрачность фона</string>
+    <string name="settings_navbar_glass_highlight_strength">Интенсивность блика</string>
+    <string name="settings_navbar_glass_specular">Зеркальное отражение</string>
+    <string name="settings_navbar_glass_specular_summary">Включить зеркальный блик в верхней части панели навигации</string>
+    <string name="settings_navbar_glass_inner_glow">Внутреннее свечение</string>
+    <string name="settings_navbar_glass_inner_glow_summary">Включить мягкое свечение в нижней части панели навигации</string>
+    <string name="settings_navbar_glass_border">Стеклянная рамка</string>
+    <string name="settings_navbar_glass_border_summary">Включить тонкую рамку вокруг панели навигации</string>
+    <string name="settings_compact_rounded_bar">Компактный скругленный стиль</string>
+    <string name="settings_compact_rounded_bar_summary">Использовать компактную плавающую панель со скругленными углами</string>
+    <string name="settings_stats_top_layout">Верхняя карточка</string>
+    <string name="settings_stats_top_layout_summary">Выберите стиль верхней информационной карточки</string>
+    <string name="settings_stats_top_layout_list">Список</string>
+    <string name="settings_stats_top_layout_grid">Сетка</string>
+    <string name="settings_block_kernelpatch_update">Блокировать обновление KernelPatch</string>
+    <string name="settings_block_kernelpatch_update_summary">Не показывать уведомления об обновлении KernelPatch</string>
+    <string name="settings_block_androidpatch_update">Блокировать обновление системного патча</string>
+    <string name="settings_block_androidpatch_update_summary">Не показывать уведомления об обновлении системного патча (APD)</string>
+    <string name="settings_disable_module_update_check">Отключить проверку обновления модулей</string>
+    <string name="settings_disable_module_update_check_summary">Отключить автоматическую проверку обновлений для системных модулей</string>
+
+    <string name="reboot">Перезагрузка</string>
+    <string name="settings">Настройки</string>
+    <string name="reboot_recovery">Перезагрузить в Recovery</string>
+    <string name="reboot_bootloader">Перезагрузить в Bootloader</string>
+    <string name="reboot_download">Перезагрузить в Download</string>
+    <string name="reboot_edl">Перезагрузить в EDL</string>
+    <string name="reboot_fastbootd">Перезагрузить в FastbootD</string>
+    <string name="about">О приложении</string>
+    <string name="developer_and_maintainer">Разработчик | Сопровождающий</string>
+    <string name="settings_app_language">Язык</string>
+    <string name="system_default">По умолчанию системы</string>
+    <string name="settings_global_namespace_mode">Глобальный режим пространства имён</string>
+    <string name="settings_global_namespace_mode_summary">Все root-сессии используют глобальное пространство монтирования</string>
+    <string name="settings_clear_super_key_dialog">Вы действительно хотите продолжить?</string>
+    <string name="settings_sucompat">Совместимость со старым su</string>
+    <string name="settings_sucompat_summary">Включить совместимость со старым su (если su не работает)</string>
+    <string name="settings_selinux_hide">Скрыть изменение SELinux (Тест)</string>
+    <string name="settings_selinux_hide_summary">Скрывает изменения SELinux от обнаружения пользовательскими процессами (эта функция может быть нестабильной). Безопасный режим может отключить эту функцию.</string>
+    <string name="settings_selinux_hide_warning_title">Предупреждение</string>
+    <string name="settings_selinux_hide_warning_below_5_10">Эта функция протестирована только на ядре 5.10 и выше и может быть нестабильной на более старых версиях ядра.</string>
+    <string name="settings_selinux_hide_warning_non_gki">Не-GKI ядра несут больший риск и могут вызвать сбой загрузки. Убедитесь, что ваши данные сохранены в резервной копии.</string>
+
+    <string name="su_exclude_all_title">Исключить все</string>
+    <string name="su_exclude_all_confirm">Вы уверены, что хотите исключить все приложения без root-прав?</string>
+
+    <string name="home_learn_apatch">Изучить FolkPatch</string>
+    <string name="home_click_to_learn_apatch">Узнайте о функциях FolkPatch и как их использовать</string>
+    <string name="settings_hide_apatch_card">Скрыть карту "Изучить FolkPatch"</string>
+    <string name="settings_hide_apatch_card_summary">Скрыть карту "Изучить FolkPatch" на главном экране</string>
+
+    <string name="about_source_code"><![CDATA[<p>Просмотреть исходный код на %1$s<p/>Присоединяйтесь к нашему %2$s каналу<p/>Присоединяйтесь к нашей %3$s группе]]></string>
+    <string name="send_log">Отправить логи</string>
+    <string name="settings_clean_storage">Очистка данных приложения</string>
+    <string name="settings_clean_storage_summary">Исправляет сбои загрузки и применения из-за остаточных файлов</string>
+    <string name="settings_clean_storage_confirm">Будут удалены загруженные темы, импортированная музыка, звуковые эффекты и весь кэш, каталоги будут созданы заново. Настройки сохранятся. Продолжить?</string>
+    <string name="settings_clean_storage_done">Очистка завершена</string>
+    <string name="save_log">Сохранить логи</string>
+    <string name="log_saved">Логи сохранены</string>
+    <string name="safe_mode">Безопасный режим</string>
+    <string name="github">GitHub</string>
+    <string name="telegram">Telegram</string>
+    <string name="support_or_donate">Поддержка / Пожертвование</string>
+
+    <string name="super_key">SuperKey</string>
+    <string name="clear_super_key">Очистить SuperKey</string>
+    <string name="patch_set_superkey">Установить SuperKey</string>
+    <string name="home_patch_set_key_desc">Единственные учётные данные для KernelPatch</string>
+    <string name="home_patch_next_step">Следующий шаг</string>
+
+    <string name="home_not_installed">Не установлено</string>
+    <string name="home_install_unknown">Не установлено или не проверено</string>
+    <string name="home_install_unknown_summary">Нажмите для установки</string>
+    <string name="home_click_to_install">Нажмите для установки</string>
+    <string name="home_working">Работает</string>
+    <string name="home_kp_need_update">Доступна новая версия</string>
+    <string name="home_kp_cando_update">Обновить</string>
+
+    <string name="home_installing">Установка</string>
+
+    <string name="kpatch_version">Версия: %s</string>
+    <string name="apatch_version">Версия: %s</string>
+
+    <string name="kpatch_version_update" formatted="false">Версия: %s -&gt; %s</string>
+    <string name="kpatch_shadow_path_title">kpatch</string>
+    <string name="home_auth_key_title">Введите SuperKey</string>
+    <string name="home_auth_key_desc">Запустить после аутентификации</string>
+    <string name="home_kpatch_info_title">Информация</string>
+
+    <string name="home_ap_cando_install">Установить</string>
+
+    <string name="home_ap_cando_uninstall">Удалить</string>
+    <string name="home_ap_cando_reboot">Перезагрузить</string>
+
+    <string name="patch_title">Патч</string>
+
+    <string name="patch_config_title">Патчи</string>
+    <string name="patch_mode_bootimg_patch">Режим: Патч</string>
+    <string name="patch_mode_patch_and_install">Режим: Патч и установка</string>
+    <string name="patch_mode_install_to_next_slot">Режим: Установка в неактивный слот (После OTA)</string>
+    <string name="patch_mode_uninstall_patch">Режим: Удаление KPatch</string>
+    <string name="patch_select_bootimg_btn">Выбрать boot</string>
+    <string name="patch_embed_kpm_btn">Встроить KPM</string>
+    <string name="patch_start_patch_btn">Начать</string>
+    <string name="patch_start_unpatch_btn">Удалить патч</string>
+    <string name="patch_item_error">!!ОШИБКА!!</string>
+    <string name="patch_item_bootimg">Образ boot</string>
+    <string name="patch_item_bootimg_slot">Слот:</string>
+    <string name="patch_item_bootimg_dev">Устройство:</string>
+    <string name="patch_item_kernel">Ядро</string>
+    <string name="patch_item_kpimg">kpimg</string>
+    <string name="patch_item_kpimg_version">Версия:</string>
+    <string name="patch_item_kpimg_comile_time">Время:</string>
+    <string name="patch_item_kpimg_config">Конфигурация:</string>
+    <string name="patch_item_new_extra_kpm">Встроить новый</string>
+    <string name="patch_item_existed_extra_kpm">Существует</string>
+    <string name="patch_item_extra_name">Имя:</string>
+    <string name="patch_item_extra_version">Версия:</string>
+    <string name="patch_item_extra_author">Автор:</string>
+    <string name="patch_item_extra_kpm_license">Лицензия:</string>
+    <string name="patch_item_extra_kpm_desciption">Описание:</string>
+    <string name="patch_item_extra_args">Аргументы:</string>
+    <string name="patch_item_extra_event">Событие:</string>
+    <string name="patch_item_skey">SuperKey</string>
+    <string name="patch_custom_superkey">Пользовательский SuperKey</string>
+    <string name="patch_custom_superkey_summary">Вы по-прежнему можете использовать SuperKey для управления Root и ядром, менеджер авторизован встроенной подписью ядра</string>
+    <string name="patch_item_set_skey_label">SuperKey должен содержать 8-63 символа и включать цифры и буквы, но без специальных символов.</string>
+    <string name="patch_confirm_superkey">Подтвердите SuperKey</string>
+    <string name="patch_skey_mismatch">SuperKey не совпадает</string>
+
+    <string name="home_kernel">Версия ядра</string>
+    <string name="home_manager_version">Версия менеджера</string>
+    <string name="home_fingerprint">Отпечаток</string>
+
+    <string name="home_selinux_status">Статус SELinux</string>
+    <string name="home_selinux_status_disabled">Отключен</string>
+    <string name="home_selinux_status_enforcing">Принудительный</string>
+    <string name="home_selinux_status_permissive">Разрешающий</string>
+    <string name="home_selinux_status_unknown">Неизвестно</string>
+
+    <string name="settings_selinux_mode">Режим SELinux</string>
+    <string name="settings_selinux_mode_summary">Выбрать режим принудительного применения SELinux</string>
+    <string name="settings_selinux_mode_enforcing">Принудительный (Строгий)</string>
+    <string name="settings_selinux_mode_permissive">Разрешающий (Мягкий)</string>
+    <string name="settings_selinux_current_mode">Текущий: %s</string>
+    <string name="settings_selinux_mode_enforcing_summary">SELinux полностью применяет правила доступа</string>
+    <string name="settings_selinux_mode_permissive_summary">SELinux только регистрирует нарушения, не блокирует</string>
+
+    <string name="home_device_info">Устройство</string>
+    <string name="home_system_version">Версия системы</string>
+    <string name="home_kpatch_version">Версия KernelPatch</string>
+    <string name="home_su_path">Исполняемый файл su</string>
+    <string name="home_apatch_version">Версия FolkPatch</string>
+
+    <string name="kpm">KPModule</string>
+    <string name="kpm_kp_not_installed">KernelPatch не установлен</string>
+    <string name="kpm_add_kpm">Добавить KPM</string>
+    <string name="kpm_load">Загрузить</string>
+    <string name="kpm_install">Установить</string>
+    <string name="kpm_embed">Встроить</string>
+    <string name="kpm_embedded">Встроен</string>
+    <string name="kpm_loaded">Загружен</string>
+    <string name="kpm_load_toast_succ">Загрузка успешна</string>
+    <string name="kpm_install_toast_succ">Успешно установлено; вступит в силу после перезагрузки</string>
+    <string name="kpm_load_toast_failed">Загрузка не удалась</string>
+    <string name="kpm_unload_confirm">Выгрузить модуль %s?</string>
+    <string name="kpm_unload">Выгрузить</string>
+    <string name="kpm_control">Управление</string>
+    <string name="kpm_apm_empty">Нет загруженных модулей</string>
+    <string name="kpm_custom_order">Переключить пользовательский порядок модулей</string>
+    <string name="kpm_load_failed">Не удалось загрузить модули ядра</string>
+    <string name="kpm_version">Версия</string>
+    <string name="kpm_license">Лицензия</string>
+    <string name="kpm_author">Автор</string>
+    <string name="kpm_desc">Описание</string>
+    <string name="kpm_args">Аргументы</string>
+
+    <string name="su_title">Суперпользователь</string>
+    <string name="su_selinux_via_hook">Обойти через хук</string>
+    <string name="su_pkg_excluded_label">Исключить</string>
+    <string name="su_pkg_excluded_setting_title">Исключить изменения</string>
+    <string name="su_pkg_excluded_setting_summary">Включение этой опции позволит FolkPatch восстановить любые файлы, измененные модулями этого приложения.</string>
+    <string name="su_pkg_root_setting_title">Суперпользователь</string>
+    <string name="su_pkg_root_setting_summary">Включение этой опции предоставит доступ суперпользователя вашему приложению, позволяя использовать команды SU.</string>
+    <string name="su_pkg_normal_setting_title">Обычный режим</string>
+    <string name="su_pkg_normal_setting_summary">Доступ root не предоставлен, приложение работает без привилегий суперпользователя.</string>
+    <string name="su_batch_exclude_title">Пакетное исключение</string>
+    <string name="su_batch_exclude_content">Исключить инъекцию для всех не-ROOT приложений, выберите действие</string>
+    <string name="su_exclude_btn">Исключить</string>
+    <string name="su_exclude_reverse_btn">Обратить</string>
+
+    <!-- SuperUser App Action Dialog -->
+    <string name="su_app_action_title">Действие приложения</string>
+    <string name="su_app_action_content">Выберите действие для приложения</string>
+    <string name="su_app_action_launch">Запустить приложение</string>
+    <string name="su_app_action_force_stop">Принудительная остановка</string>
+    <string name="su_app_action_launch_success">Запуск %s</string>
+    <string name="su_app_action_force_stop_success">%s принудительно остановлено</string>
+    <string name="su_app_action_failed">Операция не удалась: %s</string>
+
+    <!-- SU Audit Log -->
+    <string name="su_audit_log_title">Журнал авторизации</string>
+    <string name="su_audit_log_empty">Нет записей авторизации</string>
+    <string name="su_audit_log_clear">Очистить журнал</string>
+    <string name="su_audit_log_clear_confirm">Очистить все записи авторизации?</string>
+    <string name="su_audit_action_grant">Разрешено</string>
+    <string name="su_audit_action_revoke">Отозвано</string>
+    <string name="su_audit_action_exclude">Исключено</string>
+    <string name="su_audit_tab_usage">Журнал использования</string>
+    <string name="su_audit_tab_operations">Журнал операций</string>
+
+    <string name="su_show_system_apps">Показать системные приложения</string>
+    <string name="su_hide_system_apps">Скрыть системные приложения</string>
+    <string name="su_refresh">Обновить</string>
+    <string name="su_multi_select_title">Выберите приложения</string>
+    <string name="su_multi_select_count">Выбрано: %d</string>
+    <string name="su_multi_select_grant_root">Предоставить ROOT</string>
+    <string name="su_multi_select_revoke_root">Отозвать ROOT</string>
+    <string name="su_multi_select_exclude">Исключить</string>
+    <string name="su_multi_select_confirm_grant">Предоставить ROOT %d приложениям?</string>
+    <string name="su_multi_select_confirm_revoke">Отозвать ROOT у %d приложений?</string>
+    <string name="su_multi_select_confirm_exclude">Исключить %d приложений?</string>
+    <string name="su_multi_select_enter">Множественный выбор</string>
+
+    <string name="apm">Системный модуль</string>
+    <string name="apm_not_installed">AndroidPatch не установлен</string>
+    <string name="apm_failed_to_enable">Не удалось включить модуль: %s</string>
+    <string name="apm_failed_to_disable">Не удалось отключить модуль: %s</string>
+    <string name="apm_empty">Нет установленных модулей</string>
+    <string name="apm_load_failed">Не удалось загрузить модули</string>
+    <string name="apm_remove">Удалить</string>
+    <string name="apm_undo">Отменить</string>
+    <string name="apm_install">Установить</string>
+    <string name="apm_uninstall_confirm">Удалить модуль %s?</string>
+    <string name="apm_uninstall_success">%s удалён</string>
+    <string name="apm_uninstall_failed">Не удалось удалить: %s</string>
+    <string name="apm_undo_uninstall_success">%s восстановлен</string>
+    <string name="apm_undo_uninstall_failed">Не удалось восстановить: %s</string>
+    <string name="apm_version">Версия</string>
+    <string name="apm_author">Автор</string>
+    <string name="apm_desc">Описание</string>
+    <string name="apm_overlay_fs_not_available">Модули недоступны, так как OverlayFS отключён ядром!</string>
+    <string name="apm_magisk_conflict">Модули недоступны из-за конфликта с Magisk!</string>
+    <string name="apm_mount_warning_title">Важное уведомление</string>
+    <string name="apm_mount_warning_message">По умолчанию модули не монтируются. Используйте встроенную систему монтирования или метамодули.</string>
+    <string name="apm_mount_warning_button">Понятно</string>
+    <string name="apm_reboot_to_apply">Перезагрузите, чтобы применить изменения</string>
+    <string name="apm_changelog">Список изменений</string>
+    <string name="apm_update">Обновить</string>
+    <string name="apm_downloading">Загрузка модуля: %s</string>
+    <string name="apm_start_downloading">Начать загрузку: %s</string>
+    <string name="apm_new_version_available">Доступна новая версия %s, нажмите для обновления.</string>
+
+    <string name="hide_apatch_manager">Скрыть менеджер APatch</string>
+    <string name="hide_apatch_manager_summary">Установить прокси-приложение со случайным ID пакета и пользовательской меткой приложения</string>
+    <string name="hide_apatch_dialog_new_manager_name">Новое имя менеджера</string>
+    <string name="hide_apatch_dialog_summary">Будет использоваться как новая метка приложения, отображаемая в лаунчере</string>
+    <string name="hide_apatch_manager_failure">Не удалось скрыть. Пожалуйста, сообщите об ошибке!</string>
+
+    <string name="setting_reset_su_path">Сбросить путь su</string>
+    <string name="setting_reset_su_new_path">Новый полный путь</string>\
+
+    <string name="settings_folkx_engine_title">Движок анимации FolkX</string>
+    <string name="settings_folkx_engine_summary">Использовать плавные физические пружинные анимации при переключении страниц верхнего уровня</string>
+    <string name="settings_folkx_animation_type">Тип анимации</string>
+    <string name="settings_folkx_animation_speed">Скорость анимации</string>
+    <string name="settings_folkx_animation_linear">Линейное движение</string>
+    <string name="settings_folkx_animation_spatial">Пространственное движение</string>
+    <string name="settings_folkx_animation_fade">Появление/Исчезновение</string>
+    <string name="settings_folkx_animation_vertical">Вертикальное скольжение</string>
+    <string name="settings_folkx_animation_diagonal">Диагональное скольжение</string>
+
+    <string name="apm_webui_open">Открыть</string>
+    <string name="apm_action">Действие</string>
+    <string name="module_shortcut_add">Ярлык</string>
+    <string name="module_shortcut_not_supported">Лаунчер не поддерживает ярлыки на рабочем столе.</string>
+    <string name="module_shortcut_created">Ярлык создан на рабочем столе.</string>
+    <string name="module_shortcut_updated">Ярлык обновлен.</string>
+    <string name="module_shortcut_permission_tip_xiaomi">Пожалуйста, включите разрешение "Создание ярлыков на рабочем столе" для этого приложения в настройках Xiaomi.</string>
+    <string name="module_shortcut_permission_tip_oppo">Пожалуйста, включите разрешение "Ярлык на рабочем столе" для этого приложения в настройках OPPO.</string>
+    <string name="module_shortcut_permission_tip_default">Если создание ярлыка не удается, пожалуйста, включите разрешение ярлыка на рабочем столе для этого приложения в настройках системы.</string>
+    <string name="module_shortcut_name">Название ярлыка</string>
+    <string name="module_shortcut_icon">Иконка ярлыка</string>
+    <string name="module_shortcut_type">Тип ярлыка</string>
+    <string name="module_shortcut_type_webui">WebUI</string>
+    <string name="module_shortcut_type_action">Action</string>
+    <string name="module_shortcut_icon_default">Использовать иконку по умолчанию</string>
+    <string name="module_shortcut_icon_select">Выбрать иконку</string>
+    <string name="enable_web_debugging">Включить отладку WebView</string>
+    <string name="enable_web_debugging_summary">Можно использовать для отладки WebUI. Включайте только при необходимости.</string>
+    <string name="settings_apm_install_confirm">Подтверждать перед установкой</string>
+    <string name="settings_apm_install_confirm_summary">Показывать диалог подтверждения перед установкой модулей</string>
+    <string name="settings_enable_module_shortcut_add">Включить кнопку добавления ярлыка</string>
+    <string name="settings_enable_module_shortcut_add_summary">Показать кнопку добавления ярлыка WebUI на странице системных модулей</string>
+    <string name="settings_module_sort_optimization">Оптимизация сортировки модулей</string>
+    <string name="settings_module_sort_optimization_summary">Разместить системные модули с WebUI и Action в начале списка</string>
+    <string name="apm_custom_order">Пользовательский порядок модулей</string>
+    <string name="apm_drag_to_reorder">Перетащите, чтобы изменить порядок</string>
+    <string name="apm_reset_order">Восстановить автоматическую сортировку</string>
+    <string name="settings_fold_system_module">Свернуть системные модули</string>
+    <string name="settings_fold_system_module_summary">Нажмите на карточку модуля, чтобы развернуть/свернуть действия</string>
+        <string name="settings_simple_list_bottom_bar">Простая нижняя панель списка</string>
+        <string name="settings_simple_list_bottom_bar_summary">Использовать стиль кнопок только с иконками для действий модуля, вдохновлено APatch</string>
+    <string name="settings_spliced_card_group">Spliced Card Group</string>
+    <string name="settings_spliced_card_group_summary">Use M3E continuous card group style for module list</string>
+    <string name="settings_show_kpm_status_badge">Показывать значок статуса KPM</string>
+    <string name="settings_show_kpm_status_badge_summary">Показывать значок Встроен/Загружен на карточках KPM</string>
+    <string name="settings_show_more_module_info">Показать подробности о модуле</string>
+    <string name="settings_show_more_module_info_summary">Показать ID и размер модуля в списке модулей</string>
+    <string name="apm_install_confirm_title">Установить модуль</string>
+    <string name="apm_install_confirm_content">Вы уверены, что хотите установить %s?</string>
+    <string name="apm_disable_all_title">Отключить все модули</string>
+    <string name="apm_disable_all_confirm">Вы уверены, что хотите отключить все модули? Это приведёт к отключению всех установленных модулей.</string>
+    <string name="apm_enable_module_banner">Включить баннер модуля</string>
+    <string name="apm_enable_module_banner_summary">Отображать изображение баннера для модулей если доступно</string>
+    <string name="apm_enable_folk_banner">Настроить баннер модуля</string>
+    <string name="apm_enable_folk_banner_summary">Длительное нажатие на карточку модуля для выбора изображения баннера</string>
+    <string name="apm_folk_banner_title">Редактор модулей</string>
+    <string name="apm_folk_banner_select">Выбрать изображение</string>
+    <string name="apm_folk_banner_clear">Очистить FolkBanner</string>
+    <string name="apm_folk_banner_saved">FolkBanner внедрен для %s.</string>
+    <string name="apm_folk_banner_cleared">FolkBanner очищен для %s.</string>
+    <string name="apm_folk_banner_failed">Не удалось обновить FolkBanner для %s.</string>
+    <string name="folk_banner_custom_info_title">Информация о модуле</string>
+    <string name="folk_banner_custom_info_name">Название</string>
+    <string name="folk_banner_custom_info_version">Версия</string>
+    <string name="folk_banner_custom_info_author">Автор</string>
+    <string name="folk_banner_custom_info_description">Описание</string>
+    <string name="folk_banner_custom_info_save">Сохранить</string>
+    <string name="folk_banner_custom_info_reset">Сбросить</string>
+    <string name="folk_banner_custom_info_saved">Информация о модуле сохранена для %s</string>
+    <string name="folk_banner_custom_info_reset_done">Информация о модуле сброшена для %s</string>
+    <string name="apm_banner_api_mode">Режим API</string>
+    <string name="apm_banner_api_mode_summary">Использовать API случайных изображений или локальный каталог для баннеров модулей</string>
+    <string name="apm_banner_api_source">Настроить источник API</string>
+    <string name="apm_banner_api_source_hint">Введите URL API или локальный путь</string>
+    <string name="apm_banner_api_source_saved">Источник API сохранен</string>
+    <string name="apm_banner_api_source_not_configured">Не настроено</string>
+    <string name="apm_banner_api_url_configured">URL API настроен</string>
+    <string name="apm_banner_local_dir_configured">Локальный каталог настроен</string>
+    <string name="apm_banner_clear_cache">Очистить кэш</string>
+    <string name="apm_banner_cache_cleared">Кэш баннеров очищен</string>
+    <string name="apm_banner_api_config_title">Настроить источник API</string>
+    <string name="apm_banner_api_config_desc">Введите URL API случайных изображений или путь к локальному каталогу. Каждый модуль получит уникальный баннер.</string>
+    <string name="apm_banner_api_examples_title">Примеры:</string>
+    <string name="apm_banner_api_examples">API: https://picsum.photos/800/400\nЛокально: /sdcard/Pictures/Banners</string>
+    <!-- Рынок API -->
+    <string name="apm_api_marketplace_title">Маркетплейс API</string>
+    <string name="apm_api_preview">Предпросмотр</string>
+    <string name="apm_api_apply">Применить</string>
+    <string name="apm_api_preview_title">Предпросмотр API</string>
+    <string name="apm_api_preview_failed">Не удалось загрузить предпросмотр</string>
+    <string name="apm_api_url_label">URL API:</string>
+    <string name="apm_api_apply_success">Источник API успешно применён</string>
+    <string name="apm_api_verifying">Проверка…</string>
+    <string name="apm_api_retry">Повторить</string>
+    <string name="apm_api_empty">Нет доступных источников API</string>
+    <string name="settings_banner_custom_opacity">Непрозрачность баннера</string>
+    <string name="settings_banner_custom_opacity_summary">Использовать пользовательскую непрозрачность для баннеров вместо режима обоев</string>
+    <string name="settings_banner_opacity">Прозрачность баннера</string>
+
+    <string name="settings_donot_store_superkey">Не сохранять SuperKey локально</string>
+    <string name="settings_donot_store_superkey_summary">Аутентифицировать SuperKey каждый раз при запуске менеджера</string>
+
+    <string name="mode_select_page_title">Установка</string>
+    <string name="mode_select_page_patch_and_install">Патч и установка</string>
+    <string name="mode_select_page_select_file">Выберите образ boot для патча</string>
+    <string name="mode_select_page_install_inactive_slot">Установить в неактивный слот (После OTA)</string>
+    <string name="mode_select_page_install_inactive_slot_warning">Ваше устройство будет **ПРИНУДИТЕЛЬНО** загружено в текущий неактивный слот после перезагрузки!\nИспользуйте эту опцию только после завершения OTA.\nПродолжить?</string>
+    <string name="mode_select_page_select_kpimg">Использовать локальный файл патча (KPimg)</string>
+    <string name="mode_select_page_init_boot_warning_title">Выбран неверный образ</string>
+    <string name="mode_select_page_init_boot_warning_message">Выбранный файл похож на образ init_boot или vendor_boot.
+KernelPatch требует образ boot для патча.
+
+Пожалуйста, выберите правильный образ boot (обычно boot.img).
+
+Всё равно продолжить?</string>
+    <string name="patch_custom_kpimg_label">Пользовательский KPimg</string>
+    <string name="patch_custom_kpimg_file">Файл: %s</string>
+    <string name="patch_select_kpimg_btn">Выбрать KPimg</string>
+
+    <string name="home_dialog_auth_fail_title">Ошибка аутентификации</string>
+    <string name="home_dialog_auth_fail_content">Не удалось аутентифицировать SuperKey, что привело к сбою активации FolkPatch.
+Вот несколько возможных причин сбоя аутентификации—пожалуйста, проверьте, какая из них относится к вам:
+
+\n1. Вы вообще не использовали KernelPatch для патчинга boot.img или забыли, что на самом деле делали.
+\n2. Пропатченный boot.img всё ещё спит на вашем компьютере, ни разу не был прошит в устройство.
+\n3. SuperKey был введён неправильно или содержит загадочные символы, например символы из инопланетных языков.
+\n4. Ваше устройство может быть несовместимо с FolkPatch и KernelPatch, принудительные попытки бесполезны.
+\n5. Вы могли выполнить какие-то загадочные операции—например, использовать определённые модули, исключающие имена пакетов, которые заблокировали FolkPatch, в результате чего вы исключили себя из игры.
+
+</string>
+
+    <string name="home_more_menu_feedback_or_suggestion">Обратная связь или предложение</string>
+    <string name="home_more_menu_about">О приложении</string>
+    <string name="home_more_menu_document">Документация</string>
+
+    <string name="home_more_menu_music_play">Воспроизвести музыку</string>
+    <string name="home_more_menu_music_pause">Поставить музыку на паузу</string>
+
+    <!-- Plugin strings -->
+    <string name="plugin_title">Плагины</string>
+    <string name="plugin_refresh">Обновить</string>
+    <string name="plugin_summary_title">APD Lua Plugin</string>
+    <string name="plugin_summary_not_installed">APD не установлен · плагины недоступны</string>
+    <string name="plugin_state_enabled">Включено</string>
+    <string name="plugin_state_disabled">Отключено</string>
+    <string name="plugin_toggle_failed">Не удалось изменить состояние плагина</string>
+    <string name="plugin_empty">Плагины не установлены</string>
+    <string name="plugin_empty_hint">Поместите main.lua в /data/adb/plugins/&lt;id&gt;/ чтобы добавить плагин.</string>
+    <string name="plugin_load_failed">Не удалось загрузить плагины</string>
+    <string name="plugin_manage_summary">Управление лёгкими Lua-плагинами</string>
+    <string name="plugin_install">Установить плагин</string>
+    <string name="plugin_install_success">Плагин установлен</string>
+    <string name="plugin_install_failed">Не удалось установить плагин</string>
+    <string name="plugin_uninstall_title">Удалить плагин</string>
+    <string name="plugin_uninstall">Удалить</string>
+    <string name="plugin_uninstall_confirm">Удалить плагин %1$s?</string>
+    <string name="plugin_uninstall_success">Плагин удалён</string>
+    <string name="plugin_uninstall_failed">Не удалось удалить плагин</string>
+    <string name="plugin_action">Запустить</string>
+    <string name="plugin_action_success">Действие выполнено</string>
+    <string name="plugin_action_failed">Действие не выполнено</string>
+    <string name="plugin_quick_action_success">Выполнено успешно</string>
+    <string name="plugin_quick_action_failed">Выполнение не удалось</string>
+    <string name="plugin_config">Настроить</string>
+    <string name="plugin_config_title">Настроить %1$s</string>
+    <string name="plugin_config_saved">Настройки сохранены</string>
+    <string name="plugin_log_title">Вывод выполнения</string>
+    <string name="plugin_log_empty">Журнал выполнения пуст</string>
+    <string name="plugin_log_page_title">Журналы плагинов</string>
+    <string name="plugin_log_all_empty">Ни один плагин ещё не создавал журналы</string>
+    <string name="plugin_log_clear">Очистить журналы</string>
+    <string name="plugin_log_cleared">Журналы очищены</string>
+    <string name="plugin_log_export">Экспорт журналов</string>
+
+    <string name="home_dialog_uninstall_title">Удаление</string>
+    
+    <string name="home_dialog_uninstall_ap_only">Удалить только патч</string>
+    <string name="home_dialog_uninstall_ap_only_desc">Удалить только AndroidPatch, сохранив менеджер.</string>
+    <string name="home_dialog_uninstall_all">Полностью удалить</string>
+    <string name="home_dialog_uninstall_all_desc">Удалить AndroidPatch и запустить процесс полного удаления.</string>
+    
+    <!-- Install Mode Select -->
+    <string name="kp_install_methods">KernelPatch Патчинг/Установка</string>
+    <string name="restore_boot_methods">Выберите загрузочный образ для восстановления в загрузочный раздел</string>
+    <string name="restore_select_file">Выберите файл загрузочного раздела для восстановления</string>
+
+    <string name="kpm_control_dialog_title">Управление KPM</string>
+    <string name="kpm_control_dialog_content">Пожалуйста, введите параметры управления:</string>
+    <string name="kpm_control_paramters">Параметры</string>
+    <string name="kpm_control_outMsg">Вывод</string>
+    <string name="kpm_control_ok">Успешно!</string>
+    <string name="kpm_control_failed">Ошибка!</string>
+    
+    <string name="settings_night_mode_follow_sys">Тёмная тема следует системе</string>
+    <string name="settings_night_mode_follow_sys_summary">Автоматически переключать тёмную тему на основе системных настроек</string>
+    <string name="settings_night_theme_enabled">Тёмная тема</string>
+    
+    <string name="settings_use_system_color_theme">Системная цветовая тема</string>
+    <string name="settings_use_system_color_theme_summary">Использовать цветовую тему, сгенерированную системой из обоев</string>
+    <string name="settings_custom_color_theme">Цветовая тема</string>
+
+    <string name="amber_theme">Янтарная</string>
+    <string name="blue_theme">Синяя</string>
+    <string name="blue_grey_theme">Серо-синяя</string>
+    <string name="brown_theme">Коричневая</string>
+    <string name="cyan_theme">Бирюзовая</string>
+    <string name="deep_orange_theme">Тёмно-оранжевая</string>
+    <string name="deep_purple_theme">Тёмно-фиолетовая</string>
+    <string name="green_theme">Зелёная</string>
+    <string name="indigo_theme">Индиго</string>
+    <string name="light_blue_theme">Светло-синяя</string>
+    <string name="light_green_theme">Светло-зелёная</string>
+    <string name="lime_theme">Лаймовая</string>
+    <string name="orange_theme">Оранжевая</string>
+    <string name="pink_theme">Розовая</string>
+    <string name="purple_theme">Фиолетовая</string>
+    <string name="red_theme">Красная</string>
+    <string name="sakura_theme">Сакура</string>
+    <string name="teal_theme">Бирюзовая</string>
+    <string name="yellow_theme">Жёлтая</string>
+    <string name="theme_color">Цвет темы</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="theme_system">Система</string>
+    <string name="loading_modules">Загрузка модулей…</string>
+    <string name="loading_scripts">Поиск скриптов…</string>
+    <string name="loading_themes">Загрузка тем…</string>
+    <string name="loading_apis">Загрузка источников API…</string>
+    <string name="retry">Повторить</string>
+
+    <string name="about_app_desc">Реализация Root на основе KernelPatch, позволяющая перехватывать функции ядра без перекомпиляции ядра.</string>
+    <string name="about_powered_by">Работает на %1$s</string>
+    <string name="about_telegram_group">Группа в Telegram</string>
+    
+    <!-- Online Module Strings -->
+    <string name="online_module_title">Онлайн системные модули</string>
+    <string name="online_module_download_start">Начать загрузку: %s</string>
+    <string name="online_module_download_complete">Загрузка завершена: %s</string>
+    <string name="online_module_download_notification">Загрузка %s. Проверьте панель уведомлений для отслеживания прогресса и папку Загрузки для завершённого файла.</string>
+
+    <!-- Online Module Source Strings -->
+    <string name="online_module_source_official">Официальный</string>
+    <string name="online_module_source_cluster">Кластер репозиториев</string>
+    <string name="online_module_source_custom">Пользовательский репозиторий</string>
+    <string name="online_module_source_title">Источник модулей</string>
+    <string name="online_module_repo_url_title">URL репозитория</string>
+    <string name="online_module_repo_url_hint">https://example.com/modules.json</string>
+    <string name="online_module_repo_settings">Настройки репозитория</string>
+
+    <!-- Repo Module Detail Strings -->
+    <string name="repo_module_detail_links">Ссылки</string>
+    <string name="repo_module_detail_homepage">Главная</string>
+    <string name="repo_module_detail_source">Исходный код</string>
+    <string name="repo_module_detail_support">Поддержка</string>
+    <string name="repo_module_detail_versions">История версий</string>
+    <string name="repo_module_detail_download">Скачать и установить</string>
+    <string name="repo_module_detail_by_author">автор: %1$s</string>
+    <string name="online_module_repo_browse_title">Обзор репозиториев</string>
+    <string name="online_module_view_modules">Просмотр модулей</string>
+    <string name="online_module_select_repo_hint">Выберите репозиторий для просмотра модулей</string>
+    <string name="online_module_enter_url_hint">Введите URL репозитория</string>
+    <string name="online_module_invalid_url">Пожалуйста, введите корректный URL</string>
+    <string name="online_module_explore_repos">Обзор репозиториев</string>
+    <string name="online_module_repo_count">%1$d репозиториев</string>
+    <string name="online_module_module_count">%1$d+ модулей</string>
+    <string name="online_module_select_repo">Выберите репозиторий</string>
+    <string name="online_module_enter_url_manually">Ввести URL вручную</string>
+    <string name="online_module_default_repo">Репозиторий по умолчанию</string>
+    <string name="online_module_repo_list_title">Список репозиториев</string>
+    <string name="online_module_load_error">Не удалось загрузить, попробуйте обновить</string>
+    <string name="online_module_no_search_results">Подходящие модули не найдены</string>
+    <string name="online_module_module_detail_download_count">Загрузок: %1$s</string>
+    <string name="online_module_module_detail_last_update">Последнее обновление: %1$s</string>
+    <string name="online_module_module_detail_version">Версия: %1$s</string>
+    <string name="online_module_module_detail_size">Размер: %1$s</string>
+    <string name="online_module_module_detail_author">Автор: %1$s</string>
+    <string name="online_module_module_detail_description">Описание: %1$s</string>
+    <string name="online_module_module_detail_suitable">Подходит для: %1$s</string>
+    <string name="online_module_module_detail_changelog">Список изменений: %1$s</string>
+    <string name="online_module_module_detail_instructions">Инструкция: %1$s</string>
+
+    <!-- Online KPM Strings -->
+    <string name="online_kpm_title">Онлайн модули ядра</string>
+    <string name="online_kpm_download_start">Начать загрузку: %s</string>
+    <string name="online_kpm_download_complete">Загрузка завершена: %s</string>
+    <string name="online_kpm_download_notification">Загрузка %s. Проверьте панель уведомлений для отслеживания прогресса и папку Загрузки для завершённого файла.</string>
+
+    <!-- Online Plugin Strings -->
+    <string name="online_plugin_title">Онлайн-плагины</string>
+    <string name="online_plugin_download_start">Начать загрузку: %s</string>
+    <string name="online_plugin_download_complete">Загрузка завершена: %s</string>
+    <string name="online_plugin_download_notification">Загрузка %s. Проверьте панель уведомлений для отслеживания прогресса и папку Загрузки для завершённого файла.</string>
+
+    <!-- Online Script Strings -->
+    <string name="online_script_title">Онлайн скрипты</string>
+    <string name="online_script_download_start">Начать загрузку: %s</string>
+    <string name="online_script_download_complete">Загрузка завершена: %s</string>
+    <string name="online_script_download_notification">Загрузка %s</string>
+
+    <!-- Crash Handle Strings -->
+    <string name="crash_handle_title">Отчёт о сбое</string>
+    <string name="crash_handle_copy">Копировать</string>
+
+    <!-- About Screen Strings -->
+    <string name="about_app_version">Версия приложения: %s</string>
+    <string name="about_github">GitHub</string>
+    <string name="about_telegram_channel">Канал в Telegram</string>
+
+    <string name="settings_app_dpi">DPI приложения</string>
+    <string name="dpi_apply_settings">Применить</string>
+    <string name="dpi_confirm_title">Подтверждение изменения DPI</string>
+    <string name="dpi_confirm_message">Изменить DPI приложения с %1$s на %2$s?</string>
+    <string name="settings_alt_icon">Альтернативная иконка</string>
+    <string name="alt_icon_summary">Использовать альтернативный значок запуска</string>
+    <string name="settings_magic_mount">Folk Mount API</string>
+    <string name="settings_magic_mount_summary">Включить встроенную систему монтирования модулей</string>
+    <string name="settings_new_app_profile_enabled">Автоматическое разрешение для новых приложений</string>
+    <string name="settings_new_app_profile_enabled_summary">При включении новые приложения автоматически используют выбранный ниже режим авторизации</string>
+    <string name="settings_new_app_profile_mode">Режим авторизации по умолчанию</string>
+    <string name="settings_new_app_profile_normal">БЕЗ ROOT</string>
+    <string name="settings_new_app_profile_root">ROOT</string>
+    <string name="settings_new_app_profile_exclude">Исключить</string>
+    <string name="settings_hide_service">FolkPatch Hide</string>
+    <string name="settings_hide_service_summary">Скрывать статус разблокировки загрузчика в некоторой степени</string>
+
+    <string name="settings_shizuku_service">Служба Shizuku</string>
+    <string name="settings_shizuku_service_summary">Предоставляет доступ к API уровня ADB для приложений, поддерживающих Shizuku (встроенная служба, сторонние приложения не требуются)</string>
+    <string name="settings_shizuku_service_running">Сервер Shizuku запущен</string>
+    <string name="settings_shizuku_started">Служба Shizuku запущена</string>
+    <string name="settings_shizuku_start_failed">Не удалось запустить службу Shizuku</string>
+    <string name="settings_shizuku_stopped">Служба Shizuku остановлена</string>
+    <string name="settings_shizuku_stop_failed">Не удалось остановить службу Shizuku</string>
+    <string name="shizuku_permission_title">Разрешить %1$s использовать Shizuku?</string>
+    <string name="shizuku_permission_message">Приложение сможет вызывать системные API с правами root через Shizuku.</string>
+    <string name="shizuku_permission_allow">Разрешить</string>
+    <string name="shizuku_permission_allow_once">Один раз</string>
+    <string name="shizuku_permission_deny">Запретить</string>
+    <string name="shizuku_permission_allow_summary">Предоставить постоянный доступ</string>
+    <string name="shizuku_permission_allow_once_summary">Разрешить только в этот раз</string>
+    <string name="shizuku_permission_deny_summary">Запретить доступ</string>
+    <string name="shizuku_permission_binder_timeout">Не удалось подключиться к сервису Shizuku. Перезапустите сервис и попробуйте снова.</string>
+    <string name="shizuku_management_title">Авторизация Shizuku</string>
+    <string name="shizuku_management_empty">Не найдено приложений, совместимых с Shizuku</string>
+    <string name="shizuku_management_unavailable">Служба Shizuku не запущена</string>
+    <string name="shizuku_management_load_failed">Не удалось загрузить авторизованные приложения</string>
+    <string name="shizuku_management_uid">UID %1$d</string>
+    <string name="shizuku_management_granted">Разрешено</string>
+    <string name="shizuku_management_denied">Не разрешено</string>
+    <string name="shizuku_management_update_failed">Не удалось обновить разрешение</string>
+    <string name="shizuku_management_root_access">Доступ root</string>
+    <string name="shizuku_management_allowed_title">Доступ Shizuku</string>
+    <string name="shizuku_management_root_access_desc">Выполняет команды от имени root. При отключении выполняет как shell (UID 2000), который не может читать защищённые данные.</string>
+    <string name="shizuku_management_badge_allowed">РАЗРЕШЕНО</string>
+    <string name="shizuku_management_badge_denied">ОТКЛОНЕНО</string>
+    <string name="shizuku_management_badge_root">ROOT</string>
+    <string name="shizuku_management_badge_shell">SHELL</string>
+    <string name="shizuku_log_title">Журналы Shizuku</string>
+    <string name="shizuku_log_empty">Нет журналов</string>
+    <string name="shizuku_log_refresh">Обновить</string>
+    <string name="shizuku_log_clear">Очистить журналы</string>
+    <string name="shizuku_log_cleared">Журналы очищены</string>
+    <string name="shizuku_log_export">Экспорт журналов</string>
+    <string name="shizuku_log_copy">Копировать</string>
+    <string name="shizuku_log_copied">Скопировано в буфер обмена</string>
+    <string name="shizuku_log_source_server">Журнал сервера</string>
+    <string name="shizuku_log_source_logcat">Logcat</string>
+    <string name="shizuku_log_search_hint">Поиск по журналам</string>
+<string name="settings_app_title">Заголовок приложения</string>
+    <string name="app_title_custom">Пользовательский</string>
+    <string name="settings_custom_app_title">Задать имя приложения</string>
+    <string name="custom_app_title_dialog_title">Пользовательское имя приложения</string>
+    <string name="custom_app_title_dialog_hint">Введите имя приложения</string>
+    <string name="custom_app_title_dialog_confirm">Подтвердить</string>
+    <string name="custom_app_title_dialog_empty">Имя не может быть пустым</string>
+    <string name="cancel">Отмена</string>
+    <string name="settings_custom_background">Пользовательский фон</string>
+    <string name="settings_custom_background_enabled">Пользовательский фон включен</string>
+    <string name="settings_custom_background_opacity">Прозрачность карточки</string>
+    <string name="settings_custom_background_blur">Размытие фона</string>
+    <string name="settings_custom_background_dim">Затемнение фона</string>
+    <string name="settings_select_background_image">Выбрать фоновое изображение</string>
+    <string name="settings_custom_background_summary">Установить пользовательское фоновое изображение</string>
+    <string name="settings_custom_background_saved">Фон успешно сохранён</string>
+    <string name="settings_custom_background_error">Не удалось сохранить фон</string>
+    <string name="settings_crop_not_supported">Кадрирование не поддерживается на этом устройстве, сохраняется исходное изображение</string>
+    <string name="settings_crop_dialog_title">Кадрировать фон</string>
+    <string name="settings_crop_dialog_message">Кадрировать изображение?</string>
+    <string name="settings_crop_dialog_crop">Да</string>
+    <string name="settings_crop_dialog_direct">Нет</string>
+    <string name="settings_background_selected">Фон выбран</string>
+    <string name="settings_background_image_cleared">Фоновое изображение очищено</string>
+    <string name="settings_clear_background">Очистить фон</string>
+    <string name="settings_clear_background_confirm">Вы уверены, что хотите очистить фоновое изображение?</string>
+    <string name="settings_multi_background_mode">Режим множественных фонов</string>
+    <string name="settings_multi_background_mode_summary">Установить разные фоновые изображения для разных страниц</string>
+    <string name="settings_select_home_background">Фон главной страницы</string>
+    <string name="settings_select_kernel_background">Фон модуля ядра</string>
+    <string name="settings_select_superuser_background">Фон суперпользователя</string>
+    <string name="settings_select_system_module_background">Фон системного модуля</string>
+    <string name="settings_select_settings_background">Фон страницы настроек</string>
+
+    <string name="settings_advanced_title_style">Расширенный стиль заголовка</string>
+    <string name="settings_advanced_title_style_summary">Заменить заголовок верхней панели на自定义 изображение</string>
+    <string name="settings_advanced_title_style_enabled">Расширенный стиль заголовка включен</string>
+    <string name="settings_select_title_image">Выбрать изображение заголовка</string>
+    <string name="settings_title_image_selected">Изображение заголовка выбрано</string>
+    <string name="settings_title_image_saved">Изображение заголовка успешно сохранено</string>
+    <string name="settings_title_image_error">Не удалось сохранить изображение заголовка</string>
+    <string name="settings_clear_title_image">Очистить изображение заголовка</string>
+    <string name="settings_clear_title_image_confirm">Вы уверены, что хотите очистить изображение заголовка?</string>
+    <string name="settings_title_image_cleared">Изображение заголовка очищено</string>
+    <string name="settings_title_image_day_opacity">Прозрачность дневного режима</string>
+    <string name="settings_title_image_night_opacity">Прозрачность ночного режима</string>
+    <string name="settings_title_image_dim">Затемнение фона</string>
+    <string name="settings_title_image_offset_x">Горизонтальная позиция</string>
+
+    <string name="settings_launcher_icon">Иконка лаунчера</string>
+    <string name="settings_grid_working_card_hide_check">Скрыть значок статуса</string>
+    <string name="settings_grid_working_card_hide_check_summary">Скрыть галочку или значок предупреждения на рабочей карточке</string>
+    <string name="settings_grid_working_card_hide_text">Скрыть текст статуса</string>
+    <string name="settings_grid_working_card_hide_text_summary">Скрыть текст «Работает» или «Не установлено» на рабочей карточке</string>
+    <string name="settings_grid_working_card_hide_mode">Скрыть режим работы</string>
+    <string name="settings_grid_working_card_hide_mode_summary">Скрыть текст «Full» или «Half» на рабочей карточке</string>
+    <string name="settings_list_card_hide_status_badge">Использовать классический эмодзи</string>
+    <string name="settings_list_card_hide_status_badge_summary">Статусный бейдж на главной странице превращается в классический эмодзи</string>
+    <string name="settings_list_info_show_icons">Иконки элементов информации</string>
+    <string name="settings_list_info_show_icons_summary">Показывать иконку рядом с каждым элементом в карточке информации</string>
+    <string name="settings_custom_badge_text">Пользовательский текст бейджа</string>
+    <string name="settings_custom_badge_text_summary">Изменить текстовое отображение бейджа, только для развлечения</string>
+    <string name="settings_custom_background_dual_dim">Включить двойную дневную/ночную затемненность</string>
+    <string name="settings_custom_background_dual_dim_desc">Автоматическая регулировка затемнения фона для светлой и тёмной темы</string>
+    <string name="settings_custom_background_day_dim">Затемненность фона в дневном режиме</string>
+    <string name="settings_custom_background_night_dim">Затемненность фона в ночном режиме</string>
+    <string name="settings_grid_working_card_dual_opacity">Включить двойную дневную/ночную прозрачность</string>
+    <string name="settings_grid_working_card_dual_opacity_desc">Автоматическая регулировка прозрачности карточки для светлой и тёмной темы</string>
+    <string name="settings_grid_working_card_day_opacity">Прозрачность карточки в дневном режиме</string>
+    <string name="settings_grid_working_card_night_opacity">Прозрачность карточки в ночном режиме</string>
+    
+    <!-- KPM AutoLoad Strings -->
+    
+    
+
+    <!-- APM Bulk Install Strings -->
+    <string name="apm_bulk_install_title">Массовая установка системных модулей</string>
+    <string name="apm_bulk_install_list_title">Список модулей</string>
+    <string name="apm_bulk_install_add">Добавить модули</string>
+    <string name="apm_bulk_install_empty">Нет добавленных модулей</string>
+    <string name="apm_bulk_install_action">Массовая установка</string>
+    <string name="apm_bulk_install_log_title">Журнал массовой установки</string>
+    <string name="apm_bulk_install_log_start">Начало массовой установки...</string>
+    <string name="apm_bulk_install_log_installing">Установка %1$s</string>
+    <string name="apm_batch_install_full_process">Полный процесс пакетной установки</string>
+    <string name="apm_batch_install_full_process_summary">Пакетная установка модулей системы выполняется с использованием полного процесса</string>
+    <string name="next_module">Следующий модуль</string>
+    <string name="apm_bulk_install_log_installed">Модуль %s установлен.</string>
+    <string name="apm_bulk_install_log_done">Все операции завершены.</string>
+    <string name="apm_bulk_install_first_use_text">Эта функция позволяет устанавливать несколько модулей одновременно. Это быстрый метод установки, подходящий для модулей, которые не требуют операций с кнопками во время установки. Для модулей, требующих взаимодействия с кнопками громкости, пожалуйста, включите режим полной установки в настройках.</string>
+    <string name="apm_bulk_install_remove">Удалить</string>
+    <string name="apm_first_use_title">Добро пожаловать в системные модули</string>
+    <string name="apm_first_use_text">Добро пожаловать в системные модули, здесь используются модули, совместимые с экосистемой Magisk. Нажмите кнопку в правом нижнем углу, чтобы установить модули. Вы также можете использовать установщик вверху для массовой установки модулей. Также предоставляется функция резервного копирования всех модулей одним нажатием, но обратите внимание, что это решение может не подходить для всех модулей, поэтому делайте свои резервные копии.</string>
+
+    <!-- Welcome Guide -->
+    <string name="welcome_title_1">Добро пожаловать в FolkPatch</string>
+    <string name="welcome_desc_1">Настраиваемый и портативный Root-менеджер на базе KernelPatch. Сделайте устройство по-настоящему своим.</string>
+    <string name="welcome_title_2">Полная настройка</string>
+    <string name="welcome_desc_2">Настройте всё — цвета, фоны, шрифты, звуки и даже вибрацию. Загляните в Магазин тем!</string>
+    <string name="welcome_title_3">Управление ядром</string>
+    <string name="welcome_desc_3">Расширенные функции ядра в одном касании. Откройте Настройки и нажмите значок настройки для доступа к FolkPatch Hide, Umount, Path Hide и другим.</string>
+    <string name="welcome_title_4">Готовы к работе</string>
+    <string name="welcome_desc_4">Всё готово! Начните исследовать самый гибкий Root-менеджер. Удачи!</string>
+    <string name="welcome_prev">Назад</string>
+    <string name="welcome_next">Далее</string>
+    <string name="welcome_skip">Пропустить</string>
+    <string name="welcome_got_it">Начать</string>
+
+
+    <!-- Hide Settings Strings -->
+    <string name="home_hide_su_path">Скрыть путь исполняемого файла su</string>
+    <string name="home_hide_kpatch_version">Скрыть версию патча ядра</string>
+    <string name="home_hide_fingerprint">Скрыть отпечаток</string>
+    <string name="home_hide_zygisk">Скрыть реализацию Zygisk</string>
+    <string name="home_hide_mount">Скрыть реализацию монтирования</string>
+    <string name="home_hide_su_path_summary">Скрыть путь исполняемого файла su в информационной карточке</string>
+    <string name="home_hide_kpatch_version_summary">Скрыть версию патча ядра в информационной карточке</string>
+    <string name="home_hide_zygisk_summary">Скрыть реализацию Zygisk в информационной карточке</string>
+    <string name="home_hide_mount_summary">Скрыть реализацию монтирования в информационной карточке</string>
+    <string name="home_hide_fingerprint_summary">Скрыть отпечаток в информационной карточке</string>
+
+    <!-- Module Backup/Restore Strings -->
+    <string name="apm_copy_list_title">Копировать список</string>
+    <string name="apm_copy_list_success">Список модулей скопирован</string>
+
+    <!-- Font Settings -->
+    <string name="settings_custom_font">Пользовательский шрифт</string>
+    <string name="settings_select_font_file">Выбрать файл шрифта</string>
+    <string name="settings_custom_font_enabled">Пользовательский шрифт включен</string>
+    <string name="settings_custom_font_summary">Использовать пользовательский шрифт TTF</string>
+    <string name="settings_font_selected">Пользовательский шрифт выбран</string>
+    <string name="settings_custom_font_error">Не удалось сохранить файл шрифта</string>
+    <string name="settings_custom_font_saved">Пользовательский шрифт успешно сохранен</string>
+    <string name="settings_clear_font">Восстановить шрифт по умолчанию</string>
+    <string name="settings_clear_font_confirm">Вы уверены, что хотите восстановить шрифт по умолчанию?</string>
+    <string name="settings_font_cleared">Шрифт по умолчанию восстановлен</string>
+    <string name="settings_font_select_hint">Выберите файл шрифта TTF</string>
+
+    <!-- Auto Backup Strings -->
+    <string name="settings_auto_backup_module">Автоматическое резервное копирование модулей</string>
+    <string name="settings_auto_backup_module_summary">Автоматически сохранять копию модуля в личный каталог при установке</string>
+    <string name="settings_open_backup_dir">Открыть каталог резервных копий</string>
+    <string name="backup_dir_empty">Каталог резервных копий пуст</string>
+    <string name="backup_dir_open_failed">Не удалось открыть каталог резервных копий</string>
+    <string name="auto_backup_failed">Ошибка резервного копирования: %s</string>
+    <string name="auto_backup_success">Резервная копия создана: %s</string>
+    <string name="settings_auto_backup_boot">Автоматическое резервное копирование Boot</string>
+    <string name="settings_auto_backup_boot_summary">Автоматически копировать Boot в локальное хранилище (Downloads/FolkPatch/BootBackups)</string>
+
+    <!-- Auto-added missing strings -->
+
+    <!-- Home Layout Strings -->
+    <string name="settings_home_layout_style">Стиль главной страницы</string>
+    <string name="settings_home_layout_default">ListUI</string>
+    <string name="settings_home_layout_grid">GridUI</string>
+    <string name="settings_home_layout_focus">FocusUI</string>
+    <string name="settings_home_layout_sign">SignUI</string>
+    <string name="settings_home_layout_circle">CircleUI</string>
+    <string name="settings_home_layout_dashboard_pro">DashboardUI</string>
+    <string name="unofficial_version_title">Неофициальная версия</string>
+    <string name="unofficial_version_message">Вы используете FolkPatch, который не является официальным приложением, пожалуйста, скачайте официальное приложение!</string>
+    <string name="go_to_github">Перейти на Github</string>
+    <string name="settings_save_theme">Сохранить тему</string>
+    <string name="settings_import_theme">Импортировать тему</string>
+    <string name="settings_theme_saved">Тема сохранена</string>
+    <string name="settings_theme_imported">Тема импортирована</string>
+    <string name="settings_theme_save_failed">Не удалось сохранить тему</string>
+    <string name="settings_theme_import_failed">Не удалось импортировать тему</string>
+    <string name="settings_reset_theme">Сбросить тему</string>
+    <string name="settings_reset_theme_confirm">Вы уверены, что хотите сбросить все настройки темы до значений по умолчанию? Это очистит все пользовательские фоны, шрифты, музыку и звуковые эффекты.</string>
+    <string name="settings_theme_reset">Тема сброшена</string>
+    <string name="settings_theme_reset_failed">Не удалось сбросить тему</string>
+
+    <!-- Theme Strings -->
+    <string name="theme_export_title">Экспорт темы</string>
+    <string name="theme_import_title">Импорт темы</string>
+    <string name="theme_name">Название темы</string>
+    <string name="theme_type">Тип темы</string>
+    <string name="theme_type_phone">Телефон</string>
+    <string name="theme_type_tablet">Планшет</string>
+    <string name="theme_version">Версия</string>
+    <string name="theme_author">Автор</string>
+    <string name="theme_description">Описание</string>
+    <string name="theme_export_action">Экспорт</string>
+    <string name="theme_import_action">Импорт</string>
+    <string name="theme_import_confirm">Вы уверены, что хотите импортировать эту тему?</string>
+    <string name="theme_info">Информация о теме</string>
+    <!-- Grid Working Card Background -->
+    <string name="settings_grid_working_card_background">Фон рабочей карточки</string>
+    <string name="settings_grid_working_card_background_enabled">Пользовательский фон карточки включен</string>
+    <string name="settings_grid_working_card_background_summary">Пользовательское фоновое изображение для рабочей карточки</string>
+    <string name="settings_grid_working_card_background_selected">Фон выбран</string>
+    <string name="settings_clear_grid_working_card_background">Очистить фон карточки</string>
+    <string name="settings_clear_grid_working_card_background_confirm">Вы уверены, что хотите очистить фоновое изображение карточки?</string>
+    <string name="settings_grid_working_card_background_saved">Фон карточки успешно сохранен</string>
+    <string name="settings_grid_working_card_background_error">Не удалось сохранить фон карточки</string>
+    <string name="settings_grid_working_card_background_cleared">Фон карточки очищен</string>
+
+    <!-- Biometric Strings -->
+    <string name="action_biometric">Биометрическая аутентификация</string>
+    <string name="msg_biometric">Пожалуйста, подтвердите свою биометрическую личность</string>
+    <string name="msg_enable_biometric">Включить биометрическую аутентификацию для подтверждения при открытии приложения?</string>
+    <string name="settings_biometric_login">Биометрическая аутентификация</string>
+    <string name="settings_biometric_login_summary">Требовать биометрическую аутентификацию при открытии приложения</string>
+    <string name="settings_strong_biometric">Сильная биометрическая аутентификация</string>
+    <string name="settings_strong_biometric_summary">Требовать аутентификацию при установке/удалении/отключении модулей</string>
+
+    <!-- Theme Store Strings -->
+    <string name="theme_store_title">Магазин тем</string>
+    <string name="theme_source_official">Официальные</string>
+    <string name="theme_source_third_party">Третьи лица</string>
+    <string name="theme_source_local">Локальный</string>
+    <string name="theme_store_author">Автор: %s</string>
+    <string name="theme_store_version">Версия: %s</string>
+    <string name="theme_source">Источник</string>
+    <string name="theme_store_download_failed">Загрузка не удалась</string>
+    <string name="theme_store_download">Загрузить</string>
+    <string name="theme_store_search_hint">Поиск тем...</string>
+
+    <!-- Update Check Strings -->
+    <string name="settings_auto_update_check">Автоматическая проверка обновлений</string>
+    <string name="settings_auto_update_check_summary">Автоматически проверять обновления при запуске приложения</string>
+    <string name="settings_check_update">Проверить обновления</string>
+    <string name="update_available_title">Доступно обновление</string>
+    <string name="update_available_message">Обнаружено, что ваша версия устарела. Хотите скачать новую версию?</string>
+    <string name="update_action">Обновить</string>
+    <string name="update_close">Закрыть</string>
+    <string name="update_latest">У вас последняя версия</string>
+    <string name="update_error">Ошибка при проверке обновлений</string>
+    <!--Варианты сворачивания-->
+    <string name="settings_category_general">Общие</string>
+    <string name="superuser">Суперпользователь</string>
+    <string name="module">Модули</string>
+    <string name="settings_category_appearance">Внешний вид</string>
+    <string name="settings_appearance_font">Настройки шрифта</string>
+    <string name="settings_appearance_font_summary">Настройка пользовательского шрифта</string>
+    <string name="settings_appearance_theme">Настройки темы</string>
+    <string name="settings_appearance_theme_summary">Магазин тем, сохранение, импорт и сброс</string>
+
+    <string name="settings_nav_custom_icons">Пользовательские иконки навигации</string>
+    <string name="settings_nav_custom_icons_summary">Замена иконок нижней панели пользовательскими изображениями</string>
+    <string name="nav_icon_home">Иконка главной</string>
+    <string name="nav_icon_kpm">Иконка KPM</string>
+    <string name="nav_icon_superuser">Иконка SuperUser</string>
+    <string name="nav_icon_apm">Иконка системного модуля</string>
+    <string name="nav_icon_settings">Иконка настроек</string>
+    <string name="nav_icon_select_image">Выбрать изображение</string>
+    <string name="nav_icon_clear">Сбросить на стандартную</string>
+    <string name="nav_icon_custom_selected">Пользовательская</string>
+    <string name="nav_icon_default">Стандартная</string>
+    <string name="nav_icon_cleared">Иконка сброшена</string>
+    <string name="nav_icon_set">Иконка обновлена</string>
+    <string name="nav_icon_set_failed">Не удалось сохранить иконку</string>
+
+    <string name="settings_theme_mode">Режим настройки</string>
+    <string name="settings_theme_mode_summary">Переключение между встроенным магазином и режимом совместимости браузера</string>
+    <string name="theme_mode_builtin">Встроенный режим</string>
+    <string name="theme_mode_builtin_desc">Используйте встроенный магазин тем для просмотра, загрузки и применения тем</string>
+    <string name="theme_mode_compat">Режим совместимости</string>
+    <string name="theme_mode_compat_desc">Использовать браузер для прямой загрузки тем (для устройств с проблемами импорта)</string>
+    <string name="theme_mode_onboarding_title">Выберите режим темы</string>
+    <string name="theme_mode_onboarding_msg">Как вы хотите просматривать и устанавливать темы? Вы можете изменить это позже в настройках.</string>
+    <string name="theme_mode_builtin_label">Встроенный магазин</string>
+    <string name="theme_mode_compat_label">Режим браузера</string>
+    <string name="theme_mode_switched">Режим темы изменён на %s</string>
+    <string name="theme_mode_current">Текущий: %s</string>
+    <string name="theme_mode_switch_title">Переключить режим темы</string>
+    <string name="theme_mode_switch_msg">Изменение режима повлияет на то, как вы просматриваете и устанавливаете темы. Продолжить?</string>
+    <string name="settings_appearance_banner">Настройки баннера</string>
+    <string name="settings_appearance_banner_summary">Настройка баннера модуля</string>
+    <string name="settings_appearance_layout">Настройки макета</string>
+    <string name="settings_appearance_layout_summary">Макет главной страницы, навигация и настройка карточек</string>
+    <string name="settings_appearance_background">Настройки фона</string>
+    <string name="settings_appearance_background_summary">Пользовательский фон, видео и многофоновый режим</string>
+    <string name="settings_appearance_night_mode">Настройки ночного режима</string>
+    <string name="settings_appearance_night_mode_summary">Темная тема и настройка цветов</string>
+    <string name="settings_amoled_theme">Чёрная тема AMOLED</string>
+    <string name="settings_amoled_theme_desc">Чисто чёрный фон для тёмного режима</string>
+    <string name="settings_switch_icon">Индикатор кнопки</string>
+    <string name="settings_switch_icon_desc">Показать значки состояния на переключателях</string>
+    <string name="settings_discrete_slider">Дискретный ползунок</string>
+    <string name="settings_discrete_slider_desc">Показать отметки на дорожке ползунка</string>
+    <string name="settings_category_behavior">Поведение</string>
+    <string name="settings_category_function">Функция</string>
+    <string name="settings_use_legacy_su_page">Авторизация суперпользователя на одной странице</string>
+    <string name="settings_use_legacy_su_page_summary">Страница суперпользователя переключена на одностраничный дизайн авторизации</string>
+    <string name="settings_category_module">Модули</string>
+    <string name="settings_category_security">Безопасность</string>
+    
+    <!-- Background Music Strings -->
+    <string name="settings_background_music">Фоновая музыка</string>
+    <string name="settings_background_music_summary">Воспроизводить фоновую музыку, когда приложение на переднем плане</string>
+    <string name="settings_background_music_playing">Воспроизведение: %s</string>
+    <string name="settings_background_music_enabled">Фоновая музыка включена</string>
+    <string name="settings_select_music_file">Выбрать музыкальный файл</string>
+    <string name="settings_music_selected">Музыка выбрана</string>
+    <string name="settings_clear_music">Очистить музыку</string>
+    <string name="settings_clear_music_confirm">Вы уверены, что хотите очистить фоновую музыку?</string>
+    <string name="settings_music_auto_play">Автовоспроизведение</string>
+    <string name="settings_music_auto_play_summary">Автоматически воспроизводить музыку при открытии приложения</string>
+    <string name="settings_music_volume">Громкость</string>
+    <string name="settings_music_saved">Музыкальный файл сохранён</string>
+    <string name="settings_music_save_error">Не удалось сохранить музыкальный файл</string>
+    <string name="settings_music_cleared">Музыка очищена</string>
+    <string name="settings_category_multimedia">Мультимедиа</string>
+    <string name="settings_category_general_summary">Язык, обновления, SELinux, системные настройки</string>
+    <string name="settings_category_appearance_summary">Тема, цвета, макет, фон, шрифты</string>
+    <string name="settings_category_behavior_summary">Отладка Web, поведение установки, отображение на главном</string>
+    <string name="settings_category_security_summary">Аутентификация приложения и проверка операций с модулями</string>
+    <string name="settings_category_backup_summary">Локальное резервное копирование, облачное, WebDAV</string>
+    <string name="settings_category_module_summary">Информация о модулях, сортировка, пакетная установка</string>
+    <string name="settings_category_function_summary">Скрытие FolkPatch, служба Umount</string>
+    <string name="settings_category_multimedia_summary">Фоновая музыка, звуки, вибрация</string>
+    <string name="settings_music_playback_control">Управление воспроизведением</string>
+    <string name="settings_music_looping">Зациклить</string>
+    <string name="settings_music_looping_summary">Повторять текущую композицию</string>
+    <!-- Theme Store Filter -->
+    <string name="theme_store_filter_title">Фильтровать Темы</string>
+    <string name="theme_store_filter_author">Автор</string>
+    <string name="theme_store_filter_author_hint">Введите имя автора</string>
+    <string name="theme_store_filter_source">Источник</string>
+    <string name="theme_store_filter_source_all">Все</string>
+    <string name="theme_store_filter_type">Тип Устройства</string>
+    <string name="theme_store_filter_apply">Применить</string>
+    <string name="theme_store_filter_reset">Сброс</string>
+
+    <!-- Video Background Settings -->
+    <string name="settings_video_background">Видеофон</string>
+    <string name="settings_video_background_summary">Использовать видео в качестве фона</string>
+    <string name="settings_select_video">Выбрать Видео</string>
+    <string name="settings_video_selected">Видео Выбрано</string>
+    <string name="settings_video_background_enabled">Видеофон Включен</string>
+    <string name="settings_clear_video_background">Очистить видеообои</string>
+    <string name="settings_clear_video_background_confirm">Вы уверены, что хотите очистить видеообои?</string>
+    <string name="settings_video_volume">Громкость Видео</string>
+    <!-- File Picker -->
+    <string name="file_picker_permission_required">Требуется разрешение</string>
+    <string name="file_picker_permission_desc">Для просмотра файлов предоставьте разрешение \'Доступ ко всем файлам\'.</string>
+    <string name="file_picker_grant_permission">Предоставить разрешение</string>
+    <string name="file_picker_cancel">Отмена</string>
+    <string name="file_picker_internal_storage">Внутреннее хранилище</string>
+    <string name="file_picker_no_files">Нет файлов</string>
+    <string name="file_picker_filtered_files">Показано %1$s файлов</string>
+    <string name="file_picker_close">Закрыть выбор файлов</string>
+    <!-- HomeV3 Strings -->
+    <string name="home_device_status_title">Состояние устройства</string>
+    <string name="home_device_status_battery_temp">Температура батареи</string>
+    <string name="home_device_status_cpu_load">Нагрузка ЦПУ</string>
+    <string name="home_device_status_battery_level">Уровень батареи</string>
+    <string name="home_storage_title">Хранилище</string>
+    <string name="home_storage_internal">Внутреннее хранилище</string>
+    <string name="home_storage_ram">ОЗУ</string>
+    <string name="home_storage_zram">ZRAM</string>
+    <string name="home_storage_swap">Файл подкачки</string>
+    <string name="home_info_kernel">Ядро</string>
+    <string name="home_info_superkey">SuperKey</string>
+    <string name="home_info_auth_auth">Аут</string>
+    <string name="home_info_auth_na">Н/Д</string>
+    <string name="home_info_device_slot">Слот устройства</string>
+    <string name="home_info_device_model">Модель устройства</string>
+    <string name="home_info_running_mode">Режим работы</string>
+    <string name="home_info_mode_full">Полный</string>
+    <string name="home_info_mode_half">Частичный</string>
+    <string name="home_version">Версия: %s</string>
+    <string name="home_zygisk_implement">Реализация Zygisk</string>
+    <string name="home_mount_implement">Реализация монтирования</string>
+
+    <string name="settings_app_list_loading_scheme">Схема загрузки списка приложений</string>
+    <string name="settings_app_list_loading_scheme_summary">Выберите способ загрузки списка приложений</string>
+    <string name="app_list_loading_scheme_root_service">RootService (По умолчанию)</string>
+    <string name="app_list_loading_scheme_package_manager">PackageManager (Системное API)</string>
+    <string name="app_list_loading_scheme_dialog_title">Схема загрузки</string>
+    <string name="su_backup_list">Список резервных копий</string>
+    <string name="su_restore_list">Список восстановлений</string>
+    <string name="backup_success">Резервное копирование успешно</string>
+    <!-- Badge Count Settings -->
+    <string name="enable_badge_count">Настройки счётчика значков</string>
+    <string name="enable_badge_count_summary">Настройка отображения счётчика значков для элементов навигации</string>
+    <string name="badge_superuser">Показывать значок суперпользователя</string>
+    <string name="badge_apm">Показывать значок системного модуля</string>
+    <string name="badge_kernel">Показывать значок модуля ядра</string>
+    <string name="settings_sound_effect">Звуковой эффект</string>
+    <string name="settings_sound_effect_summary">Воспроизводить звук при нажатии</string>
+    <string name="settings_sound_effect_enabled">Включено</string>
+    <string name="settings_sound_effect_playing">Выбрано: %s</string>
+    <string name="settings_sound_effect_source">Источник звука</string>
+    <string name="settings_sound_effect_source_local">Локальный файл</string>
+    <string name="settings_sound_effect_source_preset">Предустановка</string>
+    <string name="settings_sound_effect_preset_title">Предустановленные звуки</string>
+    <string name="settings_select_sound_effect">Выбрать звуковой файл</string>
+    <string name="settings_sound_effect_selected">Звуковой файл выбран</string>
+    <string name="settings_sound_effect_scope">Область действия</string>
+    <string name="settings_sound_effect_scope_global">Везде</string>
+    <string name="settings_sound_effect_scope_bottom_bar">Только нижняя панель</string>
+    <string name="settings_clear_sound_effect">Очистить звуковой эффект</string>
+    <string name="settings_clear_sound_effect_confirm">Вы уверены, что хотите удалить звуковой эффект?</string>
+    <string name="settings_sound_effect_cleared">Звуковой эффект удален</string>
+
+    <string name="settings_startup_sound">Звук запуска</string>
+    <string name="settings_startup_sound_summary">Воспроизводить звук при запуске приложения</string>
+    <string name="settings_startup_sound_enabled">Звук запуска включен</string>
+    <string name="settings_startup_sound_playing">Воспроизведение: %s</string>
+    <string name="settings_select_startup_sound">Выбрать звук запуска</string>
+    <string name="settings_startup_sound_selected">Звук запуска выбран</string>
+    <string name="settings_clear_startup_sound">Очистить звук запуска</string>
+    <string name="settings_clear_startup_sound_confirm">Вы уверены, что хотите удалить звук запуска?</string>
+    <string name="settings_startup_sound_cleared">Звук запуска удален</string>
+
+    <string name="settings_enable_cloud_backup_summary">Автоматическое резервное копирование в облако</string>
+    <string name="settings_configure_webdav">Настроить службу WebDAV</string>
+    <string name="webdav_config_title">Конфигурация WebDAV</string>
+    <string name="webdav_url">URL WebDAV</string>
+    <string name="webdav_username">Имя пользователя</string>
+    <string name="webdav_password">Пароль</string>
+    <string name="webdav_uploading">Загрузка в WebDAV...</string>
+    <string name="webdav_backup_success">Резервная копия WebDAV успешно создана</string>
+    <string name="webdav_backup_failed">Ошибка резервного копирования WebDAV: %s</string>
+    <string name="save">Сохранить</string>
+    <string name="test">Тест</string>
+    <string name="webdav_path_label">Путь (напр. /Backup)</string>
+    <string name="webdav_view_logs">Просмотр логов</string>
+    <string name="webdav_backup_logs_title">Логи резервного копирования</string>
+    <string name="webdav_no_logs">Нет логов</string>
+    <string name="webdav_clear_logs">Очистить</string>
+    <string name="settings_enable_local_backup">Включить локальное резервное копирование</string>
+    <string name="settings_enable_local_backup_summary">Резервное копирование модулей в локальное хранилище (Downloads/FolkPatch/ModuleBackups)</string>
+    <string name="close">Закрыть</string>
+
+    <!-- Backup Settings -->
+    <string name="settings_category_backup">Настройки резервного копирования</string>
+    <string name="settings_enable_cloud_backup">Включить облачное резервное копирование</string>
+    <string name="settings_webdav_url">URL WebDAV</string>
+    <string name="settings_webdav_username">Имя пользователя WebDAV</string>
+    <string name="settings_webdav_password">Пароль WebDAV</string>
+    <string name="settings_test_webdav">Проверить соединение WebDAV</string>
+    <string name="webdav_test_success">Тест успешен</string>
+    <string name="webdav_test_failed">Тест не удался: %s</string>
+    <string name="settings_backup_now">Создать резервную копию сейчас</string>
+    <string name="backup_failed">Ошибка резервного копирования: %s</string>
+    <string name="settings_restore_backup">Восстановить из резервной копии</string>
+    <string name="restore_success">Восстановление успешно</string>
+    <string name="restore_failed">Ошибка восстановления: %s</string>
+    <string name="settings_auto_backup">Автоматическое резервное копирование</string>
+    <string name="settings_auto_backup_summary">Автоматическое резервное копирование раз в день</string>
+    <string name="settings_delete_remote_backup">Удалить облачную резервную копию</string>
+    <string name="delete_remote_backup_confirm">Вы уверены, что хотите удалить облачную резервную копию?</string>
+    <string name="delete_success">Удаление успешно</string>
+    <string name="delete_failed">Ошибка удаления: %s</string>
+    <string name="settings_encrypt_backup">Шифровать резервную копию</string>
+    <string name="settings_encrypt_backup_summary">Шифровать файл резервной копии паролем</string>
+    <string name="settings_backup_password">Пароль резервной копии</string>
+    <string name="settings_backup_password_hint">Введите пароль резервной копии</string>
+
+    <string name="patch_output_written_to"> Патч применен успешно, файл записан в </string>
+    <string name="patch_write_failed"> Ошибка записи пропатченного boot.img</string>
+
+    <!-- Script Library Strings -->
+    <string name="script_library">Библиотека скриптов</string>
+    <string name="script_library_title">Библиотека скриптов</string>
+    <string name="script_library_empty">Нет скриптов, нажмите кнопку добавления</string>
+    <string name="script_library_add">Добавить скрипт</string>
+    <string name="script_library_add_title">Добавить скрипт</string>
+    <string name="script_library_select_file">Выбрать файл скрипта</string>
+    <string name="script_library_alias">Псевдоним</string>
+    <string name="script_library_alias_hint">Введите псевдоним скрипта (опционально)</string>
+    <string name="script_library_run">Запустить</string>
+    <string name="script_library_delete">Удалить</string>
+    <string name="script_library_path">Путь: %s</string>
+    <string name="script_library_confirm_delete">Подтвердить удаление скрипта?</string>
+    <string name="script_library_delete_success">Скрипт удален успешно</string>
+    <string name="script_library_delete_failed">Ошибка удаления скрипта</string>
+    <string name="script_library_add_success">Скрипт добавлен успешно</string>
+    <string name="script_library_add_failed">Ошибка добавления скрипта: %s</string>
+    <string name="script_library_load_failed">Ошибка загрузки библиотеки скриптов</string>
+    <string name="script_library_output">Вывод выполнения</string>
+    <string name="script_library_no_output">Нет вывода</string>
+    <string name="script_library_save_log">Сохранить лог</string>
+    <string name="script_library_log_saved">Лог сохранен в %s</string>
+    <string name="script_library_log_save_failed">Ошибка сохранения лога: %s</string>
+    <string name="settings_vibration">Вибрация и тактильная отдача</string>
+    <string name="settings_vibration_summary">Вибрация при касании</string>
+    <string name="settings_vibration_enabled">Включить вибрацию</string>
+    <string name="settings_vibration_intensity">Интенсивность вибрации</string>
+    <string name="settings_vibration_scope">Область вибрации</string>
+    <string name="settings_vibration_scope_global">Везде (Глобально)</string>
+    <string name="settings_vibration_scope_bottom_bar">Только нижняя панель</string>
+    <string name="search_modules">Поиск модулей...</string>
+    <string name="search_scripts">Поиск скриптов...</string>
+
+    <!-- Umount Service -->
+    <string name="settings_umount_service">Umount Service</string>
+    <string name="settings_umount_service_summary">Настройка точек монтирования для автоматического отключения при загрузке</string>
+    <string name="umount_config_title">Настройка Umount</string>
+    <string name="umount_config_enabled">Включить Umount</string>
+    <string name="umount_config_enabled_summary">Автоматическое отключение указанных точек монтирования при загрузке</string>
+    <string name="umount_config_paths_label">Пути точек монтирования (по одному на строку)</string>
+    <string name="umount_config_paths_placeholder">/system/vendor/app\n/system/vendor/priv-app</string>
+    <string name="umount_config_paths_helper">Введите один путь точки монтирования для отключения на строку</string>
+    <string name="umount_config_save">Сохранить</string>
+    <string name="umount_config_save_confirm">Подтвердить сохранение конфигурации?</string>
+    <string name="umount_config_save_success">Конфигурация успешно сохранена</string>
+    <string name="umount_config_save_failed">Не удалось сохранить конфигурацию</string>
+
+    <!-- Страница Мои Темы -->
+    <string name="my_themes_title">Мои темы</string>
+    <string name="my_themes_empty">Тем пока нет</string>
+    <string name="my_themes_empty_action">Посетить магазин тем</string>
+    <string name="my_themes_apply">Применить тему</string>
+    <string name="my_themes_delete">Удалить тему</string>
+    <string name="my_themes_delete_confirm">Вы уверены, что хотите удалить эту тему?</string>
+    <string name="my_themes_deleted">Тема удалена</string>
+    <string name="my_themes_applied">Тема применена</string>
+    <string name="my_themes_apply_failed">Не удалось применить тему — долгое нажатие для удаления и повторной загрузки</string>
+    <string name="my_themes_details">Детали темы</string>
+
+    <!-- Диалог Загрузки -->
+    <string name="theme_download_title">Загрузка темы</string>
+    <string name="theme_download_completed">Загрузка завершена</string>
+    <string name="theme_download_failed">Ошибка загрузки</string>
+    <string name="theme_file_corrupt">Файл темы повреждён, пожалуйста, перезагрузите</string>
+    <string name="theme_file_incomplete">Файл темы неполный, пожалуйста, перезагрузите</string>
+    <string name="theme_download_progress">Прогресс</string>
+    <string name="theme_download_file">Файл темы</string>
+    <string name="theme_download_image">Изображение предпросмотра</string>
+    <string name="theme_download_cancel">Отмена</string>
+    <string name="theme_download_pause">Пауза</string>
+    <string name="theme_download_resume">Продолжить</string>
+    <string name="theme_download_retry">Повторить</string>
+    <string name="theme_download_apply">Применить тему</string>
+    <string name="theme_download_go_to_my_themes">Мои темы</string>
+    <string name="theme_download_retrying">Повтор (%d/3)...</string>
+    <string name="theme_download_preparing">Подготовка загрузки...</string>
+    <string name="theme_download_downloading_file">Загрузка файла темы...</string>
+    <string name="theme_download_downloading_image">Загрузка изображения предпросмотра...</string>
+    <string name="theme_download_finalizing">Завершение...</string>
+    <string name="settings_predictive_back">Предиктивный жест назад</string>
+    <string name="settings_predictive_back_summary">Включить анимацию предиктивного жеста назад (Android 14+)</string>
+
+    <string name="home_device_status_battery_charging">Зарядка</string>
+    <string name="home_device_status_cpu_temp">Температура ЦПУ</string>
+    <string name="home_device_status_memory_trend">Тренд памяти</string>
+    <string name="home_storage_partitions">Разделы хранилища</string>
+    <string name="home_device_status_cpu_freq">Частота ЦПУ</string>
+    <string name="home_network_rx">Загрузка</string>
+    <string name="home_network_tx">Отдача</string>
+    <string name="settings_home_layout_stats">StatsUI</string>
+    <string name="home_stats_more_options">Ещё</string>
+    <string name="home_stats_kp_label">KP</string>
+    <string name="home_stats_manager_label">Менеджер</string>
+    <string name="home_device_status_gpu_load">GPU</string>
+    <string name="home_stats_kernel_modules">Модули ядра</string>
+    <string name="home_stats_apm_modules">Системные модули</string>
+    <string name="home_stats_superusers">Суперпользователи</string>
+    <string name="settings_kernel_spoof">Настройка подмены ядра</string>
+    <string name="settings_kernel_spoof_summary">Подмена версии ядра и времени сборки</string>
+    <string name="settings_kernel_spoof_version">Версия ядра</string>
+    <string name="settings_kernel_spoof_build_time">Время сборки ядра</string>
+    <string name="settings_kernel_spoof_restore">Восстановить</string>
+
+    <string name="kernel_spoof_enabled">Подмена ядра включена</string>
+    <string name="kernel_spoof_disabled_restored">Подмена ядра отключена и восстановлена</string>
+    <string name="kernel_spoof_failed">Ошибка подмены ядра: %d</string>
+    <string name="kernel_spoof_applied">Подмена ядра применена</string>
+
+    <string name="settings_path_hide">Скрытие путей</string>
+    <string name="settings_path_hide_summary">Скрывать файлы и каталоги от приложений на уровне ядра</string>
+    <string name="path_hide_paths_label">Скрытые пути (по одному на строку)</string>
+
+    <string name="path_hide_paths_helper">Введите по одному пути на строку. Совпадающие пути будут возвращать ENOENT.</string>
+    <string name="path_hide_save">Сохранить</string>
+    <string name="path_hide_enabled">Скрытие путей включено</string>
+    <string name="path_hide_disabled">Скрытие путей отключено</string>
+    <string name="path_hide_applied">Конфигурация скрытия путей применена</string>
+    <string name="path_hide_failed">Ошибка операции скрытия путей: %d</string>
+    <string name="path_hide_uid_mode">Режим выполнения по UID</string>
+    <string name="path_hide_uid_mode_summary">Скрывать пути только для указанных UID приложений</string>
+    <string name="path_hide_uids_label">Целевые UID (по одному на строку)</string>
+    <string name="path_hide_uids_helper">Введите UID приложений. Пути будут скрыты только для этих приложений.</string>
+    <string name="path_hide_uid_save">Сохранить UID</string>
+    <string name="path_hide_uid_mode_enabled">Режим выполнения по UID включён</string>
+    <string name="path_hide_uid_mode_disabled">Режим выполнения по UID отключён</string>
+    <string name="path_hide_filter_system">Фильтровать системные UID</string>
+    <string name="path_hide_filter_system_summary">Также скрывать пути от процессов root и системы (UID &lt; 10000)</string>
+    <string name="path_hide_filter_system_enabled">Фильтрация системных UID включена</string>
+    <string name="path_hide_filter_system_disabled">Фильтрация системных UID отключена</string>
+    <string name="path_hide_filter_system_warning_title">Предупреждение</string>
+    <string name="path_hide_filter_system_warning_message">Включение скроет пути также от процессов root и системы (UID &lt; 10000). Это может привести к нарушению работы некоторых системных функций. Действуйте с осторожностью.</string>
+    <string name="path_hide_uid_applied">Белый список UID применён</string>
+    <string name="path_hide_select_apps">Выбрать приложения</string>
+    <string name="path_hide_no_apps_selected">Приложения не выбраны</string>
+    <string name="path_hide_app_removed">Удалено %d устаревших записей удалённых приложений</string>
+    <string name="path_hide_search_apps">Поиск приложений…</string>
+    <string name="path_hide_show_system">Показать системные приложения</string>
+    <string name="netisolate_title">Сетевая изоляция</string>
+    <string name="netisolate_enable">Сетевая изоляция включена</string>
+    <string name="netisolate_disable">Сетевая изоляция отключена</string>
+    <string name="netisolate_enable_summary">Блокировать сетевой доступ для выбранных приложений на уровне ядра</string>
+    <string name="netisolate_uids_label">Заблокированные приложения</string>
+    <string name="netisolate_uids_hint">Введите UID для блокировки (по одному на строку)</string>
+    <string name="netisolate_no_uids">Нет заблокированных приложений</string>
+    <string name="settings_search_title">Поиск настроек</string>
+    <string name="settings_search_hint">Поиск настроек…</string>
+    <string name="settings_search_empty_hint">Введите для поиска всех настроек…</string>
+    <string name="settings_no_results">Ничего не найдено</string>
+
+    <!-- Color Generation -->
+    <string name="color_generation_classic">Классический</string>
+    <string name="color_generation_custom">Пользовательский</string>
+    <string name="color_generation_label">Режим цвета</string>
+
+    <!-- Color Standard -->
+    <string name="color_standard_md3_2021">MD3 2021</string>
+    <string name="color_standard_m3e_2025">M3e 2025</string>
+    <string name="color_standard_label">Стандарт цвета</string>
+
+    <!-- Color Style -->
+    <string name="color_style_label">Стиль цвета</string>
+    <string name="color_style_tonal_spot">Тональный акцент</string>
+    <string name="color_style_vibrant">Яркий</string>
+    <string name="color_style_content">Контент</string>
+    <string name="color_style_expressive">Экспрессивный</string>
+    <string name="color_style_rainbow">Радуга</string>
+    <string name="color_style_fruit_salad">Фруктовый салат</string>
+    <string name="color_style_monochrome">Монохромный</string>
+    <string name="color_style_neutral">Нейтральный</string>
+    <string name="color_style_fidelity">Точность</string>
+    <string name="settings_focus_card_background">Обои карточки FocusUI</string>
+    <string name="settings_focus_card_background_enabled">Обои карточки FocusUI включены; удерживайте карточку для управления обоями</string>
+    <string name="settings_focus_card_background_summary">Включить обои карточки FocusUI и управление обоями через удержание</string>
+    <string name="settings_focus_card_dim">Затемнение обоев карточки</string>
+    <string name="settings_focus_card_dual_dim">Включить двойное затемнение день/ночь</string>
+    <string name="settings_focus_card_dual_dim_desc">Автоматически регулировать затемнение обоев карточки для светлой и тёмной темы</string>
+    <string name="settings_focus_card_day_dim">Затемнение обоев в дневном режиме</string>
+    <string name="settings_focus_card_night_dim">Затемнение обоев в ночном режиме</string>
+    <string name="settings_focus_card_opacity">Непрозрачность обоев карточки</string>
+    <string name="settings_focus_card_dual_opacity">Включить двойную непрозрачность день/ночь</string>
+    <string name="settings_focus_card_dual_opacity_desc">Автоматически регулировать непрозрачность обоев карточки для светлой и тёмной темы</string>
+    <string name="settings_focus_card_day_opacity">Непрозрачность обоев в дневном режиме</string>
+    <string name="settings_focus_card_night_opacity">Непрозрачность обоев в ночном режиме</string>
+    <string name="settings_focus_card_kernel">Карточка ядра</string>
+    <string name="settings_focus_card_app">Карточка приложений</string>
+    <string name="settings_focus_card_device">Карточка состояния устройства</string>
+    <string name="settings_focus_card_storage">Карточка хранилища</string>
+    <string name="settings_focus_card_wallpaper_selected">Обои установлены</string>
+    <string name="dashboard_card_background_title">Обои карточки панели</string>
+    <string name="settings_dashboard_card_background">Обои карточки панели</string>
+    <string name="settings_dashboard_card_background_enabled">Обои панели включены; удерживайте карточку панели для управления</string>
+    <string name="settings_dashboard_card_background_summary">Включить обои для карточки панели DashboardUI</string>
+    <string name="dashboard_card_background_clear">Очистить обои панели</string>
+    <string name="dashboard_card_background_clear_confirm">Вы уверены, что хотите очистить обои карточки панели?</string>
+    <string name="dashboard_card_background_saved">Обои панели успешно сохранены</string>
+    <string name="dashboard_card_background_error">Не удалось сохранить обои панели</string>
+    <string name="dashboard_card_background_cleared">Обои панели очищены</string>
+    <string name="dashboard_card_background_restore">Восстановить по умолчанию</string>
+    <string name="dashboard_card_background_restored">Обои панели восстановлены</string>
+    <string name="settings_dashboard_card_dual_dim">Включить двойное затемнение день/ночь</string>
+    <string name="settings_dashboard_card_dual_dim_desc">Автоматически регулировать затемнение обоев панели для светлой и тёмной темы</string>
+    <string name="settings_dashboard_card_day_dim">Затемнение обоев панели в дневном режиме</string>
+    <string name="settings_dashboard_card_night_dim">Затемнение обоев панели в ночном режиме</string>
+    <string name="settings_dashboard_card_opacity">Непрозрачность обоев панели</string>
+    <string name="settings_dashboard_card_dual_opacity">Включить двойную непрозрачность день/ночь</string>
+    <string name="settings_dashboard_card_dual_opacity_desc">Автоматически регулировать непрозрачность обоев панели для светлой и тёмной темы</string>
+    <string name="settings_dashboard_card_day_opacity">Непрозрачность обоев панели в дневном режиме</string>
+    <string name="settings_dashboard_card_night_opacity">Непрозрачность обоев панели в ночном режиме</string>
+    <string name="settings_title_image_permission_required">Предоставьте доступ к хранилищу для выбора изображения заголовка</string>
+    <string name="settings_background_permission_required">Предоставьте доступ к хранилищу для выбора фонового изображения</string>
+    <string name="settings_sound_effect_save_failed">Не удалось сохранить звуковой эффект</string>
+    <string name="settings_startup_sound_save_failed">Не удалось сохранить звук запуска</string>
+    <string name="script_library_downloaded_to">Загружено в: %s</string>
+    <string name="script_library_download_failed">Ошибка загрузки: %s</string>
+    <string name="settings_new_app_profile_update_failed">Не удалось обновить профиль нового приложения: %s</string>
+    <string name="settings_info_copy">Долгое нажатие для копирования</string>
+    <string name="settings_info_copy_summary">Долгое нажатие на элемент информационной панели главного экрана копирует его содержимое</string>
+    <string name="home_info_copied">%1$s скопировано</string>
+    <string name="settings_jailbreak_mode">Режим джейлбрейка</string>
+    <string name="settings_jailbreak_mode_summary">Загружает модуль KernelPatch на стоковое ядро. В этом режиме патчинг запрещён.</string>
+    <string name="settings_jailbreak_soft_reboot">Мягкая перезагрузка</string>
+    <string name="settings_jailbreak_soft_reboot_message">Модуль загружен. Перезапустить систему сейчас?</string>
+    <string name="settings_jailbreak_restart_framework">Перезапустить framework</string>
+    <string name="settings_jailbreak_restart_framework_message">Модуль загружен. Перезапустить Android framework сейчас? Эта операция выполнит мягкую перезагрузку устройства (перезапустит только framework, не ядро).</string>
+    <string name="settings_jailbreak_loaded">Модуль джейлбрейка загружен</string>
+    <string name="settings_jailbreak_failed">Не удалось загрузить модуль джейлбрейка</string>
+    <string name="jailbreak_no_patch">В режиме джейлбрейка патчинг запрещён.</string>
+    <string name="jailbreak">Джейлбрейк</string>
+    <string name="jailbreak_triggered">Jailbreak активирован. Дождитесь получения root, затем выполните мягкую перезагрузку.</string>
+    <string name="reboot_soft">Мягкая перезагрузка</string>
+    <string name="kpm_installed">Установлен</string>
+    <string name="kpm_disabled">Отключён (вступит в силу после перезагрузки)</string>
+    <string name="kpm_embedded_unload_invalid">Встроенные KPM нельзя выгрузить; после перезагрузки они останутся активными.</string>
+</resources>

@@ -1,40 +1,103 @@
+<div align="center">
+
 # DSH-Folk
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+**在 Android 上跑 DeepSeek Harness 的启动器**
 
-**DSH-Folk** —— 基于 FolkPatch UI 代码构建的 DeepSeek Harness 移动端界面。
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg?logo=gnu)](./LICENSE)
+[![Build](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml/badge.svg)](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml)
 
-本项目是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）的移动端客户端，其 **UI 层代码直接派生自 [FolkPatch](https://github.com/LyraVoid/FolkPatch)** —— 一款以卓越 UI/UX 著称的 Android Root 管理工具。我们将 FolkPatch 优雅的界面语言带到 AI 智能体框架中，让移动端的 AI 交互体验同样流畅而精致。
+</div>
 
-> *“把 FolkPatch 那种‘工具亦有温度’的精神，带到 Harness 的生态中。”*
+DSH-Folk 把 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)（一个 Node.js 的编码 Agent CLI）装进手机：
+应用下载一份 arm64 Linux 容器运行时，用 proot / proroot 在容器里启动 `dsh web`，然后你在手机上直接打开它的 Web UI。
 
-## ⚠️ 重要声明
+不需要 root，也不需要 Termux。有 root / Shizuku / 无线 ADB 时会自动利用，用于放宽某些受限操作。
 
-本项目是 **FolkPatch UI 代码的 GPL-3.0 衍生作品**。所有 UI 相关的源代码（布局、动画、主题引擎等）均基于 FolkPatch 的源码修改而来，因此本项目的**整体许可证必须为 GPL-3.0**。
+## 现在能做什么
 
-## ✨ 特性
+| 页面 | 说明 |
+| --- | --- |
+| **主页** | 一键启动 / 停止 / 重启 DSH，显示运行阶段、Web UI 地址、当前运行方式与权限通道，带可复制的启动日志 |
+| **终端** | 容器内的真 PTY 终端（基于 Termux 的 `terminal-view`），直接 `bash` 进容器 |
+| **插件** | 管理容器里 DSH 的插件，展示 npm 周下载量与 GitHub star，内置 dsh-market 插件商店，支持本地安装 |
+| **设置** | 常规 / 外观 / 功能 / 安全 / 备份 / 模块 / 多媒体，界面主题体系沿用 FolkPatch（`theme.json` 完全兼容） |
 
-- **🎨 纯正 FolkPatch 界面**：直接继承其流畅动效与壁纸感知主题
-- **📱 移动端原生体验**：专为 Android 设备优化的交互逻辑
-- **🔌 完整 DSH 兼容**：完美支持 DeepSeek Harness “一切皆插件” 的生态
-- **🎯 轻量高效**：UI 层独立，不侵入 DSH 核心逻辑
+**配置备份**与 DSH 桌面端的 `dsh-config-manager` 插件使用**同一套导出格式**，
+所以手机上导出的 zip 能直接在电脑上导入，反之亦然（设置、模型提供者、插件清单、MCP 服务器、技能、工作区；凭据不导出）。
 
-## 🚀 快速开始
+## 环境要求
 
-### 环境要求
-- Android 7.0 或更高版本
-- 已安装 DeepSeek Harness（`dsh`）运行时环境
+- Android 8.0 (API 26) 或更高
+- **arm64-v8a** 设备（不支持 32 位）
+- 首次启动需要联网下载运行时（数百 MB，可在设置里选镜像或自动测速）
+- 存储空间建议预留 2 GB 以上
 
-### 安装步骤
+root / Shizuku / 无线 ADB 都是**可选**的。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）与已授权的 Shizuku / Sui，
+自身不打任何内核补丁、不安装 su、不内置 Shizuku Server。
 
-1. 从 [Releases](https://github.com/your_github_name/DSH-Folk/releases) 下载最新 APK
-2. 在 Android 设备上安装 APK
-3. 打开应用，自动检测并连接已安装的 `dsh` 服务
-4. 开始体验 FolkPatch 风格的 AI 智能体交互
+## 安装
 
-### 从源码构建
+从 [Releases](https://github.com/IPF-Sinon/DSH-Folk/releases) 下载 APK 安装。
 
-```bash
-git clone https://github.com/your_github_name/DSH-Folk.git
-cd DSH-Folk
-# 具体的构建命令取决于你的技术栈
+APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出包：在 Actions 里手动触发 **Build DSH-Folk**
+（`workflow_dispatch`，可选 debug / release）。release 需要在仓库 secrets 里配置
+`KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`；没配置时会退回默认调试签名。
+
+容器运行时由另一个工作流 **Build DSH runtime rootfs** 生成，产物（`rootfs.tar.gz` + `metadata.json`）
+发布到滚动 tag `runtime-latest`，应用启动时读取其中的 `metadata.json` 决定下载什么。
+
+## 它是怎么跑起来的
+
+```
+DSH-Folk (Android app)
+  └─ proot / proroot                      ← 打包在 APK 里的可执行 .so
+       └─ Ubuntu 24.04 arm64 rootfs       ← 首次启动时在线下载
+            └─ Node.js 24 + @deepseek-ai/dsh
+                 └─ dsh web --port 3080   ← 只监听 127.0.0.1
+                      └─ 手机浏览器 / 应用内打开
+```
+
+几个不得不这么做的地方：
+
+- Android 的 `app_data_file` 带 **noexec**，只有 `nativeLibraryDir` 里的 `.so` 可执行，所以 proot / proroot 以 `.so` 形式打包进 APK。
+- 部分设备的私有目录禁止 `link(2)`，应用会先探测硬链接是否可用，不可用时给 proot 加 `--link2symlink`。
+- `dsh web` 只绑定回环地址；配置备份走的也是同一个回环 HTTP 接口，不对局域网开放。
+
+## 项目结构
+
+```
+app/src/main/java/me/bmax/apatch/
+  dsh/                  运行时层：下载安装、proot 启动、权限探测、无线 ADB、PTY、配置备份
+  ui/screen/HomeDsh.kt  主页
+  ui/screen/Dsh*.kt     终端 / 插件 / 插件商店
+  ui/screen/settings/   设置各分页
+runtime-builder/        容器 rootfs 构建脚本（在 CI 上跑）
+.github/workflows/      build.yml（APK） + runtime.yml（rootfs）
+```
+
+内部包名保留 `me.bmax.apatch`（applicationId 是 `io.github.ipfsinon.dshfolk`）：
+这样 FolkPatch 的整套主题子系统与用户已有的 `theme.json` 不需要改一行就能继续用。
+
+## 致谢
+
+DSH-Folk 的 UI 直接复用 FolkPatch，容器与运行时交付思路来自 DSHA / DSHM：
+
+- [FolkPatch](https://github.com/LyraVoid/FolkPatch) —— 本项目的 UI 基础（GPL-3.0）
+- [APatch](https://github.com/bmax121/APatch) —— FolkPatch 的上游
+- [DSHA](https://github.com/IPF-Sinon) —— 无线 ADB 配对方案
+- [DSHM](https://github.com/IPF-Sinon) —— 运行时在线交付与镜像测速方案
+- [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) —— 被启动的本体
+- [proot](https://github.com/proot-me/proot) / [Termux](https://github.com/termux/termux-app) —— 容器执行与 PTY 终端
+- [Shizuku](https://github.com/RikkaApps/Shizuku) —— 免 root 特权通道
+- [KernelSU](https://github.com/tiann/KernelSU) / [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) —— 界面设计参考
+
+## 许可证
+
+[GNU General Public License v3.0](./LICENSE)。本项目派生自 GPL-3.0 的 FolkPatch，因此整体沿用 GPL-3.0：
+分发（含二次修改）必须同样以 GPLv3 开源并提供完整源码。
+
+## 交流
+
+- QQ 群：[1109060326](https://qm.qq.com/q/t7HDoR5ACk)
+- Issues：https://github.com/IPF-Sinon/DSH-Folk/issues

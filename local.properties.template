@@ -1,0 +1,7 @@
+## 本地开发配置。请复制为 local.properties（不要提交到版本控制）。
+#
+# Android SDK 路径。CI 上由 android-actions/setup-android 注入，不需要这个文件。
+sdk.dir=/path/to/Android/Sdk
+
+# 无 root 设备上调试 UI 时把 root 相关探测短路（构建期常量）。
+debug.fake_root=false

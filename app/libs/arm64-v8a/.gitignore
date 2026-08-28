@@ -1,0 +1,9 @@
+# 保留 proot / proroot 预编译可执行 .so（DSH 容器运行时），忽略其它构建产物
+libbootctl.so
+libbusybox.so
+libresetprop.so
+libkptools.so
+libkpatch.so
+libapjni.so
+libapd.so
+*.so.version

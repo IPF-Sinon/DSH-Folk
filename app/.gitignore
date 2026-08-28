@@ -1,0 +1,5 @@
+/build
+/release/
+*.jks
+*.keystore
+keystore.properties

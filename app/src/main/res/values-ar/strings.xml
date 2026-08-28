@@ -1,0 +1,1346 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">FolkPatch</string>
+
+    <string name="desktop_app_name">اسم تطبيق سطح المكتب</string>
+
+    <string name="home">الرئيسية</string>
+
+    <string name="success">نجاح</string>
+    <string name="failure">فشل</string>
+
+    <string name="patch_warnning">التثبيت ينطوي على مخاطر. يرجى التأكد من نسخ بياناتك احتياطيًا.</string>
+    <string name="patch">تصحيح</string>
+
+    <string name="kernel_patch">تصحيح النواة</string>
+    <string name="android_patch">تصحيح أندرويد</string>
+
+    <string name="settings_nav_layout_title">إعدادات تخطيط التنقل</string>
+    <string name="settings_nav_layout_summary">إخفاء أو إظهار بعض مكونات التنقل</string>
+    <string name="settings_nav_scheme">مخطط التنقل</string>
+    <string name="settings_nav_mode">وضع شريط التنقل</string>
+    <string name="settings_nav_mode_summary">اختر طريقة عرض شريط التنقل</string>
+    <string name="settings_nav_mode_auto">تلقائي تقليدي</string>
+    <string name="settings_nav_mode_bottom">شريط سفلي دائمًا</string>
+    <string name="settings_nav_mode_rail">شريط جانبي دائمًا</string>
+    <string name="settings_nav_mode_floating">شريط سفلي عائم</string>
+    <string name="settings_show_apm">إظهار وحدات النظام</string>
+    <string name="settings_show_kpm">إظهار KPM</string>
+    <string name="settings_show_superuser">إظهار المستخدم المتميز</string>
+    <string name="settings_floating_auto_hide">إخفاء تلقائي</string>
+    <string name="settings_floating_auto_hide_summary">إخفاء الشريط العائم تلقائيًا بعد 3 ثوانٍ بدون تفاعل</string>
+    <string name="settings_floating_swipe_hide">إخفاء بالتمرير</string>
+    <string name="settings_floating_swipe_hide_summary">إخفاء الشريط عند التمرير لأسفل، إظهاره عند التمرير لأعلى</string>
+    <string name="settings_navbar_glass_effect">تأثير الزجاج المصنفر</string>
+    <string name="settings_navbar_glass_effect_summary">تطبيق تأثير الزجاج المصنفر على شريط التنقل العائم</string>
+    <string name="settings_navbar_glass_blur_strength">قوة التمويه</string>
+    <string name="settings_navbar_glass_transparency">شفافية الخلفية</string>
+    <string name="settings_navbar_glass_highlight_strength">شدة التمييز</string>
+    <string name="settings_navbar_glass_specular">انعكاس مرآوي</string>
+    <string name="settings_navbar_glass_specular_summary">تفعيل تمييز يشبه المرآة في أعلى شريط التنقل</string>
+    <string name="settings_navbar_glass_inner_glow">توهج داخلي</string>
+    <string name="settings_navbar_glass_inner_glow_summary">تفعيل تأثير توهج خفيف في أسفل شريط التنقل</string>
+    <string name="settings_navbar_glass_border">إطار زجاجي</string>
+    <string name="settings_navbar_glass_border_summary">تفعيل إطار خفيف حول شريط التنقل</string>
+    <string name="settings_compact_rounded_bar">نمط دائري مدمج</string>
+    <string name="settings_compact_rounded_bar_summary">استخدام شريط عائم مدمج مع زوايا دائرية وتباعد أقل</string>
+    <string name="settings_stats_top_layout">تخطيط علوي</string>
+    <string name="settings_stats_top_layout_summary">اختيار نمط بطاقة المعلومات العلوية</string>
+    <string name="settings_stats_top_layout_list">قائمة</string>
+    <string name="settings_stats_top_layout_grid">شبكة</string>
+    <string name="settings_block_kernelpatch_update">حظر تحديث KernelPatch</string>
+    <string name="settings_block_kernelpatch_update_summary">عدم إظهار إشعارات تحديث KernelPatch</string>
+    <string name="settings_block_androidpatch_update">حظر تحديث تصحيح النظام</string>
+    <string name="settings_block_androidpatch_update_summary">عدم إظهار إشعارات تحديث تصحيح النظام (APD)</string>
+    <string name="settings_disable_module_update_check">تعطيل التحقق من تحديث الوحدات</string>
+    <string name="settings_disable_module_update_check_summary">تعطيل التحقق التلقائي من التحديثات للوحدات النظام</string>
+
+    <string name="reboot">إعادة التشغيل</string>
+    <string name="settings">الإعدادات</string>
+    <string name="reboot_recovery">إعادة التشغيل إلى الريكفري</string>
+    <string name="reboot_bootloader">إعادة التشغيل إلى البوتلودر</string>
+    <string name="reboot_download">إعادة التشغيل إلى وضع التنزيل</string>
+    <string name="reboot_edl">إعادة التشغيل إلى وضع EDL</string>
+    <string name="reboot_fastbootd">إعادة التشغيل إلى وضع FastbootD</string>
+    <string name="about">حول</string>
+    <string name="developer_and_maintainer">المطور | المشرف</string>
+    <string name="settings_app_language">اللغة</string>
+    <string name="system_default">افتراضي النظام</string>
+    <string name="settings_global_namespace_mode">وضع مساحة الاسم العام</string>
+    <string name="settings_global_namespace_mode_summary">جميع جلسات الروت تستخدم مساحة اسم المجلدات العامة</string>
+    <string name="settings_clear_super_key_dialog">هل تريد حقًا المتابعة؟</string>
+    <string name="settings_sucompat">توافق su القديم</string>
+    <string name="settings_sucompat_summary">تفعيل توافق su القديم (لحالات عدم عمل su)</string>
+    <string name="settings_selinux_hide">إخفاء تعديل SELinux (اختباري)</string>
+    <string name="settings_selinux_hide_summary">إخفاء تعديلات SELinux لمنع اكتشافها من قبل عمليات المستخدم (قد تكون هذه الميزة غير مستقرة). يمكن للوضع الآمن تعطيل هذه الميزة.</string>
+    <string name="settings_selinux_hide_warning_title">تحذير</string>
+    <string name="settings_selinux_hide_warning_below_5_10">تم اختبار هذه الميزة على نواة 5.10 وما فوق فقط وقد تكون غير مستقرة على إصدارات النواة الأقل.</string>
+    <string name="settings_selinux_hide_warning_non_gki">تحمل النوى غير GKI مخاطر أكبر وقد تؤدي إلى فشل الإقلاع. تأكد من عمل نسخة احتياطية لبياناتك.</string>
+    <string name="settings_grid_working_card_hide_check">إخفاء أيقونة الحالة</string>
+    <string name="settings_grid_working_card_hide_check_summary">إخفاء علامة الصح أو أيقونة التحذير في بطاقة الحالة</string>
+    <string name="settings_grid_working_card_hide_text">إخفاء نص الحالة</string>
+    <string name="settings_grid_working_card_hide_text_summary">إخفاء نص "يعمل" أو "غير مثبت" في بطاقة الحالة</string>
+    <string name="settings_grid_working_card_hide_mode">إخفاء وضع العمل</string>
+    <string name="settings_grid_working_card_hide_mode_summary">إخفاء نص "كامل" أو "نصف" في بطاقة الحالة</string>
+
+    <string name="settings_folkx_engine_title">محرك FolkX للرسوم المتحركة</string>
+    <string name="settings_folkx_engine_summary">استخدام رسوم متحركة زنبركية سلسة قائمة على الفيزياء عند التبديل بين الصفحات الرئيسية</string>
+    <string name="settings_folkx_animation_type">نوع الرسوم المتحركة</string>
+    <string name="settings_folkx_animation_speed">سرعة الرسوم المتحركة</string>
+    <string name="settings_folkx_animation_linear">حركة خطية</string>
+    <string name="settings_folkx_animation_spatial">حركة مكانية</string>
+    <string name="settings_folkx_animation_fade">تلاشي للداخل/للخارج</string>
+    <string name="settings_folkx_animation_vertical">انزلاق عمودي</string>
+    <string name="settings_folkx_animation_diagonal">انزلاق قطري</string>
+
+    <string name="su_exclude_all_title">استثناء الكل</string>
+    <string name="su_exclude_all_confirm">هل أنت متأكد من أنك تريد استثناء جميع التطبيقات التي لا تتطلب صلاحيات الروت؟</string>
+    <string name="su_batch_exclude_title">استثناء دفعة</string>
+    <string name="su_batch_exclude_content">استثناء الحقن لجميع التطبيقات التي لا تتطلب صلاحيات الروت، يرجى تحديد إجراء</string>
+    <string name="su_exclude_btn">استثناء</string>
+    <string name="su_exclude_reverse_btn">عكس</string>
+
+    <!-- SuperUser App Action Dialog -->
+    <string name="su_app_action_title">إجراء التطبيق</string>
+    <string name="su_app_action_content">يرجى تحديد إجراء للتطبيق</string>
+    <string name="su_app_action_launch">تشغيل التطبيق</string>
+    <string name="su_app_action_force_stop">إيقاف إجباري</string>
+    <string name="su_app_action_launch_success">جارٍ تشغيل %s</string>
+    <string name="su_app_action_force_stop_success">تم إيقاف %s إجبارياً</string>
+    <string name="su_app_action_failed">فشلت العملية: %s</string>
+
+    <!-- SU Audit Log -->
+    <string name="su_audit_log_title">سجل التخويل</string>
+    <string name="su_audit_log_empty">لا توجد سجلات تخويل</string>
+    <string name="su_audit_log_clear">مسح السجل</string>
+    <string name="su_audit_log_clear_confirm">تأكيد مسح جميع سجلات التخويل؟</string>
+    <string name="su_audit_action_grant">مُصرح</string>
+    <string name="su_audit_action_revoke">مُلغى</string>
+    <string name="su_audit_action_exclude">مُستثنى</string>
+    <string name="su_audit_tab_usage">سجل الاستخدام</string>
+    <string name="su_audit_tab_operations">سجل العمليات</string>
+
+    <string name="home_learn_apatch">تعلم FolkPatch</string>
+    <string name="home_click_to_learn_apatch">تعرف على ميزات FolkPatch وكيفية استخدامه</string>
+    <string name="settings_hide_apatch_card">إخفاء بطاقة تعلم FolkPatch</string>
+    <string name="settings_hide_apatch_card_summary">إخفاء بطاقة تعلم FolkPatch في الشاشة الرئيسية</string>
+
+    <string name="about_source_code"><![CDATA[<p>عرض الكود المصدري على %1$s<p/>انضم إلى قناتنا على %2$s<p/>انضم إلى مجموعتنا على %3$s]]></string>
+    <string name="send_log">إرسال السجلات</string>
+    <string name="settings_clean_storage">تنظيف بيانات التطبيق</string>
+    <string name="settings_clean_storage_summary">إصلاح فشل التنزيل أو التطبيق الناتج عن الملفات المتبقية</string>
+    <string name="settings_clean_storage_confirm">سيؤدي هذا إلى حذف السمات التي تم تنزيلها والموسيقى المستوردة والمؤثرات الصوتية وجميع ملفات التخزين المؤقت، ثم إعادة إنشاء المجلدات. سيتم الاحتفاظ بالإعدادات. هل تريد المتابعة؟</string>
+    <string name="settings_clean_storage_done">اكتمل التنظيف</string>
+    <string name="save_log">حفظ السجلات</string>
+    <string name="log_saved">تم حفظ السجلات</string>
+    <string name="safe_mode">الوضع الآمن</string>
+    <string name="github">GitHub</string>
+    <string name="telegram">Telegram</string>
+    <string name="support_or_donate">دعم / تبرع</string>
+
+    <string name="super_key">المفتاح الخارق</string>
+    <string name="clear_super_key">مسح المفتاح الخارق</string>
+    <string name="patch_set_superkey">تعيين المفتاح الخارق</string>
+    <string name="home_patch_set_key_desc">بيانات الاعتماد لـ KernelPatch فقط</string>
+    <string name="home_patch_next_step">الخطوة التالية</string>
+
+    <string name="home_not_installed">غير مثبت</string>
+    <string name="home_install_unknown">غير مثبت أو لم تتم المصادقة</string>
+    <string name="home_install_unknown_summary">انقر للتثبيت</string>
+    <string name="home_click_to_install">انقر للتثبيت</string>
+    <string name="home_working">يعمل</string>
+    <string name="home_kp_need_update">يتوفر إصدار جديد</string>
+    <string name="home_kp_cando_update">تحديث</string>
+
+    <string name="home_installing">جارٍ التثبيت</string>
+
+    <string name="kpatch_version">الإصدار: %s</string>
+    <string name="apatch_version">الإصدار: %s</string>
+
+    <string name="kpatch_version_update" formatted="false">الإصدار: %s -&gt; %s</string>
+    <string name="kpatch_shadow_path_title">kpatch</string>
+    <string name="home_auth_key_title">أدخل المفتاح الخارق</string>
+    <string name="home_auth_key_desc">ابدأ بعد المصادقة</string>
+    <string name="home_kpatch_info_title">معلومات</string>
+
+    <string name="home_ap_cando_install">تثبيت</string>
+
+    <string name="home_ap_cando_uninstall">إلغاء التثبيت</string>
+    <string name="home_ap_cando_reboot">إعادة التشغيل</string>
+
+    <string name="patch_title">تصحيح</string>
+
+    <string name="patch_config_title">التصحيحات</string>
+    <string name="patch_mode_bootimg_patch">الوضع: تصحيح</string>
+    <string name="patch_mode_patch_and_install">الوضع: تصحيح وتثبيت</string>
+    <string name="patch_mode_install_to_next_slot">الوضع: التثبيت في الفتحة غير النشطة (بعد OTA)</string>
+    <string name="patch_mode_restore">الوضع: استعادة</string>
+    <string name="patch_mode_uninstall_patch">الوضع: إلغاء تثبيت KPatch</string>
+    <string name="patch_select_bootimg_btn">تحديد boot</string>
+    <string name="patch_embed_kpm_btn">تضمين KPM</string>
+    <string name="patch_start_patch_btn">بدء</string>
+    <string name="patch_start_unpatch_btn">إلغاء التصحيح</string>
+    <string name="patch_item_error">!!خطأ!!</string>
+    <string name="patch_item_bootimg">bootimg</string>
+    <string name="patch_item_bootimg_slot">الفتحة:</string>
+    <string name="patch_item_bootimg_dev">الجهاز:</string>
+    <string name="patch_item_kernel">النواة</string>
+    <string name="patch_item_kpimg">kpimg</string>
+    <string name="patch_item_kpimg_version">الإصدار:</string>
+    <string name="patch_item_kpimg_comile_time">الوقت:</string>
+    <string name="patch_item_kpimg_config">الإعدادات:</string>
+    <string name="patch_item_new_extra_kpm">تضمين جديد</string>
+    <string name="patch_item_existed_extra_kpm">موجود</string>
+    <string name="patch_item_extra_name">الاسم:</string>
+    <string name="patch_item_extra_version">الإصدار:</string>
+    <string name="patch_item_extra_author">المؤلف:</string>
+    <string name="patch_item_extra_kpm_license">الترخيص:</string>
+    <string name="patch_item_extra_kpm_desciption">الوصف:</string>
+    <string name="patch_item_extra_args">الوسائط:</string>
+    <string name="patch_item_extra_event">الحدث:</string>
+    <string name="patch_item_skey">المفتاح الخارق</string>
+    <string name="patch_custom_superkey">مفتاح خارق مخصص</string>
+    <string name="patch_custom_superkey_summary">لا يزال بإمكانك تعيين مفتاح خارق لإدارة Root والنواة، المدير مفوض بتوقيع مدمج من النواة</string>
+    <string name="patch_item_set_skey_label">يجب أن يتراوح طول المفتاح الخارق بين 8 و 63 حرفًا وأن يتضمن أرقامًا وحروفًا، ولكن بدون أحرف خاصة.</string>
+    <string name="patch_confirm_superkey">تأكيد المفتاح الخارق</string>
+    <string name="patch_skey_mismatch">المفتاح الخارق غير متطابق</string>
+
+    <string name="home_kernel">إصدار النواة</string>
+    <string name="home_manager_version">إصدار المدير</string>
+    <string name="home_fingerprint">البصمة الرقمية</string>
+
+    <string name="home_selinux_status">حالة SELinux</string>
+    <string name="home_selinux_status_disabled">معطل</string>
+    <string name="home_selinux_status_enforcing">مفروض</string>
+    <string name="home_selinux_status_permissive">متساهل</string>
+    <string name="home_selinux_status_unknown">غير معروف</string>
+
+    <string name="settings_selinux_mode">وضع SELinux</string>
+    <string name="settings_selinux_mode_summary">اختر وضع إنفاذ SELinux</string>
+    <string name="settings_selinux_mode_enforcing">مفروض (صارم)</string>
+    <string name="settings_selinux_mode_permissive">متساهل (مرن)</string>
+    <string name="settings_selinux_current_mode">الحالي: %s</string>
+    <string name="settings_selinux_mode_enforcing_summary">SELinux يفرض قواعد الوصول بالكامل</string>
+    <string name="settings_selinux_mode_permissive_summary">SELinux يسجل الانتهاكات فقط، لا يرفض</string>
+
+    <string name="home_device_info">الجهاز</string>
+    <string name="home_system_version">إصدار النظام</string>
+    <string name="home_kpatch_version">إصدار KernelPatch</string>
+    <string name="home_su_path">su القابل للتنفيذ</string>
+    <string name="home_apatch_version">إصدار FolkPatch</string>
+
+    <string name="kpm">وحدة KP</string>
+    <string name="kpm_kp_not_installed">KernelPatch غير مثبت</string>
+    <string name="kpm_add_kpm">إضافة وحدة KP</string>
+    <string name="kpm_load">تحميل</string>
+    <string name="kpm_install">تثبيت</string>
+    <string name="kpm_embed">تضمين</string>
+    <string name="kpm_embedded">مضمن</string>
+    <string name="kpm_loaded">محمل</string>
+    <string name="kpm_load_toast_succ">نجح التحميل</string>
+    <string name="kpm_install_toast_succ">تم التثبيت بنجاح؛ يسري بعد إعادة التشغيل</string>
+    <string name="kpm_load_toast_failed">فشل التحميل</string>
+    <string name="kpm_unload_confirm">إلغاء تحميل وحدة %s؟</string>
+    <string name="kpm_unload">إلغاء التحميل</string>
+    <string name="kpm_control">تحكم</string>
+    <string name="kpm_apm_empty">لا توجد وحدات محملة</string>
+    <string name="kpm_custom_order">تبديل ترتيب الوحدات المخصص</string>
+    <string name="kpm_load_failed">فشل تحميل وحدات النواة</string>
+    <string name="kpm_version">الإصدار</string>
+    <string name="kpm_license">الترخيص</string>
+    <string name="kpm_author">المؤلف</string>
+    <string name="kpm_desc">الوصف</string>
+    <string name="kpm_args">الوسائط</string>
+
+    <string name="su_title">المستخدم الخارق</string>
+    <string name="su_selinux_via_hook">التجاوز عبر الخطاف</string>
+    <string name="su_pkg_excluded_label">استثناء</string>
+    <string name="su_pkg_excluded_setting_title">استثناء التعديلات</string>
+    <string name="su_pkg_excluded_setting_summary">سيمكن تفعيل هذا الخيار FolkPatch من استعادة أي ملفات تم تعديلها بواسطة وحدات هذا التطبيق.</string>
+    <string name="su_pkg_root_setting_title">المستخدم المتميز</string>
+    <string name="su_pkg_root_setting_summary">تفعيل هذا الخيار لمنح صلاحيات المستخدم المتميز لتطبيقك، مما يسمح باستخدام أوامر SU</string>
+    <string name="su_pkg_normal_setting_title">الوضع العادي</string>
+    <string name="su_pkg_normal_setting_summary">لم يتم منح حق الوصول إلى الجذر، يتم تشغيل التطبيق بدون صلاحيات المستخدم المتميز.</string>
+    <string name="su_show_system_apps">إظهار تطبيقات النظام</string>
+    <string name="su_hide_system_apps">إخفاء تطبيقات النظام</string>
+    <string name="su_refresh">تحديث</string>
+    <string name="su_multi_select_title">تحديد التطبيقات</string>
+    <string name="su_multi_select_count">تم تحديد %d</string>
+    <string name="su_multi_select_grant_root">منح صلاحية ROOT</string>
+    <string name="su_multi_select_revoke_root">سحب صلاحية ROOT</string>
+    <string name="su_multi_select_exclude">استبعاد</string>
+    <string name="su_multi_select_confirm_grant">منح صلاحية ROOT لـ %d تطبيق؟</string>
+    <string name="su_multi_select_confirm_revoke">سحب صلاحية ROOT من %d تطبيق؟</string>
+    <string name="su_multi_select_confirm_exclude">استبعاد %d تطبيق؟</string>
+    <string name="su_multi_select_enter">تحديد متعدد</string>
+
+    <string name="apm">وحدة AP</string>
+    <string name="apm_not_installed">AndroidPatch غير مثبت</string>
+    <string name="apm_failed_to_enable">فشل تمكين الوحدة: %s</string>
+    <string name="apm_failed_to_disable">فشل تعطيل الوحدة: %s</string>
+    <string name="apm_empty">لا توجد وحدات مثبتة</string>
+    <string name="apm_load_failed">فشل تحميل الوحدات</string>
+    <string name="apm_remove">إزالة</string>
+    <string name="apm_undo">تراجع</string>
+    <string name="apm_install">تثبيت</string>
+    <string name="apm_uninstall_confirm">إلغاء تثبيت وحدة %s؟</string>
+    <string name="apm_uninstall_success">تم إلغاء تثبيت %s</string>
+    <string name="apm_uninstall_failed">فشل إلغاء التثبيت: %s</string>
+    <string name="apm_undo_uninstall_success">تم استعادة %s بنجاح</string>
+    <string name="apm_undo_uninstall_failed">فشل الاستعادة: %s</string>
+    <string name="apm_version">الإصدار</string>
+    <string name="apm_author">المؤلف</string>
+    <string name="apm_desc">الوصف</string>
+    <string name="apm_overlay_fs_not_available">الوحدات غير متاحة لأن OverlayFS معطل بواسطة النواة!</string>
+    <string name="apm_magisk_conflict">الوحدات غير متاحة بسبب تعارض مع Magisk!</string>
+    <string name="apm_mount_warning_title">إشعار مهم</string>
+    <string name="apm_mount_warning_message">الوحدات غير مثبتة افتراضياً. يرجى استخدام نظام التركيب المدمج أو الوحدات الفوقية.</string>
+    <string name="apm_mount_warning_button">فهمت</string>
+    <string name="apm_reboot_to_apply">أعد التشغيل للتطبيق</string>
+    <string name="apm_changelog">سجل التغييرات</string>
+    <string name="apm_update">تحديث</string>
+    <string name="apm_downloading">جارٍ تنزيل الوحدة: %s</string>
+    <string name="apm_start_downloading">بدء التنزيل: %s</string>
+    <string name="apm_new_version_available">الإصدار الجديد %s متاح، انقر للترقية.</string>
+
+    <string name="hide_apatch_manager">إخفاء مدير APatch</string>
+    <string name="hide_apatch_manager_summary">تثبيت تطبيق وكيل بمعرف حزمة عشوائي وتسمية تطبيق مخصصة</string>
+    <string name="hide_apatch_dialog_new_manager_name">اسم المدير الجديد</string>
+    <string name="hide_apatch_dialog_summary">سيتم استخدامه كتسمية التطبيق الجديدة المعروضة في اللانشر</string>
+    <string name="hide_apatch_manager_failure">فشل الإخفاء. يرجى الإبلاغ عن الخطأ!</string>
+
+    <string name="setting_reset_su_path">إعادة تعيين مسار su</string>
+    <string name="setting_reset_su_new_path">المسار الكامل الجديد</string>
+
+    <string name="apm_webui_open">فتح</string>
+    <string name="apm_action">إجراء</string>
+    <string name="module_shortcut_add">اختصار</string>
+    <string name="module_shortcut_not_supported">المشغل لا يدعم اختصارات سطح المكتب.</string>
+    <string name="module_shortcut_created">تم إنشاء اختصار على سطح المكتب.</string>
+    <string name="module_shortcut_updated">تم تحديث الاختصار.</string>
+    <string name="module_shortcut_permission_tip_xiaomi">الرجاء تفعيل "إنشاء اختصارات سطح المكتب" لهذا التطبيق في إعدادات Xiaomi.</string>
+    <string name="module_shortcut_permission_tip_oppo">الرجاء تفعيل "اختصار سطح المكتب" لهذا التطبيق في إعدادات OPPO.</string>
+    <string name="module_shortcut_permission_tip_default">إذا فشل إنشاء الاختصار، الرجاء تفعيل إذن اختصار سطح المكتب لهذا التطبيق في إعدادات النظام.</string>
+    <string name="module_shortcut_name">اسم الاختصار</string>
+    <string name="module_shortcut_icon">أيقونة الاختصار</string>
+    <string name="module_shortcut_type">نوع الاختصار</string>
+    <string name="module_shortcut_type_webui">WebUI</string>
+    <string name="module_shortcut_type_action">Action</string>
+    <string name="module_shortcut_icon_default">استخدام الأيقونة الافتراضية</string>
+    <string name="module_shortcut_icon_select">اختيار أيقونة</string>
+    <string name="enable_web_debugging">تمكين تصحيح أخطاء WebView</string>
+    <string name="enable_web_debugging_summary">يمكن استخدامه لتصحيح أخطاء واجهة المستخدم الرسومية للويب. يرجى تمكينه عند الحاجة فقط.</string>
+    <string name="settings_apm_install_confirm">تأكيد قبل التثبيت</string>
+    <string name="settings_apm_install_confirm_summary">إظهار مربع حوار تأكيد قبل تثبيت الوحدات</string>
+    <string name="settings_show_more_module_info">إظهار تفاصيل الوحدة</string>
+    <string name="settings_show_more_module_info_summary">إظهار معرف الوحدة وحجمها في قائمة الوحدات</string>
+    <string name="settings_apm_stay_on_page">البقاء في صفحة العملية</string>
+    <string name="settings_apm_stay_on_page_summary">عدم الرجوع تلقائيًا بعد تنفيذ إجراء الوحدة</string>
+    <string name="settings_enable_module_shortcut_add">تمكين زر إضافة اختصار</string>
+    <string name="settings_enable_module_shortcut_add_summary">إظهار زر إضافة اختصار واجهة المستخدم الرسومية للويب</string>
+    <string name="settings_module_sort_optimization">تحسين فرز الوحدات</string>
+    <string name="settings_module_sort_optimization_summary">جعل وحدات النظام مع واجهة المستخدم الرسومية للويب والإجراء تظهر في الأعلى</string>
+    <string name="apm_custom_order">ترتيب مخصص للوحدات</string>
+    <string name="apm_drag_to_reorder">اسحب لإعادة الترتيب</string>
+    <string name="apm_reset_order">استعادة الترتيب التلقائي</string>
+    <string name="settings_fold_system_module">طي وحدات النظام</string>
+    <string name="settings_fold_system_module_summary">انقر على بطاقة الوحدة للتوسيع/الطي الإجراءات</string>
+        <string name="settings_simple_list_bottom_bar">شريط سفلي بسيط</string>
+        <string name="settings_simple_list_bottom_bar_summary">استخدم أزرار الأيقونات فقط لإجراءات الوحدة، مستوحى من APatch</string>
+    <string name="settings_spliced_card_group">Spliced Card Group</string>
+    <string name="settings_spliced_card_group_summary">Use M3E continuous card group style for module list</string>
+    <string name="settings_show_kpm_status_badge">إظهار شارة حالة KPM</string>
+    <string name="settings_show_kpm_status_badge_summary">إظهار شارة مضمن/محمل على بطاقات KPM</string>
+    <string name="apm_install_confirm_title">تثبيت الوحدة</string>
+    <string name="apm_install_confirm_content">هل أنت متأكد من أنك تريد تثبيت %s؟</string>
+    <string name="apm_disable_all_title">تعطيل كل الوحدات</string>
+    <string name="apm_disable_all_confirm">هل أنت متأكد من أنك تريد تعطيل جميع الوحدات؟ سيقوم هذا بتعطيل جميع الوحدات المثبتة.</string>
+    <string name="apm_enable_module_banner">تمكين لافتة الوحدة</string>
+    <string name="apm_enable_module_banner_summary">عرض صورة اللافتة للوحدات إذا كانت متوفرة</string>
+    <string name="apm_enable_folk_banner">تخصيص لافتة الوحدة</string>
+    <string name="apm_enable_folk_banner_summary">اضغط مطولًا على بطاقة الوحدة لاختيار صورة اللافتة</string>
+    <string name="apm_folk_banner_title">محرر الوحدات</string>
+    <string name="apm_folk_banner_select">اختيار صورة</string>
+    <string name="apm_folk_banner_clear">مسح FolkBanner</string>
+    <string name="apm_folk_banner_saved">تم حقن FolkBanner لـ %s.</string>
+    <string name="apm_folk_banner_cleared">تم مسح FolkBanner لـ %s.</string>
+    <string name="apm_folk_banner_failed">فشل تحديث FolkBanner لـ %s.</string>
+    <string name="apm_banner_api_mode">وضع API</string>
+    <string name="apm_banner_api_mode_summary">استخدام API للصور العشوائية أو دليل محلي للافتات الوحدات</string>
+    <string name="apm_banner_api_source">تكوين مصدر API</string>
+    <string name="apm_banner_api_source_hint">أدخل عنوان API أو المسار المحلي</string>
+    <string name="apm_banner_api_source_saved">تم حفظ مصدر API</string>
+    <string name="apm_banner_api_source_not_configured">غير مكوّن</string>
+    <string name="apm_banner_api_url_configured">عنوان API مكوّن</string>
+    <string name="apm_banner_local_dir_configured">الدليل المحلي مكوّن</string>
+    <string name="apm_banner_clear_cache">مسح ذاكرة التخزين المؤقت</string>
+    <string name="apm_banner_cache_cleared">تم مسح ذاكرة التخزين المؤقت للافتات</string>
+    <string name="apm_banner_api_config_title">تكوين مصدر API</string>
+    <string name="apm_banner_api_config_desc">أدخل عنوان API للصور العشوائية أو مسار دليل محلي. ستتلقى كل وحدة لافتة فريدة.</string>
+    <string name="apm_banner_api_examples_title">أمثلة:</string>
+    <string name="apm_banner_api_examples">API: https://picsum.photos/800/400\nمحلي: /sdcard/Pictures/Banners</string>
+    <!-- سوق واجهة برمجة التطبيقات -->
+    <string name="apm_api_marketplace_title">سوق واجهة برمجة التطبيقات</string>
+    <string name="apm_api_preview">معاينة</string>
+    <string name="apm_api_apply">تطبيق</string>
+    <string name="apm_api_preview_title">معاينة واجهة برمجة التطبيقات</string>
+    <string name="apm_api_preview_failed">فشل تحميل المعاينة</string>
+    <string name="apm_api_url_label">عنوان واجهة برمجة التطبيقات:</string>
+    <string name="apm_api_apply_success">تم تطبيق مصدر واجهة برمجة التطبيقات بنجاح</string>
+    <string name="apm_api_verifying">جاري التحقق…</string>
+    <string name="apm_api_retry">إعادة المحاولة</string>
+    <string name="apm_api_empty">لا تتوفر مصادر واجهة برمجة التطبيقات</string>
+    <string name="settings_banner_custom_opacity">عتامة اللافتة</string>
+    <string name="settings_banner_custom_opacity_summary">استخدام عتامة مخصصة لللافتات بدلاً من اتباع وضع خلفية الشاشة</string>
+    <string name="settings_banner_opacity">شفافية اللافتة</string>
+
+    <string name="settings_donot_store_superkey">عدم تخزين المفتاح الخارق محليًا</string>
+    <string name="settings_donot_store_superkey_summary">المصادقة على المفتاح الخارق في كل مرة يبدأ فيها المدير
+</string>
+
+    <string name="mode_select_page_title">تثبيت</string>
+    <string name="mode_select_page_patch_and_install">تصحيح وتثبيت</string>
+    <string name="mode_select_page_select_file">حدد صورة boot لتصحيحها</string>
+    <string name="restore_select_file">حدد ملف قسم boot لاستعادته</string>
+    <string name="mode_select_page_install_inactive_slot">التثبيت في الفتحة غير النشطة (بعد OTA)</string>
+    <string name="mode_select_page_install_inactive_slot_warning">سيتم **إجبار** جهازك على الإقلاع إلى الفتحة غير النشطة الحالية بعد إعادة التشغيل!\nاستخدم هذا الخيار فقط بعد الانتهاء من OTA.\nهل تريد المتابعة؟</string>
+    <string name="mode_select_page_select_kpimg">استخدام ملف ترقيع محلي (KPimg)</string>
+    <string name="mode_select_page_init_boot_warning_title">تم اختيار صورة خاطئة</string>
+    <string name="mode_select_page_init_boot_warning_message">يبدو أن الملف المحدد هو صورة init_boot أو vendor_boot.
+يتطلب KernelPatch صورة boot للترقيع.
+
+يرجى اختيار صورة boot الصحيحة (عادةً boot.img).
+
+المتابعة على أي حال؟</string>
+    <string name="patch_custom_kpimg_label">KPimg مخصص</string>
+    <string name="patch_custom_kpimg_file">الملف: %s</string>
+    <string name="patch_select_kpimg_btn">اختيار KPimg</string>
+
+    <string name="home_dialog_auth_fail_title">فشلت المصادقة</string>
+    <string name="home_dialog_auth_fail_content">تعذر المصادقة على المفتاح الخارق، مما يؤدي إلى فشل تنشيط FolkPatch.
+فيما يلي بعض الأسباب المحتملة لفشل المصادقة—يرجى التحقق من السبب الذي ينطبق عليك:
+
+
+\n1. لم تستخدم KernelPatch لتصحيح boot.img على الإطلاق، أو نسيت ما فعلته بالفعل.
+\n2. boot.img المصحح لا يزال نائمًا على جهاز الكمبيوتر الخاص بك، ولم يتم وميضه في الجهاز أبدًا.
+\n3. تم إدخال المفتاح الخارق بشكل غير صحيح، أو يحتوي على رموز غامضة، مثل أحرف من لغات كوكبية.
+\n4. قد يكون جهازك غير متوافق مع FolkPatch و KernelPatch، والمحاولات القسرية بلا طائل.
+\n5. قد تكون قد قمت ببعض العمليات الغامضة—مثل استخدام وحدات معينة تستبعد أسماء الحزم التي منعت FolkPatch، مما أدى إلى إخراج نفسك من اللعبة.
+
+</string>
+
+    <string name="home_more_menu_feedback_or_suggestion">ملاحظات أو اقتراحات</string>
+    <string name="home_more_menu_about">حول</string>
+    <string name="home_more_menu_document">توثيق</string>
+
+    <string name="home_more_menu_music_play">تشغيل الموسيقى</string>
+    <string name="home_more_menu_music_pause">إيقاف الموسيقى مؤقتًا</string>
+
+    <!-- Plugin strings -->
+    <string name="plugin_title">المكونات الإضافية</string>
+    <string name="plugin_refresh">تحديث</string>
+    <string name="plugin_summary_title">APD Lua Plugin</string>
+    <string name="plugin_summary_not_installed">APD غير مثبت · المكونات غير متاحة</string>
+    <string name="plugin_state_enabled">ممكّن</string>
+    <string name="plugin_state_disabled">معطّل</string>
+    <string name="plugin_toggle_failed">فشل تغيير حالة المكوّن الإضافي</string>
+    <string name="plugin_empty">لا توجد مكونات إضافية مثبتة</string>
+    <string name="plugin_empty_hint">ضع main.lua في /data/adb/plugins/&lt;id&gt;/ لإضافة مكوّن.</string>
+    <string name="plugin_load_failed">فشل تحميل المكونات الإضافية</string>
+    <string name="plugin_manage_summary">إدارة مكونات Lua خفيفة الوزن</string>
+    <string name="plugin_install">تثبيت المكوّن</string>
+    <string name="plugin_install_success">تم تثبيت المكوّن</string>
+    <string name="plugin_install_failed">فشل تثبيت المكوّن</string>
+    <string name="plugin_uninstall_title">إلغاء تثبيت المكوّن</string>
+    <string name="plugin_uninstall">إلغاء التثبيت</string>
+    <string name="plugin_uninstall_confirm">إلغاء تثبيت المكوّن %1$s؟</string>
+    <string name="plugin_uninstall_success">تمت إزالة المكوّن</string>
+    <string name="plugin_uninstall_failed">فشل إزالة المكوّن</string>
+    <string name="plugin_action">تشغيل</string>
+    <string name="plugin_action_success">تم تنفيذ العملية</string>
+    <string name="plugin_action_failed">فشل تنفيذ العملية</string>
+    <string name="plugin_quick_action_success">تم التنفيذ بنجاح</string>
+    <string name="plugin_quick_action_failed">فشل التنفيذ</string>
+    <string name="plugin_config">إعداد</string>
+    <string name="plugin_config_title">إعداد %1$s</string>
+    <string name="plugin_config_saved">تم حفظ الإعدادات</string>
+    <string name="plugin_log_title">مخرجات التنفيذ</string>
+    <string name="plugin_log_empty">لا توجد سجلات تنفيذ بعد</string>
+    <string name="plugin_log_page_title">سجلات المكونات</string>
+    <string name="plugin_log_all_empty">لم تُنتج أي مكونات سجلات بعد</string>
+    <string name="plugin_log_clear">مسح السجلات</string>
+    <string name="plugin_log_cleared">تم مسح السجلات</string>
+    <string name="plugin_log_export">تصدير السجلات</string>
+
+    <string name="home_dialog_uninstall_title">إلغاء التثبيت</string>
+    
+    <string name="home_dialog_uninstall_ap_only">إلغاء تثبيت التصحيح فقط</string>
+    <string name="home_dialog_uninstall_all">إلغاء التثبيت بالكامل</string>
+    <string name="home_dialog_uninstall_ap_only_desc">إزالة AndroidPatch فقط والاحتفاظ بالمدير.</string>
+    <string name="home_dialog_uninstall_all_desc">إزالة AndroidPatch وبدء عملية إلغاء التثبيت الكاملة.</string>
+
+    <string name="kpm_control_dialog_title">التحكم في KPM</string>
+    <string name="kpm_control_dialog_content">الرجاء إدخال معلمات التحكم:</string>
+    <string name="kpm_control_paramters">المعلمات</string>
+    <string name="kpm_control_outMsg">الناتج</string>
+    <string name="kpm_control_ok">نجاح!</string>
+    <string name="kpm_control_failed">فشل!</string>
+    
+    <string name="settings_night_mode_follow_sys">السمة الداكنة تتبع النظام</string>
+    <string name="settings_night_mode_follow_sys_summary">تبديل السمة الداكنة تلقائيًا بناءً على إعدادات النظام</string>
+    <string name="settings_night_theme_enabled">السمة الداكنة</string>
+    
+    <string name="settings_use_system_color_theme">سمة ألوان النظام</string>
+    <string name="settings_use_system_color_theme_summary">استخدام سمة الألوان التي تم إنشاؤها من خلفية الشاشة بواسطة النظام</string>
+    <string name="settings_custom_color_theme">سمة اللون</string>
+
+    <string name="amber_theme">عنبري</string>
+    <string name="blue_theme">أزرق</string>
+    <string name="blue_grey_theme">أزرق رمادي</string>
+    <string name="brown_theme">بني</string>
+    <string name="cyan_theme">سماوي</string>
+    <string name="deep_orange_theme">برتقالي داكن</string>
+    <string name="deep_purple_theme">أرجواني داكن</string>
+    <string name="green_theme">أخضر</string>
+    <string name="indigo_theme">نيلي</string>
+    <string name="light_blue_theme">أزرق فاتح</string>
+    <string name="light_green_theme">أخضر فاتح</string>
+    <string name="lime_theme">ليموني</string>
+    <string name="orange_theme">برتقالي</string>
+    <string name="pink_theme">وردي</string>
+    <string name="purple_theme">أرجواني</string>
+    <string name="red_theme">أحمر</string>
+    <string name="sakura_theme">ساكورا</string>
+    <string name="teal_theme">أزرق مخضر</string>
+    <string name="yellow_theme">أصفر</string>
+    <string name="theme_color">لون السمة</string>
+    <string name="theme_light">فاتح</string>
+    <string name="theme_dark">داكن</string>
+    <string name="theme_system">النظام</string>
+    <string name="loading_modules">جارٍ تحميل الوحدات…</string>
+    <string name="loading_scripts">جارٍ البحث عن البرامج النصية…</string>
+    <string name="loading_themes">جارٍ تحميل السمات…</string>
+    <string name="loading_apis">جارٍ تحميل مصادر واجهة برمجة التطبيقات…</string>
+    <string name="retry">إعادة المحاولة</string>
+
+    <string name="about_app_desc">تطبيق Root مبني على KernelPatch، يسمح بخطاف وظائف النواة دون إعادة تجميع النواة.</string>
+    <string name="about_powered_by">مدعوم من %1$s</string>
+    <string name="about_telegram_group">مجموعة تيليجرام</string>
+    
+    <!-- Online Module Strings -->
+    <string name="online_module_title">وحدة النظام عبر الإنترنت</string>
+    <string name="online_module_download_start">بدء التنزيل: %s</string>
+    <string name="online_module_download_complete">اكتمل التنزيل: %s</string>
+    <string name="online_module_download_notification">جارٍ تنزيل %s. يرجى التحقق من لوحة الإشعارات للتقدم ومجلد التنزيل للملف المكتمل.</string>
+
+    <!-- Online Module Source Strings -->
+    <string name="online_module_source_official">المصدر الرسمي</string>
+    <string name="online_module_source_cluster">مجموعة المستودعات</string>
+    <string name="online_module_source_custom">مستودع مخصص</string>
+    <string name="online_module_source_title">مصدر الوحدات</string>
+    <string name="online_module_repo_url_title">عنوان المستودع</string>
+    <string name="online_module_repo_url_hint">https://example.com/modules.json</string>
+    <string name="online_module_repo_settings">إعدادات المستودع</string>
+
+    <!-- Repo Module Detail Strings -->
+    <string name="repo_module_detail_links">الروابط</string>
+    <string name="repo_module_detail_homepage">الصفحة الرئيسية</string>
+    <string name="repo_module_detail_source">الكود المصدري</string>
+    <string name="repo_module_detail_support">الدعم</string>
+    <string name="repo_module_detail_versions">سجل الإصدارات</string>
+    <string name="repo_module_detail_download">تنزيل وتثبيت</string>
+    <string name="repo_module_detail_by_author">بواسطة %1$s</string>
+    <string name="online_module_repo_browse_title">تصفح المستودعات</string>
+    <string name="online_module_view_modules">عرض الوحدات</string>
+    <string name="online_module_select_repo_hint">اختر مستودعًا لتصفح الوحدات</string>
+    <string name="online_module_enter_url_hint">أدخل عنوان المستودع</string>
+    <string name="online_module_invalid_url">يرجى إدخال عنوان صالح</string>
+    <string name="online_module_explore_repos">استكشاف المستودعات</string>
+    <string name="online_module_repo_count">%1$d مستودعات</string>
+    <string name="online_module_module_count">%1$d+ وحدة</string>
+    <string name="online_module_select_repo">اختر مستودعًا</string>
+    <string name="online_module_enter_url_manually">إدخال العنوان يدويًا</string>
+    <string name="online_module_default_repo">المستودع الافتراضي</string>
+    <string name="online_module_repo_list_title">قائمة المستودعات</string>
+    <string name="online_module_load_error">فشل التحميل، يرجى التحديث والمحاولة مرة أخرى</string>
+    <string name="online_module_no_search_results">لم يتم العثور على وحدات مطابقة</string>
+    <string name="online_module_module_detail_download_count">عدد التنزيلات: %1$s</string>
+    <string name="online_module_module_detail_last_update">آخر تحديث: %1$s</string>
+    <string name="online_module_module_detail_version">الإصدار: %1$s</string>
+    <string name="online_module_module_detail_size">الحجم: %1$s</string>
+    <string name="online_module_module_detail_author">المؤلف: %1$s</string>
+    <string name="online_module_module_detail_description">الوصف: %1$s</string>
+    <string name="online_module_module_detail_suitable">مناسب لـ: %1$s</string>
+    <string name="online_module_module_detail_changelog">سجل التغييرات: %1$s</string>
+    <string name="online_module_module_detail_instructions">تعليمات الاستخدام: %1$s</string>
+
+    <!-- Online KPM Strings -->
+    <string name="online_kpm_title">وحدات النواة عبر الإنترنت</string>
+    <string name="online_kpm_download_start">بدء التنزيل: %s</string>
+    <string name="online_kpm_download_complete">اكتمل التنزيل: %s</string>
+    <string name="online_kpm_download_notification">جارٍ تنزيل %s. يرجى التحقق من لوحة الإشعارات للتقدم ومجلد التنزيل للملف المكتمل。</string>
+
+    <!-- Online Plugin Strings -->
+    <string name="online_plugin_title">المكونات الإضافية عبر الإنترنت</string>
+    <string name="online_plugin_download_start">بدء التنزيل: %s</string>
+    <string name="online_plugin_download_complete">اكتمل التنزيل: %s</string>
+    <string name="online_plugin_download_notification">جارٍ تنزيل %s. يرجى التحقق من لوحة الإشعارات للتقدم ومجلد التنزيل للملف المكتمل。</string>
+
+    <!-- Online Script Strings -->
+    <string name="online_script_title">سكربتات عبر الإنترنت</string>
+    <string name="online_script_download_start">بدء التنزيل: %s</string>
+    <string name="online_script_download_complete">اكتمل التنزيل: %s</string>
+    <string name="online_script_download_notification">جارٍ تنزيل %s</string>
+
+    <!-- Crash Handle Strings -->
+    <string name="crash_handle_title">تقرير التعطل</string>
+    <string name="crash_handle_copy">نسخ</string>
+
+    <!-- About Screen Strings -->
+    <string name="about_app_version">إصدار التطبيق: %s</string>
+    <string name="about_github">GitHub</string>
+    <string name="about_telegram_channel">قناة تيليجرام</string>
+
+    <string name="settings_app_dpi">DPI التطبيق</string>
+    <string name="dpi_apply_settings">تطبيق</string>
+    <string name="dpi_confirm_title">تأكيد تغيير DPI</string>
+    <string name="dpi_confirm_message">تغيير DPI التطبيق من %1$s إلى %2$s؟</string>
+    <string name="settings_alt_icon">أيقونة بديلة</string>
+    <string name="alt_icon_summary">استخدم أيقونة المشغل البديلة</string>
+    <string name="settings_magic_mount">Folk Mount API</string>
+    <string name="settings_magic_mount_summary">تفعيل نظام تركيب الوحدات المدمج</string>
+    <string name="settings_new_app_profile_enabled">الترخيص التلقائي للتطبيقات الجديدة</string>
+    <string name="settings_new_app_profile_enabled_summary">عند التفعيل، ستطبق التطبيقات المثبتة حديثًا وضع الترخيص المحدد أدناه تلقائيًا</string>
+    <string name="settings_new_app_profile_mode">وضع الترخيص الافتراضي</string>
+    <string name="settings_new_app_profile_normal">بدون صلاحية</string>
+    <string name="settings_new_app_profile_root">صلاحية الجذر</string>
+    <string name="settings_new_app_profile_exclude">استبعاد</string>
+    <string name="settings_hide_service">FolkPatch Hide</string>
+    <string name="settings_hide_service_summary">إخفاء حالة فتح قفل محمل الإقلاع إلى حد ما</string>
+
+    <string name="settings_shizuku_service">خدمة Shizuku</string>
+    <string name="settings_shizuku_service_summary">توفير وصول إلى واجهة برمجة التطبيقات بمستوى ADB للتطبيقات التي تدعم Shizuku (خدمة مدمجة، لا تتطلب تطبيقًا خارجيًا)</string>
+    <string name="settings_shizuku_service_running">خادم Shizuku قيد التشغيل</string>
+    <string name="settings_shizuku_started">تم بدء خدمة Shizuku</string>
+    <string name="settings_shizuku_start_failed">فشل بدء خدمة Shizuku</string>
+    <string name="settings_shizuku_stopped">تم إيقاف خدمة Shizuku</string>
+    <string name="settings_shizuku_stop_failed">فشل إيقاف خدمة Shizuku</string>
+    <string name="shizuku_permission_title">السماح لـ %1$s باستخدام Shizuku؟</string>
+    <string name="shizuku_permission_message">سيمكن التطبيق من استدعاء واجهات برمجة تطبيقات النظام بصلاحيات الجذر عبر Shizuku.</string>
+    <string name="shizuku_permission_allow">السماح</string>
+    <string name="shizuku_permission_allow_once">مرة واحدة فقط</string>
+    <string name="shizuku_permission_deny">رفض</string>
+    <string name="shizuku_permission_allow_summary">منح وصول دائم</string>
+    <string name="shizuku_permission_allow_once_summary">السماح لهذه المرة فقط</string>
+    <string name="shizuku_permission_deny_summary">رفض الوصول</string>
+    <string name="shizuku_permission_binder_timeout">تعذّر الاتصال بخدمة Shizuku، يرجى إعادة تشغيل الخدمة والمحاولة مجددًا</string>
+    <string name="shizuku_management_title">إدارة تصريح Shizuku</string>
+    <string name="shizuku_management_empty">لم يتم العثور على تطبيقات متوافقة مع Shizuku</string>
+    <string name="shizuku_management_unavailable">خدمة Shizuku غير قيد التشغيل</string>
+    <string name="shizuku_management_load_failed">فشل تحميل التطبيقات المصرَّح بها</string>
+    <string name="shizuku_management_uid">UID %1$d</string>
+    <string name="shizuku_management_granted">مسموح</string>
+    <string name="shizuku_management_denied">غير مسموح</string>
+    <string name="shizuku_management_update_failed">تعذّر تحديث التصريح</string>
+    <string name="shizuku_management_root_access">صلاحية الجذر</string>
+    <string name="shizuku_management_allowed_title">الوصول إلى Shizuku</string>
+    <string name="shizuku_management_root_access_desc">تنفيذ الأوامر بصلاحية الجذر. عند الإيقاف تعمل بصلاحية shell (UID 2000) ولا يمكنها قراءة البيانات المحمية.</string>
+    <string name="shizuku_management_badge_allowed">مسموح</string>
+    <string name="shizuku_management_badge_denied">مرفوض</string>
+    <string name="shizuku_management_badge_root">ROOT</string>
+    <string name="shizuku_management_badge_shell">SHELL</string>
+    <string name="shizuku_log_title">سجلات Shizuku</string>
+    <string name="shizuku_log_empty">لا توجد سجلات</string>
+    <string name="shizuku_log_refresh">تحديث</string>
+    <string name="shizuku_log_clear">مسح السجلات</string>
+    <string name="shizuku_log_cleared">تم مسح السجلات</string>
+    <string name="shizuku_log_export">تصدير السجلات</string>
+    <string name="shizuku_log_copy">نسخ</string>
+    <string name="shizuku_log_copied">تم النسخ إلى الحافظة</string>
+    <string name="shizuku_log_source_server">سجل الخادم</string>
+    <string name="shizuku_log_source_logcat">Logcat</string>
+    <string name="shizuku_log_search_hint">البحث في السجلات</string>
+<string name="settings_app_title">عنوان التطبيق</string>
+    <string name="app_title_custom">مخصص</string>
+    <string name="settings_custom_app_title">تعيين اسم التطبيق</string>
+    <string name="custom_app_title_dialog_title">اسم التطبيق المخصص</string>
+    <string name="custom_app_title_dialog_hint">أدخل اسم التطبيق</string>
+    <string name="custom_app_title_dialog_confirm">تأكيد</string>
+    <string name="custom_app_title_dialog_empty">لا يمكن أن يكون الاسم فارغاً</string>
+    <string name="cancel">إلغاء</string>
+    <string name="settings_custom_background">خلفية مخصصة</string>
+    <string name="settings_custom_background_enabled">تمكين الخلفية المخصصة</string>
+    <string name="settings_custom_background_opacity">شفافية البطاقة</string>
+    <string name="settings_custom_background_blur">تمويه الخلفية</string>
+    <string name="settings_custom_background_dim">تعتيم الخلفية</string>
+    <string name="settings_custom_background_dual_dim">تمكين تعتيم مزدوج لليوم/الليل</string>
+    <string name="settings_custom_background_dual_dim_desc">ضبط تعتيم الخلفية تلقائيًا للسمات الفاتحة والداكنة</string>
+    <string name="settings_custom_background_day_dim">تعتيم الخلفية في وضع النهار</string>
+    <string name="settings_custom_background_night_dim">تعتيم الخلفية في وضع الليل</string>
+    <string name="settings_multi_background_mode">وضع الخلفيات المتعددة</string>
+    <string name="settings_multi_background_mode_summary">تعيين صور خلفية مختلفة لصفحات مختلفة</string>
+    <string name="settings_select_home_background">خلفية الصفحة الرئيسية</string>
+    <string name="settings_select_kernel_background">خلفية وحدة النواة</string>
+    <string name="settings_select_superuser_background">خلفية المستخدم الخارق</string>
+    <string name="settings_select_system_module_background">خلفية وحدة النظام</string>
+    <string name="settings_select_settings_background">خلفية الإعدادات</string>
+
+    <string name="settings_advanced_title_style">نمط العنوان المتقدم</string>
+    <string name="settings_advanced_title_style_summary">استبدال العنوان العلوي بصورة مخصصة</string>
+    <string name="settings_advanced_title_style_enabled">تمكين نمط العنوان المتقدم</string>
+    <string name="settings_select_title_image">تحديد صورة العنوان</string>
+    <string name="settings_title_image_selected">تم تحديد صورة العنوان</string>
+    <string name="settings_title_image_saved">تم حفظ صورة العنوان بنجاح</string>
+    <string name="settings_title_image_error">فشل حفظ صورة العنوان</string>
+    <string name="settings_clear_title_image">مسح صورة العنوان</string>
+    <string name="settings_clear_title_image_confirm">هل أنت متأكد من أنك تريد مسح صورة العنوان؟</string>
+    <string name="settings_title_image_cleared">تم مسح صورة العنوان</string>
+    <string name="settings_title_image_day_opacity">شفافية وضع النهار</string>
+    <string name="settings_title_image_night_opacity">شفافية وضع الليل</string>
+    <string name="settings_title_image_dim">تعتيم الخلفية</string>
+    <string name="settings_title_image_offset_x">الموضع الأفقي</string>
+
+
+    <!-- Font Settings -->
+    <string name="settings_custom_font">خط مخصص</string>
+    <string name="settings_select_font_file">تحديد ملف الخط</string>
+    <string name="settings_custom_font_enabled">تمكين الخط المخصص</string>
+    <string name="settings_custom_font_summary">استخدام خط TTF مخصص للتطبيق</string>
+    <string name="settings_font_selected">تم تحديد الخط المخصص</string>
+    <string name="settings_custom_font_error">فشل حفظ ملف الخط</string>
+    <string name="settings_custom_font_saved">تم حفظ الخط المخصص بنجاح</string>
+    <string name="settings_clear_font">استعادة الخط الافتراضي</string>
+    <string name="settings_clear_font_confirm">هل أنت متأكد من أنك تريد استعادة الخط الافتراضي؟</string>
+    <string name="settings_font_cleared">تمت استعادة الخط الافتراضي</string>
+    <string name="settings_font_select_hint">حدد ملف خط TTF</string>
+    <string name="settings_select_background_image">تحديد صورة الخلفية</string>
+    <string name="settings_custom_background_summary">تعيين صورة خلفية مخصصة</string>
+    <string name="settings_custom_background_saved">تم حفظ الخلفية بنجاح</string>
+    <string name="settings_custom_background_error">فشل حفظ الخلفية</string>
+    <string name="settings_crop_not_supported">القص غير مدعوم على هذا الجهاز، يتم حفظ الصورة الأصلية</string>
+    <string name="settings_crop_dialog_title">قص الخلفية</string>
+    <string name="settings_crop_dialog_message">هل تريد قص الصورة؟</string>
+    <string name="settings_crop_dialog_crop">نعم</string>
+    <string name="settings_crop_dialog_direct">لا</string>
+    <string name="settings_background_selected">تم تحديد الخلفية</string>
+    <string name="settings_background_image_cleared">تم مسح صورة الخلفية</string>
+    <string name="settings_clear_background">مسح الخلفية</string>
+    <string name="settings_clear_background_confirm">هل أنت متأكد من أنك تريد مسح صورة الخلفية؟</string>
+
+    <string name="settings_launcher_icon">أيقونة اللانشر</string>
+
+    <!-- Video Background Settings -->
+    <string name="settings_video_background">خلفية الفيديو</string>
+    <string name="settings_video_background_summary">استخدام فيديو كخلفية</string>
+    <string name="settings_select_video">تحديد فيديو</string>
+    <string name="settings_video_selected">تم تحديد الفيديو</string>
+    <string name="settings_clear_video_background">مسح خلفية الفيديو</string>
+    <string name="settings_clear_video_background_confirm">هل أنت متأكد من أنك تريد مسح خلفية الفيديو؟</string>
+    <string name="settings_video_background_enabled">تمكين خلفية الفيديو</string>
+    <string name="settings_video_volume">مستوى صوت الفيديو</string>
+    
+    <!-- KPM AutoLoad Strings -->
+
+    
+    <!-- Module Backup/Restore Strings -->
+    <string name="apm_copy_list_title">نسخ القائمة</string>
+    <string name="apm_copy_list_success">تم نسخ قائمة الوحدات</string>
+
+    <!-- APM Bulk Install Strings -->
+    <string name="apm_bulk_install_title">التثبيت المجمع لوحدات النظام</string>
+    <string name="apm_bulk_install_list_title">قائمة الوحدات</string>
+    <string name="apm_bulk_install_add">إضافة وحدات</string>
+    <string name="apm_bulk_install_empty">لم تتم إضافة أي وحدات</string>
+    <string name="apm_bulk_install_action">تثبيت مجمع</string>
+    <string name="apm_bulk_install_log_title">سجل التثبيت المجمع</string>
+    <string name="apm_bulk_install_log_start">بدء التثبيت المجمع...</string>
+    <string name="apm_bulk_install_log_installing">جارٍ تثبيت %1$s</string>
+    <string name="apm_batch_install_full_process">عملية التثبيت الدفعي الكاملة</string>
+    <string name="apm_batch_install_full_process_summary">يتم إجراء التثبيت الدفعي لمواد النظام باستخدام العملية الكاملة</string>
+    <string name="next_module">الوحدة التالية</string>
+    <string name="apm_bulk_install_log_installed">تم تثبيت الوحدة %s.</string>
+    <string name="apm_bulk_install_log_done">اكتملت جميع العمليات.</string>
+    <string name="apm_bulk_install_first_use_text">تتيح لك هذه الميزة تثبيت وحدات متعددة في وقت واحد. إنها طريقة تثبيت سريعة مناسبة للوحدات التي لا تتضمن عمليات مفتاحية أثناء التثبيت. بالنسبة للوحدات التي تتطلب تفاعلات مفاتيح الصوت، يرجى تفعيل وضع التثبيت الكامل في الإعدادات.</string>
+    <string name="apm_bulk_install_remove">إزالة</string>
+    <string name="apm_first_use_title">مرحبًا بك في وحدات النظام</string>
+    <string name="apm_first_use_text">مرحبًا بك في وحدات النظام، يستخدم هذا وحدات متوافقة مع نظام Magisk البيئي. انقر فوق الزر في الزاوية اليمنى السفلية لتثبيت الوحدات. يمكنك أيضًا استخدام المثبت في الأعلى لتثبيت الوحدات بشكل مجمع. يتم توفير ميزة لنسخ احتياطي لجميع الوحدات بنقرة واحدة أيضًا، ولكن لاحظ أن هذا الحل قد لا يكون مناسبًا لجميع الوحدات، لذلك يجب عليك عمل نسخ احتياطية خاصة بك.</string>
+
+    <!-- Welcome Guide -->
+    <string name="welcome_title_1">مرحباً بك في FolkPatch</string>
+    <string name="welcome_desc_1">مدير Root عالي التخصيص وسهل الاستخدام مبني على KernelPatch. اجعل جهازك ملكك حقاً.</string>
+    <string name="welcome_title_2">تخصيص كامل</string>
+    <string name="welcome_desc_2">خصص كل شيء — الألوان والخلفيات والخطوط والأصوات وحتى الاهتزازات. تصفح متجر السمات لاكتشاف المزيد!</string>
+    <string name="welcome_title_3">التحكم في النواة</string>
+    <string name="welcome_desc_3">الوصول إلى ميزات النواة المتقدمة بنقرة واحدة. افتح الإعدادات وانقر على أيقونة الضبط لفتح FolkPatch Hide و Umount و Path Hide.</string>
+    <string name="welcome_title_4">جاهز للانطلاق</string>
+    <string name="welcome_desc_4">أنت جاهز! ابدأ في استكشاف أكثر تجارب Root مرونة. استمتع!</string>
+    <string name="welcome_prev">السابق</string>
+    <string name="welcome_next">التالي</string>
+    <string name="welcome_skip">تخطي</string>
+    <string name="welcome_got_it">ابدأ</string>
+
+
+    
+
+    <!-- Hide Settings Strings -->
+    <string name="home_hide_su_path">إخفاء مسار su القابل للتنفيذ</string>
+    <string name="home_hide_kpatch_version">إخفاء إصدار تصحيح النواة</string>
+    <string name="home_hide_fingerprint">إخفاء البصمة الرقمية</string>
+    <string name="home_hide_zygisk">إخفاء تنفيذ Zygisk</string>
+    <string name="home_hide_mount">إخفاء تنفيذ التثبيت</string>
+    <string name="home_hide_su_path_summary">إخفاء مسار su القابل للتنفيذ في بطاقة المعلومات</string>
+    <string name="home_hide_kpatch_version_summary">إخفاء إصدار تصحيح النواة في بطاقة المعلومات</string>
+    <string name="home_hide_zygisk_summary">إخفاء تنفيذ Zygisk في بطاقة المعلومات</string>
+    <string name="home_hide_mount_summary">إخفاء تنفيذ التثبيت في بطاقة المعلومات</string>
+    <string name="home_hide_fingerprint_summary">إخفاء البصمة الرقمية في بطاقة المعلومات</string>
+
+    
+    
+    <!-- Auto Backup Strings -->
+    <string name="settings_auto_backup_module">النسخ الاحتياطي التلقائي لوحدات النظام</string>
+    <string name="settings_auto_backup_module_summary">النسخ الاحتياطي التلقائي لملف الوحدة إلى الدليل الخاص عند التثبيت</string>
+    <string name="settings_open_backup_dir">فتح دليل النسخ الاحتياطي</string>
+    <string name="backup_dir_empty">دليل النسخ الاحتياطي فارغ</string>
+    <string name="backup_dir_open_failed">فشل فتح دليل النسخ الاحتياطي</string>
+    <string name="auto_backup_failed">فشل النسخ الاحتياطي التلقائي: %s</string>
+    <string name="auto_backup_success">نجح النسخ الاحتياطي التلقائي: %s</string>
+    <string name="settings_auto_backup_boot">النسخ الاحتياطي التلقائي لـ Boot</string>
+    <string name="settings_auto_backup_boot_summary">النسخ الاحتياطي التلقائي لـ Boot إلى التخزين المحلي (Downloads/FolkPatch/BootBackups)</string>
+
+    <!-- Home Layout Strings -->
+    <string name="settings_home_layout_style">نمط تخطيط الشاشة الرئيسية</string>
+    <string name="settings_home_layout_default">واجهة قائمة</string>
+    <string name="settings_home_layout_grid">واجهة شبكة</string>
+    <string name="settings_home_layout_focus">واجهة تركيز</string>
+    <string name="settings_home_layout_sign">واجهة إشارة</string>
+    <string name="settings_home_layout_circle">واجهة دائرية</string>
+    <string name="settings_home_layout_dashboard_pro">واجهة لوحة معلومات</string>
+    <string name="unofficial_version_title">إصدار غير رسمي</string>
+    <string name="unofficial_version_message">أنت تستخدم FolkPatch وهو ليس تطبيقًا رسميًا، يرجى تنزيل التطبيق الرسمي!</string>
+    <string name="go_to_github">اذهب إلى Github</string>
+    <string name="settings_save_theme">حفظ السمة</string>
+    <string name="settings_import_theme">استيراد السمة</string>
+    <string name="settings_theme_saved">تم حفظ السمة</string>
+    <string name="settings_theme_imported">تم استيراد السمة</string>
+    <string name="settings_theme_save_failed">فشل حفظ السمة</string>
+    <string name="settings_theme_import_failed">فشل استيراد السمة</string>
+    <string name="settings_reset_theme">إعادة تعيين السمة</string>
+    <string name="settings_reset_theme_confirm">هل أنت متأكد من أنك تريد إعادة تعيين جميع إعدادات السمة إلى القيم الافتراضية؟ سؤؤدي هذا إلى مسح جميع الخلفيات والخطوط والموسيقى والمؤثرات الصوتية المخصصة.</string>
+    <string name="settings_theme_reset">تمت إعادة تعيين السمة</string>
+    <string name="settings_theme_reset_failed">فشل في إعادة تعيين السمة</string>
+
+    <!-- Theme Strings -->
+    <string name="theme_export_title">تصدير السمة</string>
+    <string name="theme_import_title">استيراد السمة</string>
+    <string name="theme_name">اسم السمة</string>
+    <string name="theme_type">نوع السمة</string>
+    <string name="theme_type_phone">هاتف</string>
+    <string name="theme_type_tablet">جهاز لوحي</string>
+    <string name="theme_version">الإصدار</string>
+    <string name="theme_author">المؤلف</string>
+    <string name="theme_description">الوصف</string>
+    <string name="theme_export_action">تصدير</string>
+    <string name="theme_import_action">استيراد</string>
+    <string name="theme_import_confirm">هل أنت متأكد من أنك تريد استيراد هذه السمة؟</string>
+    <string name="theme_info">معلومات السمة</string>
+
+    <!-- Grid Working Card Background -->
+    <string name="settings_grid_working_card_background">خلفية بطاقة العمل</string>
+    <string name="settings_grid_working_card_background_enabled">تمكين خلفية البطاقة المخصصة</string>
+    <string name="settings_grid_working_card_background_summary">صورة خلفية مخصصة لبطاقة العمل</string>
+    <string name="settings_grid_working_card_background_selected">تم تحديد الخلفية</string>
+    <string name="settings_grid_working_card_dual_opacity">تمكين شفافية مزدوجة لليوم/الليل</string>
+    <string name="settings_grid_working_card_dual_opacity_desc">ضبط شفافية البطاقة تلقائيًا للسمات الفاتحة والداكنة</string>
+    <string name="settings_grid_working_card_day_opacity">شفافية البطاقة في وضع النهار</string>
+    <string name="settings_grid_working_card_night_opacity">شفافية البطاقة في وضع الليل</string>
+    <string name="settings_clear_grid_working_card_background">مسح خلفية البطاقة</string>
+    <string name="settings_clear_grid_working_card_background_confirm">هل أنت متأكد من أنك تريد مسح صورة خلفية البطاقة؟</string>
+    <string name="settings_grid_working_card_background_saved">تم حفظ خلفية البطاقة بنجاح</string>
+    <string name="settings_grid_working_card_background_error">فشل حفظ خلفية البطاقة</string>
+    <string name="settings_grid_working_card_background_cleared">تم مسح خلفية البطاقة</string>
+
+    <!-- Biometric Strings -->
+    <string name="action_biometric">المصادقة البيومترية</string>
+    <string name="msg_biometric">يرجى التحقق من هويتك البيومترية</string>
+    <string name="msg_enable_biometric">تمكين المصادقة البيومترية لطلب التحقق عند فتح التطبيق؟</string>
+    <string name="settings_biometric_login">المصادقة البيومترية</string>
+    <string name="settings_biometric_login_summary">تتطلب مصادقة بيومترية عند فتح التطبيق</string>
+    <string name="settings_strong_biometric">المصادقة البيومترية القوية</string>
+    <string name="settings_strong_biometric_summary">تتطلب المصادقة عند تثبيت/إلغاء تثبيت/تعطيل الوحدات</string>
+
+    <!-- Theme Store Strings -->
+    <string name="theme_store_title">متجر السمات</string>
+    <string name="theme_source_official">رسمي</string>
+    <string name="theme_source_third_party">طرف ثالث</string>
+    <string name="theme_source_local">محلي</string>
+    <string name="theme_store_author">المؤلف: %s</string>
+    <string name="theme_store_version">الإصدار: %s</string>
+    <string name="theme_source">المصدر</string>
+    <string name="theme_store_download_failed">فشل التنزيل</string>
+    <string name="theme_store_download">تنزيل</string>
+    <string name="theme_store_search_hint">ابحث عن سمات...</string>
+
+    <!-- Update Check Strings -->
+    <string name="settings_auto_update_check">التحقق التلقائي من التحديثات</string>
+    <string name="settings_auto_update_check_summary">التحقق تلقائيًا من وجود تحديثات عند بدء تشغيل التطبيق</string>
+    <string name="settings_check_update">التحقق من وجود تحديثات</string>
+    <string name="update_available_title">التحديث متاح</string>
+    <string name="update_available_message">تم اكتشاف أن إصدارك منخفض جدًا، هل تريد تنزيل الإصدار الجديد؟</string>
+    <string name="update_action">تحديث</string>
+    <string name="update_close">إغلاق</string>
+    <string name="update_latest">أنت على أحدث إصدار</string>
+    <string name="update_error">خطأ في التحقق من وجود تحديثات</string>
+    <string name="settings_category_general">عام</string>
+    <string name="settings_app_list_loading_scheme">مخطط تحميل قائمة التطبيقات</string>
+    <string name="settings_app_list_loading_scheme_summary">اختر كيفية تحميل قائمة التطبيقات</string>
+    <string name="app_list_loading_scheme_root_service">RootService (الافتراضي)</string>
+    <string name="app_list_loading_scheme_package_manager">PackageManager (واجهة برمجة تطبيقات النظام)</string>
+    <string name="app_list_loading_scheme_dialog_title">مخطط التحميل</string>
+    <string name="settings_category_appearance">المظهر</string>
+    <string name="settings_appearance_font">إعدادات الخط</string>
+    <string name="settings_appearance_font_summary">تكوين الخط المخصص</string>
+    <string name="settings_appearance_theme">إعدادات المظهر</string>
+    <string name="settings_appearance_theme_summary">متجر المواضيع وحفظ واستيراد وإعادة تعيين</string>
+
+    <string name="settings_nav_custom_icons">أيقونات التنقل المخصصة</string>
+    <string name="settings_nav_custom_icons_summary">استبدال أيقونات الشريط السفلي بصور مخصصة</string>
+    <string name="nav_icon_home">أيقونة الرئيسية</string>
+    <string name="nav_icon_kpm">أيقونة KPM</string>
+    <string name="nav_icon_superuser">أيقونة SuperUser</string>
+    <string name="nav_icon_apm">أيقونة وحدة النظام</string>
+    <string name="nav_icon_settings">أيقونة الإعدادات</string>
+    <string name="nav_icon_select_image">اختيار صورة</string>
+    <string name="nav_icon_clear">إعادة تعيين إلى الافتراضي</string>
+    <string name="nav_icon_custom_selected">مخصص</string>
+    <string name="nav_icon_default">افتراضي</string>
+    <string name="nav_icon_cleared">تم إعادة تعيين الأيقونة</string>
+    <string name="nav_icon_set">تم تحديث الأيقونة</string>
+    <string name="nav_icon_set_failed">فشل حفظ الأيقونة</string>
+
+    <string name="settings_theme_mode">وضع التكوين</string>
+    <string name="settings_theme_mode_summary">التبديل بين المتجر المدمج ووضع توافق المتصفح</string>
+    <string name="theme_mode_builtin">الوضع المدمج</string>
+    <string name="theme_mode_builtin_desc">استخدم متجر السمات المدمج لتصفح وتنزيل وتطبيق السمات</string>
+    <string name="theme_mode_compat">وضع التوافق</string>
+    <string name="theme_mode_compat_desc">استخدم المتصفح لتنزيل السمات مباشرة (للأجهزة التي تواجه مشكلات في الاستيراد)</string>
+    <string name="theme_mode_onboarding_title">اختيار وضع السمة</string>
+    <string name="theme_mode_onboarding_msg">كيف تريد تصفح وتثبيت السمات؟ يمكنك تغيير هذا لاحقًا في الإعدادات.</string>
+    <string name="theme_mode_builtin_label">المتجر المدمج</string>
+    <string name="theme_mode_compat_label">وضع المتصفح</string>
+    <string name="theme_mode_switched">تم تغيير وضع السمة إلى %s</string>
+    <string name="theme_mode_current">الحالي: %s</string>
+    <string name="theme_mode_switch_title">تبديل وضع السمة</string>
+    <string name="theme_mode_switch_msg">سيؤدي تغيير الوضع إلى التأثير على كيفية تصفحك وتثبيت السمات. هل تريد المتابعة؟</string>
+    <string name="settings_appearance_banner">إعدادات اللافتة</string>
+    <string name="settings_appearance_banner_summary">تكوين لافتة الوحدة</string>
+    <string name="settings_appearance_layout">إعدادات التخطيط</string>
+    <string name="settings_appearance_layout_summary">تخطيط الصفحة الرئيسية والتنقل وتخصيص البطاقة</string>
+    <string name="settings_appearance_background">إعدادات الخلفية</string>
+    <string name="settings_appearance_background_summary">خلفية مخصصة وفيديو والعديد من الخلفيات</string>
+    <string name="settings_appearance_night_mode">إعدادات الوضع الليلي</string>
+    <string name="settings_appearance_night_mode_summary">السمة الداكنة وتكوين الألوان</string>
+    <string name="settings_amoled_theme">سمة AMOLED السوداء</string>
+    <string name="settings_amoled_theme_desc">خلفية سوداء بالكامل للوضع الداكن</string>
+    <string name="settings_switch_icon">تمكين مؤشر الزر</string>
+    <string name="settings_switch_icon_desc">إظهار أيقونات الحالة على أزرار التبديل</string>
+    <string name="settings_discrete_slider">شريط تمرير متقطع</string>
+    <string name="settings_discrete_slider_desc">إظهار علامات التدرج على مسار شريط التمرير</string>
+    <string name="settings_category_behavior">السلوك</string>
+    <string name="settings_category_function">الوظيفة</string>
+    <string name="settings_use_legacy_su_page">تفويض المستخدم المتميز لصفحة واحدة</string>
+    <string name="settings_use_legacy_su_page_summary">تم تبديل صفحة المستخدم المتميز إلى تصميم تفويض لصفحة واحدة</string>
+    <string name="settings_category_module">الوحدات</string>
+    <string name="settings_category_security">الأمان</string>
+    
+    <!-- Background Music Strings -->
+    <string name="settings_background_music">موسيقى الخلفية</string>
+    <string name="settings_background_music_summary">تشغيل موسيقى الخلفية عندما يكون التطبيق في المقدمة</string>
+    <string name="settings_background_music_playing">قيد التشغيل: %s</string>
+    <string name="settings_background_music_enabled">تمكين موسيقى الخلفية</string>
+    <string name="settings_select_music_file">تحديد ملف موسيقى</string>
+    <string name="settings_music_selected">تم تحديد الموسيقى</string>
+    <string name="settings_clear_music">مسح الموسيقى</string>
+    <string name="settings_clear_music_confirm">هل أنت متأكد من أنك تريد مسح موسيقى الخلفية؟</string>
+    <string name="settings_music_auto_play">تشغيل تلقائي</string>
+    <string name="settings_music_auto_play_summary">تشغيل الموسيقى تلقائيًا عند فتح التطبيق</string>
+    <string name="settings_music_looping">تشغيل متكرر</string>
+    <string name="settings_music_looping_summary">تكرار الأغنية الحالية</string>
+    <string name="settings_music_volume">مستوى الصوت</string>
+    <string name="settings_music_saved">تم حفظ ملف الموسيقى</string>
+    <string name="settings_music_save_error">فشل حفظ ملف الموسيقى</string>
+    <string name="settings_music_cleared">تم مسح الموسيقى</string>
+    <string name="settings_category_multimedia">الوسائط المتعددة</string>
+    <string name="settings_category_general_summary">اللغة، التحديثات، SELinux، تعديلات النظام</string>
+    <string name="settings_category_appearance_summary">السمة، الألوان، التخطيط، الخلفية، الخطوط</string>
+    <string name="settings_category_behavior_summary">تصحيح أخطاء الويب، سلوك التثبيت، عرض الشاشة الرئيسية</string>
+    <string name="settings_category_security_summary">مصادقة التطبيق والتحقق من عمليات الوحدات</string>
+    <string name="settings_category_backup_summary">نسخ احتياطي محلي، سحابي، WebDAV</string>
+    <string name="settings_category_module_summary">معلومات الوحدات، الفرز، التثبيت الدفعي</string>
+    <string name="settings_category_function_summary">إخفاء FolkPatch، خدمة Umount</string>
+    <string name="settings_category_multimedia_summary">موسيقى الخلفية، الأصوات، الاهتزاز</string>
+    <string name="settings_music_playback_control">التحكم في التشغيل</string>
+
+    <!-- Theme Store Filter -->
+    <string name="theme_store_filter_title">تصفية السمات</string>
+    <string name="theme_store_filter_author">المؤلف</string>
+    <string name="theme_store_filter_author_hint">أدخل اسم المؤلف</string>
+    <string name="theme_store_filter_source">المصدر</string>
+    <string name="theme_store_filter_source_all">الكل</string>
+    <string name="theme_store_filter_type">نوع الجهاز</string>
+    <string name="theme_store_filter_apply">تطبيق</string>
+    <string name="theme_store_filter_reset">إعادة تعيين</string>
+
+    <!-- File Picker -->
+    <string name="file_picker_permission_required">الإذن مطلوب</string>
+    <string name="file_picker_permission_desc">لتصفح الملفات، يرجى منح إذن "الوصول إلى جميع الملفات".</string>
+    <string name="file_picker_grant_permission">منح الإذن</string>
+    <string name="file_picker_cancel">إلغاء</string>
+    <string name="file_picker_internal_storage">التخزين الداخلي</string>
+    <string name="file_picker_no_files">لا توجد ملفات</string>
+    <string name="file_picker_filtered_files">عرض %1$s ملفات</string>
+    <string name="file_picker_close">إغلاق منتقي الملفات</string>
+
+    <!-- HomeV3 Strings -->
+    <string name="home_device_status_title">حالة الجهاز</string>
+    <string name="home_device_status_battery_temp">درجة حرارة البطارية</string>
+    <string name="home_device_status_cpu_load">تحميل وحدة المعالجة المركزية</string>
+    <string name="home_device_status_battery_level">مستوى البطارية</string>
+    <string name="home_storage_title">التخزين</string>
+    <string name="home_storage_internal">التخزين الداخلي</string>
+    <string name="home_storage_ram">ذاكرة الوصول العشوائي</string>
+    <string name="home_storage_zram">ZRAM</string>
+    <string name="home_storage_swap">ملف المبادلة</string>
+    <string name="home_info_kernel">النواة</string>
+    <string name="home_info_superkey">المفتاح الخارق</string>
+    <string name="home_info_auth_auth">مصادقة</string>
+    <string name="home_info_auth_na">غير متاح</string>
+    <string name="home_info_device_slot">فتحة الجهاز</string>
+    <string name="home_info_device_model">طراز الجهاز</string>
+    <string name="home_info_running_mode">وضع التشغيل</string>
+    <string name="home_info_mode_full">كامل</string>
+    <string name="home_info_mode_half">نصف</string>
+    <string name="home_version">النسخة: %s</string>
+    <string name="home_zygisk_implement">تنفيذ Zygisk</string>
+    <string name="home_mount_implement">تنفيذ التثبيت</string>
+
+    <string name="settings_list_card_hide_status_badge">استخدم الإيموجي الكلاسيكي</string>
+    <string name="settings_list_card_hide_status_badge_summary">شارة الحالة في الصفحة الرئيسية تتحول إلى إيموجي كلاسيكي</string>
+    <string name="settings_list_info_show_icons">أيقونات عناصر المعلومات</string>
+    <string name="settings_list_info_show_icons_summary">عرض أيقونة بجانب كل عنصر في بطاقة المعلومات</string>
+    <string name="settings_custom_badge_text">نص الشارة المخصص</string>
+    <string name="settings_custom_badge_text_summary">تعديل عرض نص الشارة، للمتعة فقط</string>
+
+    <!-- Install Mode Select -->
+    <string name="kp_install_methods">تصحيح/تثبيت KernelPatch</string>
+    <string name="restore_boot_methods">حدد boot لاستعادته إلى قسم boot</string>
+
+    <string name="su_backup_list">قائمة النسخ الاحتياطي</string>
+    <string name="su_restore_list">قائمة الاستعادة</string>
+    <string name="backup_success">تم النسخ الاحتياطي بنجاح</string>
+    <!-- Badge Count Settings -->
+    <string name="enable_badge_count">إعدادات عدد الشارات</string>
+    <string name="enable_badge_count_summary">تكوين عرض عدد الشارات لعناصر التنقل</string>
+    <string name="badge_superuser">إظهار شارة المستخدم المتميز</string>
+    <string name="badge_apm">إظهار شارة وحدات النظام</string>
+    <string name="badge_kernel">إظهار شارة وحدة النواة</string>
+    <string name="settings_sound_effect">Sound Effect</string>
+    <string name="settings_sound_effect_summary">Play sound effect on click</string>
+    <string name="settings_sound_effect_enabled">Enabled</string>
+    <string name="settings_sound_effect_playing">Selected: %s</string>
+    <string name="settings_sound_effect_source">مصدر الصوت</string>
+    <string name="settings_sound_effect_source_local">ملف محلي</string>
+    <string name="settings_sound_effect_source_preset">مسبق</string>
+    <string name="settings_sound_effect_preset_title">أصوات مسبقة</string>
+    <string name="settings_select_sound_effect">Select Sound Effect</string>
+    <string name="settings_sound_effect_selected">Sound effect file selected</string>
+    <string name="settings_sound_effect_scope">Effect Scope</string>
+    <string name="settings_sound_effect_scope_global">Global (Anywhere)</string>
+    <string name="settings_sound_effect_scope_bottom_bar">Bottom Bar Only</string>
+    <string name="settings_clear_sound_effect">Clear Sound Effect</string>
+    <string name="settings_clear_sound_effect_confirm">Are you sure you want to clear the sound effect?</string>
+    <string name="settings_sound_effect_cleared">Sound effect cleared</string>
+
+    <string name="settings_startup_sound">صوت بدء التشغيل</string>
+    <string name="settings_startup_sound_summary">تشغيل صوت عند بدء التطبيق</string>
+    <string name="settings_startup_sound_enabled">صوت بدء التشغيل مفعّل</string>
+    <string name="settings_startup_sound_playing">قيد التشغيل: %s</string>
+    <string name="settings_select_startup_sound">اختر صوت بدء التشغيل</string>
+    <string name="settings_startup_sound_selected">تم اختيار صوت بدء التشغيل</string>
+    <string name="settings_clear_startup_sound">مسح صوت بدء التشغيل</string>
+    <string name="settings_clear_startup_sound_confirm">هل أنت متأكد أنك تريد مسح صوت بدء التشغيل؟</string>
+    <string name="settings_startup_sound_cleared">تم مسح صوت بدء التشغيل</string>
+
+    <string name="settings_enable_cloud_backup_summary">النسخ الاحتياطي تلقائيًا من السحابة</string>
+    <string name="settings_configure_webdav">تكوين خدمة WebDAV</string>
+    <string name="webdav_config_title">تكوين WebDAV</string>
+    <string name="webdav_url">رابط WebDAV</string>
+    <string name="webdav_username">اسم المستخدم</string>
+    <string name="webdav_password">كلمة المرور</string>
+    <string name="webdav_uploading">جاري الرفع إلى WebDAV...</string>
+    <string name="webdav_backup_success">نجح النسخ الاحتياطي عبر WebDAV</string>
+    <string name="webdav_backup_failed">فشل النسخ الاحتياطي عبر WebDAV: %s</string>
+    <string name="save">حفظ</string>
+    <string name="test">اختبار</string>
+    <string name="webdav_path_label">المسار (مثال /Backup)</string>
+    <string name="webdav_view_logs">عرض السجلات</string>
+    <string name="webdav_backup_logs_title">سجلات النسخ الاحتياطي</string>
+    <string name="webdav_no_logs">لا توجد سجلات</string>
+    <string name="webdav_clear_logs">مسح</string>
+    <string name="settings_enable_local_backup">تفعيل النسخ الاحتياطي المحلي</string>
+    <string name="settings_enable_local_backup_summary">نسخ احتياطي إلى التخزين المحلي (Downloads/FolkPatch/ModuleBackups)</string>
+    <string name="close">إغلاق</string>
+
+    <!-- Backup Settings -->
+    <string name="settings_category_backup">إعدادات النسخ الاحتياطي</string>
+    <string name="settings_enable_cloud_backup">تفعيل النسخ الاحتياطي السحابي</string>
+    <string name="settings_test_webdav">اختبار اتصال WebDAV</string>
+    <string name="webdav_test_success">نجح الاختبار</string>
+    <string name="webdav_test_failed">فشل الاختبار: %s</string>
+    <string name="patch_output_written_to"> تم التصحيح بنجاح، تم كتابة ملف الإخراج إلى </string>
+    <string name="patch_write_failed"> فشل تصحيح boot.img</string>
+
+    <!-- Script Library Strings -->
+    <string name="script_library">مكتبة السكربتات</string>
+    <string name="script_library_title">مكتبة السكربتات</string>
+    <string name="script_library_empty">لا توجد سكربتات، اضغط على زر الإضافة</string>
+    <string name="script_library_add">إضافة سكربت</string>
+    <string name="script_library_add_title">إضافة سكربت</string>
+    <string name="script_library_select_file">اختيار ملف السكربت</string>
+    <string name="script_library_alias">الاسم المستعار</string>
+    <string name="script_library_alias_hint">أدخل اسم السكربت (اختياري)</string>
+    <string name="script_library_run">تشغيل</string>
+    <string name="script_library_delete">حذف</string>
+    <string name="script_library_path">المسار: %s</string>
+    <string name="script_library_confirm_delete">تأكيد حذف السكربت؟</string>
+    <string name="script_library_delete_success">تم حذف السكربت بنجاح</string>
+    <string name="script_library_delete_failed">فشل حذف السكربت</string>
+    <string name="script_library_add_success">تمت إضافة السكربت بنجاح</string>
+    <string name="script_library_add_failed">فشل إضافة السكربت: %s</string>
+    <string name="script_library_load_failed">فشل تحميل مكتبة السكربتات</string>
+    <string name="script_library_output">مخرجات التنفيذ</string>
+    <string name="script_library_no_output">لا توجد مخرجات</string>
+    <string name="script_library_save_log">حفظ السجل</string>
+    <string name="script_library_log_saved">تم حفظ السجل في %s</string>
+    <string name="script_library_log_save_failed">فشل حفظ السجل: %s</string>
+    <string name="settings_vibration">الاهتزاز واللمس</string>
+    <string name="settings_vibration_summary">الاهتزاز عند اللمس</string>
+    <string name="settings_vibration_enabled">تفعيل الاهتزاز</string>
+    <string name="settings_vibration_intensity">شدة الاهتزاز</string>
+    <string name="settings_vibration_scope">نطاق الاهتزاز</string>
+    <string name="settings_vibration_scope_global">عالمي (في كل مكان)</string>
+    <string name="settings_vibration_scope_bottom_bar">الشريط السفلي فقط</string>
+    <string name="superuser">المستخدم الخارق</string>
+    <string name="module">وحدة</string>
+    <string name="search_modules">بحث في الوحدات...</string>
+    <string name="search_scripts">بحث في السكربتات...</string>
+
+    <!-- Umount Service -->
+    <string name="settings_umount_service">Umount Service</string>
+    <string name="settings_umount_service_summary">تكوين نقاط التثبيت للإلغاء التلقائي عند التشغيل</string>
+    <string name="umount_config_title">تكوين Umount</string>
+    <string name="umount_config_enabled">تفعيل Umount</string>
+    <string name="umount_config_enabled_summary">الإلغاء التلقائي لنقاط التثبيت المحددة عند التشغيل</string>
+    <string name="umount_config_paths_label">مسارات نقاط التثبيت (واحد في كل سطر)</string>
+    <string name="umount_config_paths_placeholder">/system/vendor/app\n/system/vendor/priv-app</string>
+    <string name="umount_config_paths_helper">أدخل مسار نقطة تثبيت واحد في كل سطر لإلغاء التثبيت</string>
+    <string name="umount_config_save">حفظ</string>
+    <string name="umount_config_save_confirm">تأكيد حفظ التكوين؟</string>
+    <string name="umount_config_save_success">تم حفظ التكوين بنجاح</string>
+    <string name="umount_config_save_failed">فشل حفظ التكوين</string>
+
+    <!-- صفحة سماتي -->
+    <string name="my_themes_title">سماتي</string>
+    <string name="my_themes_empty">لا توجد سمات بعد</string>
+    <string name="my_themes_empty_action">تصفح متجر السمات</string>
+    <string name="my_themes_apply">تطبيق السمة</string>
+    <string name="my_themes_delete">حذف السمة</string>
+    <string name="my_themes_delete_confirm">هل أنت متأكد من حذف هذه السمة؟</string>
+    <string name="my_themes_deleted">تم حذف السمة</string>
+    <string name="my_themes_applied">تم تطبيق السمة</string>
+    <string name="my_themes_apply_failed">فشل تطبيق السمة — اضغط مطولاً للحذف وإعادة التنزيل</string>
+    <string name="my_themes_details">تفاصيل السمة</string>
+
+    <!-- حوار التنزيل -->
+    <string name="theme_download_title">جارٍ تنزيل السمة</string>
+    <string name="theme_download_completed">اكتمل التنزيل</string>
+    <string name="theme_download_failed">فشل التنزيل</string>
+    <string name="theme_file_corrupt">ملف السمة تالف، يرجى إعادة التنزيل</string>
+    <string name="theme_file_incomplete">ملف السمة غير مكتمل، يرجى إعادة التنزيل</string>
+    <string name="theme_download_progress">التقدم</string>
+    <string name="theme_download_file">ملف السمة</string>
+    <string name="theme_download_image">صورة المعاينة</string>
+    <string name="theme_download_cancel">إلغاء</string>
+    <string name="theme_download_pause">إيقاف مؤقت</string>
+    <string name="theme_download_resume">استئناف</string>
+    <string name="theme_download_retry">إعادة المحاولة</string>
+    <string name="theme_download_apply">تطبيق السمة</string>
+    <string name="theme_download_go_to_my_themes">سماتي</string>
+    <string name="theme_download_retrying">إعادة المحاولة (%d/3)...</string>
+    <string name="theme_download_preparing">جارٍ تحضير التنزيل...</string>
+    <string name="theme_download_downloading_file">جارٍ تنزيل ملف السمة...</string>
+    <string name="theme_download_downloading_image">جارٍ تنزيل صورة المعاينة...</string>
+    <string name="theme_download_finalizing">جارٍ الانتهاء...</string>
+    <string name="settings_predictive_back">إيماءة العودة التنبؤية</string>
+    <string name="settings_predictive_back_summary">تمكين رسوم إيماءة العودة التنبؤية المتحركة في Android 14+</string>
+
+    <string name="home_device_status_battery_charging">جارٍ الشحن</string>
+    <string name="home_device_status_cpu_temp">درجة حرارة المعالج</string>
+    <string name="home_device_status_memory_trend">اتجاه الذاكرة</string>
+    <string name="home_storage_partitions">أقسام التخزين</string>
+    <string name="home_device_status_cpu_freq">تردد المعالج</string>
+    <string name="home_network_rx">تنزيل</string>
+    <string name="home_network_tx">رفع</string>
+    <string name="settings_home_layout_stats">StatsUI</string>
+    <string name="home_stats_more_options">خيارات أخرى</string>
+    <string name="home_stats_kp_label">KP</string>
+    <string name="home_stats_manager_label">المدير</string>
+    <string name="home_device_status_gpu_load">GPU</string>
+    <string name="home_stats_kernel_modules">وحدات النواة</string>
+    <string name="home_stats_apm_modules">وحدات النظام</string>
+    <string name="home_stats_superusers">المستخدمون الخارقون</string>
+    <string name="settings_kernel_spoof">تكوين التمويه للنواة</string>
+    <string name="settings_kernel_spoof_summary">تمويه إصدار النواة ووقت البناء</string>
+    <string name="settings_kernel_spoof_version">إصدار النواة</string>
+    <string name="settings_kernel_spoof_build_time">وقت بناء النواة</string>
+    <string name="settings_kernel_spoof_restore">استعادة</string>
+
+    <string name="kernel_spoof_enabled">تم تفعيل تمويه النواة</string>
+    <string name="kernel_spoof_disabled_restored">تم تعطيل تمويه النواة واستعادتها</string>
+    <string name="kernel_spoof_failed">فشل تمويه النواة: %d</string>
+    <string name="kernel_spoof_applied">تم تطبيق تمويه النواة</string>
+
+    <string name="settings_path_hide">إخفاء المسار</string>
+    <string name="settings_path_hide_summary">إخفاء الملفات والأدلة من التطبيقات على مستوى النواة</string>
+    <string name="path_hide_paths_label">المسارات المخفية (واحد في كل سطر)</string>
+
+    <string name="path_hide_paths_helper">أدخل مساراً واحداً في كل سطر. المسارات المتطابقة ستعيد ENOENT.</string>
+    <string name="path_hide_save">حفظ</string>
+    <string name="path_hide_enabled">تم تفعيل إخفاء المسار</string>
+    <string name="path_hide_disabled">تم تعطيل إخفاء المسار</string>
+    <string name="path_hide_applied">تم تطبيق إعدادات إخفاء المسار</string>
+    <string name="path_hide_failed">فشلت عملية إخفاء المسار: %d</string>
+    <string name="path_hide_uid_mode">وضع تنفيذ UID</string>
+    <string name="path_hide_uid_mode_summary">إخفاء المسارات لتطبيقات محددة فقط بواسطة UID</string>
+    <string name="path_hide_uids_label">معرّفات UID المستهدفة (واحد في كل سطر)</string>
+    <string name="path_hide_uids_helper">أدخل معرّفات UID للتطبيقات. فقط هذه التطبيقات سيتم إخفاء مساراتها.</string>
+    <string name="path_hide_uid_save">حفظ معرّفات UID</string>
+    <string name="path_hide_uid_mode_enabled">تم تفعيل وضع تنفيذ UID</string>
+    <string name="path_hide_uid_mode_disabled">تم تعطيل وضع تنفيذ UID</string>
+    <string name="path_hide_filter_system">تصفية معرّفات UID النظام</string>
+    <string name="path_hide_filter_system_summary">إخفاء المسارات أيضًا من عمليات الجذر والنظام (UID &lt; 10000)</string>
+    <string name="path_hide_filter_system_enabled">تم تفعيل تصفية معرّفات UID النظام</string>
+    <string name="path_hide_filter_system_disabled">تم تعطيل تصفية معرّفات UID النظام</string>
+    <string name="path_hide_filter_system_warning_title">تحذير</string>
+    <string name="path_hide_filter_system_warning_message">سيؤدي التفعيل إلى إخفاء المسارات أيضًا من عمليات الجذر والنظام (UID &lt; 10000). قد يتسبب ذلك في خلل في بعض وظائف النظام. يرجى الحذر.</string>
+    <string name="path_hide_uid_applied">تم تطبيق القائمة البيضاء لـ UID</string>
+    <string name="path_hide_select_apps">اختر التطبيقات</string>
+    <string name="path_hide_no_apps_selected">لم يتم اختيار أي تطبيق</string>
+    <string name="path_hide_app_removed">تمت إزالة إعدادات %d تطبيق تم إلغاء تثبيته</string>
+    <string name="path_hide_search_apps">البحث عن التطبيقات…</string>
+    <string name="path_hide_show_system">عرض تطبيقات النظام</string>
+    <string name="netisolate_title">عزل الشبكة</string>
+    <string name="netisolate_enable">تم تفعيل عزل الشبكة</string>
+    <string name="netisolate_disable">تم تعطيل عزل الشبكة</string>
+    <string name="netisolate_enable_summary">حظر الوصول إلى الشبكة للتطبيقات المحددة على مستوى النواة</string>
+    <string name="netisolate_uids_label">التطبيقات المحظورة</string>
+    <string name="netisolate_uids_hint">أدخل معرّفات UID للحظر (واحد لكل سطر)</string>
+    <string name="netisolate_no_uids">لا توجد تطبيقات محظورة</string>
+    <string name="settings_search_title">بحث في الإعدادات</string>
+    <string name="settings_search_hint">البحث في الإعدادات…</string>
+    <string name="settings_search_empty_hint">اكتب للبحث في جميع الإعدادات…</string>
+    <string name="settings_no_results">لا توجد نتائج</string>
+
+    <!-- Color Generation -->
+    <string name="color_generation_classic">كلاسيكي</string>
+    <string name="color_generation_custom">مخصص</string>
+    <string name="color_generation_label">وضع الألوان</string>
+
+    <!-- Color Standard -->
+    <string name="color_standard_md3_2021">MD3 2021</string>
+    <string name="color_standard_m3e_2025">M3e 2025</string>
+    <string name="color_standard_label">معيار الألوان</string>
+
+    <!-- Color Style -->
+    <string name="color_style_label">نمط الألوان</string>
+    <string name="color_style_tonal_spot">بقعة نغمية</string>
+    <string name="color_style_vibrant">نابض بالحياة</string>
+    <string name="color_style_content">المحتوى</string>
+    <string name="color_style_expressive">تعبيري</string>
+    <string name="color_style_rainbow">قوس قزح</string>
+    <string name="color_style_fruit_salad">سلطة فواكه</string>
+    <string name="color_style_monochrome">أحادي اللون</string>
+    <string name="color_style_neutral">محايد</string>
+    <string name="color_style_fidelity">دقة</string>
+    <string name="settings_focus_card_background">خلفية بطاقة FocusUI</string>
+    <string name="settings_focus_card_background_enabled">تم تمكين خلفيات بطاقة FocusUI؛ اضغط مطولاً على بطاقة لإدارة خلفيتها</string>
+    <string name="settings_focus_card_background_summary">تمكين خلفيات بطاقة FocusUI وإدارة الخلفية بالضغط المطول</string>
+    <string name="settings_focus_card_dim">تعتيم خلفية البطاقة</string>
+    <string name="settings_focus_card_dual_dim">تمكين التعتيم المزدوج للنهار/الليل</string>
+    <string name="settings_focus_card_dual_dim_desc">ضبط تعتيم خلفية البطاقة تلقائياً للسمات الفاتحة والداكنة</string>
+    <string name="settings_focus_card_day_dim">تعتيم خلفية البطاقة في الوضع النهاري</string>
+    <string name="settings_focus_card_night_dim">تعتيم خلفية البطاقة في الوضع الليلي</string>
+    <string name="settings_focus_card_opacity">شفافية خلفية البطاقة</string>
+    <string name="settings_focus_card_dual_opacity">تمكين الشفافية المزدوجة للنهار/الليل</string>
+    <string name="settings_focus_card_dual_opacity_desc">ضبط شفافية خلفية البطاقة تلقائياً للسمات الفاتحة والداكنة</string>
+    <string name="settings_focus_card_day_opacity">شفافية خلفية البطاقة في الوضع النهاري</string>
+    <string name="settings_focus_card_night_opacity">شفافية خلفية البطاقة في الوضع الليلي</string>
+    <string name="settings_focus_card_kernel">بطاقة النواة</string>
+    <string name="settings_focus_card_app">بطاقة التطبيقات</string>
+    <string name="settings_focus_card_device">بطاقة حالة الجهاز</string>
+    <string name="settings_focus_card_storage">بطاقة التخزين</string>
+    <string name="settings_focus_card_wallpaper_selected">تم تعيين الخلفية</string>
+    <string name="dashboard_card_background_title">خلفية بطاقة لوحة القيادة</string>
+    <string name="settings_dashboard_card_background">خلفية بطاقة لوحة القيادة</string>
+    <string name="settings_dashboard_card_background_enabled">تم تمكين خلفية لوحة القيادة؛ اضغط مطولاً على البطاقة لإدارتها</string>
+    <string name="settings_dashboard_card_background_summary">تمكين خلفية لبطاقة لوحة القيادة DashboardUI</string>
+    <string name="dashboard_card_background_clear">مسح خلفية لوحة القيادة</string>
+    <string name="dashboard_card_background_clear_confirm">هل أنت متأكد من مسح خلفية بطاقة لوحة القيادة؟</string>
+    <string name="dashboard_card_background_saved">تم حفظ خلفية لوحة القيادة بنجاح</string>
+    <string name="dashboard_card_background_error">فشل حفظ خلفية لوحة القيادة</string>
+    <string name="dashboard_card_background_cleared">تم مسح خلفية لوحة القيادة</string>
+    <string name="dashboard_card_background_restore">استعادة الافتراضي</string>
+    <string name="dashboard_card_background_restored">تمت استعادة خلفية لوحة القيادة</string>
+    <string name="settings_dashboard_card_dual_dim">تمكين التعتيم المزدوج للنهار/الليل</string>
+    <string name="settings_dashboard_card_dual_dim_desc">ضبط تعتيم خلفية لوحة القيادة تلقائياً للسمات الفاتحة والداكنة</string>
+    <string name="settings_dashboard_card_day_dim">تعتيم خلفية لوحة القيادة في الوضع النهاري</string>
+    <string name="settings_dashboard_card_night_dim">تعتيم خلفية لوحة القيادة في الوضع الليلي</string>
+    <string name="settings_dashboard_card_opacity">شفافية خلفية لوحة القيادة</string>
+    <string name="settings_dashboard_card_dual_opacity">تمكين الشفافية المزدوجة للنهار/الليل</string>
+    <string name="settings_dashboard_card_dual_opacity_desc">ضبط شفافية خلفية لوحة القيادة تلقائياً للسمات الفاتحة والداكنة</string>
+    <string name="settings_dashboard_card_day_opacity">شفافية خلفية لوحة القيادة في الوضع النهاري</string>
+    <string name="settings_dashboard_card_night_opacity">شفافية خلفية لوحة القيادة في الوضع الليلي</string>
+    <string name="folk_banner_custom_info_title">معلومات الوحدة</string>
+    <string name="folk_banner_custom_info_name">الاسم</string>
+    <string name="folk_banner_custom_info_version">الإصدار</string>
+    <string name="folk_banner_custom_info_author">المؤلف</string>
+    <string name="folk_banner_custom_info_description">الوصف</string>
+    <string name="folk_banner_custom_info_save">حفظ</string>
+    <string name="folk_banner_custom_info_reset">إعادة تعيين</string>
+    <string name="folk_banner_custom_info_saved">تم حفظ معلومات الوحدة لـ %s</string>
+    <string name="folk_banner_custom_info_reset_done">تم إعادة تعيين معلومات الوحدة لـ %s</string>
+    <string name="settings_title_image_permission_required">يرجى منح إذن التخزين لاختيار صورة العنوان</string>
+    <string name="settings_background_permission_required">يرجى منح إذن التخزين لاختيار صورة الخلفية</string>
+    <string name="settings_sound_effect_save_failed">فشل حفظ المؤثر الصوتي</string>
+    <string name="settings_startup_sound_save_failed">فشل حفظ صوت البدء</string>
+    <string name="script_library_downloaded_to">تم التنزيل إلى: %s</string>
+    <string name="script_library_download_failed">فشل التنزيل: %s</string>
+    <string name="settings_new_app_profile_update_failed">فشل تحديث ملف تعريف التطبيق الجديد: %s</string>
+    <string name="settings_info_copy">النسخ بالضغط المطول</string>
+    <string name="settings_info_copy_summary">اضغط مطولاً على عنصر في لوحة معلومات الشاشة الرئيسية لنسخ محتواه</string>
+    <string name="home_info_copied">تم نسخ %1$s</string>
+    <string name="settings_jailbreak_mode">وضع كسر الحماية</string>
+    <string name="settings_jailbreak_mode_summary">قم بتحميل وحدة KernelPatch على نواة أصلية. لا يُسمح بالتثبيت في هذا الوضع.</string>
+    <string name="settings_jailbreak_soft_reboot">إعادة تشغيل ناعمة</string>
+    <string name="settings_jailbreak_soft_reboot_message">تم تحميل الوحدة. هل تريد إعادة تشغيل الإطار الآن؟</string>
+    <string name="settings_jailbreak_restart_framework">إعادة تشغيل الإطار</string>
+    <string name="settings_jailbreak_restart_framework_message">تم تحميل الوحدة. هل تريد إعادة تشغيل إطار Android الآن؟ ستؤدي هذه العملية إلى إعادة تشغيل ناعمة للجهاز (إعادة تشغيل الإطار فقط، وليس النواة).</string>
+    <string name="settings_jailbreak_loaded">تم تحميل وحدة كسر الحماية</string>
+    <string name="settings_jailbreak_failed">فشل تحميل وحدة كسر الحماية</string>
+    <string name="jailbreak_no_patch">لا يُسمح بالتثبيت في وضع كسر الحماية.</string>
+    <string name="jailbreak">كسر الحماية</string>
+    <string name="jailbreak_triggered">تم تفعيل كسر الحماية. انتظر الحصول على صلاحيات الجذر ثم قم بإعادة تشغيل ناعمة.</string>
+    <string name="reboot_soft">إعادة تشغيل ناعمة</string>
+    <string name="kpm_installed">مثبّت</string>
+    <string name="kpm_disabled">معطّل (يسري بعد إعادة التشغيل)</string>
+    <string name="kpm_embedded_unload_invalid">لا يمكن إلغاء تحميل وحدات KPM المضمّنة؛ ستظل فعّالة بعد إعادة التشغيل.</string>
+</resources>
