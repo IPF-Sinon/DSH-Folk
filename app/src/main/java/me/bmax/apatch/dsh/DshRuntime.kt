@@ -629,7 +629,7 @@ object DshRuntime {
      * 而 NODE_OPTIONS 传不了它（node 明确拒绝），只能作为命令行参数。
      *
      * 默认端口 3080 不显式传 --port，避免 commander 的 'argument missing'。
-     * 服务只绑 127.0.0.1（无鉴权），不提供 --host 0.0.0.0 开关。
+     * 服务只绑 127.0.0.1，不提供 --host 0.0.0.0 开关；鉴权由 dsh 自己的登录页负责。
      */
     fun startServer() {
         val p = _state.value.phase
@@ -693,11 +693,18 @@ object DshRuntime {
         }
     }
 
-    /** 轮询端口直到服务可访问或超时。 */
+    /**
+     * 轮询直到服务真能响应 HTTP 或超时。
+     *
+     * 只探 TCP 端口是不够的：端口被别的进程占着（上一次没退干净、用户自己在容器里
+     * 跑了东西）也会 connect 成功，于是首页显示「已就绪」，点开却是别人的页面或直接
+     * 连不上。这里在端口通之后再要一次 HTTP 响应 —— 任何状态码都算（dsh 未登录时
+     * 返回登录页，403 也证明是它在服务）。
+     */
     private suspend fun awaitReady() {
         val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
-            if (portOpen(port())) {
+            if (portOpen(port()) && httpResponds(port())) {
                 _state.update {
                     it.copy(phase = DshPhase.RUNNING, progress = 1f, message = "服务已就绪 · ${it.webUrl}")
                 }
@@ -721,6 +728,25 @@ object DshRuntime {
         java.net.Socket().use { s ->
             s.connect(java.net.InetSocketAddress("127.0.0.1", port), 800)
             true
+        }
+    }.getOrDefault(false)
+
+    /**
+     * 回环 HTTP 是否有响应。
+     *
+     * 任何 HTTP 状态码都算就绪 —— dsh 未登录时返回登录页（200）或 403，都说明服务在跑。
+     * 只有连不上 / 不是 HTTP / 超时才算没起来。
+     */
+    private fun httpResponds(port: Int): Boolean = runCatching {
+        val conn = URL("http://127.0.0.1:$port/").openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 1_500
+            conn.readTimeout = 2_500
+            conn.instanceFollowRedirects = false
+            conn.responseCode > 0
+        } finally {
+            runCatching { conn.disconnect() }
         }
     }.getOrDefault(false)
 
