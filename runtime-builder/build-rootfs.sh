@@ -65,10 +65,13 @@ tar -xJf "$NODE_TAR" -C "$ROOTFS/usr/local" --strip-components=1
 test -x "$ROOTFS/usr/local/bin/node"
 
 echo "==> [3/6] 安装 @deepseek-ai/dsh@${DSH_VERSION}"
-# 用 runner 的 npm 装进目标 rootfs 的前缀。dsh 是纯 JS，无需为 arm64 编译；
-# --ignore-scripts 防止任何 postinstall 在 x86 上生成宿主架构产物。
+# 用 runner（x86_64）的 npm 装进目标 rootfs 的前缀。
+# --os/--cpu 必须显式指定：dsh 依赖 sharp 与 koffi，它们通过 optionalDependencies
+# 按宿主平台挑预编译包，不指定就会装进 linux-x64 的 .node，在手机上一 require 就炸。
+# --ignore-scripts 同时挡掉任何想在 x86 上编译产物的 postinstall。
 npm install --global \
   --prefix "$ROOTFS/usr/local" \
+  --os=linux --cpu=arm64 \
   --ignore-scripts --no-audit --no-fund \
   "@deepseek-ai/dsh@${DSH_VERSION}"
 
@@ -77,10 +80,36 @@ test -d "$DSH_ENTRY"
 DSH_REAL_VERSION="$(node -p "require('$DSH_ENTRY/package.json').version")"
 echo "    dsh = $DSH_REAL_VERSION"
 
-# npm 生成的 bin 软链会指向 runner 路径，重建成容器内相对链接
+# 重建 bin 软链：入口路径从 package.json 的 bin 字段读，不要写死
+# （dsh 的入口是 lib/bin.js，将来改了这里也不用跟着改）。
+# App 侧靠 readlink -f 解析出真实 JS 再交给 node --expose-internals，
+# 所以这个链接必须是容器内可解析的相对链接。
+DSH_BIN_REL="$(node -p "
+  const b = require('$DSH_ENTRY/package.json').bin;
+  typeof b === 'string' ? b : b.dsh
+")"
 rm -f "$ROOTFS/usr/local/bin/dsh"
-ln -s "../lib/node_modules/@deepseek-ai/dsh/bin/dsh.js" "$ROOTFS/usr/local/bin/dsh" 2>/dev/null \
-  || ln -s "../lib/node_modules/@deepseek-ai/dsh/dist/cli.js" "$ROOTFS/usr/local/bin/dsh"
+ln -s "../lib/node_modules/@deepseek-ai/dsh/${DSH_BIN_REL}" "$ROOTFS/usr/local/bin/dsh"
+test -f "$ROOTFS/usr/local/lib/node_modules/@deepseek-ai/dsh/${DSH_BIN_REL}"
+echo "    入口 = ${DSH_BIN_REL}"
+
+# node-pty 把所有平台的预编译产物打在同一个包里（win32 那两份各 12 MB），
+# 只留 linux-arm64：既减掉约 24 MB，也让下面的异架构自检不必给它开特例。
+find "$ROOTFS/usr/local/lib/node_modules" -type d -name prebuilds | while read -r d; do
+  find "$d" -mindepth 1 -maxdepth 1 -type d ! -name "linux-arm64" -exec rm -rf {} +
+done
+
+# 架构自检：任何 linux-x64 / darwin / win32 的原生模块留在 rootfs 里都是隐患，
+# 手机上 require 到就是 ENOEXEC。CI 阶段直接失败比让用户在设备上排查便宜得多。
+BAD_NATIVE="$(find "$ROOTFS/usr/local/lib/node_modules" -name "*.node" \
+  \( -path "*linux-x64*" -o -path "*darwin*" -o -path "*win32*" -o -path "*x64*" \) 2>/dev/null || true)"
+if [ -n "$BAD_NATIVE" ]; then
+  echo "!! rootfs 里出现非 arm64 原生模块："
+  printf '   %s\n' $BAD_NATIVE
+  exit 1
+fi
+ARM_NATIVE_COUNT="$(find "$ROOTFS/usr/local/lib/node_modules" -name "*.node" 2>/dev/null | wc -l)"
+echo "    原生模块 ${ARM_NATIVE_COUNT} 个，未发现异架构产物"
 
 echo "==> [4/6] 容器内初始设置"
 install -d -m 700 "$ROOTFS/root/.dsh"
