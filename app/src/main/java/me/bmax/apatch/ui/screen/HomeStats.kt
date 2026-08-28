@@ -5,11 +5,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,92 +17,56 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import com.ramcosta.composedestinations.generated.destinations.InstallModeSelectScreenDestination
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
-import me.bmax.apatch.apApp
 import me.bmax.apatch.ui.component.chart.ModulePieChart
-import me.bmax.apatch.ui.component.chart.rememberPieSliceDataFromCounts
 import me.bmax.apatch.ui.component.chart.SystemAreaChart
 import me.bmax.apatch.ui.component.chart.SystemLineChart
-import me.bmax.apatch.util.Version
-import me.bmax.apatch.util.Version.getManagerVersion
+import me.bmax.apatch.ui.component.chart.rememberPieSliceDataFromCounts
+import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.ui.viewmodel.DashboardViewModel
+import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
 import me.bmax.apatch.ui.viewmodel.SystemMonitorState
 import me.bmax.apatch.ui.viewmodel.TimeSeriesData
-import me.bmax.apatch.util.AppData
-import me.bmax.apatch.ui.theme.BackgroundConfig
-import kotlin.math.roundToInt
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 
+/**
+ * 统计风格首页。
+ *
+ * 形制不变：顶部状态区（列表卡或网格双卡，由 stats_top_layout 决定）+ 系统监控图表 +
+ * 饼图统计 + 信息卡 + 了解更多卡；宽屏双栏。
+ * 语义换成 DSH：状态区显示运行时，饼图从「KPM/APM/超级用户」改成插件的启用/停用/可更新。
+ */
 @Composable
 fun HomeScreenStats(
     innerPadding: PaddingValues,
-    navigator: DestinationsNavigator,
-    kpState: APApplication.State,
-    apState: APApplication.State
+    navigator: DestinationsNavigator
 ) {
     val viewModel: DashboardViewModel = viewModel()
     val uiState by viewModel.dashboardUiState.collectAsStateWithLifecycle()
     val timeSeries by viewModel.timeSeriesData.collectAsStateWithLifecycle()
 
-    val isJailbreak = LocalHomeJailbreakState.current.isActive
-
-    // Check if update notification is blocked (including when jailbreak mode is active)
-    val kpState = if (kpState == APApplication.State.KERNELPATCH_NEED_UPDATE && (apApp.isKernelPatchUpdateBlocked() || isJailbreak)) {
-        APApplication.State.KERNELPATCH_INSTALLED
-    } else {
-        kpState
+    val pluginViewModel: DshPluginViewModel = viewModel()
+    LaunchedEffect(Unit) {
+        if (pluginViewModel.plugins.isEmpty()) pluginViewModel.refresh()
     }
 
-    val showCoreCards = kpState != APApplication.State.UNKNOWN_STATE || isJailbreak
-    if (showCoreCards) {
-        LaunchedEffect(Unit) {
-            AppData.DataRefreshManager.ensureCountsLoaded()
-        }
-    }
-    val superuserCount by AppData.DataRefreshManager.superuserCount.collectAsStateWithLifecycle()
-    val apmModuleCount by AppData.DataRefreshManager.apmModuleCount.collectAsStateWithLifecycle()
-    val kernelModuleCount by AppData.DataRefreshManager.kernelModuleCount.collectAsStateWithLifecycle()
+    val state = LocalDshHomeState.current
+    // 图表与统计只在运行时已装好后才有意义，未安装时不启动轮询
+    val isReady = state.installed
 
-    LifecycleStartEffect(Unit) {
-        viewModel.startPeriodicPolling()
-        onStopOrDispose {
-            viewModel.stopPeriodicPolling()
-        }
-    }
-
-    val showUninstallDialog = remember { mutableStateOf(false) }
-    if (showUninstallDialog.value) {
-        UninstallDialog(showDialog = showUninstallDialog, navigator)
-    }
-
-    val hideApatchCard = APApplication.sharedPreferences.getBoolean("hide_apatch_card", false)
-    val isInstalled = kpState != APApplication.State.UNKNOWN_STATE || isJailbreak
+    val hideAboutCard = APApplication.sharedPreferences.getBoolean("hide_apatch_card", false)
     val statsTopLayout = APApplication.sharedPreferences.getString("stats_top_layout", "list") ?: "list"
     val useGridTop = statsTopLayout == "grid"
     val isWallpaperMode = BackgroundConfig.isCustomBackgroundEnabled &&
         (BackgroundConfig.customBackgroundUri != null || BackgroundConfig.isMultiBackgroundEnabled)
 
-    var zygiskImplement by remember { mutableStateOf("None") }
-    var mountImplement by remember { mutableStateOf("None") }
-    if (isInstalled) {
-        LaunchedEffect(Unit) {
-            withContext(Dispatchers.IO) {
-                try {
-                    zygiskImplement = me.bmax.apatch.util.getZygiskImplement()
-                    mountImplement = me.bmax.apatch.util.getMountImplement()
-                } catch (_: Exception) {}
-            }
-        }
-    }
-
-    LifecycleStartEffect(isInstalled) {
-        if (isInstalled) {
+    LifecycleStartEffect(isReady) {
+        if (isReady) {
             viewModel.startPeriodicPolling()
         }
         onStopOrDispose {
@@ -126,24 +88,19 @@ fun HomeScreenStats(
             if (isWallpaperMode) { Spacer(Modifier.height(8.dp)) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (useGridTop) {
-                    StatsGridTopSection(kpState, apState, navigator, showUninstallDialog)
+                    StatsGridTopSection(navigator)
                 } else {
-                    StatusCardCircle(kpState, apState, navigator, showUninstallDialog)
-                    if (kpState != APApplication.State.UNKNOWN_STATE && apState != APApplication.State.UNKNOWN_STATE && apState != APApplication.State.ANDROIDPATCH_INSTALLED) {
-                        AStatusCardCircle(apState)
-                    }
+                    StatusCardCircle()
                 }
-                if (isInstalled) {
+                if (isReady) {
                     SystemMonitoringSection(uiState.systemMonitor, timeSeries)
                 }
                 HomeBottomSpacer()
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                if (isInstalled) {
-                    ModuleStatisticsSection(superuserCount, apmModuleCount, kernelModuleCount)
-                }
-                SystemInfoCard(kpState, apState, zygiskImplement, mountImplement)
-                if (!hideApatchCard) {
+                PluginStatisticsSection(pluginViewModel)
+                InfoCardCircle()
+                if (!hideAboutCard) {
                     LearnMoreCardV4()
                 }
                 HomeBottomSpacer()
@@ -159,19 +116,16 @@ fun HomeScreenStats(
         ) {
             if (isWallpaperMode) { Spacer(Modifier.height(8.dp)) }
             if (useGridTop) {
-                StatsGridTopSection(kpState, apState, navigator, showUninstallDialog)
+                StatsGridTopSection(navigator)
             } else {
-                StatusCardCircle(kpState, apState, navigator, showUninstallDialog)
-                if (kpState != APApplication.State.UNKNOWN_STATE && apState != APApplication.State.UNKNOWN_STATE && apState != APApplication.State.ANDROIDPATCH_INSTALLED) {
-                    AStatusCardCircle(apState)
-                }
+                StatusCardCircle()
             }
-            if (isInstalled) {
+            if (isReady) {
                 SystemMonitoringSection(uiState.systemMonitor, timeSeries)
-                ModuleStatisticsSection(superuserCount, apmModuleCount, kernelModuleCount)
             }
-            SystemInfoCard(kpState, apState, zygiskImplement, mountImplement)
-            if (!hideApatchCard) {
+            PluginStatisticsSection(pluginViewModel)
+            InfoCardCircle()
+            if (!hideAboutCard) {
                 LearnMoreCardV4()
             }
             HomeBottomSpacer()
@@ -479,12 +433,15 @@ private fun SystemMonitoringSection(
 }
 
 @Composable
-private fun ModuleStatisticsSection(
-    superuserCount: Int,
-    apmModuleCount: Int,
-    kernelModuleCount: Int,
+private fun PluginStatisticsSection(
+    viewModel: DshPluginViewModel,
     modifier: Modifier = Modifier
 ) {
+    val plugins = viewModel.plugins
+    val enabledCount = plugins.count { it.enabled }
+    val disabledCount = plugins.size - enabledCount
+    val updatableCount = viewModel.updatableCount
+
     TonalCard(modifier = modifier) {
         Row(
             modifier = Modifier
@@ -492,15 +449,16 @@ private fun ModuleStatisticsSection(
                 .padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            val totalCount = kernelModuleCount + apmModuleCount + superuserCount
             ModulePieChart(
                 data = rememberPieSliceDataFromCounts(
-                    kernelModules = kernelModuleCount,
-                    apmModules = apmModuleCount,
-                    superusers = superuserCount,
-                    apmLabel = stringResource(R.string.apm)
+                    kernelModules = enabledCount,
+                    apmModules = disabledCount,
+                    superusers = updatableCount,
+                    kpmLabel = stringResource(R.string.dsh_stats_enabled),
+                    apmLabel = stringResource(R.string.dsh_stats_disabled),
+                    suLabel = stringResource(R.string.dsh_stats_updatable),
                 ),
-                centerLabel = if (totalCount > 0) totalCount.toString() else "--",
+                centerLabel = if (plugins.isNotEmpty()) plugins.size.toString() else "--",
                 modifier = Modifier.size(140.dp)
             )
 
@@ -509,19 +467,19 @@ private fun ModuleStatisticsSection(
                 modifier = Modifier.align(Alignment.CenterVertically)
             ) {
                 StatRow(
-                    label = stringResource(R.string.home_stats_kernel_modules),
-                    value = kernelModuleCount.toString(),
-                    icon = Icons.Outlined.DeveloperBoard
+                    label = stringResource(R.string.dsh_stats_enabled),
+                    value = enabledCount.toString(),
+                    icon = Icons.Outlined.CheckCircle
                 )
                 StatRow(
-                    label = stringResource(R.string.home_stats_apm_modules),
-                    value = apmModuleCount.toString(),
-                    icon = Icons.Outlined.Extension
+                    label = stringResource(R.string.dsh_stats_disabled),
+                    value = disabledCount.toString(),
+                    icon = Icons.Outlined.Block
                 )
                 StatRow(
-                    label = stringResource(R.string.home_stats_superusers),
-                    value = superuserCount.toString(),
-                    icon = Icons.Outlined.Shield
+                    label = stringResource(R.string.dsh_stats_updatable),
+                    value = updatableCount.toString(),
+                    icon = Icons.Outlined.SystemUpdate
                 )
             }
         }
@@ -656,15 +614,10 @@ private fun formatFreq(khz: Long): String {
     }
 }
 
+
 @Composable
-private fun StatsGridTopSection(
-    kpState: APApplication.State,
-    apState: APApplication.State,
-    navigator: DestinationsNavigator,
-    showUninstallDialog: MutableState<Boolean>
-) {
-    val managerVersion = Version.getManagerVersion()
-    val isJailbreak = LocalHomeJailbreakState.current.isActive
+private fun StatsGridTopSection(navigator: DestinationsNavigator) {
+    val state = LocalDshHomeState.current
 
     Row(
         modifier = Modifier
@@ -676,16 +629,7 @@ private fun StatsGridTopSection(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight(),
-            kpState = kpState,
-            apState = apState,
-            onClick = {
-                when (kpState) {
-                    APApplication.State.UNKNOWN_STATE -> navigator.navigate(InstallModeSelectScreenDestination)
-                    APApplication.State.KERNELPATCH_NEED_UPDATE -> navigator.navigate(InstallModeSelectScreenDestination)
-                    APApplication.State.KERNELPATCH_INSTALLED -> {}
-                    else -> navigator.navigate(InstallModeSelectScreenDestination)
-                }
-            }
+            onClick = { state.primaryAction() }
         )
 
         Column(
@@ -696,44 +640,19 @@ private fun StatsGridTopSection(
         ) {
             SmallInfoCard(
                 modifier = Modifier.weight(1f),
-                title = if (isJailbreak) stringResource(R.string.settings_jailbreak_mode) else stringResource(R.string.kernel_patch),
-                value = if (isJailbreak) {
-                    stringResource(R.string.home_working)
-                } else if (kpState != APApplication.State.UNKNOWN_STATE) {
-                    "${Version.installedKPVString()} (${managerVersion.second})"
-                } else {
-                    "N/A"
-                },
-                icon = if (isJailbreak) Icons.Filled.LockOpen else Icons.Outlined.Extension,
-                onClick = {
-                    if (kpState == APApplication.State.KERNELPATCH_NEED_UPDATE) {
-                        navigator.navigate(InstallModeSelectScreenDestination)
-                    }
-                }
+                title = stringResource(R.string.dsh_run_mode),
+                value = state.runtimeLabel,
+                icon = Icons.Outlined.Speed,
+                onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) }
             )
 
             SmallInfoCard(
                 modifier = Modifier.weight(1f),
-                title = stringResource(R.string.android_patch),
-                value = when (apState) {
-                    APApplication.State.ANDROIDPATCH_INSTALLED -> "Active"
-                    APApplication.State.ANDROIDPATCH_NEED_UPDATE -> "Update"
-                    APApplication.State.ANDROIDPATCH_INSTALLING -> "..."
-                    else -> "Inactive"
-                },
-                icon = Icons.Outlined.Android,
-                onClick = {
-                    if (apState == APApplication.State.ANDROIDPATCH_INSTALLED) {
-                        showUninstallDialog.value = true
-                    } else if (apState != APApplication.State.ANDROIDPATCH_NOT_INSTALLED && kpState == APApplication.State.KERNELPATCH_INSTALLED) {
-                        APApplication.installApatch()
-                    }
-                }
+                title = stringResource(R.string.dsh_permission),
+                value = state.permLabel,
+                icon = Icons.Outlined.Security,
+                onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) }
             )
         }
-    }
-
-    if (kpState != APApplication.State.UNKNOWN_STATE && apState != APApplication.State.UNKNOWN_STATE && apState != APApplication.State.ANDROIDPATCH_INSTALLED) {
-        AStatusCard(apState)
     }
 }

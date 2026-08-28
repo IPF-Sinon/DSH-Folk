@@ -1,94 +1,91 @@
 package me.bmax.apatch.ui.screen
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import android.content.ActivityNotFoundException
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.RestartAlt
-import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.Extension
-import androidx.compose.material3.*
-import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.rememberAsyncImagePainter
-import com.ramcosta.composedestinations.generated.destinations.InstallModeSelectScreenDestination
-import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import me.bmax.apatch.APApplication
-import me.bmax.apatch.R
-import me.bmax.apatch.ui.theme.BackgroundConfig
-import me.bmax.apatch.util.Version
-import androidx.compose.foundation.isSystemInDarkTheme
-
-import androidx.compose.ui.draw.alpha
 import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
-import android.os.Build
-import me.bmax.apatch.apApp
-import me.bmax.apatch.util.Version.getManagerVersion
-import me.bmax.apatch.util.ui.HomeBottomSpacer
-import android.content.ActivityNotFoundException
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
-import kotlinx.coroutines.Dispatchers
+import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
+import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.BackgroundOptionsDialog
 import me.bmax.apatch.ui.component.rememberConfirmDialog
+import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.ui.theme.BackgroundManager
 import me.bmax.apatch.util.PermissionUtils
+import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.showToast
 
-private val managerVersion = getManagerVersion()
-
+/**
+ * 网格风格首页（原 KernelSU 风格布局）。
+ *
+ * 形制不变：左侧一张大状态卡（支持自定义卡片背景图 + 长按换图），右侧上下两张小卡，
+ * 下面一张信息卡。语义换成 DSH 运行时：大卡显示运行阶段，小卡显示运行方式与权限通道。
+ */
 @Composable
 fun HomeScreenV2(
     paddingValues: PaddingValues,
     navigator: DestinationsNavigator,
-    kpState: APApplication.State,
-    apState: APApplication.State
+    showInfoIcons: Boolean = false
 ) {
     val scrollState = rememberScrollState()
-    
-    // Check if update notification is blocked (including when jailbreak mode is active)
-    val isJailbreak = LocalHomeJailbreakState.current.isActive
-    val kpState = if (kpState == APApplication.State.KERNELPATCH_NEED_UPDATE && (apApp.isKernelPatchUpdateBlocked() || isJailbreak)) {
-        APApplication.State.KERNELPATCH_INSTALLED
-    } else {
-        kpState
-    }
-    
-    val apState = if (apState == APApplication.State.ANDROIDPATCH_NEED_UPDATE && apApp.isAndroidPatchUpdateBlocked()) {
-        APApplication.State.ANDROIDPATCH_INSTALLED
-    } else {
-        apState
-    }
-    
-    val showUninstallDialog = remember { mutableStateOf(false) }
+    val state = LocalDshHomeState.current
 
-    if (showUninstallDialog.value) {
-        UninstallDialog(showDialog = showUninstallDialog, navigator)
-    }
-    
     Column(
         modifier = Modifier
             .padding(paddingValues)
@@ -97,94 +94,48 @@ fun HomeScreenV2(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Spacer(Modifier.height(0.dp))
-        
-        // Top Section: Split into Left (Status) and Right (Details)
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Left: Big Status Card
             StatusCardBig(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
-                kpState = kpState,
-                apState = apState,
-                onClick = {
-                    when (kpState) {
-                        APApplication.State.UNKNOWN_STATE -> navigator.navigate(InstallModeSelectScreenDestination)
-                        APApplication.State.KERNELPATCH_NEED_UPDATE -> navigator.navigate(InstallModeSelectScreenDestination)
-                        APApplication.State.KERNELPATCH_INSTALLED -> {} 
-                        else -> navigator.navigate(InstallModeSelectScreenDestination)
-                    }
-                }
+                onClick = { state.primaryAction() }
             )
-            
-            // Right: Two Small Cards
+
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Top Right: KP Version
+                // 运行方式：proot / proroot，点进权限与功能设置切换
                 SmallInfoCard(
                     modifier = Modifier.weight(1f),
-                    title = stringResource(R.string.kernel_patch),
-                    value = if (kpState != APApplication.State.UNKNOWN_STATE) "${Version.installedKPVString()} (${managerVersion.second})" else "N/A",
-                    icon = Icons.Outlined.Extension,
-                    onClick = {
-                        if (kpState == APApplication.State.KERNELPATCH_NEED_UPDATE) {
-                             navigator.navigate(InstallModeSelectScreenDestination)
-                        }
-                    }
+                    title = stringResource(R.string.dsh_run_mode),
+                    value = state.runtimeLabel,
+                    icon = Icons.Outlined.Speed,
+                    onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) }
                 )
-                
-                // Bottom Right: AP Version
+
+                // 权限通道：Root / Shizuku / 无线 ADB / 未获取
                 SmallInfoCard(
                     modifier = Modifier.weight(1f),
-                    title = stringResource(R.string.android_patch),
-                    value = when(apState) {
-                        APApplication.State.ANDROIDPATCH_INSTALLED -> "Active"
-                        APApplication.State.ANDROIDPATCH_NEED_UPDATE -> "Update"
-                        APApplication.State.ANDROIDPATCH_INSTALLING -> "..."
-                        else -> "Inactive"
-                    },
-                    icon = Icons.Outlined.Android,
-                    onClick = {
-                        if (apState == APApplication.State.ANDROIDPATCH_INSTALLED) {
-                            showUninstallDialog.value = true
-                        } else if (apState != APApplication.State.ANDROIDPATCH_NOT_INSTALLED && kpState == APApplication.State.KERNELPATCH_INSTALLED) {
-                            // Only allow install/uninstall if NOT in "Not Installed" state (per user request to disable click)
-                            // Wait, if it is NOT installed, user wants NO trigger effect.
-                            // So we only allow action if INSTALLED.
-                            // But what about INSTALLING?
-                            // User said: "When system patch (AP) is not installed... click... should be set to no trigger effect"
-                            // So if apState == ANDROIDPATCH_NOT_INSTALLED -> No effect.
-                            APApplication.installApatch()
-                        }
-                    }
+                    title = stringResource(R.string.dsh_permission),
+                    value = state.permLabel,
+                    icon = Icons.Outlined.Security,
+                    onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) }
                 )
             }
         }
 
-        
-        // AndroidPatch Install Card (Only when not installed)
-        if (kpState != APApplication.State.UNKNOWN_STATE && apState != APApplication.State.UNKNOWN_STATE && apState != APApplication.State.ANDROIDPATCH_INSTALLED) {
-            AStatusCard(apState)
-        }
-        
-        // Info Card
-        InfoCard(kpState, apState)
-        
-        // Learn More
-        val hideApatchCard = APApplication.sharedPreferences.getBoolean("hide_apatch_card", false)
-        if (!hideApatchCard) {
-            LearnMoreCard()
-        }
-        
+        DshInfoCard(showInfoIcons)
+
         HomeBottomSpacer()
     }
 }
@@ -193,66 +144,23 @@ fun HomeScreenV2(
 @Composable
 fun StatusCardBig(
     modifier: Modifier = Modifier,
-    kpState: APApplication.State,
-    apState: APApplication.State,
     onClick: () -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val isWorking = kpState == APApplication.State.KERNELPATCH_INSTALLED
-    val isUpdate = kpState == APApplication.State.KERNELPATCH_NEED_UPDATE || kpState == APApplication.State.KERNELPATCH_NEED_REBOOT
+    val context = LocalContext.current
+    val state = LocalDshHomeState.current
+    val isDark = dshIsDarkTheme()
 
-    val jailbreakState = LocalHomeJailbreakState.current
-    val isJailbreak = jailbreakState.isActive
-    val isPermissive = jailbreakState.isPermissive
-    
-    val prefs = APApplication.sharedPreferences
-    val darkThemeFollowSys = prefs.getBoolean("night_mode_follow_sys", false)
-    val nightModeEnabled = prefs.getBoolean("night_mode_enabled", true)
-    val isDark = if (darkThemeFollowSys) {
-        isSystemInDarkTheme()
-    } else {
-        nightModeEnabled
-    }
-    
-    // Colors
-    val useCustomGridBg = BackgroundConfig.isGridWorkingCardBackgroundEnabled && !BackgroundConfig.gridWorkingCardBackgroundUri.isNullOrEmpty()
-    
-    val (baseContainerColor, baseContentColor) = if (isJailbreak) {
-         val containerColor = if (BackgroundConfig.isCustomBackgroundEnabled) {
-             MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = BackgroundConfig.customBackgroundOpacity)
-         } else {
-             MaterialTheme.colorScheme.tertiaryContainer
-         }
-         containerColor to MaterialTheme.colorScheme.onTertiaryContainer
-    } else if (BackgroundConfig.isCustomBackgroundEnabled) {
-         val opacity = BackgroundConfig.customBackgroundOpacity
-         val container = MaterialTheme.colorScheme.primary.copy(alpha = opacity)
-         val content = if (opacity <= 0.1f) {
-             if (isDark) Color.White else Color.Black
-         } else {
-             MaterialTheme.colorScheme.onPrimary
-         }
-         container to content
-    } else {
-        if (isWorking) {
-             MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.onPrimary
-        } else if (isUpdate) {
-             MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
-        } else {
-             // Use secondaryContainer for Unknown/Not Installed (Fixed/Neutral color like original layout)
-             MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
-        }
-    }
-    
+    // 卡片背景图只在「运行中」这一态开放，跟原来 isWorking 的语义对齐
+    val useCustomGridBg = BackgroundConfig.isGridWorkingCardBackgroundEnabled &&
+        !BackgroundConfig.gridWorkingCardBackgroundUri.isNullOrEmpty()
+
+    val (baseContainerColor, baseContentColor) = dshStatusColors(state, isDark)
     val containerColor = if (useCustomGridBg) Color.Transparent else baseContainerColor
-    // If using custom grid bg, force content color to white (or based on some logic), or keep base logic?
-    // Let's assume white text for image background with dimming
     val contentColor = if (useCustomGridBg) Color.White else baseContentColor
 
-    // Long-press card options (only when working and card background feature enabled)
     val scope = rememberCoroutineScope()
     var showCardOptionsDialog by remember { mutableStateOf(false) }
-    val isLongPressEnabled = isWorking && BackgroundConfig.isGridWorkingCardBackgroundEnabled
+    val isLongPressEnabled = state.isRunning && BackgroundConfig.isGridWorkingCardBackgroundEnabled
 
     val pickGridImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -284,24 +192,12 @@ fun StatusCardBig(
                 if (isLongPressEnabled) {
                     Modifier.pointerInput(Unit) {
                         detectTapGestures(
-                            onTap = {
-                                if (isJailbreak || kpState == APApplication.State.UNKNOWN_STATE && isPermissive) {
-                                    jailbreakState.performPrimaryAction()
-                                } else {
-                                    onClick()
-                                }
-                            },
+                            onTap = { onClick() },
                             onLongPress = { showCardOptionsDialog = true }
                         )
                     }
                 } else {
-                    Modifier.clickable {
-                        if (isJailbreak || kpState == APApplication.State.UNKNOWN_STATE && isPermissive) {
-                            jailbreakState.performPrimaryAction()
-                        } else {
-                            onClick()
-                        }
-                    }
+                    Modifier.clickable { onClick() }
                 }
             ),
         shape = RoundedCornerShape(20.dp),
@@ -309,7 +205,6 @@ fun StatusCardBig(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (useCustomGridBg) {
-                // Configure ImageLoader for GIF support explicitly
                 val imageLoader = ImageLoader.Builder(context)
                     .components {
                         if (Build.VERSION.SDK_INT >= 28) {
@@ -319,16 +214,6 @@ fun StatusCardBig(
                         }
                     }
                     .build()
-
-                val prefs = APApplication.sharedPreferences
-                val darkThemeFollowSys = prefs.getBoolean("night_mode_follow_sys", false)
-                val nightModeEnabled = prefs.getBoolean("night_mode_enabled", true)
-                val isDarkTheme = if (darkThemeFollowSys) {
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && context.resources.configuration.uiMode and
-                        android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
-                } else {
-                    nightModeEnabled
-                }
 
                 Image(
                     painter = rememberAsyncImagePainter(
@@ -343,69 +228,55 @@ fun StatusCardBig(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxSize()
-                        .alpha(BackgroundConfig.getEffectiveGridBackgroundOpacity(isDarkTheme))
+                        .alpha(BackgroundConfig.getEffectiveGridBackgroundOpacity(isDark))
                 )
-                // Add a dim layer for readability
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = BackgroundConfig.gridWorkingCardBackgroundDim))
                 )
             }
-            
-            Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
                 Column(modifier = Modifier.align(Alignment.BottomStart)) {
                     if (!BackgroundConfig.isGridWorkingCardTextHidden) {
                         Text(
-                            text = when {
-                                isJailbreak -> stringResource(R.string.settings_jailbreak_mode)
-                                kpState == APApplication.State.KERNELPATCH_INSTALLED -> stringResource(R.string.home_working)
-                                kpState == APApplication.State.KERNELPATCH_NEED_UPDATE -> stringResource(R.string.home_kp_need_update)
-                                kpState == APApplication.State.KERNELPATCH_NEED_REBOOT -> stringResource(R.string.home_ap_cando_reboot)
-                                kpState == APApplication.State.UNKNOWN_STATE -> stringResource(R.string.home_install_unknown)
-                                else -> stringResource(R.string.home_not_installed)
-                            },
+                            text = dshPhaseLabel(state.phase),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = contentColor
                         )
                     }
-                    if (!isJailbreak && isWorking && !BackgroundConfig.isGridWorkingCardModeHidden) {
+                    if (state.isRunning && !BackgroundConfig.isGridWorkingCardModeHidden) {
                         Spacer(Modifier.height(4.dp))
                         val customText = BackgroundConfig.getCustomBadgeText()
                         Text(
-                            text = if (customText != null) "<$customText>" else if (apState == APApplication.State.ANDROIDPATCH_INSTALLED) "<Full>" else "<Half>",
+                            text = customText?.let { "<$it>" } ?: ":${state.port}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = contentColor.copy(alpha = 0.8f)
                         )
                     }
-                    if (isJailbreak && !BackgroundConfig.isGridWorkingCardTextHidden) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.reboot_soft),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = contentColor.copy(alpha = 0.78f),
-                        )
-                    } else if (kpState == APApplication.State.UNKNOWN_STATE && isPermissive) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.jailbreak),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = contentColor.copy(alpha = 0.78f),
+                    if (state.isBusy && !BackgroundConfig.isGridWorkingCardTextHidden) {
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { state.progress.coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp),
+                            color = contentColor,
+                            trackColor = contentColor.copy(alpha = 0.24f),
                         )
                     }
-                } // End of Column
+                }
             }
-            
-            // Icon
+
             if (!BackgroundConfig.isGridWorkingCardCheckHidden) {
                 Icon(
-                    imageVector = when {
-                        jailbreakState.isTriggering -> Icons.Outlined.RestartAlt
-                        isJailbreak -> Icons.Filled.LockOpen
-                        isWorking -> Icons.Filled.CheckCircle
-                        else -> Icons.Filled.Warning
-                    },
+                    imageVector = dshPhaseIcon(state),
                     contentDescription = null,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -416,7 +287,6 @@ fun StatusCardBig(
         }
     }
 
-    // Card Options Dialog
     BackgroundOptionsDialog(
         showDialog = showCardOptionsDialog,
         onDismiss = { showCardOptionsDialog = false },
@@ -459,7 +329,7 @@ fun SmallInfoCard(
     } else {
         MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
     }
-    
+
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
@@ -472,8 +342,8 @@ fun SmallInfoCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = icon, 
-                    contentDescription = null, 
+                    imageVector = icon,
+                    contentDescription = null,
                     modifier = Modifier.size(16.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -489,7 +359,7 @@ fun SmallInfoCard(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                 color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }

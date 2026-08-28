@@ -16,6 +16,20 @@
     <string name="dsh_start">启动</string>
     <string name="dsh_stop">停止</string>
     <string name="dsh_restart">重启</string>
+    <string name="dsh_install_and_start">下载并启动</string>
+    <string name="dsh_working">处理中…</string>
+    <string name="dsh_no_browser">没有可用的浏览器</string>
+    <string name="dsh_hint_tap_to_install">运行时尚未下载，点击开始获取（约 120 MB）。</string>
+    <string name="dsh_hint_tap_to_start">运行时已就绪，点击启动 Harness。</string>
+    <string name="dsh_learn_title">了解 DSH-Folk</string>
+    <string name="dsh_learn_desc">打开项目主页，查看文档与反馈</string>
+    <string name="dsh_stats_plugins">插件</string>
+    <string name="dsh_stats_enabled">已启用</string>
+    <string name="dsh_stats_disabled">已停用</string>
+    <string name="dsh_stats_updatable">可更新</string>
+    <string name="dsh_status">状态</string>
+    <string name="dsh_runtime_version">运行时</string>
+    <string name="dsh_web_port">端口</string>
 
     <string name="dsh_about_powered_by" translatable="false">DeepSeek Harness · Node.js · proot</string>
 

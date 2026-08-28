@@ -20,6 +20,20 @@
     <string name="dsh_start">Start</string>
     <string name="dsh_stop">Stop</string>
     <string name="dsh_restart">Restart</string>
+    <string name="dsh_install_and_start">Download and start</string>
+    <string name="dsh_working">Working…</string>
+    <string name="dsh_no_browser">No browser available</string>
+    <string name="dsh_hint_tap_to_install">Runtime not downloaded yet. Tap to fetch it (about 120 MB).</string>
+    <string name="dsh_hint_tap_to_start">Runtime is ready. Tap to start the harness.</string>
+    <string name="dsh_learn_title">About DSH-Folk</string>
+    <string name="dsh_learn_desc">Open the project page for docs and issues</string>
+    <string name="dsh_stats_plugins">Plugins</string>
+    <string name="dsh_stats_enabled">Enabled</string>
+    <string name="dsh_stats_disabled">Disabled</string>
+    <string name="dsh_stats_updatable">Updatable</string>
+    <string name="dsh_status">Status</string>
+    <string name="dsh_runtime_version">Runtime</string>
+    <string name="dsh_web_port">Port</string>
 
     <!-- 运行方式 -->
     <string name="dsh_mode_proot" translatable="false">proot</string>

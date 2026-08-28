@@ -8,126 +8,70 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.BatteryStd
-import androidx.compose.material.icons.outlined.Extension
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SdStorage
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.*
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import coil.ImageLoader
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
-import com.ramcosta.composedestinations.generated.destinations.InstallModeSelectScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.bmax.apatch.APApplication
-import me.bmax.apatch.apApp
-import me.bmax.apatch.Natives
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.BackgroundOptionsDialog
 import me.bmax.apatch.ui.component.copyableInfo
 import me.bmax.apatch.ui.component.rememberConfirmDialog
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.ui.theme.BackgroundManager
-import me.bmax.apatch.util.SystemInfoCollector
 import me.bmax.apatch.util.PermissionUtils
-import me.bmax.apatch.util.Version
+import me.bmax.apatch.util.SystemInfoCollector
 import me.bmax.apatch.util.Version.getManagerVersion
-import me.bmax.apatch.util.getSELinuxStatus
-import me.bmax.apatch.util.rootShellForResult
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.showToast
+import kotlinx.coroutines.launch
 
 private val managerVersion = getManagerVersion()
 
 @Composable
 fun HomeScreenV3(
     paddingValues: PaddingValues,
-    navigator: DestinationsNavigator,
-    kpState: APApplication.State,
-    apState: APApplication.State
+    navigator: DestinationsNavigator
 ) {
     val scrollState = rememberScrollState()
-    
-    // Check if update notification is blocked (including when jailbreak mode is active)
-    val isJailbreak = LocalHomeJailbreakState.current.isActive
-    val kpState = if (kpState == APApplication.State.KERNELPATCH_NEED_UPDATE && (apApp.isKernelPatchUpdateBlocked() || isJailbreak)) {
-        APApplication.State.KERNELPATCH_INSTALLED
-    } else {
-        kpState
-    }
-    
-    val apState = if (apState == APApplication.State.ANDROIDPATCH_NEED_UPDATE && apApp.isAndroidPatchUpdateBlocked()) {
-        APApplication.State.ANDROIDPATCH_INSTALLED
-    } else {
-        apState
-    }
-    
-    val context = LocalContext.current
+
     // Only enable wallpaper mode (no card shadow) if custom background is actually enabled
-    val isWallpaperMode = BackgroundConfig.isCustomBackgroundEnabled && (BackgroundConfig.customBackgroundUri != null || BackgroundConfig.isMultiBackgroundEnabled)
-    
-    val showUninstallDialog = remember { mutableStateOf(false) }
+    val isWallpaperMode = BackgroundConfig.isCustomBackgroundEnabled &&
+        (BackgroundConfig.customBackgroundUri != null || BackgroundConfig.isMultiBackgroundEnabled)
 
-    val defaultSlot = stringResource(R.string.home_info_auth_na)
-    var deviceSlot by remember { mutableStateOf(defaultSlot) }
-    var zygiskImplement by remember { mutableStateOf("None") }
-    var mountImplement by remember { mutableStateOf("None") }
-
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            try {
-                zygiskImplement = me.bmax.apatch.util.getZygiskImplement()
-                mountImplement = me.bmax.apatch.util.getMountImplement()
-
-                val result = rootShellForResult("getprop ro.boot.slot_suffix")
-                if (result.isSuccess) {
-                    val slot = result.out.firstOrNull()?.trim()?.removePrefix("_")
-                    if (!slot.isNullOrEmpty()) {
-                        deviceSlot = slot.uppercase()
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    if (showUninstallDialog.value) {
-        UninstallDialog(showDialog = showUninstallDialog, navigator)
-    }
-    
     BoxWithConstraints {
         val isWide = maxWidth >= 600.dp && maxWidth > maxHeight
-        
+
         Column(
             modifier = Modifier
                 .padding(paddingValues)
@@ -137,30 +81,21 @@ fun HomeScreenV3(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (isWide) {
-                // Row 1: KernelPatch + APP
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.height(IntrinsicSize.Max)
                 ) {
-                    KernelPatchCard(
-                        kpState = kpState,
-                        navigator = navigator,
+                    HarnessCard(
                         isWallpaperMode = isWallpaperMode,
-                        zygiskImplement = zygiskImplement,
-                        mountImplement = mountImplement,
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     )
-                    AppCard(
-                        apState = apState,
-                        kpState = kpState,
-                        deviceSlot = deviceSlot,
-                        showUninstallDialog = showUninstallDialog,
+                    PermissionCard(
+                        navigator = navigator,
                         isWallpaperMode = isWallpaperMode,
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     )
                 }
-                
-                // Row 2: Device + Storage
+
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.height(IntrinsicSize.Max)
@@ -175,21 +110,8 @@ fun HomeScreenV3(
                     )
                 }
             } else {
-                // Vertical Stack
-                KernelPatchCard(
-                    kpState = kpState,
-                    navigator = navigator,
-                    isWallpaperMode = isWallpaperMode,
-                    zygiskImplement = zygiskImplement,
-                    mountImplement = mountImplement
-                )
-                AppCard(
-                    apState = apState,
-                    kpState = kpState,
-                    deviceSlot = deviceSlot,
-                    showUninstallDialog = showUninstallDialog,
-                    isWallpaperMode = isWallpaperMode
-                )
+                HarnessCard(isWallpaperMode = isWallpaperMode)
+                PermissionCard(navigator = navigator, isWallpaperMode = isWallpaperMode)
                 DeviceStatusCard(isWallpaperMode = isWallpaperMode)
                 StorageCard(isWallpaperMode = isWallpaperMode)
             }
@@ -199,129 +121,104 @@ fun HomeScreenV3(
     }
 }
 
+/**
+ * Harness 卡：原 KernelPatch 卡的位置与形制，语义换成 DSH 运行时。
+ * 卡片背景键沿用 FOCUS_CARD_KERNEL，老 theme.json 里配的卡片壁纸继续生效。
+ */
 @Composable
-private fun KernelPatchCard(
-    kpState: APApplication.State,
-    navigator: DestinationsNavigator,
+private fun HarnessCard(
     isWallpaperMode: Boolean,
-    zygiskImplement: String,
-    mountImplement: String,
     modifier: Modifier = Modifier
 ) {
-    val jailbreakState = LocalHomeJailbreakState.current
-    val isJailbreak = jailbreakState.isActive
-    val isPermissive = jailbreakState.isPermissive
+    val state = LocalDshHomeState.current
+
     MagiskStyleCard(
-        title = if (isJailbreak) stringResource(R.string.settings_jailbreak_mode) else "KernelPatch",
-        icon = if (isJailbreak) Icons.Filled.LockOpen else Icons.Outlined.Extension,
-        actionText = when {
-            isJailbreak -> stringResource(R.string.reboot_soft)
-            kpState == APApplication.State.KERNELPATCH_NEED_UPDATE -> stringResource(R.string.home_kp_cando_update)
-            kpState == APApplication.State.UNKNOWN_STATE && isPermissive -> stringResource(R.string.jailbreak)
-            else -> stringResource(R.string.kpm_install)
-        },
-        showAction = isJailbreak || kpState != APApplication.State.KERNELPATCH_INSTALLED,
-        actionEnabled = !jailbreakState.isTriggering,
+        title = stringResource(R.string.dsh_app_title),
+        icon = Icons.Outlined.Terminal,
+        actionText = dshPrimaryActionLabel(state),
+        showAction = true,
+        actionEnabled = !state.isBusy,
         isWallpaperMode = isWallpaperMode,
-        onActionClick = {
-            if (isJailbreak || kpState == APApplication.State.UNKNOWN_STATE && isPermissive) {
-                jailbreakState.performPrimaryAction()
-            } else {
-                navigator.navigate(InstallModeSelectScreenDestination)
-            }
-        },
+        onActionClick = { state.primaryAction() },
         modifier = modifier,
         cardId = BackgroundConfig.FOCUS_CARD_KERNEL
     ) {
-        if (isJailbreak) {
-            InfoRow(
-                label = stringResource(R.string.settings_jailbreak_mode),
-                value = stringResource(R.string.settings_jailbreak_mode_summary)
-            )
+        InfoRow(
+            label = stringResource(R.string.dsh_status),
+            value = dshPhaseLabel(state.phase)
+        )
+        state.version?.let {
+            InfoRow(label = stringResource(R.string.dsh_runtime_version), value = it)
         }
         InfoRow(
-            label = stringResource(R.string.home_kpatch_version),
-            value = if (kpState != APApplication.State.UNKNOWN_STATE) Version.installedKPVString() else stringResource(R.string.home_not_installed)
+            label = stringResource(R.string.dsh_run_mode),
+            value = state.runtimeLabel
         )
-        if (kpState != APApplication.State.UNKNOWN_STATE && zygiskImplement != "None") {
-            InfoRow(
-                label = stringResource(R.string.home_zygisk_implement),
-                value = zygiskImplement
-            )
+        if (state.isRunning) {
+            InfoRow(label = stringResource(R.string.dsh_web_port), value = state.port.toString())
         }
-        if (kpState != APApplication.State.UNKNOWN_STATE && mountImplement != "None") {
-            InfoRow(
-                label = stringResource(R.string.home_mount_implement),
-                value = mountImplement
-            )
+        val detail = dshPhaseDetail(state)
+        if (detail.isNotEmpty()) {
+            InfoRow(label = stringResource(R.string.dsh_output), value = detail)
         }
-        InfoRow(
-            label = stringResource(R.string.home_info_kernel),
-            value = System.getProperty("os.version") ?: stringResource(R.string.home_selinux_status_unknown)
-        )
-        if (kpState != APApplication.State.UNKNOWN_STATE) {
-            InfoRow(
-                label = stringResource(R.string.home_info_superkey),
-                value = if (APApplication.superKey.isNotEmpty()) stringResource(R.string.home_info_auth_auth) else stringResource(R.string.home_info_auth_na)
+        if (state.isBusy) {
+            Spacer(modifier = Modifier.height(4.dp))
+            LinearProgressIndicator(
+                progress = { state.progress.coerceIn(0f, 1f) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(MaterialTheme.shapes.small),
             )
         }
     }
 }
 
+/**
+ * 权限卡：原 App 卡的位置，显示当前生效的提权通道与设备信息。
+ * 卡片背景键沿用 FOCUS_CARD_APP。
+ */
 @Composable
-private fun AppCard(
-    apState: APApplication.State,
-    kpState: APApplication.State,
-    deviceSlot: String,
-    showUninstallDialog: MutableState<Boolean>,
+private fun PermissionCard(
+    navigator: DestinationsNavigator,
     isWallpaperMode: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val state = LocalDshHomeState.current
+
     MagiskStyleCard(
-        title = stringResource(R.string.app_name),
-        icon = Icons.Outlined.Android,
-        actionText = if (apState == APApplication.State.ANDROIDPATCH_INSTALLED) stringResource(R.string.home_ap_cando_uninstall) else stringResource(R.string.kpm_install),
+        title = stringResource(R.string.dsh_permission),
+        icon = Icons.Outlined.Security,
+        actionText = stringResource(R.string.settings),
         showAction = true,
-        actionEnabled = kpState == APApplication.State.KERNELPATCH_INSTALLED || kpState == APApplication.State.KERNELPATCH_NEED_UPDATE || apState == APApplication.State.ANDROIDPATCH_INSTALLED,
         isWallpaperMode = isWallpaperMode,
-        onActionClick = {
-            if (apState == APApplication.State.ANDROIDPATCH_INSTALLED) {
-                showUninstallDialog.value = true
-            } else if (kpState == APApplication.State.KERNELPATCH_INSTALLED || kpState == APApplication.State.KERNELPATCH_NEED_UPDATE) {
-                APApplication.installApatch()
-            }
-        },
+        onActionClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },
         modifier = modifier,
         cardId = BackgroundConfig.FOCUS_CARD_APP
     ) {
         InfoRow(
-            label = stringResource(R.string.home_apatch_version),
-            value = "${managerVersion.second} (${managerVersion.first})"
+            label = stringResource(R.string.dsh_perm_current),
+            value = state.permLabel
         )
         InfoRow(
-            label = stringResource(R.string.home_info_device_slot),
-            value = deviceSlot
+            label = stringResource(R.string.dsh_adb_paired),
+            value = if (state.perm.adbPaired) {
+                stringResource(R.string.home_info_auth_auth)
+            } else {
+                stringResource(R.string.home_info_auth_na)
+            }
+        )
+        InfoRow(
+            label = stringResource(R.string.app_name),
+            value = "${managerVersion.second} (${managerVersion.first})"
         )
         InfoRow(
             label = stringResource(R.string.home_info_device_model),
             value = Build.MODEL
         )
         InfoRow(
-            label = stringResource(R.string.home_info_running_mode),
-            value = if (apState == APApplication.State.ANDROIDPATCH_INSTALLED)
-                (BackgroundConfig.getCustomBadgeText() ?: stringResource(R.string.home_info_mode_full))
-            else if (kpState == APApplication.State.KERNELPATCH_INSTALLED || kpState == APApplication.State.KERNELPATCH_NEED_UPDATE)
-                (BackgroundConfig.getCustomBadgeText() ?: stringResource(R.string.home_info_mode_half))
-            else
-                stringResource(R.string.home_info_auth_na)
-        )
-        InfoRow(
             label = stringResource(R.string.home_selinux_status),
-            value = getSELinuxStatus()
-        )
-        InfoRow(
-            label = stringResource(R.string.home_su_path),
-            value = if (kpState != APApplication.State.UNKNOWN_STATE) Natives.suPath() else stringResource(R.string.home_info_auth_na)
+            value = me.bmax.apatch.util.getSELinuxStatus()
         )
     }
 }
