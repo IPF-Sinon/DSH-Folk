@@ -388,7 +388,6 @@ object DshPluginRepo {
     }
 }
 
-/** 语义化版本比较（缺位按 0；非数字段落退化为字典序）。 */
 /**
  * semver 比较（够用版）：先比 major.minor.patch，相同再比预发布标识。
  *

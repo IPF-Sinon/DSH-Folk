@@ -264,6 +264,14 @@ private fun DshPluginItem(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
+                // 点赞来自 dsh-market，只有目录收录的插件有；未知（-1）时不占位
+                if (plugin.likes >= 0) {
+                    ModuleLabel(
+                        text = stringResource(R.string.dsh_plugin_likes, formatCount(plugin.likes)),
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
                 if (plugin.updatable) {
                     ModuleLabel(
                         text = stringResource(R.string.apm_update),
