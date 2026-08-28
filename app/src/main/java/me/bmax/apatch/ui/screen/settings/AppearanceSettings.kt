@@ -1013,13 +1013,10 @@ fun AppearanceSettingsContent(
 
                 if (customNavIconsEnabled.value) {
                     Spacer(Modifier.height(8.dp))
-                    val navDestinations = listOf(
-                        Triple("Home", R.string.nav_icon_home, Icons.Filled.Home),
-                        Triple("KModule", R.string.nav_icon_kpm, Icons.Filled.Archive),
-                        Triple("SuperUser", R.string.nav_icon_superuser, Icons.Filled.AdminPanelSettings),
-                        Triple("AModule", R.string.nav_icon_apm, Icons.Filled.Extension),
-                        Triple("Settings", R.string.nav_icon_settings, Icons.Filled.Settings),
-                    )
+                    // 键沿用 BottomBarDestination.iconKey（旧名），保证 theme.json 互通
+                    val navDestinations = me.bmax.apatch.ui.screen.BottomBarDestination.entries.map {
+                        Triple(it.iconKey, it.label, it.iconSelected)
+                    }
 
                     Column {
                         navDestinations.forEach { (destName, labelRes, defaultIcon) ->

@@ -450,9 +450,8 @@
     <string name="settings_nav_custom_icons">自定义导航图标</string>
     <string name="settings_nav_custom_icons_summary">用自定义图片替换底部导航栏图标</string>
     <string name="nav_icon_home">首页图标</string>
-    <string name="nav_icon_kpm">KPM图标</string>
-    <string name="nav_icon_superuser">超级用户图标</string>
-    <string name="nav_icon_apm">系统模块图标</string>
+    <string name="nav_icon_superuser">终端图标</string>
+    <string name="nav_icon_apm">插件图标</string>
     <string name="nav_icon_settings">设置图标</string>
     <string name="nav_icon_clear">重置为默认</string>
     <string name="nav_icon_custom_selected">自定义</string>
@@ -506,11 +505,11 @@
     <string name="settings_music_save_error">保存音乐文件失败</string>
     <string name="settings_music_cleared">音乐已清除</string>
     <string name="settings_category_multimedia">多媒体</string>
-    <string name="settings_category_general_summary">语言、更新、SELinux、系统调整</string>
+    <string name="settings_category_general_summary">语言、更新、动效、图标与名称、DPI</string>
     <string name="settings_category_appearance_summary">主题、颜色、布局、背景、字体</string>
-    <string name="settings_category_behavior_summary">Web调试、安装行为、首页显示</string>
-    <string name="settings_category_security_summary">应用认证与模块操作验证</string>
-    <string name="settings_category_backup_summary">本地备份、云端备份、WebDAV</string>
+    <string name="settings_category_behavior_summary">Web 调试、信息复制、首页卡片、插件角标</string>
+    <string name="settings_category_security_summary">打开应用时的生物识别认证</string>
+    <string name="settings_category_backup_summary">DSH 配置导出导入、WebDAV 同步</string>
     <string name="settings_category_function_summary">运行方式、权限通道、无线 ADB 配对</string>
     <string name="settings_category_multimedia_summary">背景音乐、音效、振动</string>
     <string name="settings_music_playback_control">播放控制</string>

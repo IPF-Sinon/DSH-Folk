@@ -393,9 +393,8 @@
     <string name="settings_nav_custom_icons">自定义导航图标</string>
     <string name="settings_nav_custom_icons_summary">用自定义贴图替换底部导航栏图标</string>
     <string name="nav_icon_home">主界面图标</string>
-    <string name="nav_icon_kpm">KPM图标</string>
-    <string name="nav_icon_superuser">管理员图标</string>
-    <string name="nav_icon_apm">插件图标</string>
+    <string name="nav_icon_superuser">終端圖示</string>
+    <string name="nav_icon_apm">外掛圖示</string>
     <string name="nav_icon_settings">设置图标</string>
     <string name="nav_icon_clear">重置为默认</string>
     <string name="nav_icon_custom_selected">自定义</string>
@@ -450,11 +449,11 @@
     <string name="settings_music_save_error">保存音乐失败</string>
     <string name="settings_music_cleared">音乐已删</string>
     <string name="settings_category_multimedia">餐厅喇叭</string>
-    <string name="settings_category_general_summary">菜单语言、新菜更新、厨房规矩、餐厅调整</string>
+    <string name="settings_category_general_summary">語言、更新、動效、圖示與名稱、DPI</string>
     <string name="settings_category_appearance_summary">菜单主题、颜色、布局、背景、字体</string>
-    <string name="settings_category_behavior_summary">Web调试、上菜行为、招牌展示</string>
-    <string name="settings_category_security_summary">应用认证与招牌菜操作验证</string>
-    <string name="settings_category_backup_summary">本地留份、云端留份、WebDAV</string>
+    <string name="settings_category_behavior_summary">Web 除錯、資訊複製、首頁卡片、外掛角標</string>
+    <string name="settings_category_security_summary">開啟應用時的生物辨識認證</string>
+    <string name="settings_category_backup_summary">DSH 設定匯出匯入、WebDAV 同步</string>
     <string name="settings_category_function_summary">執行方式、權限通道、無線 ADB 配對</string>
     <string name="settings_category_multimedia_summary">背景音乐、音效、振动</string>
     <string name="settings_music_playback_control">音乐控制</string>

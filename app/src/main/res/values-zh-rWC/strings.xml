@@ -395,9 +395,8 @@
     <string name="settings_nav_custom_icons">洞府导航道印</string>
     <string name="settings_nav_custom_icons_summary">用自定义道印替换底部导航栏图标</string>
     <string name="nav_icon_home">洞府道印</string>
-    <string name="nav_icon_kpm">KPM道印</string>
-    <string name="nav_icon_superuser">超神道印</string>
-    <string name="nav_icon_apm">功法道印</string>
+    <string name="nav_icon_superuser">终端图标</string>
+    <string name="nav_icon_apm">插件图标</string>
     <string name="nav_icon_settings">设置道印</string>
     <string name="nav_icon_clear">重置为默认</string>
     <string name="nav_icon_custom_selected">自定义</string>
@@ -452,11 +451,11 @@
     <string name="settings_music_save_error">仙音玉简封存失败</string>
     <string name="settings_music_cleared">仙音已涤除</string>
     <string name="settings_category_multimedia">仙音幻阁</string>
-    <string name="settings_category_general_summary">凡尘语韵、天道更新、仙界禁令、乾坤调整</string>
+    <string name="settings_category_general_summary">语言、更新、动效、图标与名称、DPI</string>
     <string name="settings_category_appearance_summary">道韵主题、灵光色彩、仙阵布局、虚幻背景、符文字体</string>
-    <string name="settings_category_behavior_summary">万维除错、阵法植入、仙府显影</string>
-    <string name="settings_category_security_summary">仙纹核验与仙符操作验证</string>
-    <string name="settings_category_backup_summary">本地拓印、云端仙录、WebDAV传功</string>
+    <string name="settings_category_behavior_summary">Web 调试、信息复制、首页卡片、插件角标</string>
+    <string name="settings_category_security_summary">打开应用时的生物识别认证</string>
+    <string name="settings_category_backup_summary">DSH 配置导出导入、WebDAV 同步</string>
     <string name="settings_category_function_summary">运行之法、权柄通路、无线 ADB 结契</string>
     <string name="settings_category_multimedia_summary">背景仙音、法术音效、灵力振动</string>
     <string name="settings_music_playback_control">仙音法阵</string>

@@ -398,9 +398,8 @@
     <string name="settings_nav_custom_icons">Пользовательские иконки навигации</string>
     <string name="settings_nav_custom_icons_summary">Замена иконок нижней панели пользовательскими изображениями</string>
     <string name="nav_icon_home">Иконка главной</string>
-    <string name="nav_icon_kpm">Иконка KPM</string>
-    <string name="nav_icon_superuser">Иконка SuperUser</string>
-    <string name="nav_icon_apm">Иконка системного модуля</string>
+    <string name="nav_icon_superuser">Terminal Icon</string>
+    <string name="nav_icon_apm">Plugins Icon</string>
     <string name="nav_icon_settings">Иконка настроек</string>
     <string name="nav_icon_clear">Сбросить на стандартную</string>
     <string name="nav_icon_custom_selected">Пользовательская</string>
@@ -453,11 +452,11 @@
     <string name="settings_music_save_error">Не удалось сохранить музыкальный файл</string>
     <string name="settings_music_cleared">Музыка очищена</string>
     <string name="settings_category_multimedia">Мультимедиа</string>
-    <string name="settings_category_general_summary">Язык, обновления, SELinux, системные настройки</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
     <string name="settings_category_appearance_summary">Тема, цвета, макет, фон, шрифты</string>
-    <string name="settings_category_behavior_summary">Отладка Web, поведение установки, отображение на главном</string>
-    <string name="settings_category_security_summary">Аутентификация приложения и проверка операций с модулями</string>
-    <string name="settings_category_backup_summary">Локальное резервное копирование, облачное, WebDAV</string>
+    <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
+    <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
+    <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
     <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">Фоновая музыка, звуки, вибрация</string>
     <string name="settings_music_playback_control">Управление воспроизведением</string>

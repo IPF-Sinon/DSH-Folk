@@ -439,9 +439,8 @@
     <string name="settings_nav_custom_icons">自訂導航圖示</string>
     <string name="settings_nav_custom_icons_summary">用自訂圖片取代底部導航列圖示</string>
     <string name="nav_icon_home">首頁圖示</string>
-    <string name="nav_icon_kpm">KPM圖示</string>
-    <string name="nav_icon_superuser">超級使用者圖示</string>
-    <string name="nav_icon_apm">系統模組圖示</string>
+    <string name="nav_icon_superuser">終端圖示</string>
+    <string name="nav_icon_apm">外掛圖示</string>
     <string name="nav_icon_settings">設定圖示</string>
     <string name="nav_icon_clear">重設為預設</string>
     <string name="nav_icon_custom_selected">自訂</string>
@@ -496,11 +495,11 @@
     <string name="settings_music_save_error">音樂檔案儲存失敗</string>
     <string name="settings_music_cleared">音樂已清除</string>
     <string name="settings_category_multimedia">多媒體</string>
-    <string name="settings_category_general_summary">語言、更新、SELinux、系統調整</string>
+    <string name="settings_category_general_summary">語言、更新、動效、圖示與名稱、DPI</string>
     <string name="settings_category_appearance_summary">主題、顏色、佈局、背景、字型</string>
-    <string name="settings_category_behavior_summary">Web除錯、安裝行為、首頁顯示</string>
-    <string name="settings_category_security_summary">應用認證與模組操作驗證</string>
-    <string name="settings_category_backup_summary">本地備份、雲端備份、WebDAV</string>
+    <string name="settings_category_behavior_summary">Web 除錯、資訊複製、首頁卡片、外掛角標</string>
+    <string name="settings_category_security_summary">開啟應用時的生物辨識認證</string>
+    <string name="settings_category_backup_summary">DSH 設定匯出匯入、WebDAV 同步</string>
     <string name="settings_category_function_summary">執行方式、權限通道、無線 ADB 配對</string>
     <string name="settings_category_multimedia_summary">背景音樂、音效、振動</string>
     <string name="settings_music_playback_control">播放控制</string>

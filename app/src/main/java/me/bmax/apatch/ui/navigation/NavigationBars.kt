@@ -694,7 +694,7 @@ fun NavBarIcon(
     tint: Color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
     modifier: Modifier = Modifier,
 ) {
-    val destinationName = destination.name
+    val destinationName = destination.iconKey
     // Observe config revision so the icon recomposes immediately when the user
     // picks/clears a custom icon or toggles custom icons, without needing an app restart.
     val revision by BottomBarIconConfig.revision.collectAsStateWithLifecycle()

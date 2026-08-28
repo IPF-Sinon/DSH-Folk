@@ -21,7 +21,7 @@ DSH-Folk 把 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)�
 | **主页** | 一键启动 / 停止 / 重启 DSH，显示运行阶段、Web UI 地址、当前运行方式与权限通道，带可复制的启动日志 |
 | **终端** | 容器内的真 PTY 终端（基于 Termux 的 `terminal-view`），直接 `bash` 进容器 |
 | **插件** | 管理容器里 DSH 的插件，展示 npm 周下载量与 GitHub star，内置 dsh-market 插件商店，支持本地安装 |
-| **设置** | 常规 / 外观 / 功能 / 安全 / 备份 / 模块 / 多媒体，界面主题体系沿用 FolkPatch（`theme.json` 完全兼容） |
+| **设置** | 常规 / 外观 / 行为 / 功能 / 安全 / 备份 / 插件 / 多媒体，界面主题体系沿用 FolkPatch（`theme.json` 完全兼容） |
 
 **配置备份**与 DSH 桌面端的 `dsh-config-manager` 插件使用**同一套导出格式**，
 所以手机上导出的 zip 能直接在电脑上导入，反之亦然（设置、模型提供者、插件清单、MCP 服务器、技能、工作区；凭据不导出）。

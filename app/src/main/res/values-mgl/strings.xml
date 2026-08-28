@@ -400,9 +400,8 @@
     <string name="settings_nav_custom_icons">星之导航魔法印记</string>
     <string name="settings_nav_custom_icons_summary">用自定义魔法印记替换底部导航栏图标</string>
     <string name="nav_icon_home">星之印记</string>
-    <string name="nav_icon_kpm">KPM印记</string>
-    <string name="nav_icon_superuser">超魔印记</string>
-    <string name="nav_icon_apm">魔法模块印记</string>
+    <string name="nav_icon_superuser">Terminal Icon</string>
+    <string name="nav_icon_apm">Plugins Icon</string>
     <string name="nav_icon_settings">魔法设置印记</string>
     <string name="nav_icon_clear">重置为默认</string>
     <string name="nav_icon_custom_selected">自定义</string>
@@ -455,11 +454,11 @@
     <string name="settings_music_save_error">魔法旋律水晶封存失败</string>
     <string name="settings_music_cleared">魔法颂歌已清空</string>
     <string name="settings_category_multimedia">魔法幻音</string>
-    <string name="settings_category_general_summary">魔法语韵、魔法更新、结界律令、魔法世界调整</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
     <string name="settings_category_appearance_summary">魔法主题、星光色彩、魔法阵布局、梦境背景、魔法符文字体</string>
-    <string name="settings_category_behavior_summary">万维除错、魔法植入、魔法殿堂展示</string>
-    <string name="settings_category_security_summary">魔法印鉴认证与魔法阵操作验证</string>
-    <string name="settings_category_backup_summary">本地魔法书、云端魔法书、WebDAV</string>
+    <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
+    <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
+    <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
     <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">背景魔法颂歌、魔法音效、魔力振动</string>
     <string name="settings_music_playback_control">颂歌控法阵</string>

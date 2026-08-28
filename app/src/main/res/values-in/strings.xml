@@ -384,9 +384,8 @@
     <string name="settings_nav_custom_icons">Ikon Navigasi Kustom</string>
     <string name="settings_nav_custom_icons_summary">Ganti ikon bilah bawah dengan gambar kustom</string>
     <string name="nav_icon_home">Ikon Beranda</string>
-    <string name="nav_icon_kpm">Ikon KPM</string>
-    <string name="nav_icon_superuser">Ikon SuperUser</string>
-    <string name="nav_icon_apm">Ikon Modul Sistem</string>
+    <string name="nav_icon_superuser">Terminal Icon</string>
+    <string name="nav_icon_apm">Plugins Icon</string>
     <string name="nav_icon_settings">Ikon Pengaturan</string>
     <string name="nav_icon_clear">Reset ke Default</string>
     <string name="nav_icon_custom_selected">Kustom</string>
@@ -439,11 +438,11 @@
     <string name="settings_music_save_error">Gagal menyimpan file musik</string>
     <string name="settings_music_cleared">Musik dihapus</string>
     <string name="settings_category_multimedia">Multimedia</string>
-    <string name="settings_category_general_summary">Bahasa, pembaruan, SELinux, penyesuaian sistem</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
     <string name="settings_category_appearance_summary">Tema, warna, tata letak, latar belakang, font</string>
-    <string name="settings_category_behavior_summary">Debug Web, perilaku pemasangan, tampilan beranda</string>
-    <string name="settings_category_security_summary">Autentikasi aplikasi dan verifikasi operasi modul</string>
-    <string name="settings_category_backup_summary">Cadangan lokal, cadangan awan, WebDAV</string>
+    <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
+    <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
+    <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
     <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">Musik latar, suara, getaran</string>
     <string name="settings_music_playback_control">Kontrol Pemutaran</string>

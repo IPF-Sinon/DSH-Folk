@@ -413,9 +413,8 @@
     <string name="settings_nav_custom_icons">Özel Navigasyon Simgeleri</string>
     <string name="settings_nav_custom_icons_summary">Alt çubuk simgelerini özel görüntülerle değiştirin</string>
     <string name="nav_icon_home">Ana Sayfa Simgesi</string>
-    <string name="nav_icon_kpm">KPM Simgesi</string>
-    <string name="nav_icon_superuser">SuperUser Simgesi</string>
-    <string name="nav_icon_apm">Sistem Modülü Simgesi</string>
+    <string name="nav_icon_superuser">Terminal Icon</string>
+    <string name="nav_icon_apm">Plugins Icon</string>
     <string name="nav_icon_settings">Ayarlar Simgesi</string>
     <string name="nav_icon_clear">Varsayılana Sıfırla</string>
     <string name="nav_icon_custom_selected">Özel</string>
@@ -470,11 +469,11 @@
     <string name="settings_music_save_error">Müzik dosyası kaydedilemedi</string>
     <string name="settings_music_cleared">Müzik temizlendi</string>
     <string name="settings_category_multimedia">Multimedya</string>
-    <string name="settings_category_general_summary">Dil, güncellemeler, SELinux, sistem ayarları</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
     <string name="settings_category_appearance_summary">Tema, renkler, düzen, arka plan, yazı tipleri</string>
-    <string name="settings_category_behavior_summary">Web hata ayıklama, kurulum davranışı, ana sayfa görüntüsü</string>
-    <string name="settings_category_security_summary">Uygulama kimlik doğrulaması ve modül işlem doğrulaması</string>
-    <string name="settings_category_backup_summary">Yerel yedekleme, bulut yedekleme, WebDAV</string>
+    <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
+    <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
+    <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
     <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">Arka plan müziği, sesler, titreşim</string>
     <string name="settings_music_playback_control">Oynatma Kontrolü</string>

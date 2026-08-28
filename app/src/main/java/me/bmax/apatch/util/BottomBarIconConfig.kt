@@ -153,11 +153,10 @@ object BottomBarIconConfig {
      */
     fun resetAll() {
         APApplication.sharedPreferences.edit {
-            remove(PREF_PREFIX + "Home")
-            remove(PREF_PREFIX + "KModule")
-            remove(PREF_PREFIX + "SuperUser")
-            remove(PREF_PREFIX + "AModule")
-            remove(PREF_PREFIX + "Settings")
+            // 含已废弃的 KModule：老版本可能留下过这条
+            for (key in listOf("Home", "KModule", "SuperUser", "AModule", "Settings")) {
+                remove(PREF_PREFIX + key)
+            }
             putBoolean("nav_icon_custom_enabled", false)
         }
         notifyChanged()

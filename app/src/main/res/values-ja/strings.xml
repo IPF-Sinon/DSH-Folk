@@ -347,9 +347,8 @@
     <string name="settings_nav_custom_icons">カスタムナビアイコン</string>
     <string name="settings_nav_custom_icons_summary">下部バーのアイコンをカスタム画像に置き換えます</string>
     <string name="nav_icon_home">ホームアイコン</string>
-    <string name="nav_icon_kpm">KPMアイコン</string>
-    <string name="nav_icon_superuser">SuperUserアイコン</string>
-    <string name="nav_icon_apm">システムモジュールアイコン</string>
+    <string name="nav_icon_superuser">Terminal Icon</string>
+    <string name="nav_icon_apm">Plugins Icon</string>
     <string name="nav_icon_settings">設定アイコン</string>
     <string name="nav_icon_clear">デフォルトに戻す</string>
     <string name="nav_icon_custom_selected">カスタム</string>
@@ -403,11 +402,11 @@
     <string name="settings_music_save_error">音楽の保存に失敗しました。</string>
     <string name="settings_music_cleared">音楽を消去しました。</string>
     <string name="settings_category_multimedia">マルチメディア</string>
-    <string name="settings_category_general_summary">言語、アップデート、SELinux、システム調整</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
     <string name="settings_category_appearance_summary">テーマ、色、レイアウト、背景、フォント</string>
-    <string name="settings_category_behavior_summary">Webデバッグ、インストール動作、ホーム表示</string>
-    <string name="settings_category_security_summary">アプリ認証とモジュール操作の検証</string>
-    <string name="settings_category_backup_summary">ローカルバックアップ、クラウドバックアップ、WebDAV</string>
+    <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
+    <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
+    <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
     <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">BGM、効果音、バイブレーション</string>
     <string name="settings_music_playback_control">再生のコントロール</string>

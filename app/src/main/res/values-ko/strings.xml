@@ -419,9 +419,8 @@
     <string name="settings_nav_custom_icons">사용자 정의 네비게이션 아이콘</string>
     <string name="settings_nav_custom_icons_summary">하단 바 아이콘을 사용자 정의 이미지로 교체</string>
     <string name="nav_icon_home">홈 아이콘</string>
-    <string name="nav_icon_kpm">KPM 아이콘</string>
-    <string name="nav_icon_superuser">SuperUser 아이콘</string>
-    <string name="nav_icon_apm">시스템 모듈 아이콘</string>
+    <string name="nav_icon_superuser">Terminal Icon</string>
+    <string name="nav_icon_apm">Plugins Icon</string>
     <string name="nav_icon_settings">설정 아이콘</string>
     <string name="nav_icon_clear">기본값으로 초기화</string>
     <string name="nav_icon_custom_selected">사용자 정의</string>
@@ -475,11 +474,11 @@
     <string name="settings_music_save_error">음악 파일 저장 실패</string>
     <string name="settings_music_cleared">음악 삭제됨</string>
     <string name="settings_category_multimedia">멀티미디어</string>
-    <string name="settings_category_general_summary">언어, 업데이트, SELinux, 시스템 조정</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
     <string name="settings_category_appearance_summary">테마, 색상, 레이아웃, 배경, 글꼴</string>
-    <string name="settings_category_behavior_summary">웹 디버깅, 설치 동작, 홈 표시</string>
-    <string name="settings_category_security_summary">앱 인증 및 모듈 작업 검증</string>
-    <string name="settings_category_backup_summary">로컬 백업, 클라우드 백업, WebDAV</string>
+    <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
+    <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
+    <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
     <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">배경 음악, 소리, 진동</string>
     <string name="settings_music_playback_control">재생 제어</string>

@@ -401,9 +401,8 @@
     <string name="settings_nav_custom_icons">أيقونات التنقل المخصصة</string>
     <string name="settings_nav_custom_icons_summary">استبدال أيقونات الشريط السفلي بصور مخصصة</string>
     <string name="nav_icon_home">أيقونة الرئيسية</string>
-    <string name="nav_icon_kpm">أيقونة KPM</string>
-    <string name="nav_icon_superuser">أيقونة SuperUser</string>
-    <string name="nav_icon_apm">أيقونة وحدة النظام</string>
+    <string name="nav_icon_superuser">Terminal Icon</string>
+    <string name="nav_icon_apm">Plugins Icon</string>
     <string name="nav_icon_settings">أيقونة الإعدادات</string>
     <string name="nav_icon_clear">إعادة تعيين إلى الافتراضي</string>
     <string name="nav_icon_custom_selected">مخصص</string>
@@ -458,11 +457,11 @@
     <string name="settings_music_save_error">فشل حفظ ملف الموسيقى</string>
     <string name="settings_music_cleared">تم مسح الموسيقى</string>
     <string name="settings_category_multimedia">الوسائط المتعددة</string>
-    <string name="settings_category_general_summary">اللغة، التحديثات، SELinux، تعديلات النظام</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
     <string name="settings_category_appearance_summary">السمة، الألوان، التخطيط، الخلفية، الخطوط</string>
-    <string name="settings_category_behavior_summary">تصحيح أخطاء الويب، سلوك التثبيت، عرض الشاشة الرئيسية</string>
-    <string name="settings_category_security_summary">مصادقة التطبيق والتحقق من عمليات الوحدات</string>
-    <string name="settings_category_backup_summary">نسخ احتياطي محلي، سحابي، WebDAV</string>
+    <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
+    <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
+    <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
     <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">موسيقى الخلفية، الأصوات، الاهتزاز</string>
     <string name="settings_music_playback_control">التحكم في التشغيل</string>

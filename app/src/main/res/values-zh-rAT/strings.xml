@@ -400,9 +400,8 @@
     <string name="settings_nav_custom_icons">圣域导航圣印</string>
     <string name="settings_nav_custom_icons_summary">用自定义圣印替换底部导航栏图标</string>
     <string name="nav_icon_home">圣殿圣印</string>
-    <string name="nav_icon_kpm">KPM圣印</string>
-    <string name="nav_icon_superuser">超神圣印</string>
-    <string name="nav_icon_apm">系统模块圣印</string>
+    <string name="nav_icon_superuser">終端圖示</string>
+    <string name="nav_icon_apm">外掛圖示</string>
     <string name="nav_icon_settings">设置圣印</string>
     <string name="nav_icon_clear">重置为默认</string>
     <string name="nav_icon_custom_selected">自定义</string>
@@ -441,11 +440,11 @@
     
     <!-- Multimedia Category Strings -->
     <string name="settings_category_multimedia">天使幻音</string>
-    <string name="settings_category_general_summary">天使语韵、圣光更新、结界律令、神域调整</string>
+    <string name="settings_category_general_summary">語言、更新、動效、圖示與名稱、DPI</string>
     <string name="settings_category_appearance_summary">圣光主题、天使色彩、神殿布局、圣域背景、神文字体</string>
-    <string name="settings_category_behavior_summary">万维除错、降临仪式、圣殿展示</string>
-    <string name="settings_category_security_summary">天使印鉴认证与魔法阵操作验证</string>
-    <string name="settings_category_backup_summary">本地圣典、云端圣典、WebDAV</string>
+    <string name="settings_category_behavior_summary">Web 除錯、資訊複製、首頁卡片、外掛角標</string>
+    <string name="settings_category_security_summary">開啟應用時的生物辨識認證</string>
+    <string name="settings_category_backup_summary">DSH 設定匯出匯入、WebDAV 同步</string>
     <string name="settings_category_function_summary">執行方式、權限通道、無線 ADB 配對</string>
     <string name="settings_category_multimedia_summary">背景圣歌、天使音效、圣光振动</string>
     

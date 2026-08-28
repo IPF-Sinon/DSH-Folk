@@ -399,9 +399,8 @@
     <string name="settings_nav_custom_icons">Ícones de navegação personalizados</string>
     <string name="settings_nav_custom_icons_summary">Substituir ícones da barra inferior por imagens personalizadas</string>
     <string name="nav_icon_home">Ícone de início</string>
-    <string name="nav_icon_kpm">Ícone de KPM</string>
-    <string name="nav_icon_superuser">Ícone de SuperUser</string>
-    <string name="nav_icon_apm">Ícone de módulo do sistema</string>
+    <string name="nav_icon_superuser">Terminal Icon</string>
+    <string name="nav_icon_apm">Plugins Icon</string>
     <string name="nav_icon_settings">Ícone de configurações</string>
     <string name="nav_icon_clear">Redefinir para padrão</string>
     <string name="nav_icon_custom_selected">Personalizado</string>
@@ -456,11 +455,11 @@
     <string name="settings_music_save_error">Falha ao salvar arquivo de música</string>
     <string name="settings_music_cleared">Música limpa</string>
     <string name="settings_category_multimedia">Multimídia</string>
-    <string name="settings_category_general_summary">Idioma, atualizações, SELinux, ajustes do sistema</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
     <string name="settings_category_appearance_summary">Tema, cores, layout, fundo, fontes</string>
-    <string name="settings_category_behavior_summary">Depuração Web, comportamento de instalação, exibição inicial</string>
-    <string name="settings_category_security_summary">Autenticação do aplicativo e verificação de operações de módulos</string>
-    <string name="settings_category_backup_summary">Backup local, backup na nuvem, WebDAV</string>
+    <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
+    <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
+    <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
     <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">Música de fundo, sons, vibração</string>
     <string name="settings_music_playback_control">Controle de Reprodução</string>

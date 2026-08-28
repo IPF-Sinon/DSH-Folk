@@ -396,9 +396,8 @@
     <string name="settings_nav_custom_icons">Biểu tượng điều hướng tùy chỉnh</string>
     <string name="settings_nav_custom_icons_summary">Thay thế biểu tượng thanh dưới bằng hình ảnh tùy chỉnh</string>
     <string name="nav_icon_home">Biểu tượng trang chủ</string>
-    <string name="nav_icon_kpm">Biểu tượng KPM</string>
-    <string name="nav_icon_superuser">Biểu tượng SuperUser</string>
-    <string name="nav_icon_apm">Biểu tượng mô-đun hệ thống</string>
+    <string name="nav_icon_superuser">Terminal Icon</string>
+    <string name="nav_icon_apm">Plugins Icon</string>
     <string name="nav_icon_settings">Biểu tượng cài đặt</string>
     <string name="nav_icon_clear">Đặt lại mặc định</string>
     <string name="nav_icon_custom_selected">Tùy chỉnh</string>
@@ -451,11 +450,11 @@
     <string name="settings_music_save_error">Lưu tệp nhạc thất bại</string>
     <string name="settings_music_cleared">Nhạc đã được xóa</string>
     <string name="settings_category_multimedia">Đa phương tiện</string>
-    <string name="settings_category_general_summary">Ngôn ngữ, cập nhật, SELinux, tinh chỉnh hệ thống</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
     <string name="settings_category_appearance_summary">Chủ đề, màu sắc, bố cục, nền, phông chữ</string>
-    <string name="settings_category_behavior_summary">Gỡ lỗi Web, hành vi cài đặt, hiển thị trang chủ</string>
-    <string name="settings_category_security_summary">Xác thực ứng dụng và xác minh thao tác mô-đun</string>
-    <string name="settings_category_backup_summary">Sao lưu cục bộ, sao lưu đám mây, WebDAV</string>
+    <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
+    <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
+    <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
     <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
     <string name="settings_category_multimedia_summary">Nhạc nền, âm thanh, rung</string>
     <string name="settings_music_playback_control">Điều khiển phát nhạc</string>
