@@ -270,7 +270,7 @@ fun rememberDshInfoRows(state: DshHomeUiState): List<DshInfoRow> {
     val selinuxLabel = stringResource(R.string.home_selinux_status)
 
     val kernelRelease = remember { Os.uname().release }
-    val selinux = remember { runCatching { getSELinuxStatus() }.getOrDefault("Unknown") }
+    val selinux = getSELinuxStatus()
 
     return buildList {
         state.version?.let { add(DshInfoRow(Icons.Outlined.Layers, runtimeLabel, it)) }
