@@ -526,7 +526,10 @@ object DshRuntime {
             val contentLength = if (sizeBytes > 0) sizeBytes
                 else conn.contentLengthLong.let { if (it > 0 && resumed) it + have else it }
             target.parentFile?.mkdirs()
-            out = BufferedOutputStream(FileOutputStream(target, resumed))
+            // stream 是非空局部量：循环里写它，out 只留给 finally 关句柄。
+            // （out 是 OutputStream? 且循环内会被置空，直接用它写会丢智能转换）
+            val stream = BufferedOutputStream(FileOutputStream(target, resumed))
+            out = stream
             input = conn.inputStream
             val buf = ByteArray(64 * 1024)
             var total = if (resumed) have else 0L
@@ -538,7 +541,7 @@ object DshRuntime {
             while (true) {
                 val n = input.read(buf)
                 if (n < 0) break
-                out.write(buf, 0, n)
+                stream.write(buf, 0, n)
                 total += n
                 val now = System.currentTimeMillis()
                 if (now - lastSpeedAt >= 500) {
@@ -569,7 +572,8 @@ object DshRuntime {
                 // 从一个比目标还长的偏移接着请求，服务端只会回 416。
                 if (contentLength > 0 && total > contentLength) {
                     appendLog("! 下载超出预期大小（$total > $contentLength），丢弃重下")
-                    runCatching { out?.close() }
+                    // 先关流再删：否则 finally 里的 close 会把缓冲区刷回一个刚被删掉的路径
+                    runCatching { stream.close() }
                     out = null
                     runCatching { target.delete() }
                     return false
