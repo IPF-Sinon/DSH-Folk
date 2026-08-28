@@ -8,6 +8,7 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.bmax.apatch.R
 import me.bmax.apatch.util.getSafeDownloadsDir
 import org.json.JSONArray
 import org.json.JSONObject
@@ -62,11 +63,11 @@ object DshConfigBackup {
     )
 
     /** 插件在不在、能不能用。DSH 没起来或插件没装都会落到 ready=false。 */
-    suspend fun status(): Status = withContext(Dispatchers.IO) {
+    suspend fun status(ctx: Context): Status = withContext(Dispatchers.IO) {
         val r = request("GET", "/status", null)
-        if (r == null) return@withContext Status(false, error = "DSH 未运行或 dsh-config-manager 未安装")
+        if (r == null) return@withContext Status(false, error = ctx.getString(R.string.dsh_bk_not_running))
         val o = runCatching { JSONObject(r) }.getOrNull()
-            ?: return@withContext Status(false, error = "返回内容无法解析")
+            ?: return@withContext Status(false, error = ctx.getString(R.string.dsh_bk_bad_json))
         Status(
             ready = o.optBoolean("ready", false),
             pluginVersion = o.optString("pluginVersion"),
@@ -102,21 +103,29 @@ object DshConfigBackup {
             if (password.isNotEmpty()) put("password", password)
         }
         val raw = request("POST", "/export", body.toString())
-            ?: return@withContext ExportResult(false, message = "导出请求失败：DSH 未运行或插件未安装")
+            ?: return@withContext ExportResult(false, message = ctx.getString(R.string.dsh_bk_export_req_failed))
         val o = runCatching { JSONObject(raw) }.getOrNull()
-            ?: return@withContext ExportResult(false, message = "导出返回无法解析：${raw.take(200)}")
+            ?: return@withContext ExportResult(
+            false,
+            message = ctx.getString(R.string.dsh_bk_export_bad_json, raw.take(200)),
+        )
         val err = o.optString("error")
         if (err.isNotEmpty()) return@withContext ExportResult(false, message = err)
         val zipPath = o.optString("zipPath")
-        if (zipPath.isEmpty()) return@withContext ExportResult(false, message = "导出未返回文件路径")
+        if (zipPath.isEmpty()) {
+            return@withContext ExportResult(false, message = ctx.getString(R.string.dsh_bk_export_no_path))
+        }
 
         val dir = backupDir(ctx)
         if (!dir.exists() && !dir.mkdirs()) {
-            return@withContext ExportResult(false, message = "无法创建目录 ${dir.absolutePath}")
+            return@withContext ExportResult(
+                false,
+                message = ctx.getString(R.string.dsh_bk_mkdir_failed, dir.absolutePath),
+            )
         }
         val dest = File(dir, zipPath.substringAfterLast('/'))
         val bytes = download(zipPath, dest)
-        if (bytes <= 0) return@withContext ExportResult(false, message = "下载导出文件失败")
+        if (bytes <= 0) return@withContext ExportResult(false, message = ctx.getString(R.string.dsh_bk_download_failed))
 
         // report / manifest 里有真正落盘的分区与加密状态，比我们请求的 only 更权威
         val report = o.optJSONObject("report")
@@ -128,7 +137,7 @@ object DshConfigBackup {
         val containsSecrets = security?.optBoolean("containsSecrets", false) ?: false
         val warnings = report?.optJSONArray("warnings")
         val warnText = buildString {
-            if (containsSecrets) append("\n! 备份中含有凭据明文，请勿分享此文件")
+            if (containsSecrets) append("\n! ").append(ctx.getString(R.string.dsh_bk_contains_secrets))
             if (warnings != null) {
                 for (i in 0 until warnings.length()) {
                     val w = warnings.optString(i)
@@ -141,9 +150,11 @@ object DshConfigBackup {
             file = dest,
             sizeBytes = bytes,
             message = buildString {
-                append("已导出 ").append(dest.name)
-                if (sections > 0) append("（").append(sections).append(" 个分区）")
-                if (encrypted) append("，已加密")
+                append(ctx.getString(R.string.dsh_bk_exported, dest.name))
+                if (sections > 0) {
+                    append("（").append(ctx.getString(R.string.dsh_bk_exported_sections, sections)).append("）")
+                }
+                if (encrypted) append("，").append(ctx.getString(R.string.dsh_bk_exported_encrypted))
                 append(warnText)
             },
             sections = sections,
@@ -204,38 +215,39 @@ object DshConfigBackup {
      * @param password 加密备份的解锁密码
      */
     suspend fun import(
+        ctx: Context,
         zip: File,
         strategy: String = "merge",
         password: String = "",
     ): ImportResult = withContext(Dispatchers.IO) {
-        val up = upload(zip) ?: return@withContext ImportResult(false, "上传失败：DSH 未运行或插件未安装")
+        val up = upload(zip) ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_upload_failed))
         val upObj = runCatching { JSONObject(up) }.getOrNull()
-            ?: return@withContext ImportResult(false, "上传返回无法解析")
+            ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_upload_bad_json))
         var zipPath = upObj.optString("zipPath")
         if (zipPath.isEmpty()) {
-            return@withContext ImportResult(false, upObj.optString("error").ifEmpty { "上传未返回路径" })
+            return@withContext ImportResult(false, upObj.optString("error").ifEmpty { ctx.getString(R.string.dsh_bk_upload_no_path) })
         }
 
         // 整体加密备份必须先解锁成明文 ZIP，否则 analyze 读不出 manifest
         if (upObj.optString("containerType") == "encrypted") {
-            if (password.isEmpty()) return@withContext ImportResult(false, "这是加密备份，请填写备份密码")
+            if (password.isEmpty()) return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_need_password))
             val dec = request(
                 "POST", "/decrypt-archive",
                 JSONObject().put("zipPath", zipPath).put("password", password).toString(),
-            ) ?: return@withContext ImportResult(false, "解锁请求失败")
+            ) ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_unlock_failed))
             val decObj = runCatching { JSONObject(dec) }.getOrNull()
-                ?: return@withContext ImportResult(false, "解锁返回无法解析")
+                ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_unlock_bad_json))
             val newPath = decObj.optString("zipPath")
             if (newPath.isEmpty()) {
-                return@withContext ImportResult(false, decObj.optString("error").ifEmpty { "密码错误或备份已损坏" })
+                return@withContext ImportResult(false, decObj.optString("error").ifEmpty { ctx.getString(R.string.dsh_bk_bad_password) })
             }
             zipPath = newPath
         }
 
         val analyze = request("POST", "/analyze", JSONObject().put("zipPath", zipPath).toString())
-            ?: return@withContext ImportResult(false, "分析请求失败")
+            ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_analyze_failed))
         val analyzeObj = runCatching { JSONObject(analyze) }.getOrNull()
-            ?: return@withContext ImportResult(false, "分析返回无法解析")
+            ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_analyze_bad_json))
         val analyzeErr = analyzeObj.optString("error")
         if (analyzeErr.isNotEmpty()) return@withContext ImportResult(false, analyzeErr)
         // ImportAnalysis.valid / compatibility 才是「这个包能不能导」的判断依据。
@@ -249,10 +261,10 @@ object DshConfigBackup {
                     if (e.isNotEmpty()) append("✗ ").append(e).append('\n')
                 }
             }
-            return@withContext ImportResult(false, "备份文件校验未通过，未做任何改动", detail)
+            return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_invalid_archive), detail)
         }
         if (analyzeObj.optString("compatibility") == "unsupported") {
-            return@withContext ImportResult(false, "这份备份与当前 DSH 版本不兼容，未做任何改动")
+            return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_incompatible))
         }
 
         val decisions = JSONObject().apply {
@@ -263,9 +275,9 @@ object DshConfigBackup {
         val plan = request(
             "POST", "/plan",
             JSONObject().put("zipPath", zipPath).put("decisions", decisions).toString(),
-        ) ?: return@withContext ImportResult(false, "生成计划失败")
+        ) ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_plan_failed))
         val planObj = runCatching { JSONObject(plan) }.getOrNull()
-            ?: return@withContext ImportResult(false, "计划返回无法解析")
+            ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_plan_bad_json))
         val planErr = planObj.optString("error")
         if (planErr.isNotEmpty()) return@withContext ImportResult(false, planErr)
 
@@ -278,9 +290,9 @@ object DshConfigBackup {
             "POST", "/execute",
             JSONObject().put("zipPath", zipPath).put("plan", planObj).put("opts", opts).toString(),
             timeoutMs = 900_000,
-        ) ?: return@withContext ImportResult(false, "执行导入失败")
+        ) ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_exec_failed))
         val execObj = runCatching { JSONObject(exec) }.getOrNull()
-            ?: return@withContext ImportResult(false, "导入返回无法解析")
+            ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_exec_bad_json))
         val execErr = execObj.optString("error")
         if (execErr.isNotEmpty()) return@withContext ImportResult(false, execErr)
 
@@ -333,14 +345,20 @@ object DshConfigBackup {
         // 回滚发生说明这次导入整体没落地，必须显式说出来
         val rollback = execObj.optJSONObject("rollback")
         if (rollback != null) {
-            notes.append(if (rollback.optBoolean("full")) "↩ 已完整回滚" else "↩ 已部分回滚")
+            notes.append("↩ ").append(
+                ctx.getString(
+                    if (rollback.optBoolean("full")) R.string.dsh_bk_rolled_back_full
+                    else R.string.dsh_bk_rolled_back_partial
+                )
+            )
             notes.append('\n')
             // rollback.failed[]{item,reason,manualHint}：回滚都失败了的项处于半写入状态，
             // 只说「已部分回滚」等于让用户自己去猜哪儿坏了。manualHint 是插件给的补救指引。
             val rbFailed = rollback.optJSONArray("failed")
             for (i in 0 until (rbFailed?.length() ?: 0)) {
                 val f = rbFailed?.optJSONObject(i) ?: continue
-                notes.append("✗ 回滚失败 ").append(f.optString("item"))
+                notes.append("✗ ")
+                    .append(ctx.getString(R.string.dsh_bk_rollback_failed, f.optString("item")))
                 f.optString("reason").takeIf { it.isNotEmpty() }?.let { notes.append("：").append(it) }
                 f.optString("manualHint").takeIf { it.isNotEmpty() }?.let { notes.append(" → ").append(it) }
                 notes.append('\n')
@@ -349,15 +367,17 @@ object DshConfigBackup {
         val needsRestart = execObj.optBoolean("needsRestart", planObj.optBoolean("needsRestart", false))
         val ok = execObj.optBoolean("ok", failed == 0) && rollback == null
         val head = buildString {
-            append(if (ok) "导入完成：" else "导入未完成：")
-            append("$total 项")
-            if (failed > 0) append("，$failed 项失败")
-            if (warned > 0) append("，$warned 项告警")
-            if (skipped > 0) append("，$skipped 项跳过")
-            if (tombstonedCount > 0) append("，$tombstonedCount 项被删除记录挡下")
-            if (needsRestart) append("；需要重启 DSH 生效")
+            append(ctx.getString(if (ok) R.string.dsh_bk_import_done else R.string.dsh_bk_import_incomplete))
+            append(ctx.getString(R.string.dsh_bk_items, total))
+            if (failed > 0) append(ctx.getString(R.string.dsh_bk_items_failed, failed))
+            if (warned > 0) append(ctx.getString(R.string.dsh_bk_items_warned, warned))
+            if (skipped > 0) append(ctx.getString(R.string.dsh_bk_items_skipped, skipped))
+            if (tombstonedCount > 0) {
+                append(ctx.getString(R.string.dsh_bk_items_tombstoned, tombstonedCount))
+            }
+            if (needsRestart) append(ctx.getString(R.string.dsh_bk_needs_restart))
             execObj.optString("snapshotId").takeIf { it.isNotEmpty() }
-                ?.let { append("；回滚快照 $it") }
+                ?.let { append(ctx.getString(R.string.dsh_bk_snapshot, it)) }
         }
         ImportResult(ok, head, notes.toString())
     }

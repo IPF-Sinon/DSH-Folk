@@ -86,7 +86,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
             val text = if (staged == null) {
                 context.getString(R.string.dsh_plugin_local_read_failed)
             } else {
-                val r = DshConfigBackup.import(staged, password = dshPassword)
+                val r = DshConfigBackup.import(context, staged, password = dshPassword)
                 staged.delete()
                 if (r.detail.isBlank()) r.message else "${r.message}\n${r.detail}"
             }
@@ -126,7 +126,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         dshMessage = exporting
                         scope.launch(Dispatchers.IO) {
                             // 先确认插件在：DSH 没起来时直接报「需要先启动」，比让 HTTP 超时更清楚
-                            val status = DshConfigBackup.status()
+                            val status = DshConfigBackup.status(context)
                             val text = if (!status.ready) {
                                 if (status.error.isEmpty()) pluginMissing else notRunning
                             } else {
