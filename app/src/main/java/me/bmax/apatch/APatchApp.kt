@@ -12,19 +12,13 @@ import me.bmax.apatch.util.ui.showToast
 import androidx.core.content.edit
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import com.topjohnwu.superuser.CallbackList
 import me.bmax.apatch.ui.CrashHandleActivity
-import me.bmax.apatch.util.APatchCli
 import me.bmax.apatch.ui.theme.MusicConfig
 import me.bmax.apatch.util.MusicManager
-import me.bmax.apatch.util.Version
-import me.bmax.apatch.util.getRootShell
-import me.bmax.apatch.util.rootShellForResult
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.Locale
-import kotlin.concurrent.thread
 import kotlin.system.exitProcess
 
 import coil.ImageLoader
@@ -76,73 +70,13 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
             .build()
     }
 
-    enum class State {
-        UNKNOWN_STATE,
-
-        KERNELPATCH_INSTALLED, KERNELPATCH_NEED_UPDATE, KERNELPATCH_NEED_REBOOT, KERNELPATCH_UNINSTALLING,
-
-        ANDROIDPATCH_NOT_INSTALLED, ANDROIDPATCH_INSTALLED, ANDROIDPATCH_INSTALLING, ANDROIDPATCH_NEED_UPDATE, ANDROIDPATCH_UNINSTALLING,
-    }
-
 
     companion object {
-        const val APD_PATH = "/data/adb/apd"
-
-        @Deprecated("No more KPatch ELF from 0.11.0-dev")
-        const val KPATCH_PATH = "/data/adb/kpatch"
-        const val SUPERCMD = "/system/bin/truncate"
+        /** 供 root shell 的 PATH/BUSYBOX 使用：设备上若装了 APatch，这个目录里有 busybox。 */
         const val APATCH_FOLDER = "/data/adb/ap/"
-        private const val APATCH_BIN_FOLDER = APATCH_FOLDER + "bin/"
-        private const val APATCH_LOG_FOLDER = APATCH_FOLDER + "log/"
-        private const val APD_LINK_PATH = APATCH_BIN_FOLDER + "apd"
-        const val PACKAGE_CONFIG_FILE = APATCH_FOLDER + "package_config"
-        const val SU_PATH_FILE = APATCH_FOLDER + "su_path"
-        const val SAFEMODE_FILE = "/dev/.safemode"
-        private const val NEED_REBOOT_FILE = "/dev/.need_reboot"
-        const val GLOBAL_NAMESPACE_FILE = "/data/adb/.global_namespace_enable"
-        const val SUCOMPAT_FILE = "/data/adb/ap/sucompat"
-        const val SELINUX_HIDE_FILE = APATCH_FOLDER + "selinux_hide"
-        const val MAGIC_MOUNT_FILE = "/data/adb/.magic_mount_enable"
-        const val HIDE_SERVICE_FILE = "/data/adb/.hide_service_enable"
-        const val HIDE_BINARY_PATH = "/data/adb/fp/bin/fpd"
-        const val UMOUNT_SERVICE_FILE = "/data/adb/.umount_service_enable"
-        const val UMOUNT_BINARY_PATH = "/data/adb/fp/bin/fpd"
-        const val UTS_SPOOF_ENABLE_FILE = "/data/adb/.uts_spoof_enable"
-        const val UTS_SPOOF_CONFIG_FILE = "/data/adb/.uts_spoof_config"
-        const val PATHHIDE_DIR = "/data/adb/fp/pathhide/"
-        const val PATHHIDE_PATHS_FILE = "/data/adb/fp/pathhide/paths"
-        const val PATHHIDE_ENABLE_FILE = "/data/adb/fp/pathhide/enabled"
-        const val PATHHIDE_UIDS_FILE = "/data/adb/fp/pathhide/uids"
-        const val PATHHIDE_UID_MODE_FILE = "/data/adb/fp/pathhide/uid_mode"
-        const val PATHHIDE_FILTER_SYSTEM_FILE = "/data/adb/fp/pathhide/filter_system"
-        const val NETISOLATE_DIR = "/data/adb/fp/netisolate/"
-        const val NETISOLATE_ENABLE_FILE = "/data/adb/fp/netisolate/enabled"
-        const val NETISOLATE_UIDS_FILE = "/data/adb/fp/netisolate/uids"
-        const val JAILBREAK_FILE = APATCH_FOLDER + "jailbreak"
-        const val JAILBREAK_KO_PATH = APATCH_FOLDER + "kernelpatch.ko"
-        /** Persisted, file-backed KPMs. Each module lives in <id>/<id>.kpm. */
-        const val KPMS_DIR = APATCH_FOLDER + "kpm/"
-
-        @Deprecated("Use SHA256 comparison instead")
-        const val APATCH_VERSION_PATH = APATCH_FOLDER + "version"
-        private const val MAGISKPOLICY_BIN_PATH = APATCH_BIN_FOLDER + "magiskpolicy"
-        private const val BUSYBOX_BIN_PATH = APATCH_BIN_FOLDER + "busybox"
-        private const val RESETPROP_BIN_PATH = APATCH_BIN_FOLDER + "resetprop"
-        private const val KPTOOLS_BIN_PATH = APATCH_BIN_FOLDER + "kptools"
         const val DEFAULT_SCONTEXT = "u:r:untrusted_app:s0"
-        const val MAGISK_SCONTEXT = "u:r:magisk:s0"
-
-        private const val DEFAULT_SU_PATH = "/system/bin/kp"
-        private const val LEGACY_SU_PATH = "/system/bin/su"
 
         const val SP_NAME = "config"
-        const val PREF_BLOCK_KERNELPATCH_UPDATE = "block_kernelpatch_update"
-        const val PREF_BLOCK_ANDROIDPATCH_UPDATE = "block_androidpatch_update"
-        const val PREF_AUTO_EXCLUDE_NEW_APPS = "auto_exclude_new_apps"
-        const val PREF_NEW_APP_PROFILE_ENABLED = "new_app_profile_enabled"
-        const val PREF_UTS_SPOOF_ENABLED = "uts_spoof_enabled"
-        const val PREF_UTS_SPOOF_RELEASE = "uts_spoof_release"
-        const val PREF_UTS_SPOOF_VERSION = "uts_spoof_version"
         private const val SHOW_BACKUP_WARN = "show_backup_warning"
         private const val CRASH_COUNT_KEY = "fp_crash_count"
         private const val CRASH_TIMESTAMP_KEY = "fp_crash_timestamp"
@@ -150,179 +84,15 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
         private const val CRASH_WINDOW_MS = 30_000L
         lateinit var sharedPreferences: SharedPreferences
 
-        private val logCallback: CallbackList<String?> = object : CallbackList<String?>() {
-            override fun onAddElement(s: String?) {
-                Log.d(TAG, s.toString())
-            }
-        }
-
-        private val _kpStateLiveData = MutableLiveData(State.UNKNOWN_STATE)
-        val kpStateLiveData: LiveData<State> = _kpStateLiveData
-        private val _kpStateInitializedLiveData = MutableLiveData(false)
-        val kpStateInitializedLiveData: LiveData<Boolean> = _kpStateInitializedLiveData
-
-        private val _apStateLiveData = MutableLiveData(State.UNKNOWN_STATE)
-        val apStateLiveData: LiveData<State> = _apStateLiveData
-
-        @Suppress("DEPRECATION")
-        fun uninstallApatch() {
-            if (_apStateLiveData.value != State.ANDROIDPATCH_INSTALLED) return
-            _apStateLiveData.value = State.ANDROIDPATCH_UNINSTALLING
-
-            Natives.resetSuPath(DEFAULT_SU_PATH)
-
-            val cmds = arrayOf(
-                "rm -f $APD_PATH",
-                "rm -f $KPATCH_PATH",
-                "rm -rf $APATCH_BIN_FOLDER",
-                "rm -rf $APATCH_LOG_FOLDER",
-                "rm -rf $APATCH_VERSION_PATH",
-            )
-
-            val shell = getRootShell()
-            shell.newJob().add(*cmds).to(logCallback, logCallback).exec()
-
-            Log.d(TAG, "APatch uninstalled...")
-            if (_kpStateLiveData.value == State.UNKNOWN_STATE) {
-                _apStateLiveData.postValue(State.UNKNOWN_STATE)
-            } else {
-                _apStateLiveData.postValue(State.ANDROIDPATCH_NOT_INSTALLED)
-            }
-        }
-
-        @Suppress("DEPRECATION")
-        fun installApatch() {
-            val state = _apStateLiveData.value
-            if (state == State.ANDROIDPATCH_INSTALLING) {
-                return
-            }
-            _apStateLiveData.value = State.ANDROIDPATCH_INSTALLING
-            val nativeDir = apApp.applicationInfo.nativeLibraryDir
-
-            val cmds = arrayOf(
-                "mkdir -p $APATCH_BIN_FOLDER",
-                "mkdir -p $APATCH_LOG_FOLDER",
-
-                "rm -f $APD_PATH",
-                "cp -f ${nativeDir}/libapd.so $APD_PATH",
-                "chmod +x $APD_PATH",
-                "ln -sf $APD_PATH $APD_LINK_PATH",
-                "restorecon $APD_PATH",
-
-                "rm -f $MAGISKPOLICY_BIN_PATH",
-                "cp -f ${nativeDir}/libmagiskpolicy.so $MAGISKPOLICY_BIN_PATH",
-                "chmod +x $MAGISKPOLICY_BIN_PATH",
-                "rm -f $RESETPROP_BIN_PATH",
-                "cp -f ${nativeDir}/libresetprop.so $RESETPROP_BIN_PATH",
-                "chmod +x $RESETPROP_BIN_PATH",
-                "rm -f $BUSYBOX_BIN_PATH",
-                "cp -f ${nativeDir}/libbusybox.so $BUSYBOX_BIN_PATH",
-                "chmod +x $BUSYBOX_BIN_PATH",
-                "cp -f ${nativeDir}/libkptools.so $KPTOOLS_BIN_PATH",
-                "chmod +x $KPTOOLS_BIN_PATH",
-
-                "touch $PACKAGE_CONFIG_FILE",
-                "touch $SU_PATH_FILE",
-                "[ -s $SU_PATH_FILE ] || echo $LEGACY_SU_PATH > $SU_PATH_FILE",
-                "echo ${Version.getManagerVersion().second} > $APATCH_VERSION_PATH",
-                "restorecon -R $APATCH_FOLDER",
-
-                "${nativeDir}/libmagiskpolicy.so --magisk --live",
-            )
-
-            val shell = getRootShell()
-            shell.newJob().add(*cmds).to(logCallback, logCallback).exec()
-
-            Natives.resetSuPath(DEFAULT_SU_PATH)
-            Natives.resetSuPath(LEGACY_SU_PATH)
-
-            // clear shell cache
-            APatchCli.refresh()
-
-            Log.d(TAG, "APatch installed...")
-            _apStateLiveData.postValue(State.ANDROIDPATCH_INSTALLED)
-        }
-
-        fun markNeedReboot() {
-            val result = rootShellForResult("touch $NEED_REBOOT_FILE")
-            _kpStateLiveData.postValue(State.KERNELPATCH_NEED_REBOOT)
-            Log.d(TAG, "mark reboot ${result.code}")
-        }
-
-
-        var superKey: String = ""
-            set(value) {
-                field = value
-                _kpStateInitializedLiveData.postValue(false)
-                val ready = Natives.nativeReady(value)
-                _kpStateLiveData.value =
-                    if (ready) State.KERNELPATCH_INSTALLED else State.UNKNOWN_STATE
-                _apStateLiveData.value =
-                    if (ready) State.ANDROIDPATCH_NOT_INSTALLED else State.UNKNOWN_STATE
-                Log.d(TAG, "state: " + _kpStateLiveData.value)
-                if (!ready) {
-                    _kpStateInitializedLiveData.postValue(true)
-                    return
-                }
-
-                thread {
-                    try {
-                        val rc = Natives.su(0, null)
-                        if (!rc) {
-                            Log.e(TAG, "Native.su failed")
-                            return@thread
-                        }
-
-                        APatchCli.refresh()
-
-                        val buildV = Version.getKpImg()
-                        val installedV = Version.installedKPTime()
-
-                        Log.d(TAG, "kp installed version: ${installedV}, build version: $buildV")
-
-                        val isBlocked = apApp.isKernelPatchUpdateBlocked()
-
-                        if (buildV != installedV) {
-                            if (isBlocked) {
-                                _kpStateLiveData.postValue(State.KERNELPATCH_INSTALLED)
-                            } else {
-                                _kpStateLiveData.postValue(State.KERNELPATCH_NEED_UPDATE)
-                            }
-                        }
-                        Log.d(TAG, "kp state: " + _kpStateLiveData.value)
-
-                        if (File(NEED_REBOOT_FILE).exists()) {
-                            _kpStateLiveData.postValue(State.KERNELPATCH_NEED_REBOOT)
-                        }
-                        Log.d(TAG, "kp state: " + _kpStateLiveData.value)
-
-                        val bundledHash = Version.getBundledApdSha256()
-                        val installedHash = Version.getInstalledApdSha256()
-                        Log.d(TAG, "bundled apd sha256: $bundledHash, installed apd sha256: $installedHash")
-
-                        val isApBlocked = apApp.isAndroidPatchUpdateBlocked()
-
-                        if (installedHash.isNotEmpty()) {
-                            if (bundledHash == installedHash) {
-                                _apStateLiveData.postValue(State.ANDROIDPATCH_INSTALLED)
-                            } else {
-                                if (isApBlocked) {
-                                    _apStateLiveData.postValue(State.ANDROIDPATCH_INSTALLED)
-                                } else {
-                                    _apStateLiveData.postValue(State.ANDROIDPATCH_NEED_UPDATE)
-                                }
-                            }
-                        } else {
-                            _apStateLiveData.postValue(State.ANDROIDPATCH_NOT_INSTALLED)
-                        }
-                        Log.d(TAG, "ap state: " + _apStateLiveData.value)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to refresh patch state", e)
-                    } finally {
-                        _kpStateInitializedLiveData.postValue(true)
-                    }
-                }
-            }
+        /**
+         * 应用级初始化是否完成（启动图关闭的信号）。
+         *
+         * 原来这里是 KernelPatch/AndroidPatch 的状态机（kpStateLiveData / apStateLiveData /
+         * kpStateInitializedLiveData），启动图要等内核状态探测完才关。DSH-Folk 不打补丁，
+         * 只需要一个「Application 初始化完成」的布尔量。
+         */
+        private val _initializedLiveData = MutableLiveData(false)
+        val initializedLiveData: LiveData<Boolean> = _initializedLiveData
 
         private fun bypassHiddenApiRestrictions() {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
@@ -347,17 +117,15 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
 
     override fun onCreate() {
         super.onCreate()
-        // The app-zygote for the jailbreak MagicaService runs without a UserManager,
-        // so shared prefs and other context-dependent setup are unavailable there.
-        // AppZygotePreload drives the jailbreak via JNI directly; skip init here.
+        // 没有 UserManager 的进程（例如 app-zygote）拿不到 SharedPreferences，
+        // 这里直接跳过初始化。
         if (getSystemService(Context.USER_SERVICE) == null) {
             return
         }
         apApp = this
         sharedPreferences = getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
 
-        // Load all configs synchronously before superKey assignment
-        // (superKey setter triggers a thread that reads config-dependent state)
+        // 主题/音效/背景等配置必须在任何 Composable 读取之前同步载入
         MusicConfig.load(this)
         me.bmax.apatch.ui.theme.SoundEffectConfig.load(this)
         me.bmax.apatch.ui.theme.VibrationConfig.load(this)
@@ -365,13 +133,12 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
         me.bmax.apatch.ui.theme.FontConfig.load(this)
         me.bmax.apatch.util.ui.FloatingBarConfig.load(this)
 
-        superKey = "su"
         val processName = getProcessNameCompat()
-        if (processName.endsWith(":root") || processName.endsWith(":webui")) {
+        if (processName.endsWith(":root")) {
             return
         }
-        // 背景音乐仅在主进程初始化：WebUIActivity 位于独立 ":webui" 进程，
-        // 若在子进程初始化会创建第二个 MediaPlayer，与主进程实例重叠播放
+        // 背景音乐仅在主进程初始化：子进程若也初始化会创建第二个 MediaPlayer，
+        // 与主进程实例重叠播放
         MusicManager.init(this)
         bypassHiddenApiRestrictions()
         Log.d(TAG, "APApplication onCreate started")
@@ -416,7 +183,7 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
                 .addInterceptor { block ->
                     block.proceed(
                         block.request().newBuilder()
-                            .header("User-Agent", "APatch/${BuildConfig.VERSION_CODE}")
+                            .header("User-Agent", "DSH-Folk/${BuildConfig.VERSION_CODE}")
                             .header("Accept-Language", Locale.getDefault().toLanguageTag()).build()
                     )
                 }.build()
@@ -427,18 +194,12 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
             .remove(CRASH_COUNT_KEY)
             .remove(CRASH_TIMESTAMP_KEY)
             .apply()
+
+        _initializedLiveData.postValue(true)
     }
 
     fun getBackupWarningState(): Boolean {
         return sharedPreferences.getBoolean(SHOW_BACKUP_WARN, true)
-    }
-
-    fun isKernelPatchUpdateBlocked(): Boolean {
-        return sharedPreferences.getBoolean(PREF_BLOCK_KERNELPATCH_UPDATE, false)
-    }
-
-    fun isAndroidPatchUpdateBlocked(): Boolean {
-        return sharedPreferences.getBoolean(PREF_BLOCK_ANDROIDPATCH_UPDATE, false)
     }
 
     fun updateBackupWarningState(state: Boolean) {

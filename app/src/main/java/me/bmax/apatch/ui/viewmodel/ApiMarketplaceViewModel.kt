@@ -113,7 +113,7 @@ class ApiMarketplaceViewModel : ViewModel() {
 
                 val request = Request.Builder()
                     .url(url)
-                    .header("User-Agent", "FolkPatch-BannerAPI/1.0")
+                    .header("User-Agent", "DSH-Folk-BannerAPI/1.0")
                     .build()
 
                 val response = client.newCall(request).execute()

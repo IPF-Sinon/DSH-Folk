@@ -181,7 +181,7 @@ fun BackupSettingsContent(
             ExpressiveCard(
                 flat = flat,
                 onClick = {
-                    val backupDir = java.io.File(me.bmax.apatch.util.getSafeDownloadsDir(context), "FolkPatch/ModuleBackups")
+                    val backupDir = java.io.File(me.bmax.apatch.util.getSafeDownloadsDir(context), "DSH-Folk/PluginBackups")
                     if (!backupDir.exists()) backupDir.mkdirs()
 
                     try {

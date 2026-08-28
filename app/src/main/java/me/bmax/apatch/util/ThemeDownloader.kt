@@ -124,12 +124,12 @@ class ThemeDownloader(private val context: Context) {
     }
 
     /**
-     * 获取外部存储主题目录 (/storage/emulated/0/Download/FolkPatch/Themes/)
+     * 获取外部存储主题目录 (/storage/emulated/0/Download/DSH-Folk/Themes/)
      */
     private fun getExternalThemesDir(): File {
         val externalDir = File(
             getSafeDownloadsDir(context),
-            "FolkPatch/Themes"
+            "DSH-Folk/Themes"
         )
         runCatching { ensureDirectory(externalDir) }
             .onFailure { Log.w(TAG, "Failed to prepare external themes dir", it) }

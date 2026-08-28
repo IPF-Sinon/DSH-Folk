@@ -787,7 +787,7 @@ class MainActivity : AppCompatActivity() {
                 isLoading = false
             }
         }
-        APApplication.kpStateInitializedLiveData.observe(this, object : Observer<Boolean> {
+        APApplication.initializedLiveData.observe(this, object : Observer<Boolean> {
             override fun onChanged(value: Boolean) {
                 if (value) {
                     dismissSplash()

@@ -1,21 +1,11 @@
 package me.bmax.apatch.util
 
-import android.content.ContentResolver
 import android.content.Context
-import android.database.Cursor
-import android.net.Uri
-import android.provider.OpenableColumns
-import android.system.Os
 import android.util.Log
 import com.topjohnwu.superuser.Shell
-import com.topjohnwu.superuser.ShellUtils
-import com.topjohnwu.superuser.io.SuFile
 import me.bmax.apatch.APApplication
-import me.bmax.apatch.APApplication.Companion.SUPERCMD
 import me.bmax.apatch.BuildConfig
-import java.io.File
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 private const val TAG = "APatchCli"
 private const val SHELL_TIMEOUT_MS = 10_000L
@@ -58,11 +48,18 @@ private fun buildWithTimeout(builder: Shell.Builder, vararg commands: String): S
     return result ?: throw (error ?: IOException("Shell creation failed"))
 }
 
+/**
+ * 建一个尽力而为的 shell。
+ *
+ * 原 APatch 会先走 KernelPatch 的 truncate <superkey> 通道再退回 su；DSH-Folk 不打内核
+ * 补丁，能用的只有设备上已有的 su（Magisk / KernelSU / APatch），所以链条是
+ * su [-mm] 然后 sh。拿不到 root 时返回的是普通 sh —— 调用方要用 Shell.isRoot 判断。
+ */
 fun createRootShell(globalMnt: Boolean = false): Shell {
     Shell.enableVerboseLogging = BuildConfig.DEBUG
     val builder = Shell.Builder.create().setInitializers(RootShellInitializer::class.java)
 
-    if (android.os.Process.myUid() == 0 && !globalMnt) {
+    if (android.os.Process.myUid() == 0) {
         try {
             return buildWithTimeout(builder, "sh")
         } catch (e: Throwable) {
@@ -71,42 +68,14 @@ fun createRootShell(globalMnt: Boolean = false): Shell {
     }
 
     return try {
-        buildWithTimeout(
-            builder, SUPERCMD, APApplication.superKey, "-Z", APApplication.MAGISK_SCONTEXT
-        )
+        if (globalMnt) buildWithTimeout(builder, "su", "-mm") else buildWithTimeout(builder, "su")
     } catch (e: Throwable) {
         Log.e(TAG, "su failed: ", e)
-        return try {
-            Log.e(TAG, "retry compat kpatch su")
-            if (globalMnt) {
-                buildWithTimeout(
-                    builder,
-                    getKPatchPath(), APApplication.superKey, "su", "-Z", APApplication.MAGISK_SCONTEXT, "--mount-master"
-                )
-            }else{
-                buildWithTimeout(
-                    builder,
-                    getKPatchPath(), APApplication.superKey, "su", "-Z", APApplication.MAGISK_SCONTEXT
-                )
-            }
-        } catch (e: Throwable) {
-            Log.e(TAG, "retry kpatch su failed: ", e)
-            return try {
-                Log.e(TAG, "retry su: ", e)
-                if (globalMnt) {
-                    buildWithTimeout(builder, "su","-mm")
-                }else{
-                    buildWithTimeout(builder, "su")
-                }
-            } catch (e: Throwable) {
-                Log.e(TAG, "retry su failed: ", e)
-                try {
-                    buildWithTimeout(builder, "sh")
-                } catch (e2: Throwable) {
-                    Log.e(TAG, "final sh fallback failed: ", e2)
-                    throw IOException("Unable to create any shell", e2)
-                }
-            }
+        try {
+            buildWithTimeout(builder, "sh")
+        } catch (e2: Throwable) {
+            Log.e(TAG, "final sh fallback failed: ", e2)
+            throw IOException("Unable to create any shell", e2)
         }
     }
 }
@@ -208,30 +177,15 @@ fun rootAvailable(): Boolean {
     return shell.isRoot
 }
 
+/** 不带 initializer 的一次性 shell（bugreport 采集用）。 */
 fun tryGetRootShell(): Shell {
     Shell.enableVerboseLogging = BuildConfig.DEBUG
     val builder = Shell.Builder.create()
     return try {
-        builder.build(
-            SUPERCMD, APApplication.superKey, "-Z", APApplication.MAGISK_SCONTEXT
-        )
+        builder.build("su")
     } catch (e: Throwable) {
-        Log.e(TAG, "su failed: ", e)
-        return try {
-            Log.e(TAG, "retry compat kpatch su")
-            builder.build(
-                getKPatchPath(), APApplication.superKey, "su", "-Z", APApplication.MAGISK_SCONTEXT
-            )
-        } catch (e: Throwable) {
-            Log.e(TAG, "retry kpatch su failed: ", e)
-            return try {
-                Log.e(TAG, "retry su: ", e)
-                builder.build("su")
-            } catch (e: Throwable) {
-                Log.e(TAG, "retry su failed: ", e)
-                builder.build("sh")
-            }
-        }
+        Log.e(TAG, "su failed, falling back to sh: ", e)
+        builder.build("sh")
     }
 }
 
