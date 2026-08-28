@@ -190,4 +190,22 @@
     <string name="dsh_adb_shell_allow_summary">Off: only read-only commands (getprop / dumpsys / ls / cat) run inside the container. On: anything the agent or you type through adb-shell also runs, with shell (uid 2000) rights.</string>
     <string name="dsh_adb_root_allow">Allow root shell in the container</string>
     <string name="dsh_adb_root_allow_summary">Only useful when the phone is already rooted: lets adb-shell --su escalate to uid 0. Leave it off unless you need it.</string>
+    <string name="dsh_msg_fetching_meta">Fetching runtime info…</string>
+    <string name="dsh_msg_downloading">Downloading runtime (%1$s)…</string>
+    <string name="dsh_msg_downloading_pct">Downloading runtime (%1$d%%) · %2$s</string>
+    <string name="dsh_msg_installing">Installing runtime…</string>
+    <string name="dsh_msg_runtime_ready">Runtime ready, preparing the environment…</string>
+    <string name="dsh_msg_starting">Starting the service…</string>
+    <string name="dsh_msg_service_ready">Service ready · %1$s</string>
+    <string name="dsh_msg_stopped">Service stopped</string>
+    <string name="dsh_msg_not_installed">Runtime is not installed</string>
+    <string name="dsh_err_meta_failed">Could not fetch runtime info. Check the network or switch mirror.</string>
+    <string name="dsh_err_arch_mismatch">Runtime architecture mismatch: package is %1$s, this device supports %2$s</string>
+    <string name="dsh_err_no_space">Not enough storage (%1$d MB free, about %2$d MB needed). Free some space and retry.</string>
+    <string name="dsh_err_download_failed">Runtime download failed. Check the network or switch mirror.</string>
+    <string name="dsh_err_sha_mismatch">Runtime verification failed (sha256 mismatch). The broken file was removed — please retry.</string>
+    <string name="dsh_err_extract_failed">Runtime install failed (rootfs incomplete after extraction)</string>
+    <string name="dsh_err_start_failed">Start failed: %1$s</string>
+    <string name="dsh_err_process_exited">The service process exited (see the startup log)</string>
+    <string name="dsh_err_start_timeout">Startup timed out (see the startup log)</string>
 </resources>

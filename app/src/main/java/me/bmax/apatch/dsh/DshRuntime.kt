@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.bmax.apatch.R
 import org.json.JSONObject
 
 /** 运行时阶段。 */
@@ -366,7 +367,12 @@ object DshRuntime {
     private suspend fun downloadAndInstall() {
         clearLog()
         _state.update {
-            it.copy(phase = DshPhase.DOWNLOADING, progress = 0f, speedBytesPerSec = 0L, message = "正在获取运行时信息…")
+            it.copy(
+                phase = DshPhase.DOWNLOADING,
+                progress = 0f,
+                speedBytesPerSec = 0L,
+                message = str(R.string.dsh_msg_fetching_meta),
+            )
         }
         if (DshSource.setting(appContext) == DshSource.SOURCE_AUTO) {
             appendLog("> 自动测速选择下载源…")
@@ -380,13 +386,13 @@ object DshRuntime {
         appendLog("> 获取运行时信息…")
         val meta = fetchMeta()
         if (meta == null) {
-            fail("获取运行时信息失败，请检查网络或切换镜像源")
+            fail(str(R.string.dsh_err_meta_failed))
             return
         }
         // 架构必须先对上：自定义源可以指向任何 metadata.json，下错架构的 rootfs 要到
         // 启动 node 时才报 "Exec format error"，白下 130 MB 还看不懂错在哪。
         if (meta.arch.isNotEmpty() && !android.os.Build.SUPPORTED_ABIS.contains(meta.arch)) {
-            fail("运行时架构不匹配：包是 ${meta.arch}，本机支持 ${android.os.Build.SUPPORTED_ABIS.joinToString("/")}")
+            fail(str(R.string.dsh_err_arch_mismatch, meta.arch, android.os.Build.SUPPORTED_ABIS.joinToString("/")))
             return
         }
         // 空间检查放在下载之前：rootfs 解压后约为压缩包的 3 倍，加上压缩包自身
@@ -395,14 +401,14 @@ object DshRuntime {
             val free = availableSpace(appContext.filesDir)
             val need = meta.sizeBytes * 4
             if (free in 1..need) {
-                fail("存储空间不足（可用 ${free / 1024 / 1024}MB，需约 ${need / 1024 / 1024}MB），请清理后重试")
+                fail(str(R.string.dsh_err_no_space, free / 1024 / 1024, need / 1024 / 1024))
                 return
             }
         }
         val tarball = DshEnv.downloadZip(appContext)
         appendLog("> 开始下载运行时 v${meta.version}（node ${meta.nodeVersion} · dsh ${meta.dsh}）")
         if (!downloadWithFallback(meta, tarball)) {
-            fail("运行时下载失败，请检查网络或切换镜像源")
+            fail(str(R.string.dsh_err_download_failed))
             return
         }
         appendLog("> 下载完成（${tarball.length() / 1024 / 1024} MB），校验 sha256…")
@@ -410,22 +416,24 @@ object DshRuntime {
             // 校验失败说明这份文件本身是坏的（续传时拼错、镜像给了旧包）——
             // 必须删掉，否则下次续传会一直基于这份坏数据往后接，永远校验不过。
             runCatching { tarball.delete() }
-            fail("运行时校验失败（sha256 不匹配），已清除损坏文件，请重试")
+            fail(str(R.string.dsh_err_sha_mismatch))
             return
         }
         // 二次确认：metadata 里的 sizeBytes 可能与实际有偏差，用真实体积再算一次
         val free = availableSpace(appContext.filesDir)
         val need = (tarball.length() * 3.0).toLong()
         if (free in 1..need) {
-            fail("存储空间不足（可用 ${free / 1024 / 1024}MB，需约 ${need / 1024 / 1024}MB），请清理后重试")
+            fail(str(R.string.dsh_err_no_space, free / 1024 / 1024, need / 1024 / 1024))
             return
         }
         appendLog("> sha256 校验通过，开始解压安装…")
-        _state.update { it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = "正在安装运行时…") }
+        _state.update {
+            it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_msg_installing))
+        }
         val ok = withContext(Dispatchers.IO) { extractRootfs(tarball) }
         tarball.delete()
         if (!ok) {
-            fail("运行时安装失败（解压后 rootfs 不完整）")
+            fail(str(R.string.dsh_err_extract_failed))
             return
         }
         appendLog("> 运行时安装完成")
@@ -437,7 +445,7 @@ object DshRuntime {
                 runtimeVersion = meta.version,
                 progress = 1f,
                 speedBytesPerSec = 0L,
-                message = "运行时已就绪，正在准备环境…",
+                message = str(R.string.dsh_msg_runtime_ready),
             )
         }
     }
@@ -478,7 +486,9 @@ object DshRuntime {
             ).distinct()
         for ((i, url) in candidates.withIndex()) {
             appendLog("> 尝试下载源 [${i + 1}/${candidates.size}]: $url")
-            _state.update { it.copy(message = "正在下载运行时（${meta.version}）…", speedBytesPerSec = 0L) }
+            _state.update {
+                it.copy(message = str(R.string.dsh_msg_downloading, meta.version), speedBytesPerSec = 0L)
+            }
             if (downloadFile(url, target, meta.sizeBytes)) {
                 appendLog("> 下载源 [${i + 1}] 成功")
                 return true
@@ -550,7 +560,7 @@ object DshRuntime {
                             it.copy(
                                 progress = pct.toFloat(),
                                 speedBytesPerSec = speedBps,
-                                message = "正在下载运行时（$pctInt%）· ${formatSpeed(speedBps)}",
+                                message = str(R.string.dsh_msg_downloading_pct, pctInt, formatSpeed(speedBps)),
                             )
                         }
                     }
@@ -669,7 +679,7 @@ object DshRuntime {
         val p = _state.value.phase
         if (p == DshPhase.RUNNING || p == DshPhase.STARTING) return
         if (!DshEnv.isRuntimeInstalled(appContext)) {
-            _state.update { it.copy(phase = DshPhase.NOT_READY, message = "运行时未安装") }
+            _state.update { it.copy(phase = DshPhase.NOT_READY, message = str(R.string.dsh_msg_not_installed)) }
             return
         }
         DshEnv.dshHome(appContext).mkdirs()
@@ -699,7 +709,7 @@ object DshRuntime {
         serverProcess = try {
             execRootfs(cmd)
         } catch (e: Exception) {
-            val detail = "启动失败：${e.message ?: e.javaClass.simpleName}"
+            val detail = str(R.string.dsh_err_start_failed, e.message ?: e.javaClass.simpleName)
             appendLog("! $detail")
             if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
                 appendLog("> 已切回 proot，请重新启动服务")
@@ -709,7 +719,7 @@ object DshRuntime {
         }
         forwardOutput(serverProcess)
         startedAt = System.currentTimeMillis()
-        _state.update { it.copy(phase = DshPhase.STARTING, port = port, message = "正在启动服务…") }
+        _state.update { it.copy(phase = DshPhase.STARTING, port = port, message = str(R.string.dsh_msg_starting)) }
     }
 
     /** 逐行转发容器输出到日志（node 重定向到文件是块缓冲，不逐行读日志面板会空白）。 */
@@ -742,14 +752,18 @@ object DshRuntime {
         while (System.currentTimeMillis() < deadline) {
             if (portOpen(port()) && httpResponds(port())) {
                 _state.update {
-                    it.copy(phase = DshPhase.RUNNING, progress = 1f, message = "服务已就绪 · ${it.webUrl}")
+                    it.copy(
+                        phase = DshPhase.RUNNING,
+                        progress = 1f,
+                        message = str(R.string.dsh_msg_service_ready, it.webUrl),
+                    )
                 }
                 appendLog("> 服务已就绪: http://127.0.0.1:${port()}/")
                 prefs().edit().putInt(DshEnv.KEY_PROROOT_FAIL, 0).apply()
                 return
             }
             if (serverProcess?.isAlive == false) {
-                val detail = "服务进程已退出（见启动日志）"
+                val detail = str(R.string.dsh_err_process_exited)
                 appendLog("! $detail")
                 if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
                     appendLog("> 已切回 proot，请重新启动服务")
@@ -762,7 +776,7 @@ object DshRuntime {
         // 超时同样算 proroot 一次失败：进程没退但服务始终起不来（proroot 在部分内核上
         // 卡在 seccomp/ptrace 上就是这种表现），只记「进程退出」那一路会让用户永远
         // 卡在坏运行时上，自动回退 proot 的兜底形同不存在。
-        val detail = "启动超时（见启动日志）"
+        val detail = str(R.string.dsh_err_start_timeout)
         appendLog("! $detail")
         if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
             appendLog("> 已切回 proot，请重新启动服务")
@@ -819,7 +833,7 @@ object DshRuntime {
         runCatching { serverProcess?.destroyForcibly() }
         serverProcess = null
         startedAt = 0L
-        _state.update { it.copy(phase = DshPhase.NOT_READY, pid = null, message = "服务已停止") }
+        _state.update { it.copy(phase = DshPhase.NOT_READY, pid = null, message = str(R.string.dsh_msg_stopped)) }
     }
 
     fun uptimeMillis(): Long = if (startedAt == 0L) 0L else System.currentTimeMillis() - startedAt
@@ -841,6 +855,16 @@ object DshRuntime {
         appendLog("! $message")
         _state.update { it.copy(phase = DshPhase.ERROR, message = message, speedBytesPerSec = 0L) }
     }
+
+    /**
+     * 取本地化字符串。
+     *
+     * 状态消息会直接显示在首页大卡上，必须跟随应用语言 —— 原来这一层全是硬编码中文，
+     * 英文界面下首页照样弹中文。启动日志里的行仍保持中文原样：那是给排障看的技术输出，
+     * 混进资源里既难维护、也让日志在不同语言下对不上。
+     */
+    private fun str(resId: Int, vararg args: Any): String =
+        if (::appContext.isInitialized) appContext.getString(resId, *args) else ""
 
     // ────────────────────────── 工具 ──────────────────────────
 
