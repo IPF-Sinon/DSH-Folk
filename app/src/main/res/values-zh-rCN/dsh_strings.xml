@@ -241,4 +241,12 @@
     <string name="dsh_bk_items_tombstoned">，%1$d 项被删除记录挡下</string>
     <string name="dsh_bk_needs_restart">；需要重启 DSH 生效</string>
     <string name="dsh_bk_snapshot">；回滚快照 %1$s</string>
+    <string name="dsh_runtime_section">运行时</string>
+    <string name="dsh_runtime_summary">运行时损坏或想换新版本时重装容器</string>
+    <string name="dsh_runtime_installed_version">已安装：%1$s</string>
+    <string name="dsh_runtime_not_installed">尚未安装 —— 在首页启动服务即会下载</string>
+    <string name="dsh_runtime_reinstall">重装运行时</string>
+    <string name="dsh_runtime_reinstall_confirm_title">重装运行时？</string>
+    <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并覆盖容器。/root/.dsh 下的东西 —— 已装的插件、ADB 密钥、你的 DSH 配置 —— 都在这个容器里，会一并丢失。开始前会先停止服务。</string>
+    <string name="dsh_runtime_reinstall_go">重装</string>
 </resources>

@@ -259,4 +259,12 @@
     <string name="dsh_bk_items_tombstoned">, %1$d blocked by deletion records</string>
     <string name="dsh_bk_needs_restart">; restart DSH to take effect</string>
     <string name="dsh_bk_snapshot">; rollback snapshot %1$s</string>
+    <string name="dsh_runtime_section">Runtime</string>
+    <string name="dsh_runtime_summary">Reinstall the container runtime when it is damaged or you want a newer build</string>
+    <string name="dsh_runtime_installed_version">Installed: %1$s</string>
+    <string name="dsh_runtime_not_installed">Not installed yet — start the service on the home page to download it</string>
+    <string name="dsh_runtime_reinstall">Reinstall runtime</string>
+    <string name="dsh_runtime_reinstall_confirm_title">Reinstall the runtime?</string>
+    <string name="dsh_runtime_reinstall_confirm_text">This downloads the runtime again (about 140 MB) and overwrites the container. Files under /root/.dsh — installed plugins, ADB keys and your DSH configuration — are inside that container and will be lost. The service stops first.</string>
+    <string name="dsh_runtime_reinstall_go">Reinstall</string>
 </resources>

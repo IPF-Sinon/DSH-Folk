@@ -88,6 +88,8 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     }
 
     val runtimeInstalled = DshEnv.isRuntimeInstalled(context)
+    // 已装版本从运行时状态读（同一份 prefs，下载成功时写入）
+    val runtimeState by DshRuntime.state.collectAsStateWithLifecycle()
 
     val noSpeedText = stringResource(R.string.dsh_source_no_speed)
     val resultFmt = stringResource(R.string.dsh_source_result)
@@ -230,6 +232,12 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                             }
                     },
                     runtimeInstalled = runtimeInstalled,
+                    runtimeVersion = runtimeState.runtimeVersion ?: "",
+                    onReinstallRuntime = {
+                        // 重装是长任务，DshRuntime 自己起协程并把进度打进启动日志；
+                        // 回首页就能看到进度，这里不再阻塞设置页
+                        DshRuntime.reinstallRuntime()
+                    },
                     adbPairCode = adbPairCode,
                     onAdbPairCodeChange = { adbPairCode = it.filter { c -> c.isDigit() }.take(6) },
                     adbPairPort = adbPairPort,

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
@@ -26,10 +27,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -81,6 +87,10 @@ fun FunctionSettingsContent(
     onRequestShizuku: () -> Unit,
     /** 运行时是否已安装（无线 ADB 需要容器内的 python）。 */
     runtimeInstalled: Boolean,
+    /** 已安装的运行时版本；未安装时为空。 */
+    runtimeVersion: String,
+    /** 重新下载并覆盖容器。 */
+    onReinstallRuntime: () -> Unit,
     adbPairCode: String,
     onAdbPairCodeChange: (String) -> Unit,
     adbPairPort: String,
@@ -232,6 +242,62 @@ fun FunctionSettingsContent(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        // ───────── 运行时重装 ─────────
+        // DshRuntime.reinstallRuntime() 早就存在，但之前 UI 里没有任何入口，
+        // 而好几处报错文案（缺 pnpm / 缺 dsh）都写着「请在设置中重装运行时」。
+        item(key = "function_runtime") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    SectionHeader(
+                        icon = { Icon(Icons.Filled.Refresh, null, Modifier.size(20.dp)) },
+                        title = stringResource(R.string.dsh_runtime_section),
+                        summary = stringResource(R.string.dsh_runtime_summary),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = if (runtimeInstalled && runtimeVersion.isNotEmpty()) {
+                            stringResource(R.string.dsh_runtime_installed_version, runtimeVersion)
+                        } else if (runtimeInstalled) {
+                            stringResource(R.string.dsh_runtime_section)
+                        } else {
+                            stringResource(R.string.dsh_runtime_not_installed)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    var confirming by remember { mutableStateOf(false) }
+                    OutlinedButton(
+                        onClick = { confirming = true },
+                        enabled = runtimeInstalled,
+                    ) {
+                        Text(stringResource(R.string.dsh_runtime_reinstall))
+                    }
+                    // 重装会连带删掉容器内的插件与 ADB 密钥，必须确认
+                    if (confirming) {
+                        AlertDialog(
+                            onDismissRequest = { confirming = false },
+                            title = { Text(stringResource(R.string.dsh_runtime_reinstall_confirm_title)) },
+                            text = { Text(stringResource(R.string.dsh_runtime_reinstall_confirm_text)) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    confirming = false
+                                    onReinstallRuntime()
+                                }) {
+                                    Text(stringResource(R.string.dsh_runtime_reinstall_go))
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { confirming = false }) {
+                                    Text(stringResource(android.R.string.cancel))
+                                }
+                            },
+                        )
                     }
                 }
             }
