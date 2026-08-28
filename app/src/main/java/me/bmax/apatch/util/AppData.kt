@@ -60,10 +60,12 @@ object AppData {
                 val installed = DshPluginRepo.listInstalled()
                 _pluginCount.value = installed.size
 
-                // 可更新数需要线上版本号；商店不可达时保持上一次的值而不是清零。
-                val catalog = runCatching { DshPluginRepo.fetchCatalog() }.getOrDefault(emptyList())
-                if (catalog.isNotEmpty()) {
-                    _updatableCount.value = catalog.count { it.updatable }
+                // 可更新数直接对「已安装列表」补齐远端版本，而不是数商店目录里可更新的条目：
+                // dsh-market 只收录了一部分插件（dsh-config-manager 就不在目录里），
+                // 数目录会漏掉这些本地插件的更新。补齐失败时保持上一次的值而不是清零。
+                val enriched = runCatching { DshPluginRepo.enrich(installed) }.getOrDefault(emptyList())
+                if (enriched.isNotEmpty()) {
+                    _updatableCount.value = enriched.count { it.updatable }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to refresh DSH plugin counts", e)

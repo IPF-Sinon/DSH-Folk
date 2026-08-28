@@ -96,8 +96,12 @@ object DshPluginRepo {
     suspend fun fetchCatalog(): List<DshPlugin> = withContext(Dispatchers.IO) {
         val base = fetchMarket().ifEmpty { fetchNpmFallback() }
         if (base.isEmpty()) return@withContext emptyList()
-        val installed = listInstalled().associateBy { it.id }
-        enrich(base.map { p -> p.copy(installedVersion = installed[p.id]?.installedVersion ?: "") })
+        // 已安装条目的 id 就是 npm 包名，目录条目的 id 是 market id ——
+        // 两者对 12/28 条并不相同，必须按 pkg 关联，否则「已安装」永远匹配不上
+        val installed = listInstalled().associateBy { it.pkg }
+        enrich(base.map { p ->
+            p.copy(installedVersion = installed[p.pkg]?.installedVersion ?: "")
+        })
     }
 
     /** 并发补齐版本、下载量、star、点赞（各自失败只让那一项保持 -1 / 空）。 */
