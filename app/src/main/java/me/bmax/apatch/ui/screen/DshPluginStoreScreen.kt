@@ -56,14 +56,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
-import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPlugin
+import me.bmax.apatch.dsh.DshPluginRepo
 import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.ui.component.SearchAppBar
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.LocalSnackbarHost
-import java.io.File
 
 /**
  * 插件商店（dsh-market）。
@@ -92,17 +91,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
         if (result.resultCode != RESULT_OK) return@rememberLauncherForActivityResult
         val uri = result.data?.data ?: return@rememberLauncherForActivityResult
         scope.launch {
-            // 容器内只能读 rootfs 里的路径，先把用户选的 tgz 落到 /root/.dsh/incoming
-            val guest = withContext(Dispatchers.IO) {
-                runCatching {
-                    val dir = File(DshEnv.dshHome(context), "incoming").apply { mkdirs() }
-                    val dst = File(dir, "local-plugin-${System.currentTimeMillis()}.tgz")
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        dst.outputStream().use { input.copyTo(it) }
-                    }
-                    "/root/.dsh/incoming/${dst.name}"
-                }.getOrNull()
-            }
+            val guest = withContext(Dispatchers.IO) { DshPluginRepo.stageTarball(context, uri) }
             if (guest == null) {
                 snackBarHost.showSnackbar(context.getString(R.string.dsh_plugin_local_read_failed))
                 return@launch

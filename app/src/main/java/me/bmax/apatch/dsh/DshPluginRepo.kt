@@ -1,6 +1,9 @@
 package me.bmax.apatch.dsh
 
+import android.content.Context
+import android.net.Uri
 import android.util.Log
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
@@ -321,6 +324,39 @@ object DshPluginRepo {
     suspend fun installLocal(containerPath: String): String = withContext(Dispatchers.IO) {
         // 绝对路径原样传给 pnpm（dsh 只重写相对路径 spec），tgz 装完同样会被 reconcile
         dshPlugin("add '$containerPath'", 900_000)
+    }
+
+    /** 暂存目录在容器里的绝对路径。 */
+    private const val INCOMING_GUEST = "/root/.dsh/incoming"
+
+    /**
+     * 把用户选的 .tgz 落进容器可见目录，返回容器内绝对路径；失败返回 null。
+     *
+     * 容器只看得到 rootfs 内的路径，SAF 的 content:// Uri 更是传不进去，所以必须先拷。
+     *
+     * 校验不能省：`openInputStream` 对已撤销授权 / 已删除的 Uri 会返回 **null**，
+     * 而 `?.use {}` 在 null 时整块跳过且不抛异常 —— 原来两处调用点因此会把一个不存在
+     * 或 0 字节的路径交给 `dsh plugin add`，用户看到的是 pnpm 的一句 ENOENT。
+     *
+     * 顺带清掉上次留下的暂存文件：每次本地安装都写一个带时间戳的新文件，
+     * 装完谁也不删，rootfs 里会一直堆着。
+     */
+    fun stageTarball(ctx: Context, uri: Uri): String? {
+        val dir = File(DshEnv.dshHome(ctx), "incoming")
+        if (!dir.isDirectory && !dir.mkdirs()) return null
+        // 只留这一次的文件：tgz 动辄几 MB，堆在 rootfs 里没人清
+        runCatching { dir.listFiles()?.forEach { it.delete() } }
+        val dst = File(dir, "local-plugin-${System.currentTimeMillis()}.tgz")
+        val ok = runCatching {
+            val input = ctx.contentResolver.openInputStream(uri) ?: return@runCatching false
+            input.use { src -> dst.outputStream().use { src.copyTo(it) } }
+            dst.isFile && dst.length() > 0L
+        }.getOrDefault(false)
+        if (!ok) {
+            runCatching { dst.delete() }
+            return null
+        }
+        return "$INCOMING_GUEST/${dst.name}"
     }
 
     /**
