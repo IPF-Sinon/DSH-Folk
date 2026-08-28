@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.bmax.apatch.R
 import rikka.shizuku.Shizuku
 
 /**
@@ -42,13 +43,27 @@ object PermissionManager {
         /** 提供 root 的实现名（Magisk / KernelSU / APatch / 未知）。 */
         val rootProvider: String = "",
     ) {
-        val label: String
+        /**
+         * 通道名的字符串资源 id。
+         *
+         * 不在这里直接拼中文：这个类被首页六套布局和功能页共用，
+         * 显示层才有 Context/Composable 能取到当前语言。
+         * root 实现名（Magisk / KernelSU / …）由 [rootProvider] 单独给出。
+         */
+        val labelRes: Int
             get() = when (channel) {
-                Channel.ROOT -> if (rootProvider.isEmpty()) "Root" else "Root · $rootProvider"
-                Channel.SHIZUKU -> "Shizuku"
-                Channel.ADB -> "无线 ADB"
-                Channel.NONE -> "未获取"
+                Channel.ROOT -> R.string.dsh_perm_root
+                Channel.SHIZUKU -> R.string.dsh_perm_shizuku
+                Channel.ADB -> R.string.dsh_perm_adb
+                Channel.NONE -> R.string.dsh_perm_none
             }
+
+        /** 已本地化的通道名，root 时带上实现名。 */
+        fun label(ctx: Context): String {
+            val base = ctx.getString(labelRes)
+            return if (channel == Channel.ROOT && rootProvider.isNotEmpty()) "$base · $rootProvider"
+            else base
+        }
     }
 
     private val _status = MutableStateFlow(Status())

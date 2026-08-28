@@ -32,6 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -243,7 +244,10 @@ fun FunctionSettingsContent(
                     Spacer(Modifier.height(12.dp))
 
                     Text(
-                        text = stringResource(R.string.dsh_perm_current, perm.label),
+                        text = stringResource(
+                            R.string.dsh_perm_current,
+                            perm.label(LocalContext.current),
+                        ),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
                     )

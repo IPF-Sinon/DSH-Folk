@@ -148,7 +148,7 @@ fun HomeScreenDsh(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Outlined.Security,
                 title = stringResource(R.string.dsh_permission),
-                value = perm.label,
+                value = perm.label(context),
                 subtitle = permHint(perm),
                 onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },
             )

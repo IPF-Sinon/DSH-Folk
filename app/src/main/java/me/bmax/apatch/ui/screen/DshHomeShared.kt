@@ -95,8 +95,8 @@ class DshHomeUiState internal constructor(
     /** 运行方式显示名（proot / proroot）。 */
     val runtimeLabel: String get() = if (runtimeId == "proroot") "proroot" else "proot"
 
-    /** 权限通道显示名，直接来自 PermissionManager。 */
-    val permLabel: String get() = perm.label
+    /** 权限通道显示名（已本地化）。 */
+    val permLabel: String get() = perm.label(context)
 
     fun start() = HarnessService.start(context)
 
