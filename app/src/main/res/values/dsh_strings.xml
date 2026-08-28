@@ -182,4 +182,6 @@
     <string name="dsh_backup_remote_list">Backups inside the runtime</string>
     <string name="dsh_backup_remote_refresh">List runtime backups</string>
     <string name="dsh_backup_remote_empty">No backup files in the runtime yet.</string>
+    <string name="dsh_plugin_needs_restart">Done — restart DSH for it to take effect</string>
+    <string name="dsh_plugin_restart_now">Restart now</string>
 </resources>

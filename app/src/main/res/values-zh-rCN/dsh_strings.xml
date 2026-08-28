@@ -164,4 +164,6 @@
     <string name="dsh_backup_remote_list">运行时里的备份</string>
     <string name="dsh_backup_remote_refresh">列出运行时备份</string>
     <string name="dsh_backup_remote_empty">运行时里还没有备份文件。</string>
+    <string name="dsh_plugin_needs_restart">已完成，重启 DSH 后生效</string>
+    <string name="dsh_plugin_restart_now">立即重启</string>
 </resources>

@@ -78,7 +78,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
     val snackBarHost = LocalSnackbarHost.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val done = stringResource(R.string.dsh_plugin_done)
+    val announce = rememberPluginAnnouncer(viewModel, snackBarHost)
 
     LaunchedEffect(Unit) {
         if (viewModel.catalog.isEmpty()) viewModel.refresh()
@@ -106,7 +106,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
                 return@launch
             }
             viewModel.installLocal(guest) { out ->
-                scope.launch { snackBarHost.showSnackbar(out.lines().lastOrNull() ?: done) }
+                scope.launch { announce(out) }
             }
         }
     }
@@ -190,7 +190,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
                             onInstall = {
                                 viewModel.install(plugin.pkg) { out ->
                                     scope.launch {
-                                        snackBarHost.showSnackbar(out.lines().lastOrNull() ?: done)
+                                        announce(out)
                                     }
                                 }
                             },

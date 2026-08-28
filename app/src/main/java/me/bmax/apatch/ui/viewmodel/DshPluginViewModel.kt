@@ -62,6 +62,12 @@ class DshPluginViewModel : ViewModel() {
 
     val updatableCount: Int get() = plugins.count { it.updatable }
 
+    /** 有装/卸成功过：需要重启 DSH 才会加载新的 profile patch 层。 */
+    var needsRestart by mutableStateOf(false)
+        private set
+
+    fun clearNeedsRestart() { needsRestart = false }
+
     fun refresh() {
         if (isRefreshing) return
         isRefreshing = true
@@ -103,35 +109,37 @@ class DshPluginViewModel : ViewModel() {
     }
 
     fun install(pkg: String, version: String = "", onDone: (String) -> Unit = {}) {
-        viewModelScope.launch {
-            isRefreshing = true
-            val out = DshPluginRepo.install(pkg, version)
-            lastOutput = out
-            isRefreshing = false
-            onDone(out)
-            refresh()
-        }
+        run({ DshPluginRepo.install(pkg, version) }, onDone)
     }
 
     fun uninstall(pkg: String, onDone: (String) -> Unit = {}) {
+        run({ DshPluginRepo.uninstall(pkg) }, onDone)
+    }
+
+    fun installLocal(containerPath: String, onDone: (String) -> Unit = {}) {
+        run({ DshPluginRepo.installLocal(containerPath) }, onDone)
+    }
+
+    /**
+     * 装 / 卸 / 本地装共用的执行壳。
+     *
+     * 成功后置 [needsRestart]：dsh 在启动时组合 profile 的 patch 层，
+     * 装完不重启进程新插件不会加载 —— 这与 dsh plugin 自己的 needsRestart 语义一致。
+     */
+    private fun run(action: suspend () -> String, onDone: (String) -> Unit) {
         viewModelScope.launch {
             isRefreshing = true
-            val out = DshPluginRepo.uninstall(pkg)
+            val out = action()
             lastOutput = out
             isRefreshing = false
+            if (!looksFailed(out)) needsRestart = true
             onDone(out)
             refresh()
         }
     }
 
-    fun installLocal(containerPath: String, onDone: (String) -> Unit = {}) {
-        viewModelScope.launch {
-            isRefreshing = true
-            val out = DshPluginRepo.installLocal(containerPath)
-            lastOutput = out
-            isRefreshing = false
-            onDone(out)
-            refresh()
-        }
-    }
+    /** pnpm 失败时 dsh 会打印这几行；识别不出来就当成功（宁可多提示一次重启）。 */
+    private fun looksFailed(out: String): Boolean =
+        out.contains("pnpm failed") || out.contains("pnpm not found") ||
+            out.contains("[DSH-Folk]") || out.contains("ERR_PNPM")
 }

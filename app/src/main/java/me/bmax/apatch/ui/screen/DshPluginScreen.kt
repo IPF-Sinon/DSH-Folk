@@ -34,7 +34,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -62,6 +64,7 @@ import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPlugin
+import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.ui.component.SearchAppBar
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
@@ -87,7 +90,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
     val snackBarHost = LocalSnackbarHost.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val done = stringResource(R.string.dsh_plugin_done)
+    val announce = rememberPluginAnnouncer(viewModel, snackBarHost)
 
     LaunchedEffect(Unit) {
         if (viewModel.plugins.isEmpty()) viewModel.refresh()
@@ -116,7 +119,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                 return@launch
             }
             viewModel.installLocal(guest) { out ->
-                scope.launch { snackBarHost.showSnackbar(out.lines().lastOrNull() ?: done) }
+                scope.launch { announce(out) }
             }
         }
     }
@@ -177,7 +180,7 @@ private fun DshPluginList(
     snackBarHost: SnackbarHostState,
 ) {
     val scope = rememberCoroutineScope()
-    val done = stringResource(R.string.dsh_plugin_done)
+    val announce = rememberPluginAnnouncer(viewModel, snackBarHost)
     val list = viewModel.filtered
 
     if (list.isEmpty()) {
@@ -212,12 +215,12 @@ private fun DshPluginList(
                 showMoreInfo = viewModel.showMoreInfo,
                 onUpdate = {
                     viewModel.install(plugin.pkg) { out ->
-                        scope.launch { snackBarHost.showSnackbar(out.lines().lastOrNull() ?: done) }
+                        scope.launch { announce(out) }
                     }
                 },
                 onUninstall = {
                     viewModel.uninstall(plugin.pkg) { out ->
-                        scope.launch { snackBarHost.showSnackbar(out.lines().lastOrNull() ?: done) }
+                        scope.launch { announce(out) }
                     }
                 },
             )
@@ -329,4 +332,36 @@ internal fun formatCount(n: Long): String = when {
     n >= 1_000_000 -> String.format("%.1fM", n / 1_000_000.0)
     n >= 1_000 -> String.format("%.1fk", n / 1_000.0)
     else -> n.toString()
+}
+
+/**
+ * 装 / 卸完成后的统一提示。
+ *
+ * 成功时给一条带「立即重启」动作的 snackbar：dsh 只在启动时组合 profile 的 patch 层，
+ * 不重启进程新装的插件不会加载（与 dsh plugin 自己的 needsRestart 语义一致）。
+ */
+@Composable
+internal fun rememberPluginAnnouncer(
+    viewModel: DshPluginViewModel,
+    snackBarHost: SnackbarHostState,
+): suspend (String) -> Unit {
+    val done = stringResource(R.string.dsh_plugin_done)
+    val needsRestartText = stringResource(R.string.dsh_plugin_needs_restart)
+    val restartNowText = stringResource(R.string.dsh_plugin_restart_now)
+    return remember(viewModel, snackBarHost, done, needsRestartText, restartNowText) {
+        { out: String ->
+            val tail = out.lines().lastOrNull { it.isNotBlank() } ?: done
+            if (viewModel.needsRestart) {
+                val result = snackBarHost.showSnackbar(
+                    message = needsRestartText,
+                    actionLabel = restartNowText,
+                    duration = SnackbarDuration.Long,
+                )
+                viewModel.clearNeedsRestart()
+                if (result == SnackbarResult.ActionPerformed) DshRuntime.restart()
+            } else {
+                snackBarHost.showSnackbar(tail)
+            }
+        }
+    }
 }
