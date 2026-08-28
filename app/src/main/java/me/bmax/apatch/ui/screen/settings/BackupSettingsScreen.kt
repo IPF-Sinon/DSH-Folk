@@ -141,6 +141,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                                             user = BackupConfig.webdavUsername,
                                             pass = BackupConfig.webdavPassword,
                                             file = zip,
+                                            // 用户没填远端路径时给个固定子目录，别把备份散在 WebDAV 根上
                                             subDir = BackupConfig.webdavPath.trim('/').ifEmpty { "DSH-Folk" },
                                         )
                                         local + "\n" + if (up.isSuccess) webdavOk

@@ -49,9 +49,12 @@ object WebDavUtils {
                     currentPath = if (currentPath.isEmpty()) part else "$currentPath/$part"
                     createDir(cleanBaseUrl, user, pass, currentPath)
                 }
-                
+
                 val fileName = remoteFileName ?: file.name
-                val fullUrl = "$cleanBaseUrl/$currentPath/$fileName"
+                // subDir 为空（用户把远端路径填成 "/" 或留空）时不能直接拼 —— 那会变成
+                // base//file，多数 WebDAV 服务端会返回 409/404。
+                val fullUrl = if (currentPath.isEmpty()) "$cleanBaseUrl/$fileName"
+                    else "$cleanBaseUrl/$currentPath/$fileName"
                 BackupLogManager.log("Uploading to: $fullUrl")
                 
                 val credential = Credentials.basic(user, pass)
