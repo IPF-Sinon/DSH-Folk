@@ -232,8 +232,8 @@
     <string name="dsh_bk_rolled_back_full">已完整回滚</string>
     <string name="dsh_bk_rolled_back_partial">已部分回滚</string>
     <string name="dsh_bk_rollback_failed">回滚失败：%1$s</string>
-    <string name="dsh_bk_import_done">导入完成：</string>
-    <string name="dsh_bk_import_incomplete">导入未完成：</string>
+    <string name="dsh_bk_import_done">导入完成：%1$s</string>
+    <string name="dsh_bk_import_incomplete">导入未完成：%1$s</string>
     <string name="dsh_bk_items">%1$d 项</string>
     <string name="dsh_bk_items_failed">，%1$d 项失败</string>
     <string name="dsh_bk_items_warned">，%1$d 项告警</string>

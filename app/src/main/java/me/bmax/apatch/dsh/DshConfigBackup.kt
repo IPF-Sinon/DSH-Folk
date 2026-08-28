@@ -367,8 +367,16 @@ object DshConfigBackup {
         val needsRestart = execObj.optBoolean("needsRestart", planObj.optBoolean("needsRestart", false))
         val ok = execObj.optBoolean("ok", failed == 0) && rollback == null
         val head = buildString {
-            append(ctx.getString(if (ok) R.string.dsh_bk_import_done else R.string.dsh_bk_import_incomplete))
-            append(ctx.getString(R.string.dsh_bk_items, total))
+            // 「导入完成：」这种以空格/冒号收尾的前缀不能单独做一条资源：
+            // AAPT2 会把 XML 文本值的首尾空白 trim 掉（英文那条 "Import finished: "
+            // 打进 APK 后变成 "Import finished:"，和后面的计数黏在一起）。
+            // 用带 %1$s 的完整格式串，把计数当参数塞进去。
+            append(
+                ctx.getString(
+                    if (ok) R.string.dsh_bk_import_done else R.string.dsh_bk_import_incomplete,
+                    ctx.getString(R.string.dsh_bk_items, total),
+                )
+            )
             if (failed > 0) append(ctx.getString(R.string.dsh_bk_items_failed, failed))
             if (warned > 0) append(ctx.getString(R.string.dsh_bk_items_warned, warned))
             if (skipped > 0) append(ctx.getString(R.string.dsh_bk_items_skipped, skipped))

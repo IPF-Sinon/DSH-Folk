@@ -250,8 +250,8 @@
     <string name="dsh_bk_rolled_back_full">Fully rolled back</string>
     <string name="dsh_bk_rolled_back_partial">Partially rolled back</string>
     <string name="dsh_bk_rollback_failed">Rollback failed: %1$s</string>
-    <string name="dsh_bk_import_done">Import finished: </string>
-    <string name="dsh_bk_import_incomplete">Import did not finish: </string>
+    <string name="dsh_bk_import_done">Import finished: %1$s</string>
+    <string name="dsh_bk_import_incomplete">Import did not finish: %1$s</string>
     <string name="dsh_bk_items">%1$d items</string>
     <string name="dsh_bk_items_failed">, %1$d failed</string>
     <string name="dsh_bk_items_warned">, %1$d with warnings</string>
