@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Ask a question | 提问
-    url: https://github.com/bmax121/APatch/discussions/new?category=Q-A
-    about: If you've any questions, ask them here | 如果有任何疑问请在这里提问
-  - name: Official Telegram channel | 官方 Telegram 频道
-    url: https://t.me/FolkPatch
-    about: Subscribe to receive releases and announcements | 可以订阅通知和发行版
+  - name: 提问 / Ask a question
+    url: https://github.com/IPF-Sinon/DSH-Folk/discussions
+    about: 使用上的疑问请在 Discussions 里问，不要开 Issue
+  - name: QQ 群 1109060326
+    url: https://qm.qq.com/q/t7HDoR5ACk
+    about: 日常交流与快速求助
