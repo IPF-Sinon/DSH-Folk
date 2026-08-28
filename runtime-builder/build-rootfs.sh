@@ -111,6 +111,19 @@ fi
 ARM_NATIVE_COUNT="$(find "$ROOTFS/usr/local/lib/node_modules" -name "*.node" 2>/dev/null | wc -l)"
 echo "    原生模块 ${ARM_NATIVE_COUNT} 个，未发现异架构产物"
 
+# dsh 的插件管理（dsh plugin --profile web add …）内部转发 pnpm，PATH 上没有 pnpm
+# 就直接返回 127「pnpm not found on PATH」。rootfs 里只有 corepack 的 shim，
+# 而 corepack 首次运行要联网下载 —— 用户在手机上装插件时才发现没网就太晚了。
+# pnpm 是纯 JS、零 runtime 依赖，异架构安装完全安全（不像 sharp/koffi 要挑预编译产物）。
+echo "    附带安装 pnpm（dsh plugin 内部转发它）"
+npm install --global \
+  --prefix "$ROOTFS/usr/local" \
+  --ignore-scripts --no-audit --no-fund \
+  pnpm
+test -f "$ROOTFS/usr/local/bin/pnpm"
+PNPM_VERSION="$(node -p "require('$ROOTFS/usr/local/lib/node_modules/pnpm/package.json').version")"
+echo "    pnpm = $PNPM_VERSION"
+
 echo "==> [4/7] 安装 python3（无线 ADB 配对依赖）"
 # 无线 ADB 配对（AdbBridge / adb-pair.py）需要容器内的 python3，
 # 而 ubuntu-base 里没有它。手机上第一次配对才 apt install 的话：

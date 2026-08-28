@@ -62,7 +62,7 @@ data class DshPlugin(
  * - **npm registry** 提供最新版本号（`registry.npmjs.org/<pkg>/latest`），用来判断可更新；
  * - **GitHub API** 提供 star 数（匿名 60 次/小时，所以缓存 6 小时并限并发）。
  *
- * 已安装列表来自容器内 `DSH_HOME/plugins-store/node_modules`，走 proot 读，不依赖网络。
+ * 已安装列表来自容器内 profile 目录，走 proot 读，不依赖网络。
  */
 object DshPluginRepo {
     private const val TAG = "DSH-Folk-Plugins"
@@ -72,6 +72,10 @@ object DshPluginRepo {
     private const val MARKET_DOWNLOADS = "https://dsh-market.com/api/npm-downloads"
     private const val NPM_SEARCH = "https://registry.npmjs.org/-/v1/search?size=100&text="
     private const val NPM_DOWNLOADS_POINT = "https://api.npmjs.org/downloads/point/last-week/"
+
+    /** dsh 的 profile 名。web 界面就是这个 profile，插件必须装进它才会被加载。 */
+    private const val PROFILE = "web"
+    private const val PROFILE_DIR = "/root/.dsh/profiles/web"
 
     private const val CACHE_TTL_MS = 6 * 60 * 60 * 1000L
     /** 目录/下载量表变动没那么快，缓存 30 分钟，避免每次进页面都全量重拉。 */
@@ -240,61 +244,84 @@ object DshPluginRepo {
         return v
     }
 
-    // 容器内已安装插件。dsh 从 DSH_HOME/plugins 与 plugins-store/node_modules 两处加载，
-    // 这里都扫一遍并按包名去重。
+    // 容器内已安装插件：读 profile 的 package.json dependencies，再从 node_modules 取实际版本。
+    // 依赖清单才是权威来源 —— node_modules 里还躺着一大堆传递依赖，直接扫目录会把
+    // 上千个无关包全当成「已安装插件」。@deepseek-ai/dsh-base 之类出厂 bundle 不是依赖，
+    // 天然不会出现在这里。
     // 注意不要把这段写成 KDoc：路径里的通配符会提前闭合块注释。
     suspend fun listInstalled(): List<DshPlugin> = withContext(Dispatchers.IO) {
+        val script = "const fs=require('fs'),path=require('path');" +
+            "const dir=process.argv[1];" +
+            "let m;try{m=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){process.exit(0)}" +
+            "for(const n of Object.keys(m.dependencies||{})){" +
+            "let v='',d='';" +
+            "try{const q=JSON.parse(fs.readFileSync(path.join(dir,'node_modules',n,'package.json'),'utf8'));" +
+            "v=q.version||'';d=q.description||''}catch(e){}" +
+            "console.log([n,v,d].join('\\t'))}"
         val out = DshRuntime.execRootfsForOutput(
-            "for d in /root/.dsh/plugins/*/ /root/.dsh/plugins-store/node_modules/*/ " +
-                "/root/.dsh/plugins-store/node_modules/@*/*/; do " +
-                "test -f \"\$d/package.json\" || continue; " +
-                "n=\$(node -e 'try{const p=require(process.argv[1]+\"/package.json\");" +
-                "console.log([p.name,p.version,p.description||\"\"].join(\"\\t\"))}catch(e){}' \"\$d\" 2>/dev/null); " +
-                "test -n \"\$n\" && echo \"\$n\"; done",
-            45_000,
+            "node -e \"$script\" " + PROFILE_DIR + " 2>/dev/null",
+            60_000,
         )
         out.lines().mapNotNull { line ->
             val parts = line.split('\t')
             if (parts.size < 2 || parts[0].isBlank()) return@mapNotNull null
             val pkg = parts[0].trim()
+            val ver = parts[1].trim()
             DshPlugin(
                 id = pkg,
                 pkg = pkg,
                 name = pkg,
-                version = parts[1].trim(),
+                version = ver,
                 description = parts.getOrElse(2) { "" }.trim(),
-                installedVersion = parts[1].trim(),
+                installedVersion = ver,
             )
         }.distinctBy { it.pkg }
     }
 
-    /** 安装/更新一个插件（容器内 npm 安装到 DSH_HOME/plugins-store）。 */
+    /**
+     * 安装/更新一个插件。
+     *
+     * 必须走 `dsh plugin --profile web add`，不能自己 npm install：
+     * dsh 只加载 profile package.json 里 `dsh.profile.bundles` 列出的包，而这个列表是
+     * `dsh plugin` 成功后 reconcile 出来的（判据是包自己声明 `dsh.bundle.patch`）。
+     * 裸装进任何目录都只是躺在磁盘上，不会被加载。
+     */
     suspend fun install(pkg: String, version: String = ""): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext "包名为空，无法安装"
         val spec = if (version.isBlank()) pkg else "$pkg@$version"
-        DshRuntime.execRootfsForOutput(
-            "export DSH_HOME=/root/.dsh; mkdir -p /root/.dsh/plugins-store && cd /root/.dsh && " +
-                "npm install --prefix /root/.dsh/plugins-store --no-audit --no-fund '$spec' 2>&1 | tail -25",
-            600_000,
-        )
+        dshPlugin("add '$spec'", 900_000)
     }
 
-    /** 卸载一个插件。 */
+    /** 卸载一个插件（同样交给 dsh plugin，才会从 bundles 里摘掉）。 */
     suspend fun uninstall(pkg: String): String = withContext(Dispatchers.IO) {
-        DshRuntime.execRootfsForOutput(
-            "export DSH_HOME=/root/.dsh; " +
-                "npm uninstall --prefix /root/.dsh/plugins-store '$pkg' 2>&1 | tail -15",
-            300_000,
-        )
+        if (pkg.isBlank()) return@withContext "包名为空，无法卸载"
+        dshPlugin("remove '$pkg'", 600_000)
     }
 
     /** 本地安装：宿主 tgz 路径已由调用方复制进容器可见位置。 */
     suspend fun installLocal(containerPath: String): String = withContext(Dispatchers.IO) {
-        DshRuntime.execRootfsForOutput(
-            "export DSH_HOME=/root/.dsh; mkdir -p /root/.dsh/plugins-store && " +
-                "npm install --prefix /root/.dsh/plugins-store --no-audit --no-fund '$containerPath' 2>&1 | tail -25",
-            600_000,
+        // 绝对路径原样传给 pnpm（dsh 只重写相对路径 spec），tgz 装完同样会被 reconcile
+        dshPlugin("add '$containerPath'", 900_000)
+    }
+
+    /**
+     * 跑一条 `dsh plugin --profile <PROFILE> <args>`。
+     *
+     * dsh 是 wrapper 脚本，和启动 web 一样得先 readlink 出真正的 bin.js 再交给 node
+     * （`--expose-internals` 只能作为命令行参数传）。pnpm 装包要几分钟，输出只留尾部。
+     */
+    private fun dshPlugin(args: String, timeoutMs: Long): String {
+        val out = DshRuntime.execRootfsForOutput(
+            "export DSH_HOME=/root/.dsh; cd /root; " +
+                "if ! command -v dsh >/dev/null 2>&1; then echo '[DSH-Folk] 容器内找不到 dsh'; exit 1; fi; " +
+                "if ! command -v pnpm >/dev/null 2>&1; then " +
+                "echo '[DSH-Folk] 容器内找不到 pnpm，请在设置中重装运行时'; exit 1; fi; " +
+                "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); " +
+                "node --expose-internals \"\$DSH_REAL\" plugin --profile " + PROFILE + " " + args +
+                " 2>&1 | tail -30",
+            timeoutMs,
         )
+        return out.ifBlank { "没有输出（可能超时或容器未启动）" }
     }
 
     private fun httpGet(url: String): String? = runCatching {
