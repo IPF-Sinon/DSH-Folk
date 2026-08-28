@@ -319,6 +319,16 @@ object DshConfigBackup {
         if (rollback != null) {
             notes.append(if (rollback.optBoolean("full")) "↩ 已完整回滚" else "↩ 已部分回滚")
             notes.append('\n')
+            // rollback.failed[]{item,reason,manualHint}：回滚都失败了的项处于半写入状态，
+            // 只说「已部分回滚」等于让用户自己去猜哪儿坏了。manualHint 是插件给的补救指引。
+            val rbFailed = rollback.optJSONArray("failed")
+            for (i in 0 until (rbFailed?.length() ?: 0)) {
+                val f = rbFailed?.optJSONObject(i) ?: continue
+                notes.append("✗ 回滚失败 ").append(f.optString("item"))
+                f.optString("reason").takeIf { it.isNotEmpty() }?.let { notes.append("：").append(it) }
+                f.optString("manualHint").takeIf { it.isNotEmpty() }?.let { notes.append(" → ").append(it) }
+                notes.append('\n')
+            }
         }
         val needsRestart = execObj.optBoolean("needsRestart", planObj.optBoolean("needsRestart", false))
         val ok = execObj.optBoolean("ok", failed == 0) && rollback == null
