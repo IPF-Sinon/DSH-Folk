@@ -217,7 +217,7 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
                             }
 
                             override fun onExit(status: Int) {
-                                main.post { title = "会话已结束（退出码 $status）" }
+                                main.post { title = context.getString(R.string.dsh_term_exited, status) }
                             }
 
                             override fun onCopy(text: String) {
@@ -269,7 +269,10 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
                             view.attachSession(ps.session)
                             title = ps.session?.title?.takeIf { it.isNotBlank() } ?: "Ubuntu · PTY"
                         }.onFailure {
-                            title = "终端启动失败：${it.message ?: it.javaClass.simpleName}"
+                            title = context.getString(
+                                R.string.dsh_term_start_failed,
+                                it.message ?: it.javaClass.simpleName,
+                            )
                         }
                     }
                 },

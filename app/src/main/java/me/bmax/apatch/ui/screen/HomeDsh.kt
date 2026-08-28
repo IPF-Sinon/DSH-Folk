@@ -125,7 +125,7 @@ fun HomeScreenDsh(
             onOpenWeb = {
                 runCatching {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(state.webUrl)))
-                }.onFailure { showToast(context, "没有可用的浏览器") }
+                }.onFailure { showToast(context, context.getString(R.string.dsh_no_browser)) }
             },
         )
 
@@ -160,12 +160,14 @@ fun HomeScreenDsh(
     }
 }
 
+@Composable
 private fun permHint(s: PermissionManager.Status): String = when (s.channel) {
-    PermissionManager.Channel.ROOT -> "已获得 root，完整能力"
-    PermissionManager.Channel.SHIZUKU -> "shell 权限（uid 2000）"
-    PermissionManager.Channel.ADB -> "已配对，shell 权限"
+    PermissionManager.Channel.ROOT -> stringResource(R.string.dsh_perm_hint_root)
+    PermissionManager.Channel.SHIZUKU -> stringResource(R.string.dsh_perm_hint_shizuku)
+    PermissionManager.Channel.ADB -> stringResource(R.string.dsh_perm_hint_adb)
     PermissionManager.Channel.NONE ->
-        if (s.shizukuRunning) "Shizuku 在运行但未授权" else "点此配置提权通道"
+        if (s.shizukuRunning) stringResource(R.string.dsh_perm_hint_shizuku_ungranted)
+        else stringResource(R.string.dsh_perm_hint_none)
 }
 
 /** Hero 卡：DeepSeek Harness 大标题 + 阶段 + 进度 + 操作。 */
@@ -426,7 +428,7 @@ private fun DshLogCard() {
                     .verticalScroll(rememberScrollState()),
             ) {
                 Text(
-                    text = log.ifEmpty { "尚无日志。点击「启动」开始安装并运行 DeepSeek Harness。" },
+                    text = log.ifEmpty { stringResource(R.string.dsh_log_empty) },
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurface,

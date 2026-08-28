@@ -153,4 +153,12 @@
     <string name="dsh_autostart_summary">Launch the harness automatically after the device finishes booting (only when the runtime is already installed)</string>
     <string name="dsh_backup_webdav_ok">Also uploaded to WebDAV</string>
     <string name="dsh_backup_webdav_failed">WebDAV upload failed: %1$s</string>
+    <string name="dsh_perm_hint_root">Root granted — full capability</string>
+    <string name="dsh_perm_hint_shizuku">Shell permission (uid 2000)</string>
+    <string name="dsh_perm_hint_adb">Paired — shell permission</string>
+    <string name="dsh_perm_hint_shizuku_ungranted">Shizuku is running but not granted</string>
+    <string name="dsh_perm_hint_none">Tap to set up an elevated channel</string>
+    <string name="dsh_log_empty">No log yet. Tap Start to install and run DeepSeek Harness.</string>
+    <string name="dsh_term_exited">Session ended (exit code %1$d)</string>
+    <string name="dsh_term_start_failed">Terminal failed to start: %1$s</string>
 </resources>

@@ -135,4 +135,12 @@
     <string name="dsh_autostart_summary">设备启动完成后自动拉起 Harness（仅在运行时已安装时生效）</string>
     <string name="dsh_backup_webdav_ok">已同时上传到 WebDAV</string>
     <string name="dsh_backup_webdav_failed">WebDAV 上传失败：%1$s</string>
+    <string name="dsh_perm_hint_root">已获得 root，完整能力</string>
+    <string name="dsh_perm_hint_shizuku">shell 权限（uid 2000）</string>
+    <string name="dsh_perm_hint_adb">已配对，shell 权限</string>
+    <string name="dsh_perm_hint_shizuku_ungranted">Shizuku 在运行但未授权</string>
+    <string name="dsh_perm_hint_none">点此配置提权通道</string>
+    <string name="dsh_log_empty">尚无日志。点击「启动」开始安装并运行 DeepSeek Harness。</string>
+    <string name="dsh_term_exited">会话已结束（退出码 %1$d）</string>
+    <string name="dsh_term_start_failed">终端启动失败：%1$s</string>
 </resources>
