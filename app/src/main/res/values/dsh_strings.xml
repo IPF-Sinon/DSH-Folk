@@ -184,4 +184,6 @@
     <string name="dsh_backup_remote_empty">No backup files in the runtime yet.</string>
     <string name="dsh_plugin_needs_restart">Done — restart DSH for it to take effect</string>
     <string name="dsh_plugin_restart_now">Restart now</string>
+    <string name="dsh_plugin_inactive">Not a profile layer</string>
+    <string name="dsh_plugin_inactive_hint">Installed as a plain dependency: it declares no dsh.bundle, so DSH does not load it.</string>
 </resources>

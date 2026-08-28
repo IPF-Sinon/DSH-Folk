@@ -166,4 +166,6 @@
     <string name="dsh_backup_remote_empty">运行时里还没有备份文件。</string>
     <string name="dsh_plugin_needs_restart">已完成，重启 DSH 后生效</string>
     <string name="dsh_plugin_restart_now">立即重启</string>
+    <string name="dsh_plugin_inactive">未生效</string>
+    <string name="dsh_plugin_inactive_hint">作为普通依赖装上了，但它没有声明 dsh.bundle，DSH 不会加载它。</string>
 </resources>

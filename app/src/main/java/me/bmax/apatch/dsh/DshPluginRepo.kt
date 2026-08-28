@@ -40,6 +40,12 @@ data class DshPlugin(
     /** dsh-market 上的点赞数，-1 表示未知。 */
     val likes: Long = -1L,
     val category: String = "",
+    /**
+     * 是否作为 profile 层生效。
+     *
+     * 判据是包名在 profile `package.json` 的 `dsh.profile.bundles` 里 —— dsh 只加载
+     * 这个列表；装了但没声明 `dsh.bundle.patch` 的依赖只是普通库，不是生效的插件。
+     */
     val enabled: Boolean = true,
 ) {
     val installed: Boolean get() = installedVersion.isNotEmpty()
@@ -263,11 +269,12 @@ object DshPluginRepo {
         val script = "const fs=require('fs'),path=require('path');" +
             "const dir=process.argv[1];" +
             "let m;try{m=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){process.exit(0)}" +
+            "const b=new Set((m.dsh&&m.dsh.profile&&m.dsh.profile.bundles)||[]);" +
             "for(const n of Object.keys(m.dependencies||{})){" +
             "let v='',d='';" +
             "try{const q=JSON.parse(fs.readFileSync(path.join(dir,'node_modules',n,'package.json'),'utf8'));" +
             "v=q.version||'';d=q.description||''}catch(e){}" +
-            "console.log([n,v,d].join('\\t'))}"
+            "console.log([n,v,d,b.has(n)?'1':'0'].join('\\t'))}"
         val out = DshRuntime.execRootfsForOutput(
             "node -e \"$script\" " + PROFILE_DIR + " 2>/dev/null",
             60_000,
@@ -284,6 +291,8 @@ object DshPluginRepo {
                 version = ver,
                 description = parts.getOrElse(2) { "" }.trim(),
                 installedVersion = ver,
+                // 缺这一列（旧格式输出）时按生效算，别把已装插件全标成停用
+                enabled = parts.getOrElse(3) { "1" }.trim() != "0",
             )
         }.distinctBy { it.pkg }
     }

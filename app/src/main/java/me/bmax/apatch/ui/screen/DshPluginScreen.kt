@@ -271,6 +271,13 @@ private fun DshPluginItem(
                         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     )
                 }
+                if (!plugin.enabled) {
+                    ModuleLabel(
+                        text = stringResource(R.string.dsh_plugin_inactive),
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
             }
 
             Text(
@@ -290,6 +297,15 @@ private fun DshPluginItem(
                         .filter { it.isNotEmpty() }.joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (!plugin.enabled) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.dsh_plugin_inactive_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
 
