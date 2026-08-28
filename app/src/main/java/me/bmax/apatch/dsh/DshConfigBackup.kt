@@ -238,6 +238,22 @@ object DshConfigBackup {
             ?: return@withContext ImportResult(false, "分析返回无法解析")
         val analyzeErr = analyzeObj.optString("error")
         if (analyzeErr.isNotEmpty()) return@withContext ImportResult(false, analyzeErr)
+        // ImportAnalysis.valid / compatibility 才是「这个包能不能导」的判断依据。
+        // 只看顶层 error 是不够的：分析本身成功（HTTP 200、无 error）但 valid=false
+        // 时原来照样往下走 plan/execute，等于拿一个已知不合法的包去写配置。
+        if (!analyzeObj.optBoolean("valid", true)) {
+            val errs = analyzeObj.optJSONArray("errors")
+            val detail = buildString {
+                for (i in 0 until (errs?.length() ?: 0)) {
+                    val e = errs?.optString(i) ?: continue
+                    if (e.isNotEmpty()) append("✗ ").append(e).append('\n')
+                }
+            }
+            return@withContext ImportResult(false, "备份文件校验未通过，未做任何改动", detail)
+        }
+        if (analyzeObj.optString("compatibility") == "unsupported") {
+            return@withContext ImportResult(false, "这份备份与当前 DSH 版本不兼容，未做任何改动")
+        }
 
         val decisions = JSONObject().apply {
             put("strategy", strategy)
