@@ -20,7 +20,7 @@ object AdbBridge {
     private val SCRIPTS = arrayOf("adb-pair.py", "adb-shell.py", "adb-setup.sh")
 
     /** 脚本版本：改脚本就 +1，旧版残留会因版本不符被强制重注入。 */
-    private const val SCRIPT_VERSION = "1"
+    private const val SCRIPT_VERSION = "2"
 
     // 源文件是 adb-wheels.tar.gz，但 AGP 会在打包时解压并去掉 .gz 后缀
     private val WHEELS_ASSET_NAMES = listOf("adb-wheels.tar.gz", "adb-wheels.tar")
@@ -112,6 +112,28 @@ object AdbBridge {
             "P=\$(test -f /root/.dsh/adbkeys/connect_port && cat /root/.dsh/adbkeys/connect_port || echo -); " +
             "echo 'key='\$K' deps='\$D' port='\$P"
     )
+
+    /**
+     * 容器内直接执行 ADB 写操作是否已获用户授权。
+     *
+     * 授权状态就是 rootfs 里的一个标记文件（adb-shell.py 读它）。App 自己的调用带
+     * DSH_INTERNAL=1，不受这个开关限制 —— 它管的是「agent / 用户在终端里手敲」。
+     */
+    fun shellAllowed(ctx: Context): Boolean =
+        java.io.File(DshEnv.dshHome(ctx), "adb-shell-allowed").isFile
+
+    /** 设置写操作授权。直接写宿主路径，不必启动容器。 */
+    fun setShellAllowed(ctx: Context, allowed: Boolean) {
+        val f = java.io.File(DshEnv.dshHome(ctx), "adb-shell-allowed")
+        runCatching {
+            if (allowed) {
+                f.parentFile?.mkdirs()
+                f.writeText("1")
+            } else {
+                f.delete()
+            }
+        }
+    }
 
     private fun esc(s: String): String = s.replace("'", "'\\''")
 

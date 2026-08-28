@@ -43,6 +43,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.component.ExpressiveCard
+import me.bmax.apatch.ui.component.ExpressiveSwitch
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 import me.bmax.apatch.ui.component.ToggleSettingCard
 
@@ -90,6 +91,8 @@ fun FunctionSettingsContent(
     onAdbHostChange: (String) -> Unit,
     adbBusy: Boolean,
     adbOutput: String,
+    adbShellAllowed: Boolean,
+    onAdbShellAllowedChange: (Boolean) -> Unit,
     onInstallAdbDeps: () -> Unit,
     onPair: () -> Unit,
     onOpenDevSettings: () -> Unit,
@@ -384,6 +387,31 @@ fun FunctionSettingsContent(
                         if (adbBusy) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         }
+                    }
+
+                    // 写操作授权：adb-shell.py 读 rootfs 里的标记文件，只读命令不受影响
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_adb_shell_allow),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.dsh_adb_shell_allow_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        ExpressiveSwitch(
+                            checked = adbShellAllowed,
+                            onCheckedChange = onAdbShellAllowedChange,
+                            enabled = runtimeInstalled && !adbBusy,
+                        )
                     }
 
                     if (adbOutput.isNotBlank()) {

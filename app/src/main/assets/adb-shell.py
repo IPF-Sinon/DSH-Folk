@@ -7,7 +7,7 @@ DSHA 设备 shell 工具（ADB 无线通道，免 Shizuku）。
   adb-shell.py <command...>         # 在设备上以 shell(uid=2000) 身份执行
   adb-shell "命令"                  # 包装命令（装在 /usr/local/bin，PATH 内）
 连接端口优先级：--port > /root/.dsh/adbkeys/connect_port > 5555
-输出：stdout + "\n[EXIT=n]"（与 3090 桥保持一致的格式）
+输出：stdout + "\n[EXIT=n]"
 """
 import sys
 import os
@@ -16,6 +16,8 @@ import time
 KEYDIR = '/root/.dsh/adbkeys'
 KEY = KEYDIR + '/adbkey'
 KEYPUB = KEY + '.pub'
+# 用户显式授权「容器内可直接执行写操作」的标记（由 App 设置页写/删）
+ALLOW_FILE = '/root/.dsh/adb-shell-allowed'
 
 # 免确认的只读命令（见 is_readonly_cmd）。只放「无论参数怎么给都不改设备状态」的命令。
 READONLY_CMDS = frozenset((
@@ -82,20 +84,20 @@ def main():
         print('[EXIT=1]')
         sys.exit(1)
 
-    # ===== 执行前报备确认（用户要求：用 shell 必须先说明理由，用户确认后才执行）=====
-    # 通过 3090 桥 /confirm 弹窗（App 前台）或通知（后台）让用户确认；
-    # 命令里 # 后的注释作为「理由」展示。未确认/超时默认拒绝。
-    # 只读命令（getprop/dumpsys 等以只读开头）直接放行，减少打扰。
-    # DSH_INTERNAL=1：App 自己的调用（保活探活、pm grant 授权）跳过确认关卡 ——
-    # 否则六层保活每分钟探一次活，就会不停弹确认框。（吸收上游 PR#24 的做法）
-    confirm_reason = cmd.split('#', 1)[1].strip() if '#' in cmd else ''
+    # ===== 写操作关卡 =====
+    # DSHA 原版在这里连 127.0.0.1:3090 的确认桥弹窗。DSH-Folk 没有那个桥（全仓
+    # grep 3090 只剩这个脚本自己），所以原逻辑等于「所有写命令永远被拒绝，
+    # 并提示用户去检查一个不存在的东西」。
+    #
+    # 改为显式授权文件：用户在 App 设置 → 权限 里打开「容器内直接用 ADB shell」
+    # 才会生成 ALLOW_FILE。没开时只读命令照常放行，写命令明确拒绝并告诉用户开哪儿。
+    # DSH_INTERNAL=1 是 App 自己的调用（AdbBridge.shell），一律放行。
     if os.environ.get('DSH_INTERNAL') != '1' and not is_readonly_cmd(cmd):
-        ok = request_confirm(cmd, confirm_reason)
-        if not ok:
-            print('USER_REJECTED: 未获授权，命令未执行')
+        if not os.path.exists(ALLOW_FILE):
+            print('NOT_AUTHORIZED: 写操作未获授权，命令未执行')
             print('  命令：%s' % cmd)
-            print('  可能原因：用户点了拒绝 / 60 秒内未确认 / 3090 确认桥不可达')
-            print('  处理：在 App「配置」页启用 ADB 设备通道，确认桥运行后重试')
+            print('  只读命令（getprop/dumpsys/ls/cat 等）无需授权即可执行。')
+            print('  要放开写操作：App → 设置 → 权限 → 打开「容器内直接使用 ADB shell」')
             print('[EXIT=1]')
             sys.exit(1)
 
@@ -247,38 +249,6 @@ def is_readonly_cmd(cmd):
         return len(parts) > 1 and parts[1] in READONLY_SUB[name]
     return name in READONLY_CMDS
 
-
-def request_confirm(cmd, reason=''):
-    """请求用户确认执行设备命令（3090 桥 /confirm，App 弹窗/通知）。
-    返回 True=允许。失败/超时默认拒绝（安全优先）。"""
-    import urllib.request
-    import urllib.parse
-    import urllib.error
-    token = ''
-    try:
-        with open('/root/.dsh/.bridge_token') as f:
-            token = f.read().strip()
-    except Exception:
-        pass
-    # 命令 + 理由一起发给确认弹窗
-    display = cmd if not reason else cmd + '\n\n[理由] ' + reason
-    q = ('/confirm?cmd=' + urllib.parse.quote(display)
-         + '&token=' + urllib.parse.quote(token) + '&force=1')
-    # 桥的监听地址取决于 App 版本：新版绑 127.0.0.1（并附加 ::1），
-    # 老版 getLoopbackAddress() 在 Android 上只绑 [::1] → IPv4 连不上。两个都试。
-    for host in ('127.0.0.1', '[::1]'):
-        try:
-            with urllib.request.urlopen('http://' + host + ':3090' + q, timeout=65) as r:
-                body = r.read().decode('utf-8', 'ignore')
-            # 兼容两种响应体：{"result":"YES"}（合法 JSON）与旧版 {"result":YES}
-            return '"YES"' in body or '":YES' in body
-        except TimeoutError:
-            return False  # 桥收到了请求但用户没在 60s 内确认 → 拒绝
-        except urllib.error.URLError:
-            continue      # 该地址连不上 → 换另一个地址族
-        except Exception:
-            return False
-    return False
 
 def discover_conn_port(timeout_s=5):
     """mDNS 自动发现无线调试连接端口（_adb-tls-connect）。找到返回端口，失败返回 0。"""

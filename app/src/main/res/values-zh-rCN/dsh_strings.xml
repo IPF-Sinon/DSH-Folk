@@ -168,4 +168,6 @@
     <string name="dsh_plugin_restart_now">立即重启</string>
     <string name="dsh_plugin_inactive">未生效</string>
     <string name="dsh_plugin_inactive_hint">作为普通依赖装上了，但它没有声明 dsh.bundle，DSH 不会加载它。</string>
+    <string name="dsh_adb_shell_allow">容器内允许 ADB 写操作</string>
+    <string name="dsh_adb_shell_allow_summary">关闭时容器里只能执行只读命令（getprop / dumpsys / ls / cat 等）。打开后 agent 或你自己经 adb-shell 敲的写命令也会以 shell(uid 2000) 身份执行。</string>
 </resources>

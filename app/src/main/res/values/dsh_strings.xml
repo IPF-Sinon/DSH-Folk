@@ -186,4 +186,6 @@
     <string name="dsh_plugin_restart_now">Restart now</string>
     <string name="dsh_plugin_inactive">Not a profile layer</string>
     <string name="dsh_plugin_inactive_hint">Installed as a plain dependency: it declares no dsh.bundle, so DSH does not load it.</string>
+    <string name="dsh_adb_shell_allow">Allow ADB write commands in the container</string>
+    <string name="dsh_adb_shell_allow_summary">Off: only read-only commands (getprop / dumpsys / ls / cat) run inside the container. On: anything the agent or you type through adb-shell also runs, with shell (uid 2000) rights.</string>
 </resources>

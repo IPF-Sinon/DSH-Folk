@@ -79,6 +79,8 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var adbHost by rememberSaveable { mutableStateOf("") }
     var adbBusy by rememberSaveable { mutableStateOf(false) }
     var adbOutput by rememberSaveable { mutableStateOf("") }
+    // 授权状态存 rootfs 里的标记文件（adb-shell.py 直接读），不是 SharedPreferences
+    var adbShellAllowed by rememberSaveable { mutableStateOf(AdbBridge.shellAllowed(context)) }
 
     val runtimeInstalled = DshEnv.isRuntimeInstalled(context)
 
@@ -232,6 +234,11 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     onAdbHostChange = { adbHost = it.trim() },
                     adbBusy = adbBusy,
                     adbOutput = adbOutput,
+                    adbShellAllowed = adbShellAllowed,
+                    onAdbShellAllowedChange = { on ->
+                        AdbBridge.setShellAllowed(context, on)
+                        adbShellAllowed = AdbBridge.shellAllowed(context)
+                    },
                     onInstallAdbDeps = {
                         adbBusy = true
                         scope.launch(Dispatchers.IO) {
