@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">DSH-Folk</string>
-    <string name="app_name_fpatch" translatable="false">DSH</string>
+    <!-- 桌面图标可切换的短名（设置 → 常规 → 桌面名称） -->
+    <string name="app_name_short" translatable="false">DSH</string>
 
     <string name="desktop_app_name">Desktop App Name</string>
 
@@ -608,6 +609,7 @@ Here are some possible reasons for authentication failure—please check which o
     <string name="about_telegram_channel">Telegram Channel</string>
 
     <!-- App Title Strings -->
+    <string name="app_title_dsh" translatable="false">DSH-Folk</string>
     <string name="app_title_custom">Custom</string>
     <string name="app_title_fpatch">FPatch</string>
     <string name="app_title_apatch_folk">APatch Folk</string>

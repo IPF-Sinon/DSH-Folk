@@ -415,8 +415,8 @@ private fun TopBar(
         nightModeEnabled
     }
     
-    val currentTitle = prefs.getString("app_title", "folkpatch") ?: "folkpatch"
-    val customAppTitle = prefs.getString("custom_app_title", "FolkPatch") ?: "FolkPatch"
+    val currentTitle = prefs.getString("app_title", "dsh") ?: "dsh"
+    val customAppTitle = prefs.getString("custom_app_title", "DSH-Folk") ?: "DSH-Folk"
     val isCustomTitle = currentTitle == "custom"
     val titleResId = when (currentTitle) {
         "custom" -> null
@@ -431,7 +431,8 @@ private fun TopBar(
         "superuser" -> R.string.app_title_superuser
         "superpatch" -> R.string.app_title_superpatch
         "magicpatch" -> R.string.app_title_magicpatch
-        else -> R.string.app_title_folkpatch
+        "folkpatch" -> R.string.app_title_folkpatch
+        else -> R.string.app_title_dsh
     }
 
     val useAdvancedTitleStyle = BackgroundConfig.isAdvancedTitleStyleEnabled && 

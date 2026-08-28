@@ -466,8 +466,9 @@ fun SELinuxModeDialog(
 @Composable
 fun AppTitleChooseDialog(showDialog: MutableState<Boolean>, onTitleChanged: (String) -> Unit = {}) {
     val prefs = APApplication.sharedPreferences
-    val currentTitle = remember { prefs.getString("app_title", "folkpatch") }
+    val currentTitle = remember { prefs.getString("app_title", "dsh") }
     val titles = listOf(
+        "dsh" to stringResource(R.string.app_title_dsh),
         "custom" to stringResource(R.string.app_title_custom),
         "fpatch" to stringResource(R.string.app_title_fpatch),
         "apatch_folk" to stringResource(R.string.app_title_apatch_folk),
@@ -527,7 +528,7 @@ fun AppTitleChooseDialog(showDialog: MutableState<Boolean>, onTitleChanged: (Str
 fun CustomAppTitleDialog(showDialog: MutableState<Boolean>, snackBarHost: SnackbarHostState, onTitleChanged: (String) -> Unit = {}) {
     val prefs = APApplication.sharedPreferences
     var customTitle by remember {
-        mutableStateOf(prefs.getString("custom_app_title", "FolkPatch") ?: "FolkPatch")
+        mutableStateOf(prefs.getString("custom_app_title", "DSH-Folk") ?: "DSH-Folk")
     }
 
     BasicAlertDialog(
@@ -594,7 +595,7 @@ fun CustomAppTitleDialog(showDialog: MutableState<Boolean>, snackBarHost: Snackb
 fun DesktopAppNameChooseDialog(showDialog: MutableState<Boolean>, onNameChanged: (String) -> Unit = {}) {
     val prefs = APApplication.sharedPreferences
     val context = LocalContext.current
-    val currentName = remember { prefs.getString("desktop_app_name", "FolkPatch") }
+    val currentName = remember { prefs.getString("desktop_app_name", "DSH-Folk") }
     BasicAlertDialog(
         onDismissRequest = { showDialog.value = false }, properties = DialogProperties(
             decorFitsSystemWindows = true,
@@ -612,17 +613,17 @@ fun DesktopAppNameChooseDialog(showDialog: MutableState<Boolean>, onNameChanged:
             LazyColumn {
                 item {
                     ListItem(
-                        headlineContent = { Text(text = "FolkPatch") },
+                        headlineContent = { Text(text = "DSH-Folk") },
                         modifier = Modifier.clickable {
                             showDialog.value = false
                             prefs.edit {
-                                putString("desktop_app_name", "FolkPatch")
+                                putString("desktop_app_name", "DSH-Folk")
                             }
-                            onNameChanged("FolkPatch")
+                            onNameChanged("DSH-Folk")
                             LauncherIconUtils.applySaved(context)
                         },
                         trailingContent = {
-                            if (currentName == "FolkPatch" || currentName == null) {
+                            if (currentName == "DSH-Folk" || currentName == null) {
                                 Icon(Icons.Filled.Check, contentDescription = null)
                             }
                         }
@@ -630,17 +631,17 @@ fun DesktopAppNameChooseDialog(showDialog: MutableState<Boolean>, onNameChanged:
                 }
                 item {
                     ListItem(
-                        headlineContent = { Text(text = "FPatch") },
+                        headlineContent = { Text(text = "DSH") },
                         modifier = Modifier.clickable {
                             showDialog.value = false
                             prefs.edit {
-                                putString("desktop_app_name", "FPatch")
+                                putString("desktop_app_name", "DSH")
                             }
-                            onNameChanged("FPatch")
+                            onNameChanged("DSH")
                             LauncherIconUtils.applySaved(context)
                         },
                         trailingContent = {
-                            if (currentName == "FPatch") {
+                            if (currentName == "DSH") {
                                 Icon(Icons.Filled.Check, contentDescription = null)
                             }
                         }
