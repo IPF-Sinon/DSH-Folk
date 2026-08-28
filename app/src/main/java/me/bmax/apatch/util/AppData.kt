@@ -63,7 +63,11 @@ object AppData {
                 // 可更新数直接对「已安装列表」补齐远端版本，而不是数商店目录里可更新的条目：
                 // dsh-market 只收录了一部分插件（dsh-config-manager 就不在目录里），
                 // 数目录会漏掉这些本地插件的更新。补齐失败时保持上一次的值而不是清零。
-                val enriched = runCatching { DshPluginRepo.enrich(installed) }.getOrDefault(emptyList())
+                // version 必须先清空：enrich 只在 version 为空时才去查 registry 的最新版，
+                // 而 listInstalled 给出的 version 就是已装版本 —— 不清空则 updatable 恒为 false
+                val enriched = runCatching {
+                    DshPluginRepo.enrich(installed.map { it.copy(version = "") })
+                }.getOrDefault(emptyList())
                 if (enriched.isNotEmpty()) {
                     _updatableCount.value = enriched.count { it.updatable }
                 }

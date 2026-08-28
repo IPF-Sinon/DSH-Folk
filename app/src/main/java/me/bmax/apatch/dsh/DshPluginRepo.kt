@@ -104,7 +104,13 @@ object DshPluginRepo {
         })
     }
 
-    /** 并发补齐版本、下载量、star、点赞（各自失败只让那一项保持 -1 / 空）。 */
+    /**
+     * 并发补齐版本、下载量、star、点赞（各自失败只让那一项保持 -1 / 空）。
+     *
+     * `version` 语义是**远端最新版**：非空即视为已知，不会再查 registry。
+     * 想让已安装条目算出 updatable，调用方必须先把 version 清空
+     * （`installedVersion` 不受影响）。
+     */
     suspend fun enrich(list: List<DshPlugin>): List<DshPlugin> = coroutineScope {
         // 下载量与点赞是整表接口，先各取一次
         val downloads = async { downloadsTable() }
