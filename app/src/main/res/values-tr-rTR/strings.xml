@@ -469,7 +469,7 @@
     <string name="settings_music_save_error">Müzik dosyası kaydedilemedi</string>
     <string name="settings_music_cleared">Müzik temizlendi</string>
     <string name="settings_category_multimedia">Multimedya</string>
-    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon and name, DPI</string>
     <string name="settings_category_appearance_summary">Tema, renkler, düzen, arka plan, yazı tipleri</string>
     <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
     <string name="settings_category_security_summary">Biometric authentication for opening the app</string>

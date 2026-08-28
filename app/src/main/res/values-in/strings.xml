@@ -438,7 +438,7 @@
     <string name="settings_music_save_error">Gagal menyimpan file musik</string>
     <string name="settings_music_cleared">Musik dihapus</string>
     <string name="settings_category_multimedia">Multimedia</string>
-    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon and name, DPI</string>
     <string name="settings_category_appearance_summary">Tema, warna, tata letak, latar belakang, font</string>
     <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
     <string name="settings_category_security_summary">Biometric authentication for opening the app</string>

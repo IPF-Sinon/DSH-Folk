@@ -454,7 +454,7 @@
     <string name="settings_music_save_error">魔法旋律水晶封存失败</string>
     <string name="settings_music_cleared">魔法颂歌已清空</string>
     <string name="settings_category_multimedia">魔法幻音</string>
-    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon and name, DPI</string>
     <string name="settings_category_appearance_summary">魔法主题、星光色彩、魔法阵布局、梦境背景、魔法符文字体</string>
     <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
     <string name="settings_category_security_summary">Biometric authentication for opening the app</string>

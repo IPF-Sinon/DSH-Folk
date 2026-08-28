@@ -178,7 +178,7 @@
     <string name="loading_apis">正在加载 API 仙法门…</string>
     <string name="retry">再试</string>
 
-    <string name="about_powered_by">赖%s仙门以辅</string>
+    <string name="about_powered_by">赖%1$s仙门以辅</string>
     
     <!-- Online Module Strings -->
 

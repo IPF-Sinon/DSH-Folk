@@ -536,7 +536,7 @@
     <string name="settings_music_save_error">Failed to save music file</string>
     <string name="settings_music_cleared">Music cleared</string>
     <string name="settings_category_multimedia">Multimedia</string>
-    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon and name, DPI</string>
     <string name="settings_category_appearance_summary">Theme, colors, layout, background, fonts</string>
     <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
     <string name="settings_category_security_summary">Biometric authentication for opening the app</string>

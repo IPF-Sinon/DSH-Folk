@@ -474,7 +474,7 @@
     <string name="settings_music_save_error">음악 파일 저장 실패</string>
     <string name="settings_music_cleared">음악 삭제됨</string>
     <string name="settings_category_multimedia">멀티미디어</string>
-    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon and name, DPI</string>
     <string name="settings_category_appearance_summary">테마, 색상, 레이아웃, 배경, 글꼴</string>
     <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
     <string name="settings_category_security_summary">Biometric authentication for opening the app</string>

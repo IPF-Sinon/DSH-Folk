@@ -402,7 +402,7 @@
     <string name="settings_music_save_error">音楽の保存に失敗しました。</string>
     <string name="settings_music_cleared">音楽を消去しました。</string>
     <string name="settings_category_multimedia">マルチメディア</string>
-    <string name="settings_category_general_summary">Language, updates, animations, icon & name, DPI</string>
+    <string name="settings_category_general_summary">Language, updates, animations, icon and name, DPI</string>
     <string name="settings_category_appearance_summary">テーマ、色、レイアウト、背景、フォント</string>
     <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
     <string name="settings_category_security_summary">Biometric authentication for opening the app</string>

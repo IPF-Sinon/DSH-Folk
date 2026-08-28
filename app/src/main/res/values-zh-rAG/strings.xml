@@ -199,7 +199,7 @@
     <string name="loading_apis">正在加载 API 源喵…</string>
     <string name="retry">重试喵</string>
 
-    <string name="about_powered_by">靠 %s 撑着哒喵！</string>
+    <string name="about_powered_by">靠 %1$s 撑着哒喵！</string>
     
     <!-- Online Module Strings -->
 
