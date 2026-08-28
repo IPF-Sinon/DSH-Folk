@@ -1,7 +1,6 @@
 package me.bmax.apatch.dsh
 
 import android.content.Context
-import android.os.Environment
 import java.io.File
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -9,6 +8,7 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.bmax.apatch.util.getSafeDownloadsDir
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -45,12 +45,14 @@ object DshConfigBackup {
         "pluginFiles", "credentialsStatus", "self",
     )
 
-    /** 手机上备份文件的落地目录（对用户可见，便于用文件管理器拷走）。 */
-    fun backupDir(): File =
-        File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "DSH-Folk/ConfigBackups",
-        )
+    /**
+     * 手机上备份文件的落地目录。
+     *
+     * 尽量放公共 Download（用户能用文件管理器拷走），但分区存储下没有「所有文件」
+     * 权限时那里写不进去，[getSafeDownloadsDir] 会退回应用专属外部目录。
+     */
+    fun backupDir(ctx: Context): File =
+        File(getSafeDownloadsDir(ctx), "DSH-Folk/ConfigBackups")
 
     data class Status(
         val ready: Boolean,
@@ -90,6 +92,7 @@ object DshConfigBackup {
      * @param password 非空则整包 AES-256-GCM 加密（只在内存里传给插件，本地不留）
      */
     suspend fun export(
+        ctx: Context,
         sections: List<String> = emptyList(),
         password: String = "",
     ): ExportResult = withContext(Dispatchers.IO) {
@@ -107,7 +110,7 @@ object DshConfigBackup {
         val zipPath = o.optString("zipPath")
         if (zipPath.isEmpty()) return@withContext ExportResult(false, message = "导出未返回文件路径")
 
-        val dir = backupDir()
+        val dir = backupDir(ctx)
         if (!dir.exists() && !dir.mkdirs()) {
             return@withContext ExportResult(false, message = "无法创建目录 ${dir.absolutePath}")
         }

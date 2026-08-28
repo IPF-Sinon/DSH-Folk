@@ -2104,7 +2104,12 @@ fun AppearanceSettingsContent(
                 scope.launch {
                     loadingDialog.show()
                     try {
-                        val exportDir = java.io.File("/storage/emulated/0/Download/DSH-Folk/Themes/")
+                        // 不能写死 /storage/emulated/0：分区存储下没有「所有文件」权限时
+                        // 那个路径建不出来，导出会静默失败
+                        val exportDir = java.io.File(
+                            me.bmax.apatch.util.getSafeDownloadsDir(context),
+                            "DSH-Folk/Themes",
+                        )
                         if (!exportDir.exists()) {
                             exportDir.mkdirs()
                         }

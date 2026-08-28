@@ -130,7 +130,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                             val text = if (!status.ready) {
                                 if (status.error.isEmpty()) pluginMissing else notRunning
                             } else {
-                                val r = DshConfigBackup.export(password = dshPassword)
+                                val r = DshConfigBackup.export(context, password = dshPassword)
                                 if (!r.ok) r.message else {
                                     val local = "${r.message}\n${r.file?.absolutePath ?: ""}"
                                     // 开了云备份就顺手推一份到 WebDAV，失败只追加一行说明，不影响本地备份
@@ -177,7 +177,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         }
                     },
                     onDshOpenDir = {
-                        val dir = DshConfigBackup.backupDir()
+                        val dir = DshConfigBackup.backupDir(context)
                         dir.mkdirs()
                         val opened = runCatching {
                             val uri = FileProvider.getUriForFile(
