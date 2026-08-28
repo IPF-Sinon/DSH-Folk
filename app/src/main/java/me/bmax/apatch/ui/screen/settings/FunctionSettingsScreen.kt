@@ -80,7 +80,12 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var adbBusy by rememberSaveable { mutableStateOf(false) }
     var adbOutput by rememberSaveable { mutableStateOf("") }
     // 授权状态存 rootfs 里的标记文件（adb-shell.py 直接读），不是 SharedPreferences
-    var adbShellAllowed by rememberSaveable { mutableStateOf(AdbBridge.shellAllowed(context)) }
+    var adbShellAllowed by rememberSaveable {
+        mutableStateOf(AdbBridge.granted(context, AdbBridge.ShellGrant.WRITE))
+    }
+    var adbRootAllowed by rememberSaveable {
+        mutableStateOf(AdbBridge.granted(context, AdbBridge.ShellGrant.ROOT))
+    }
 
     val runtimeInstalled = DshEnv.isRuntimeInstalled(context)
 
@@ -236,8 +241,13 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     adbOutput = adbOutput,
                     adbShellAllowed = adbShellAllowed,
                     onAdbShellAllowedChange = { on ->
-                        AdbBridge.setShellAllowed(context, on)
-                        adbShellAllowed = AdbBridge.shellAllowed(context)
+                        AdbBridge.setGranted(context, AdbBridge.ShellGrant.WRITE, on)
+                        adbShellAllowed = AdbBridge.granted(context, AdbBridge.ShellGrant.WRITE)
+                    },
+                    adbRootAllowed = adbRootAllowed,
+                    onAdbRootAllowedChange = { on ->
+                        AdbBridge.setGranted(context, AdbBridge.ShellGrant.ROOT, on)
+                        adbRootAllowed = AdbBridge.granted(context, AdbBridge.ShellGrant.ROOT)
                     },
                     onInstallAdbDeps = {
                         adbBusy = true

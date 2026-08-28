@@ -170,4 +170,6 @@
     <string name="dsh_plugin_inactive_hint">作为普通依赖装上了，但它没有声明 dsh.bundle，DSH 不会加载它。</string>
     <string name="dsh_adb_shell_allow">容器内允许 ADB 写操作</string>
     <string name="dsh_adb_shell_allow_summary">关闭时容器里只能执行只读命令（getprop / dumpsys / ls / cat 等）。打开后 agent 或你自己经 adb-shell 敲的写命令也会以 shell(uid 2000) 身份执行。</string>
+    <string name="dsh_adb_root_allow">容器内允许 root shell</string>
+    <string name="dsh_adb_root_allow_summary">仅在手机本身已 root 时有意义：允许 adb-shell --su 提权到 uid 0。不需要就别开。</string>
 </resources>

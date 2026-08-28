@@ -93,6 +93,8 @@ fun FunctionSettingsContent(
     adbOutput: String,
     adbShellAllowed: Boolean,
     onAdbShellAllowedChange: (Boolean) -> Unit,
+    adbRootAllowed: Boolean,
+    onAdbRootAllowedChange: (Boolean) -> Unit,
     onInstallAdbDeps: () -> Unit,
     onPair: () -> Unit,
     onOpenDevSettings: () -> Unit,
@@ -411,6 +413,31 @@ fun FunctionSettingsContent(
                             checked = adbShellAllowed,
                             onCheckedChange = onAdbShellAllowedChange,
                             enabled = runtimeInstalled && !adbBusy,
+                        )
+                    }
+
+                    // root shell：只有手机本身已 root 才有意义，所以顺带用权限通道判断
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_adb_root_allow),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.dsh_adb_root_allow_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        ExpressiveSwitch(
+                            checked = adbRootAllowed,
+                            onCheckedChange = onAdbRootAllowedChange,
+                            enabled = runtimeInstalled && !adbBusy && perm.suPresent,
                         )
                     }
 

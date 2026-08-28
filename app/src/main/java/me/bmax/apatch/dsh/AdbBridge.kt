@@ -114,17 +114,26 @@ object AdbBridge {
     )
 
     /**
-     * 容器内直接执行 ADB 写操作是否已获用户授权。
+     * adb-shell.py 读取的两个授权标记。
      *
-     * 授权状态就是 rootfs 里的一个标记文件（adb-shell.py 读它）。App 自己的调用带
-     * DSH_INTERNAL=1，不受这个开关限制 —— 它管的是「agent / 用户在终端里手敲」。
+     * 授权状态就是 rootfs 里的标记文件而不是 SharedPreferences —— 脚本在容器里跑，
+     * 读不到 App 的偏好设置。App 自己的调用带 DSH_INTERNAL=1，不受 [WRITE] 限制；
+     * [ROOT] 只有用户或 agent 显式加 --su 时才会用到，任何情况下都要先授权。
      */
-    fun shellAllowed(ctx: Context): Boolean =
-        java.io.File(DshEnv.dshHome(ctx), "adb-shell-allowed").isFile
+    enum class ShellGrant(internal val fileName: String) {
+        /** 非只读命令（写操作）。 */
+        WRITE("adb-shell-allowed"),
 
-    /** 设置写操作授权。直接写宿主路径，不必启动容器。 */
-    fun setShellAllowed(ctx: Context, allowed: Boolean) {
-        val f = java.io.File(DshEnv.dshHome(ctx), "adb-shell-allowed")
+        /** `--su` 提权到 root（需手机本身已 root）。 */
+        ROOT("allow-root-shell"),
+    }
+
+    fun granted(ctx: Context, grant: ShellGrant): Boolean =
+        java.io.File(DshEnv.dshHome(ctx), grant.fileName).isFile
+
+    /** 写/删标记文件。直接操作宿主路径，不必启动容器。 */
+    fun setGranted(ctx: Context, grant: ShellGrant, allowed: Boolean) {
+        val f = java.io.File(DshEnv.dshHome(ctx), grant.fileName)
         runCatching {
             if (allowed) {
                 f.parentFile?.mkdirs()

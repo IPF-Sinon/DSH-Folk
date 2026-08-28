@@ -16,8 +16,9 @@ import time
 KEYDIR = '/root/.dsh/adbkeys'
 KEY = KEYDIR + '/adbkey'
 KEYPUB = KEY + '.pub'
-# 用户显式授权「容器内可直接执行写操作」的标记（由 App 设置页写/删）
-ALLOW_FILE = '/root/.dsh/adb-shell-allowed'
+# 用户显式授权的标记文件（由 App 设置页写/删；容器内读不到 App 偏好设置）
+ALLOW_FILE = '/root/.dsh/adb-shell-allowed'       # 写操作
+ROOT_ALLOW_FILE = '/root/.dsh/allow-root-shell'   # --su 提权
 
 # 免确认的只读命令（见 is_readonly_cmd）。只放「无论参数怎么给都不改设备状态」的命令。
 READONLY_CMDS = frozenset((
@@ -44,13 +45,13 @@ def main():
         if len(args) >= 2:
             port = int(args[1])
         args = args[2:]
-    # --su：以 root 身份执行（需手机已 root；未 root 会提示）
-    # 安全：必须用户已在 App「配置」页勾选「允许 root shell」才会生成
-    # /root/.dsh/allow-root-shell 标记；未授权一律拒绝（防止 agent 擅自提权）
+    # --su：以 root 身份执行（需手机本身已 root）。
+    # 必须用户在 App 设置 → 权限 里打开开关（生成 ROOT_ALLOW_FILE）才放行，
+    # 未授权一律拒绝 —— 防止 agent 擅自提权。
     if args and args[0] == '--su':
-        if not os.path.exists('/root/.dsh/allow-root-shell'):
+        if not os.path.exists(ROOT_ALLOW_FILE):
             print('ROOT_NOT_ALLOWED: 未授权 root shell')
-            print('请在 App「配置」页勾选「允许 root shell」并保存后重试')
+            print('要放开：App → 设置 → 权限 → 打开「容器内允许 root shell」')
             print('[EXIT=1]')
             sys.exit(1)
         use_su = True
