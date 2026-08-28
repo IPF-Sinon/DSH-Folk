@@ -3,7 +3,6 @@
 package me.bmax.apatch.ui.screen.settings.general
 
 import android.app.Activity
-import android.content.SharedPreferences
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -11,7 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -22,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,120 +31,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.APApplication
-import me.bmax.apatch.Natives
 import me.bmax.apatch.R
 import me.bmax.apatch.util.*
 import me.bmax.apatch.util.ui.APDialogBlurBehindUtils
 import me.bmax.apatch.util.ui.showToast
 import java.io.File
-
-@Composable
-fun NewAppProfileModeDialog(
-    showDialog: MutableState<Boolean>,
-    initialMode: Int,
-    onModeChanged: (Int) -> Unit,
-) {
-    val context = LocalContext.current
-    val currentMode = remember(initialMode) { mutableIntStateOf(initialMode) }
-    val options = listOf(
-        0 to R.string.settings_new_app_profile_normal,
-        1 to R.string.settings_new_app_profile_root,
-        2 to R.string.settings_new_app_profile_exclude,
-    )
-
-    BasicAlertDialog(
-        onDismissRequest = { showDialog.value = false },
-        properties = DialogProperties(
-            decorFitsSystemWindows = true,
-            usePlatformDefaultWidth = false,
-        )
-    ) {
-        Surface(
-            modifier = Modifier
-                .width(310.dp)
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(30.dp),
-            tonalElevation = AlertDialogDefaults.TonalElevation,
-            color = AlertDialogDefaults.containerColor,
-        ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(
-                    text = stringResource(R.string.settings_new_app_profile_mode),
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = AlertDialogDefaults.containerColor,
-                    tonalElevation = 2.dp
-                ) {
-                    Column {
-                        options.forEach { (mode, labelId) ->
-                            ListItem(
-                                headlineContent = { Text(stringResource(labelId)) },
-                                leadingContent = {
-                                    RadioButton(
-                                        selected = currentMode.intValue == mode,
-                                        onClick = null
-                                    )
-                                },
-                                modifier = Modifier.clickable {
-                                    val result = Natives.setNewAppProfileMode(mode)
-                                    if (result == 0L) {
-                                        currentMode.intValue = mode
-                                        onModeChanged(mode)
-                                        showDialog.value = false
-                                    } else {
-                                        showToast(context, context.getString(R.string.settings_new_app_profile_update_failed, result.toString()))
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = { showDialog.value = false }) {
-                        Text(stringResource(id = android.R.string.cancel))
-                    }
-                }
-            }
-            val dialogWindowProvider = LocalView.current.parent as DialogWindowProvider
-            APDialogBlurBehindUtils.setupWindowBlurListener(dialogWindowProvider.window)
-        }
-    }
-}
-
-internal suspend fun loadNewAppProfileMode(prefs: SharedPreferences): Int = withContext(Dispatchers.IO) {
-    val prefsValue = runCatching {
-        prefs.getInt(APApplication.PREF_AUTO_EXCLUDE_NEW_APPS, 0)
-    }.getOrDefault(0)
-    val nativeMode = runCatching {
-        Natives.getNewAppProfileMode()
-    }.getOrDefault(prefsValue)
-    when {
-        // Native has an explicit non-zero value — trust it as authoritative
-        nativeMode != 0 -> {
-            if (nativeMode != prefsValue) {
-                prefs.edit { putInt(APApplication.PREF_AUTO_EXCLUDE_NEW_APPS, nativeMode) }
-            }
-            nativeMode
-        }
-        // Native returned 0 (default or read failure), but prefs has a saved preference — restore native
-        prefsValue != 0 -> {
-            runCatching { Natives.setNewAppProfileMode(prefsValue) }
-            prefsValue
-        }
-        // Both are 0 — true default
-        else -> 0
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -320,145 +208,6 @@ fun DpiChooseDialog(showDialog: MutableState<Boolean>) {
             val dialogWindowProvider = LocalView.current.parent as DialogWindowProvider
             APDialogBlurBehindUtils.setupWindowBlurListener(dialogWindowProvider.window)
         }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SELinuxModeDialog(
-    showDialog: MutableState<Boolean>,
-    currentMode: String,
-    onModeChanged: (String) -> Unit
-) {
-    val context = LocalContext.current
-    var selectedMode by remember { mutableStateOf(currentMode) }
-    var showConfirmationDialog by remember { mutableStateOf(false) }
-
-    BasicAlertDialog(
-        onDismissRequest = { showDialog.value = false },
-        properties = DialogProperties(
-            decorFitsSystemWindows = true,
-            usePlatformDefaultWidth = false,
-        )
-    ) {
-        Surface(
-            modifier = Modifier
-                .width(310.dp)
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(30.dp),
-            tonalElevation = AlertDialogDefaults.TonalElevation,
-            color = AlertDialogDefaults.containerColor,
-        ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(
-                    text = stringResource(R.string.settings_selinux_mode),
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = AlertDialogDefaults.containerColor,
-                    tonalElevation = 2.dp
-                ) {
-                    Column {
-                        ListItem(
-                            headlineContent = { Text(stringResource(R.string.settings_selinux_mode_enforcing)) },
-                            supportingContent = {
-                                Text(
-                                    text = stringResource(R.string.settings_selinux_mode_enforcing_summary),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            },
-                            leadingContent = {
-                                RadioButton(
-                                    selected = selectedMode == "Enforcing",
-                                    onClick = { selectedMode = "Enforcing" }
-                                )
-                            },
-                            modifier = Modifier.clickable { selectedMode = "Enforcing" }
-                        )
-
-                        ListItem(
-                            headlineContent = { Text(stringResource(R.string.settings_selinux_mode_permissive)) },
-                            supportingContent = {
-                                Text(
-                                    text = stringResource(R.string.settings_selinux_mode_permissive_summary),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            },
-                            leadingContent = {
-                                RadioButton(
-                                    selected = selectedMode == "Permissive",
-                                    onClick = { selectedMode = "Permissive" }
-                                )
-                            },
-                            modifier = Modifier.clickable { selectedMode = "Permissive" }
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = { showDialog.value = false }) {
-                        Text(stringResource(id = android.R.string.cancel))
-                    }
-
-                    Button(
-                        onClick = {
-                            showConfirmationDialog = true
-                        },
-                        enabled = selectedMode != currentMode
-                    ) {
-                        Text(stringResource(id = android.R.string.ok))
-                    }
-                }
-            }
-            val dialogWindowProvider = LocalView.current.parent as DialogWindowProvider
-            APDialogBlurBehindUtils.setupWindowBlurListener(dialogWindowProvider.window)
-        }
-    }
-
-    if (showConfirmationDialog) {
-        val isPermissive = selectedMode == "Permissive"
-        AlertDialog(
-            onDismissRequest = { showConfirmationDialog = false },
-            title = { Text(stringResource(id = R.string.settings_selinux_mode)) },
-            text = {
-                if (isPermissive) {
-                    Text(stringResource(id = R.string.msg_selinux_permissive_warning))
-                } else {
-                    Text(stringResource(id = R.string.msg_selinux_enforcing_confirm))
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val success = setSELinuxMode(selectedMode == "Enforcing")
-                        if (success) {
-                            onModeChanged(selectedMode)
-                        }
-                        showDialog.value = false
-                        showConfirmationDialog = false
-                    }
-                ) {
-                    Text(stringResource(id = android.R.string.ok))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showConfirmationDialog = false }
-                ) {
-                    Text(stringResource(id = android.R.string.cancel))
-                }
-            }
-        )
     }
 }
 
@@ -731,173 +480,6 @@ fun FolkXAnimationTypeDialog(showDialog: MutableState<Boolean>, onTypeChanged: (
             APDialogBlurBehindUtils.setupWindowBlurListener(dialogWindowProvider.window)
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AppListLoadingSchemeDialog(showDialog: MutableState<Boolean>, onSchemeChanged: (String) -> Unit = {}) {
-    val prefs = APApplication.sharedPreferences
-
-    BasicAlertDialog(
-        onDismissRequest = { showDialog.value = false }, properties = DialogProperties(
-            decorFitsSystemWindows = true,
-            usePlatformDefaultWidth = false,
-        )
-    ) {
-        Surface(
-            modifier = Modifier
-                .width(310.dp)
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(30.dp),
-            tonalElevation = AlertDialogDefaults.TonalElevation,
-            color = AlertDialogDefaults.containerColor,
-        ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(
-                    text = stringResource(R.string.settings_app_list_loading_scheme),
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                val currentScheme = remember { prefs.getString("app_list_loading_scheme", "root_service") }
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = AlertDialogDefaults.containerColor,
-                    tonalElevation = 2.dp
-                ) {
-                    Column {
-                        val schemes = listOf(
-                            "root_service" to R.string.app_list_loading_scheme_root_service,
-                            "package_manager" to R.string.app_list_loading_scheme_package_manager
-                        )
-
-                        schemes.forEach { (scheme, labelId) ->
-                            ListItem(
-                                headlineContent = { Text(stringResource(labelId)) },
-                                leadingContent = {
-                                    RadioButton(
-                                        selected = currentScheme == scheme,
-                                        onClick = null
-                                    )
-                                },
-                                modifier = Modifier.clickable {
-                                    prefs.edit { putString("app_list_loading_scheme", scheme) }
-                                    onSchemeChanged(scheme)
-                                    showDialog.value = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = { showDialog.value = false }) {
-                        Text(stringResource(id = android.R.string.cancel))
-                    }
-                }
-            }
-            val dialogWindowProvider = LocalView.current.parent as DialogWindowProvider
-            APDialogBlurBehindUtils.setupWindowBlurListener(dialogWindowProvider.window)
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ResetSUPathDialog(showDialog: MutableState<Boolean>) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var suPath by remember { mutableStateOf("/system/bin/su") }
-    LaunchedEffect(Unit) {
-        suPath = withContext(Dispatchers.IO) {
-            runCatching { me.bmax.apatch.Natives.suPath() }.getOrDefault("/system/bin/su")
-        }
-    }
-    BasicAlertDialog(
-        onDismissRequest = { showDialog.value = false }, properties = DialogProperties(
-            decorFitsSystemWindows = true,
-            usePlatformDefaultWidth = false,
-        )
-    ) {
-        Surface(
-            modifier = Modifier
-                .width(310.dp)
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(30.dp),
-            tonalElevation = AlertDialogDefaults.TonalElevation,
-            color = AlertDialogDefaults.containerColor,
-        ) {
-            Column(modifier = Modifier.padding(PaddingValues(all = 24.dp))) {
-                Box(
-                    Modifier
-                        .padding(PaddingValues(bottom = 16.dp))
-                        .align(Alignment.Start)
-                ) {
-                    Text(
-                        text = stringResource(id = R.string.setting_reset_su_path),
-                        style = MaterialTheme.typography.headlineSmall
-                    )
-                }
-                Box(
-                    Modifier
-                        .weight(weight = 1f, fill = false)
-                        .padding(PaddingValues(bottom = 12.dp))
-                        .align(Alignment.Start)
-                ) {
-                    OutlinedTextField(
-                        value = suPath,
-                        onValueChange = {
-                            suPath = it
-                        },
-                        label = { Text(stringResource(id = R.string.setting_reset_su_new_path)) },
-                        visualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = { showDialog.value = false }) {
-
-                        Text(stringResource(id = android.R.string.cancel))
-                    }
-
-                    Button(enabled = suPath.startsWith("/") && suPath.trim().length > 1, onClick = {
-                        showDialog.value = false
-                        val newPath = suPath.trim()
-                        scope.launch {
-                            val success = withContext(Dispatchers.IO) {
-                                runCatching {
-                                    val reset = me.bmax.apatch.Natives.resetSuPath(newPath)
-                                    if (reset) {
-                                        rootShellForResult(
-                                            "printf %s ${newPath.shellSingleQuoted()} > ${APApplication.SU_PATH_FILE}"
-                                        )
-                                    }
-                                    reset
-                                }.getOrDefault(false)
-                            }
-                            showToast(context, if (success) R.string.success else R.string.failure)
-                        }
-                    }) {
-                        Text(stringResource(id = android.R.string.ok))
-                    }
-                }
-            }
-            val dialogWindowProvider = LocalView.current.parent as DialogWindowProvider
-            APDialogBlurBehindUtils.setupWindowBlurListener(dialogWindowProvider.window)
-        }
-    }
-}
-
-private fun String.shellSingleQuoted(): String {
-    return "'" + replace("'", "'\\''") + "'"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

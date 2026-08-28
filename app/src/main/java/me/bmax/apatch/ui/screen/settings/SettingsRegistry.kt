@@ -13,7 +13,7 @@ enum class SettingCategory(
     BEHAVIOR("behavior", R.string.settings_category_behavior),
     SECURITY("security", R.string.settings_category_security),
     BACKUP("backup", R.string.settings_category_backup),
-    MODULE("module", R.string.settings_category_module),
+    MODULE("module", R.string.dsh_plugins),
     MULTIMEDIA("multimedia", R.string.settings_category_multimedia),
     FUNCTION("function", R.string.settings_category_function),
 }
@@ -40,19 +40,11 @@ object SettingsRegistry {
             add(SettingEntry("general_language", R.string.settings_app_language, category = SettingCategory.GENERAL))
             add(SettingEntry("general_check_update", R.string.settings_check_update, category = SettingCategory.GENERAL))
             add(SettingEntry("general_auto_update", R.string.settings_auto_update_check, R.string.settings_auto_update_check_summary, SettingCategory.GENERAL))
-            add(SettingEntry("general_block_kp_update", R.string.settings_block_kernelpatch_update, R.string.settings_block_kernelpatch_update_summary, SettingCategory.GENERAL))
-            add(SettingEntry("general_block_ap_update", R.string.settings_block_androidpatch_update, R.string.settings_block_androidpatch_update_summary, SettingCategory.GENERAL))
             add(SettingEntry("general_folkx_engine", R.string.settings_folkx_engine_title, R.string.settings_folkx_engine_summary, SettingCategory.GENERAL))
             add(SettingEntry("general_folkx_animation_type", R.string.settings_folkx_animation_type, category = SettingCategory.GENERAL))
             add(SettingEntry("general_folkx_animation_speed", R.string.settings_folkx_animation_speed, category = SettingCategory.GENERAL))
             add(SettingEntry("general_predictive_back", R.string.settings_predictive_back, R.string.settings_predictive_back_summary, SettingCategory.GENERAL))
-            add(SettingEntry("general_new_app_profile", R.string.settings_new_app_profile_mode, category = SettingCategory.GENERAL))
-            add(SettingEntry("general_app_list_scheme", R.string.settings_app_list_loading_scheme, category = SettingCategory.GENERAL))
-            add(SettingEntry("general_selinux_mode", R.string.settings_selinux_mode, R.string.settings_selinux_mode_summary, SettingCategory.GENERAL))
-            add(SettingEntry("general_global_namespace", R.string.settings_global_namespace_mode, R.string.settings_global_namespace_mode_summary, SettingCategory.GENERAL))
-            add(SettingEntry("general_magic_mount", R.string.settings_magic_mount, R.string.settings_magic_mount_summary, SettingCategory.GENERAL))
             add(SettingEntry("general_alt_icon", R.string.settings_alt_icon, R.string.alt_icon_summary, SettingCategory.GENERAL))
-            add(SettingEntry("general_reset_su_path", R.string.setting_reset_su_path, category = SettingCategory.GENERAL))
             add(SettingEntry("general_app_title", R.string.settings_app_title, category = SettingCategory.GENERAL))
             add(SettingEntry("general_custom_app_title", R.string.settings_custom_app_title, category = SettingCategory.GENERAL))
             add(SettingEntry("general_desktop_app_name", R.string.desktop_app_name, category = SettingCategory.GENERAL))
@@ -102,16 +94,8 @@ object SettingsRegistry {
             // === Behavior ===
             add(SettingEntry("behavior_web_debugging", R.string.enable_web_debugging, R.string.enable_web_debugging_summary, SettingCategory.BEHAVIOR))
             add(SettingEntry("behavior_info_copy", R.string.settings_info_copy, R.string.settings_info_copy_summary, SettingCategory.BEHAVIOR))
-            add(SettingEntry("behavior_install_confirm", R.string.settings_apm_install_confirm, R.string.settings_apm_install_confirm_summary, SettingCategory.BEHAVIOR))
-            add(SettingEntry("behavior_module_shortcut", R.string.settings_enable_module_shortcut_add, R.string.settings_enable_module_shortcut_add_summary, SettingCategory.BEHAVIOR))
-            add(SettingEntry("behavior_stay_on_page", R.string.settings_apm_stay_on_page, R.string.settings_apm_stay_on_page_summary, SettingCategory.BEHAVIOR))
             add(SettingEntry("behavior_hide_apatch_card", R.string.settings_hide_apatch_card, R.string.settings_hide_apatch_card_summary, SettingCategory.BEHAVIOR))
-            add(SettingEntry("behavior_hide_su_path", R.string.home_hide_su_path, R.string.home_hide_su_path_summary, SettingCategory.BEHAVIOR))
-            add(SettingEntry("behavior_hide_kpatch_version", R.string.home_hide_kpatch_version, R.string.home_hide_kpatch_version_summary, SettingCategory.BEHAVIOR))
             add(SettingEntry("behavior_hide_fingerprint", R.string.home_hide_fingerprint, R.string.home_hide_fingerprint_summary, SettingCategory.BEHAVIOR))
-            add(SettingEntry("behavior_hide_zygisk", R.string.home_hide_zygisk, R.string.home_hide_zygisk_summary, SettingCategory.BEHAVIOR))
-            add(SettingEntry("behavior_hide_mount", R.string.home_hide_mount, R.string.home_hide_mount_summary, SettingCategory.BEHAVIOR))
-            add(SettingEntry("behavior_legacy_su_page", R.string.settings_use_legacy_su_page, R.string.settings_use_legacy_su_page_summary, SettingCategory.BEHAVIOR))
             add(SettingEntry("behavior_badge_count", R.string.enable_badge_count, R.string.enable_badge_count_summary, SettingCategory.BEHAVIOR))
 
             // === Security ===
@@ -126,15 +110,10 @@ object SettingsRegistry {
             add(SettingEntry("backup_cloud", R.string.settings_enable_cloud_backup, R.string.settings_enable_cloud_backup_summary, SettingCategory.BACKUP))
             add(SettingEntry("backup_webdav", R.string.settings_configure_webdav, category = SettingCategory.BACKUP))
 
-            // === Module ===
-            add(SettingEntry("module_disable_update", R.string.settings_disable_module_update_check, R.string.settings_disable_module_update_check_summary, SettingCategory.MODULE))
-            add(SettingEntry("module_more_info", R.string.settings_show_more_module_info, R.string.settings_show_more_module_info_summary, SettingCategory.MODULE))
-            add(SettingEntry("module_sort_opt", R.string.settings_module_sort_optimization, R.string.settings_module_sort_optimization_summary, SettingCategory.MODULE))
-            add(SettingEntry("module_fold_system", R.string.settings_fold_system_module, R.string.settings_fold_system_module_summary, SettingCategory.MODULE))
-            add(SettingEntry("module_batch_install", R.string.apm_batch_install_full_process, R.string.apm_batch_install_full_process_summary, SettingCategory.MODULE))
-            add(SettingEntry("module_simple_list", R.string.settings_simple_list_bottom_bar, R.string.settings_simple_list_bottom_bar_summary, SettingCategory.MODULE))
-            add(SettingEntry("module_spliced_card", R.string.settings_spliced_card_group, R.string.settings_spliced_card_group_summary, SettingCategory.MODULE))
-            add(SettingEntry("module_kpm_status_badge", R.string.settings_show_kpm_status_badge, R.string.settings_show_kpm_status_badge_summary, SettingCategory.MODULE))
+            // === Plugin ===
+            add(SettingEntry("module_disable_update", R.string.dsh_plugin_disable_update_check, R.string.dsh_plugin_disable_update_check_summary, SettingCategory.MODULE))
+            add(SettingEntry("module_more_info", R.string.dsh_plugin_more_info, R.string.dsh_plugin_more_info_summary, SettingCategory.MODULE))
+            add(SettingEntry("module_sort_opt", R.string.dsh_plugin_sort_updatable_first, R.string.dsh_plugin_sort_updatable_first_summary, SettingCategory.MODULE))
 
             // === Multimedia ===
             add(SettingEntry("multimedia_bg_music", R.string.settings_background_music, R.string.settings_background_music_summary, SettingCategory.MULTIMEDIA))

@@ -137,4 +137,18 @@
     <string name="dsh_backup_exporting">Exporting…</string>
     <string name="dsh_backup_importing">Importing…</string>
     <string name="dsh_backup_open_dir_failed">Could not open the folder; it is at Download/DSH-Folk/ConfigBackups.</string>
+
+    <!-- 插件设置页 -->
+    <string name="dsh_plugin_disable_update_check">Disable update check</string>
+    <string name="dsh_plugin_disable_update_check_summary">Stop querying the plugin catalog for newer versions</string>
+    <string name="dsh_plugin_more_info">Show plugin details</string>
+    <string name="dsh_plugin_more_info_summary">Show the package id and author under each plugin</string>
+    <string name="dsh_plugin_sort_updatable_first">Updatable first</string>
+    <string name="dsh_plugin_sort_updatable_first_summary">Sort plugins that have an update to the top of the list</string>
+
+    <!-- 行为设置页 -->
+    <string name="dsh_badge_plugin">Show updatable plugin badge</string>
+    <string name="dsh_plugin_settings_summary">Update check, plugin details, sorting</string>
+    <string name="dsh_autostart">Start on boot</string>
+    <string name="dsh_autostart_summary">Launch the harness automatically after the device finishes booting (only when the runtime is already installed)</string>
 </resources>

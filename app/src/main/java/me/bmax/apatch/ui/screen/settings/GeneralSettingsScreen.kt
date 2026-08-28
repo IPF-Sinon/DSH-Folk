@@ -16,13 +16,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -31,14 +24,8 @@ import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.theme.BackgroundConfig
-import me.bmax.apatch.util.getSELinuxMode
-import me.bmax.apatch.util.isGlobalNamespaceEnabled as checkGlobalNamespaceEnabled
-import me.bmax.apatch.util.isMagicMountEnabled as checkMagicMountEnabled
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
 
@@ -46,26 +33,6 @@ import me.bmax.apatch.util.ui.NavigationBarsSpacer
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeneralSettingsScreen(navigator: DestinationsNavigator, highlightKey: String? = null) {
-    val state by APApplication.apStateLiveData.observeAsState(APApplication.State.UNKNOWN_STATE)
-    val kPatchReady = state != APApplication.State.UNKNOWN_STATE
-    val aPatchReady = (state == APApplication.State.ANDROIDPATCH_INSTALLING || state == APApplication.State.ANDROIDPATCH_INSTALLED || state == APApplication.State.ANDROIDPATCH_NEED_UPDATE)
-
-    var isGlobalNamespaceEnabled by rememberSaveable { mutableStateOf(false) }
-    var namespaceLoaded by remember { mutableStateOf(false) }
-    var isMagicMountEnabled by rememberSaveable { mutableStateOf(false) }
-    var currentSELinuxMode by rememberSaveable { mutableStateOf("Unknown") }
-
-    LaunchedEffect(kPatchReady, aPatchReady) {
-        if (kPatchReady && aPatchReady) {
-            withContext(Dispatchers.IO) {
-                isGlobalNamespaceEnabled = checkGlobalNamespaceEnabled()
-                isMagicMountEnabled = checkMagicMountEnabled()
-                currentSELinuxMode = getSELinuxMode()
-            }
-            namespaceLoaded = true
-        }
-    }
-
     val snackBarHost = LocalSnackbarHost.current
     val flat = BackgroundConfig.isCustomBackgroundEnabled || BackgroundConfig.settingsBackgroundUri != null
 
@@ -89,15 +56,6 @@ fun GeneralSettingsScreen(navigator: DestinationsNavigator, highlightKey: String
         ) {
             item {
                 GeneralSettingsContent(
-                    kPatchReady = kPatchReady,
-                    aPatchReady = aPatchReady,
-                    currentSELinuxMode = currentSELinuxMode,
-                    onSELinuxModeChange = { currentSELinuxMode = it },
-                    isGlobalNamespaceEnabled = isGlobalNamespaceEnabled,
-                    namespaceLoaded = namespaceLoaded,
-                    onGlobalNamespaceChange = { isGlobalNamespaceEnabled = it },
-                    isMagicMountEnabled = isMagicMountEnabled,
-                    onMagicMountChange = { isMagicMountEnabled = it },
                     snackBarHost = snackBarHost,
                     flat = flat,
                     navigator = navigator,

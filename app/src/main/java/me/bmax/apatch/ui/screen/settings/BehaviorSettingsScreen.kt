@@ -16,8 +16,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -26,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.util.ui.LocalSnackbarHost
@@ -36,10 +33,6 @@ import me.bmax.apatch.util.ui.NavigationBarsSpacer
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BehaviorSettingsScreen(navigator: DestinationsNavigator, highlightKey: String? = null) {
-    val state by APApplication.apStateLiveData.observeAsState(APApplication.State.UNKNOWN_STATE)
-    val kPatchReady = state != APApplication.State.UNKNOWN_STATE
-    val aPatchReady = (state == APApplication.State.ANDROIDPATCH_INSTALLING || state == APApplication.State.ANDROIDPATCH_INSTALLED || state == APApplication.State.ANDROIDPATCH_NEED_UPDATE)
-
     val snackBarHost = LocalSnackbarHost.current
     val flat = BackgroundConfig.isCustomBackgroundEnabled || BackgroundConfig.settingsBackgroundUri != null
     Scaffold(
@@ -62,8 +55,6 @@ fun BehaviorSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
         ) {
             item {
                 BehaviorSettingsContent(
-                    kPatchReady = kPatchReady,
-                    aPatchReady = aPatchReady,
                     flat = flat,
                     highlightKey = highlightKey,
                 )

@@ -119,4 +119,18 @@
     <string name="dsh_backup_exporting">正在导出…</string>
     <string name="dsh_backup_importing">正在导入…</string>
     <string name="dsh_backup_open_dir_failed">打不开目录，文件在 Download/DSH-Folk/ConfigBackups。</string>
+
+    <!-- 插件设置页 -->
+    <string name="dsh_plugin_disable_update_check">禁用更新检查</string>
+    <string name="dsh_plugin_disable_update_check_summary">不再向插件目录查询新版本</string>
+    <string name="dsh_plugin_more_info">显示插件详细信息</string>
+    <string name="dsh_plugin_more_info_summary">在每个插件下显示包名与作者</string>
+    <string name="dsh_plugin_sort_updatable_first">可更新优先</string>
+    <string name="dsh_plugin_sort_updatable_first_summary">把有更新的插件排到列表最前面</string>
+
+    <!-- 行为设置页 -->
+    <string name="dsh_badge_plugin">显示可更新插件角标</string>
+    <string name="dsh_plugin_settings_summary">更新检查、插件详情、排序</string>
+    <string name="dsh_autostart">开机自启</string>
+    <string name="dsh_autostart_summary">设备启动完成后自动拉起 Harness（仅在运行时已安装时生效）</string>
 </resources>

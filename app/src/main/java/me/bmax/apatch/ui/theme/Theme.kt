@@ -47,9 +47,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.ramcosta.composedestinations.generated.destinations.SettingScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.KPModuleScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.SuperUserScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.APModuleScreenDestination
 import me.bmax.apatch.ui.component.themeColorOptions
 
 @Composable

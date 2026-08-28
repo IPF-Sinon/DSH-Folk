@@ -7,8 +7,6 @@ import android.net.TrafficStats
 import android.os.BatteryManager
 import android.os.StatFs
 import android.util.Log
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.topjohnwu.superuser.Shell
@@ -23,7 +21,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
 import me.bmax.apatch.apApp
 import me.bmax.apatch.util.AppData
@@ -52,24 +49,22 @@ data class TimeSeriesData(
     val ramHistory: List<Float> = emptyList()
 )
 
-data class ModuleStatsState(
-    val kernelModuleCount: Int = 0,
-    val apmModuleCount: Int = 0,
-    val superuserCount: Int = 0
+/** DSH 插件计数（原内核/APM/超级用户三项计数的替代）。 */
+data class PluginStatsState(
+    val pluginCount: Int = 0,
+    val updatableCount: Int = 0
 )
 
-data class PatchStatusState(
-    val kpState: APApplication.State = APApplication.State.UNKNOWN_STATE,
-    val apState: APApplication.State = APApplication.State.UNKNOWN_STATE,
-    val kpVersion: String = "",
+/** 管理器自身与系统信息（原 PatchStatusState 去掉内核补丁状态后的残余）。 */
+data class ManagerInfoState(
     val managerVersion: String = "",
     val selinuxStatus: String = ""
 )
 
 data class DashboardUiState(
-    val patchStatus: PatchStatusState = PatchStatusState(),
+    val managerInfo: ManagerInfoState = ManagerInfoState(),
     val systemMonitor: SystemMonitorState = SystemMonitorState(),
-    val moduleStats: ModuleStatsState = ModuleStatsState(),
+    val pluginStats: PluginStatsState = PluginStatsState(),
     val isLoading: Boolean = true
 )
 
@@ -96,12 +91,9 @@ class DashboardViewModel : ViewModel() {
     private var storageBatteryJob: Job? = null
     private var storagePartitionsJob: Job? = null
 
-    private val liveDataObservers = mutableListOf<Observer<*>>()
-
     init {
         loadOneTimeData()
-        observeLiveDataSources()
-        collectModuleCounts()
+        collectPluginCounts()
     }
 
     private fun loadOneTimeData() {
@@ -115,8 +107,7 @@ class DashboardViewModel : ViewModel() {
             }
 
             val newState = current.copy(
-                patchStatus = current.patchStatus.copy(
-                    kpVersion = runCatching { Version.installedKPVString() }.getOrDefault(""),
+                managerInfo = current.managerInfo.copy(
                     managerVersion = runCatching { Version.getManagerVersion().first }.getOrDefault(""),
                     selinuxStatus = fetchSELinuxStatus(apApp)
                 ),
@@ -132,60 +123,25 @@ class DashboardViewModel : ViewModel() {
         }
     }
 
-    private fun observeLiveDataSources() {
-        observeLiveData(APApplication.kpStateLiveData) { state ->
-            val current = _dashboardUiState.value
-            _dashboardUiState.value = current.copy(
-                patchStatus = current.patchStatus.copy(kpState = state)
-            )
-        }
-
-        observeLiveData(APApplication.apStateLiveData) { state ->
-            val current = _dashboardUiState.value
-            _dashboardUiState.value = current.copy(
-                patchStatus = current.patchStatus.copy(apState = state)
-            )
-        }
-    }
-
-    private fun <T> observeLiveData(liveData: LiveData<T>, onChanged: (T) -> Unit) {
-        val observer = Observer<T> { value ->
-            onChanged(value)
-        }
-        @Suppress("UNCHECKED_CAST")
-        liveDataObservers.add(observer as Observer<*>)
-        liveData.observeForever(observer)
-    }
-
-    private fun collectModuleCounts() {
-        AppData.DataRefreshManager.superuserCount
+    private fun collectPluginCounts() {
+        AppData.DataRefreshManager.pluginCount
             .onEach { count ->
                 val current = _dashboardUiState.value
                 _dashboardUiState.value = current.copy(
-                    moduleStats = current.moduleStats.copy(superuserCount = count)
+                    pluginStats = current.pluginStats.copy(pluginCount = count)
                 )
             }
-            .catch { e -> Log.e(TAG, "Error collecting superuserCount", e) }
+            .catch { e -> Log.e(TAG, "Error collecting pluginCount", e) }
             .launchIn(viewModelScope)
 
-        AppData.DataRefreshManager.apmModuleCount
+        AppData.DataRefreshManager.updatableCount
             .onEach { count ->
                 val current = _dashboardUiState.value
                 _dashboardUiState.value = current.copy(
-                    moduleStats = current.moduleStats.copy(apmModuleCount = count)
+                    pluginStats = current.pluginStats.copy(updatableCount = count)
                 )
             }
-            .catch { e -> Log.e(TAG, "Error collecting apmModuleCount", e) }
-            .launchIn(viewModelScope)
-
-        AppData.DataRefreshManager.kernelModuleCount
-            .onEach { count ->
-                val current = _dashboardUiState.value
-                _dashboardUiState.value = current.copy(
-                    moduleStats = current.moduleStats.copy(kernelModuleCount = count)
-                )
-            }
-            .catch { e -> Log.e(TAG, "Error collecting kernelModuleCount", e) }
+            .catch { e -> Log.e(TAG, "Error collecting updatableCount", e) }
             .launchIn(viewModelScope)
     }
 
@@ -350,9 +306,9 @@ class DashboardViewModel : ViewModel() {
             _dashboardUiState.value = current.copy(isLoading = true)
 
             val newState = current.copy(
-                patchStatus = current.patchStatus.copy(
-                    kpVersion = runCatching { Version.installedKPVString() }.getOrDefault(current.patchStatus.kpVersion),
-                    managerVersion = runCatching { Version.getManagerVersion().first }.getOrDefault(current.patchStatus.managerVersion),
+                managerInfo = current.managerInfo.copy(
+                    managerVersion = runCatching { Version.getManagerVersion().first }
+                        .getOrDefault(current.managerInfo.managerVersion),
                     selinuxStatus = fetchSELinuxStatus(apApp)
                 ),
                 systemMonitor = current.systemMonitor.copy(
@@ -389,14 +345,6 @@ class DashboardViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        liveDataObservers.forEach { observer ->
-            @Suppress("UNCHECKED_CAST")
-            APApplication.kpStateLiveData.removeObserver(observer as Observer<APApplication.State>)
-            @Suppress("UNCHECKED_CAST")
-            APApplication.apStateLiveData.removeObserver(observer as Observer<APApplication.State>)
-        }
-        liveDataObservers.clear()
-
         stopPeriodicPolling()
         Log.d(TAG, "DashboardViewModel cleared, all polling jobs cancelled")
     }

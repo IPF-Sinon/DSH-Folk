@@ -209,6 +209,7 @@ private fun DshPluginList(
         items(list, key = { it.id }) { plugin ->
             DshPluginItem(
                 plugin = plugin,
+                showMoreInfo = viewModel.showMoreInfo,
                 onUpdate = {
                     viewModel.install(plugin.id) { out ->
                         scope.launch { snackBarHost.showSnackbar(out.lines().lastOrNull() ?: done) }
@@ -230,6 +231,7 @@ private fun DshPluginList(
 @Composable
 private fun DshPluginItem(
     plugin: DshPlugin,
+    showMoreInfo: Boolean,
     onUpdate: () -> Unit,
     onUninstall: () -> Unit,
 ) {
@@ -279,9 +281,9 @@ private fun DshPluginItem(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (plugin.author.isNotEmpty()) {
+            if (showMoreInfo) {
                 Text(
-                    text = plugin.author,
+                    text = listOf(plugin.id, plugin.author).filter { it.isNotEmpty() }.joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

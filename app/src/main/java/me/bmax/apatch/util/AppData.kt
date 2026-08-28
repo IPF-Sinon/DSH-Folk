@@ -7,156 +7,71 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
-import me.bmax.apatch.Natives
-import org.json.JSONArray
+import me.bmax.apatch.dsh.DshPluginRepo
+import me.bmax.apatch.dsh.DshRuntime
 
 /**
- * AppData - Data management center for badge counts
- * Manages counts for superuser and APM modules
+ * AppData —— DSH-Folk 的角标数据中心。
+ *
+ * 原 APatch 版本统计的是「超级用户 / APM 模块 / 内核模块」三类内核补丁数据；
+ * DSH-Folk 没有内核补丁栈，这里改为统计容器内 DSH 插件：
+ *  - [DataRefreshManager.pluginCount]     已安装插件数（插件页角标）
+ *  - [DataRefreshManager.updatableCount]  可更新插件数
+ *
+ * 运行时未安装/未启动时全部为 0，且不会去 exec 容器命令。
  */
 object AppData {
     private const val TAG = "AppData"
-    private const val NATIVE_CALL_TIMEOUT_MS = 5_000L
-
-    /**
-     * Run a potentially blocking native call with a timeout fallback.
-     * Since JNI syscalls cannot be cancelled by coroutines, we use a thread + join(timeout).
-     */
-    private fun <T> runNativeWithTimeout(timeoutMs: Long, defaultValue: T, block: () -> T): T {
-        var result: T? = null
-        val t = Thread { result = block() }
-        t.name = "native-call-timeout"
-        t.start()
-        t.join(timeoutMs)
-        return if (t.isAlive) {
-            Log.w(TAG, "Native call timed out after ${timeoutMs}ms")
-            defaultValue
-        } else {
-            result ?: defaultValue
-        }
-    }
 
     object DataRefreshManager {
-        // Private state flows for counts
-        private val _superuserCount = MutableStateFlow(0)
-        private val _apmModuleCount = MutableStateFlow(0)
-        private val _kernelModuleCount = MutableStateFlow(0)
+        private val _pluginCount = MutableStateFlow(0)
+        private val _updatableCount = MutableStateFlow(0)
 
         private var lastRefreshAt = 0L
 
-        // Public read-only state flows
-        val superuserCount: StateFlow<Int> = _superuserCount.asStateFlow()
-        val apmModuleCount: StateFlow<Int> = _apmModuleCount.asStateFlow()
-        val kernelModuleCount: StateFlow<Int> = _kernelModuleCount.asStateFlow()
+        val pluginCount: StateFlow<Int> = _pluginCount.asStateFlow()
+        val updatableCount: StateFlow<Int> = _updatableCount.asStateFlow()
 
         /**
-         * Refresh all data counts
+         * 刷新插件角标计数。
+         *
+         * @param enablePluginBadge 角标总开关关闭时直接跳过，避免无谓的容器 exec。
+         * @param minIntervalMs 最小刷新间隔，避免 3s 轮询把容器打满。
          */
         suspend fun refreshData(
-            enableSuperUser: Boolean,
-            enableApm: Boolean,
-            enableKernel: Boolean,
-            minIntervalMs: Long = 15000L,
-            force: Boolean = false
+            enablePluginBadge: Boolean,
+            minIntervalMs: Long = 30_000L,
+            force: Boolean = false,
         ) = withContext(Dispatchers.IO) {
-            if (!enableSuperUser && !enableApm && !enableKernel) {
-                return@withContext
-            }
+            if (!enablePluginBadge) return@withContext
 
             val now = SystemClock.elapsedRealtime()
-            if (!force && now - lastRefreshAt < minIntervalMs) {
-                return@withContext
-            }
+            if (!force && now - lastRefreshAt < minIntervalMs) return@withContext
             lastRefreshAt = now
 
-            if (enableSuperUser) {
-                val count = getSuperuserCount()
-                if (_superuserCount.value != count) {
-                    _superuserCount.value = count
-                }
+            // 容器没跑起来时不做任何 exec：execRootfsForOutput 会阻塞等超时。
+            if (!DshRuntime.state.value.installed) {
+                _pluginCount.value = 0
+                _updatableCount.value = 0
+                return@withContext
             }
-
-            if (enableApm) {
-                val count = getApmModuleCount()
-                if (_apmModuleCount.value != count) {
-                    _apmModuleCount.value = count
-                }
-            }
-
-            if (enableKernel) {
-                val count = getKernelModuleCount()
-                if (_kernelModuleCount.value != count) {
-                    _kernelModuleCount.value = count
-                }
-            }
-        }
-
- 
-        suspend fun ensureCountsLoaded(force: Boolean = false) = withContext(Dispatchers.IO) {
 
             try {
-                val suCount = getSuperuserCount()
-                if (_superuserCount.value != suCount) {
-                    _superuserCount.value = suCount
-                }
-                
-                val apmCount = getApmModuleCount()
-                if (_apmModuleCount.value != apmCount) {
-                    _apmModuleCount.value = apmCount
-                }
-                
-                val kpmCount = getKernelModuleCount()
-                if (_kernelModuleCount.value != kpmCount) {
-                    _kernelModuleCount.value = kpmCount
+                val installed = DshPluginRepo.listInstalled()
+                _pluginCount.value = installed.size
+
+                // 可更新数需要线上版本号；商店不可达时保持上一次的值而不是清零。
+                val catalog = runCatching { DshPluginRepo.fetchCatalog() }.getOrDefault(emptyList())
+                if (catalog.isNotEmpty()) {
+                    _updatableCount.value = catalog.count { it.updatable }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to ensure counts loaded", e)
+                Log.e(TAG, "Failed to refresh DSH plugin counts", e)
             }
         }
-    }
 
-    /**
-     * Get superuser count
-     * Note: Minus 1 to exclude the APatch manager itself from the count
-     */
-    private fun getSuperuserCount(): Int {
-        return runNativeWithTimeout(NATIVE_CALL_TIMEOUT_MS, 0) {
-            try {
-                val uids = Natives.suUids()
-                (uids.size - 1).coerceAtLeast(0)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to get superuser count", e)
-                0
-            }
-        }
-    }
-
-    /**
-     * Get APM module count
-     */
-    private suspend fun getApmModuleCount(): Int {
-        return try {
-            val result = listModules()
-            val array = JSONArray(result)
-            array.length()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to get APM module count", e)
-            0
-        }
-    }
-
-    /**
-     * Get kernel module count
-     */
-    private fun getKernelModuleCount(): Int {
-        return runNativeWithTimeout(NATIVE_CALL_TIMEOUT_MS, 0) {
-            try {
-                Natives.kernelPatchModuleNum().toInt()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to get kernel module count", e)
-                0
-            }
-        }
+        /** 首次进入界面时加载一次（同样受运行时状态保护）。 */
+        suspend fun ensureCountsLoaded(force: Boolean = false) =
+            refreshData(enablePluginBadge = true, force = force)
     }
 }
-

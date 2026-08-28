@@ -1,7 +1,6 @@
 package me.bmax.apatch.ui.navigation
 
 import android.content.SharedPreferences
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -46,7 +45,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -76,7 +74,6 @@ import com.ramcosta.composedestinations.utils.rememberDestinationsNavigator
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import me.bmax.apatch.APApplication
-import me.bmax.apatch.R
 import me.bmax.apatch.ui.screen.BottomBarDestination
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.util.BottomBarIconConfig
@@ -93,33 +90,25 @@ fun BottomBar(
     liquidState: io.github.fletchmckee.liquid.LiquidState? = null
 ) {
     val context = LocalContext.current
-    val state by APApplication.apStateLiveData.observeAsState(APApplication.State.UNKNOWN_STATE)
     val navigator = navController.rememberDestinationsNavigator()
 
     val prefs = APApplication.sharedPreferences
-    var showNavApm by remember { mutableStateOf(prefs.getBoolean("show_nav_apm", true)) }
-    var showNavKpm by remember { mutableStateOf(prefs.getBoolean("show_nav_kpm", true)) }
-    var showNavSuperUser by remember { mutableStateOf(prefs.getBoolean("show_nav_superuser", true)) }
+    var showNavPlugin by remember { mutableStateOf(prefs.getBoolean("show_nav_apm", true)) }
+    var showNavTerminal by remember { mutableStateOf(prefs.getBoolean("show_nav_superuser", true)) }
 
     // Individual badge count settings - default enabled
-    var enableSuperUserBadge by remember { mutableStateOf(prefs.getBoolean("badge_superuser", true)) }
-    var enableApmBadge by remember { mutableStateOf(prefs.getBoolean("badge_apm", true)) }
-    var enableKernelBadge by remember { mutableStateOf(prefs.getBoolean("badge_kernel", true)) }
+    var enablePluginBadge by remember { mutableStateOf(prefs.getBoolean("badge_apm", true)) }
 
     // Collect badge counts from AppData
-    val superuserCount by me.bmax.apatch.util.AppData.DataRefreshManager.superuserCount.collectAsStateWithLifecycle()
-    val apmModuleCount by me.bmax.apatch.util.AppData.DataRefreshManager.apmModuleCount.collectAsStateWithLifecycle()
-    val kernelModuleCount by me.bmax.apatch.util.AppData.DataRefreshManager.kernelModuleCount.collectAsStateWithLifecycle()
+    // 插件页角标：容器内可更新的 DSH 插件数量。
+    val updatableCount by me.bmax.apatch.util.AppData.DataRefreshManager.updatableCount.collectAsStateWithLifecycle()
 
     DisposableEffect(Unit) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { sharedPrefs, key ->
             when (key) {
-                "show_nav_apm" -> showNavApm = sharedPrefs.getBoolean(key, true)
-                "show_nav_kpm" -> showNavKpm = sharedPrefs.getBoolean(key, true)
-                "show_nav_superuser" -> showNavSuperUser = sharedPrefs.getBoolean(key, true)
-                "badge_superuser" -> enableSuperUserBadge = sharedPrefs.getBoolean(key, true)
-                "badge_apm" -> enableApmBadge = sharedPrefs.getBoolean(key, true)
-                "badge_kernel" -> enableKernelBadge = sharedPrefs.getBoolean(key, true)
+                "show_nav_apm" -> showNavPlugin = sharedPrefs.getBoolean(key, true)
+                "show_nav_superuser" -> showNavTerminal = sharedPrefs.getBoolean(key, true)
+                "badge_apm" -> enablePluginBadge = sharedPrefs.getBoolean(key, true)
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -128,20 +117,12 @@ fun BottomBar(
         }
     }
 
-    Crossfade(
-        modifier = modifier,
-        targetState = state,
-        label = "BottomBarStateCrossfade"
-    ) { state ->
-        val kPatchReady = state != APApplication.State.UNKNOWN_STATE
-        val aPatchReady = state == APApplication.State.ANDROIDPATCH_INSTALLED
-
+    Box(modifier = modifier) {
         // Determine visible destinations
         val visibleDestinations = BottomBarDestination.entries.filter { destination ->
             when {
-                destination == BottomBarDestination.Plugin && !showNavApm -> false
-                destination == BottomBarDestination.Terminal && !showNavSuperUser -> false
-                (destination.kPatchRequired && !kPatchReady) || (destination.aPatchRequired && !aPatchReady) -> false
+                destination == BottomBarDestination.Plugin && !showNavPlugin -> false
+                destination == BottomBarDestination.Terminal && !showNavTerminal -> false
                 else -> true
             }
         }
@@ -267,12 +248,8 @@ fun BottomBar(
                                 animatedSelectedIndex = animatedSelectedIndex.value,
                                 moveDirection = moveDirection.value,
                                 liquidMotion = liquidMotion.value,
-                                superuserCount = superuserCount,
-                                apmModuleCount = apmModuleCount,
-                                kernelModuleCount = kernelModuleCount,
-                                enableSuperUserBadge = enableSuperUserBadge,
-                                enableApmBadge = enableApmBadge,
-                                enableKernelBadge = enableKernelBadge,
+                                updatableCount = updatableCount,
+                                enablePluginBadge = enablePluginBadge,
                                 currentRoute = currentRoute,
                                 navController = navController,
                                 context = context,
@@ -297,12 +274,8 @@ fun BottomBar(
                                 animatedSelectedIndex = animatedSelectedIndex.value,
                                 moveDirection = moveDirection.value,
                                 liquidMotion = liquidMotion.value,
-                                superuserCount = superuserCount,
-                                apmModuleCount = apmModuleCount,
-                                kernelModuleCount = kernelModuleCount,
-                                enableSuperUserBadge = enableSuperUserBadge,
-                                enableApmBadge = enableApmBadge,
-                                enableKernelBadge = enableKernelBadge,
+                                updatableCount = updatableCount,
+                                enablePluginBadge = enablePluginBadge,
                                 currentRoute = currentRoute,
                                 navController = navController,
                                 context = context,
@@ -346,8 +319,7 @@ fun BottomBar(
                             },
                             icon = {
                                 val badgeContent = when {
-                                    destination == BottomBarDestination.Terminal && enableSuperUserBadge -> superuserCount
-                                    destination == BottomBarDestination.Plugin && enableApmBadge -> apmModuleCount
+                                    destination == BottomBarDestination.Plugin && enablePluginBadge -> updatableCount
                                     else -> 0
                                 }
 
@@ -391,12 +363,8 @@ private fun BottomBarContent(
     animatedSelectedIndex: Float,
     moveDirection: Float = 0f,
     liquidMotion: Float = 0f,
-    superuserCount: Int,
-    apmModuleCount: Int,
-    kernelModuleCount: Int,
-    enableSuperUserBadge: Boolean,
-    enableApmBadge: Boolean,
-    enableKernelBadge: Boolean,
+    updatableCount: Int,
+    enablePluginBadge: Boolean,
     currentRoute: String?,
     navController: NavHostController,
     context: android.content.Context,
@@ -561,8 +529,7 @@ private fun BottomBarContent(
                         contentAlignment = Alignment.Center
                     ) {
                         val badgeContent = when {
-                            destination == BottomBarDestination.Terminal && enableSuperUserBadge -> superuserCount
-                            destination == BottomBarDestination.Plugin && enableApmBadge -> apmModuleCount
+                            destination == BottomBarDestination.Plugin && enablePluginBadge -> updatableCount
                             else -> 0
                         }
 
@@ -595,31 +562,23 @@ private fun BottomBarContent(
 @Composable
 fun NavigationRailBar(navController: NavHostController) {
     val context = LocalContext.current
-    val state by APApplication.apStateLiveData.observeAsState(APApplication.State.UNKNOWN_STATE)
     val navigator = navController.rememberDestinationsNavigator()
 
     val prefs = APApplication.sharedPreferences
-    var showNavApm by remember { mutableStateOf(prefs.getBoolean("show_nav_apm", true)) }
-    var showNavKpm by remember { mutableStateOf(prefs.getBoolean("show_nav_kpm", true)) }
-    var showNavSuperUser by remember { mutableStateOf(prefs.getBoolean("show_nav_superuser", true)) }
+    var showNavPlugin by remember { mutableStateOf(prefs.getBoolean("show_nav_apm", true)) }
+    var showNavTerminal by remember { mutableStateOf(prefs.getBoolean("show_nav_superuser", true)) }
 
-    var enableSuperUserBadge by remember { mutableStateOf(prefs.getBoolean("badge_superuser", true)) }
-    var enableApmBadge by remember { mutableStateOf(prefs.getBoolean("badge_apm", true)) }
-    var enableKernelBadge by remember { mutableStateOf(prefs.getBoolean("badge_kernel", true)) }
+    var enablePluginBadge by remember { mutableStateOf(prefs.getBoolean("badge_apm", true)) }
 
-    val superuserCount by me.bmax.apatch.util.AppData.DataRefreshManager.superuserCount.collectAsStateWithLifecycle()
-    val apmModuleCount by me.bmax.apatch.util.AppData.DataRefreshManager.apmModuleCount.collectAsStateWithLifecycle()
-    val kernelModuleCount by me.bmax.apatch.util.AppData.DataRefreshManager.kernelModuleCount.collectAsStateWithLifecycle()
+    // 插件页角标：容器内可更新的 DSH 插件数量。
+    val updatableCount by me.bmax.apatch.util.AppData.DataRefreshManager.updatableCount.collectAsStateWithLifecycle()
 
     DisposableEffect(Unit) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { sharedPrefs, key ->
             when (key) {
-                "show_nav_apm" -> showNavApm = sharedPrefs.getBoolean(key, true)
-                "show_nav_kpm" -> showNavKpm = sharedPrefs.getBoolean(key, true)
-                "show_nav_superuser" -> showNavSuperUser = sharedPrefs.getBoolean(key, true)
-                "badge_superuser" -> enableSuperUserBadge = sharedPrefs.getBoolean(key, true)
-                "badge_apm" -> enableApmBadge = sharedPrefs.getBoolean(key, true)
-                "badge_kernel" -> enableKernelBadge = sharedPrefs.getBoolean(key, true)
+                "show_nav_apm" -> showNavPlugin = sharedPrefs.getBoolean(key, true)
+                "show_nav_superuser" -> showNavTerminal = sharedPrefs.getBoolean(key, true)
+                "badge_apm" -> enablePluginBadge = sharedPrefs.getBoolean(key, true)
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -628,18 +587,11 @@ fun NavigationRailBar(navController: NavHostController) {
         }
     }
 
-    Crossfade(
-        targetState = state,
-        label = "NavigationRailStateCrossfade"
-    ) { state ->
-        val kPatchReady = state != APApplication.State.UNKNOWN_STATE
-        val aPatchReady = state == APApplication.State.ANDROIDPATCH_INSTALLED
-
+    run {
         val visibleDestinations = BottomBarDestination.entries.filter { destination ->
             when {
-                destination == BottomBarDestination.Plugin && !showNavApm -> false
-                destination == BottomBarDestination.Terminal && !showNavSuperUser -> false
-                (destination.kPatchRequired && !kPatchReady) || (destination.aPatchRequired && !aPatchReady) -> false
+                destination == BottomBarDestination.Plugin && !showNavPlugin -> false
+                destination == BottomBarDestination.Terminal && !showNavTerminal -> false
                 else -> true
             }
         }
@@ -694,8 +646,7 @@ fun NavigationRailBar(navController: NavHostController) {
                         },
                         icon = {
                             val badgeContent = when {
-                                destination == BottomBarDestination.Terminal && enableSuperUserBadge -> superuserCount
-                                destination == BottomBarDestination.Plugin && enableApmBadge -> apmModuleCount
+                                destination == BottomBarDestination.Plugin && enablePluginBadge -> updatableCount
                                 else -> 0
                             }
 

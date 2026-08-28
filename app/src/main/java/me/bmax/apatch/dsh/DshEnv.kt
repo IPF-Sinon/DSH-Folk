@@ -49,4 +49,5 @@ object DshEnv {
     const val KEY_PORT = "dsh_port"
     const val KEY_RUNTIME_VERSION = "runtime_version"
     const val KEY_PROROOT_FAIL = "proroot_fail_streak"
+    const val KEY_AUTOSTART = "dsh_autostart"     // 开机自启（BootCompletedReceiver 读取）
 }

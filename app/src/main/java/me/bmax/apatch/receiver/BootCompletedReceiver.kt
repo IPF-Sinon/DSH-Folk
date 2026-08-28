@@ -4,79 +4,38 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import kotlin.concurrent.thread
-import me.bmax.apatch.util.ApdExecResult
-import me.bmax.apatch.util.execApdBootFallback
+import me.bmax.apatch.dsh.DshEnv
+import me.bmax.apatch.dsh.HarnessService
 
+/**
+ * 开机自启：可选地在系统启动完成后把 `dsh web` 拉起来。
+ *
+ * FolkPatch 原来在这里补跑 `apd manager-boot-completed`（内核补丁的 post-fs-data 兜底）。
+ * DSH-Folk 没有 apd，改成读 [DshEnv.KEY_AUTOSTART]：开启且运行时已安装时启动前台服务，
+ * 否则什么都不做 —— 不能无条件启动，否则用户一开机就白跑一个 120 MB 容器。
+ */
 class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) {
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+
+        val prefs = context.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(DshEnv.KEY_AUTOSTART, false)) return
+
+        if (!DshEnv.isRuntimeInstalled(context)) {
+            Log.i(TAG, "Autostart requested but the runtime is not installed yet")
             return
         }
 
-        val pendingResult = goAsync()
-
-        thread(name = "fp-boot-fallback") {
-            try {
-                val retryDelaysMs = longArrayOf(0L, 15_000L, 30_000L)
-                for ((index, delayMs) in retryDelaysMs.withIndex()) {
-                    if (delayMs > 0) {
-                        Thread.sleep(delayMs)
-                    }
-
-                    Log.i(
-                        TAG,
-                        "Boot fallback attempt ${index + 1}/${retryDelaysMs.size}: triggering manager-boot-completed"
-                    )
-                    val result = try {
-                        execApdBootFallback("manager-boot-completed")
-                    } catch (t: Throwable) {
-                        Log.e(TAG, "Boot fallback attempt ${index + 1} crashed before completion", t)
-                        null
-                    }
-
-                    if (result != null && result.success) {
-                        Log.i(
-                            TAG,
-                            "Boot fallback succeeded on attempt ${index + 1}: ${formatResult(result)}"
-                        )
-                        return@thread
-                    }
-
-                    if (result != null) {
-                        Log.w(
-                            TAG,
-                            "Boot fallback attempt ${index + 1} failed: ${formatResult(result)}"
-                        )
-                    }
-                }
-
-                Log.e(TAG, "Boot fallback failed after all retry attempts")
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-                Log.w(TAG, "Boot fallback interrupted", e)
-            } catch (t: Throwable) {
-                Log.e(TAG, "Boot fallback crashed", t)
-            } finally {
-                pendingResult.finish()
-            }
+        try {
+            HarnessService.start(context)
+            Log.i(TAG, "Autostart: HarnessService requested")
+        } catch (t: Throwable) {
+            // 高版本 Android 对开机后台启动前台服务有限制，失败只记日志，用户可手动启动
+            Log.e(TAG, "Autostart failed", t)
         }
     }
 
     companion object {
-        private const val TAG = "FPBootReceiver"
-
-        private fun formatResult(result: ApdExecResult): String {
-            val parts = mutableListOf("command=${result.commandLabel}")
-            result.exitCode?.let { parts += "exit=$it" }
-            result.errorMessage?.takeIf { it.isNotBlank() }?.let { parts += "error=$it" }
-            result.output
-                .takeIf { it.isNotBlank() }
-                ?.let { output ->
-                    val compact = output.replace('\n', ' ').take(400)
-                    parts += "output=$compact"
-                }
-            return parts.joinToString(", ")
-        }
+        private const val TAG = "DshBootReceiver"
     }
 }

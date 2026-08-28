@@ -136,14 +136,6 @@
         </activity-alias>
 
         <activity
-            android:name=".ui.WebUIActivity"
-            android:process=":webui"
-            android:autoRemoveFromRecents="true"
-            android:documentLaunchMode="intoExisting"
-            android:exported="false"
-            android:theme="@style/Theme.APatch.WebUI" />
-
-        <activity
             android:name=".ui.CrashHandleActivity"
             android:exported="false" />
 
@@ -166,11 +158,6 @@
             android:enabled="true"
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
-
-        <service
-            android:name=".services.RootServices"
-            android:exported="false"
-            android:process=":root" />
 
         <receiver
             android:name=".receiver.BootCompletedReceiver"

@@ -16,6 +16,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
@@ -40,6 +41,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.SplicedColumnGroup
+import me.bmax.apatch.ui.component.ToggleSettingCard
 
 /**
  * 功能设置内容：**运行方式** 与 **权限通道**（含无线 ADB 配对）。
@@ -56,6 +58,9 @@ fun FunctionSettingsContent(
     /** proroot 是否在本机可用（不可用时禁选并说明原因）。 */
     prorootAvailable: Boolean,
     prorootUnavailableReason: String,
+    /** 开机自启（BootCompletedReceiver 会读同一个 pref）。 */
+    autostart: Boolean,
+    onAutostartChange: (Boolean) -> Unit,
     perm: PermissionManager.Status,
     onRefreshPerm: () -> Unit,
     onRequestShizuku: () -> Unit,
@@ -113,6 +118,18 @@ fun FunctionSettingsContent(
                     )
                 }
             }
+        }
+
+        // ───────── 开机自启 ─────────
+        item(key = "function_autostart") {
+            ToggleSettingCard(
+                flat = flat,
+                icon = Icons.Filled.PowerSettingsNew,
+                title = stringResource(R.string.dsh_autostart),
+                description = stringResource(R.string.dsh_autostart_summary),
+                checked = autostart,
+                onCheckedChange = onAutostartChange,
+            )
         }
 
         // ───────── 权限通道 ─────────

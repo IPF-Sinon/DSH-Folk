@@ -21,7 +21,6 @@ import me.bmax.apatch.ui.component.ToggleSettingCard
 @Composable
 fun SecuritySettingsContent(
     snackBarHost: SnackbarHostState,
-    kPatchReady: Boolean,
     flat: Boolean = false,
     highlightKey: String? = null,
 ) {

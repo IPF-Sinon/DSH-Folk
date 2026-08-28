@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.bmax.apatch.APApplication
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
 
@@ -36,10 +37,27 @@ class DshPluginViewModel : ViewModel() {
     var lastOutput by mutableStateOf("")
         private set
 
+    /** 插件设置页的开关（key 沿用 FolkPatch 模块页的名字，兼容旧配置）。 */
+    private val prefs get() = APApplication.sharedPreferences
+
+    /** 「显示插件详细信息」：卡片是否显示包名与作者。 */
+    val showMoreInfo: Boolean get() = prefs.getBoolean("show_more_module_info", true)
+
+    private val sortUpdatableFirst: Boolean get() = prefs.getBoolean("module_sort_optimization", true)
+
+    private val disableUpdateCheck: Boolean get() = prefs.getBoolean("disable_module_update_check", false)
+
     val filtered: List<DshPlugin>
-        get() = if (search.isBlank()) plugins else plugins.filter {
-            it.id.contains(search, true) || it.name.contains(search, true) ||
-                it.description.contains(search, true)
+        get() {
+            val matched = if (search.isBlank()) plugins else plugins.filter {
+                it.id.contains(search, true) || it.name.contains(search, true) ||
+                    it.description.contains(search, true)
+            }
+            return if (sortUpdatableFirst) {
+                matched.sortedWith(compareByDescending<DshPlugin> { it.updatable }.thenBy { it.id })
+            } else {
+                matched
+            }
         }
 
     val updatableCount: Int get() = plugins.count { it.updatable }
@@ -51,6 +69,12 @@ class DshPluginViewModel : ViewModel() {
             val installed = withContext(Dispatchers.IO) { DshPluginRepo.listInstalled() }
             // 先把已安装列表放出来，网络慢时页面不空白
             plugins = installed
+            if (disableUpdateCheck) {
+                // 关掉更新检查就不再拉线上目录：没有远端版本号，updatable 恒为 false
+                catalog = emptyList()
+                isRefreshing = false
+                return@launch
+            }
             val online = withContext(Dispatchers.IO) { DshPluginRepo.fetchCatalog() }
             catalog = online
             val byId = online.associateBy { it.id }

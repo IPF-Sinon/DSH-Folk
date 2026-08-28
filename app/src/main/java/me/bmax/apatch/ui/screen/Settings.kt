@@ -174,8 +174,8 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                     item {
                         SplicedSettingsItem(
                             icon = Icons.Filled.Extension,
-                            title = stringResource(R.string.settings_category_module),
-                            summary = stringResource(R.string.settings_category_module_summary),
+                            title = stringResource(R.string.dsh_plugins),
+                            summary = stringResource(R.string.dsh_plugin_settings_summary),
                             onClick = { navigator.navigate(ModuleSettingsScreenDestination(null)) },
                         )
                     }

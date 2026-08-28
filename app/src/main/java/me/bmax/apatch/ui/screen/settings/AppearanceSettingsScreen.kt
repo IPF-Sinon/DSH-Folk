@@ -17,7 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -26,7 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.edit
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
@@ -42,8 +40,6 @@ import me.bmax.apatch.util.ui.NavigationBarsSpacer
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceSettingsScreen(navigator: DestinationsNavigator, highlightKey: String? = null) {
-    val state by APApplication.apStateLiveData.observeAsState(APApplication.State.UNKNOWN_STATE)
-    val kPatchReady = state != APApplication.State.UNKNOWN_STATE
 
     val snackBarHost = LocalSnackbarHost.current
     val flat = BackgroundConfig.isCustomBackgroundEnabled || BackgroundConfig.settingsBackgroundUri != null
@@ -73,7 +69,6 @@ fun AppearanceSettingsScreen(navigator: DestinationsNavigator, highlightKey: Str
             item {
                 AppearanceSettingsContent(
                     snackBarHost = snackBarHost,
-                    kPatchReady = kPatchReady,
                     onNavigateToThemeStore = { navigator.navigate(ThemeStoreScreenDestination) },
                     onNavigateToApiMarketplace = { navigator.navigate(ApiMarketplaceScreenDestination) },
                     flat = flat,

@@ -105,7 +105,6 @@ import coil.compose.AsyncImage
 @Composable
 fun AppearanceSettingsContent(
     snackBarHost: SnackbarHostState,
-    kPatchReady: Boolean,
     onNavigateToThemeStore: () -> Unit,
     onNavigateToApiMarketplace: () -> Unit,
     flat: Boolean = false,
@@ -455,9 +454,10 @@ fun AppearanceSettingsContent(
     val statsTopLayoutValue = if (statsTopLayout == "grid") statsTopLayoutGridLabel else statsTopLayoutListLabel
     var showStatsTopLayoutDialog by remember { mutableStateOf(false) }
 
-    var showNavApm by remember { mutableStateOf(prefs.getBoolean("show_nav_apm", true)) }
-    var showNavKpm by remember { mutableStateOf(prefs.getBoolean("show_nav_kpm", true)) }
-    var showNavSuperUser by remember { mutableStateOf(prefs.getBoolean("show_nav_superuser", true)) }
+    // 底栏只有 主页/终端/插件/设置 四项，主页与设置不可隐藏，所以只留两个开关。
+    // key 沿用原名（show_nav_apm → 插件页，show_nav_superuser → 终端页）兼容旧配置。
+    var showNavPlugin by remember { mutableStateOf(prefs.getBoolean("show_nav_apm", true)) }
+    var showNavTerminal by remember { mutableStateOf(prefs.getBoolean("show_nav_superuser", true)) }
 
     var currentNavMode by remember { mutableStateOf(prefs.getString("nav_mode", "floating") ?: "floating") }
     val navSchemeLabel = when (currentNavMode) {
@@ -485,9 +485,8 @@ fun AppearanceSettingsContent(
                 "color_style" -> colorStyle = ColorStyle.fromName(prefs.getString(key, "TONAL_SPOT"))
                 "home_layout_style" -> currentStyle = prefs.getString(key, "dsh")
                 "stats_top_layout" -> statsTopLayout = prefs.getString(key, "list") ?: "list"
-                "show_nav_apm" -> showNavApm = prefs.getBoolean(key, true)
-                "show_nav_kpm" -> showNavKpm = prefs.getBoolean(key, true)
-                "show_nav_superuser" -> showNavSuperUser = prefs.getBoolean(key, true)
+                "show_nav_apm" -> showNavPlugin = prefs.getBoolean(key, true)
+                "show_nav_superuser" -> showNavTerminal = prefs.getBoolean(key, true)
                 "nav_mode" -> currentNavMode = prefs.getString(key, "floating") ?: "floating"
                 "floating_auto_hide" -> floatingAutoHide = prefs.getBoolean(key, true)
                 "floating_swipe_hide" -> floatingSwipeHide = prefs.getBoolean(key, true)
@@ -752,74 +751,62 @@ fun AppearanceSettingsContent(
                 }
             }
 
-            if (kPatchReady) {
-                item(key = "appearance_nav_layout") {
-                    var expanded by remember { mutableStateOf(false) }
-                    val rotationState by animateFloatAsState(
-                        targetValue = if (expanded) 180f else 0f,
-                        label = "ArrowRotation",
-                    )
-                    ExpressiveCard(flat = flat, onClick = { expanded = !expanded }) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(imageVector = Icons.Filled.Navigation, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                            Spacer(Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(id = R.string.settings_nav_layout_title),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text = stringResource(id = R.string.settings_nav_layout_summary),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Filled.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.rotate(rotationState),
+            item(key = "appearance_nav_layout") {
+                var expanded by remember { mutableStateOf(false) }
+                val rotationState by animateFloatAsState(
+                    targetValue = if (expanded) 180f else 0f,
+                    label = "ArrowRotation",
+                )
+                ExpressiveCard(flat = flat, onClick = { expanded = !expanded }) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(imageVector = Icons.Filled.Navigation, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(id = R.string.settings_nav_layout_title),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = stringResource(id = R.string.settings_nav_layout_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline,
                             )
                         }
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.rotate(rotationState),
+                        )
                     }
-                    AnimatedVisibility(visible = expanded) {
-                        Column(modifier = Modifier.padding(start = 16.dp, top = 8.dp)) {
-                            me.bmax.apatch.ui.component.CheckboxItem(
-                                icon = null,
-                                title = stringResource(id = R.string.settings_show_apm),
-                                summary = null,
-                                checked = showNavApm,
-                                onCheckedChange = {
-                                    showNavApm = it
-                                    prefs.edit().putBoolean("show_nav_apm", it).apply()
-                                },
-                            )
-                            me.bmax.apatch.ui.component.CheckboxItem(
-                                icon = null,
-                                title = stringResource(id = R.string.settings_show_kpm),
-                                summary = null,
-                                checked = showNavKpm,
-                                onCheckedChange = {
-                                    showNavKpm = it
-                                    prefs.edit().putBoolean("show_nav_kpm", it).apply()
-                                },
-                            )
-                            me.bmax.apatch.ui.component.CheckboxItem(
-                                icon = null,
-                                title = stringResource(id = R.string.settings_show_superuser),
-                                summary = null,
-                                checked = showNavSuperUser,
-                                onCheckedChange = {
-                                    showNavSuperUser = it
-                                    prefs.edit().putBoolean("show_nav_superuser", it).apply()
-                                },
-                            )
-                        }
+                }
+                AnimatedVisibility(visible = expanded) {
+                    Column(modifier = Modifier.padding(start = 16.dp, top = 8.dp)) {
+                        me.bmax.apatch.ui.component.CheckboxItem(
+                            icon = null,
+                            title = stringResource(id = R.string.dsh_plugins),
+                            summary = null,
+                            checked = showNavPlugin,
+                            onCheckedChange = {
+                                showNavPlugin = it
+                                prefs.edit().putBoolean("show_nav_apm", it).apply()
+                            },
+                        )
+                        me.bmax.apatch.ui.component.CheckboxItem(
+                            icon = null,
+                            title = stringResource(id = R.string.dsh_terminal),
+                            summary = null,
+                            checked = showNavTerminal,
+                            onCheckedChange = {
+                                showNavTerminal = it
+                                prefs.edit().putBoolean("show_nav_superuser", it).apply()
+                            },
+                        )
                     }
                 }
             }

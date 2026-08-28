@@ -83,8 +83,6 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.ApmBulkInstallScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.AppearanceSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.BackupSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.BehaviorSettingsScreenDestination
@@ -103,9 +101,7 @@ import com.ramcosta.composedestinations.utils.isRouteOnBackStackAsState
 import com.ramcosta.composedestinations.utils.rememberDestinationsNavigator
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.ui.screen.BottomBarDestination
-import me.bmax.apatch.ui.screen.MODULE_TYPE
 import me.bmax.apatch.ui.theme.APatchTheme
-import me.bmax.apatch.ui.viewmodel.SuperUserViewModel
 import me.bmax.apatch.ui.theme.APatchThemeWithBackground
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import androidx.compose.material3.NavigationBarDefaults
@@ -159,12 +155,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalContext
 import android.provider.OpenableColumns
 import me.bmax.apatch.ui.theme.ThemeManager
-import me.bmax.apatch.ui.component.rememberConfirmDialog
 import me.bmax.apatch.ui.component.rememberLoadingDialog
 
 
 import me.bmax.apatch.ui.screen.settings.appearance.ThemeImportDialog
-import me.bmax.apatch.util.BiometricUtils
 import me.bmax.apatch.ui.navigation.BottomBar
 import me.bmax.apatch.ui.navigation.NavigationRailBar
 import me.bmax.apatch.ui.navigation.LocalScrollState
@@ -180,15 +174,13 @@ import me.bmax.apatch.util.ui.showToast
 
 class MainActivity : AppCompatActivity() {
     private var isLoading = true
+    /** 外部分享/打开进来的文件 URI，DSH-Folk 只用于导入 .fpt 主题包。 */
     private var installUri: Uri? = null
-    private var installUris: ArrayList<Uri>? = null
     private lateinit var permissionHandler: PermissionRequestHandler
     private val isLocked = mutableStateOf(false)
     private var isAuthenticated = false
     private var biometricPromptShowing = false
     private var startupSoundPlayed = false
-    private var pendingActionModuleId by mutableStateOf<String?>(null)
-    private var pendingScriptId by mutableStateOf<String?>(null)
 
     private fun getFileName(context: android.content.Context, uri: Uri): String {
         var result: String? = null
@@ -236,22 +228,6 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        updatePendingActionFromIntent(intent)
-    }
-
-    private fun updatePendingActionFromIntent(intent: Intent?) {
-        if (intent?.getBooleanExtra("from_action_shortcut", false) == true) {
-            val id = intent.getStringExtra("apm_action_module_id")
-            if (!id.isNullOrEmpty()) {
-                pendingActionModuleId = id
-            }
-        }
-        if (intent?.getBooleanExtra("from_script_shortcut", false) == true) {
-            val id = intent.getStringExtra("script_id")
-            if (!id.isNullOrEmpty()) {
-                pendingScriptId = id
-            }
-        }
     }
 
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -286,8 +262,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         super.onCreate(savedInstanceState)
-        updatePendingActionFromIntent(intent)
-        
+
         installUri = if (intent.action == Intent.ACTION_SEND) {
              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
@@ -303,15 +278,6 @@ class MainActivity : AppCompatActivity() {
                     @Suppress("DEPRECATION")
                     intent.getParcelableArrayListExtra<Uri>("uris")?.firstOrNull()
                 }
-            }
-        }
-
-        if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
-            installUris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
             }
         }
 
@@ -468,62 +434,27 @@ class MainActivity : AppCompatActivity() {
                 )
             }
 
-            LaunchedEffect(pendingActionModuleId) {
-                val id = pendingActionModuleId
-                if (!id.isNullOrEmpty()) {
-                    navigator.navigate(com.ramcosta.composedestinations.generated.destinations.ExecuteAPMActionScreenDestination(id))
-                    pendingActionModuleId = null
-                }
-            }
-
-            LaunchedEffect(pendingScriptId) {
-                val id = pendingScriptId
-                if (!id.isNullOrEmpty()) {
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        me.bmax.apatch.util.ScriptLibraryManager.loadScripts().find { it.id == id }
-                    }?.let { scriptInfo ->
-                        navigator.navigate(com.ramcosta.composedestinations.generated.destinations.ScriptExecutionLogScreenDestination(scriptInfo))
-                    }
-                    pendingScriptId = null
-                }
-            }
-
+            // 插件角标刷新：数据来自容器内 npm 列表，比原来的内核计数昂贵得多，
+            // 所以轮询间隔放到 30s，并由 AppData 内部再做一次最小间隔与运行时状态保护。
             LaunchedEffect(Unit) {
-                if (SuperUserViewModel.apps.isEmpty()) {
-                    SuperUserViewModel().fetchAppList()
-                }
-            }
-
-
-            LaunchedEffect(Unit) {
-                me.bmax.apatch.util.AppData.DataRefreshManager.ensureCountsLoaded()
-                
                 val badgePrefs = APApplication.sharedPreferences
-                var lastEnableSuperUser = badgePrefs.getBoolean("badge_superuser", true)
-                var lastEnableApm = badgePrefs.getBoolean("badge_apm", true)
-                var lastEnableKernel = badgePrefs.getBoolean("badge_kernel", true)
+                var lastEnabled = badgePrefs.getBoolean("badge_apm", true)
 
                 while (isActive) {
-                    val enableSuperUser = badgePrefs.getBoolean("badge_superuser", true)
-                    val enableApm = badgePrefs.getBoolean("badge_apm", true)
-                    val enableKernel = badgePrefs.getBoolean("badge_kernel", true)
-                    val forceRefresh =
-                        (!lastEnableSuperUser && enableSuperUser) ||
-                        (!lastEnableApm && enableApm) ||
-                        (!lastEnableKernel && enableKernel)
+                    val enabled = badgePrefs.getBoolean("badge_apm", true)
+                    val forceRefresh = !lastEnabled && enabled
+                    lastEnabled = enabled
 
-                    lastEnableSuperUser = enableSuperUser
-                    lastEnableApm = enableApm
-                    lastEnableKernel = enableKernel
-
-                    // Always refresh counts for UI components, badge settings only control display
                     try {
-                        me.bmax.apatch.util.AppData.DataRefreshManager.ensureCountsLoaded(force = forceRefresh)
+                        me.bmax.apatch.util.AppData.DataRefreshManager.refreshData(
+                            enablePluginBadge = enabled,
+                            force = forceRefresh,
+                        )
                     } catch (e: Exception) {
-                        android.util.Log.e("BadgeCount", "Failed to refresh badge data", e)
+                        android.util.Log.e("BadgeCount", "Failed to refresh plugin badge data", e)
                     }
 
-                    delay(3000L)
+                    delay(30_000L)
                 }
             }
 
@@ -543,72 +474,35 @@ class MainActivity : AppCompatActivity() {
                 val themeImportMetadata = remember { mutableStateOf<ThemeManager.ThemeMetadata?>(null) }
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-                var pendingExternalInstallUri by remember { mutableStateOf<Uri?>(null) }
-                val externalInstallConfirmDialog = rememberConfirmDialog(
-                    onConfirm = {
-                        pendingExternalInstallUri?.let { u ->
-                            navigator.navigate(InstallScreenDestination(u, MODULE_TYPE.APM))
-                        }
-                        pendingExternalInstallUri = null
-                    },
-                    onDismiss = {
-                        pendingExternalInstallUri = null
-                    }
-                )
-
+                // DSH-Folk 只处理一种外部文件：.fpt 主题包。
+                // 原来的模块 zip 安装入口随内核补丁栈一起移除了。
                 val uri = installUri
-                val uris = installUris
                 val lastHandledExternalKey = rememberSaveable { mutableStateOf<String?>(null) }
-                LaunchedEffect(uri, uris) {
-                    val key = when {
-                        uris != null && uris.isNotEmpty() -> uris.joinToString("|") { it.toString() }
-                        uri != null -> uri.toString()
-                        else -> null
-                    }
-                    if (key == null || key == lastHandledExternalKey.value) {
+                LaunchedEffect(uri) {
+                    val key = uri?.toString() ?: return@LaunchedEffect
+                    if (key == lastHandledExternalKey.value) {
                         return@LaunchedEffect
                     }
                     lastHandledExternalKey.value = key
 
-                    if (uris != null && uris.isNotEmpty()) {
-                        navigator.navigate(ApmBulkInstallScreenDestination(initialUris = uris))
-                        installUris = null
-                        installUri = null
-                    } else if (uri != null) {
-                        val fileName = withContext(Dispatchers.IO) {
-                            getFileName(context, uri)
-                        }
-                        if (fileName.endsWith(".fpt", ignoreCase = true)) {
-                            themeImportUri.value = uri
-                            scope.launch {
-                                loadingDialog.show()
-                                val metadata = ThemeManager.readThemeMetadata(context, uri)
-                                loadingDialog.hide()
-                                if (metadata != null) {
-                                    themeImportMetadata.value = metadata
-                                    showThemeImportDialog.value = true
-                                } else {
-                                    showToast(context, context.getString(R.string.settings_theme_import_failed))
-                                }
-                            }
-                        } else {
-                            if (prefs.getBoolean("strong_biometric", false) && prefs.getBoolean("biometric_login", false)) {
-                                if (!BiometricUtils.authenticate(this@MainActivity)) return@LaunchedEffect
-                            }
-                            if (prefs.getBoolean("apm_install_confirm_enabled", true)) {
-                                pendingExternalInstallUri = uri
-                                externalInstallConfirmDialog.showConfirm(
-                                    title = context.getString(R.string.apm_install_confirm_title),
-                                    content = context.getString(R.string.apm_install_confirm_content, fileName),
-                                    markdown = false
-                                )
-                            } else {
-                                navigator.navigate(InstallScreenDestination(uri, MODULE_TYPE.APM))
-                            }
-                        }
-                        installUri = null
-                        installUris = null
+                    val fileName = withContext(Dispatchers.IO) {
+                        getFileName(context, uri)
                     }
+                    if (fileName.endsWith(".fpt", ignoreCase = true)) {
+                        themeImportUri.value = uri
+                        scope.launch {
+                            loadingDialog.show()
+                            val metadata = ThemeManager.readThemeMetadata(context, uri)
+                            loadingDialog.hide()
+                            if (metadata != null) {
+                                themeImportMetadata.value = metadata
+                                showThemeImportDialog.value = true
+                            } else {
+                                showToast(context, context.getString(R.string.settings_theme_import_failed))
+                            }
+                        }
+                    }
+                    installUri = null
                 }
 
                 if (showThemeImportDialog.value && themeImportMetadata.value != null) {

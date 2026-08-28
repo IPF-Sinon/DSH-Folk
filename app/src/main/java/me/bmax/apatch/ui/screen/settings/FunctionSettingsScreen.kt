@@ -62,7 +62,10 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     val snackBarHost = LocalSnackbarHost.current
     val perm by PermissionManager.status.collectAsStateWithLifecycle()
 
+    val dshPrefs = context.getSharedPreferences(DshEnv.PREF, android.content.Context.MODE_PRIVATE)
+
     var runtimeId by rememberSaveable { mutableStateOf(DshRuntime.runtimeId()) }
+    var autostart by rememberSaveable { mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_AUTOSTART, false)) }
     var adbPairCode by rememberSaveable { mutableStateOf("") }
     var adbPairPort by rememberSaveable { mutableStateOf("") }
     var adbConnectPort by rememberSaveable { mutableStateOf("") }
@@ -126,6 +129,11 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     },
                     prorootAvailable = prorootAvailable,
                     prorootUnavailableReason = prorootReason,
+                    autostart = autostart,
+                    onAutostartChange = { on ->
+                        autostart = on
+                        dshPrefs.edit().putBoolean(DshEnv.KEY_AUTOSTART, on).apply()
+                    },
                     perm = perm,
                     onRefreshPerm = {
                         scope.launch(Dispatchers.IO) {

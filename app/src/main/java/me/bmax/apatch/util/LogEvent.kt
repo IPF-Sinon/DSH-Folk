@@ -81,20 +81,20 @@ suspend fun getBugreportFile(context: Context): File = withContext(Dispatchers.I
             pw.println("Nodename: ${uname.nodename}")
             pw.println("Sysname: ${uname.sysname}")
 
-            pw.println("KPatch: ${Version.installedKPVString()}")
-            pw.println("APatch: ${Version.installedApdHash}")
-            val safeMode = false
-            pw.println("SafeMode: $safeMode")
+            pw.println("DshRuntime: ${me.bmax.apatch.dsh.DshRuntime.state.value.runtimeVersion}")
+            pw.println("DshPhase: ${me.bmax.apatch.dsh.DshRuntime.state.value.phase}")
+            pw.println("ContainerRuntime: ${me.bmax.apatch.dsh.DshRuntime.runtimeId()}")
+            pw.println("PermissionChannel: ${me.bmax.apatch.dsh.PermissionManager.status.value.channel}")
         }
 
-        // modules
-        val modulesFile = File(bugreportDir, "modules.json")
-        modulesFile.writeText(listModules())
+        // DSH 启动日志（替代原来的内核模块列表）
+        val dshLogFile = File(bugreportDir, "dsh.log")
+        dshLogFile.writeText(runCatching { me.bmax.apatch.dsh.DshRuntime.tailLog(2000) }.getOrDefault(""))
 
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH_mm")
         val current = LocalDateTime.now().format(formatter)
 
-        val targetFile = File(context.cacheDir, "FolkPatch_bugreport_${current}.tar.gz")
+        val targetFile = File(context.cacheDir, "DSH-Folk_bugreport_${current}.tar.gz")
 
         shell.newJob().add("tar czf ${targetFile.absolutePath} -C ${bugreportDir.absolutePath} .")
             .exec()
