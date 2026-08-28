@@ -121,10 +121,14 @@ object DshConfigBackup {
         // report / manifest 里有真正落盘的分区与加密状态，比我们请求的 only 更权威
         val report = o.optJSONObject("report")
         val sections = report?.optJSONArray("included")?.length() ?: 0
-        val encrypted = report?.optJSONObject("security")?.optBoolean("encrypted", false)
-            ?: password.isNotEmpty()
+        val security = report?.optJSONObject("security")
+        val encrypted = security?.optBoolean("encrypted", false) ?: password.isNotEmpty()
+        // 我们始终传 includeSecrets=false，所以 containsSecrets 为真是异常信号：
+        // 包里带了真凭据，不能当普通文件随手转发。宁可多一句提示。
+        val containsSecrets = security?.optBoolean("containsSecrets", false) ?: false
         val warnings = report?.optJSONArray("warnings")
         val warnText = buildString {
+            if (containsSecrets) append("\n! 备份中含有凭据明文，请勿分享此文件")
             if (warnings != null) {
                 for (i in 0 until warnings.length()) {
                     val w = warnings.optString(i)
@@ -185,9 +189,10 @@ object DshConfigBackup {
     data class ImportResult(val ok: Boolean, val message: String, val detail: String = "")
 
     /**
-     * 插件 ImportResult 的字段名（lib/client.d.ts）：
+     * 插件 ImportResult 的字段名（src/core/types.ts ImportResult）：
      * ok / executed[]{itemId,status,message,skippedByUser} / needsRestart /
-     * missingSecrets[] / warnings[] / rollback{full,restored,failed[]} / snapshotId。
+     * missingSecrets[] / warnings[] / rollback{full,restored,failed[]} / snapshotId /
+     * skippedTombstoned[]{kind,id,adapter}。
      * 注意**不是** items —— 按 items 解析会永远得到「导入完成：0 项」。
      */
     private const val KEY_EXECUTED = "executed"
@@ -300,6 +305,15 @@ object DshConfigBackup {
                 notes.append('\n')
             }
         }
+        // 被删除墓碑挡掉的条目：状态是「成功」但东西没进来，不说用户会以为导入了
+        val tombstoned = execObj.optJSONArray("skippedTombstoned")
+        val tombstonedCount = tombstoned?.length() ?: 0
+        for (i in 0 until tombstonedCount) {
+            val t = tombstoned?.optJSONObject(i) ?: continue
+            notes.append("⊘ ").append(t.optString("id"))
+            t.optString("adapter").takeIf { it.isNotEmpty() }?.let { notes.append(" (").append(it).append(")") }
+            notes.append('\n')
+        }
         // 回滚发生说明这次导入整体没落地，必须显式说出来
         val rollback = execObj.optJSONObject("rollback")
         if (rollback != null) {
@@ -314,6 +328,7 @@ object DshConfigBackup {
             if (failed > 0) append("，$failed 项失败")
             if (warned > 0) append("，$warned 项告警")
             if (skipped > 0) append("，$skipped 项跳过")
+            if (tombstonedCount > 0) append("，$tombstonedCount 项被删除记录挡下")
             if (needsRestart) append("；需要重启 DSH 生效")
             execObj.optString("snapshotId").takeIf { it.isNotEmpty() }
                 ?.let { append("；回滚快照 $it") }
