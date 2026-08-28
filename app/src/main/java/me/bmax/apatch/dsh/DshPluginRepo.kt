@@ -6,20 +6,29 @@ import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
 /** 一个 DSH 插件条目。 */
 data class DshPlugin(
-    /** npm 包名，如 `dsh-tui`。 */
+    /**
+     * 目录里的稳定 id。dsh-market 的 id 与 npm 包名**不一定相同**
+     * （例如 `dsh-tui` 的包名是 `@deepseek-harness-tui/dsh-tui`），
+     * 所以列表 key 用 id，安装/下载量一律用 [pkg]。
+     */
     val id: String,
+    /** npm 包名；目录里没登记 npm 的条目为空（只能看，不能一键装）。 */
+    val pkg: String = "",
     val name: String,
-    val version: String,
+    val version: String = "",
     val description: String = "",
     val author: String = "",
-    /** 上游仓库（用于取 star）。 */
+    /** 上游仓库，形如 `owner/name`（用于取 star）。 */
     val repo: String = "",
     val homepage: String = "",
     /** 已安装版本，未安装为空。 */
@@ -28,9 +37,15 @@ data class DshPlugin(
     val downloads: Long = -1L,
     /** GitHub star，-1 表示未知。 */
     val stars: Long = -1L,
+    /** dsh-market 上的点赞数，-1 表示未知。 */
+    val likes: Long = -1L,
+    val category: String = "",
     val enabled: Boolean = true,
 ) {
     val installed: Boolean get() = installedVersion.isNotEmpty()
+
+    /** 可一键安装：目录登记了 npm 包名。 */
+    val installable: Boolean get() = pkg.isNotEmpty()
 
     /** 已安装且线上版本更高 → 可更新。 */
     val updatable: Boolean
@@ -40,24 +55,40 @@ data class DshPlugin(
 /**
  * DSH 插件数据源。
  *
- * 三个来源各管一件事，缺一个不影响其它：
- * - **dsh-market.com** 提供插件目录（名称/描述/仓库）。它的 `api/stats` 只有点赞数，
- *   没有下载量，所以下载量另取；
- * - **npm registry** 提供版本与近一周下载量（`api.npmjs.org/downloads/point/last-week/<pkg>`）；
- * - **GitHub API** 提供 star 数（匿名 60 次/小时，所以本地缓存 6 小时）。
+ * 各来源只管一件事，缺一个不影响其它：
+ * - **dsh-market** 的 `manifest/plugins.json` 是插件目录（id / 名称 / 作者 / 描述 / 仓库 / npm 包名）；
+ *   它的 `api/stats` 只有点赞与安装计数，`api/npm-downloads` 是**一次返回全部**的周下载量表
+ *   （官方站点自己就是这么取的，所以不必逐包打 api.npmjs.org）；
+ * - **npm registry** 提供最新版本号（`registry.npmjs.org/<pkg>/latest`），用来判断可更新；
+ * - **GitHub API** 提供 star 数（匿名 60 次/小时，所以缓存 6 小时并限并发）。
  *
- * 已安装列表来自容器内 `DSH_HOME/plugins`，走 proot 读，不依赖网络。
+ * 已安装列表来自容器内 `DSH_HOME/plugins-store/node_modules`，走 proot 读，不依赖网络。
  */
 object DshPluginRepo {
     private const val TAG = "DSH-Folk-Plugins"
-    private const val MARKET_LIST = "https://dsh-market.com/api/plugins"
+
+    private const val MARKET_MANIFEST = "https://dsh-market.com/manifest/plugins.json"
+    private const val MARKET_STATS = "https://dsh-market.com/api/stats"
+    private const val MARKET_DOWNLOADS = "https://dsh-market.com/api/npm-downloads"
     private const val NPM_SEARCH = "https://registry.npmjs.org/-/v1/search?size=100&text="
+    private const val NPM_DOWNLOADS_POINT = "https://api.npmjs.org/downloads/point/last-week/"
+
     private const val CACHE_TTL_MS = 6 * 60 * 60 * 1000L
+    /** 目录/下载量表变动没那么快，缓存 30 分钟，避免每次进页面都全量重拉。 */
+    private const val CATALOG_TTL_MS = 30 * 60 * 1000L
 
     private val starCache = ConcurrentHashMap<String, Pair<Long, Long>>()      // repo -> (star, at)
-    private val downloadCache = ConcurrentHashMap<String, Pair<Long, Long>>()  // pkg  -> (dl, at)
+    private val versionCache = ConcurrentHashMap<String, Pair<String, Long>>() // pkg  -> (ver, at)
 
-    /** 拉线上插件目录并补齐下载量 / star。 */
+    @Volatile private var downloadsTable: Map<String, Long> = emptyMap()
+    @Volatile private var downloadsAt: Long = 0L
+    @Volatile private var likesTable: Map<String, Long> = emptyMap()
+    @Volatile private var likesAt: Long = 0L
+
+    /** 同时最多这么多个网络请求，别把 GitHub 的匿名配额一次打光。 */
+    private val gate = Semaphore(6)
+
+    /** 拉线上插件目录并补齐版本 / 下载量 / star。 */
     suspend fun fetchCatalog(): List<DshPlugin> = withContext(Dispatchers.IO) {
         val base = fetchMarket().ifEmpty { fetchNpmFallback() }
         if (base.isEmpty()) return@withContext emptyList()
@@ -65,35 +96,48 @@ object DshPluginRepo {
         enrich(base.map { p -> p.copy(installedVersion = installed[p.id]?.installedVersion ?: "") })
     }
 
-    /** 并发补齐下载量与 star（各自失败只让那一项保持 -1）。 */
-    private suspend fun enrich(list: List<DshPlugin>): List<DshPlugin> = coroutineScope {
+    /** 并发补齐版本、下载量、star、点赞（各自失败只让那一项保持 -1 / 空）。 */
+    suspend fun enrich(list: List<DshPlugin>): List<DshPlugin> = coroutineScope {
+        // 下载量与点赞是整表接口，先各取一次
+        val downloads = async { downloadsTable() }
+        val likes = async { likesTable() }
+        val dlMap = downloads.await()
+        val likeMap = likes.await()
+
         list.map { p ->
             async {
-                val dl = async { downloadsOf(p.id) }
-                val st = async { if (p.repo.isEmpty()) -1L else starsOf(p.repo) }
-                p.copy(downloads = dl.await(), stars = st.await())
+                gate.withPermit {
+                    p.copy(
+                        version = p.version.ifEmpty {
+                            if (p.pkg.isEmpty()) "" else latestVersionOf(p.pkg)
+                        },
+                        stars = if (p.repo.isEmpty()) -1L else starsOf(p.repo),
+                        downloads = p.pkg.takeIf { it.isNotEmpty() }
+                            ?.let { dlMap[it] ?: downloadsOf(it) } ?: -1L,
+                        likes = likeMap[p.id] ?: -1L,
+                    )
+                }
             }
-        }.map { it.await() }
+        }.awaitAll()
     }
 
-    /** dsh-market 目录。 */
+    /** dsh-market 目录（`manifest/plugins.json`）。 */
     private fun fetchMarket(): List<DshPlugin> = runCatching {
-        val json = httpGet(MARKET_LIST) ?: return@runCatching emptyList()
-        val arr = runCatching { JSONArray(json) }.getOrElse {
-            JSONObject(json).optJSONArray("plugins") ?: JSONArray()
-        }
+        val json = httpGet(MARKET_MANIFEST) ?: return@runCatching emptyList()
+        val arr = JSONObject(json).optJSONArray("items") ?: JSONArray()
         (0 until arr.length()).mapNotNull { i ->
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
-            val id = o.optString("name").ifEmpty { o.optString("id") }
+            val id = o.optString("id").ifEmpty { o.optString("npm") }
             if (id.isEmpty()) return@mapNotNull null
             DshPlugin(
                 id = id,
-                name = o.optString("displayName").ifEmpty { id },
-                version = o.optString("version"),
-                description = o.optString("description"),
+                pkg = o.optString("npm"),
+                name = o.optString("name").ifEmpty { id },
+                description = o.optString("description").ifEmpty { o.optString("descriptionEn") },
                 author = o.optString("author"),
-                repo = normalizeRepo(o.optString("repository").ifEmpty { o.optString("repo") }),
-                homepage = o.optString("homepage"),
+                repo = normalizeRepo(o.optString("repo")),
+                homepage = o.optString("repo"),
+                category = o.optString("category"),
             )
         }
     }.getOrElse {
@@ -111,6 +155,7 @@ object DshPluginRepo {
             if (id.isEmpty()) return@mapNotNull null
             DshPlugin(
                 id = id,
+                pkg = id,
                 name = id,
                 version = pkg.optString("version"),
                 description = pkg.optString("description"),
@@ -124,21 +169,69 @@ object DshPluginRepo {
         emptyList()
     }
 
-    /** 近一周 npm 下载量。 */
-    fun downloadsOf(pkg: String): Long {
-        cached(downloadCache, pkg)?.let { return it }
+    /** dsh-market 的整表周下载量（key 是 npm 包名）。 */
+    private fun downloadsTable(): Map<String, Long> {
+        val now = System.currentTimeMillis()
+        if (downloadsTable.isNotEmpty() && now - downloadsAt < CATALOG_TTL_MS) return downloadsTable
+        val table = runCatching {
+            val json = httpGet(MARKET_DOWNLOADS) ?: return@runCatching emptyMap()
+            val o = JSONObject(json).optJSONObject("downloads") ?: return@runCatching emptyMap()
+            buildMap {
+                for (k in o.keys()) put(k, o.optLong(k, -1L))
+            }
+        }.getOrElse {
+            Log.w(TAG, "下载量表获取失败: ${it.message}")
+            emptyMap()
+        }
+        if (table.isNotEmpty()) {
+            downloadsTable = table
+            downloadsAt = now
+        }
+        return table
+    }
+
+    /** dsh-market 的点赞表（key 是目录 id）。 */
+    private fun likesTable(): Map<String, Long> {
+        val now = System.currentTimeMillis()
+        if (likesTable.isNotEmpty() && now - likesAt < CATALOG_TTL_MS) return likesTable
+        val table = runCatching {
+            val json = httpGet(MARKET_STATS) ?: return@runCatching emptyMap()
+            val o = JSONObject(json).optJSONObject("plugin") ?: return@runCatching emptyMap()
+            buildMap {
+                for (k in o.keys()) put(k, o.optLong(k, -1L))
+            }
+        }.getOrElse { emptyMap() }
+        if (table.isNotEmpty()) {
+            likesTable = table
+            likesAt = now
+        }
+        return table
+    }
+
+    /** 整表里没有这个包时的单包兜底查询。 */
+    fun downloadsOf(pkg: String): Long = runCatching {
+        val json = httpGet(NPM_DOWNLOADS_POINT + pkg) ?: return@runCatching -1L
+        JSONObject(json).optLong("downloads", -1L)
+    }.getOrDefault(-1L)
+
+    /** npm 上的最新版本号。 */
+    fun latestVersionOf(pkg: String): String {
+        versionCache[pkg]?.let { (v, at) ->
+            if (System.currentTimeMillis() - at < CACHE_TTL_MS) return v
+        }
         val v = runCatching {
-            val json = httpGet("https://api.npmjs.org/downloads/point/last-week/$pkg")
-                ?: return@runCatching -1L
-            JSONObject(json).optLong("downloads", -1L)
-        }.getOrDefault(-1L)
-        if (v >= 0) downloadCache[pkg] = v to System.currentTimeMillis()
+            val json = httpGet("https://registry.npmjs.org/$pkg/latest") ?: return@runCatching ""
+            JSONObject(json).optString("version")
+        }.getOrDefault("")
+        if (v.isNotEmpty()) versionCache[pkg] = v to System.currentTimeMillis()
         return v
     }
 
     /** GitHub star。repo 形如 `owner/name`。 */
     fun starsOf(repo: String): Long {
-        cached(starCache, repo)?.let { return it }
+        starCache[repo]?.let { (v, at) ->
+            if (System.currentTimeMillis() - at < CACHE_TTL_MS) return v
+        }
         val v = runCatching {
             val json = httpGet("https://api.github.com/repos/$repo") ?: return@runCatching -1L
             JSONObject(json).optLong("stargazers_count", -1L)
@@ -147,11 +240,13 @@ object DshPluginRepo {
         return v
     }
 
-    // 容器内已安装插件（遍历 DSH_HOME/plugins 下每个目录的 package.json）。
+    // 容器内已安装插件。dsh 从 DSH_HOME/plugins 与 plugins-store/node_modules 两处加载，
+    // 这里都扫一遍并按包名去重。
     // 注意不要把这段写成 KDoc：路径里的通配符会提前闭合块注释。
     suspend fun listInstalled(): List<DshPlugin> = withContext(Dispatchers.IO) {
         val out = DshRuntime.execRootfsForOutput(
-            "for d in /root/.dsh/plugins/*/; do " +
+            "for d in /root/.dsh/plugins/*/ /root/.dsh/plugins-store/node_modules/*/ " +
+                "/root/.dsh/plugins-store/node_modules/@*/*/; do " +
                 "test -f \"\$d/package.json\" || continue; " +
                 "n=\$(node -e 'try{const p=require(process.argv[1]+\"/package.json\");" +
                 "console.log([p.name,p.version,p.description||\"\"].join(\"\\t\"))}catch(e){}' \"\$d\" 2>/dev/null); " +
@@ -161,21 +256,24 @@ object DshPluginRepo {
         out.lines().mapNotNull { line ->
             val parts = line.split('\t')
             if (parts.size < 2 || parts[0].isBlank()) return@mapNotNull null
+            val pkg = parts[0].trim()
             DshPlugin(
-                id = parts[0].trim(),
-                name = parts[0].trim(),
+                id = pkg,
+                pkg = pkg,
+                name = pkg,
                 version = parts[1].trim(),
                 description = parts.getOrElse(2) { "" }.trim(),
                 installedVersion = parts[1].trim(),
             )
-        }
+        }.distinctBy { it.pkg }
     }
 
-    /** 安装/更新一个插件（容器内 npm 安装到 DSH_HOME/plugins）。 */
+    /** 安装/更新一个插件（容器内 npm 安装到 DSH_HOME/plugins-store）。 */
     suspend fun install(pkg: String, version: String = ""): String = withContext(Dispatchers.IO) {
+        if (pkg.isBlank()) return@withContext "包名为空，无法安装"
         val spec = if (version.isBlank()) pkg else "$pkg@$version"
         DshRuntime.execRootfsForOutput(
-            "export DSH_HOME=/root/.dsh; mkdir -p /root/.dsh/plugins && cd /root/.dsh && " +
+            "export DSH_HOME=/root/.dsh; mkdir -p /root/.dsh/plugins-store && cd /root/.dsh && " +
                 "npm install --prefix /root/.dsh/plugins-store --no-audit --no-fund '$spec' 2>&1 | tail -25",
             600_000,
         )
@@ -193,15 +291,10 @@ object DshPluginRepo {
     /** 本地安装：宿主 tgz 路径已由调用方复制进容器可见位置。 */
     suspend fun installLocal(containerPath: String): String = withContext(Dispatchers.IO) {
         DshRuntime.execRootfsForOutput(
-            "export DSH_HOME=/root/.dsh; mkdir -p /root/.dsh/plugins && " +
+            "export DSH_HOME=/root/.dsh; mkdir -p /root/.dsh/plugins-store && " +
                 "npm install --prefix /root/.dsh/plugins-store --no-audit --no-fund '$containerPath' 2>&1 | tail -25",
             600_000,
         )
-    }
-
-    private fun <K> cached(map: ConcurrentHashMap<K, Pair<Long, Long>>, key: K): Long? {
-        val (v, at) = map[key] ?: return null
-        return if (System.currentTimeMillis() - at < CACHE_TTL_MS) v else null
     }
 
     private fun httpGet(url: String): String? = runCatching {

@@ -206,17 +206,17 @@ private fun DshPluginList(
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items(list, key = { it.id }) { plugin ->
+        items(list, key = { it.pkg.ifEmpty { it.id } }) { plugin ->
             DshPluginItem(
                 plugin = plugin,
                 showMoreInfo = viewModel.showMoreInfo,
                 onUpdate = {
-                    viewModel.install(plugin.id) { out ->
+                    viewModel.install(plugin.pkg) { out ->
                         scope.launch { snackBarHost.showSnackbar(out.lines().lastOrNull() ?: done) }
                     }
                 },
                 onUninstall = {
-                    viewModel.uninstall(plugin.id) { out ->
+                    viewModel.uninstall(plugin.pkg) { out ->
                         scope.launch { snackBarHost.showSnackbar(out.lines().lastOrNull() ?: done) }
                     }
                 },
@@ -283,7 +283,8 @@ private fun DshPluginItem(
             )
             if (showMoreInfo) {
                 Text(
-                    text = listOf(plugin.id, plugin.author).filter { it.isNotEmpty() }.joinToString(" · "),
+                    text = listOf(plugin.pkg.ifEmpty { plugin.id }, plugin.author)
+                        .filter { it.isNotEmpty() }.joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

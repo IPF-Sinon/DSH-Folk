@@ -157,4 +157,8 @@
     <string name="dsh_source_testing">测速中…</string>
     <string name="dsh_source_result">%1$s：%2$d ms · %3$s</string>
     <string name="dsh_source_no_speed">不可达</string>
+    <string name="dsh_plugin_install">安装</string>
+    <string name="dsh_plugin_installed">已安装</string>
+    <string name="dsh_plugin_no_npm">目录未登记 npm 包名，请打开仓库手动安装</string>
+    <string name="dsh_plugin_likes">♡ %1$s</string>
 </resources>

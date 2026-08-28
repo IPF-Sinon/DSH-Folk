@@ -146,7 +146,8 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
             }
         },
     ) { innerPadding ->
-        val installedIds = remember(viewModel.plugins) { viewModel.plugins.map { it.id }.toSet() }
+        // 已安装判定按 npm 包名：目录 id 与包名不一定相同（dsh-tui vs @deepseek-harness-tui/dsh-tui）
+        val installedPkgs = remember(viewModel.plugins) { viewModel.plugins.map { it.pkg }.toSet() }
         val query = viewModel.search
         val list = if (query.isBlank()) viewModel.catalog else viewModel.catalog.filter {
             it.id.contains(query, true) || it.name.contains(query, true) ||
@@ -185,9 +186,9 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
                     items(list, key = { it.id }) { plugin ->
                         StorePluginCard(
                             plugin = plugin,
-                            installed = plugin.id in installedIds,
+                            installed = plugin.pkg.isNotEmpty() && plugin.pkg in installedPkgs,
                             onInstall = {
-                                viewModel.install(plugin.id) { out ->
+                                viewModel.install(plugin.pkg) { out ->
                                     scope.launch {
                                         snackBarHost.showSnackbar(out.lines().lastOrNull() ?: done)
                                     }
@@ -232,6 +233,16 @@ private fun StorePluginCard(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
+                        if (plugin.likes >= 0) {
+                            ModuleLabel(
+                                text = stringResource(
+                                    R.string.dsh_plugin_likes,
+                                    formatCount(plugin.likes),
+                                ),
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            )
+                        }
                         if (plugin.version.isNotEmpty()) {
                             ModuleLabel(
                                 text = "v${plugin.version}",
@@ -257,12 +268,26 @@ private fun StorePluginCard(
                     }
                 }
                 Spacer(Modifier.size(12.dp))
-                FilledTonalIconButton(onClick = onInstall, modifier = Modifier.size(48.dp)) {
+                FilledTonalIconButton(
+                    onClick = onInstall,
+                    enabled = plugin.installable && !installed,
+                    modifier = Modifier.size(48.dp),
+                ) {
                     Icon(
                         imageVector = if (installed) Icons.Outlined.Check else Icons.Outlined.Download,
-                        contentDescription = if (installed) "Installed" else "Install",
+                        contentDescription = stringResource(
+                            if (installed) R.string.dsh_plugin_installed
+                            else R.string.dsh_plugin_install
+                        ),
                     )
                 }
+            }
+            if (!plugin.installable) {
+                Text(
+                    text = stringResource(R.string.dsh_plugin_no_npm),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
             if (plugin.description.isNotEmpty()) {
                 Text(

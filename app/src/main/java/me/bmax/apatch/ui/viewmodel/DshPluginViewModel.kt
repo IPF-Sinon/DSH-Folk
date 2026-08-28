@@ -77,10 +77,12 @@ class DshPluginViewModel : ViewModel() {
             }
             val online = withContext(Dispatchers.IO) { DshPluginRepo.fetchCatalog() }
             catalog = online
-            val byId = online.associateBy { it.id }
-            plugins = installed.map { local ->
-                val remote = byId[local.id]
+            // 目录按 npm 包名对齐已安装列表：dsh-market 的 id 与包名不一定相同
+            val byPkg = online.filter { it.pkg.isNotEmpty() }.associateBy { it.pkg }
+            val merged = installed.map { local ->
+                val remote = byPkg[local.pkg]
                 local.copy(
+                    id = remote?.id ?: local.id,
                     name = remote?.name?.takeIf { it.isNotBlank() } ?: local.name,
                     description = local.description.ifBlank { remote?.description ?: "" },
                     author = local.author.ifBlank { remote?.author ?: "" },
@@ -89,7 +91,12 @@ class DshPluginViewModel : ViewModel() {
                     version = remote?.version?.takeIf { it.isNotBlank() } ?: local.version,
                     downloads = remote?.downloads ?: -1L,
                     stars = remote?.stars ?: -1L,
+                    likes = remote?.likes ?: -1L,
                 )
+            }
+            // 目录里查不到的本地插件（自建/私有包）也要显示版本与下载量
+            plugins = withContext(Dispatchers.IO) {
+                DshPluginRepo.enrich(merged.map { if (byPkg.containsKey(it.pkg)) it else it.copy(version = "") })
             }
             isRefreshing = false
         }
