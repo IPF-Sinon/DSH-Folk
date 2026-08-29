@@ -436,6 +436,7 @@ private fun DshWebUiModeDialog(
     )
 }
 
+/** 启动日志卡：等宽字体滚动 + 右上角复制按钮。六套布局共用。 */
 @Composable
 internal fun DshLogCard() {
     val context = LocalContext.current

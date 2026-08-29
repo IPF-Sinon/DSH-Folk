@@ -356,8 +356,6 @@ private fun DshSmallCard(
     }
 }
 
-/** 启动日志卡：等宽字体滚动 + 右上角复制按钮。 */
-@Composable
 @Composable
 private fun phaseLabel(phase: DshPhase): String = stringResource(
     when (phase) {
