@@ -308,22 +308,32 @@ object DshPluginRepo {
      * `dsh plugin` 成功后 reconcile 出来的（判据是包自己声明 `dsh.bundle.patch`）。
      * 裸装进任何目录都只是躺在磁盘上，不会被加载。
      */
-    suspend fun install(pkg: String, version: String = ""): String = withContext(Dispatchers.IO) {
+    suspend fun install(
+        pkg: String,
+        version: String = "",
+        onLine: (String) -> Unit = {},
+    ): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext "包名为空，无法安装"
         val spec = if (version.isBlank()) pkg else "$pkg@$version"
-        dshPlugin("add '$spec'", 900_000)
+        dshPlugin("add '$spec'", 900_000, onLine)
     }
 
     /** 卸载一个插件（同样交给 dsh plugin，才会从 bundles 里摘掉）。 */
-    suspend fun uninstall(pkg: String): String = withContext(Dispatchers.IO) {
+    suspend fun uninstall(
+        pkg: String,
+        onLine: (String) -> Unit = {},
+    ): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext "包名为空，无法卸载"
-        dshPlugin("remove '$pkg'", 600_000)
+        dshPlugin("remove '$pkg'", 600_000, onLine)
     }
 
     /** 本地安装：宿主 tgz 路径已由调用方复制进容器可见位置。 */
-    suspend fun installLocal(containerPath: String): String = withContext(Dispatchers.IO) {
+    suspend fun installLocal(
+        containerPath: String,
+        onLine: (String) -> Unit = {},
+    ): String = withContext(Dispatchers.IO) {
         // 绝对路径原样传给 pnpm（dsh 只重写相对路径 spec），tgz 装完同样会被 reconcile
-        dshPlugin("add '$containerPath'", 900_000)
+        dshPlugin("add '$containerPath'", 900_000, onLine)
     }
 
     /** 暂存目录在容器里的绝对路径。 */
@@ -369,24 +379,30 @@ object DshPluginRepo {
     const val EXIT_MARKER = "[DSH-Folk-exit]"
 
     /**
-     * 跑 `dsh plugin --profile web <args>` 并回读输出。
+     * 跑 `dsh plugin --profile web <args>` 并回读输出，逐行回调 onLine。
      *
-     * 结尾必须带退出码：`| tail -30` 会把管道的退出状态换成 tail 的（永远 0），
-     * 所以原来只能靠在输出里找 "pnpm failed" 之类的字样猜成败 —— pnpm 换个措辞、
-     * 或者报错行正好被 tail 截掉，就会把失败当成功（表现为「装好了但插件不在」）。
-     * 这里用 PIPESTATUS 取 node 自己的退出码，单独打一行给调用方判。
+     * 结尾必须带退出码：不带的话只能靠在输出里找 "pnpm failed" 之类的字样猜
+     * 成败——pnpm 换个措辞就会把失败当成功（表现为「装好了但插件不在」）。
      */
-    private fun dshPlugin(args: String, timeoutMs: Long): String {
-        val out = DshRuntime.execRootfsForOutput(
+    private fun dshPlugin(
+        args: String,
+        timeoutMs: Long,
+        onLine: (String) -> Unit = {},
+    ): String {
+        val out = DshRuntime.execRootfsStreaming(
             "export DSH_HOME=/root/.dsh; cd /root; " +
                 "if ! command -v dsh >/dev/null 2>&1; then echo '[DSH-Folk] 容器内找不到 dsh'; exit 1; fi; " +
                 "if ! command -v pnpm >/dev/null 2>&1; then " +
                 "echo '[DSH-Folk] 容器内找不到 pnpm，请在设置中重装运行时'; exit 1; fi; " +
                 "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); " +
+                // 不再接 `| tail -30`：输出现在是逐行流式回调的，界面自己保留
+                // 滚动日志；而 tail 会把 pnpm 的输出攒到结束才一次吐出来，正好把
+                // 实时进度堵死。失败时也不再因为被截而丢掉关键报错行。
                 "node --expose-internals \"\$DSH_REAL\" plugin --profile " + PROFILE + " " + args +
-                " 2>&1 | tail -30; " +
-                "echo \"" + EXIT_MARKER + " \${PIPESTATUS[0]}\"",
+                " 2>&1; " +
+                "echo \"" + EXIT_MARKER + " \$?\"",
             timeoutMs,
+            onLine,
         )
         return out.ifBlank { "没有输出（可能超时或容器未启动）" }
     }

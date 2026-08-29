@@ -22,9 +22,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import org.json.JSONObject
@@ -349,18 +349,48 @@ object DshRuntime {
      * 超时返回已读到的部分而不是空串：pnpm / pip 那种半途卡死的情况，前面几百行输出
      * 往往正好说明卡在哪。
      */
-    fun execRootfsForOutput(bashCommand: String, timeoutMs: Long = 60_000L): String = runCatching {
+    fun execRootfsForOutput(bashCommand: String, timeoutMs: Long = 60_000L): String =
+        execRootfsStreaming(bashCommand, timeoutMs) {}
+
+    /**
+     * 同上，但每读到一整行就回调一次。
+     *
+     * 存在的理由：[execRootfsForOutput] 把输出攒到结束才一次返回，而
+     * `dsh plugin add` 背后的 pnpm 可能跑几分钟——这段时间里界面拿不到
+     * 任何进展，用户无法判断是在装还是卡死了。
+     *
+     * onLine 在读线程上调用（不是主线程），回调里不要直接碰 Compose 状态。
+     */
+    fun execRootfsStreaming(
+        bashCommand: String,
+        timeoutMs: Long = 60_000L,
+        onLine: (String) -> Unit,
+    ): String = runCatching {
         val p = execRootfs(bashCommand)
         val sb = StringBuilder()
         val reader = Thread {
             runCatching {
                 p.inputStream.bufferedReader().use { r ->
                     val buf = CharArray(8192)
+                    // 手写行切分而不用 readLine()：pnpm 的进度行以 \r 结尾且不带 \n，
+                    // readLine() 会一直等到下一个 \n 才吐——进度就又成了攒一批才出。
+                    val line = StringBuilder()
+                    fun flush() {
+                        if (line.isEmpty()) return
+                        val text = line.toString()
+                        line.setLength(0)
+                        runCatching { onLine(text) }
+                    }
                     while (true) {
                         val n = r.read(buf)
                         if (n < 0) break
                         synchronized(sb) { sb.appendRange(buf, 0, n) }
+                        for (i in 0 until n) {
+                            val ch = buf[i]
+                            if (ch == '\n' || ch == '\r') flush() else line.append(ch)
+                        }
                     }
+                    flush()
                 }
             }
         }

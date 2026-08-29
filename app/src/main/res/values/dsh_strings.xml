@@ -83,7 +83,6 @@
     <string name="dsh_plugin_catalog_loading">Fetching plugin catalog…</string>
     <string name="dsh_plugin_catalog_failed">Could not fetch the plugin catalog. Check the network and refresh.</string>
     <string name="dsh_plugin_local_read_failed">Cannot read the selected file</string>
-    <string name="dsh_plugin_done">Done</string>
 
     <!-- 关于页 -->
     <string name="dsh_about_desc">An Android launcher for DeepSeek Harness: it runs the Node.js CLI and its Web UI inside a Linux container (proot / proroot), so the whole harness works on a phone.</string>
@@ -178,6 +177,19 @@
     <string name="dsh_plugin_install">Install</string>
     <string name="dsh_plugin_installed">Installed</string>
     <string name="dsh_plugin_no_npm">Not on npm — tap to open the repository and follow its install steps</string>
+    <!-- 插件详情弹层 -->
+    <string name="dsh_plugin_field_pkg">Package</string>
+    <string name="dsh_plugin_field_latest">Latest</string>
+    <string name="dsh_plugin_field_installed">Installed</string>
+    <string name="dsh_plugin_field_category">Category</string>
+    <string name="dsh_plugin_field_repo">Repository</string>
+    <!-- 安装进度对话框 -->
+    <string name="dsh_plugin_working_on">Working on %1$s…</string>
+    <string name="dsh_plugin_failed_on">%1$s failed</string>
+    <string name="dsh_plugin_done_on">%1$s finished</string>
+    <string name="dsh_plugin_waiting_output">Waiting for output…</string>
+    <!-- 搜索无结果（与「目录拉取失败」区分开） -->
+    <string name="dsh_plugin_no_match">No plugin matches “%1$s”</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>
     <string name="dsh_backup_remote_list">Backups inside the runtime</string>
     <string name="dsh_backup_remote_refresh">List runtime backups</string>

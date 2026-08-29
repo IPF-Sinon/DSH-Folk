@@ -69,7 +69,6 @@
     <string name="dsh_plugin_catalog_loading">正在获取插件目录…</string>
     <string name="dsh_plugin_catalog_failed">暂时取不到插件目录，请检查网络后刷新。</string>
     <string name="dsh_plugin_local_read_failed">无法读取所选文件</string>
-    <string name="dsh_plugin_done">完成</string>
 
     <string name="dsh_about_desc">DeepSeek Harness 的 Android 启动器：把 Node.js 命令行与 Web 界面跑在 Linux 容器（proot / proroot）里，让整套 harness 能在手机上使用。</string>
     <string name="dsh_ack_dsh">DeepSeek Harness —— 本应用运行的命令行与 Web 界面</string>
@@ -160,6 +159,19 @@
     <string name="dsh_plugin_install">安装</string>
     <string name="dsh_plugin_installed">已安装</string>
     <string name="dsh_plugin_no_npm">未发布到 npm，点右侧按钮打开仓库按其说明安装</string>
+    <!-- 插件详情弹层 -->
+    <string name="dsh_plugin_field_pkg">包名</string>
+    <string name="dsh_plugin_field_latest">最新版本</string>
+    <string name="dsh_plugin_field_installed">已安装</string>
+    <string name="dsh_plugin_field_category">分类</string>
+    <string name="dsh_plugin_field_repo">仓库</string>
+    <!-- 安装进度对话框 -->
+    <string name="dsh_plugin_working_on">正在处理 %1$s…</string>
+    <string name="dsh_plugin_failed_on">%1$s 失败</string>
+    <string name="dsh_plugin_done_on">%1$s 完成</string>
+    <string name="dsh_plugin_waiting_output">等待输出…</string>
+    <!-- 搜索无结果（与「目录拉取失败」区分开） -->
+    <string name="dsh_plugin_no_match">没有匹配「%1$s」的插件</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>
     <string name="dsh_backup_remote_list">运行时里的备份</string>
     <string name="dsh_backup_remote_refresh">列出运行时备份</string>

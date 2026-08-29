@@ -2,7 +2,6 @@ package me.bmax.apatch.ui.screen
 
 import android.app.Activity.RESULT_OK
 import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -39,8 +38,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -58,6 +60,7 @@ import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
+import me.bmax.apatch.ui.component.DshPluginDetailSheet
 import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.ui.component.SearchAppBar
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
@@ -79,11 +82,25 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
     val snackBarHost = LocalSnackbarHost.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val announce = rememberPluginAnnouncer(viewModel, snackBarHost)
 
     LaunchedEffect(Unit) {
         if (viewModel.catalog.isEmpty()) viewModel.refresh()
     }
+
+    var detail by remember { mutableStateOf<DshPlugin?>(null) }
+    detail?.let { p ->
+        DshPluginDetailSheet(
+            plugin = p,
+            onDismiss = { detail = null },
+            onInstall = { viewModel.install(p.pkg) },
+            onUpdate = { viewModel.install(p.pkg) },
+            onUninstall = { viewModel.uninstall(p.pkg) },
+            onOpenRepo = { openPluginRepo(context, p) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },
+        )
+    }
+
+    // 安装进度：与已安装页共用一份对话框实现
+    PluginProgressHost(viewModel)
 
     val pickTarball = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -96,9 +113,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
                 snackBarHost.showSnackbar(context.getString(R.string.dsh_plugin_local_read_failed))
                 return@launch
             }
-            viewModel.installLocal(guest) { out ->
-                scope.launch { announce(out) }
-            }
+            viewModel.installLocal(guest)
         }
     }
 
@@ -155,11 +170,17 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
             }
             if (list.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    // 三态分开：正在拉 / 拉不到目录 / 目录有但搜索没命中。
+                    // 原来只判 list.isEmpty()，而 list 是过滤后的结果 —— 于是搜不到
+                    // 任何插件时会误报「暂时取不到插件目录，请检查网络」。
                     Text(
-                        text = stringResource(
-                            if (viewModel.isRefreshing) R.string.dsh_plugin_catalog_loading
-                            else R.string.dsh_plugin_catalog_failed
-                        ),
+                        text = when {
+                            viewModel.isRefreshing ->
+                                stringResource(R.string.dsh_plugin_catalog_loading)
+                            viewModel.catalog.isNotEmpty() && query.isNotBlank() ->
+                                stringResource(R.string.dsh_plugin_no_match, query)
+                            else -> stringResource(R.string.dsh_plugin_catalog_failed)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -178,26 +199,11 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
                         StorePluginCard(
                             plugin = plugin,
                             installed = plugin.pkg.isNotEmpty() && plugin.pkg in installedPkgs,
-                            onInstall = {
-                                viewModel.install(plugin.pkg) { out ->
-                                    scope.launch {
-                                        announce(out)
-                                    }
-                                }
-                            },
+                            onInstall = { viewModel.install(plugin.pkg) },
                             onOpenRepo = {
-                                val url = plugin.homepage.ifEmpty { plugin.repo }
-                                if (url.isNotEmpty()) {
-                                    runCatching {
-                                        context.startActivity(
-                                            Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        )
-                                    }.onFailure {
-                                        scope.launch { announce(context.getString(R.string.dsh_no_browser)) }
-                                    }
-                                }
+                                openPluginRepo(context, plugin) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } }
                             },
+                            onOpenDetail = { detail = plugin },
                         )
                     }
                     item { HomeBottomSpacer() }
@@ -213,8 +219,10 @@ private fun StorePluginCard(
     installed: Boolean,
     onInstall: () -> Unit,
     onOpenRepo: () -> Unit,
+    onOpenDetail: () -> Unit,
 ) {
     Card(
+        onClick = onOpenDetail,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(

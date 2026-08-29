@@ -37,6 +37,34 @@ class DshPluginViewModel : ViewModel() {
     var lastOutput by mutableStateOf("")
         private set
 
+    /**
+     * 装/卸正在进行中。
+     *
+     * 不复用 [isRefreshing]：刷新列表只要一、两秒，而 pnpm 装包可能几分钟，
+     * 两者对应的 UI（顶部细进度条 vs 安装日志对话框）完全不同。
+     */
+    var installing by mutableStateOf(false)
+        private set
+
+    /** 当前操作的对象名（包名或文件名），用作对话框标题。 */
+    var installTarget by mutableStateOf("")
+        private set
+
+    /** 实时日志行。封顶防止 pnpm 刷出上万行把列表渲染拖垮。 */
+    var installLog by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** 本次操作是否失败（结束后才有意义）。 */
+    var installFailed by mutableStateOf(false)
+        private set
+
+    fun dismissInstallLog() {
+        if (installing) return
+        installLog = emptyList()
+        installTarget = ""
+        installFailed = false
+    }
+
     /** 插件设置页的开关（key 沿用 FolkPatch 模块页的名字，兼容旧配置）。 */
     private val prefs get() = APApplication.sharedPreferences
 
@@ -109,15 +137,15 @@ class DshPluginViewModel : ViewModel() {
     }
 
     fun install(pkg: String, version: String = "", onDone: (String) -> Unit = {}) {
-        run({ DshPluginRepo.install(pkg, version) }, onDone)
+        run(pkg, { DshPluginRepo.install(pkg, version, it) }, onDone)
     }
 
     fun uninstall(pkg: String, onDone: (String) -> Unit = {}) {
-        run({ DshPluginRepo.uninstall(pkg) }, onDone)
+        run(pkg, { DshPluginRepo.uninstall(pkg, it) }, onDone)
     }
 
     fun installLocal(containerPath: String, onDone: (String) -> Unit = {}) {
-        run({ DshPluginRepo.installLocal(containerPath) }, onDone)
+        run(containerPath.substringAfterLast('/'), { DshPluginRepo.installLocal(containerPath, it) }, onDone)
     }
 
     /**
@@ -126,10 +154,26 @@ class DshPluginViewModel : ViewModel() {
      * 成功后置 [needsRestart]：dsh 在启动时组合 profile 的 patch 层，
      * 装完不重启进程新插件不会加载 —— 这与 dsh plugin 自己的 needsRestart 语义一致。
      */
-    private fun run(action: suspend () -> String, onDone: (String) -> Unit) {
+    private fun run(
+        target: String,
+        action: suspend ((String) -> Unit) -> String,
+        onDone: (String) -> Unit,
+    ) {
+        if (installing) return
         viewModelScope.launch {
-            isRefreshing = true
-            val raw = action()
+            installing = true
+            installFailed = false
+            installTarget = target
+            installLog = emptyList()
+            // onLine 在容器输出的读线程上被调，不能直接写 Compose 状态，
+            // 所以绕回 viewModelScope（主调度器）再追加。
+            val raw = action { line ->
+                viewModelScope.launch {
+                    if (line.startsWith(DshPluginRepo.EXIT_MARKER)) return@launch
+                    val next = installLog + line
+                    installLog = if (next.size > MAX_LOG_LINES) next.takeLast(MAX_LOG_LINES) else next
+                }
+            }
             val failed = looksFailed(raw)
             // 退出码标记是给程序看的，别显示给用户
             val out = raw.lineSequence()
@@ -138,7 +182,8 @@ class DshPluginViewModel : ViewModel() {
                 .trim()
                 .ifEmpty { raw }
             lastOutput = out
-            isRefreshing = false
+            installFailed = failed
+            installing = false
             if (!failed) needsRestart = true
             onDone(out)
             refresh()
@@ -149,7 +194,7 @@ class DshPluginViewModel : ViewModel() {
      * 这次 dsh plugin 是不是失败了。
      *
      * 首选 [DshPluginRepo.EXIT_MARKER] 那行里的真实退出码 —— 输出里找关键字是猜：
-     * pnpm 换个措辞、或者报错行被 `tail -30` 截掉，失败就会被当成成功，用户看到
+     * pnpm 换个措辞失败就会被当成成功，用户看到
      * 「已安装」但插件其实没进 bundles。找不到标记行时（超时、容器没起来）才退回
      * 关键字匹配。
      */
@@ -161,5 +206,10 @@ class DshPluginViewModel : ViewModel() {
         }
         return out.contains("pnpm failed") || out.contains("pnpm not found") ||
             out.contains("[DSH-Folk]") || out.contains("ERR_PNPM")
+    }
+
+    private companion object {
+        /** 安装日志保留行数上限：pnpm 能刷出上万行，全留会拖垮列表渲染。 */
+        const val MAX_LOG_LINES = 400
     }
 }
