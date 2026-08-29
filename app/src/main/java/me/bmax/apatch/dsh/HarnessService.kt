@@ -123,7 +123,7 @@ class HarnessService : Service() {
     companion object {
         const val CHANNEL_ID = "dsh_harness"
         const val NOTIFICATION_ID = 1001
-        const val ACTION_STOP = "io.github.ipfsinon.dshfolk.action.STOP_HARNESS"
+        const val ACTION_STOP = "top.funcun.dshfolk.action.STOP_HARNESS"
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, HarnessService::class.java))

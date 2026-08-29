@@ -94,7 +94,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "io.github.ipfsinon.dshfolk"
+        applicationId = "top.funcun.dshfolk"
         minSdk = androidMinSdkVersion
         targetSdk = androidTargetSdkVersion
         versionCode = managerVersionCode

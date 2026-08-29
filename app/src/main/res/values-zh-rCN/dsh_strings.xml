@@ -33,8 +33,8 @@
 
     <string name="dsh_about_powered_by" translatable="false">DeepSeek Harness · Node.js · proot</string>
 
-    <string name="dsh_mode_proot_desc">内置，稳定（基于 ptrace）</string>
-    <string name="dsh_mode_proroot_desc">实验，零 ptrace 开销</string>
+    <string name="dsh_mode_proot_desc">稳定回退（基于 ptrace，开销略高）</string>
+    <string name="dsh_mode_proroot_desc">默认，零 ptrace 开销；部分内核不兼容，失败会自动切回 proot</string>
 
     <string name="dsh_perm_none">未获取</string>
     <string name="dsh_perm_root">Root</string>
@@ -189,6 +189,7 @@
     <string name="dsh_err_extract_failed">运行时安装失败（解压后 rootfs 不完整）</string>
     <string name="dsh_err_start_failed">启动失败：%1$s</string>
     <string name="dsh_err_process_exited">服务进程已退出（见启动日志）</string>
+    <string name="dsh_err_no_process">服务进程没有被创建（见启动日志）</string>
     <string name="dsh_err_start_timeout">启动超时（见启动日志）</string>
     <string name="dsh_plugin_open_repo">打开仓库</string>
     <string name="dsh_notif_channel_name">DSH 服务</string>

@@ -87,7 +87,7 @@ runtime-builder/        容器 rootfs 构建脚本（在 CI 上跑）
 .github/workflows/      build.yml（APK） + runtime.yml（rootfs）
 ```
 
-内部包名保留 `me.bmax.apatch`（applicationId 是 `io.github.ipfsinon.dshfolk`）：
+内部包名保留 `me.bmax.apatch`（applicationId 是 `top.funcun.dshfolk`）：
 这样 FolkPatch 的整套主题子系统与用户已有的 `theme.json` 不需要改一行就能继续用。
 
 ## 致谢

@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
@@ -70,9 +72,21 @@ data class DshMeta(
  */
 object DshRuntime {
     private const val TAG = "DSH-Folk"
-    private const val READY_TIMEOUT_MS = 180_000L
-    /** proroot 连续失败到此次数即强制回退 proot 并清掉用户选择。 */
-    private const val PROROOT_FAIL_LIMIT = 3
+    /**
+     * 等服务就绪的上限。
+     *
+     * 从 180s 压到 90s：proroot 现在失败一次就回退（见 [PROROOT_FAIL_LIMIT]），
+     * 而「卡住不退」的 proroot 唯一表现就是耗尽这个超时 —— 等待越久，用户从
+     * 坏运行时走到可用运行时的时间就越长。node 起 dsh web 正常在 10s 内。
+     */
+    private const val READY_TIMEOUT_MS = 90_000L
+    /**
+     * proroot 连续失败到此次数即强制回退 proot 并清掉用户选择。
+     *
+     * 取 1（失败即回退）：proroot 的失败模式是内核相关的确定性失败，重试同一台
+     * 设备不会有不同结果，让用户白等第二、三次没有意义。
+     */
+    private const val PROROOT_FAIL_LIMIT = 1
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow(DshState())
@@ -130,9 +144,15 @@ object DshRuntime {
 
     // ────────────────────────── 容器运行时选择 ──────────────────────────
 
-    /** 当前选择的运行时 id（默认 proot：稳定优先）。 */
+    /**
+     * 当前选择的运行时 id。
+     *
+     * 默认 proroot：它不走 ptrace，容器内进程开销明显低于 proot。代价是在部分
+     * 内核上会卡在 seccomp/ptrace 上起不来 —— 这条路由 [noteProrootFailure]
+     * 兜底，失败一次就自动切回 proot，所以默认选快的那个是合理的。
+     */
     fun runtimeId(): String =
-        if (!ready) "proot" else prefs().getString(DshEnv.KEY_RUNTIME, "proot") ?: "proot"
+        if (!ready) "proroot" else prefs().getString(DshEnv.KEY_RUNTIME, "proroot") ?: "proroot"
 
     fun setRuntimeId(id: String) {
         if (!ready) return
@@ -147,13 +167,25 @@ object DshRuntime {
         return if (proroot.available()) proroot else proot
     }
 
+    /**
+     * 刚刚发生过 proroot → proot 的自动回退，等着用 proot 重试一次。
+     *
+     * 存在的理由：[PROROOT_FAIL_LIMIT] 是 1，失败即回退。如果只写一行
+     * 「已切回 proot，请重新启动」，用户首次开应用就会撞上一次失败并被
+     * 要求手动重试——而此时我们已经知道该用 proot 了。
+     */
+    @Volatile
+    private var prorootFellBack = false
+
     /** 记一次 proroot 启动失败；达上限强制切回 proot。返回是否触发了回退。 */
     fun noteProrootFailure(why: String): Boolean {
         if (runtimeId() != "proroot") return false
         val n = prefs().getInt(DshEnv.KEY_PROROOT_FAIL, 0) + 1
         return if (n >= PROROOT_FAIL_LIMIT) {
             prefs().edit().putString(DshEnv.KEY_RUNTIME, "proot").putInt(DshEnv.KEY_PROROOT_FAIL, 0).apply()
-            appendLog("! proroot 连续 $n 次启动失败（$why），已自动切回 proot")
+            val times = if (n > 1) "连续 $n 次" else ""
+            appendLog("! proroot ${times}启动失败（$why），已自动切回 proot")
+            prorootFellBack = true
             true
         } else {
             prefs().edit().putInt(DshEnv.KEY_PROROOT_FAIL, n).apply()
@@ -349,38 +381,73 @@ object DshRuntime {
 
     // ────────────────────────── 引导（下载 + 解压 + 启动）──────────────────────────
 
-    /** 一键引导：未装则下载安装，然后拉起 web 服务。 */
+    /** 引导/重启/重装共用的串行锁：三者都会动 rootfs 与服务进程。 */
+    private val bootMutex = Mutex()
+
+    /**
+     * 一键引导：未装则下载安装，然后拉起 web 服务。
+     *
+     * [startServer] 的守卫现在只看进程，不再兼当「防重复下载」；
+     * 而 HarnessService 在 DOWNLOADING / EXTRACTING 阶段依然会放行 bootstrap，
+     * 连点两次启动就会开两条 135MB 下载。用互斥锁 + 阶段判定拦住。
+     */
     fun bootstrap() {
         scope.launch {
-            if (!DshEnv.isRuntimeInstalled(appContext)) {
-                downloadAndInstall()
-                if (_state.value.phase == DshPhase.ERROR) return@launch
+            if (busy()) return@launch
+            bootMutex.withLock {
+                if (!DshEnv.isRuntimeInstalled(appContext)) {
+                    downloadAndInstall()
+                    if (_state.value.phase == DshPhase.ERROR) return@withLock
+                }
+                setupResolvConf()
+                startAndAwait()
             }
-            setupResolvConf()
-            startServer()
-            awaitReady()
         }
+    }
+
+    /**
+     * 启动并等待就绪；如果这一轮触发了 proroot → proot 回退，就用 proot
+     * 再试一次（只重试一次：proot 也起不来就是真错了，再试无意义）。
+     */
+    private suspend fun startAndAwait() {
+        prorootFellBack = false
+        startServer()
+        awaitReady()
+        if (!prorootFellBack) return
+        prorootFellBack = false
+        appendLog("> 用 proot 重试启动…")
+        stopServer()
+        delay(500)
+        startServer()
+        awaitReady()
+    }
+
+    /** 下载/解压/启动中：不接受新的引导请求。 */
+    private fun busy(): Boolean = _state.value.phase.let {
+        it == DshPhase.DOWNLOADING || it == DshPhase.EXTRACTING || it == DshPhase.STARTING
     }
 
     /** 强制重启 web 服务。 */
     fun restart() {
         scope.launch {
-            stopServer()
-            delay(500)
-            startServer()
-            awaitReady()
+            bootMutex.withLock {
+                stopServer()
+                delay(500)
+                startAndAwait()
+            }
         }
     }
 
     /** 重新下载并安装运行时（覆盖 rootfs）。 */
     fun reinstallRuntime() {
         scope.launch {
-            stopServer()
-            downloadAndInstall()
-            if (_state.value.phase != DshPhase.ERROR) {
-                setupResolvConf()
-                startServer()
-                awaitReady()
+            bootMutex.withLock {
+                stopServer()
+                downloadAndInstall()
+                if (_state.value.phase != DshPhase.ERROR) {
+                    setupResolvConf()
+                    startAndAwait()
+                }
             }
         }
     }
@@ -459,9 +526,12 @@ object DshRuntime {
         }
         appendLog("> 运行时安装完成")
         prefs().edit().putString(DshEnv.KEY_RUNTIME_VERSION, meta.version).apply()
+        // phase 必须回 NOT_READY，不能直接置 STARTING：[bootstrap] 下一步就调
+        // [startServer]，而它的防重入守卫会把 STARTING 当成「已经在启动了」直接
+        // return——首次安装后服务永远起不来就是这个自我拦截造成的。
         _state.update {
             it.copy(
-                phase = DshPhase.STARTING,
+                phase = DshPhase.NOT_READY,
                 installed = true,
                 runtimeVersion = meta.version,
                 progress = 1f,
@@ -701,8 +771,9 @@ object DshRuntime {
      * 服务只绑 127.0.0.1，不提供 --host 0.0.0.0 开关；鉴权由 dsh 自己的登录页负责。
      */
     fun startServer() {
-        val p = _state.value.phase
-        if (p == DshPhase.RUNNING || p == DshPhase.STARTING) return
+        // 守卫只看真实进程，不看 phase。看 phase 会把上一步（例如安装完成）
+        // 自己写下的 STARTING 误当成「已有人在启动」。
+        if (serverProcess?.isAlive == true) return
         if (!DshEnv.isRuntimeInstalled(appContext)) {
             _state.update { it.copy(phase = DshPhase.NOT_READY, message = str(R.string.dsh_msg_not_installed)) }
             return
@@ -734,6 +805,9 @@ object DshRuntime {
         serverProcess = try {
             execRootfs(cmd)
         } catch (e: Exception) {
+            // 不能把上一轮已死的进程留在字段里：[awaitReady] 会把它读成
+            // 「进程已退出」，盖掉真正的启动失败原因。
+            serverProcess = null
             val detail = str(R.string.dsh_err_start_failed, e.message ?: e.javaClass.simpleName)
             appendLog("! $detail")
             if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
@@ -773,6 +847,18 @@ object DshRuntime {
      * 返回登录页，403 也证明是它在服务）。
      */
     private suspend fun awaitReady() {
+        // 没有进程就没什么可等。不能依赖下面那句
+        // `serverProcess?.isAlive == false` —— serverProcess 为 null 时它是 false
+        // （null == false），于是「压根没启动」会一声不响地等到超时。
+        // [startServer] 已经报错的情况下直接返回，否则这里的超时/无进程
+        // 文案会盖掉那个更具体的原因。
+        if (_state.value.phase == DshPhase.ERROR) return
+        if (serverProcess == null) {
+            val detail = str(R.string.dsh_err_no_process)
+            appendLog("! $detail")
+            _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
+            return
+        }
         val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
             if (portOpen(port()) && httpResponds(port())) {

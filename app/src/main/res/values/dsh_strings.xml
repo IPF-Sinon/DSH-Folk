@@ -38,8 +38,8 @@
     <!-- 运行方式 -->
     <string name="dsh_mode_proot" translatable="false">proot</string>
     <string name="dsh_mode_proroot" translatable="false">proroot</string>
-    <string name="dsh_mode_proot_desc">Built-in, stable (ptrace based)</string>
-    <string name="dsh_mode_proroot_desc">Experimental, zero ptrace overhead</string>
+    <string name="dsh_mode_proot_desc">Stable fallback (ptrace based, slightly slower)</string>
+    <string name="dsh_mode_proroot_desc">Default, zero ptrace overhead; falls back to proot automatically if the kernel rejects it</string>
 
     <!-- 权限通道 -->
     <string name="dsh_perm_none">None</string>
@@ -207,6 +207,7 @@
     <string name="dsh_err_extract_failed">Runtime install failed (rootfs incomplete after extraction)</string>
     <string name="dsh_err_start_failed">Start failed: %1$s</string>
     <string name="dsh_err_process_exited">The service process exited (see the startup log)</string>
+    <string name="dsh_err_no_process">The service process was never started (see the startup log)</string>
     <string name="dsh_err_start_timeout">Startup timed out (see the startup log)</string>
     <string name="dsh_plugin_open_repo">Open repository</string>
     <string name="dsh_notif_channel_name">DSH service</string>
