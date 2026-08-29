@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -47,6 +48,7 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.termux.terminal.TerminalSession
+import com.termux.terminal.TextStyle
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import java.util.concurrent.atomic.AtomicBoolean
@@ -54,9 +56,26 @@ import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPtySession
+import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.showToast
 
 private const val KEY_FONT_SP = "dsh_term_font_sp"
+
+/**
+ * 终端固定深色配色（不跟随应用主题）。
+ *
+ * 必须显式给背景的理由：TerminalRenderer 里只有
+ * `if (backColor != palette[COLOR_INDEX_BACKGROUND])` 时才画矩形
+ * （源码注释原文 "Only draw non-default background"）—— 也就是说
+ * **默认背景压根不绘制**，露出来的是底层 Compose 窗口背景。
+ * 而 Termux 默认前景是白色，浅色主题下就成了白底白字；
+ * 开了自定义背景图时更是图片直接透到字符后面。
+ *
+ * 终端的惯例就是深底亮字，所以不做浅色变体，也顺带解决了主题背景干扰。
+ */
+private const val TERM_BG = 0xFF101014.toInt()
+private const val TERM_FG = 0xFFE6E6E6.toInt()
+private const val TERM_CURSOR = 0xFF7DD3FC.toInt()
 private const val FONT_MIN_SP = 8
 private const val FONT_MAX_SP = 24
 private const val FONT_DEF_SP = 13
@@ -92,6 +111,20 @@ private val EXTRA_KEYS: List<Pair<String, String?>> = listOf(
  * Compose 侧用 [AndroidView] 承载 Termux 的 TerminalView —— 终端渲染没有 Compose 实现，
  * 自己写一个终端模拟器不现实。
  */
+/**
+ * 把固定配色写进 emulator 的调色盘。
+ *
+ * TerminalColors.mCurrentColors 是 public 数组，索引 256/257/258 分别是
+ * 前景/背景/光标（TextStyle.COLOR_INDEX_*）。emulator 要到
+ * initializeEmulator 之后才存在，所以这一步必须在 attachSession 之后做。
+ */
+private fun applyTermColors(session: TerminalSession?) {
+    val colors = session?.emulator?.mColors ?: return
+    colors.mCurrentColors[TextStyle.COLOR_INDEX_FOREGROUND] = TERM_FG
+    colors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND] = TERM_BG
+    colors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] = TERM_CURSOR
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>
 @Composable
@@ -185,94 +218,103 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
         }
 
         Column(Modifier.fillMaxSize().padding(innerPadding)) {
-            AndroidView(
+            // 不透明 Surface：开了自定义背景图时，MaterialTheme 的 background 是
+            // Color.Transparent，背景图会直接透到终端字符后面。
+            Surface(
+                color = Color(TERM_BG),
                 modifier = Modifier.fillMaxWidth().weight(1f),
-                factory = { ctx ->
-                    TerminalView(ctx, null).also { view ->
-                        terminalView = view
-                        view.setTextSize(
-                            TypedValue.applyDimension(
-                                TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat(),
-                                ctx.resources.displayMetrics
-                            ).toInt()
-                        )
-                        val redrawPending = AtomicBoolean(false)
-                        val listener = object : DshPtySession.Listener {
-                            // PTY 每几十字节回调一次，无节流 post 会灌满主线程队列
-                            // （表现为「终端越用越卡」），所以合并成一次重绘
-                            override fun onOutput() {
-                                if (!redrawPending.compareAndSet(false, true)) return
-                                main.post {
-                                    redrawPending.set(false)
-                                    view.onScreenUpdated()
-                                }
-                            }
-
-                            override fun onTitle(t: String) {
-                                if (t.isNotBlank()) main.post { title = t.trim() }
-                            }
-
-                            override fun onExit(status: Int) {
-                                main.post { title = context.getString(R.string.dsh_term_exited, status) }
-                            }
-
-                            override fun onCopy(text: String) {
-                                main.post {
-                                    runCatching {
-                                        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE)
-                                            as ClipboardManager
-                                        cm.setPrimaryClip(ClipData.newPlainText("term", text))
+            ) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        TerminalView(ctx, null).also { view ->
+                            terminalView = view
+                            view.setBackgroundColor(TERM_BG)
+                            view.setTextSize(
+                                TypedValue.applyDimension(
+                                    TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat(),
+                                    ctx.resources.displayMetrics
+                                ).toInt()
+                            )
+                            val redrawPending = AtomicBoolean(false)
+                            val listener = object : DshPtySession.Listener {
+                                // PTY 每几十字节回调一次，无节流 post 会灌满主线程队列
+                                // （表现为「终端越用越卡」），所以合并成一次重绘
+                                override fun onOutput() {
+                                    if (!redrawPending.compareAndSet(false, true)) return
+                                    main.post {
+                                        redrawPending.set(false)
+                                        view.onScreenUpdated()
                                     }
                                 }
-                            }
 
-                            override fun onPasteRequest() {
-                                main.post {
-                                    runCatching {
-                                        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE)
-                                            as ClipboardManager
-                                        val clip = cm.primaryClip ?: return@runCatching
-                                        if (clip.itemCount == 0) return@runCatching
-                                        val cs = clip.getItemAt(0).coerceToText(ctx)
-                                        if (!cs.isNullOrEmpty()) send(cs.toString())
+                                override fun onTitle(t: String) {
+                                    if (t.isNotBlank()) main.post { title = t.trim() }
+                                }
+
+                                override fun onExit(status: Int) {
+                                    main.post { title = context.getString(R.string.dsh_term_exited, status) }
+                                }
+
+                                override fun onCopy(text: String) {
+                                    main.post {
+                                        runCatching {
+                                            val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE)
+                                                as ClipboardManager
+                                            cm.setPrimaryClip(ClipData.newPlainText("term", text))
+                                        }
                                     }
                                 }
-                            }
 
-                            override fun onBell() {
-                                // 手机上「响一声」多半是骚扰，这里不做处理
+                                override fun onPasteRequest() {
+                                    main.post {
+                                        runCatching {
+                                            val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE)
+                                                as ClipboardManager
+                                            val clip = cm.primaryClip ?: return@runCatching
+                                            if (clip.itemCount == 0) return@runCatching
+                                            val cs = clip.getItemAt(0).coerceToText(ctx)
+                                            if (!cs.isNullOrEmpty()) send(cs.toString())
+                                        }
+                                    }
+                                }
+
+                                override fun onBell() {
+                                    // 手机上「响一声」多半是骚扰，这里不做处理
+                                }
+                            }
+                            view.setTerminalViewClient(
+                                DshTerminalViewClient(
+                                    fontSp = { fontSp },
+                                    bumpFont = { setFont(fontSp + it) },
+                                    showKeyboard = {
+                                        view.requestFocus()
+                                        val im = ctx.getSystemService(Context.INPUT_METHOD_SERVICE)
+                                            as? InputMethodManager
+                                        im?.showSoftInput(view, 0)
+                                    },
+                                    readCtrl = { ctrlDown },
+                                    readAlt = { altDown },
+                                    onScreenUpdated = { view.onScreenUpdated() },
+                                )
+                            )
+                            runCatching {
+                                // 初始 80x24 只是占位：attachSession 后 TerminalView 会按实测
+                                // 字宽重算行列并通知 PTY，否则 TUI 边框会错位
+                                val ps = DshPtySession.attachOrStart(80, 24, listener)
+                                view.attachSession(ps.session)
+                                applyTermColors(ps.session)
+                                title = ps.session?.title?.takeIf { it.isNotBlank() } ?: "Ubuntu · PTY"
+                            }.onFailure {
+                                title = context.getString(
+                                    R.string.dsh_term_start_failed,
+                                    it.message ?: it.javaClass.simpleName,
+                                )
                             }
                         }
-                        view.setTerminalViewClient(
-                            DshTerminalViewClient(
-                                fontSp = { fontSp },
-                                bumpFont = { setFont(fontSp + it) },
-                                showKeyboard = {
-                                    view.requestFocus()
-                                    val im = ctx.getSystemService(Context.INPUT_METHOD_SERVICE)
-                                        as? InputMethodManager
-                                    im?.showSoftInput(view, 0)
-                                },
-                                readCtrl = { ctrlDown },
-                                readAlt = { altDown },
-                                onScreenUpdated = { view.onScreenUpdated() },
-                            )
-                        )
-                        runCatching {
-                            // 初始 80x24 只是占位：attachSession 后 TerminalView 会按实测
-                            // 字宽重算行列并通知 PTY，否则 TUI 边框会错位
-                            val ps = DshPtySession.attachOrStart(80, 24, listener)
-                            view.attachSession(ps.session)
-                            title = ps.session?.title?.takeIf { it.isNotBlank() } ?: "Ubuntu · PTY"
-                        }.onFailure {
-                            title = context.getString(
-                                R.string.dsh_term_start_failed,
-                                it.message ?: it.javaClass.simpleName,
-                            )
-                        }
-                    }
-                },
-            )
+                    },
+                )
+            }
 
             // 扩展键条
             Row(
@@ -307,6 +349,9 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
                     }
                 }
             }
+
+            // 底栏在终端页常显（不参与自动隐藏），不让位的话扩展键条会被盖住
+            HomeBottomSpacer()
         }
     }
 }

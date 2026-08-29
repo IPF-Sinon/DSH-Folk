@@ -86,6 +86,7 @@ import androidx.navigation.compose.rememberNavController
 import com.ramcosta.composedestinations.generated.destinations.AppearanceSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.BackupSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.BehaviorSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.DshTerminalScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.LanguagePickerScreenDestination
@@ -621,8 +622,15 @@ class MainActivity : AppCompatActivity() {
                 // Auto-hide floating bar on secondary/detail pages (non-main-tab routes)
                 val isOnMainTabPage = currentRoute in bottomBarRoutes
 
+                // 终端页不参与自动隐藏：TerminalView 是原生 View，自己吃掉触摸
+                // 事件、不参与 Compose 的 nestedScroll，而底栏 3 秒自动隐藏后唯一的
+                // 恢复入口就是 rememberScrollConnection.onPreScroll 里的
+                // resetBottomBarAutoHide() —— 于是在终端页底栏一旦隐起来就再也叫不回来。
+                val isOnTerminalPage = currentRoute == DshTerminalScreenDestination.route
+
                 val showBottomBar = if (isFloatingMode) {
                     if (!isOnMainTabPage) false
+                    else if (isOnTerminalPage) true
                     else if (!floatingAutoHide && !floatingSwipeHide) true
                     else if (!floatingAutoHide) !isScrollingDown.value
                     else if (!floatingSwipeHide) isBottomBarVisible
