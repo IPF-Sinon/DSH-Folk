@@ -42,7 +42,19 @@ object PermissionManager {
         val adbPaired: Boolean = false,
         /** 提供 root 的实现名（Magisk / KernelSU / APatch / 未知）。 */
         val rootProvider: String = "",
+        /**
+         * Shizuku 服务端的 uid；Sui / root 模式跑的服务是 **0**，
+         * 普通 adb 模式是 **2000**；-1 = 未知（未授权 / pre-v11 / 未接收 binder）。
+         */
+        val shizukuUid: Int = -1,
+        /** 用户首选的通道（auto 时为 null）。 */
+        val preferred: Channel? = null,
+        /** 首选通道不可用、已回退到 [channel]。 */
+        val preferenceFellBack: Boolean = false,
     ) {
+        /** Shizuku 本身就跑在 root 下（Sui）。 */
+        val shizukuIsRoot: Boolean get() = shizukuUid == 0
+
         /**
          * 通道名的字符串资源 id。
          *
@@ -90,13 +102,27 @@ object PermissionManager {
         val shizukuGranted = shizukuRunning && runCatching {
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         }.getOrDefault(false)
+        // Sui / root 模式跑的 Shizuku 服务端 uid 是 0，普通 adb 模式是 2000。
+        // getUid() 在未接收 binder 时会抛 IllegalStateException，必须包 runCatching。
+        val shizukuUid = if (shizukuGranted) {
+            runCatching { Shizuku.getUid() }.getOrDefault(-1)
+        } else {
+            -1
+        }
         val adbPaired = File(DshEnv.dshHome(ctx), "adbkeys/adbkey").isFile
 
+        // 先算出哪些通道真的可用，再按用户首选挑——有 root 不等于必须用 root。
+        val available = buildList {
+            if (rootOk) add(Channel.ROOT)
+            if (shizukuGranted) add(Channel.SHIZUKU)
+            if (adbPaired) add(Channel.ADB)
+        }
+        val preferred = readPreference(ctx)
+        val auto = available.firstOrNull() ?: Channel.NONE
         val channel = when {
-            rootOk -> Channel.ROOT
-            shizukuGranted -> Channel.SHIZUKU
-            adbPaired -> Channel.ADB
-            else -> Channel.NONE
+            preferred == null -> auto
+            preferred in available -> preferred
+            else -> auto
         }
         val s = Status(
             channel = channel,
@@ -105,10 +131,40 @@ object PermissionManager {
             shizukuGranted = shizukuGranted,
             adbPaired = adbPaired,
             rootProvider = provider,
+            shizukuUid = shizukuUid,
+            preferred = preferred,
+            preferenceFellBack = preferred != null && preferred !in available,
         )
         _status.value = s
-        Log.i(TAG, "权限通道=$channel su=$su shizuku=$shizukuRunning/$shizukuGranted adb=$adbPaired")
+        Log.i(
+            TAG,
+            "权限通道=$channel(首选=$preferred 回退=${s.preferenceFellBack}) " +
+                "su=$su shizuku=$shizukuRunning/$shizukuGranted/uid=$shizukuUid adb=$adbPaired",
+        )
         return s
+    }
+
+    /**
+     * 读用户首选通道；auto / 未设 / 写坏了都归为 null（= 自动优先级）。
+     */
+    fun readPreference(ctx: Context): Channel? = when (
+        prefs(ctx).getString(DshEnv.KEY_PERM_CHANNEL, PREF_AUTO)
+    ) {
+        PREF_ROOT -> Channel.ROOT
+        PREF_SHIZUKU -> Channel.SHIZUKU
+        PREF_ADB -> Channel.ADB
+        else -> null
+    }
+
+    /** 写首选通道（null = 自动）。调用方自己负责随后 refresh。 */
+    fun setPreference(ctx: Context, channel: Channel?) {
+        val v = when (channel) {
+            Channel.ROOT -> PREF_ROOT
+            Channel.SHIZUKU -> PREF_SHIZUKU
+            Channel.ADB -> PREF_ADB
+            else -> PREF_AUTO
+        }
+        prefs(ctx).edit().putString(DshEnv.KEY_PERM_CHANNEL, v).apply()
     }
 
     /** PATH 上是否存在 su（存在≠已授权）。 */
@@ -165,6 +221,11 @@ object PermissionManager {
 
     /** 上次 `su -c id` 是否真的拿到了 uid 0（避免每次进首页都弹授权框）。 */
     private const val KEY_ROOT_VERIFIED = "root_verified"
+
+    const val PREF_AUTO = "auto"
+    const val PREF_ROOT = "root"
+    const val PREF_SHIZUKU = "shizuku"
+    const val PREF_ADB = "adb"
 
     private val SU_PATHS = listOf(
         "/system/bin/su",

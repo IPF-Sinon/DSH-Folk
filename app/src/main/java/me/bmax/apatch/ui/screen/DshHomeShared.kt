@@ -1,10 +1,9 @@
 package me.bmax.apatch.ui.screen
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.system.Os
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,18 +28,23 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,10 +62,10 @@ import me.bmax.apatch.dsh.DshPhase
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.HarnessService
 import me.bmax.apatch.dsh.PermissionManager
+import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.component.copyableInfo
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.util.getSELinuxStatus
-import me.bmax.apatch.util.ui.showToast
 
 /**
  * 所有首页布局共用的 DSH 运行时状态层。
@@ -86,6 +90,8 @@ class DshHomeUiState internal constructor(
     val installed: Boolean,
     val runtimeId: String,
     val perm: PermissionManager.Status,
+    /** 「每次询问」模式下请求弹选择框。 */
+    private val onAskWebUi: () -> Unit,
 ) {
     val isRunning: Boolean get() = phase == DshPhase.RUNNING
     val isBusy: Boolean
@@ -104,14 +110,18 @@ class DshHomeUiState internal constructor(
 
     fun restart() = DshRuntime.restart()
 
+    /**
+     * 打开 WebUI。六套布局共用这一个入口，所以打开方式只需在这里分流。
+     *
+     * 「每次询问」不能在这个非 Composable 方法里弹窗，所以只置一个标志，
+     * 由 [ProvideDshHomeState] 里的对话框消费。
+     */
     fun openWeb() {
-        val ok = runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(webUrl))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        }.isSuccess
-        if (!ok) showToast(context, context.getString(R.string.dsh_no_browser))
+        when (DshWebUi.mode(context)) {
+            DshWebUi.MODE_BROWSER -> DshWebUi.openExternal(context, webUrl)
+            DshWebUi.MODE_ASK -> onAskWebUi()
+            else -> DshWebUi.openInApp(context, webUrl)
+        }
     }
 
     /**
@@ -144,6 +154,21 @@ fun ProvideDshHomeState(content: @Composable () -> Unit) {
         withContext(Dispatchers.IO) { PermissionManager.refresh(appContext) }
     }
 
+    // 「每次询问」的选择框
+    var askWebUi by remember { mutableStateOf(false) }
+    if (askWebUi) {
+        DshWebUiModeDialog(
+            onDismiss = { askWebUi = false },
+            onPick = { mode, remember ->
+                askWebUi = false
+                if (remember) DshWebUi.setMode(appContext, mode)
+                val url = "http://127.0.0.1:${runtime.port}/"
+                if (mode == DshWebUi.MODE_BROWSER) DshWebUi.openExternal(appContext, url)
+                else DshWebUi.openInApp(appContext, url)
+            },
+        )
+    }
+
     val ui = remember(runtime, perm, appContext) {
         DshHomeUiState(
             context = appContext,
@@ -157,6 +182,7 @@ fun ProvideDshHomeState(content: @Composable () -> Unit) {
             installed = runtime.installed,
             runtimeId = DshRuntime.runtimeId(),
             perm = perm,
+            onAskWebUi = { askWebUi = true },
         )
     }
 
@@ -350,4 +376,51 @@ fun DshInfoCard(showIcons: Boolean = false) {
             Spacer(Modifier.height(0.dp))
         }
     }
+}
+
+/**
+ * 「每次询问」时的打开方式选择框。
+ *
+ * 带「记住我的选择」：一个每次都问的对话框如果没法关掉，本身就是烦扰。
+ */
+@Composable
+private fun DshWebUiModeDialog(
+    onDismiss: () -> Unit,
+    onPick: (mode: String, remember: Boolean) -> Unit,
+) {
+    var remember by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dsh_webui_mode_ask_title)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.dsh_webui_mode_ask_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { remember = !remember },
+                ) {
+                    Checkbox(checked = remember, onCheckedChange = { remember = it })
+                    Text(
+                        text = stringResource(R.string.dsh_webui_mode_remember),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onPick(DshWebUi.MODE_IN_APP, remember) }) {
+                Text(stringResource(R.string.dsh_webui_mode_in_app))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onPick(DshWebUi.MODE_BROWSER, remember) }) {
+                Text(stringResource(R.string.dsh_webui_mode_browser))
+            }
+        },
+    )
 }

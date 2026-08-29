@@ -148,6 +148,13 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- 内置 WebUI：只加载本机 127.0.0.1，不对外暴露 -->
+        <activity
+            android:name=".ui.DshWebUiActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:exported="false"
+            android:label="@string/dsh_open_webui" />
+
         <activity
             android:name=".ui.CrashHandleActivity"
             android:exported="false" />

@@ -50,4 +50,10 @@ object DshEnv {
     const val KEY_RUNTIME_VERSION = "runtime_version"
     const val KEY_PROROOT_FAIL = "proroot_fail_streak"
     const val KEY_AUTOSTART = "dsh_autostart"     // 开机自启（BootCompletedReceiver 读取）
+
+    /** 权限通道首选：auto | root | shizuku | adb。 */
+    const val KEY_PERM_CHANNEL = "perm_channel_pref"
+
+    /** WebUI 打开方式：in | browser | ask。 */
+    const val KEY_WEBUI_MODE = "webui_open_mode"
 }

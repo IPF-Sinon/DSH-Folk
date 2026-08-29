@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
@@ -21,13 +22,13 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,10 +45,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.text.KeyboardOptions
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
+import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.ExpressiveSwitch
 import me.bmax.apatch.ui.component.SplicedColumnGroup
@@ -85,6 +86,12 @@ fun FunctionSettingsContent(
     perm: PermissionManager.Status,
     onRefreshPerm: () -> Unit,
     onRequestShizuku: () -> Unit,
+    /** WebUI 打开方式：in | browser | ask。 */
+    webuiMode: String,
+    onWebuiModeChange: (String) -> Unit,
+    /** 权限通道首选（auto | root | shizuku | adb）。 */
+    permPrefName: String,
+    onPermPrefChange: (String) -> Unit,
     /** 运行时是否已安装（无线 ADB 需要容器内的 python）。 */
     runtimeInstalled: Boolean,
     /** 已安装的运行时版本；未安装时为空。 */
@@ -159,6 +166,42 @@ fun FunctionSettingsContent(
                 checked = autostart,
                 onCheckedChange = onAutostartChange,
             )
+        }
+
+        // ───────── Web 界面打开方式 ─────────
+        item(key = "function_webui_mode") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    SectionHeader(
+                        icon = { Icon(Icons.Filled.Layers, null, Modifier.size(20.dp)) },
+                        title = stringResource(R.string.dsh_webui_mode),
+                        summary = stringResource(R.string.dsh_webui_mode_summary),
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    RuntimeOption(
+                        selected = webuiMode == DshWebUi.MODE_IN_APP,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_webui_mode_in_app),
+                        summary = stringResource(R.string.dsh_webui_mode_in_app_desc),
+                        onSelect = { onWebuiModeChange(DshWebUi.MODE_IN_APP) },
+                    )
+                    RuntimeOption(
+                        selected = webuiMode == DshWebUi.MODE_BROWSER,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_webui_mode_browser),
+                        summary = stringResource(R.string.dsh_webui_mode_browser_desc),
+                        onSelect = { onWebuiModeChange(DshWebUi.MODE_BROWSER) },
+                    )
+                    RuntimeOption(
+                        selected = webuiMode == DshWebUi.MODE_ASK,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_webui_mode_ask),
+                        summary = stringResource(R.string.dsh_webui_mode_ask_desc),
+                        onSelect = { onWebuiModeChange(DshWebUi.MODE_ASK) },
+                    )
+                }
+            }
         }
 
         // ───────── 运行时下载源 ─────────
@@ -332,11 +375,17 @@ fun FunctionSettingsContent(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    val shizukuUidLabel = when (perm.shizukuUid) {
+                        0 -> stringResource(R.string.dsh_perm_shizuku_uid_root)
+                        2000 -> stringResource(R.string.dsh_perm_shizuku_uid_shell)
+                        else -> "uid ${perm.shizukuUid}"
+                    }
                     Text(
                         text = stringResource(
-                            R.string.dsh_perm_shizuku_detail,
+                            R.string.dsh_perm_shizuku_detail_uid,
                             yesNo(perm.shizukuRunning),
                             yesNo(perm.shizukuGranted),
+                            shizukuUidLabel,
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -347,6 +396,54 @@ fun FunctionSettingsContent(
                             text = stringResource(R.string.dsh_perm_none_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_perm_prefer),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    RuntimeOption(
+                        selected = permPrefName == PermissionManager.PREF_AUTO,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_perm_prefer_auto),
+                        summary = stringResource(R.string.dsh_perm_prefer_auto_desc),
+                        onSelect = { onPermPrefChange(PermissionManager.PREF_AUTO) },
+                    )
+                    RuntimeOption(
+                        selected = permPrefName == PermissionManager.PREF_ROOT,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_perm_root),
+                        summary = stringResource(R.string.dsh_perm_hint_root),
+                        onSelect = { onPermPrefChange(PermissionManager.PREF_ROOT) },
+                    )
+                    RuntimeOption(
+                        selected = permPrefName == PermissionManager.PREF_SHIZUKU,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_perm_shizuku),
+                        summary = stringResource(R.string.dsh_perm_hint_shizuku),
+                        onSelect = { onPermPrefChange(PermissionManager.PREF_SHIZUKU) },
+                    )
+                    RuntimeOption(
+                        selected = permPrefName == PermissionManager.PREF_ADB,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_perm_adb),
+                        summary = stringResource(R.string.dsh_perm_hint_adb),
+                        onSelect = { onPermPrefChange(PermissionManager.PREF_ADB) },
+                    )
+
+                    if (perm.preferenceFellBack) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(
+                                R.string.dsh_perm_fell_back,
+                                perm.label(LocalContext.current),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
                         )
                     }
 
@@ -503,7 +600,7 @@ fun FunctionSettingsContent(
                         ExpressiveSwitch(
                             checked = adbRootAllowed,
                             onCheckedChange = onAdbRootAllowedChange,
-                            enabled = runtimeInstalled && !adbBusy && perm.suPresent,
+                            enabled = runtimeInstalled && !adbBusy && (perm.suPresent || perm.shizukuIsRoot),
                         )
                     }
 

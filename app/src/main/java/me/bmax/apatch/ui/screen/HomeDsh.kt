@@ -1,7 +1,5 @@
 package me.bmax.apatch.ui.screen
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -122,11 +120,7 @@ fun HomeScreenDsh(
             onStart = { HarnessService.start(context) },
             onStop = { HarnessService.stop(context) },
             onRestart = { DshRuntime.restart() },
-            onOpenWeb = {
-                runCatching {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(state.webUrl)))
-                }.onFailure { showToast(context, context.getString(R.string.dsh_no_browser)) }
-            },
+            onOpenWeb = { state.openWeb() },
         )
 
         Row(

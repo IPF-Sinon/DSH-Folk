@@ -13,6 +13,30 @@
     <string name="dsh_copy_log">复制日志</string>
     <string name="dsh_log_copied">日志已复制</string>
     <string name="dsh_open_webui">打开 Web 界面</string>
+    <!-- 内置 WebUI 容器 -->
+    <string name="dsh_webui_reload">刷新</string>
+    <string name="dsh_webui_open_external">用浏览器打开</string>
+    <string name="dsh_webui_load_failed">加载失败</string>
+    <!-- WebUI 打开方式设置 -->
+    <string name="dsh_webui_mode">Web 界面打开方式</string>
+    <string name="dsh_webui_mode_summary">Web 界面只监听 127.0.0.1，仅本机可访问</string>
+    <string name="dsh_webui_mode_in_app">应用内打开</string>
+    <string name="dsh_webui_mode_in_app_desc">内置浏览器，不用切应用</string>
+    <string name="dsh_webui_mode_browser">外部浏览器</string>
+    <string name="dsh_webui_mode_browser_desc">交给系统浏览器打开</string>
+    <string name="dsh_webui_mode_ask">每次询问</string>
+    <string name="dsh_webui_mode_ask_desc">打开时再选</string>
+    <string name="dsh_webui_mode_ask_title">用什么打开 Web 界面</string>
+    <string name="dsh_webui_mode_ask_body">Web 界面由本机 127.0.0.1 提供服务。</string>
+    <string name="dsh_webui_mode_remember">记住我的选择</string>
+    <!-- 权限通道首选 -->
+    <string name="dsh_perm_prefer">首选通道</string>
+    <string name="dsh_perm_prefer_auto">自动</string>
+    <string name="dsh_perm_prefer_auto_desc">优先 root，其次 Shizuku，再次无线 ADB</string>
+    <string name="dsh_perm_fell_back">首选通道当前不可用，已回退为 %1$s</string>
+    <string name="dsh_perm_shizuku_uid_root">uid 0（root）</string>
+    <string name="dsh_perm_shizuku_uid_shell">uid 2000（shell）</string>
+    <string name="dsh_perm_shizuku_detail_uid">服务运行中：%1$s · 已授权：%2$s · %3$s</string>
     <string name="dsh_start">启动</string>
     <string name="dsh_stop">停止</string>
     <string name="dsh_restart">重启</string>
@@ -86,7 +110,6 @@
     <string name="dsh_perm_current">当前生效：%1$s</string>
     <string name="dsh_perm_refresh">重新探测</string>
     <string name="dsh_perm_root_detail">找到 su：%1$s · 提供者：%2$s</string>
-    <string name="dsh_perm_shizuku_detail">服务运行中：%1$s · 已授权：%2$s</string>
     <string name="dsh_perm_request_shizuku">申请 Shizuku 权限</string>
     <string name="dsh_perm_none_hint">没有可用的提权通道。DSH 仍能在容器里运行，只是访问系统路径与部分插件功能受限。</string>
 

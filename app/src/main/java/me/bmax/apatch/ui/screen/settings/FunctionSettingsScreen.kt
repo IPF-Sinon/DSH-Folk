@@ -44,6 +44,7 @@ import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
+import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
 import rikka.shizuku.Shizuku
@@ -66,6 +67,16 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     val dshPrefs = context.getSharedPreferences(DshEnv.PREF, android.content.Context.MODE_PRIVATE)
 
     var runtimeId by rememberSaveable { mutableStateOf(DshRuntime.runtimeId()) }
+    // null = 自动（按优先级）。存的是字符串，rememberSaveable 不能直接存 enum?
+    var permPrefName by rememberSaveable {
+        mutableStateOf(
+            dshPrefs.getString(DshEnv.KEY_PERM_CHANNEL, PermissionManager.PREF_AUTO)
+                ?: PermissionManager.PREF_AUTO
+        )
+    }
+    var webuiMode by rememberSaveable {
+        mutableStateOf(dshPrefs.getString(DshEnv.KEY_WEBUI_MODE, DshWebUi.MODE_IN_APP) ?: DshWebUi.MODE_IN_APP)
+    }
     var autostart by rememberSaveable { mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_AUTOSTART, false)) }
     var downloadSource by rememberSaveable { mutableStateOf(DshSource.setting(context)) }
     var customMetaUrl by rememberSaveable { mutableStateOf(DshSource.customMetaUrl(context)) }
@@ -106,6 +117,32 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     // proroot 的可用性要读它自己的目录，放 IO 线程算一次即可。
     var prorootAvailable by rememberSaveable { mutableStateOf(false) }
     var prorootReason by rememberSaveable { mutableStateOf("") }
+
+    /**
+     * B5：Shizuku 授权后自动重新探测。
+     *
+     * 原来只调 Shizuku.requestPermission()，从不注册结果回调 —— 用户在弹窗里
+     * 点了「允许」，权限卡却还显示未授权，必须手动再点一次「刷新权限」。
+     *
+     * binder 监听用 sticky 版：用户可能先打开本页、再去启动 Shizuku 服务，
+     * 那时才拿得到 binder；而已经拿到时 sticky 会立即回调一次。
+     */
+    DisposableEffect(Unit) {
+        val app = context.applicationContext
+        val refresh = { scope.launch(Dispatchers.IO) { PermissionManager.refresh(app) } }
+        val onResult = Shizuku.OnRequestPermissionResultListener { _, _ -> refresh() }
+        val onBinder = Shizuku.OnBinderReceivedListener { refresh() }
+        runCatching {
+            Shizuku.addRequestPermissionResultListener(onResult)
+            Shizuku.addBinderReceivedListenerSticky(onBinder)
+        }
+        onDispose {
+            runCatching {
+                Shizuku.removeRequestPermissionResultListener(onResult)
+                Shizuku.removeBinderReceivedListener(onBinder)
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         DshRuntime.attach(context.applicationContext)
@@ -230,6 +267,27 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                                     snackBarHost.showSnackbar(it.message ?: "Shizuku request failed")
                                 }
                             }
+                    },
+                    webuiMode = webuiMode,
+                    onWebuiModeChange = { mode ->
+                        webuiMode = mode
+                        DshWebUi.setMode(context.applicationContext, mode)
+                    },
+                    permPrefName = permPrefName,
+                    onPermPrefChange = { name ->
+                        permPrefName = name
+                        // 手动选通道只是显示/菜单偏好，容器执行仍走 proot/proroot；
+                        // 不选 = 自动按 root > shizuku > adb 的优先级挑一条可用的
+                        val ch = when (name) {
+                            PermissionManager.PREF_ROOT -> PermissionManager.Channel.ROOT
+                            PermissionManager.PREF_SHIZUKU -> PermissionManager.Channel.SHIZUKU
+                            PermissionManager.PREF_ADB -> PermissionManager.Channel.ADB
+                            else -> null
+                        }
+                        PermissionManager.setPreference(context.applicationContext, ch)
+                        scope.launch(Dispatchers.IO) {
+                            PermissionManager.refresh(context.applicationContext)
+                        }
                     },
                     runtimeInstalled = runtimeInstalled,
                     runtimeVersion = runtimeState.runtimeVersion ?: "",
