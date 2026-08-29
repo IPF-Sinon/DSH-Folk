@@ -94,6 +94,8 @@ fun HomeScreenCircle(
             LearnMoreCardCircle()
         }
 
+        DshLogCard()
+
         HomeBottomSpacer()
     }
 }

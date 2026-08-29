@@ -136,6 +136,8 @@ fun HomeScreenV2(
 
         DshInfoCard(showInfoIcons)
 
+        DshLogCard()
+
         HomeBottomSpacer()
     }
 }

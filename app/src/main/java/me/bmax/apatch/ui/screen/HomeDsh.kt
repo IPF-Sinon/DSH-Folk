@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,8 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -39,7 +39,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -48,33 +47,26 @@ import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshPhase
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.HarnessService
 import me.bmax.apatch.dsh.PermissionManager
-import me.bmax.apatch.ui.component.copyInfoToClipboard
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.util.ui.HomeBottomSpacer
-import me.bmax.apatch.util.ui.showToast
 
 /**
  * DSH-Folk 默认首页。
@@ -95,6 +87,8 @@ fun HomeScreenDsh(
     val context = LocalContext.current
     val state by DshRuntime.state.collectAsStateWithLifecycle()
     val perm by PermissionManager.status.collectAsStateWithLifecycle()
+    // openWeb 分流住在 DshHomeUiState 上（state 是 DshRuntime.State，没有这个方法）
+    val uiState = LocalDshHomeState.current
 
     LaunchedEffect(Unit) {
         DshRuntime.attach(context.applicationContext)
@@ -120,7 +114,7 @@ fun HomeScreenDsh(
             onStart = { HarnessService.start(context) },
             onStop = { HarnessService.stop(context) },
             onRestart = { DshRuntime.restart() },
-            onOpenWeb = { state.openWeb() },
+            onOpenWeb = { uiState.openWeb() },
         )
 
         Row(
@@ -165,6 +159,7 @@ private fun permHint(s: PermissionManager.Status): String = when (s.channel) {
 }
 
 /** Hero 卡：DeepSeek Harness 大标题 + 阶段 + 进度 + 操作。 */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DshHeroCard(
     phase: DshPhase,
@@ -257,7 +252,10 @@ private fun DshHeroCard(
                     )
                 }
                 Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     if (running) {
                         Button(
                             onClick = onOpenWeb,
@@ -360,78 +358,6 @@ private fun DshSmallCard(
 
 /** 启动日志卡：等宽字体滚动 + 右上角复制按钮。 */
 @Composable
-private fun DshLogCard() {
-    val context = LocalContext.current
-    var log by remember { mutableStateOf("") }
-
-    // 轮询而非监听：LogStore 的 tail 只读内存环形缓冲，开销极低
-    LaunchedEffect(Unit) {
-        while (true) {
-            log = withContext(Dispatchers.IO) { DshRuntime.tailLog(200) }
-            delay(1_000)
-        }
-    }
-
-    val containerColor = if (BackgroundConfig.isCustomBackgroundEnabled) {
-        MaterialTheme.colorScheme.surface.copy(alpha = BackgroundConfig.customBackgroundOpacity)
-    } else {
-        MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Outlined.Article, null, Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.dsh_boot_log),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = {
-                    copyInfoToClipboard(
-                        context,
-                        context.getString(R.string.dsh_boot_log),
-                        log.ifEmpty { "(empty)" },
-                    )
-                    showToast(context, R.string.dsh_log_copied)
-                }) {
-                    Icon(
-                        Icons.Filled.ContentCopy,
-                        contentDescription = stringResource(R.string.dsh_copy_log),
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 120.dp, max = 320.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                Text(
-                    text = log.ifEmpty { stringResource(R.string.dsh_log_empty) },
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun phaseLabel(phase: DshPhase): String = stringResource(
     when (phase) {

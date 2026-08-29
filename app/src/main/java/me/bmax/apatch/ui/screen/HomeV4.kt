@@ -152,6 +152,8 @@ fun HomeScreenV4(
             }
         }
 
+        DshLogCard()
+
         HomeBottomSpacer()
     }
 }

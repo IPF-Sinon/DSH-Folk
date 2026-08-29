@@ -5,18 +5,24 @@ import android.os.Build
 import android.system.Os
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Cached
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.DeveloperBoard
@@ -33,6 +39,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,9 +59,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
@@ -63,9 +72,11 @@ import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.HarnessService
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.DshWebUi
+import me.bmax.apatch.ui.component.copyInfoToClipboard
 import me.bmax.apatch.ui.component.copyableInfo
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.util.getSELinuxStatus
+import me.bmax.apatch.util.ui.showToast
 
 /**
  * 所有首页布局共用的 DSH 运行时状态层。
@@ -424,3 +435,78 @@ private fun DshWebUiModeDialog(
         },
     )
 }
+
+@Composable
+internal fun DshLogCard() {
+    val context = LocalContext.current
+    var log by remember { mutableStateOf("") }
+
+    // 轮询而非监听：LogStore 的 tail 只读内存环形缓冲，开销极低
+    LaunchedEffect(Unit) {
+        while (true) {
+            log = withContext(Dispatchers.IO) { DshRuntime.tailLog(200) }
+            delay(1_000)
+        }
+    }
+
+    val containerColor = if (BackgroundConfig.isCustomBackgroundEnabled) {
+        MaterialTheme.colorScheme.surface.copy(alpha = BackgroundConfig.customBackgroundOpacity)
+    } else {
+        MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Outlined.Article, null, Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.dsh_boot_log),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = {
+                    copyInfoToClipboard(
+                        context,
+                        context.getString(R.string.dsh_boot_log),
+                        log.ifEmpty { "(empty)" },
+                    )
+                    showToast(context, R.string.dsh_log_copied)
+                }) {
+                    Icon(
+                        Icons.Filled.ContentCopy,
+                        contentDescription = stringResource(R.string.dsh_copy_log),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 120.dp, max = 320.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = log.ifEmpty { stringResource(R.string.dsh_log_empty) },
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
+
+

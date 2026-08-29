@@ -95,6 +95,7 @@ fun HomeScreenStats(
                 if (isReady) {
                     SystemMonitoringSection(uiState.systemMonitor, timeSeries)
                 }
+                DshLogCard()
                 HomeBottomSpacer()
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -128,6 +129,7 @@ fun HomeScreenStats(
             if (!hideAboutCard) {
                 LearnMoreCardV4()
             }
+            DshLogCard()
             HomeBottomSpacer()
         }
     }

@@ -116,6 +116,8 @@ fun HomeScreenV3(
                 StorageCard(isWallpaperMode = isWallpaperMode)
             }
 
+            DshLogCard()
+
             HomeBottomSpacer()
         }
     }
