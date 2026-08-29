@@ -89,27 +89,27 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
 
-      - name: Check signing secrets
-        id: signing
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            # 没配 keystore 也要能出包：Gradle 会退回 debug.keystore 默认签名
-            echo "::notice::KEYSTORE_BASE64 not set, release will use the fallback debug key"
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
+      # release 包必须真签名。缺任何一项就硬失败 —— 悄悄用 debug key 签出一个
+      # 「release」比构建失败危险得多：它装得上、看着正常，但和正式包签名不同，
+      # 之后无法覆盖升级，用户还得卸载重装。
       - name: Decode keystore
-        if: steps.signing.outputs.present == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # 仓库里这一项的 secret 名是 KEY_PRIVATE_PASSWORD（不是 KEY_PASSWORD）。
+          # 名字写错读出来是空串，Gradle 会拿空密码去开私钥然后失败。
+          KEY_PASSWORD: ${{ secrets.KEY_PRIVATE_PASSWORD }}
         run: |
+          missing=""
+          [ -n "$KEYSTORE_BASE64" ]  || missing="$missing KEYSTORE_BASE64"
+          [ -n "$KEYSTORE_PASSWORD" ] || missing="$missing KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ]         || missing="$missing KEY_ALIAS"
+          [ -n "$KEY_PASSWORD" ]      || missing="$missing KEY_PRIVATE_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::missing release signing secrets:$missing"
+            exit 1
+          fi
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > dsh-folk.jks
           # 用 printf 而非 heredoc 展开，避免密码里的特殊字符被 shell 解释
           {
@@ -132,6 +132,21 @@ jobs:
           fi
           mv "$APK" "DSH-Folk-Release-${SHORT}.apk"
           sha256sum "DSH-Folk-Release-${SHORT}.apk" > "DSH-Folk-Release-${SHORT}.apk.sha256"
+
+      # 签名自检：debug key 的证书主体固定是 CN=Android Debug。真出现它说明
+      # keystore 没生效（Gradle 静默回退），必须在发包之前拦住。
+      # 用 keytool 而不是 apksigner：keytool 随 setup-java 一定在 PATH 上，
+      # 而 apksigner 的路径取决于 AGP 装了哪个 build-tools 版本，find 出来不稳。
+      - name: Verify signer
+        run: |
+          SHORT="${GITHUB_SHA::7}"
+          keytool -printcert -jarfile "DSH-Folk-Release-${SHORT}.apk" > signer.txt
+          grep -E "Owner|Valid from" signer.txt || true
+          if grep -q "CN=Android Debug" signer.txt; then
+            echo "::error::release APK is signed with the Android debug key"
+            exit 1
+          fi
+          rm -f signer.txt
 
       - name: Remove signing material
         if: always()

@@ -1,6 +1,9 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?><!--
+  备用图标（设置 → 常规 → 备用图标）。与主图标是两个不同的设计。
+  背景从原来的深红 #2B0A0A 改为纯白：新素材自带浅灰底，深红只会在边缘漏一条。
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background"/>
-    <foreground android:drawable="@drawable/ic_launcher_foreground_alt"/>
-    <monochrome android:drawable="@drawable/ic_launcher_monochrome_alt" />
+    <background android:drawable="@color/ic_launcher_background_white"/>
+    <foreground android:drawable="@mipmap/ic_launcher_alt_foreground"/>
+    <monochrome android:drawable="@mipmap/ic_launcher_alt_monochrome"/>
 </adaptive-icon>
