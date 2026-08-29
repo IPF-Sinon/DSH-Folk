@@ -108,7 +108,12 @@ object DshRuntime {
      * UninitializedPropertyAccessException）。
      */
     fun init(context: Context) {
-        if (!::appContext.isInitialized) appContext = context.applicationContext
+        if (!::appContext.isInitialized) {
+            appContext = context.applicationContext
+            // 进程重启后旧日志不该残留：清一次，让启动日志按「本次运行」呈现。
+            // startServer() 里还会再清一次，这里主要覆盖「只开 App 不启动服务」的情况。
+            clearLog()
+        }
     }
 
     /** Context 是否已绑定。未绑定时所有读接口给默认值而不是抛异常。 */

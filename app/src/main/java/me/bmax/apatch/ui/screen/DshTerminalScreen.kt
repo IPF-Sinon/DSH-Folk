@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -138,6 +140,8 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
     var ctrlDown by remember { mutableStateOf(false) }
     var altDown by remember { mutableStateOf(false) }
     var terminalView by remember { mutableStateOf<TerminalView?>(null) }
+    // 原地重启时 +1，用 key 强制重建 AndroidView 以便 attachOrStart 起一个新 PTY
+    var sessionGen by remember { mutableIntStateOf(0) }
 
     val installed = remember { DshEnv.isRuntimeInstalled(context) }
     val main = remember { Handler(Looper.getMainLooper()) }
@@ -190,9 +194,10 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
                         )
                     }
                     IconButton(onClick = {
-                        DshPtySession.shutdown()
-                        showToast(context, R.string.dsh_term_session_ended)
-                        navigator.popBackStack()
+                        // 原地重启：收旧会话 + 重建视图，别把用户弹回上一页
+                        DshPtySession.restartQuietly()
+                        sessionGen++
+                        showToast(context, R.string.dsh_term_restarted)
                     }) {
                         Icon(
                             Icons.Outlined.RestartAlt,
@@ -217,19 +222,22 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
             return@Scaffold
         }
 
-        Column(Modifier.fillMaxSize().padding(innerPadding)) {
+        Column(Modifier.fillMaxSize().padding(innerPadding).imePadding()) {
             // 不透明 Surface：开了自定义背景图时，MaterialTheme 的 background 是
             // Color.Transparent，背景图会直接透到终端字符后面。
             Surface(
                 color = Color(TERM_BG),
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { ctx ->
-                        TerminalView(ctx, null).also { view ->
-                            terminalView = view
-                            view.setBackgroundColor(TERM_BG)
+                key(sessionGen) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            TerminalView(ctx, null).also { view ->
+                                terminalView = view
+                                view.isFocusable = true
+                                view.isFocusableInTouchMode = true
+                                view.setBackgroundColor(TERM_BG)
                             view.setTextSize(
                                 TypedValue.applyDimension(
                                     TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat(),
@@ -314,6 +322,7 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
                         }
                     },
                 )
+                }
             }
 
             // 扩展键条

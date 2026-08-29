@@ -4,6 +4,7 @@ import android.app.Activity.RESULT_OK
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,8 +16,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,17 +33,20 @@ import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +67,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
 import me.bmax.apatch.ui.component.DshPluginDetailSheet
@@ -68,10 +78,16 @@ import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 
 /**
- * 插件商店（dsh-market）。
+ * 插件商店。
  *
- * 目录来自 dsh-market.com，下载量取自 npm registry，星标取自 GitHub —— 三者独立，
- * 任一不可用时对应标签显示「—」而不是让整页失败。
+ * 数据源是 npm 上同时打 `dsh-plugin` 与 `dsh` 两个 keyword 的包（官方商店「全部 (2.5k)」
+ * 就是它，每页 24 条），不是 dsh-market 的 44 条精选目录。分类 = 更窄的第三个 npm keyword，
+ * 走服务端分页（`keywords:a,b,c` 是 AND）。
+ *
+ * 列表用瀑布流（双列 staggered grid）+ 滚动到底部自动加载下一页，首屏只拉一页，
+ * 避免一次性 2500+ 条把列表渲染拖垮。下载量/星标仍是「未知 → 惰性补齐」，
+ * 不为一页之外的东西发额外请求。
+ *
  * 右下角 FAB 为**本地安装**：选一个 npm 包 tarball（.tgz），复制进 rootfs 后交给 dsh plugin add。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,8 +99,13 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        if (viewModel.catalog.isEmpty()) viewModel.refresh()
+    // 未装运行时：既不查已装列表、也不发网络请求，直接引导去首页。
+    val runtimeInstalled = remember { DshEnv.isRuntimeInstalled(context) }
+
+    LaunchedEffect(runtimeInstalled) {
+        if (!runtimeInstalled) return@LaunchedEffect
+        viewModel.loadInstalledForStore()
+        if (viewModel.storeItems.isEmpty()) viewModel.loadStore(reset = true)
     }
 
     var detail by remember { mutableStateOf<DshPlugin?>(null) }
@@ -126,7 +147,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
                 onClearClick = { viewModel.search = "" },
                 onBackClick = { navigator.popBackStack() },
                 dropdownContent = {
-                    IconButton(onClick = { viewModel.refresh() }) {
+                    IconButton(onClick = { viewModel.loadStore(reset = true) }) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "Refresh")
                     }
                 },
@@ -152,69 +173,162 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
             }
         },
     ) { innerPadding ->
-        // 已安装判定按 npm 包名：目录 id 与包名不一定相同（dsh-tui vs @deepseek-harness-tui/dsh-tui）
-        val installedPkgs = remember(viewModel.plugins) { viewModel.plugins.map { it.pkg }.toSet() }
-        val query = viewModel.search
-        val list = if (query.isBlank()) viewModel.catalog else viewModel.catalog.filter {
-            it.id.contains(query, true) || it.name.contains(query, true) ||
-                it.description.contains(query, true)
+        if (!runtimeInstalled) {
+            DshRuntimeNeeded(
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                onGoHome = { navigator.popBackStack() },
+            )
+            return@Scaffold
         }
-
-        Column(Modifier.fillMaxSize()) {
-            if (viewModel.isRefreshing) {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = innerPadding.calculateTopPadding()),
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            CategoryRow(viewModel)
+            val total = viewModel.storeTotal
+            if (total > 0L) {
+                Text(
+                    text = stringResource(R.string.dsh_plugin_total, formatCount(total)),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (list.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    // 三态分开：正在拉 / 拉不到目录 / 目录有但搜索没命中。
-                    // 原来只判 list.isEmpty()，而 list 是过滤后的结果 —— 于是搜不到
-                    // 任何插件时会误报「暂时取不到插件目录，请检查网络」。
-                    Text(
-                        text = when {
-                            viewModel.isRefreshing ->
-                                stringResource(R.string.dsh_plugin_catalog_loading)
-                            viewModel.catalog.isNotEmpty() && query.isNotBlank() ->
-                                stringResource(R.string.dsh_plugin_no_match, query)
-                            else -> stringResource(R.string.dsh_plugin_catalog_failed)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            StoreGrid(
+                viewModel = viewModel,
+                installedPkgs = viewModel.plugins.map { it.pkg }.toSet(),
+                onInstall = { pkg -> viewModel.install(pkg) },
+                onOpenDetail = { detail = it },
+                onOpenRepo = { openPluginRepo(context, it) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryRow(viewModel: DshPluginViewModel) {
+    val chipColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 1f)
+    )
+    Row(
+        modifier = Modifier
+            .horizontalScroll(rememberScrollState())
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        FilterChip(
+            selected = viewModel.storeCategory.isBlank(),
+            onClick = { viewModel.selectStoreCategory("") },
+            label = { Text(stringResource(R.string.dsh_plugin_category_all)) },
+            colors = chipColors,
+        )
+        DshPluginRepo.categories().forEach { cat ->
+            FilterChip(
+                selected = viewModel.storeCategory == cat.slug,
+                onClick = { viewModel.selectStoreCategory(cat.slug) },
+                label = { Text(stringResource(cat.label)) },
+                colors = chipColors,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StoreGrid(
+    viewModel: DshPluginViewModel,
+    installedPkgs: Set<String>,
+    onInstall: (String) -> Unit,
+    onOpenDetail: (DshPlugin) -> Unit,
+    onOpenRepo: (DshPlugin) -> Unit,
+) {
+    val gridState = rememberLazyStaggeredGridState()
+    val query = viewModel.search
+    // 搜索是本地过滤（npm 无法把自由文本和 keywords: 限定词用 AND 组合），
+    // 过滤的是已累积的条目；继续往下滚会再加载下一页，命中会越来越多。
+    val list = if (query.isBlank()) viewModel.storeItems else viewModel.storeItems.filter {
+        it.id.contains(query, true) || it.name.contains(query, true) ||
+            it.description.contains(query, true)
+    }
+
+    // 滚到倒数第 6 项时预取下一页；搜索态同样允许继续翻页，好找到更多命中。
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            viewModel.storeItems.isNotEmpty() &&
+                !viewModel.storeEndReached &&
+                last >= viewModel.storeItems.size - 6
+        }
+    }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) viewModel.loadStore()
+    }
+
+    when {
+        viewModel.storeRefreshing && viewModel.storeItems.isEmpty() -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+        list.isEmpty() -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = when {
+                        viewModel.storeRefreshing ->
+                            stringResource(R.string.dsh_plugin_catalog_loading)
+                        query.isNotBlank() ->
+                            stringResource(R.string.dsh_plugin_no_match, query)
+                        else -> stringResource(R.string.dsh_plugin_catalog_failed)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        else -> {
+            LazyVerticalStaggeredGrid(
+                columns = StaggeredGridCells.Adaptive(minSize = 160.dp),
+                state = gridState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalItemSpacing = 12.dp,
+            ) {
+                items(list, key = { it.id }) { plugin ->
+                    StorePluginTile(
+                        plugin = plugin,
+                        installed = plugin.pkg in installedPkgs,
+                        onInstall = { onInstall(plugin.pkg) },
+                        onOpenRepo = { onOpenRepo(plugin) },
+                        onOpenDetail = { onOpenDetail(plugin) },
                     )
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        top = if (viewModel.isRefreshing) 8.dp else innerPadding.calculateTopPadding() + 8.dp,
-                        start = 16.dp,
-                        end = 16.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(list, key = { it.id }) { plugin ->
-                        StorePluginCard(
-                            plugin = plugin,
-                            installed = plugin.pkg.isNotEmpty() && plugin.pkg in installedPkgs,
-                            onInstall = { viewModel.install(plugin.pkg) },
-                            onOpenRepo = {
-                                openPluginRepo(context, plugin) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } }
-                            },
-                            onOpenDetail = { detail = plugin },
-                        )
+                if (viewModel.storeLoadingMore) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                stringResource(R.string.dsh_plugin_loading_more),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                    item { HomeBottomSpacer() }
                 }
+                item(span = StaggeredGridItemSpan.FullLine) { HomeBottomSpacer() }
             }
         }
     }
 }
 
 @Composable
-private fun StorePluginCard(
+private fun StorePluginTile(
     plugin: DshPlugin,
     installed: Boolean,
     onInstall: () -> Unit,
@@ -224,50 +338,20 @@ private fun StorePluginCard(
     Card(
         onClick = onOpenDetail,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ModuleLabel(
-                            text = "↓ " + formatCount(plugin.downloads),
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                        ModuleLabel(
-                            text = "★ " + formatCount(plugin.stars),
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        if (plugin.likes >= 0) {
-                            ModuleLabel(
-                                text = stringResource(
-                                    R.string.dsh_plugin_likes,
-                                    formatCount(plugin.likes),
-                                ),
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                            )
-                        }
-                        if (plugin.version.isNotEmpty()) {
-                            ModuleLabel(
-                                text = "v${plugin.version}",
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = plugin.name,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -275,19 +359,20 @@ private fun StorePluginCard(
                     if (plugin.author.isNotEmpty()) {
                         Text(
                             text = plugin.author,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
-                Spacer(Modifier.size(12.dp))
-                // 目录里 13/41 条没登记 npm 包名，装不了 —— 但仓库地址都有。
-                // 给一个永远点不动的下载键等于死路，这里直接换成「打开仓库」。
+                // 商店条目都是 npm 包，可一键装；「打开仓库」只在极少数没登记 npm 的
+                // 精选条目里兜底（这里不会出现，保留 onOpenRepo 以防万一）。
                 val canOpenRepo = plugin.homepage.isNotEmpty() || plugin.repo.isNotEmpty()
                 FilledTonalIconButton(
                     onClick = if (plugin.installable) onInstall else onOpenRepo,
                     enabled = if (plugin.installable) !installed else canOpenRepo,
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(40.dp),
                 ) {
                     Icon(
                         imageVector = when {
@@ -305,12 +390,27 @@ private fun StorePluginCard(
                     )
                 }
             }
-            if (!plugin.installable) {
-                Text(
-                    text = stringResource(R.string.dsh_plugin_no_npm),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ModuleLabel(
+                    text = "↓ " + formatCount(plugin.downloads),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
+                ModuleLabel(
+                    text = "★ " + formatCount(plugin.stars),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                if (plugin.version.isNotEmpty()) {
+                    ModuleLabel(
+                        text = "v${plugin.version}",
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             if (plugin.description.isNotEmpty()) {
                 Text(

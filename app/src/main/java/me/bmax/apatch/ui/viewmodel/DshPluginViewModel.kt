@@ -33,6 +33,34 @@ class DshPluginViewModel : ViewModel() {
 
     var search by mutableStateOf("")
 
+    // ---- 商店：npm 关键字枚举 + 瀑布流分页 ----
+    /** 已累积的商店条目（按 npm 包名去重）。 */
+    var storeItems by mutableStateOf<List<DshPlugin>>(emptyList())
+        private set
+
+    /** npm 返回的总条数（用于「全部 (2.5k)」这类展示）。 */
+    var storeTotal by mutableStateOf(0L)
+        private set
+
+    /** 首屏/切分类的整页刷新中。 */
+    var storeRefreshing by mutableStateOf(false)
+        private set
+
+    /** 滚动到底部加载下一页中。 */
+    var storeLoadingMore by mutableStateOf(false)
+        private set
+
+    /** 当前分类 slug（空 = 全部）。 */
+    var storeCategory by mutableStateOf("")
+        private set
+
+    /** 是否已翻到最后一页。 */
+    val storeEndReached: Boolean
+        get() = storeTotal > 0L && storeItems.size.toLong() >= storeTotal
+
+    /** 商店加载的世代号：reset 时自增，过期的在途请求据此丢弃，防切分类竞态。 */
+    private var storeEpoch = 0
+
     /** 最近一次操作输出（安装/卸载日志尾巴），供 snackbar / 对话框展示。 */
     var lastOutput by mutableStateOf("")
         private set
@@ -136,6 +164,59 @@ class DshPluginViewModel : ViewModel() {
         }
     }
 
+    /** 商店页补一份已安装列表，仅用于「已安装」角标，不发线上目录请求。 */
+    fun loadInstalledForStore() {
+        if (plugins.isNotEmpty()) return
+        viewModelScope.launch {
+            plugins = withContext(Dispatchers.IO) { DshPluginRepo.listInstalled() }
+        }
+    }
+
+    /** 切换商店分类：清空累积并重新拉第一页。 */
+    fun selectStoreCategory(category: String) {
+        if (storeCategory == category) return
+        storeCategory = category
+        loadStore(reset = true)
+    }
+
+    /**
+     * 加载商店一页。`reset = true` 重拉第一页（首屏/切分类），否则在尾部追加下一页。
+     *
+     * 用「累加 + 按包名去重」而不是替换：npm 索引随时在漂，重拉同一段偏移可能
+     * 前后两次返回略有不同，去重保证不重复渲染同一个包。
+     */
+    fun loadStore(reset: Boolean = false) {
+        if (reset) {
+            // 换代并清空：在途的旧分类/旧分页请求做完后会被判定为过期而丢弃
+            storeEpoch++
+            storeItems = emptyList()
+            storeTotal = 0L
+        }
+        // 追加下一页时才受这些约束；reset 必须总是能发起（切分类要能打断在途加载）
+        if (!reset && (storeRefreshing || storeLoadingMore || storeEndReached)) return
+        if (reset) storeRefreshing = true else storeLoadingMore = true
+        val epoch = storeEpoch
+        val cat = storeCategory
+        val from = if (reset) 0 else storeItems.size
+        viewModelScope.launch {
+            try {
+                val page = withContext(Dispatchers.IO) {
+                    DshPluginRepo.searchPlugins(cat, from, STORE_PAGE_SIZE)
+                }
+                if (epoch != storeEpoch) return@launch
+                val seen = storeItems.mapTo(mutableSetOf()) { it.id }
+                storeItems = storeItems + page.items.filterNot { it.id in seen }
+                storeTotal = page.total
+            } finally {
+                // 过期请求不碰旗标，免得把新一轮加载的进度条提前关掉
+                if (epoch == storeEpoch) {
+                    storeRefreshing = false
+                    storeLoadingMore = false
+                }
+            }
+        }
+    }
+
     fun install(pkg: String, version: String = "", onDone: (String) -> Unit = {}) {
         run(pkg, { DshPluginRepo.install(pkg, version, it) }, onDone)
     }
@@ -211,5 +292,8 @@ class DshPluginViewModel : ViewModel() {
     private companion object {
         /** 安装日志保留行数上限：pnpm 能刷出上万行，全留会拖垮列表渲染。 */
         const val MAX_LOG_LINES = 400
+
+        /** 商店每页条数（与官方「每页 24」一致，首屏只拉这一页）。 */
+        const val STORE_PAGE_SIZE = 24
     }
 }

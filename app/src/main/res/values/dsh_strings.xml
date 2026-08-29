@@ -16,6 +16,7 @@
     <string name="dsh_boot_log">Startup log</string>
     <string name="dsh_copy_log">Copy log</string>
     <string name="dsh_log_copied">Log copied</string>
+    <string name="dsh_export_log">Export log</string>
     <string name="dsh_open_webui">Open Web UI</string>
     <!-- 内置 WebUI 容器 -->
     <string name="dsh_webui_reload">Reload</string>
@@ -58,6 +59,8 @@
     <string name="dsh_status">Status</string>
     <string name="dsh_runtime_version">Runtime</string>
     <string name="dsh_web_port">Port</string>
+    <string name="dsh_rootfs_size">Container size</string>
+    <string name="dsh_webui_address">Web UI</string>
 
     <!-- 运行方式 -->
     <string name="dsh_mode_proot" translatable="false">proot</string>
@@ -98,6 +101,7 @@
     <string name="dsh_term_font_smaller">Smaller font</string>
     <string name="dsh_term_font_larger">Larger font</string>
     <string name="dsh_term_restart">Restart session</string>
+    <string name="dsh_term_restarted">Session restarted</string>
     <string name="dsh_term_session_ended">Session ended, tap restart to reopen</string>
     <string name="dsh_term_not_ready">Runtime is not installed yet. Go to Home and tap Start.</string>
 
@@ -303,4 +307,46 @@
     <string name="dsh_runtime_reinstall_confirm_title">Reinstall the runtime?</string>
     <string name="dsh_runtime_reinstall_confirm_text">This downloads the runtime again (about 140 MB) and overwrites the container. Files under /root/.dsh — installed plugins, ADB keys and your DSH configuration — are inside that container and will be lost. The service stops first.</string>
     <string name="dsh_runtime_reinstall_go">Reinstall</string>
+
+    <!-- 插件商店：npm 关键字枚举 + 分页 -->
+    <string name="dsh_plugin_category_all">All</string>
+    <string name="dsh_plugin_total">%1$s plugins</string>
+    <string name="dsh_plugin_needs_runtime">Install the runtime on the home page first, then browse the plugin store.</string>
+    <string name="dsh_plugin_go_home">Go to Home</string>
+    <string name="dsh_plugin_loading_more">Loading more…</string>
+    <string name="dsh_plugin_cat_agent">AGI Architecture</string>
+    <string name="dsh_plugin_cat_ui">UI Enhancement</string>
+    <string name="dsh_plugin_cat_usage">Usage &amp; Billing</string>
+    <string name="dsh_plugin_cat_theme">Theme &amp; Appearance</string>
+    <string name="dsh_plugin_cat_llm">Model &amp; Account</string>
+    <string name="dsh_plugin_cat_im">Identity &amp; Chat</string>
+    <string name="dsh_plugin_cat_chat">Chat &amp; Messaging</string>
+    <string name="dsh_plugin_cat_memory">Memory</string>
+    <string name="dsh_plugin_cat_mcp">Tools &amp; Capabilities</string>
+    <string name="dsh_plugin_cat_web_search">Browser &amp; Web</string>
+    <string name="dsh_plugin_cat_vision">Vision &amp; Multimodal</string>
+    <string name="dsh_plugin_cat_audio">Voice &amp; Audio</string>
+    <string name="dsh_plugin_cat_document">Document &amp; Rendering</string>
+    <string name="dsh_plugin_cat_skills">Skill Packs</string>
+    <string name="dsh_plugin_cat_workflow">Workflow &amp; Automation</string>
+    <string name="dsh_plugin_cat_git">Git &amp; Code Review</string>
+    <string name="dsh_plugin_cat_notification">Notification &amp; Integration</string>
+    <string name="dsh_plugin_cat_terminal">Dev &amp; Runtime</string>
+    <string name="dsh_plugin_cat_security">Security &amp; Permission</string>
+    <string name="dsh_plugin_cat_mobile">Remote &amp; Mobile</string>
+    <string name="dsh_plugin_cat_marketplace">Market &amp; Management</string>
+    <string name="dsh_plugin_cat_game">Entertainment</string>
+
+    <!-- 权限通道选项说明 / 无线 ADB 断开 -->
+    <string name="dsh_perm_prefer_root_desc">Prefer su (Magisk / KernelSU / APatch)</string>
+    <string name="dsh_perm_prefer_shizuku_desc">Prefer Shizuku / Sui shell permission</string>
+    <string name="dsh_perm_prefer_adb_desc">Prefer in-container wireless ADB</string>
+    <string name="dsh_perm_prefer_unavailable">(currently unavailable)</string>
+    <string name="dsh_perm_shizuku_uid_other">uid %1$s</string>
+    <string name="dsh_adb_pair_with_deps">Install deps &amp; pair</string>
+    <string name="dsh_adb_disconnect">Disconnect</string>
+    <string name="dsh_adb_disconnect_confirm_title">Disconnect wireless ADB?</string>
+    <string name="dsh_adb_disconnect_confirm_text">This removes the paired key; you\'ll need to pair again.</string>
+    <string name="dsh_adb_disconnected">Disconnected</string>
+    <string name="dsh_adb_disconnect_failed">Disconnect failed</string>
 </resources>

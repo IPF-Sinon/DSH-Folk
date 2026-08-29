@@ -317,15 +317,19 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                         AdbBridge.setGranted(context, AdbBridge.ShellGrant.ROOT, on)
                         adbRootAllowed = AdbBridge.granted(context, AdbBridge.ShellGrant.ROOT)
                     },
-                    onInstallAdbDeps = {
+                    onDisconnectAdb = {
                         adbBusy = true
                         scope.launch(Dispatchers.IO) {
                             val out = runCatching {
-                                AdbBridge.inject(context.applicationContext)
-                                AdbBridge.installDeps(context.applicationContext)
-                            }.getOrElse { it.message ?: "install failed" }
+                                AdbBridge.disconnect(context.applicationContext)
+                            }.getOrDefault("")
+                            PermissionManager.refresh(context.applicationContext)
                             withContext(Dispatchers.Main) {
-                                adbOutput = out
+                                adbOutput = if (out.contains("DISCONNECTED")) {
+                                    context.getString(R.string.dsh_adb_disconnected)
+                                } else {
+                                    context.getString(R.string.dsh_adb_disconnect_failed)
+                                }
                                 adbBusy = false
                             }
                         }

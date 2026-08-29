@@ -12,6 +12,7 @@
     <string name="dsh_boot_log">启动日志</string>
     <string name="dsh_copy_log">复制日志</string>
     <string name="dsh_log_copied">日志已复制</string>
+    <string name="dsh_export_log">导出日志</string>
     <string name="dsh_open_webui">打开 Web 界面</string>
     <!-- 内置 WebUI 容器 -->
     <string name="dsh_webui_reload">刷新</string>
@@ -54,6 +55,8 @@
     <string name="dsh_status">状态</string>
     <string name="dsh_runtime_version">运行时</string>
     <string name="dsh_web_port">端口</string>
+    <string name="dsh_rootfs_size">容器体积</string>
+    <string name="dsh_webui_address">Web 界面</string>
 
     <string name="dsh_about_powered_by" translatable="false">DeepSeek Harness · Node.js · proot</string>
 
@@ -85,6 +88,7 @@
     <string name="dsh_term_font_smaller">缩小字号</string>
     <string name="dsh_term_font_larger">放大字号</string>
     <string name="dsh_term_restart">重启会话</string>
+    <string name="dsh_term_restarted">会话已重启</string>
     <string name="dsh_term_session_ended">会话已结束，点右上角重启</string>
     <string name="dsh_term_not_ready">运行时还没装好。回到主页点「启动」下载安装后再来。</string>
 
@@ -285,4 +289,46 @@
     <string name="dsh_runtime_reinstall_confirm_title">重装运行时？</string>
     <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并覆盖容器。/root/.dsh 下的东西 —— 已装的插件、ADB 密钥、你的 DSH 配置 —— 都在这个容器里，会一并丢失。开始前会先停止服务。</string>
     <string name="dsh_runtime_reinstall_go">重装</string>
+
+    <!-- 插件商店：npm 关键字枚举 + 分页 -->
+    <string name="dsh_plugin_category_all">全部</string>
+    <string name="dsh_plugin_total">共 %1$s 个插件</string>
+    <string name="dsh_plugin_needs_runtime">请先在首页安装运行时，再浏览插件商店。</string>
+    <string name="dsh_plugin_go_home">去首页安装</string>
+    <string name="dsh_plugin_loading_more">加载更多…</string>
+    <string name="dsh_plugin_cat_agent">AGI 架构探索</string>
+    <string name="dsh_plugin_cat_ui">UI 增强</string>
+    <string name="dsh_plugin_cat_usage">用量与计费</string>
+    <string name="dsh_plugin_cat_theme">主题与外观</string>
+    <string name="dsh_plugin_cat_llm">模型与账号接入</string>
+    <string name="dsh_plugin_cat_im">身份与通信</string>
+    <string name="dsh_plugin_cat_chat">会话与消息</string>
+    <string name="dsh_plugin_cat_memory">记忆</string>
+    <string name="dsh_plugin_cat_mcp">工具与能力</string>
+    <string name="dsh_plugin_cat_web_search">浏览器与网页</string>
+    <string name="dsh_plugin_cat_vision">视觉与多模态</string>
+    <string name="dsh_plugin_cat_audio">语音与音频</string>
+    <string name="dsh_plugin_cat_document">文档与渲染</string>
+    <string name="dsh_plugin_cat_skills">技能包</string>
+    <string name="dsh_plugin_cat_workflow">工作流与自动化</string>
+    <string name="dsh_plugin_cat_git">Git 与代码评审</string>
+    <string name="dsh_plugin_cat_notification">通知与集成</string>
+    <string name="dsh_plugin_cat_terminal">开发与运行时</string>
+    <string name="dsh_plugin_cat_security">安全与权限</string>
+    <string name="dsh_plugin_cat_mobile">远程与移动端</string>
+    <string name="dsh_plugin_cat_marketplace">插件市场与管理</string>
+    <string name="dsh_plugin_cat_game">娱乐</string>
+
+    <!-- 权限通道选项说明 / 无线 ADB 断开 -->
+    <string name="dsh_perm_prefer_root_desc">优先用 su（Magisk / KernelSU / APatch）</string>
+    <string name="dsh_perm_prefer_shizuku_desc">优先用 Shizuku / Sui 的 shell 权限</string>
+    <string name="dsh_perm_prefer_adb_desc">优先用容器内的无线 ADB</string>
+    <string name="dsh_perm_prefer_unavailable">（当前不可用）</string>
+    <string name="dsh_perm_shizuku_uid_other">uid %1$s</string>
+    <string name="dsh_adb_pair_with_deps">安装依赖并配对</string>
+    <string name="dsh_adb_disconnect">断开</string>
+    <string name="dsh_adb_disconnect_confirm_title">断开无线 ADB？</string>
+    <string name="dsh_adb_disconnect_confirm_text">会删除已配对的密钥，之后需要重新配对才能使用。</string>
+    <string name="dsh_adb_disconnected">已断开配对</string>
+    <string name="dsh_adb_disconnect_failed">断开失败</string>
 </resources>

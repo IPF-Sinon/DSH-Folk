@@ -112,8 +112,8 @@ fun FunctionSettingsContent(
     onAdbShellAllowedChange: (Boolean) -> Unit,
     adbRootAllowed: Boolean,
     onAdbRootAllowedChange: (Boolean) -> Unit,
-    onInstallAdbDeps: () -> Unit,
     onPair: () -> Unit,
+    onDisconnectAdb: () -> Unit,
     onOpenDevSettings: () -> Unit,
     flat: Boolean = false,
     highlightKey: String? = null,
@@ -375,21 +375,23 @@ fun FunctionSettingsContent(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    val shizukuUidLabel = when (perm.shizukuUid) {
-                        0 -> stringResource(R.string.dsh_perm_shizuku_uid_root)
-                        2000 -> stringResource(R.string.dsh_perm_shizuku_uid_shell)
-                        else -> "uid ${perm.shizukuUid}"
+                    if (perm.shizukuGranted) {
+                        val shizukuUidLabel = when (perm.shizukuUid) {
+                            0 -> stringResource(R.string.dsh_perm_shizuku_uid_root)
+                            2000 -> stringResource(R.string.dsh_perm_shizuku_uid_shell)
+                            else -> stringResource(R.string.dsh_perm_shizuku_uid_other, perm.shizukuUid)
+                        }
+                        Text(
+                            text = stringResource(
+                                R.string.dsh_perm_shizuku_detail_uid,
+                                yesNo(perm.shizukuRunning),
+                                yesNo(perm.shizukuGranted),
+                                shizukuUidLabel,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    Text(
-                        text = stringResource(
-                            R.string.dsh_perm_shizuku_detail_uid,
-                            yesNo(perm.shizukuRunning),
-                            yesNo(perm.shizukuGranted),
-                            shizukuUidLabel,
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                     if (perm.channel == PermissionManager.Channel.NONE) {
                         Spacer(Modifier.height(6.dp))
                         Text(
@@ -417,21 +419,21 @@ fun FunctionSettingsContent(
                         selected = permPrefName == PermissionManager.PREF_ROOT,
                         enabled = true,
                         title = stringResource(R.string.dsh_perm_root),
-                        summary = stringResource(R.string.dsh_perm_hint_root),
+                        summary = permOptionSummary(R.string.dsh_perm_prefer_root_desc, perm.rootVerified),
                         onSelect = { onPermPrefChange(PermissionManager.PREF_ROOT) },
                     )
                     RuntimeOption(
                         selected = permPrefName == PermissionManager.PREF_SHIZUKU,
                         enabled = true,
                         title = stringResource(R.string.dsh_perm_shizuku),
-                        summary = stringResource(R.string.dsh_perm_hint_shizuku),
+                        summary = permOptionSummary(R.string.dsh_perm_prefer_shizuku_desc, perm.shizukuGranted),
                         onSelect = { onPermPrefChange(PermissionManager.PREF_SHIZUKU) },
                     )
                     RuntimeOption(
                         selected = permPrefName == PermissionManager.PREF_ADB,
                         enabled = true,
                         title = stringResource(R.string.dsh_perm_adb),
-                        summary = stringResource(R.string.dsh_perm_hint_adb),
+                        summary = permOptionSummary(R.string.dsh_perm_prefer_adb_desc, perm.adbPaired),
                         onSelect = { onPermPrefChange(PermissionManager.PREF_ADB) },
                     )
 
@@ -533,6 +535,7 @@ fun FunctionSettingsContent(
                     )
 
                     Spacer(Modifier.height(12.dp))
+                    var disconnectConfirming by remember { mutableStateOf(false) }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -541,10 +544,15 @@ fun FunctionSettingsContent(
                             onClick = onPair,
                             enabled = runtimeInstalled && !adbBusy && adbPairCode.isNotBlank(),
                         ) {
-                            Text(stringResource(R.string.dsh_adb_pair))
+                            Text(stringResource(R.string.dsh_adb_pair_with_deps))
                         }
-                        OutlinedButton(onClick = onInstallAdbDeps, enabled = runtimeInstalled && !adbBusy) {
-                            Text(stringResource(R.string.dsh_adb_install_deps))
+                        if (perm.adbPaired) {
+                            OutlinedButton(
+                                onClick = { disconnectConfirming = true },
+                                enabled = !adbBusy,
+                            ) {
+                                Text(stringResource(R.string.dsh_adb_disconnect))
+                            }
                         }
                         TextButton(onClick = onOpenDevSettings) {
                             Text(stringResource(R.string.dsh_adb_open_devsettings))
@@ -552,6 +560,26 @@ fun FunctionSettingsContent(
                         if (adbBusy) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         }
+                    }
+                    if (disconnectConfirming) {
+                        AlertDialog(
+                            onDismissRequest = { disconnectConfirming = false },
+                            title = { Text(stringResource(R.string.dsh_adb_disconnect_confirm_title)) },
+                            text = { Text(stringResource(R.string.dsh_adb_disconnect_confirm_text)) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    disconnectConfirming = false
+                                    onDisconnectAdb()
+                                }) {
+                                    Text(stringResource(R.string.dsh_adb_disconnect))
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { disconnectConfirming = false }) {
+                                    Text(stringResource(android.R.string.cancel))
+                                }
+                            },
+                        )
                     }
 
                     // 写操作授权：adb-shell.py 读 rootfs 里的标记文件，只读命令不受影响
@@ -697,3 +725,15 @@ internal fun sourceLabelRes(source: String): Int = when (source) {
 }
 
 private fun yesNo(b: Boolean): String = if (b) "✓" else "✗"
+
+/**
+ * 权限通道选项的副标题：中性说明 + 通道不可用时的「（当前不可用）」。
+ *
+ * 注意别复用 [R.string.dsh_perm_hint_root] 那组 —— 那是给首页卡描述「当前生效通道」
+ * 的断言（「已获得 root，完整能力」），当选项说明用就会变成无条件宣称已配对/已 root。
+ */
+@Composable
+private fun permOptionSummary(baseRes: Int, available: Boolean): String {
+    val base = stringResource(baseRes)
+    return if (available) base else base + "\n" + stringResource(R.string.dsh_perm_prefer_unavailable)
+}

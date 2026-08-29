@@ -34,6 +34,8 @@ object PermissionManager {
         val channel: Channel = Channel.NONE,
         /** 是否检测到 su 可执行（不代表已授权）。 */
         val suPresent: Boolean = false,
+        /** su 存在且已确认拿到 uid 0（验证或缓存通过）。 */
+        val rootVerified: Boolean = false,
         /** Shizuku 服务在跑（未必已授权本应用）。 */
         val shizukuRunning: Boolean = false,
         /** Shizuku 已授权本应用。 */
@@ -127,6 +129,7 @@ object PermissionManager {
         val s = Status(
             channel = channel,
             suPresent = su,
+            rootVerified = rootOk,
             shizukuRunning = shizukuRunning,
             shizukuGranted = shizukuGranted,
             adbPaired = adbPaired,

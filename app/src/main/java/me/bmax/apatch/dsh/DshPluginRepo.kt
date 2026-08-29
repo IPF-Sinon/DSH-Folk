@@ -14,6 +14,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import me.bmax.apatch.R
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -61,6 +62,21 @@ data class DshPlugin(
         get() = installed && version.isNotEmpty() && compareVersions(version, installedVersion) > 0
 }
 
+/** npm 关键字搜索的一页结果。 */
+data class NpmSearchPage(
+    val items: List<DshPlugin>,
+    val total: Long,
+)
+
+/**
+ * 插件商店分类。`slug` 是 npm keyword，服务端用它过滤（`keywords:dsh-plugin,dsh,<slug>`）。
+ * `label` 是对应的字符串资源 id。
+ */
+data class PluginCategory(
+    val slug: String,
+    val label: Int,
+)
+
 /**
  * DSH 插件数据源。
  *
@@ -80,6 +96,7 @@ object DshPluginRepo {
     private const val MARKET_STATS = "https://dsh-market.com/api/stats"
     private const val MARKET_DOWNLOADS = "https://dsh-market.com/api/npm-downloads"
     private const val NPM_SEARCH = "https://registry.npmjs.org/-/v1/search?size=100&text="
+    private const val NPM_SEARCH_BASE = "https://registry.npmjs.org/-/v1/search"
     private const val NPM_DOWNLOADS_POINT = "https://api.npmjs.org/downloads/point/last-week/"
 
     /** dsh 的 profile 名。web 界面就是这个 profile，插件必须装进它才会被加载。 */
@@ -190,6 +207,84 @@ object DshPluginRepo {
     }.getOrElse {
         Log.w(TAG, "npm 搜索回退失败: ${it.message}")
         emptyList()
+    }
+
+    /**
+     * 商店的分类列表，顺序即 tab 顺序（不含「全部」，由界面在开头单独加）。
+     *
+     * 每个分类对应一个 npm keyword —— 官方商店的「全部 (2.5k)」就是 npm 上同时打
+     * `dsh-plugin` 与 `dsh` 两个 keyword 的包（实测 2500+ 条），分类则是更窄的
+     * 第三个 keyword（AND）。这些 keyword 都实测有非零结果。
+     */
+    fun categories(): List<PluginCategory> = listOf(
+        PluginCategory("agent", R.string.dsh_plugin_cat_agent),
+        PluginCategory("ui", R.string.dsh_plugin_cat_ui),
+        PluginCategory("usage", R.string.dsh_plugin_cat_usage),
+        PluginCategory("theme", R.string.dsh_plugin_cat_theme),
+        PluginCategory("llm", R.string.dsh_plugin_cat_llm),
+        PluginCategory("im", R.string.dsh_plugin_cat_im),
+        PluginCategory("chat", R.string.dsh_plugin_cat_chat),
+        PluginCategory("memory", R.string.dsh_plugin_cat_memory),
+        PluginCategory("mcp", R.string.dsh_plugin_cat_mcp),
+        PluginCategory("web-search", R.string.dsh_plugin_cat_web_search),
+        PluginCategory("vision", R.string.dsh_plugin_cat_vision),
+        PluginCategory("audio", R.string.dsh_plugin_cat_audio),
+        PluginCategory("document", R.string.dsh_plugin_cat_document),
+        PluginCategory("skills", R.string.dsh_plugin_cat_skills),
+        PluginCategory("workflow", R.string.dsh_plugin_cat_workflow),
+        PluginCategory("git", R.string.dsh_plugin_cat_git),
+        PluginCategory("notification", R.string.dsh_plugin_cat_notification),
+        PluginCategory("terminal", R.string.dsh_plugin_cat_terminal),
+        PluginCategory("security", R.string.dsh_plugin_cat_security),
+        PluginCategory("mobile", R.string.dsh_plugin_cat_mobile),
+        PluginCategory("marketplace", R.string.dsh_plugin_cat_marketplace),
+        PluginCategory("game", R.string.dsh_plugin_cat_game),
+    )
+
+    /**
+     * 商店分页查询：npm 关键字枚举 + 服务端分页。
+     *
+     * 这是商店「全部 (2.5k) / 每页 24」的真正数据源，不是 [fetchMarket] 的 44 条精选。
+     * npm 的 `keywords:a,b` 是 AND 语义；分类 = 追加第三个 keyword，仍是 AND。
+     * 单页 `size` 上限 250，这里按调用方给的大小取，配合 `from` 偏移做瀑布流。
+     *
+     * 返回条目的 `id`/`pkg` 都是 npm 包名（商店条目按包名去重）。
+     */
+    suspend fun searchPlugins(
+        category: String = "",
+        from: Int = 0,
+        size: Int = 24,
+    ): NpmSearchPage = withContext(Dispatchers.IO) {
+        runCatching {
+            val kw = if (category.isBlank()) "keywords:dsh-plugin,dsh"
+            else "keywords:dsh-plugin,dsh,$category"
+            // Uri.encode 把逗号编码成 %2C，与 npm 期望的一致（空格 %20 也正确）
+            val url = "$NPM_SEARCH_BASE?size=$size&from=$from&text=" + Uri.encode(kw)
+            val json = httpGet(url) ?: return@runCatching NpmSearchPage(emptyList(), 0L)
+            val root = JSONObject(json)
+            val objs = root.optJSONArray("objects") ?: JSONArray()
+            val items = (0 until objs.length()).mapNotNull { i ->
+                val pkg = objs.optJSONObject(i)?.optJSONObject("package") ?: return@mapNotNull null
+                val name = pkg.optString("name")
+                if (name.isEmpty()) return@mapNotNull null
+                DshPlugin(
+                    id = name,
+                    pkg = name,
+                    name = name,
+                    version = pkg.optString("version"),
+                    description = pkg.optString("description"),
+                    author = pkg.optJSONObject("author")?.optString("name") ?: pkg.optString("author"),
+                    repo = normalizeRepo(pkg.optJSONObject("links")?.optString("repository") ?: ""),
+                    homepage = pkg.optJSONObject("links")?.optString("homepage") ?: "",
+                )
+            }
+            NpmSearchPage(items, root.optLong("total", 0L))
+        }.getOrElse { e ->
+            // runCatching 会连 CancellationException 一起吞掉，破坏结构化并发；这里显式重抛。
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Log.w(TAG, "npm 商店搜索失败: ${e.message}")
+            NpmSearchPage(emptyList(), 0L)
+        }
     }
 
     /** dsh-market 的整表周下载量（key 是 npm 包名）。 */

@@ -175,8 +175,18 @@ object LogStore {
         }
 
         private fun countDiskLines(): Long = runCatching {
-            if (!file.exists()) 0L
-            else file.readLines().size.toLong()
+            if (!file.exists()) return@runCatching 0L
+            // 逐块数换行符：readLines() 会为每一行分配一个 String，2MB 日志会上万次分配
+            file.inputStream().use { input ->
+                val buf = ByteArray(8192)
+                var lines = 0L
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    for (i in 0 until n) if (buf[i] == '\n'.code.toByte()) lines++
+                }
+                lines
+            }
         }.getOrDefault(0L)
 
         /** RandomAccessFile 从文件尾读取最后 n 行（进程重启后内存为空时兜底）。 */

@@ -144,6 +144,23 @@ object AdbBridge {
         }
     }
 
+    /**
+     * 取消无线 ADB 配对：删掉容器里的 adbkey（`adbPaired` 判据就是它）。
+     *
+     * 宿主侧直接删映射目录 + 容器侧再 rm 一遍，双保险。配对是无状态密钥，
+     * 删掉密钥即断开，无需发 `adb disconnect`。
+     */
+    fun disconnect(ctx: Context): String {
+        val hostKeys = java.io.File(DshEnv.dshHome(ctx), "adbkeys")
+        runCatching {
+            hostKeys.listFiles()?.forEach { it.delete() }
+            hostKeys.delete()
+        }
+        return DshRuntime.execRootfsForOutput(
+            "rm -rf /root/.dsh/adbkeys 2>/dev/null; echo DISCONNECTED", 30_000,
+        )
+    }
+
     private fun esc(s: String): String = s.replace("'", "'\\''")
 
     private fun readAsset(ctx: Context, name: String): String = runCatching {

@@ -1,8 +1,9 @@
 package me.bmax.apatch.ui.screen
 
+import android.content.ClipData
 import android.content.Context
-import android.os.Build
-import android.system.Os
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,19 +22,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Cached
 import androidx.compose.material.icons.outlined.CloudDownload
-import androidx.compose.material.icons.outlined.DeveloperBoard
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Layers
-import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -62,10 +62,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.io.File
 import me.bmax.apatch.APApplication
+import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshPhase
 import me.bmax.apatch.dsh.DshRuntime
@@ -75,7 +78,6 @@ import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.component.copyInfoToClipboard
 import me.bmax.apatch.ui.component.copyableInfo
 import me.bmax.apatch.ui.theme.BackgroundConfig
-import me.bmax.apatch.util.getSELinuxStatus
 import me.bmax.apatch.util.ui.showToast
 
 /**
@@ -294,36 +296,38 @@ data class DshInfoRow(val icon: ImageVector, val label: String, val value: Strin
 
 @Composable
 fun rememberDshInfoRows(state: DshHomeUiState): List<DshInfoRow> {
-    val hideFingerprint = APApplication.sharedPreferences.getBoolean("hide_fingerprint", false)
-
     val runtimeLabel = stringResource(R.string.dsh_runtime_version)
     val portLabel = stringResource(R.string.dsh_web_port)
     val modeLabel = stringResource(R.string.dsh_run_mode)
     val permLabel = stringResource(R.string.dsh_permission)
-    val deviceLabel = stringResource(R.string.home_device_info)
-    val kernelLabel = stringResource(R.string.home_kernel)
-    val systemLabel = stringResource(R.string.home_system_version)
-    val fingerprintLabel = stringResource(R.string.home_fingerprint)
-    val selinuxLabel = stringResource(R.string.home_selinux_status)
+    val sizeLabel = stringResource(R.string.dsh_rootfs_size)
+    val webLabel = stringResource(R.string.dsh_webui_address)
 
-    val kernelRelease = remember { Os.uname().release }
-    val selinux = getSELinuxStatus()
+    // 容器体积在安装后基本不变，只在「是否已安装」翻转时重算，别每次重组都走一遍磁盘扫描
+    val rootfsSize = remember(state.installed) {
+        if (state.installed) DshRuntime.rootfsSizeBytes() else 0L
+    }
 
     return buildList {
         state.version?.let { add(DshInfoRow(Icons.Outlined.Layers, runtimeLabel, it)) }
         add(DshInfoRow(Icons.Outlined.Speed, modeLabel, state.runtimeLabel))
         add(DshInfoRow(Icons.Outlined.Security, permLabel, state.permLabel))
+        if (state.installed) {
+            add(DshInfoRow(Icons.Outlined.Storage, sizeLabel, formatRootfsSize(rootfsSize)))
+        }
         if (state.isRunning) {
             add(DshInfoRow(Icons.Outlined.Info, portLabel, state.port.toString()))
+            add(DshInfoRow(Icons.Outlined.Language, webLabel, state.webUrl))
         }
-        add(DshInfoRow(Icons.Outlined.PhoneAndroid, deviceLabel, getDeviceInfo()))
-        add(DshInfoRow(Icons.Outlined.DeveloperBoard, kernelLabel, kernelRelease))
-        add(DshInfoRow(Icons.Outlined.Info, systemLabel, getSystemVersion()))
-        if (!hideFingerprint) {
-            add(DshInfoRow(Icons.Filled.Fingerprint, fingerprintLabel, Build.FINGERPRINT))
-        }
-        add(DshInfoRow(Icons.Outlined.Shield, selinuxLabel, selinux))
     }
+}
+
+/** 容器体积的可读写法（B / KB / MB / GB）。 */
+private fun formatRootfsSize(bytes: Long): String = when {
+    bytes < 1024 -> "${bytes}B"
+    bytes < 1024 * 1024 -> "${bytes / 1024}KB"
+    bytes < 1024L * 1024 * 1024 -> String.format("%.1fMB", bytes / (1024.0 * 1024))
+    else -> String.format("%.1fGB", bytes / (1024.0 * 1024 * 1024))
 }
 
 /**
@@ -442,11 +446,17 @@ internal fun DshLogCard() {
     val context = LocalContext.current
     var log by remember { mutableStateOf("") }
 
-    // 轮询而非监听：LogStore 的 tail 只读内存环形缓冲，开销极低
+    // 轮询而非监听：LogStore 的 tail 只读内存环形缓冲，开销极低。
+    // 内容没变就不写 state，避免每秒一次的重组；间隔 2s 进一步降低频率。
     LaunchedEffect(Unit) {
+        var last = ""
         while (true) {
-            log = withContext(Dispatchers.IO) { DshRuntime.tailLog(200) }
-            delay(1_000)
+            val next = withContext(Dispatchers.IO) { DshRuntime.tailLog(200) }
+            if (next != last) {
+                last = next
+                log = next
+            }
+            delay(2_000)
         }
     }
 
@@ -491,6 +501,24 @@ internal fun DshLogCard() {
                         modifier = Modifier.size(18.dp),
                     )
                 }
+                IconButton(onClick = {
+                    val uri = exportLogFile(context, log)
+                    val share = Intent(Intent.ACTION_SEND).apply {
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        type = "text/plain"
+                        clipData = ClipData.newRawUri(null, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(
+                        Intent.createChooser(share, context.getString(R.string.dsh_export_log)),
+                    )
+                }) {
+                    Icon(
+                        Icons.Outlined.Share,
+                        contentDescription = stringResource(R.string.dsh_export_log),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
             Box(
@@ -508,6 +536,15 @@ internal fun DshLogCard() {
             }
         }
     }
+}
+
+/** 把启动日志写成 cache 里的 txt，并返回可分享的 content:// URI。 */
+private fun exportLogFile(context: Context, log: String): Uri {
+    val dir = File(context.cacheDir, "dsh-logs")
+    dir.mkdirs()
+    val file = File(dir, "dsh-startup-${System.currentTimeMillis()}.txt")
+    file.writeText(log.ifEmpty { "(empty)" })
+    return FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.fileprovider", file)
 }
 
 

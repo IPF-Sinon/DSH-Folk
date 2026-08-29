@@ -71,6 +71,22 @@ class DshPtySession private constructor(listener: Listener) : TerminalSessionCli
         runCatching { session?.finishIfRunning() }
     }
 
+    /**
+     * 原地重启用：收掉旧会话但把监听器换成空实现，避免 `onSessionFinished` 把标题
+     * 刷成「会话已结束（退出码 …）」—— 新会话马上接管，用户看到的应是新标题。
+     */
+    fun finishQuietly() {
+        listener = object : Listener {
+            override fun onOutput() {}
+            override fun onTitle(title: String) {}
+            override fun onExit(status: Int) {}
+            override fun onCopy(text: String) {}
+            override fun onPasteRequest() {}
+            override fun onBell() {}
+        }
+        runCatching { session?.finishIfRunning() }
+    }
+
     // ==================== TerminalSessionClient ====================
 
     override fun onTextChanged(changedSession: TerminalSession) = listener.onOutput()
@@ -152,6 +168,13 @@ class DshPtySession private constructor(listener: Listener) : TerminalSessionCli
             val s = current
             current = null
             runCatching { s?.finish() }
+        }
+
+        /** 原地重启：清掉单例引用并安静收尾，宿主紧接着会用 [attachOrStart] 新起一个。 */
+        fun restartQuietly() {
+            val s = current
+            current = null
+            s?.finishQuietly()
         }
 
     }

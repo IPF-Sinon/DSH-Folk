@@ -62,6 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
 import me.bmax.apatch.dsh.DshRuntime
@@ -92,8 +93,10 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        if (viewModel.plugins.isEmpty()) viewModel.refresh()
+    val runtimeInstalled = remember { DshEnv.isRuntimeInstalled(context) }
+
+    LaunchedEffect(runtimeInstalled) {
+        if (runtimeInstalled && viewModel.plugins.isEmpty()) viewModel.refresh()
     }
 
     // 本地安装：容器内只看得到 rootfs 内的路径，所以先把用户选的 .tgz 落到
@@ -154,11 +157,18 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
             }
         },
     ) { innerPadding ->
-        DshPluginList(
-            innerPadding = innerPadding,
-            viewModel = viewModel,
-            snackBarHost = snackBarHost,
-        )
+        if (!runtimeInstalled) {
+            DshRuntimeNeeded(
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                onGoHome = { navigator.popBackStack() },
+            )
+        } else {
+            DshPluginList(
+                innerPadding = innerPadding,
+                viewModel = viewModel,
+                snackBarHost = snackBarHost,
+            )
+        }
     }
 
     // 安装/卸载进度：pnpm 可能跑几分钟，不能只在结束后弹一条 snackbar
@@ -188,6 +198,34 @@ internal fun PluginProgressHost(viewModel: DshPluginViewModel) {
             DshRuntime.restart()
         },
     )
+}
+
+/**
+ * 运行时未安装时的引导卡（已安装页与商店页共用）。
+ *
+ * 插件与商店都依赖容器里的 dsh：未装运行时既查不到已装插件，也不该发网络请求。
+ */
+@Composable
+internal fun DshRuntimeNeeded(
+    modifier: Modifier = Modifier,
+    onGoHome: () -> Unit,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = stringResource(R.string.dsh_plugin_needs_runtime),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 32.dp),
+        )
+        Spacer(Modifier.height(16.dp))
+        TextButton(onClick = onGoHome) {
+            Text(stringResource(R.string.dsh_plugin_go_home))
+        }
+    }
 }
 
 @Composable
