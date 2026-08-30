@@ -70,8 +70,6 @@
 
     <!-- SU Audit Log -->
 
-    <string name="settings_hide_apatch_card">Ocultar cartão Aprenda DSH-Folk</string>
-    <string name="settings_hide_apatch_card_summary">Ocultar o cartão informativo do DSH-Folk na tela inicial</string>
 
     <string name="send_log">Enviar logs</string>
     <string name="settings_clean_storage">Limpar dados do aplicativo</string>

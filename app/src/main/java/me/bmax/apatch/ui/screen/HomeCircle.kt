@@ -88,12 +88,6 @@ fun HomeScreenCircle(
 
         InfoCardCircle()
 
-        val hideAboutCard = me.bmax.apatch.APApplication.sharedPreferences
-            .getBoolean("hide_apatch_card", false)
-        if (!hideAboutCard) {
-            LearnMoreCardCircle()
-        }
-
         DshLogCard()
 
         HomeBottomSpacer()
@@ -302,35 +296,5 @@ fun TonalCard(
         shape = shape
     ) {
         content()
-    }
-}
-
-@Composable
-fun LearnMoreCardCircle() {
-    val uriHandler = LocalUriHandler.current
-
-    TonalCard {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    uriHandler.openUri("https://github.com/IPF-Sinon/DSH-Folk")
-                }
-                .padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = stringResource(R.string.dsh_learn_title),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.dsh_learn_desc),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-        }
     }
 }

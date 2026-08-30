@@ -70,8 +70,6 @@
 
     <!-- SU Audit Log -->
 
-    <string name="settings_hide_apatch_card">إخفاء بطاقة تعلم DSH-Folk</string>
-    <string name="settings_hide_apatch_card_summary">إخفاء بطاقة تعلم DSH-Folk في الشاشة الرئيسية</string>
 
     <string name="send_log">إرسال السجلات</string>
     <string name="settings_clean_storage">تنظيف بيانات التطبيق</string>

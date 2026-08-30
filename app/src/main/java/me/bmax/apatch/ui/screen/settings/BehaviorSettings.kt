@@ -17,7 +17,6 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -87,21 +86,6 @@ fun BehaviorSettingsContent(
             onCheckedChange = {
                 infoCopyEnabled = it
                 prefs.edit().putBoolean("enable_info_copy", it).apply()
-            }
-        )
-    }
-
-    item(key = "behavior_hide_apatch_card", visible = currentStyle != "focus") {
-        var hideApatchCard by remember { mutableStateOf(prefs.getBoolean("hide_apatch_card", false)) }
-        ToggleSettingCard(
-            flat = flat,
-            icon = Icons.Filled.VisibilityOff,
-            title = stringResource(id = R.string.settings_hide_apatch_card),
-            description = stringResource(id = R.string.settings_hide_apatch_card_summary),
-            checked = hideApatchCard,
-            onCheckedChange = {
-                hideApatchCard = it
-                prefs.edit().putBoolean("hide_apatch_card", it).apply()
             }
         )
     }

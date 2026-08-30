@@ -49,8 +49,6 @@
     <string name="settings_app_language">语言</string>
     <string name="system_default">系统默认</string>
 
-    <string name="settings_hide_apatch_card">隐藏"了解 DSH-Folk"卡片</string>
-    <string name="settings_hide_apatch_card_summary">隐藏首页的"了解 DSH-Folk"卡片</string>
     <string name="settings_grid_working_card_hide_check">隐藏状态图标</string>
     <string name="settings_grid_working_card_hide_check_summary">隐藏工作卡片上的对号或警告图标</string>
     <string name="settings_grid_working_card_hide_text">隐藏状态文字</string>

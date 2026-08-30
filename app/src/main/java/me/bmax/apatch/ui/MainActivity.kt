@@ -171,6 +171,7 @@ import me.bmax.apatch.ui.navigation.createNavTransitions
 import me.bmax.apatch.util.ui.navBarLiquefiable
 import me.bmax.apatch.util.ui.rememberNavBarGlassLiquidState
 import me.bmax.apatch.util.ui.isRealTimeBlurAvailable
+import me.bmax.apatch.util.ui.isImeVisible
 import me.bmax.apatch.util.ui.showToast
 
 class MainActivity : AppCompatActivity() {
@@ -687,6 +688,10 @@ class MainActivity : AppCompatActivity() {
                     )
 
                     Box(modifier = Modifier.fillMaxSize()) {
+                        // 键盘弹起时底栏被整块盖住，那 80dp 预留就变成内容与键盘之间
+                        // 的空隙（真机实测约 0.15 屏高）——此时收为 0，让页面自己的
+                        // imePadding() 单独负责 IME 那一份。
+                        val imeVisible = isImeVisible()
                         val baseContentModifier = Modifier
                             .navBarLiquefiable(
                                 if (shouldExposeContentToLiquid) floatingLiquidState else null
@@ -694,7 +699,7 @@ class MainActivity : AppCompatActivity() {
                             .then(
                                 when {
                                     isFloatingMode -> Modifier.nestedScroll(scrollConnection)
-                                    !useNavigationRail -> Modifier.padding(bottom = 80.dp)
+                                    !useNavigationRail && !imeVisible -> Modifier.padding(bottom = 80.dp)
                                     else -> Modifier
                                 }
                             )

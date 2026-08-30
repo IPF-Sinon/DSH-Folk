@@ -102,6 +102,8 @@ class DshHomeUiState internal constructor(
     val webUrl: String,
     val installed: Boolean,
     val runtimeId: String,
+    /** 容器体积（字节），0 = 还没量过（显示为「—」）。来自 prefs 缓存，不在组合期扫盘。 */
+    val rootfsSizeBytes: Long,
     val perm: PermissionManager.Status,
     /** 「每次询问」模式下请求弹选择框。 */
     private val onAskWebUi: () -> Unit,
@@ -194,6 +196,7 @@ fun ProvideDshHomeState(content: @Composable () -> Unit) {
             webUrl = runtime.webUrl,
             installed = runtime.installed,
             runtimeId = DshRuntime.runtimeId(),
+            rootfsSizeBytes = runtime.rootfsSizeBytes,
             perm = perm,
             onAskWebUi = { askWebUi = true },
         )
@@ -303,17 +306,12 @@ fun rememberDshInfoRows(state: DshHomeUiState): List<DshInfoRow> {
     val sizeLabel = stringResource(R.string.dsh_rootfs_size)
     val webLabel = stringResource(R.string.dsh_webui_address)
 
-    // 容器体积在安装后基本不变，只在「是否已安装」翻转时重算，别每次重组都走一遍磁盘扫描
-    val rootfsSize = remember(state.installed) {
-        if (state.installed) DshRuntime.rootfsSizeBytes() else 0L
-    }
-
     return buildList {
         state.version?.let { add(DshInfoRow(Icons.Outlined.Layers, runtimeLabel, it)) }
         add(DshInfoRow(Icons.Outlined.Speed, modeLabel, state.runtimeLabel))
         add(DshInfoRow(Icons.Outlined.Security, permLabel, state.permLabel))
         if (state.installed) {
-            add(DshInfoRow(Icons.Outlined.Storage, sizeLabel, formatRootfsSize(rootfsSize)))
+            add(DshInfoRow(Icons.Outlined.Storage, sizeLabel, formatRootfsSize(state.rootfsSizeBytes)))
         }
         if (state.isRunning) {
             add(DshInfoRow(Icons.Outlined.Info, portLabel, state.port.toString()))
@@ -322,8 +320,9 @@ fun rememberDshInfoRows(state: DshHomeUiState): List<DshInfoRow> {
     }
 }
 
-/** 容器体积的可读写法（B / KB / MB / GB）。 */
+/** 容器体积的可读写法；0 = 还没量出来。 */
 private fun formatRootfsSize(bytes: Long): String = when {
+    bytes <= 0L -> "—"
     bytes < 1024 -> "${bytes}B"
     bytes < 1024 * 1024 -> "${bytes / 1024}KB"
     bytes < 1024L * 1024 * 1024 -> String.format("%.1fMB", bytes / (1024.0 * 1024))

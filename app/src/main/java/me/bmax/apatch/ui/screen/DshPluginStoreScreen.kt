@@ -10,13 +10,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -46,7 +44,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,13 +77,16 @@ import me.bmax.apatch.util.ui.LocalSnackbarHost
 /**
  * 插件商店。
  *
- * 数据源是 npm 上同时打 `dsh-plugin` 与 `dsh` 两个 keyword 的包（官方商店「全部 (2.5k)」
- * 就是它，每页 24 条），不是 dsh-market 的 44 条精选目录。分类 = 更窄的第三个 npm keyword，
- * 走服务端分页（`keywords:a,b,c` 是 AND）。
+ * 数据源是**完整目录**（`awesome-dsh-plugin.com/plugins.json`，约 2600 条），与 DSH
+ * 官方市场插件同一条路径，国内回落 npm 包 `dsh-plugin-catalog`。
  *
- * 列表用瀑布流（双列 staggered grid）+ 滚动到底部自动加载下一页，首屏只拉一页，
- * 避免一次性 2500+ 条把列表渲染拖垮。下载量/星标仍是「未知 → 惰性补齐」，
- * 不为一页之外的东西发额外请求。
+ * 为什么不用 npm search 做服务端搜索：`text` 里 `keywords:` 之后的自由文本只影响
+ * **排序**、不做过滤 —— 实测 `keywords:dsh-plugin,dsh theme` 返回的 total 仍是 2577。
+ * 也就是说服务端给不出「某个词的全部命中」，只能给前 N 个最相关的。用户要的是
+ * 「能搜到全部插件」，所以整份目录取下来、在本地检索。
+ *
+ * 列表用瀑布流（staggered grid）—— Lazy 只组合可见项，2600 条不构成渲染压力，
+ * 因此不需要分页。下载量与 star 由目录自带，不再逐包打 npm / GitHub API。
  *
  * 右下角 FAB 为**本地安装**：选一个 npm 包 tarball（.tgz），复制进 rootfs 后交给 dsh plugin add。
  */
@@ -105,7 +105,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
     LaunchedEffect(runtimeInstalled) {
         if (!runtimeInstalled) return@LaunchedEffect
         viewModel.loadInstalledForStore()
-        if (viewModel.storeItems.isEmpty()) viewModel.loadStore(reset = true)
+        if (viewModel.storeAll.isEmpty()) viewModel.refreshCatalog()
     }
 
     var detail by remember { mutableStateOf<DshPlugin?>(null) }
@@ -113,8 +113,8 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
         DshPluginDetailSheet(
             plugin = p,
             onDismiss = { detail = null },
-            onInstall = { viewModel.install(p.pkg) },
-            onUpdate = { viewModel.install(p.pkg) },
+            onInstall = { viewModel.install(p.addSpec) },
+            onUpdate = { viewModel.install(p.addSpec) },
             onUninstall = { viewModel.uninstall(p.pkg) },
             onOpenRepo = { openPluginRepo(context, p) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },
         )
@@ -147,7 +147,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
                 onClearClick = { viewModel.search = "" },
                 onBackClick = { navigator.popBackStack() },
                 dropdownContent = {
-                    IconButton(onClick = { viewModel.loadStore(reset = true) }) {
+                    IconButton(onClick = { viewModel.refreshCatalog(force = true) }) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "Refresh")
                     }
                 },
@@ -186,21 +186,51 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
                 .padding(innerPadding)
         ) {
             CategoryRow(viewModel)
-            val total = viewModel.storeTotal
-            if (total > 0L) {
-                Text(
-                    text = stringResource(R.string.dsh_plugin_total, formatCount(total)),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            StoreStatusLine(viewModel)
             StoreGrid(
                 viewModel = viewModel,
                 installedPkgs = viewModel.plugins.map { it.pkg }.toSet(),
-                onInstall = { pkg -> viewModel.install(pkg) },
+                onInstall = { spec -> viewModel.install(spec) },
                 onOpenDetail = { detail = it },
                 onOpenRepo = { openPluginRepo(context, it) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },
+            )
+        }
+    }
+}
+
+/**
+ * 计数 + 离线提示。
+ *
+ * 显示「已显示 N / 共 M」而不是只显示总数：搜索现在覆盖全量目录，把两个数字
+ * 都摆出来，用户才看得见「搜的是全部，不是已加载的那一页」。
+ */
+@Composable
+private fun StoreStatusLine(viewModel: DshPluginViewModel) {
+    val total = viewModel.storeTotal
+    if (total <= 0) return
+    val shown = viewModel.storeItems.size
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Text(
+            text = if (shown == total) {
+                stringResource(R.string.dsh_plugin_total, formatCount(total.toLong()))
+            } else {
+                stringResource(
+                    R.string.dsh_plugin_shown_of_total,
+                    formatCount(shown.toLong()),
+                    formatCount(total.toLong()),
+                )
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (viewModel.storeOffline) {
+            Text(
+                text = stringResource(
+                    R.string.dsh_plugin_catalog_offline,
+                    viewModel.storeUpdated.ifEmpty { "?" },
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
             )
         }
     }
@@ -232,6 +262,17 @@ private fun CategoryRow(viewModel: DshPluginViewModel) {
                 colors = chipColors,
             )
         }
+        // 目录新增了 App 还没内置的分类时，用目录自带的标题补上，不必等 App 更新
+        val extra = viewModel.storeCategoryTitles.keys -
+            DshPluginRepo.categories().map { it.slug }.toSet()
+        extra.sorted().forEach { slug ->
+            FilterChip(
+                selected = viewModel.storeCategory == slug,
+                onClick = { viewModel.selectStoreCategory(slug) },
+                label = { Text(viewModel.storeCategoryTitles[slug] ?: slug) },
+                colors = chipColors,
+            )
+        }
     }
 }
 
@@ -244,29 +285,12 @@ private fun StoreGrid(
     onOpenRepo: (DshPlugin) -> Unit,
 ) {
     val gridState = rememberLazyStaggeredGridState()
+    // 分类与搜索的过滤都在 ViewModel 的 storeItems 里做，覆盖整份目录
+    val list = viewModel.storeItems
     val query = viewModel.search
-    // 搜索是本地过滤（npm 无法把自由文本和 keywords: 限定词用 AND 组合），
-    // 过滤的是已累积的条目；继续往下滚会再加载下一页，命中会越来越多。
-    val list = if (query.isBlank()) viewModel.storeItems else viewModel.storeItems.filter {
-        it.id.contains(query, true) || it.name.contains(query, true) ||
-            it.description.contains(query, true)
-    }
-
-    // 滚到倒数第 6 项时预取下一页；搜索态同样允许继续翻页，好找到更多命中。
-    val shouldLoadMore by remember {
-        derivedStateOf {
-            val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            viewModel.storeItems.isNotEmpty() &&
-                !viewModel.storeEndReached &&
-                last >= viewModel.storeItems.size - 6
-        }
-    }
-    LaunchedEffect(shouldLoadMore) {
-        if (shouldLoadMore) viewModel.loadStore()
-    }
 
     when {
-        viewModel.storeRefreshing && viewModel.storeItems.isEmpty() -> {
+        viewModel.storeRefreshing && viewModel.storeAll.isEmpty() -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
@@ -298,28 +322,11 @@ private fun StoreGrid(
                 items(list, key = { it.id }) { plugin ->
                     StorePluginTile(
                         plugin = plugin,
-                        installed = plugin.pkg in installedPkgs,
-                        onInstall = { onInstall(plugin.pkg) },
+                        installed = plugin.pkg.isNotEmpty() && plugin.pkg in installedPkgs,
+                        onInstall = { onInstall(plugin.addSpec) },
                         onOpenRepo = { onOpenRepo(plugin) },
                         onOpenDetail = { onOpenDetail(plugin) },
                     )
-                }
-                if (viewModel.storeLoadingMore) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(16.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            CircularProgressIndicator(Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                stringResource(R.string.dsh_plugin_loading_more),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
                 }
                 item(span = StaggeredGridItemSpan.FullLine) { HomeBottomSpacer() }
             }

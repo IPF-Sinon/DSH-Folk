@@ -60,8 +60,6 @@
     <string name="settings_app_language">语言设置喵</string>
     <string name="system_default">系统默认哒</string>
 
-    <string name="settings_hide_apatch_card">藏起这张卡片喵</string>
-    <string name="settings_hide_apatch_card_summary">把首页那个"了解DSH-Folk"的卡片藏起来啦喵</string>
     <string name="settings_grid_working_card_hide_check">把状态图标藏起来喵</string>
     <string name="settings_grid_working_card_hide_check_summary">把工作卡片上的勾勾或者警告标标藏起来哦喵</string>
     <string name="settings_grid_working_card_hide_text">把状态文字藏起来喵</string>

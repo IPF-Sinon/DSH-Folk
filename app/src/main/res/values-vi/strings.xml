@@ -49,8 +49,6 @@
     <string name="settings_app_language">Ngôn ngữ</string>
     <string name="system_default">Mặc định hệ thống</string>
 
-    <string name="settings_hide_apatch_card">Ẩn thẻ "Tìm hiểu về DSH-Folk"</string>
-    <string name="settings_hide_apatch_card_summary">Ẩn thẻ "Tìm hiểu về DSH-Folk" trên trang chủ</string>
 
     <string name="send_log">Gửi nhật ký</string>
     <string name="settings_clean_storage">Dọn dẹp dữ liệu ứng dụng</string>

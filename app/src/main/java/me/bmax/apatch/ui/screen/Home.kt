@@ -160,10 +160,6 @@ fun HomeScreenV1(
         Spacer(Modifier.height(0.dp))
         DshStatusCardList()
         DshInfoCard(showInfoIcons)
-        val hideAboutCard = APApplication.sharedPreferences.getBoolean("hide_apatch_card", false)
-        if (!hideAboutCard) {
-            LearnMoreCard()
-        }
         HomeBottomSpacer()
     }
 }
@@ -517,39 +513,5 @@ fun StatusBadge(
             color = contentColor.copy(alpha = 1f),
             fontWeight = FontWeight.Bold
         )
-    }
-}
-
-@Composable
-fun LearnMoreCard() {
-    val uriHandler = LocalUriHandler.current
-
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = if (BackgroundConfig.isCustomBackgroundEnabled) {
-            MaterialTheme.colorScheme.surface
-        } else {
-            MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
-        })
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    uriHandler.openUri("https://github.com/IPF-Sinon/DSH-Folk")
-                }
-                .padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text(
-                    text = stringResource(R.string.dsh_learn_title),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.dsh_learn_desc),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
     }
 }

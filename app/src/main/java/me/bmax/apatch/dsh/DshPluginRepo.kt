@@ -1,7 +1,6 @@
 package me.bmax.apatch.dsh
 
 import android.content.Context
-import android.net.Uri
 import android.util.Log
 import java.io.File
 import java.net.HttpURLConnection
@@ -21,12 +20,12 @@ import org.json.JSONObject
 /** 一个 DSH 插件条目。 */
 data class DshPlugin(
     /**
-     * 目录里的稳定 id。dsh-market 的 id 与 npm 包名**不一定相同**
-     * （例如 `dsh-tui` 的包名是 `@deepseek-harness-tui/dsh-tui`），
+     * 目录里的稳定 id。与 npm 包名**不一定相同** —— 全量目录用 `owner/name`
+     * （不同作者的同名插件并不少见），dsh-market 用它自己的 id。
      * 所以列表 key 用 id，安装/下载量一律用 [pkg]。
      */
     val id: String,
-    /** npm 包名；目录里没登记 npm 的条目为空（只能看，不能一键装）。 */
+    /** npm 包名；目录里没登记 npm 的条目为空（1284/2495 条如此）。 */
     val pkg: String = "",
     val name: String,
     val version: String = "",
@@ -45,6 +44,13 @@ data class DshPlugin(
     val likes: Long = -1L,
     val category: String = "",
     /**
+     * 传给 `dsh plugin add` 的安装规格。
+     *
+     * 通常等于 [pkg]；目录里没登记 npm 的条目是 `github:owner/name`。
+     * 空表示没有可用的安装方式。
+     */
+    val installSpec: String = "",
+    /**
      * 是否作为 profile 层生效。
      *
      * 判据是包名在 profile `package.json` 的 `dsh.profile.bundles` 里 —— dsh 只加载
@@ -54,23 +60,33 @@ data class DshPlugin(
 ) {
     val installed: Boolean get() = installedVersion.isNotEmpty()
 
-    /** 可一键安装：目录登记了 npm 包名。 */
-    val installable: Boolean get() = pkg.isNotEmpty()
+    /** 可一键安装：有 npm 包名或 github: 规格。 */
+    val installable: Boolean get() = pkg.isNotEmpty() || installSpec.isNotEmpty()
+
+    /** 传给安装命令的实参。 */
+    val addSpec: String get() = installSpec.ifEmpty { pkg }
 
     /** 已安装且线上版本更高 → 可更新。 */
     val updatable: Boolean
         get() = installed && version.isNotEmpty() && compareVersions(version, installedVersion) > 0
 }
 
-/** npm 关键字搜索的一页结果。 */
-data class NpmSearchPage(
-    val items: List<DshPlugin>,
-    val total: Long,
+/**
+ * 完整插件目录的一次快照。
+ *
+ * @param updated 目录自报的更新日期（`2026-08-29`）。
+ * @param categoryTitles 目录自带的分类标题，App 没内置该 slug 时用它兜底。
+ * @param offline 数据来自过期的本地缓存（三条线上源都失败）。
+ */
+data class PluginCatalog(
+    val updated: String,
+    val categoryTitles: Map<String, String>,
+    val plugins: List<DshPlugin>,
+    val offline: Boolean = false,
 )
 
 /**
- * 插件商店分类。`slug` 是 npm keyword，服务端用它过滤（`keywords:dsh-plugin,dsh,<slug>`）。
- * `label` 是对应的字符串资源 id。
+ * 插件商店分类。`slug` 与目录 `category` 字段一致，`label` 是内置字符串资源 id。
  */
 data class PluginCategory(
     val slug: String,
@@ -81,11 +97,16 @@ data class PluginCategory(
  * DSH 插件数据源。
  *
  * 各来源只管一件事，缺一个不影响其它：
- * - **dsh-market** 的 `manifest/plugins.json` 是插件目录（id / 名称 / 作者 / 描述 / 仓库 / npm 包名）；
- *   它的 `api/stats` 只有点赞与安装计数，`api/npm-downloads` 是**一次返回全部**的周下载量表
- *   （官方站点自己就是这么取的，所以不必逐包打 api.npmjs.org）；
- * - **npm registry** 提供最新版本号（`registry.npmjs.org/<pkg>/latest`），用来判断可更新；
- * - **GitHub API** 提供 star 数（匿名 60 次/小时，所以缓存 6 小时并限并发）。
+ * - **全量目录**（[catalog]）是商店的数据源：`awesome-dsh-plugin.com/plugins.json`，
+ *   约 2600 条，自带分类 / 描述 / star / 下载量，所以商店列表**不需要**再逐包打
+ *   npm 或 GitHub API。走 npm 包 `dsh-plugin-catalog` 作为国内回落，与 DSH 官方
+ *   市场插件（dshmarket）同一条路径；
+ * - **dsh-market** 的 `manifest/plugins.json` 是**精选**列表（几十条），只用于
+ *   已安装页的点赞数与整表周下载量；
+ * - **npm registry** 提供最新版本号（`registry.npmjs.org/<pkg>/latest`），
+ *   只对已安装的少量包查，用来判断可更新；
+ * - **GitHub API** 提供 star 数（匿名 60 次/小时，缓存 6 小时并限并发），
+ *   仅在目录没给出 star 时兜底。
  *
  * 已安装列表来自容器内 profile 目录，走 proot 读，不依赖网络。
  */
@@ -96,8 +117,23 @@ object DshPluginRepo {
     private const val MARKET_STATS = "https://dsh-market.com/api/stats"
     private const val MARKET_DOWNLOADS = "https://dsh-market.com/api/npm-downloads"
     private const val NPM_SEARCH = "https://registry.npmjs.org/-/v1/search?size=100&text="
-    private const val NPM_SEARCH_BASE = "https://registry.npmjs.org/-/v1/search"
     private const val NPM_DOWNLOADS_POINT = "https://api.npmjs.org/downloads/point/last-week/"
+
+    /** 全量目录的官方地址（GitHub Pages + CDN）。 */
+    private const val CATALOG_ORIGIN = "https://awesome-dsh-plugin.com/plugins.json"
+
+    /** 同一份目录发布成的 npm 包，用于国内回落。 */
+    private const val CATALOG_PACKAGE = "dsh-plugin-catalog"
+    private const val NPM_REGISTRY = "https://registry.npmjs.org"
+    private const val NPM_MIRROR_CN = "https://registry.npmmirror.com"
+    private const val CATALOG_CACHE_FILE = "plugin-catalog.json"
+
+    // tar 头布局：512 字节一块，name@0(100)、八进制 size@124(12)、type@156
+    private const val TAR_BLOCK = 512
+    private const val TAR_NAME_LEN = 100
+    private const val TAR_SIZE_OFF = 124
+    private const val TAR_SIZE_LEN = 12
+    private const val TAR_TYPE_OFF = 156
 
     /** dsh 的 profile 名。web 界面就是这个 profile，插件必须装进它才会被加载。 */
     private const val PROFILE = "web"
@@ -212,80 +248,184 @@ object DshPluginRepo {
     /**
      * 商店的分类列表，顺序即 tab 顺序（不含「全部」，由界面在开头单独加）。
      *
-     * 每个分类对应一个 npm keyword —— 官方商店的「全部 (2.5k)」就是 npm 上同时打
-     * `dsh-plugin` 与 `dsh` 两个 keyword 的包（实测 2500+ 条），分类则是更窄的
-     * 第三个 keyword（AND）。这些 keyword 都实测有非零结果。
+     * slug 与 [CATALOG_ORIGIN] 目录里 `category` 字段一致（实测 22 个）。标题优先用
+     * 内置字符串资源（能跟随应用语言），目录将来新增分类时回落到目录自带的
+     * `categories[slug]` 文案，不必改 App。
      */
     fun categories(): List<PluginCategory> = listOf(
-        PluginCategory("agent", R.string.dsh_plugin_cat_agent),
+        PluginCategory("agi", R.string.dsh_plugin_cat_agi),
         PluginCategory("ui", R.string.dsh_plugin_cat_ui),
         PluginCategory("usage", R.string.dsh_plugin_cat_usage),
         PluginCategory("theme", R.string.dsh_plugin_cat_theme),
-        PluginCategory("llm", R.string.dsh_plugin_cat_llm),
-        PluginCategory("im", R.string.dsh_plugin_cat_im),
-        PluginCategory("chat", R.string.dsh_plugin_cat_chat),
+        PluginCategory("model", R.string.dsh_plugin_cat_model),
+        PluginCategory("identity", R.string.dsh_plugin_cat_identity),
+        PluginCategory("session", R.string.dsh_plugin_cat_session),
         PluginCategory("memory", R.string.dsh_plugin_cat_memory),
-        PluginCategory("mcp", R.string.dsh_plugin_cat_mcp),
-        PluginCategory("web-search", R.string.dsh_plugin_cat_web_search),
+        PluginCategory("tools", R.string.dsh_plugin_cat_tools),
+        PluginCategory("browser", R.string.dsh_plugin_cat_browser),
         PluginCategory("vision", R.string.dsh_plugin_cat_vision),
-        PluginCategory("audio", R.string.dsh_plugin_cat_audio),
-        PluginCategory("document", R.string.dsh_plugin_cat_document),
-        PluginCategory("skills", R.string.dsh_plugin_cat_skills),
+        PluginCategory("voice", R.string.dsh_plugin_cat_voice),
+        PluginCategory("docs", R.string.dsh_plugin_cat_docs),
+        PluginCategory("skill", R.string.dsh_plugin_cat_skill),
         PluginCategory("workflow", R.string.dsh_plugin_cat_workflow),
         PluginCategory("git", R.string.dsh_plugin_cat_git),
-        PluginCategory("notification", R.string.dsh_plugin_cat_notification),
-        PluginCategory("terminal", R.string.dsh_plugin_cat_terminal),
+        PluginCategory("notify", R.string.dsh_plugin_cat_notify),
+        PluginCategory("dev", R.string.dsh_plugin_cat_dev),
         PluginCategory("security", R.string.dsh_plugin_cat_security),
-        PluginCategory("mobile", R.string.dsh_plugin_cat_mobile),
-        PluginCategory("marketplace", R.string.dsh_plugin_cat_marketplace),
-        PluginCategory("game", R.string.dsh_plugin_cat_game),
+        PluginCategory("remote", R.string.dsh_plugin_cat_remote),
+        PluginCategory("market", R.string.dsh_plugin_cat_market),
+        PluginCategory("fun", R.string.dsh_plugin_cat_fun),
     )
 
     /**
-     * 商店分页查询：npm 关键字枚举 + 服务端分页。
+     * 完整插件目录。**商店的唯一数据源。**
      *
-     * 这是商店「全部 (2.5k) / 每页 24」的真正数据源，不是 [fetchMarket] 的 44 条精选。
-     * npm 的 `keywords:a,b` 是 AND 语义；分类 = 追加第三个 keyword，仍是 AND。
-     * 单页 `size` 上限 250，这里按调用方给的大小取，配合 `from` 偏移做瀑布流。
+     * 为什么不是 npm search：`registry.npmjs.org/-/v1/search` 的 `text` 里，
+     * `keywords:` 限定词之后的自由文本只参与**排序**，不做过滤 —— 实测
+     * `text=keywords:dsh-plugin,dsh theme` 返回的 total 仍是 2577，只是主题类
+     * 被排到了前面。也就是说 npm 搜不出「某个词的全部命中」，只能给出前 N 个最相关。
+     * 而用户要的是「能搜到全部插件」，所以必须先把完整目录取下来，再本地检索。
      *
-     * 返回条目的 `id`/`pkg` 都是 npm 包名（商店条目按包名去重）。
+     * 这条路径与 DSH 官方市场插件（dshmarket）完全一致：
+     * 1. [CATALOG_ORIGIN] —— GitHub Pages 上的完整目录（约 2.2MB，gzip 后约 600KB）；
+     * 2. [CATALOG_PACKAGE] 的 npm 包 —— 目录也发布成 npm 包，因为公共 GitHub 代理
+     *    只接受 github.com 自己的域名、拿不到 Pages 域（官方注释实测 403），
+     *    而 npm 镜像在国内一定通；读的是 tarball 里的 `package/plugins.json`；
+     * 3. npmmirror 上的同一个包。
+     *
+     * 结果缓存到 cacheDir，TTL [CATALOG_TTL_MS]；三条源全挂时回落到过期缓存
+     * （目录是只增不减的列表，旧快照仍然可用）。
      */
-    suspend fun searchPlugins(
-        category: String = "",
-        from: Int = 0,
-        size: Int = 24,
-    ): NpmSearchPage = withContext(Dispatchers.IO) {
-        runCatching {
-            val kw = if (category.isBlank()) "keywords:dsh-plugin,dsh"
-            else "keywords:dsh-plugin,dsh,$category"
-            // Uri.encode 把逗号编码成 %2C，与 npm 期望的一致（空格 %20 也正确）
-            val url = "$NPM_SEARCH_BASE?size=$size&from=$from&text=" + Uri.encode(kw)
-            val json = httpGet(url) ?: return@runCatching NpmSearchPage(emptyList(), 0L)
-            val root = JSONObject(json)
-            val objs = root.optJSONArray("objects") ?: JSONArray()
-            val items = (0 until objs.length()).mapNotNull { i ->
-                val pkg = objs.optJSONObject(i)?.optJSONObject("package") ?: return@mapNotNull null
-                val name = pkg.optString("name")
-                if (name.isEmpty()) return@mapNotNull null
-                DshPlugin(
-                    id = name,
-                    pkg = name,
-                    name = name,
-                    version = pkg.optString("version"),
-                    description = pkg.optString("description"),
-                    author = pkg.optJSONObject("author")?.optString("name") ?: pkg.optString("author"),
-                    repo = normalizeRepo(pkg.optJSONObject("links")?.optString("repository") ?: ""),
-                    homepage = pkg.optJSONObject("links")?.optString("homepage") ?: "",
-                )
+    suspend fun catalog(ctx: Context, force: Boolean = false): PluginCatalog =
+        withContext(Dispatchers.IO) {
+            val cacheFile = File(ctx.cacheDir, CATALOG_CACHE_FILE)
+            val fresh = cacheFile.isFile &&
+                System.currentTimeMillis() - cacheFile.lastModified() < CATALOG_TTL_MS
+            if (!force && fresh) {
+                parseCatalog(runCatching { cacheFile.readText() }.getOrNull(), offline = false)
+                    ?.let { return@withContext it }
             }
-            NpmSearchPage(items, root.optLong("total", 0L))
-        }.getOrElse { e ->
-            // runCatching 会连 CancellationException 一起吞掉，破坏结构化并发；这里显式重抛。
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Log.w(TAG, "npm 商店搜索失败: ${e.message}")
-            NpmSearchPage(emptyList(), 0L)
+
+            for (fetch in catalogSources()) {
+                val text = runCatching { fetch() }.getOrNull()
+                val parsed = parseCatalog(text, offline = false)
+                if (parsed != null) {
+                    runCatching { cacheFile.writeText(text!!) }
+                    return@withContext parsed
+                }
+            }
+
+            // 三条源都挂了：过期缓存也比空列表有用，标记成离线快照让界面能说明情况
+            Log.w(TAG, "插件目录三条源均失败，回落磁盘缓存")
+            parseCatalog(runCatching { cacheFile.readText() }.getOrNull(), offline = true)
+                ?: PluginCatalog(updated = "", categoryTitles = emptyMap(), plugins = emptyList(), offline = true)
         }
+
+    /** 目录源，按顺序尝试。每个返回原始 JSON 文本或抛异常。 */
+    private fun catalogSources(): List<() -> String?> = listOf(
+        { httpGet(CATALOG_ORIGIN) },
+        { catalogFromNpm(NPM_REGISTRY) },
+        { catalogFromNpm(NPM_MIRROR_CN) },
+    )
+
+    /**
+     * 从 npm 包里取 `package/plugins.json`。
+     *
+     * 跟着 `dist.tarball` 走而不是自己拼 URL：镜像会把这个字段改写成自己的地址，
+     * 自己拼就会把下载弹回官方 registry，正好绕掉了用镜像的意义。
+     */
+    private fun catalogFromNpm(registry: String): String? {
+        val meta = httpGet("$registry/$CATALOG_PACKAGE/latest") ?: return null
+        val tarball = JSONObject(meta).optJSONObject("dist")?.optString("tarball")
+        if (tarball.isNullOrBlank()) return null
+        val gz = httpGetBytes(tarball) ?: return null
+        val bytes = fileFromTarball(gz, "package/plugins.json") ?: return null
+        return String(bytes, Charsets.UTF_8)
     }
+
+    /**
+     * gzip tar 里取一个指定条目。
+     *
+     * 自己读而不是加依赖：格式就是 512 字节头（name@0、八进制 size@124、type@156），
+     * 为一个已知文件名写读取器比为插件运行时多加一个包更划算。
+     */
+    private fun fileFromTarball(gz: ByteArray, wanted: String): ByteArray? = runCatching {
+        val buf = java.util.zip.GZIPInputStream(gz.inputStream()).use { it.readBytes() }
+        var offset = 0
+        while (offset + TAR_BLOCK <= buf.size) {
+            val name = String(buf, offset, TAR_NAME_LEN, Charsets.UTF_8).substringBefore('\u0000')
+            // 连着两个空头才是结尾，但一个就足够停下
+            if (name.isEmpty()) break
+            val rawSize = String(buf, offset + TAR_SIZE_OFF, TAR_SIZE_LEN, Charsets.US_ASCII)
+                .substringBefore('\u0000').trim()
+            val size = rawSize.toLongOrNull(8) ?: break
+            if (size < 0) break
+            val type = buf[offset + TAR_TYPE_OFF].toInt().toChar()
+            offset += TAR_BLOCK
+            // '0' 与 NUL 都表示普通文件；目录、链接、pax 头一概跳过
+            if ((type == '0' || type == '\u0000') && name == wanted) {
+                return@runCatching buf.copyOfRange(offset, (offset + size).toInt())
+            }
+            offset += (((size + TAR_BLOCK - 1) / TAR_BLOCK) * TAR_BLOCK).toInt()
+        }
+        null
+    }.getOrNull()
+
+    /** 解析目录 JSON。结构不对（比如取到一个 HTML 错误页）时返回 null，让调用方换源。 */
+    private fun parseCatalog(text: String?, offline: Boolean): PluginCatalog? = runCatching {
+        if (text.isNullOrBlank()) return@runCatching null
+        val root = JSONObject(text)
+        val arr = root.optJSONArray("plugins") ?: return@runCatching null
+        if (arr.length() == 0) return@runCatching null
+
+        val zh = java.util.Locale.getDefault().language == "zh"
+        val titles = HashMap<String, String>()
+        root.optJSONObject("categories")?.let { cats ->
+            val keys = cats.keys()
+            while (keys.hasNext()) {
+                val slug = keys.next()
+                val o = cats.optJSONObject(slug) ?: continue
+                val label = (if (zh) o.optString("zh") else o.optString("en"))
+                    .ifBlank { o.optString("en") }
+                if (label.isNotBlank()) titles[slug] = label
+            }
+        }
+
+        val plugins = (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val name = o.optString("name")
+            if (name.isEmpty()) return@mapNotNull null
+            val owner = o.optString("owner")
+            // npm 字段可能是 JSON null（1284/2495 条如此）：optString 会给出 "null"
+            val npm = o.optString("npm").takeIf { it.isNotEmpty() && it != "null" } ?: ""
+            val desc = o.optJSONObject("description")?.let { d ->
+                (if (zh) d.optString("zh") else d.optString("en")).ifBlank { d.optString("en") }
+            } ?: o.optString("description")
+            DshPlugin(
+                // owner/name 才唯一：不同作者的同名插件在目录里并不少见
+                id = if (owner.isEmpty()) name else "$owner/$name",
+                pkg = npm,
+                name = name,
+                description = desc,
+                author = owner,
+                repo = normalizeRepo(o.optString("url")),
+                homepage = o.optString("page").ifEmpty { o.optString("url") },
+                category = o.optString("category"),
+                // 目录自带这两个数字，商店列表不必再逐包打 npm / GitHub API
+                stars = if (o.isNull("stars")) -1L else o.optLong("stars", -1L),
+                downloads = if (o.isNull("downloads")) -1L else o.optLong("downloads", -1L),
+                // 没登记 npm 的条目用 install 命令里的 github: 规格安装
+                installSpec = o.optString("install").substringAfterLast(' ').ifEmpty { npm },
+            )
+        }
+        if (plugins.isEmpty()) return@runCatching null
+        PluginCatalog(
+            updated = root.optString("updated"),
+            categoryTitles = titles,
+            plugins = plugins,
+            offline = offline,
+        )
+    }.getOrNull()
 
     /** dsh-market 的整表周下载量（key 是 npm 包名）。 */
     private fun downloadsTable(): Map<String, Long> {
@@ -514,6 +654,20 @@ object DshPluginRepo {
             return@runCatching null
         }
         conn.inputStream.bufferedReader().use { it.readText() }
+    }.getOrNull()
+
+    /** 二进制下载（目录的 npm tarball 回落用）。超时给得宽些：几百 KB 的包。 */
+    private fun httpGetBytes(url: String): ByteArray? = runCatching {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 15_000
+        conn.readTimeout = 30_000
+        conn.instanceFollowRedirects = true
+        conn.setRequestProperty("User-Agent", "DSH-Folk")
+        if (conn.responseCode !in 200..299) {
+            conn.disconnect()
+            return@runCatching null
+        }
+        conn.inputStream.use { it.readBytes() }
     }.getOrNull()
 
     /** 各种 repository 写法统一成 `owner/name`。 */

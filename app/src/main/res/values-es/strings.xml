@@ -70,8 +70,6 @@
 
     <!-- SU Audit Log -->
 
-    <string name="settings_hide_apatch_card">Ocultar tarjeta Aprender DSH-Folk</string>
-    <string name="settings_hide_apatch_card_summary">Oculta la tarjeta de aprendizaje de DSH-Folk en la pantalla de inicio</string>
 
     <string name="send_log">Enviar registros</string>
     <string name="settings_clean_storage">Limpiar datos de la aplicación</string>

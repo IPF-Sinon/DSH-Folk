@@ -72,8 +72,6 @@
     <string name="settings_folkx_animation_diagonal">Diagonal Slide</string>
 
 
-    <string name="settings_hide_apatch_card">Hide Learn DSH-Folk card</string>
-    <string name="settings_hide_apatch_card_summary">Hide the Learn DSH-Folk card on the home screen</string>
 
     <string name="send_log">Send logs</string>
     <string name="settings_clean_storage">Clean app data</string>

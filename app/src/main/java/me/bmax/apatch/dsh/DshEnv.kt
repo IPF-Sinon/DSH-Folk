@@ -48,6 +48,15 @@ object DshEnv {
     const val KEY_RUNTIME = "container_runtime"   // proot | proroot
     const val KEY_PORT = "dsh_port"
     const val KEY_RUNTIME_VERSION = "runtime_version"
+
+    /**
+     * 容器体积（字节）的缓存值。
+     *
+     * 必须缓存：算它要递归遍历整个 Ubuntu rootfs（十万级文件），在组合期同步调用
+     * 会让每次导航回首页都卡 2 秒以上（真机日志实测 duration=2505ms + Skipped 232 frames）。
+     * 只在安装完成、以及首次缺值时于 IO 线程后台重算。
+     */
+    const val KEY_ROOTFS_SIZE = "rootfs_size_bytes"
     const val KEY_PROROOT_FAIL = "proroot_fail_streak"
     const val KEY_AUTOSTART = "dsh_autostart"     // 开机自启（BootCompletedReceiver 读取）
 
@@ -56,4 +65,10 @@ object DshEnv {
 
     /** WebUI 打开方式：in | browser | ask。 */
     const val KEY_WEBUI_MODE = "webui_open_mode"
+
+    /** 应用内 WebUI 悬浮球吸附的一侧：left | right。 */
+    const val KEY_WEBUI_BALL_SIDE = "webui_ball_side"
+
+    /** 应用内 WebUI 悬浮球的纵向位置，0..1 的屏高比例。 */
+    const val KEY_WEBUI_BALL_Y = "webui_ball_y"
 }

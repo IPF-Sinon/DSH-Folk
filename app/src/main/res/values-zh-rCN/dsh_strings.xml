@@ -18,6 +18,8 @@
     <string name="dsh_webui_reload">刷新</string>
     <string name="dsh_webui_open_external">用浏览器打开</string>
     <string name="dsh_webui_load_failed">加载失败</string>
+    <string name="dsh_webui_ball">Web 界面控制</string>
+    <string name="dsh_webui_close">关闭</string>
     <!-- WebUI 打开方式设置 -->
     <string name="dsh_webui_mode">Web 界面打开方式</string>
     <string name="dsh_webui_mode_summary">Web 界面只监听 127.0.0.1，仅本机可访问</string>
@@ -46,8 +48,6 @@
     <string name="dsh_no_browser">没有可用的浏览器</string>
     <string name="dsh_hint_tap_to_install">运行时尚未下载，点击开始获取（约 120 MB）。</string>
     <string name="dsh_hint_tap_to_start">运行时已就绪，点击启动 Harness。</string>
-    <string name="dsh_learn_title">了解 DSH-Folk</string>
-    <string name="dsh_learn_desc">打开项目主页，查看文档与反馈</string>
     <string name="dsh_stats_plugins">插件</string>
     <string name="dsh_stats_enabled">已生效</string>
     <string name="dsh_stats_disabled">未生效</string>
@@ -290,34 +290,35 @@
     <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并覆盖容器。/root/.dsh 下的东西 —— 已装的插件、ADB 密钥、你的 DSH 配置 —— 都在这个容器里，会一并丢失。开始前会先停止服务。</string>
     <string name="dsh_runtime_reinstall_go">重装</string>
 
-    <!-- 插件商店：npm 关键字枚举 + 分页 -->
+    <!-- 插件商店：全量目录 + 本地检索 -->
     <string name="dsh_plugin_category_all">全部</string>
     <string name="dsh_plugin_total">共 %1$s 个插件</string>
+    <string name="dsh_plugin_shown_of_total">显示 %1$s / 共 %2$s</string>
+    <string name="dsh_plugin_catalog_offline">离线快照（更新于 %1$s）—— 点刷新重试</string>
     <string name="dsh_plugin_needs_runtime">请先在首页安装运行时，再浏览插件商店。</string>
     <string name="dsh_plugin_go_home">去首页安装</string>
-    <string name="dsh_plugin_loading_more">加载更多…</string>
-    <string name="dsh_plugin_cat_agent">AGI 架构探索</string>
+    <string name="dsh_plugin_cat_agi">AGI 架构探索</string>
     <string name="dsh_plugin_cat_ui">UI 增强</string>
     <string name="dsh_plugin_cat_usage">用量与计费</string>
     <string name="dsh_plugin_cat_theme">主题与外观</string>
-    <string name="dsh_plugin_cat_llm">模型与账号接入</string>
-    <string name="dsh_plugin_cat_im">身份与通信</string>
-    <string name="dsh_plugin_cat_chat">会话与消息</string>
+    <string name="dsh_plugin_cat_model">模型与账号接入</string>
+    <string name="dsh_plugin_cat_identity">身份与通信</string>
+    <string name="dsh_plugin_cat_session">会话与消息</string>
     <string name="dsh_plugin_cat_memory">记忆</string>
-    <string name="dsh_plugin_cat_mcp">工具与能力</string>
-    <string name="dsh_plugin_cat_web_search">浏览器与网页</string>
+    <string name="dsh_plugin_cat_tools">工具与能力</string>
+    <string name="dsh_plugin_cat_browser">浏览器与网页</string>
     <string name="dsh_plugin_cat_vision">视觉与多模态</string>
-    <string name="dsh_plugin_cat_audio">语音与音频</string>
-    <string name="dsh_plugin_cat_document">文档与渲染</string>
-    <string name="dsh_plugin_cat_skills">技能包</string>
+    <string name="dsh_plugin_cat_voice">语音与音频</string>
+    <string name="dsh_plugin_cat_docs">文档与渲染</string>
+    <string name="dsh_plugin_cat_skill">技能包</string>
     <string name="dsh_plugin_cat_workflow">工作流与自动化</string>
     <string name="dsh_plugin_cat_git">Git 与代码评审</string>
-    <string name="dsh_plugin_cat_notification">通知与集成</string>
-    <string name="dsh_plugin_cat_terminal">开发与运行时</string>
+    <string name="dsh_plugin_cat_notify">通知与集成</string>
+    <string name="dsh_plugin_cat_dev">开发与运行时</string>
     <string name="dsh_plugin_cat_security">安全与权限</string>
-    <string name="dsh_plugin_cat_mobile">远程与移动端</string>
-    <string name="dsh_plugin_cat_marketplace">插件市场与管理</string>
-    <string name="dsh_plugin_cat_game">娱乐</string>
+    <string name="dsh_plugin_cat_remote">远程与移动端</string>
+    <string name="dsh_plugin_cat_market">插件市场与管理</string>
+    <string name="dsh_plugin_cat_fun">娱乐</string>
 
     <!-- 权限通道选项说明 / 无线 ADB 断开 -->
     <string name="dsh_perm_prefer_root_desc">优先用 su（Magisk / KernelSU / APatch）</string>

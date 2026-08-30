@@ -49,8 +49,6 @@
     <string name="settings_app_language">圣域语言</string>
     <string name="system_default">天意默认</string>
 
-    <string name="settings_hide_apatch_card">隐藏"探寻灵魂之力"圣阵</string>
-    <string name="settings_hide_apatch_card_summary">隐藏圣光之殿的"探寻灵魂之力"圣阵</string>
 
     <string name="send_log">发送神谕日志</string>
     <string name="settings_clean_storage">净化圣所数据</string>

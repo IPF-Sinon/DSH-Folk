@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -59,6 +60,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPtySession
 import me.bmax.apatch.util.ui.HomeBottomSpacer
+import me.bmax.apatch.util.ui.isImeVisible
 import me.bmax.apatch.util.ui.showToast
 
 private const val KEY_FONT_SP = "dsh_term_font_sp"
@@ -78,6 +80,14 @@ private const val KEY_FONT_SP = "dsh_term_font_sp"
 private const val TERM_BG = 0xFF101014.toInt()
 private const val TERM_FG = 0xFFE6E6E6.toInt()
 private const val TERM_CURSOR = 0xFF7DD3FC.toInt()
+
+/**
+ * 终端底板的不透明度。
+ *
+ * 留一点透，让自定义背景/主题在终端边缘透出来一些；0.88 下正文对比度仍然足够
+ * （深底 #101014 对亮字 #E6E6E6）。真机观察偏淡就往 0.94 调。
+ */
+private const val TERM_BG_ALPHA = 0.88f
 private const val FONT_MIN_SP = 8
 private const val FONT_MAX_SP = 24
 private const val FONT_DEF_SP = 13
@@ -142,9 +152,28 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
     var terminalView by remember { mutableStateOf<TerminalView?>(null) }
     // 原地重启时 +1，用 key 强制重建 AndroidView 以便 attachOrStart 起一个新 PTY
     var sessionGen by remember { mutableIntStateOf(0) }
+    // 重启那一刻键盘是否开着；决定新会话要不要把输入法重新叫起来
+    var restoreImeOnRestart by remember { mutableStateOf(false) }
 
     val installed = remember { DshEnv.isRuntimeInstalled(context) }
     val main = remember { Handler(Looper.getMainLooper()) }
+    val imeVisible = isImeVisible()
+
+    /**
+     * 重建视图后把焦点抢回终端。
+     *
+     * 不做这一步的话，旧 TerminalView 被销毁时它持有的焦点会落到下一个可聚焦节点 ——
+     * 工具栏第一个 IconButton（缩小字号），输入法也跟着跑到那里去。
+     */
+    LaunchedEffect(sessionGen) {
+        if (sessionGen == 0) return@LaunchedEffect
+        val view = terminalView ?: return@LaunchedEffect
+        view.requestFocus()
+        if (restoreImeOnRestart) {
+            val im = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            im?.showSoftInput(view, 0)
+        }
+    }
 
     fun setFont(sp: Int) {
         val v = sp.coerceIn(FONT_MIN_SP, FONT_MAX_SP)
@@ -194,7 +223,9 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
                         )
                     }
                     IconButton(onClick = {
-                        // 原地重启：收旧会话 + 重建视图，别把用户弹回上一页
+                        // 原地重启：收旧会话 + 重建视图，别把用户弹回上一页。
+                        // 键盘状态先记下来，重建后由 LaunchedEffect(sessionGen) 复原。
+                        restoreImeOnRestart = imeVisible
                         DshPtySession.restartQuietly()
                         sessionGen++
                         showToast(context, R.string.dsh_term_restarted)
@@ -223,11 +254,19 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
         }
 
         Column(Modifier.fillMaxSize().padding(innerPadding).imePadding()) {
-            // 不透明 Surface：开了自定义背景图时，MaterialTheme 的 background 是
-            // Color.Transparent，背景图会直接透到终端字符后面。
+            // 左右留白 + 圆角 + 半透明黑：
+            //
+            // View 背景设成透明而不是 TERM_BG，透出来的才是这个 Surface 的半透明色。
+            // 字符本身不受影响 —— TerminalRenderer 只在 backColor 与调色盘的
+            // COLOR_INDEX_BACKGROUND 不同时才画背景矩形（见 [applyTermColors] 的说明），
+            // 默认背景压根不绘制，所以半透明只作用在「空白」区域。
             Surface(
-                color = Color(TERM_BG),
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                color = Color(TERM_BG).copy(alpha = TERM_BG_ALPHA),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
             ) {
                 key(sessionGen) {
                     AndroidView(
@@ -237,7 +276,7 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
                                 terminalView = view
                                 view.isFocusable = true
                                 view.isFocusableInTouchMode = true
-                                view.setBackgroundColor(TERM_BG)
+                                view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                             view.setTextSize(
                                 TypedValue.applyDimension(
                                     TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat(),
@@ -325,12 +364,13 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
                 }
             }
 
-            // 扩展键条
+            // 扩展键条。键盘弹起时它就该紧贴键盘上沿 —— 底部预留由
+            // HomeBottomSpacer 在 IME 可见时自行归零，这里只保留自身的呼吸间距。
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

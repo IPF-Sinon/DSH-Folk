@@ -59,7 +59,6 @@ fun HomeScreenStats(
     // 图表与统计只在运行时已装好后才有意义，未安装时不启动轮询
     val isReady = state.installed
 
-    val hideAboutCard = APApplication.sharedPreferences.getBoolean("hide_apatch_card", false)
     val statsTopLayout = APApplication.sharedPreferences.getString("stats_top_layout", "list") ?: "list"
     val useGridTop = statsTopLayout == "grid"
     val isWallpaperMode = BackgroundConfig.isCustomBackgroundEnabled &&
@@ -101,9 +100,6 @@ fun HomeScreenStats(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 PluginStatisticsSection(pluginViewModel)
                 InfoCardCircle()
-                if (!hideAboutCard) {
-                    LearnMoreCardV4()
-                }
                 HomeBottomSpacer()
             }
         }
@@ -126,9 +122,6 @@ fun HomeScreenStats(
             }
             PluginStatisticsSection(pluginViewModel)
             InfoCardCircle()
-            if (!hideAboutCard) {
-                LearnMoreCardV4()
-            }
             DshLogCard()
             HomeBottomSpacer()
         }

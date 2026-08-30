@@ -50,8 +50,6 @@
     <string name="settings_app_language">語言</string>
     <string name="system_default">系統預設</string>
 
-    <string name="settings_hide_apatch_card">隱藏「了解 DSH-Folk」卡片</string>
-    <string name="settings_hide_apatch_card_summary">控制首頁是否顯示「深入了解 DSH-Folk」卡片</string>
 
     <string name="send_log">傳送日誌</string>
     <string name="settings_clean_storage">清理應用數據</string>

@@ -22,6 +22,8 @@
     <string name="dsh_webui_reload">Reload</string>
     <string name="dsh_webui_open_external">Open in browser</string>
     <string name="dsh_webui_load_failed">Failed to load</string>
+    <string name="dsh_webui_ball">Web UI controls</string>
+    <string name="dsh_webui_close">Close</string>
     <!-- WebUI 打开方式设置 -->
     <string name="dsh_webui_mode">How to open the Web UI</string>
     <string name="dsh_webui_mode_summary">The Web UI runs on 127.0.0.1 and is only reachable from this device</string>
@@ -50,8 +52,6 @@
     <string name="dsh_no_browser">No browser available</string>
     <string name="dsh_hint_tap_to_install">Runtime not downloaded yet. Tap to fetch it (about 120 MB).</string>
     <string name="dsh_hint_tap_to_start">Runtime is ready. Tap to start the harness.</string>
-    <string name="dsh_learn_title">About DSH-Folk</string>
-    <string name="dsh_learn_desc">Open the project page for docs and issues</string>
     <string name="dsh_stats_plugins">Plugins</string>
     <string name="dsh_stats_enabled">Active</string>
     <string name="dsh_stats_disabled">Inactive</string>
@@ -308,34 +308,35 @@
     <string name="dsh_runtime_reinstall_confirm_text">This downloads the runtime again (about 140 MB) and overwrites the container. Files under /root/.dsh — installed plugins, ADB keys and your DSH configuration — are inside that container and will be lost. The service stops first.</string>
     <string name="dsh_runtime_reinstall_go">Reinstall</string>
 
-    <!-- 插件商店：npm 关键字枚举 + 分页 -->
+    <!-- 插件商店：全量目录 + 本地检索 -->
     <string name="dsh_plugin_category_all">All</string>
     <string name="dsh_plugin_total">%1$s plugins</string>
+    <string name="dsh_plugin_shown_of_total">Showing %1$s of %2$s</string>
+    <string name="dsh_plugin_catalog_offline">Offline snapshot (updated %1$s) — pull to refresh</string>
     <string name="dsh_plugin_needs_runtime">Install the runtime on the home page first, then browse the plugin store.</string>
     <string name="dsh_plugin_go_home">Go to Home</string>
-    <string name="dsh_plugin_loading_more">Loading more…</string>
-    <string name="dsh_plugin_cat_agent">AGI Architecture</string>
+    <string name="dsh_plugin_cat_agi">AGI Architecture</string>
     <string name="dsh_plugin_cat_ui">UI Enhancement</string>
     <string name="dsh_plugin_cat_usage">Usage &amp; Billing</string>
     <string name="dsh_plugin_cat_theme">Theme &amp; Appearance</string>
-    <string name="dsh_plugin_cat_llm">Model &amp; Account</string>
-    <string name="dsh_plugin_cat_im">Identity &amp; Chat</string>
-    <string name="dsh_plugin_cat_chat">Chat &amp; Messaging</string>
+    <string name="dsh_plugin_cat_model">Model &amp; Account</string>
+    <string name="dsh_plugin_cat_identity">Identity &amp; Communication</string>
+    <string name="dsh_plugin_cat_session">Session &amp; Messages</string>
     <string name="dsh_plugin_cat_memory">Memory</string>
-    <string name="dsh_plugin_cat_mcp">Tools &amp; Capabilities</string>
-    <string name="dsh_plugin_cat_web_search">Browser &amp; Web</string>
+    <string name="dsh_plugin_cat_tools">Tools &amp; Capabilities</string>
+    <string name="dsh_plugin_cat_browser">Browser &amp; Web</string>
     <string name="dsh_plugin_cat_vision">Vision &amp; Multimodal</string>
-    <string name="dsh_plugin_cat_audio">Voice &amp; Audio</string>
-    <string name="dsh_plugin_cat_document">Document &amp; Rendering</string>
-    <string name="dsh_plugin_cat_skills">Skill Packs</string>
+    <string name="dsh_plugin_cat_voice">Voice &amp; Audio</string>
+    <string name="dsh_plugin_cat_docs">Docs &amp; Rendering</string>
+    <string name="dsh_plugin_cat_skill">Skill Packs</string>
     <string name="dsh_plugin_cat_workflow">Workflow &amp; Automation</string>
     <string name="dsh_plugin_cat_git">Git &amp; Code Review</string>
-    <string name="dsh_plugin_cat_notification">Notification &amp; Integration</string>
-    <string name="dsh_plugin_cat_terminal">Dev &amp; Runtime</string>
+    <string name="dsh_plugin_cat_notify">Notification &amp; Integration</string>
+    <string name="dsh_plugin_cat_dev">Development &amp; Runtime</string>
     <string name="dsh_plugin_cat_security">Security &amp; Permission</string>
-    <string name="dsh_plugin_cat_mobile">Remote &amp; Mobile</string>
-    <string name="dsh_plugin_cat_marketplace">Market &amp; Management</string>
-    <string name="dsh_plugin_cat_game">Entertainment</string>
+    <string name="dsh_plugin_cat_remote">Remote &amp; Mobile</string>
+    <string name="dsh_plugin_cat_market">Market &amp; Management</string>
+    <string name="dsh_plugin_cat_fun">Just for Fun</string>
 
     <!-- 权限通道选项说明 / 无线 ADB 断开 -->
     <string name="dsh_perm_prefer_root_desc">Prefer su (Magisk / KernelSU / APatch)</string>

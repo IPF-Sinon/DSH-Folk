@@ -68,6 +68,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.ramcosta.composedestinations.generated.NavGraphs
 import com.ramcosta.composedestinations.utils.isRouteOnBackStackAsState
 import com.ramcosta.composedestinations.utils.rememberDestinationsNavigator
@@ -713,8 +714,20 @@ fun NavBarIcon(
                 modifier = modifier,
             )
         } else {
+            // 显式指定内存/磁盘缓存 key。不指定时每次导航都会重走一遍磁盘解码
+            // （真机 logcat：每次切页 4 条 nav_icon_*.png 的 "Successful (DISK)"，
+            // 紧跟 Skipped 42~44 frames），加了 key 之后命中的是内存缓存。
+            val ctx = LocalContext.current
+            val request = remember(customUri, revision, destinationName) {
+                val key = "navicon:$destinationName:$revision"
+                ImageRequest.Builder(ctx)
+                    .data(customUri)
+                    .memoryCacheKey(key)
+                    .diskCacheKey(key)
+                    .build()
+            }
             AsyncImage(
-                model = customUri,
+                model = request,
                 contentDescription = stringResource(destination.label),
                 modifier = modifier.size(24.dp),
                 contentScale = androidx.compose.ui.layout.ContentScale.Fit,

@@ -94,7 +94,6 @@ object SettingsRegistry {
             // === Behavior ===
             add(SettingEntry("behavior_web_debugging", R.string.enable_web_debugging, R.string.enable_web_debugging_summary, SettingCategory.BEHAVIOR))
             add(SettingEntry("behavior_info_copy", R.string.settings_info_copy, R.string.settings_info_copy_summary, SettingCategory.BEHAVIOR))
-            add(SettingEntry("behavior_hide_apatch_card", R.string.settings_hide_apatch_card, R.string.settings_hide_apatch_card_summary, SettingCategory.BEHAVIOR))
             add(SettingEntry("behavior_hide_fingerprint", R.string.home_hide_fingerprint, R.string.home_hide_fingerprint_summary, SettingCategory.BEHAVIOR))
             add(SettingEntry("behavior_badge_count", R.string.enable_badge_count, R.string.enable_badge_count_summary, SettingCategory.BEHAVIOR))
 

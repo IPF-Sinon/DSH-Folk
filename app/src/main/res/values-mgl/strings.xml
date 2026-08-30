@@ -49,8 +49,6 @@
     <string name="settings_app_language">魔法语言</string>
     <string name="system_default">默认魔法</string>
 
-    <string name="settings_hide_apatch_card">隐藏"了解心之契约"魔法阵</string>
-    <string name="settings_hide_apatch_card_summary">隐藏魔法大厅的"了解心之契约"魔法阵</string>
 
     <string name="send_log">发送魔法记录</string>
     <string name="settings_clean_storage">净化魔法数据</string>

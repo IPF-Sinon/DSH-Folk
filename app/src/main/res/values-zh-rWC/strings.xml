@@ -48,8 +48,6 @@
     <string name="settings_app_language">仙音道语</string>
     <string name="system_default">循天道常序</string>
 
-    <string name="settings_hide_apatch_card">隐去「参悟DSH-Folk仙法」仙笺</string>
-    <string name="settings_hide_apatch_card_summary">藏起仙府主殿之「参悟DSH-Folk仙法」仙笺</string>
 
     <string name="send_log">呈渡劫日志</string>
     <string name="settings_clean_storage">涤荡仙府尘垢</string>

@@ -49,8 +49,6 @@
     <string name="settings_app_language">方言</string>
     <string name="system_default">照旧</string>
 
-    <string name="settings_hide_apatch_card">隐藏"了解 DSH-Folk 餐厅"菜单</string>
-    <string name="settings_hide_apatch_card_summary">隐藏主厨台面的"了解 DSH-Folk 餐厅"菜单</string>
     <string name="settings_grid_working_card_hide_check">不显对勾</string>
     <string name="settings_grid_working_card_hide_check_summary">工牌上的小勾勾或警告全藏起</string>
     <string name="settings_grid_working_card_hide_text">不显状态字</string>

@@ -48,8 +48,6 @@
     <string name="settings_app_language">语言资源包</string>
     <string name="system_default">默认资源包</string>
 
-    <string name="settings_hide_apatch_card">拆掉"了解 DSH-Folk"告示牌</string>
-    <string name="settings_hide_apatch_card_summary">把主世界那块"了解 DSH-Folk"告示牌拆了吧，碍事</string>
     <string name="settings_grid_working_card_hide_check">藏起状态图标</string>
     <string name="settings_grid_working_card_hide_check_summary">把合成台面板上的对勾和苦力怕脸藏起来</string>
     <string name="settings_grid_working_card_hide_text">藏起状态文字</string>

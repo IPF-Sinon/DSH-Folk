@@ -67,8 +67,6 @@
     <string name="settings_folkx_animation_diagonal">Çapraz Kaydırma</string>
 
 
-    <string name="settings_hide_apatch_card">DSH-Folk’i Öğren kartını gizle</string>
-    <string name="settings_hide_apatch_card_summary">Ana ekrandaki DSH-Folk’i Öğren kartını gizle</string>
 
     <string name="send_log">Günlükleri gönder</string>
     <string name="settings_clean_storage">Uygulama verilerini temizle</string>

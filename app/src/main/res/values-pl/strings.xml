@@ -41,8 +41,6 @@
     <string name="developer_and_maintainer">Deweloper | Opiekun</string>
     <string name="settings_app_language">Język</string>
     <string name="system_default">Domyślne ustawienie systemowe</string>
-    <string name="settings_hide_apatch_card">Ukryj kartę "Dowiedz się o DSH-Folk"</string>
-    <string name="settings_hide_apatch_card_summary">Ukryj kartę "Dowiedz się o DSH-Folk" na stronie głównej</string>
     <string name="send_log">Prześlij logi</string>
     <string name="settings_clean_storage">Wyczyść dane aplikacji</string>
     <string name="settings_clean_storage_summary">Naprawia błędy pobierania lub stosowania spowodowane pozostałymi plikami</string>

@@ -51,8 +51,6 @@
     <string name="system_default">Bawaan Sistem</string>
 
 
-    <string name="settings_hide_apatch_card">Sembunyikan kartu "Pelajari DSH-Folk"</string>
-    <string name="settings_hide_apatch_card_summary">Sembunyikan kartu "Pelajari DSH-Folk" di layar utama</string>
 
     <string name="send_log">Kirim Log</string>
     <string name="settings_clean_storage">Bersihkan data aplikasi</string>

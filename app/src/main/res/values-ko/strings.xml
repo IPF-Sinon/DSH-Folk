@@ -67,8 +67,6 @@
     <string name="settings_folkx_animation_diagonal">대각선 슬라이드</string>
 
 
-    <string name="settings_hide_apatch_card">DSH-Folk 알아보기 카드 숨김</string>
-    <string name="settings_hide_apatch_card_summary">홈 화면에서 DSH-Folk 알아보기 카드를 숨깁니다.</string>
 
     <string name="send_log">로그 보내기</string>
     <string name="settings_clean_storage">앱 데이터 정리</string>

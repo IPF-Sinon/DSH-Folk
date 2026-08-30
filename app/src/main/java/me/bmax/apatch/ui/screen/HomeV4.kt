@@ -109,7 +109,6 @@ fun HomeScreenV4(
     val prefs = APApplication.sharedPreferences
     val isWallpaperMode = BackgroundConfig.isCustomBackgroundEnabled &&
         (BackgroundConfig.customBackgroundUri != null || BackgroundConfig.isMultiBackgroundEnabled)
-    val hideAboutCard = prefs.getBoolean("hide_apatch_card", false)
 
     val configuration = LocalConfiguration.current
     val isWide = configuration.screenWidthDp >= 600
@@ -138,18 +137,12 @@ fun HomeScreenV4(
                 ) {
                     DeviceStatusCard(isWallpaperMode = isWallpaperMode)
                     StorageInfoCard()
-                    if (!hideAboutCard) {
-                        LearnMoreCardV4()
-                    }
                 }
             }
         } else {
             DshSystemInfoCard(navigator)
             DeviceStatusCard(isWallpaperMode = isWallpaperMode)
             StorageInfoCard()
-            if (!hideAboutCard) {
-                LearnMoreCardV4()
-            }
         }
 
         DshLogCard()
@@ -857,46 +850,5 @@ private fun StorageProgressBar(
             color = color,
             trackColor = color.copy(alpha = 0.2f),
         )
-    }
-}
-
-/**
- * 了解更多卡片 V4
- */
-@Composable
-internal fun LearnMoreCardV4() {
-    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-
-    TonalCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { uriHandler.openUri("https://github.com/IPF-Sinon/DSH-Folk") }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Info,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = stringResource(R.string.dsh_learn_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = stringResource(R.string.dsh_learn_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }

@@ -51,8 +51,6 @@
     <string name="system_default">По умолчанию системы</string>
 
 
-    <string name="settings_hide_apatch_card">Скрыть карту "Изучить DSH-Folk"</string>
-    <string name="settings_hide_apatch_card_summary">Скрыть карту "Изучить DSH-Folk" на главном экране</string>
 
     <string name="send_log">Отправить логи</string>
     <string name="settings_clean_storage">Очистка данных приложения</string>

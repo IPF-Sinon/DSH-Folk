@@ -42,6 +42,12 @@ data class DshState(
     val pid: Long? = null,
     val runtimeVersion: String? = null,
     val installed: Boolean = false,
+    /**
+     * 容器体积（字节），0 表示还没算过。
+     *
+     * 走缓存 + 后台重算而不是现算：见 [DshEnv.KEY_ROOTFS_SIZE]。
+     */
+    val rootfsSizeBytes: Long = 0L,
 ) {
     val webUrl: String get() = "http://127.0.0.1:$port/"
 }
@@ -122,13 +128,32 @@ object DshRuntime {
     fun attach(context: Context) {
         init(context)
         val installed = DshEnv.isRuntimeInstalled(appContext)
+        val cachedSize = prefs().getLong(DshEnv.KEY_ROOTFS_SIZE, 0L)
         _state.update {
             it.copy(
                 installed = installed,
                 port = port(),
                 runtimeVersion = prefs().getString(DshEnv.KEY_RUNTIME_VERSION, null),
+                rootfsSizeBytes = if (installed) cachedSize else 0L,
                 phase = if (installed) it.phase else DshPhase.NOT_READY,
             )
+        }
+        // 装好了但还没量过（升级上来的旧安装）：后台补一次，别让界面一直显示「—」
+        if (installed && cachedSize <= 0L) refreshRootfsSize()
+    }
+
+    /**
+     * 后台重算容器体积并落盘缓存。
+     *
+     * 只允许从这里进入 [dirSize]：它要遍历十万级文件，在组合期同步调用会让
+     * 每次导航回首页都卡两秒以上（真机 MIUIScout 实测 duration=2505ms）。
+     */
+    fun refreshRootfsSize() {
+        if (!ready) return
+        scope.launch {
+            val bytes = withContext(Dispatchers.IO) { dirSize(DshEnv.rootfs(appContext)) }
+            prefs().edit().putLong(DshEnv.KEY_ROOTFS_SIZE, bytes).apply()
+            _state.update { it.copy(rootfsSizeBytes = bytes) }
         }
     }
 
@@ -574,6 +599,8 @@ object DshRuntime {
                 message = str(R.string.dsh_msg_runtime_ready),
             )
         }
+        // 刚解压完，体积是全新的：后台量一次并落缓存，界面随 state 自动更新
+        refreshRootfsSize()
     }
 
     private fun fetchMeta(): DshMeta? = runCatching {
@@ -1042,7 +1069,12 @@ object DshRuntime {
         StatFs(dir.absolutePath).availableBytes
     }.getOrDefault(-1L)
 
-    /** 运行时占用统计（设置页存储信息用）。 */
+    /**
+     * 运行时占用统计（设置页存储信息用）。
+     *
+     * **别在组合期调用**：它递归遍历整个 rootfs。首页要显示体积请读
+     * `state.rootfsSizeBytes`（缓存值），需要刷新走 [refreshRootfsSize]。
+     */
     fun rootfsSizeBytes(): Long = if (!ready) 0L else dirSize(DshEnv.rootfs(appContext))
 
     private fun dirSize(dir: File): Long {
