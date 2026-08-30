@@ -35,7 +35,7 @@ import androidx.compose.material3.Icon
 /**
  * 救急 CLI 的常用命令。
  *
- * 注意 `--omit=peer`：不带它 npm 会去装 16 个 `@deepseek-ai/*` peer 包，
+ * 注意 `--omit=peer`：不带它 npm 会去装 16 个 `@deepseek-ai/…` peer 包，
  * 在手机上又慢又容易失败，而离线 CLI 一个都不需要（只用 js-yaml）。
  */
 private val RESCUE_COMMANDS = listOf(

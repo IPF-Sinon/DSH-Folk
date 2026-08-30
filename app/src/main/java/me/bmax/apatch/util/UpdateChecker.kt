@@ -154,8 +154,10 @@ object UpdateChecker {
      * 拉 `.sha256` 文件并取出十六进制摘要。
      *
      * 内容形如 `<hex>  <filename>`（sha256sum 的输出），所以取第一段。
+     * 不是 64 位十六进制就返回空 —— 宁可让 UI 退回浏览器，也不拿一个可疑的
+     * 期望值去比对（那等于没校验）。
      */
-    private fun fetchSha256(url: String): String {
+    private suspend fun fetchSha256(url: String): String {
         if (url.isEmpty()) return ""
         val body = FolkApiClient.fetchJson(url, ttlMs = 30 * 60 * 1000L, maxRetries = 1)
             .getOrNull().orEmpty()

@@ -825,7 +825,7 @@ object DshPluginRepo {
      * 与装插件是两回事：插件只启用 GUI（回环 HTTP API），不会产生
      * `dsh-config-manager` 命令 —— 命令来自这个包的 `bin` 字段，要 `npm i -g`。
      *
-     * `--omit=peer` 必须带：它声明了 16 个 `@deepseek-ai/*` peerDependencies，
+     * `--omit=peer` 必须带：它声明了 16 个 `@deepseek-ai/…` peerDependencies，
      * 而离线 CLI 一个都不用（运行时依赖只有 js-yaml，已实测 peer 全缺时
      * `snapshots` / `help` 均正常退出 0）。不带这个标志会在手机上白装十几个包。
      *
