@@ -1,6 +1,7 @@
 package me.bmax.apatch.dsh
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import java.io.File
 import java.net.HttpURLConnection
