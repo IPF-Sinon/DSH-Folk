@@ -127,6 +127,7 @@ object SettingsRegistry {
             add(SettingEntry("function_download_source", R.string.dsh_source_section, R.string.dsh_source_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_runtime", R.string.dsh_runtime_section, R.string.dsh_runtime_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_repair_plugins", R.string.dsh_plugin_repair, R.string.dsh_plugin_repair_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_verify_install", R.string.dsh_verify_after_install, R.string.dsh_verify_after_install_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_permission", R.string.dsh_perm_section, R.string.dsh_perm_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_wireless_adb", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.FUNCTION))
         }

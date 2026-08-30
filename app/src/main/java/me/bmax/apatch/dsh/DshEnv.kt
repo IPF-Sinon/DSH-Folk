@@ -71,4 +71,15 @@ object DshEnv {
 
     /** 应用内 WebUI 悬浮球的纵向位置，0..1 的屏高比例。 */
     const val KEY_WEBUI_BALL_Y = "webui_ball_y"
+
+    /**
+     * 首启预装插件是否已经跑过。
+     *
+     * 无论成功失败都置位：失败不该在每次冷启动重试（用户可以自己去商店装），
+     * 否则每次开应用都要多等一轮 pnpm。
+     */
+    const val KEY_SEED_PLUGINS_DONE = "seed_plugins_done"
+
+    /** 安装插件后是否用 `dsh web --port 0` 验证一次能否启动（默认开）。 */
+    const val KEY_VERIFY_AFTER_INSTALL = "verify_after_install"
 }

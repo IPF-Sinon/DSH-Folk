@@ -108,11 +108,14 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
         if (viewModel.storeAll.isEmpty()) viewModel.refreshCatalog()
     }
 
-    var detail by remember { mutableStateOf<DshPlugin?>(null) }
+    // 只存 id，实体每次从 storeItems 取：装完/卸完列表会刷新，
+    // 存快照的话详情页按钮会停在打开那一刻的状态
+    var detailId by remember { mutableStateOf<String?>(null) }
+    val detail = detailId?.let { id -> viewModel.storeItems.firstOrNull { it.id == id } }
     detail?.let { p ->
         DshPluginDetailSheet(
             plugin = p,
-            onDismiss = { detail = null },
+            onDismiss = { detailId = null },
             onInstall = { viewModel.install(p.addSpec) },
             onUpdate = { viewModel.install(p.addSpec) },
             onUninstall = { viewModel.uninstall(p.pkg) },
@@ -189,9 +192,8 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
             StoreStatusLine(viewModel)
             StoreGrid(
                 viewModel = viewModel,
-                installedPkgs = viewModel.plugins.map { it.pkg }.toSet(),
                 onInstall = { spec -> viewModel.install(spec) },
-                onOpenDetail = { detail = it },
+                onOpenDetail = { detailId = it.id },
                 onOpenRepo = { openPluginRepo(context, it) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },
             )
         }
@@ -279,7 +281,6 @@ private fun CategoryRow(viewModel: DshPluginViewModel) {
 @Composable
 private fun StoreGrid(
     viewModel: DshPluginViewModel,
-    installedPkgs: Set<String>,
     onInstall: (String) -> Unit,
     onOpenDetail: (DshPlugin) -> Unit,
     onOpenRepo: (DshPlugin) -> Unit,
@@ -323,7 +324,8 @@ private fun StoreGrid(
                 items(list, key = { it.id }) { plugin ->
                     StorePluginTile(
                         plugin = plugin,
-                        installed = plugin.pkg.isNotEmpty() && plugin.pkg in installedPkgs,
+                        // 已装状态由 storeItems 统一补齐，瓦片与详情页判据一致
+                        installed = plugin.installed,
                         onInstall = { onInstall(plugin.addSpec) },
                         onOpenRepo = { onOpenRepo(plugin) },
                         onOpenDetail = { onOpenDetail(plugin) },

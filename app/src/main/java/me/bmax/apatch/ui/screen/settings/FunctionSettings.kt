@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -103,6 +104,9 @@ fun FunctionSettingsContent(
     onRepairPlugins: () -> Unit,
     /** 重建正在进行中（与安装共用同一把锁）。 */
     repairBusy: Boolean,
+    /** 安装插件后是否验证一次能否启动。 */
+    verifyAfterInstall: Boolean,
+    onVerifyAfterInstallChange: (Boolean) -> Unit,
     adbPairCode: String,
     onAdbPairCodeChange: (String) -> Unit,
     adbPairPort: String,
@@ -369,6 +373,18 @@ fun FunctionSettingsContent(
                     }
                 }
             }
+        }
+
+        // ───────── 安装后验证 ─────────
+        item(key = "function_verify_install") {
+            ToggleSettingCard(
+                flat = flat,
+                icon = Icons.Filled.VerifiedUser,
+                title = stringResource(R.string.dsh_verify_after_install),
+                description = stringResource(R.string.dsh_verify_after_install_summary),
+                checked = verifyAfterInstall,
+                onCheckedChange = onVerifyAfterInstallChange,
+            )
         }
 
         // ───────── 权限通道 ─────────

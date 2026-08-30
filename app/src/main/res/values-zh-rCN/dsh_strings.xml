@@ -340,4 +340,11 @@
     <string name="dsh_plugin_repair_summary">没有真实硬链接支持时，pnpm 装出来的链接会指向它的内容存储，插件的客户端包因此找不到、服务起不来。重建会清空 node_modules 并以真实文件副本重装（保留 pnpm-lock.yaml；可能耗时几分钟，期间服务无法启动）。若你自己在 profile 的 pnpm-workspace.yaml 里设过 packageImportMethod，该设置会被保留，此项可能无效。</string>
     <string name="dsh_plugin_repair_go">立即重建</string>
     <string name="dsh_err_plugin_tree_failed">插件树加载失败。可到 设置 → 功能 → 重建插件依赖 试一次，或卸载刚装的那个插件。</string>
+
+    <!-- 安装后验证 / 首启预装 -->
+    <string name="dsh_verify_after_install">安装后验证</string>
+    <string name="dsh_verify_after_install_summary">装完插件后用临时端口启动一次 dsh，确认插件树能加载；不通过就自动卸载。每次安装会多花 30 秒到 3 分钟。</string>
+    <string name="dsh_plugin_verify_failed">验证未通过：%1$s。插件仍在，若服务起不来请到「已安装」页卸载它。</string>
+    <string name="dsh_plugin_rolled_back">验证未通过：%2$s。已自动卸载 %1$s，未对现有环境造成改动。</string>
+    <string name="dsh_plugin_seeding">正在预装内置插件…</string>
 </resources>

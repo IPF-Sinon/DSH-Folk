@@ -30,7 +30,7 @@ try_download() {
   return 1
 }
 
-echo "==> [1/7] 下载 Ubuntu ${UBUNTU_RELEASE} arm64 base rootfs"
+echo "==> [1/8] 下载 Ubuntu ${UBUNTU_RELEASE} arm64 base rootfs"
 BASE_TAR="$WORK/base.tar.gz"
 BASE_PATH="ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz"
 if [ ! -f "$BASE_TAR" ]; then
@@ -47,7 +47,7 @@ rm -rf "$ROOTFS"; mkdir -p "$ROOTFS"
 tar -xzf "$BASE_TAR" -C "$ROOTFS"
 echo "    rootfs 顶层: $(ls "$ROOTFS" | tr '\n' ' ')"
 
-echo "==> [2/7] 安装 Node.js ${NODE_VER} (linux-arm64)"
+echo "==> [2/8] 安装 Node.js ${NODE_VER} (linux-arm64)"
 NODE_TAR="$WORK/node.tar.xz"
 NODE_FILE="node-${NODE_VER}-linux-arm64.tar.xz"
 if [ ! -f "$NODE_TAR" ]; then
@@ -64,7 +64,7 @@ fi
 tar -xJf "$NODE_TAR" -C "$ROOTFS/usr/local" --strip-components=1
 test -x "$ROOTFS/usr/local/bin/node"
 
-echo "==> [3/7] 安装 @deepseek-ai/dsh@${DSH_VERSION}"
+echo "==> [3/8] 安装 @deepseek-ai/dsh@${DSH_VERSION}"
 # 用 runner（x86_64）的 npm 装进目标 rootfs 的前缀。
 # --os/--cpu 必须显式指定：dsh 依赖 sharp 与 koffi，它们通过 optionalDependencies
 # 按宿主平台挑预编译包，不指定就会装进 linux-x64 的 .node，在手机上一 require 就炸。
@@ -124,7 +124,7 @@ test -f "$ROOTFS/usr/local/bin/pnpm"
 PNPM_VERSION="$(node -p "require('$ROOTFS/usr/local/lib/node_modules/pnpm/package.json').version")"
 echo "    pnpm = $PNPM_VERSION"
 
-echo "==> [4/7] 安装 python3（无线 ADB 配对依赖）"
+echo "==> [4/8] 安装 python3（无线 ADB 配对依赖）"
 # 无线 ADB 配对（AdbBridge / adb-pair.py）需要容器内的 python3，
 # 而 ubuntu-base 里没有它。手机上第一次配对才 apt install 的话：
 #  - 要联网、要 apt 在 proot 下正常工作（dpkg 的 postinst 常在 proot 下失败）；
@@ -218,7 +218,41 @@ done
 test -f "$ROOTFS/usr/lib/python3.12/ssl.py"
 echo "    python3 已就绪 · lib-dynload $DYNLOAD_COUNT 个模块"
 
-echo "==> [5/7] 容器内初始设置"
+echo "==> [5/8] 安装 git（git 源插件依赖）"
+# 插件目录里 2659 条有 1357 条（51%）的安装命令是 `github:owner/name` 规格，
+# pnpm 解析它要 `git ls-remote`；ubuntu-base 没有 git，于是这一半插件全装不上
+# （真机报 ERR_PNPM_GIT_RESOLVE_FAILED: git executable not found on PATH）。
+# 手机上现装的问题跟 python3 一样：要联网、apt 的 postinst 在 proot 下常失败、
+# 用户要干等好几分钟。所以同样预解包进 rootfs。
+#
+# git 只用到 perl 跑几个辅助脚本（add -i、send-email 之类），核心命令是 C 实现，
+# 但 dpkg 的依赖关系摆在那儿，缺了 perl 一些子命令会直接报错，所以一并带上。
+GIT_PKGS="git git-man liberror-perl perl perl-base perl-modules-5.38
+          libcurl3t64-gnutls libpcre2-8-0 zlib1g"
+
+for pkg in $GIT_PKGS; do
+  info="$(resolve_deb "$pkg")" || { echo "!! 索引里找不到 $pkg"; exit 1; }
+  ver="$(printf '%s' "$info" | cut -f1)"
+  fn="$(printf '%s' "$info" | cut -f2)"
+  echo "    $pkg $ver"
+  curl -fsSL --connect-timeout 20 --retry 2 -o "$DEB_DIR/$pkg.deb" "$APT_BASE/$fn"
+  # 同 python3：纯解包，不跑 maintainer script（要在 arm64 上执行，runner 是 x86_64）
+  dpkg-deb -x "$DEB_DIR/$pkg.deb" "$ROOTFS"
+done
+
+# 自检：git 必须是 aarch64 ELF，且 core 的辅助程序在位（少了在手机上才炸）
+test -x "$ROOTFS/usr/bin/git"
+head -c 4 "$ROOTFS/usr/bin/git" | od -An -tx1 | tr -d ' \n' | grep -q '^7f454c46' \
+  || { echo "!! git 不是 ELF"; exit 1; }
+GIT_ARCH="$(od -An -tu1 -j18 -N1 "$ROOTFS/usr/bin/git" | tr -d ' ')"
+test "$GIT_ARCH" = "183" || { echo "!! git 不是 aarch64 (e_machine=$GIT_ARCH)"; exit 1; }
+# git-remote-https 才是 pnpm 走 https 克隆时真正调用的那个
+test -x "$ROOTFS/usr/lib/git-core/git-remote-https" \
+  || { echo "!! 缺少 git-remote-https（https 克隆会失败）"; exit 1; }
+test -x "$ROOTFS/usr/bin/perl" || { echo "!! 缺少 perl"; exit 1; }
+echo "    git 已就绪"
+
+echo "==> [6/8] 容器内初始设置"
 install -d -m 700 "$ROOTFS/root/.dsh"
 install -d -m 1777 "$ROOTFS/tmp"
 # APT 换国内源（用户在容器里 apt install 时不至于卡住）；DNS 由 App 在安装后写入
@@ -239,7 +273,7 @@ export LANG=C.UTF-8
 export TERM=xterm-256color
 EOF
 
-echo "==> [6/7] 打包 rootfs.tar.gz"
+echo "==> [7/8] 打包 rootfs.tar.gz"
 TARBALL="$OUT/rootfs.tar.gz"
 rm -f "$TARBALL"
 # numeric-owner + 不带前导目录：App 侧 TarGzipExtractor 直接铺到 filesDir/rootfs
@@ -248,7 +282,7 @@ SIZE=$(stat -c %s "$TARBALL")
 SHA=$(sha256sum "$TARBALL" | cut -d' ' -f1)
 echo "    $TARBALL  $((SIZE / 1024 / 1024)) MB  sha256=$SHA"
 
-echo "==> [7/7] 生成 metadata.json"
+echo "==> [8/8] 生成 metadata.json"
 REPO="${GITHUB_REPOSITORY:-IPF-Sinon/DSH-Folk}"
 TAG="${RELEASE_TAG:-runtime-latest}"
 ASSET="https://github.com/${REPO}/releases/download/${TAG}/rootfs.tar.gz"

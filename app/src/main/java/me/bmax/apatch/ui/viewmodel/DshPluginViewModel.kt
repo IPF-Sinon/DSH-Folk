@@ -9,7 +9,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.APApplication
+import me.bmax.apatch.R
 import me.bmax.apatch.apApp
+import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
 
@@ -70,19 +72,33 @@ class DshPluginViewModel : ViewModel() {
         get() = if (storeCategory.isBlank()) storeAll.size
         else storeAll.count { it.category == storeCategory }
 
-    /** 按分类 + 搜索词过滤后的可见条目。 */
+    /**
+     * 按分类 + 搜索词过滤后的可见条目，**并补齐已安装状态**。
+     *
+     * 为什么要在这里补：商店的 DshPlugin 来自目录，`installedVersion` 永远是空，
+     * 于是 `installed` / `updatable` 恒为 false —— 详情页因此对已装插件也显示
+     * 「安装」按钮，且永远不显示「更新」。网格瓦片之前是另算了一个 installedPkgs
+     * 集合绕过去的，那让判据分了两处、只修好了一半。在这里补齐后两处同时正确。
+     *
+     * 只能按 npm 包名匹配：目录没登记 npm 的条目（pkg 为空）匹配不上已装状态，
+     * 这是目录数据的直接后果，不为此再引入按仓库地址反查的猜测逻辑。
+     */
     val storeItems: List<DshPlugin>
         get() {
             val cat = storeCategory
             val q = search.trim()
-            return storeAll.filter { p ->
+            val installedByPkg = plugins.filter { it.pkg.isNotEmpty() }.associateBy { it.pkg }
+            return storeAll.asSequence().filter { p ->
                 (cat.isBlank() || p.category == cat) &&
                     (q.isEmpty() ||
                         p.name.contains(q, true) ||
                         p.pkg.contains(q, true) ||
                         p.author.contains(q, true) ||
                         p.description.contains(q, true))
-            }
+            }.map { p ->
+                val local = installedByPkg[p.pkg] ?: return@map p
+                p.copy(installedVersion = local.installedVersion, enabled = local.enabled)
+            }.toList()
         }
 
     /** 最近一次操作输出（安装/卸载日志尾巴），供 snackbar / 对话框展示。 */
@@ -225,7 +241,7 @@ class DshPluginViewModel : ViewModel() {
     }
 
     fun install(pkg: String, version: String = "", onDone: (String) -> Unit = {}) {
-        run(pkg, { DshPluginRepo.install(pkg, version, it) }, onDone)
+        run(pkg, { DshPluginRepo.install(pkg, version, it) }, onDone, verify = true)
     }
 
     fun uninstall(pkg: String, onDone: (String) -> Unit = {}) {
@@ -233,7 +249,12 @@ class DshPluginViewModel : ViewModel() {
     }
 
     fun installLocal(containerPath: String, onDone: (String) -> Unit = {}) {
-        run(containerPath.substringAfterLast('/'), { DshPluginRepo.installLocal(containerPath, it) }, onDone)
+        run(
+            containerPath.substringAfterLast('/'),
+            { DshPluginRepo.installLocal(containerPath, it) },
+            onDone,
+            verify = true,
+        )
     }
 
     /**
@@ -251,11 +272,14 @@ class DshPluginViewModel : ViewModel() {
      *
      * 成功后置 [needsRestart]：dsh 在启动时组合 profile 的 patch 层，
      * 装完不重启进程新插件不会加载 —— 这与 dsh plugin 自己的 needsRestart 语义一致。
+     *
+     * @param verify 安装成功后跑一次启动验证；失败则自动回滚（仅安装路径需要）。
      */
     private fun run(
         target: String,
         action: suspend ((String) -> Unit) -> String,
         onDone: (String) -> Unit,
+        verify: Boolean = false,
     ) {
         if (installing) return
         viewModelScope.launch {
@@ -265,28 +289,57 @@ class DshPluginViewModel : ViewModel() {
             installLog = emptyList()
             // onLine 在容器输出的读线程上被调，不能直接写 Compose 状态，
             // 所以绕回 viewModelScope（主调度器）再追加。
-            val raw = action { line ->
+            val append: (String) -> Unit = { line ->
                 viewModelScope.launch {
                     if (line.startsWith(DshPluginRepo.EXIT_MARKER)) return@launch
                     val next = installLog + line
                     installLog = if (next.size > MAX_LOG_LINES) next.takeLast(MAX_LOG_LINES) else next
                 }
             }
-            val failed = looksFailed(raw)
+            // 装之前先记下 bundles，装完的差集就是这次真正生效的新插件 ——
+            // 回滚必须用这个包名，不能用安装规格（github:owner/name 装出来的
+            // 包名跟规格根本不是一回事，拿规格 remove 会失败）
+            val before = if (verify) withContext(Dispatchers.IO) { DshPluginRepo.bundles() } else emptyList()
+            val raw = action(append)
+            var failed = looksFailed(raw)
+            var extra = ""
+
+            if (verify && !failed && verifyAfterInstall()) {
+                val reason = DshPluginRepo.verifyBoot(append)
+                if (reason != null) {
+                    failed = true
+                    val added = withContext(Dispatchers.IO) { DshPluginRepo.bundles() } - before.toSet()
+                    val victim = added.firstOrNull().orEmpty()
+                    val rolled = if (victim.isEmpty()) false else DshPluginRepo.rollback(victim, append)
+                    extra = if (rolled) {
+                        apApp.getString(R.string.dsh_plugin_rolled_back, victim, reason)
+                    } else {
+                        apApp.getString(R.string.dsh_plugin_verify_failed, reason)
+                    }
+                    append("[DSH-Folk] $extra")
+                }
+            }
+
             // 退出码标记是给程序看的，别显示给用户
             val out = raw.lineSequence()
                 .filterNot { it.startsWith(DshPluginRepo.EXIT_MARKER) }
                 .joinToString("\n")
                 .trim()
                 .ifEmpty { raw }
-            lastOutput = out
+            lastOutput = if (extra.isEmpty()) out else "$extra\n$out"
             installFailed = failed
             installing = false
+            // 回滚过就等于什么都没装，不该提示重启
             if (!failed) needsRestart = true
-            onDone(out)
+            onDone(lastOutput)
             refresh()
         }
     }
+
+    /** 安装后验证开关（默认开）。 */
+    private fun verifyAfterInstall(): Boolean =
+        apApp.getSharedPreferences(DshEnv.PREF, android.content.Context.MODE_PRIVATE)
+            .getBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, true)
 
     /**
      * 这次 dsh plugin 是不是失败了。

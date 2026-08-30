@@ -105,6 +105,14 @@ object DshRuntime {
     private const val PROFILE_GUEST_REL = "root/.dsh/profiles/web"
 
     /**
+     * 首启预装的插件（npm 包名，已人工验证可装）。
+     *
+     * 手机上没有这两个体验差很多：dsh-web-mobile 做移动端适配，dshmarket 提供
+     * WebUI 内的插件市场。
+     */
+    private val SEED_PLUGINS = listOf("dsh-web-mobile", "dshmarket")
+
+    /**
      * 插件树/客户端包加载失败的日志签名。
      *
      * 命中这些就**不能**判定为 proroot 故障：它与容器运行时无关，换 proot 重试
@@ -534,9 +542,44 @@ object DshRuntime {
                     if (_state.value.phase == DshPhase.ERROR) return@withLock
                 }
                 setupResolvConf()
+                seedPlugins()
                 startAndAwait()
             }
         }
+    }
+
+    /**
+     * 首次安装运行时后预装两个插件。
+     *
+     * 放在服务启动**之前**：首启本来就要下 135MB + 解压，再加一轮 pnpm 是等比例的；
+     * 而服务只启动一次、插件已经生效，不会出现「就绪了又要重启」的突兀体验。
+     *
+     * 无论成功失败都置位标记：失败不该在每次冷启动重试（用户可以自己去商店装），
+     * 否则每次开应用都要多等一轮 pnpm。
+     *
+     * 这里**不做**安装后验证：插件是我们自己挑的、已人工验证过，在首启路径上再跑
+     * 一次 `dsh web --port 0` 只会把首启拖长几分钟。
+     */
+    private suspend fun seedPlugins() {
+        if (!DshEnv.isRuntimeInstalled(appContext)) return
+        if (prefs().getBoolean(DshEnv.KEY_SEED_PLUGINS_DONE, false)) return
+        _state.update {
+            it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_plugin_seeding))
+        }
+        for (pkg in SEED_PLUGINS) {
+            appendLog("> 预装插件 $pkg …")
+            val out = runCatching {
+                DshPluginRepo.install(pkg) { line -> appendLog(line) }
+            }.getOrElse { "预装异常: ${it.message ?: it.javaClass.simpleName}" }
+            val code = out.lineSequence()
+                .lastOrNull { it.startsWith(DshPluginRepo.EXIT_MARKER) }
+                ?.removePrefix(DshPluginRepo.EXIT_MARKER)?.trim()?.toIntOrNull()
+            appendLog(if (code == 0) "> 预装完成 $pkg" else "! 预装失败 $pkg（可稍后在插件商店手动安装）")
+        }
+        prefs().edit().putBoolean(DshEnv.KEY_SEED_PLUGINS_DONE, true).apply()
+        // 预装会大幅改变 node_modules 体积，顺手重算一次缓存
+        refreshRootfsSize()
+        _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
     }
 
     /**
@@ -577,9 +620,12 @@ object DshRuntime {
         scope.launch {
             bootMutex.withLock {
                 stopServer()
+                // 重装等于换了一套全新 rootfs，容器里的插件确实没了，该重新预装
+                prefs().edit().putBoolean(DshEnv.KEY_SEED_PLUGINS_DONE, false).apply()
                 downloadAndInstall()
                 if (_state.value.phase != DshPhase.ERROR) {
                     setupResolvConf()
+                    seedPlugins()
                     startAndAwait()
                 }
             }

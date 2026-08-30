@@ -84,6 +84,9 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
         mutableStateOf(dshPrefs.getString(DshEnv.KEY_WEBUI_MODE, DshWebUi.MODE_IN_APP) ?: DshWebUi.MODE_IN_APP)
     }
     var autostart by rememberSaveable { mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_AUTOSTART, false)) }
+    var verifyAfterInstall by rememberSaveable {
+        mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, true))
+    }
     var downloadSource by rememberSaveable { mutableStateOf(DshSource.setting(context)) }
     var customMetaUrl by rememberSaveable { mutableStateOf(DshSource.customMetaUrl(context)) }
     // 生效源：auto 时是缓存/测速结果。解析要走网络，所以只在 IO 线程算，初值用设置值兜底。
@@ -304,6 +307,11 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     },
                     onRepairPlugins = { pluginViewModel.repairStore() },
                     repairBusy = pluginViewModel.installing,
+                    verifyAfterInstall = verifyAfterInstall,
+                    onVerifyAfterInstallChange = { on ->
+                        verifyAfterInstall = on
+                        dshPrefs.edit().putBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, on).apply()
+                    },
                     adbPairCode = adbPairCode,
                     onAdbPairCodeChange = { adbPairCode = it.filter { c -> c.isDigit() }.take(6) },
                     adbPairPort = adbPairPort,

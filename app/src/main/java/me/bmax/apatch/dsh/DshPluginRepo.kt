@@ -140,6 +140,26 @@ object DshPluginRepo {
     private const val PROFILE = "web"
     private const val PROFILE_DIR = "/root/.dsh/profiles/web"
 
+    /** git 已就绪的标记文件（避免每次 git 规格安装都探一遍 apt）。 */
+    private const val GIT_READY_MARK = "/root/.dsh/.git-ready"
+
+    /** 验证通过的自制标记（`dsh web: http` 出现即写）。 */
+    private const val VERIFY_OK_MARK = "[DSH-Folk-verify-ok]"
+
+    /**
+     * 验证等待上限。本环境实测约 25s 就打印就绪行，180s 是保守值 ——
+     * 误判的后果是插件被回滚、用户可关掉开关重装，不是数据损坏。
+     */
+    private const val VERIFY_TIMEOUT_MS = 180_000L
+
+    /** 插件树加载失败的日志签名（与 DshRuntime 那份同源，用于挑出关键行）。 */
+    private val VERIFY_FAILURE_MARKS = listOf(
+        "plugin tree failed to load",
+        "client bundles not found",
+        "failed to apply loader entry modules",
+        "ERR_PNPM",
+    )
+
     private const val CACHE_TTL_MS = 6 * 60 * 60 * 1000L
     /** 目录/下载量表变动没那么快，缓存 30 分钟，避免每次进页面都全量重拉。 */
     private const val CATALOG_TTL_MS = 30 * 60 * 1000L
@@ -550,10 +570,89 @@ object DshPluginRepo {
         onLine: (String) -> Unit = {},
     ): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext "包名为空，无法安装"
-        val spec = if (version.isBlank()) pkg else "$pkg@$version"
+        val resolved = resolveSpec(pkg, onLine)
+        val spec = if (version.isBlank()) resolved else "$resolved@$version"
+        if (spec.startsWith("github:") || spec.startsWith("git+")) ensureGit(onLine)
         val out = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
         out + repairIfLinkageBroken(onLine)
     }
+
+    /**
+     * git 规格安装前确保容器里有 git。
+     *
+     * 目录里 2659 条有 1357 条（51%）的 install 是 `github:` 规格，而 ubuntu-base
+     * 里没有 git —— pnpm 直接报 `git ls-remote failed: git executable not found`。
+     *
+     * 新版 runtime 已把 git 预解包进 rootfs（见 runtime-builder/build-rootfs.sh），
+     * 这里只兜存量安装：装过一次就写标记，不必每次都探。
+     *
+     * apt 在 proot 下不保证成功（builder 当初正是因为这个才改成预解包 python3），
+     * 所以失败也继续往下走原安装命令 —— 用户至少能看到完整的 apt 报错，
+     * 而不是一句没有上下文的 `git executable not found`。
+     */
+    private fun ensureGit(onLine: (String) -> Unit) {
+        val probe = DshRuntime.execRootfsForOutput(
+            "test -f '$GIT_READY_MARK' && command -v git >/dev/null 2>&1 && echo HAVE_GIT; " +
+                "command -v git >/dev/null 2>&1 && echo GIT_ON_PATH",
+            60_000,
+        )
+        if (probe.contains("GIT_ON_PATH")) {
+            if (!probe.contains("HAVE_GIT")) {
+                runCatching { DshRuntime.execRootfsForOutput("touch '$GIT_READY_MARK'", 30_000) }
+            }
+            return
+        }
+        onLine("[DSH-Folk] 这个插件来自 git 源，但容器里没有 git，正在安装（apt，可能要几分钟）…")
+        val out = DshRuntime.execRootfsStreaming(
+            "apt-get update -qq 2>&1 | tail -5; " +
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git 2>&1 | tail -30; " +
+                "command -v git >/dev/null 2>&1 && { mkdir -p \"\$(dirname '$GIT_READY_MARK')\"; " +
+                "touch '$GIT_READY_MARK'; echo '[DSH-Folk] git 已就绪'; } || " +
+                "echo '[DSH-Folk] git 安装失败，下面的安装大概率也会失败；请更新运行时（新版已内置 git）'",
+            600_000,
+            onLine,
+        )
+        android.util.Log.i("DshPluginRepo", "ensureGit: ${out.takeLast(200)}")
+    }
+
+    /**
+     * 把目录给的 `github:owner/name` 规格换成 npm 包名 —— **仅当能证明是同一个包**。
+     *
+     * 起因：目录里 `dsh-web-mobile` 的 npm 字段是 null，商店因此发
+     * `add github:mexiaosqwq/dsh-web-mobile`（容器没 git → 失败），而这个包其实在
+     * npm 上有（2.3.0，repository 指向同一个仓库），用户在终端手敲
+     * `add dsh-web-mobile` 就成功了。目录数据陈旧。
+     *
+     * **必须校验 repository**：实测抽 60 条 github: 条目，23 条在 npm 上有同名包，
+     * 其中只有 1 条 repo 对得上 —— 另外 22 条是**别的作者的同名包**（例如目录里
+     * `dsh-skin-switcher` 属 tsdfy，npm 上那个是 zhtx2024 的）。照名安装等于装错东西，
+     * 比装不上更糟。校验后命中率约 2%，这条回退只解决"目录漏登记 npm"这一种情况，
+     * 不能替代容器里的 git。
+     *
+     * 探测失败、超时、repo 不匹配 —— 一律沿用原 git 规格。
+     */
+    private fun resolveSpec(spec: String, onLine: (String) -> Unit): String {
+        if (!spec.startsWith("github:")) return spec
+        val ownerName = spec.removePrefix("github:")
+        // 只处理干净的 owner/name；带 #path: / #ref 的子目录规格换不成 npm 名
+        if (!Regex("^[\\w.-]+/[\\w.-]+$").matches(ownerName)) return spec
+        specCache[ownerName]?.let { return it.ifEmpty { spec } }
+        val name = ownerName.substringAfter('/')
+        val resolved = runCatching {
+            val json = httpGet("$NPM_REGISTRY/$name/latest") ?: return@runCatching ""
+            val o = JSONObject(json)
+            val repo = o.optJSONObject("repository")?.optString("url")
+                ?: o.optString("repository")
+            if (repo.contains(ownerName, ignoreCase = true)) name else ""
+        }.getOrDefault("")
+        specCache[ownerName] = resolved
+        if (resolved.isEmpty()) return spec
+        onLine("[DSH-Folk] 目录未登记 npm 包名；已核对 npm 上的 $name 指向同一仓库（$ownerName），改用 npm 安装以避开 git")
+        return resolved
+    }
+
+    /** `github:owner/name` → 已核实的 npm 名；空串表示核实过但不可用。 */
+    private val specCache = mutableMapOf<String, String>()
 
     /** 卸载一个插件（同样交给 dsh plugin，才会从 bundles 里摘掉）。 */
     suspend fun uninstall(
@@ -662,6 +761,74 @@ object DshPluginRepo {
         DshRuntime.execRootfsForOutput("rm -rf '$PROFILE_DIR/node_modules'", 120_000)
         dshPlugin("install ${importFlag()}".trimEnd(), 900_000, onLine)
     }
+
+    // ────────────────────────── 安装后验证 / 回滚 ──────────────────────────
+
+    /** profile `dsh.profile.bundles` 当前列表（判定安装带来了哪个新包）。 */
+    suspend fun bundles(): List<String> = withContext(Dispatchers.IO) {
+        val script = "const fs=require('fs'),path=require('path');" +
+            "try{const m=JSON.parse(fs.readFileSync(path.join(process.argv[1],'package.json'),'utf8'));" +
+            "for(const b of (m.dsh&&m.dsh.profile&&m.dsh.profile.bundles)||[])console.log(b)}catch(e){}"
+        DshRuntime.execRootfsForOutput("node -e \"$script\" $PROFILE_DIR 2>/dev/null", 60_000)
+            .lines().map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    /**
+     * 用 `dsh web --port 0` 就地验证插件树能不能结算。
+     *
+     * 判据可靠：`dsh web: http://…` 这一行只在 loader 结算之后才打印 ——
+     * dsh-web-app 里是 `settled.then(() => announceReady())`，插件树没结算就永远
+     * 不会有这行。实测 `--port 0` 会挑一个系统空闲端口（例如 38689），不碰 3080。
+     *
+     * 为什么就地验证而不是在临时 DSH_HOME 里试装：`packageImportMethod: copy`
+     * 已经关掉了 CAS 去重，复制整个真实 profile 的依赖（真机上两百多个包）会实打实
+     * 多占几百 MB，手机上不可接受；而只按模板建轻量组合又测不出与用户已装插件的冲突，
+     * 那恰恰是主要价值。代价是失败时真实 profile 被短暂改动过 —— 但新插件要重启才
+     * 生效，验证期间正在跑的服务不受影响，回滚也是我们自己发起的确定动作。
+     *
+     * @return null 表示通过；非 null 是失败原因（已含关键日志行）。
+     */
+    suspend fun verifyBoot(onLine: (String) -> Unit): String? = withContext(Dispatchers.IO) {
+        onLine("[DSH-Folk] 正在验证插件能否启动（临时端口，不影响当前服务）…")
+        val out = DshRuntime.execRootfsStreaming(
+            "export DSH_HOME=/root/.dsh; export BROWSER=true; " +
+                "mkdir -p /root/workspace 2>/dev/null; cd /root/workspace; " +
+                "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); " +
+                // --port 0 让系统挑空闲端口；就绪行一出就自己退出，别把验证进程留着
+                "node --expose-internals \"\$DSH_REAL\" web --port 0 2>&1 | " +
+                "while IFS= read -r l; do echo \"\$l\"; " +
+                "case \"\$l\" in 'dsh web: http'*) echo '$VERIFY_OK_MARK'; break;; esac; done",
+            VERIFY_TIMEOUT_MS,
+            onLine,
+        )
+        // 收尾：管道里的 node 可能还活着（break 只断了读循环）
+        runCatching {
+            DshRuntime.execRootfsForOutput("pkill -f 'web --port 0' 2>/dev/null; true", 30_000)
+        }
+        if (out.contains(VERIFY_OK_MARK)) return@withContext null
+        val key = out.lineSequence().firstOrNull { l ->
+            VERIFY_FAILURE_MARKS.any { l.contains(it, ignoreCase = true) }
+        }
+        key ?: "验证超时或进程提前退出（未出现就绪行）"
+    }
+
+    /**
+     * 回滚一次失败的安装。
+     *
+     * 包名必须取 `dsh.profile.bundles` 的新增项，不能用安装规格：
+     * `github:owner/name` 装出来的包名跟规格根本不是一回事，拿规格去 remove 会失败。
+     */
+    suspend fun rollback(pkg: String, onLine: (String) -> Unit): Boolean =
+        withContext(Dispatchers.IO) {
+            if (pkg.isBlank()) return@withContext false
+            onLine("[DSH-Folk] 验证未通过，正在自动卸载 $pkg …")
+            val out = dshPlugin("remove '$pkg'", 600_000, onLine)
+            val marker = out.lineSequence().lastOrNull { it.startsWith(EXIT_MARKER) }
+            val code = marker?.removePrefix(EXIT_MARKER)?.trim()?.toIntOrNull()
+            val ok = code == 0
+            if (!ok) onLine("[DSH-Folk] 自动卸载失败，请到「已安装」页手动卸载 $pkg")
+            ok
+        }
 
     /** 暂存目录在容器里的绝对路径。 */
     private const val INCOMING_GUEST = "/root/.dsh/incoming"
