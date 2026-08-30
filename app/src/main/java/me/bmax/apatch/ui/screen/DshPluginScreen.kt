@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -184,6 +185,48 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
 @Composable
 internal fun PluginProgressHost(viewModel: DshPluginViewModel) {
     val clipboard = LocalClipboardManager.current
+
+    // 构建脚本放行确认。摆在进度对话框之前：它是对刚失败那次安装的处置，
+    // 用户该先看到「要不要放行」，而不是先关掉日志再自己想起来重装。
+    viewModel.buildApproval?.let { ask ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissBuildApproval() },
+            title = { Text(stringResource(R.string.dsh_plugin_allow_builds_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.dsh_plugin_allow_builds_text, ask.target),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    for (p in ask.packages) {
+                        Text(
+                            text = "• $p",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_plugin_allow_builds_warn),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.approveBuilds() }) {
+                    Text(stringResource(R.string.dsh_plugin_allow_builds_go))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissBuildApproval() }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
     val visible = viewModel.installing || viewModel.installLog.isNotEmpty()
     if (!visible) return
     DshPluginProgressDialog(

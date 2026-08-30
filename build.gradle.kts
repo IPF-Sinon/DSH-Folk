@@ -32,8 +32,8 @@ fun getGitDescribe(): String {
 }
 
 fun getVersionCode(): Int {
-    // DSH-Folk 版本号（1.7.1 = 10701）
-    return 10701
+    // DSH-Folk 版本号（1.7.2 = 10702）
+    return 10702
 }
 
 fun getbranch(): String {
@@ -41,7 +41,7 @@ fun getbranch(): String {
 }
 
 fun getVersionName(): String {
-    return "1.7.1"
+    return "1.7.2"
 }
 
 tasks.register("printVersion") {

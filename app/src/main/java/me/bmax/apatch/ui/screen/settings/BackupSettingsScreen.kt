@@ -1,6 +1,5 @@
 package me.bmax.apatch.ui.screen.settings
 
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,7 +31,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
@@ -42,7 +40,6 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.ui.screen.PluginProgressHost
@@ -67,6 +64,8 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var dshMessage by rememberSaveable { mutableStateOf("") }
     var dshPassword by rememberSaveable { mutableStateOf("") }
     var dshRemote by rememberSaveable { mutableStateOf(listOf<String>()) }
+    // 是否把 sessions（会话记录）也导进去：体积能到几百 MB 且含敏感信息，默认关。
+    var dshIncludeSessions by rememberSaveable { mutableStateOf(false) }
 
     // 插件状态：进页面就查一次，别等用户点了「导出」才报错。
     // null = 检测中；下面的 LaunchedEffect 只跑一次（备份页不是热路径）。
@@ -154,12 +153,16 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                             val text = if (!status.ready) {
                                 if (status.error.isEmpty()) pluginMissing else notRunning
                             } else {
-                                val r = DshConfigBackup.export(context, password = dshPassword)
+                                val r = DshConfigBackup.export(
+                                    context,
+                                    sections = DshConfigBackup.sections(dshIncludeSessions),
+                                    password = dshPassword,
+                                )
                                 if (!r.ok) r.message else {
-                                    val local = "${r.message}\n${r.file?.absolutePath ?: ""}"
+                                    val local = "${r.message}\n${r.location.ifBlank { r.file?.absolutePath ?: "" }}"
                                     // 开了云备份就顺手推一份到 WebDAV，失败只追加一行说明，不影响本地备份
                                     val zip = r.file
-                                    if (BackupConfig.isBackupEnabled && zip != null && BackupConfig.webdavUrl.isNotBlank()) {
+                                    val result = if (BackupConfig.isBackupEnabled && zip != null && BackupConfig.webdavUrl.isNotBlank()) {
                                         val up = WebDavUtils.uploadFile(
                                             baseUrl = BackupConfig.webdavUrl,
                                             user = BackupConfig.webdavUsername,
@@ -171,6 +174,11 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                                         local + "\n" + if (up.isSuccess) webdavOk
                                             else webdavFailed.format(up.exceptionOrNull()?.message ?: "")
                                     } else local
+                                    // 暂存文件只是「下载→复制进公共目录」的中转：公共目录里已有正式副本，
+                                    // 这里删掉避免导几次就攒出几百 MB。只有「连兜底目录都写不进」的极端
+                                    // 情况 location 才指向暂存文件本身，那种情况不能删。
+                                    zip?.takeIf { it.absolutePath != r.location }?.delete()
+                                    result
                                 }
                             }
                             withContext(Dispatchers.Main) {
@@ -202,24 +210,11 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         }
                     },
                     onDshOpenDir = {
-                        val dir = DshConfigBackup.backupDir(context)
-                        dir.mkdirs()
-                        val opened = runCatching {
-                            val uri = FileProvider.getUriForFile(
-                                context,
-                                "${BuildConfig.APPLICATION_ID}.fileprovider",
-                                dir,
-                            )
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW)
-                                    .setDataAndType(uri, "resource/folder")
-                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            )
-                            true
-                        }.getOrDefault(false)
+                        val opened = DshConfigBackup.openBackupDir(context)
                         if (!opened) dshMessage = openDirFailed
                     },
+                    includeSessions = dshIncludeSessions,
+                    onIncludeSessionsChange = { dshIncludeSessions = it },
                     pluginReady = pluginReady,
                     pluginDetail = pluginDetail,
                     onGoInstallPlugin = { navigator.navigate(DshPluginStoreScreenDestination) },

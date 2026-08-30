@@ -22,6 +22,10 @@
     <string name="dsh_webui_reload">Reload</string>
     <string name="dsh_webui_open_external">Open in browser</string>
     <string name="dsh_webui_load_failed">Failed to load</string>
+    <string name="dsh_webui_no_file_picker">No file picker app found on this device</string>
+    <string name="dsh_webui_downloading">Downloading %1$s…</string>
+    <string name="dsh_webui_downloaded">Saved to Download/DSH-Folk/%1$s</string>
+    <string name="dsh_webui_download_failed">Download failed</string>
     <string name="dsh_webui_ball">Web UI controls</string>
     <string name="dsh_webui_close">Close</string>
     <!-- WebUI 打开方式设置 -->
@@ -163,7 +167,7 @@
     <string name="dsh_backup_plugin_missing">dsh-config-manager is not installed in the runtime. Install it from the plugin store first.</string>
     <string name="dsh_backup_exporting">Exporting…</string>
     <string name="dsh_backup_importing">Importing…</string>
-    <string name="dsh_backup_open_dir_failed">Could not open the folder; it is at Download/DSH-Folk/ConfigBackups.</string>
+    <string name="dsh_backup_open_dir_failed">Could not open the folder; it is at Download/DSH-Folk.</string>
 
     <!-- 插件设置页 -->
     <string name="dsh_plugin_disable_update_check">Disable update check</string>
@@ -379,4 +383,10 @@
     <string name="dsh_backup_rescue_install_cli">Install rescue CLI in container</string>
     <string name="dsh_backup_rescue_open_terminal">Open terminal</string>
     <string name="dsh_backup_rescue_cmds_title">Run these on the Terminal page</string>
+    <string name="dsh_plugin_allow_builds_title">Allow build scripts?</string>
+    <string name="dsh_plugin_allow_builds_text">Installing %1$s needs to run its build script. pnpm blocks this by default.</string>
+    <string name="dsh_plugin_allow_builds_warn">This executes code from the package author inside the container. Only allow it if you trust the source.</string>
+    <string name="dsh_plugin_allow_builds_go">Allow and retry</string>
+    <string name="dsh_backup_include_sessions">Include session history (sessions)</string>
+    <string name="dsh_backup_include_sessions_summary">Session records can be hundreds of MB and contain sensitive data. Off by default.</string>
 </resources>

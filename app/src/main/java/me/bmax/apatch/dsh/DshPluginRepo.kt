@@ -583,18 +583,64 @@ object DshPluginRepo {
      * dsh 只加载 profile package.json 里 `dsh.profile.bundles` 列出的包，而这个列表是
      * `dsh plugin` 成功后 reconcile 出来的（判据是包自己声明 `dsh.bundle.patch`）。
      * 裸装进任何目录都只是躺在磁盘上，不会被加载。
+     *
+     * @param allowBuilds 用户已放行构建脚本的包名。非空时先写进 profile 的
+     *        `pnpm-workspace.yaml` 再装，用于 [pendingBuildApproval] 之后的重试。
      */
     suspend fun install(
         pkg: String,
         version: String = "",
         onLine: (String) -> Unit = {},
+        allowBuilds: List<String> = emptyList(),
     ): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext "包名为空，无法安装"
+        if (allowBuilds.isNotEmpty()) DshRuntime.allowProfileBuilds(allowBuilds, onLine)
         val resolved = resolveSpec(pkg, onLine)
         val spec = if (version.isBlank()) resolved else "$resolved@$version"
         if (spec.startsWith("github:") || spec.startsWith("git+")) ensureGit(onLine)
         val out = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
         out + repairIfLinkageBroken(onLine)
+    }
+
+    /**
+     * 从安装输出里认出「pnpm 拦下了构建脚本」，并取出待放行的包名。
+     *
+     * pnpm 11 起，带 install/postinstall/prepare 脚本的依赖默认**不执行**，
+     * 而且这不是警告 —— 实测 `pnpm add` 直接以退出码 1 失败，输出（stdout）里是：
+     *
+     * ```
+     * [ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: better-sqlite3@11.10.0, esbuild@0.28.2
+     * Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
+     * ```
+     *
+     * 而 `pnpm approve-builds` 是交互式的（要在 TTY 里按方向键勾选），在容器里跑不了，
+     * 所以只能由我们把包名写进 `pnpm-workspace.yaml` 的 `allowBuilds`。
+     *
+     * 执行别人的构建脚本等于在容器里跑任意代码，因此**必须让用户点头**，
+     * 不能静默放行 —— 这也是这个函数只负责「识别 + 报出名单」的原因。
+     *
+     * @return 需要放行的包名（不带版本号；allowBuilds 的键就是裸包名），无则空
+     */
+    fun pendingBuildApproval(output: String): List<String> {
+        if (!output.contains("ERR_PNPM_IGNORED_BUILDS") &&
+            !output.contains("Ignored build scripts")
+        ) {
+            return emptyList()
+        }
+        val line = output.lineSequence()
+            .firstOrNull { it.contains("Ignored build scripts") }
+            ?: return emptyList()
+        return line.substringAfter("Ignored build scripts:", "")
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            // 去掉版本号：`esbuild@0.28.2` → `esbuild`，`@scope/pkg@1.2.3` → `@scope/pkg`
+            .map { spec ->
+                val at = spec.lastIndexOf('@')
+                if (at > 0) spec.substring(0, at) else spec
+            }
+            .filter { it.isNotEmpty() }
+            .distinct()
     }
 
     /**

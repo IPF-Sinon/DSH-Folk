@@ -164,6 +164,39 @@ class DshPluginViewModel : ViewModel() {
 
     fun clearNeedsRestart() { needsRestart = false }
 
+    /**
+     * pnpm 拦下了构建脚本，等用户决定是否放行。
+     *
+     * 为什么要问：执行依赖自带的 install/postinstall/prepare 脚本，等于在容器里跑
+     * 这个包作者的任意代码。pnpm 11 默认拦住并**让安装失败**，官方出路是交互式
+     * `pnpm approve-builds`（容器里没有 TTY，跑不了）。所以由 App 代问一次，
+     * 用户点头才写 allowBuilds 并重试。绝不静默放行。
+     */
+    data class BuildApproval(
+        /** 待放行的包名（不含版本）。 */
+        val packages: List<String>,
+        /** 触发它的安装目标，显示用。 */
+        val target: String,
+    )
+
+    var buildApproval by mutableStateOf<BuildApproval?>(null)
+        private set
+
+    /** 用户拒绝：什么都不写，保留失败日志。 */
+    fun dismissBuildApproval() { buildApproval = null }
+
+    /** 用户同意：写 allowBuilds 后重跑同一次安装。 */
+    fun approveBuilds() {
+        val pending = buildApproval ?: return
+        buildApproval = null
+        val retry = pendingRetry ?: return
+        pendingRetry = null
+        retry(pending.packages)
+    }
+
+    /** [approveBuilds] 要重放的动作，由 [run] 在识别出拦截时登记。 */
+    private var pendingRetry: ((List<String>) -> Unit)? = null
+
     fun refresh() {
         if (isRefreshing) return
         isRefreshing = true
@@ -241,7 +274,21 @@ class DshPluginViewModel : ViewModel() {
     }
 
     fun install(pkg: String, version: String = "", onDone: (String) -> Unit = {}) {
-        run(pkg, { DshPluginRepo.install(pkg, version, it) }, onDone, verify = true)
+        run(
+            pkg,
+            { DshPluginRepo.install(pkg, version, it) },
+            onDone,
+            verify = true,
+            // 被 pnpm 拦下构建脚本时，把「放行后重试」记成待确认动作
+            retryWithBuilds = { allow, cb ->
+                run(
+                    pkg,
+                    { DshPluginRepo.install(pkg, version, it, allowBuilds = allow) },
+                    cb,
+                    verify = true,
+                )
+            },
+        )
     }
 
     fun uninstall(pkg: String, onDone: (String) -> Unit = {}) {
@@ -291,6 +338,8 @@ class DshPluginViewModel : ViewModel() {
      * @param verify 安装成功后跑一次启动验证；失败则自动回滚（仅安装路径需要）。
      * @param affectsPluginTree 这次操作会不会改变 profile 的插件树。装全局 CLI 不会 ——
      *        对它提示「重启 DSH 后生效」是错的。
+     * @param retryWithBuilds 非空时，若失败原因是 pnpm 拦下构建脚本，就登记一次
+     *        「放行后重试」待用户确认，而不是直接把失败甩给用户。
      */
     private fun run(
         target: String,
@@ -298,6 +347,7 @@ class DshPluginViewModel : ViewModel() {
         onDone: (String) -> Unit,
         verify: Boolean = false,
         affectsPluginTree: Boolean = true,
+        retryWithBuilds: ((List<String>, (String) -> Unit) -> Unit)? = null,
     ) {
         if (installing) return
         viewModelScope.launch {
@@ -349,6 +399,16 @@ class DshPluginViewModel : ViewModel() {
             installing = false
             // 回滚过就等于什么都没装，不该提示重启；不动插件树的操作同样不提示
             if (!failed && affectsPluginTree) needsRestart = true
+
+            // 失败原因是 pnpm 拦下构建脚本时，不把「失败」当终局：拿出包名问用户
+            if (failed && retryWithBuilds != null) {
+                val pending = DshPluginRepo.pendingBuildApproval(raw)
+                if (pending.isNotEmpty()) {
+                    pendingRetry = { allow -> retryWithBuilds(allow, onDone) }
+                    buildApproval = BuildApproval(packages = pending, target = target)
+                }
+            }
+
             onDone(lastOutput)
             refresh()
         }

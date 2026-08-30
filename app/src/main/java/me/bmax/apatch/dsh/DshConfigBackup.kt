@@ -1,6 +1,12 @@
 package me.bmax.apatch.dsh
 
+import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import java.io.File
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -37,8 +43,11 @@ object DshConfigBackup {
      * 默认导出的分区。
      *
      * 与插件 defaultIncluded=true 的集合一致，另外**显式**加上 pluginFiles
-     * （插件侧默认关，但手机迁移时插件自己的配置文件该跟着走）；
-     * 只有 sessions 不导 —— 会话记录体积能到几百 MB。
+     * （插件侧默认关，但手机迁移时插件自己的配置文件该跟着走）。
+     *
+     * sessions 不在里面：它是逐会话文件复制，体积能到几百 MB，且含敏感信息。
+     * 插件侧也 defaultIncluded=false —— 想要的话用户在页面上勾
+     * 「包含会话数据」，走 [sections] 显式加进去。
      */
     val DEFAULT_SECTIONS = listOf(
         "settings", "ui", "providers", "plugins", "mcp", "prompts",
@@ -46,14 +55,23 @@ object DshConfigBackup {
         "pluginFiles", "credentialsStatus", "self",
     )
 
+    /** 要导出给插件的 `only` 列表；[includeSessions] 为真时追加 sessions 分区。 */
+    fun sections(includeSessions: Boolean): List<String> =
+        if (includeSessions) DEFAULT_SECTIONS + "sessions" else DEFAULT_SECTIONS
+
+    /** 备份落地的公共子目录（在 Download 下，用户用文件管理器就能看到）。 */
+    const val PUBLIC_SUBDIR = "DSH-Folk"
+
     /**
-     * 手机上备份文件的落地目录。
+     * 手机上备份文件的落地目录（尽力而为的兜底）。
      *
-     * 尽量放公共 Download（用户能用文件管理器拷走），但分区存储下没有「所有文件」
-     * 权限时那里写不进去，[getSafeDownloadsDir] 会退回应用专属外部目录。
+     * 首选走 MediaStore 直接写公共 `Download/DSH-Folk`（API 29+，免「所有文件」权限，
+     * 见 [export]）。这个 File 只在 MediaStore 写不进去时兜底：SDK<30 或已授
+     * 「所有文件」权限时返回真·公共 Download，否则 [getSafeDownloadsDir] 退回应用专属
+     * 外部目录。
      */
     fun backupDir(ctx: Context): File =
-        File(getSafeDownloadsDir(ctx), "DSH-Folk/ConfigBackups")
+        File(getSafeDownloadsDir(ctx), PUBLIC_SUBDIR)
 
     data class Status(
         val ready: Boolean,
@@ -84,10 +102,12 @@ object DshConfigBackup {
         val sections: Int = 0,
         /** 整包是否加密（提供了密码即为 true）。 */
         val encrypted: Boolean = false,
+        /** 给用户看的位置（如 Download/DSH-Folk/xxx.zip）；与 [file] 可能不是同一个文件。 */
+        val location: String = "",
     )
 
     /**
-     * 导出配置并把 ZIP 拉到 [backupDir]。
+     * 导出配置并把 ZIP 落到公共 Download/DSH-Folk（写不进才退 [backupDir]）。
      *
      * @param sections 要导出的分区；空则用 [DEFAULT_SECTIONS]
      * @param password 非空则整包 AES-256-GCM 加密（只在内存里传给插件，本地不留）
@@ -115,17 +135,20 @@ object DshConfigBackup {
         if (zipPath.isEmpty()) {
             return@withContext ExportResult(false, message = ctx.getString(R.string.dsh_bk_export_no_path))
         }
+        val name = zipPath.substringAfterLast('/').ifBlank { "dsh-config-backup.zip" }
 
-        val dir = backupDir(ctx)
-        if (!dir.exists() && !dir.mkdirs()) {
-            return@withContext ExportResult(
-                false,
-                message = ctx.getString(R.string.dsh_bk_mkdir_failed, dir.absolutePath),
-            )
+        // 先落到应用专属外部目录的暂存（始终可写，多大的会话都放得下），
+        // 再复制进公共 Download/DSH-Folk。不直接往公共目录写：分区存储下
+        // 没有「所有文件」权限就写不进去，而 MediaStore 那条路要先有完整字节流。
+        val stage = File(ctx.getExternalFilesDir(null) ?: ctx.cacheDir, "config-backup").apply { mkdirs() }
+        val tmp = File(stage, name)
+        val bytes = download(zipPath, tmp)
+        if (bytes <= 0) {
+            tmp.delete()
+            return@withContext ExportResult(false, message = ctx.getString(R.string.dsh_bk_download_failed))
         }
-        val dest = File(dir, zipPath.substringAfterLast('/'))
-        val bytes = download(zipPath, dest)
-        if (bytes <= 0) return@withContext ExportResult(false, message = ctx.getString(R.string.dsh_bk_download_failed))
+        // 复制进公共目录；返回给用户看的位置。失败退回应用专属目录（仍可导出，只是不好找）
+        val location = copyToPublic(ctx, tmp, name)
 
         // report / manifest 里有真正落盘的分区与加密状态，比我们请求的 only 更权威
         val report = o.optJSONObject("report")
@@ -147,10 +170,12 @@ object DshConfigBackup {
         }
         ExportResult(
             ok = true,
-            file = dest,
+            // WebDAV 上传等需要真实字节流的场合用暂存文件（公共目录里的那份是 MediaStore 项，
+            // 不一定能当普通 File 打开）。它留在应用专属目录，由系统按需回收。
+            file = tmp,
             sizeBytes = bytes,
             message = buildString {
-                append(ctx.getString(R.string.dsh_bk_exported, dest.name))
+                append(ctx.getString(R.string.dsh_bk_exported, name))
                 if (sections > 0) {
                     append("（").append(ctx.getString(R.string.dsh_bk_exported_sections, sections)).append("）")
                 }
@@ -159,7 +184,88 @@ object DshConfigBackup {
             },
             sections = sections,
             encrypted = encrypted,
+            location = location,
         )
+    }
+
+    /**
+     * 把导出的 ZIP 复制进用户能直接找到的地方，返回展示用的位置字符串。
+     *
+     * API 29+ 走 MediaStore.Downloads：分区存储下不需要「所有文件」权限就能写公共
+     * Download/DSH-Folk，文件会出现在系统文件管理器的「下载」里。写不进才退回
+     * [backupDir]（SDK<30 或有「所有文件」权限时是真公共目录，否则是应用专属目录）。
+     */
+    private fun copyToPublic(ctx: Context, src: File, name: String): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, name)
+                put(MediaStore.Downloads.MIME_TYPE, "application/zip")
+                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$PUBLIC_SUBDIR")
+            }
+            val uri = runCatching {
+                ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            }.getOrNull()
+            if (uri != null) {
+                val copied = runCatching {
+                    ctx.contentResolver.openOutputStream(uri)?.use { out ->
+                        src.inputStream().use { it.copyTo(out) }
+                    }
+                }.getOrNull() != null
+                if (copied) return "${Environment.DIRECTORY_DOWNLOADS}/$PUBLIC_SUBDIR/$name"
+            }
+        }
+        // 兜底：公共目录直接可写（SDK<29 有 WRITE_EXTERNAL_STORAGE），或退回应用专属目录
+        val dir = backupDir(ctx)
+        if (dir.exists() || dir.mkdirs()) {
+            runCatching { src.copyTo(File(dir, name), overwrite = true) }
+            // SDK<29 需要主动触发媒体扫描，文件管理器才看得到新文件
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                runCatching {
+                    android.media.MediaScannerConnection.scanFile(
+                        ctx, arrayOf(File(dir, name).absolutePath), null, null,
+                    )
+                }
+            }
+            return File(dir, name).absolutePath
+        }
+        // 连兜底目录都建不出来：就留在暂存目录，位置照实说
+        return src.absolutePath
+    }
+
+    /**
+     * 打开备份所在目录。
+     *
+     * API 29+ 打开系统「下载」（备份落在 Download/DSH-Folk，MediaStore 没有按
+     * RELATIVE_PATH 直接开子目录的稳定入口）；SDK<30 或有「所有文件」权限时，
+     * [backupDir] 是真·公共目录，用 FileProvider 打开到具体文件夹。
+     *
+     * @return 是否成功发起打开意图
+     */
+    fun openBackupDir(ctx: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val opened = runCatching {
+                ctx.startActivity(
+                    Intent(Intent.ACTION_VIEW)
+                        .setData(MediaStore.Downloads.EXTERNAL_CONTENT_URI)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }.isSuccess
+            if (opened) return true
+        }
+        val dir = backupDir(ctx)
+        dir.mkdirs()
+        return runCatching {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                ctx, "${ctx.packageName}.fileprovider", dir,
+            )
+            ctx.startActivity(
+                Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(uri, "resource/folder")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            true
+        }.getOrDefault(false)
     }
 
     /** 运行时 exports 目录里的一个备份文件。 */

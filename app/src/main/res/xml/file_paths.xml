@@ -8,5 +8,5 @@
     <external-files-path name="module_backups" path="ModuleBackups" />
     <external-path name="folkpatch_backup" path="Download/FolkPatch/ModuleBackups" />
     <!-- DSH 配置备份（dsh-config-manager 导出格式），用户可用文件管理器取走 -->
-    <external-path name="dshfolk_config_backup" path="Download/DSH-Folk/ConfigBackups" />
+    <external-path name="dshfolk_config_backup" path="Download/DSH-Folk" />
 </paths>

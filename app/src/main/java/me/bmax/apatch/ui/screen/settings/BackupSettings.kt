@@ -53,6 +53,9 @@ fun BackupSettingsContent(
     dshMessage: String,
     dshPassword: String,
     onDshPasswordChange: (String) -> Unit,
+    /** 导出是否带上 sessions（会话记录）；默认关。 */
+    includeSessions: Boolean = false,
+    onIncludeSessionsChange: (Boolean) -> Unit = {},
     onDshExport: () -> Unit,
     onDshImport: () -> Unit,
     onDshOpenDir: () -> Unit,
@@ -154,6 +157,30 @@ fun BackupSettingsContent(
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                     )
+
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Switch(
+                            checked = includeSessions,
+                            onCheckedChange = onIncludeSessionsChange,
+                            enabled = !dshBusy,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_backup_include_sessions),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.dsh_backup_include_sessions_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
 
                     Spacer(Modifier.height(12.dp))
                     Row(

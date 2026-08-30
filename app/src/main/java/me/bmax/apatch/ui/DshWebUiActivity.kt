@@ -1,17 +1,28 @@
 package me.bmax.apatch.ui
 
 import android.annotation.SuppressLint
+import android.app.DownloadManager
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
+import android.util.Base64
+import android.util.Log
 import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
+import android.webkit.URLUtil
+import android.webkit.ValueCallback
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
@@ -63,6 +74,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import java.io.File
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
@@ -132,19 +144,46 @@ private val BALL_INSET = 8.dp
  * 提供，位置可拖、松手吸附到左或右壁并记住。
  *
  * 注意 dsh 自己的 web 界面**有登录页**，所以这里同样需要登录，这是 dsh 的行为。
+ *
+ * ## 为什么必须自己接文件选择与下载
+ *
+ * WebView 不是浏览器，它**默认什么都不做**：
+ * - `<input type="file">` 被点击时，WebView 调 `WebChromeClient.onShowFileChooser`，
+ *   基类返回 false，于是没有任何反应 —— 页面侧连 `change` 事件都收不到。这就是
+ *   「插件提供的文件上传按钮点了没反应，浏览器里就好」的全部原因，跟插件无关。
+ * - 下载同理：`<a download>` / `Content-Disposition: attachment` 触发的是
+ *   `WebView.setDownloadListener`，不设就直接丢弃。dsh 自己的会话日志导出
+ *   （dsh-session-log-export）用的正是 `anchor.download = …; anchor.click()`。
+ * - `blob:` URL 更特殊：它连 DownloadListener 都不会走（那是浏览器进程内的对象，
+ *   没有网络请求），所以额外注入一小段 JS 把 blob 读成 base64 交回原生。
  */
 class DshWebUiActivity : AppCompatActivity() {
 
     private var webView: WebView? = null
     private var canGoBack = false
 
-    @SuppressLint("SetJavaScriptEnabled")
+    /** 待回填给 `<input type="file">` 的回调；同一时刻只可能有一个选择器。 */
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private lateinit var fileChooser: ActivityResultLauncher<Intent>
+
+    @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val url = intent?.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() }
             ?: "http://127.0.0.1:${DshRuntime.port()}/"
+
+        // 必须在 onCreate 里注册（Activity 还没 STARTED），不能等到点击时才注册
+        fileChooser = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            val cb = fileChooserCallback
+            fileChooserCallback = null
+            // 取消也必须回调（传 null），否则 WebView 认为选择器还开着，
+            // 那个 <input> 之后再点就永远没反应了
+            cb?.onReceiveValue(parseChooserResult(result.resultCode, result.data))
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -186,7 +225,38 @@ class DshWebUiActivity : AppCompatActivity() {
                                 // 本地回环页面用不到文件访问，关掉少一条攻击面
                                 settings.allowFileAccess = false
                                 settings.allowContentAccess = false
+                                // blob: 下载的桥。只在 loadUrl 的回环地址上注入
+                                // （onPageStarted 里按 origin 校验），别的来源拿不到它
+                                addJavascriptInterface(BlobBridge(), BLOB_BRIDGE)
                                 webViewClient = object : WebViewClient() {
+                                    /**
+                                     * 只让回环页面留在这个 WebView 里，其余交给系统浏览器。
+                                     *
+                                     * 不只是体验问题：[BlobBridge] 是通过
+                                     * `addJavascriptInterface` 挂上的，一旦 WebView 被导航到
+                                     * 外部站点，那个站点就能直接调它往磁盘写文件。把外链踢出去
+                                     * 是让这个桥永远只面向本机 dsh 的前提。
+                                     */
+                                    override fun shouldOverrideUrlLoading(
+                                        view: WebView?,
+                                        request: WebResourceRequest?,
+                                    ): Boolean {
+                                        val target = request?.url ?: return false
+                                        val scheme = target.scheme?.lowercase()
+                                        if (scheme != "http" && scheme != "https") {
+                                            // mailto: / intent: 之类交给系统，别在 WebView 里报错
+                                            return runCatching {
+                                                startActivity(
+                                                    Intent(Intent.ACTION_VIEW, target)
+                                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                )
+                                            }.isSuccess
+                                        }
+                                        if (isLoopback(target.toString())) return false
+                                        DshWebUi.openExternal(this@DshWebUiActivity, target.toString())
+                                        return true
+                                    }
+
                                     override fun doUpdateVisitedHistory(
                                         view: WebView?,
                                         u: String?,
@@ -198,6 +268,7 @@ class DshWebUiActivity : AppCompatActivity() {
 
                                     override fun onPageFinished(view: WebView?, u: String?) {
                                         progress = 100
+                                        if (isLoopback(u)) view?.evaluateJavascript(BLOB_SHIM, null)
                                         super.onPageFinished(view, u)
                                     }
 
@@ -229,6 +300,43 @@ class DshWebUiActivity : AppCompatActivity() {
                                     override fun onProgressChanged(view: WebView?, p: Int) {
                                         progress = p
                                     }
+
+                                    /**
+                                     * `<input type="file">` 的落点。返回 false 会让页面
+                                     * 彻底收不到文件 —— 这正是之前上传按钮没反应的原因。
+                                     */
+                                    override fun onShowFileChooser(
+                                        view: WebView?,
+                                        callback: ValueCallback<Array<Uri>>?,
+                                        params: android.webkit.WebChromeClient.FileChooserParams?,
+                                    ): Boolean {
+                                        // 上一个选择器还没结束就先放掉它，否则那个 input 会被永久卡住
+                                        fileChooserCallback?.onReceiveValue(null)
+                                        fileChooserCallback = callback
+                                        val intent = runCatching {
+                                            params?.createIntent()
+                                        }.getOrNull() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                                            addCategory(Intent.CATEGORY_OPENABLE)
+                                            type = "*/*"
+                                        }
+                                        return try {
+                                            fileChooser.launch(intent)
+                                            true
+                                        } catch (e: ActivityNotFoundException) {
+                                            Log.w(TAG, "no file picker activity", e)
+                                            fileChooserCallback = null
+                                            callback?.onReceiveValue(null)
+                                            showToast(
+                                                this@DshWebUiActivity,
+                                                getString(R.string.dsh_webui_no_file_picker),
+                                            )
+                                            false
+                                        }
+                                    }
+                                }
+                                // http(s) 下载（Content-Disposition / <a download> 指向真实 URL）
+                                setDownloadListener { dl, userAgent, disposition, mime, _ ->
+                                    startHttpDownload(dl, userAgent, disposition, mime)
                                 }
                                 webView = this
                                 loadUrl(url)
@@ -257,6 +365,122 @@ class DshWebUiActivity : AppCompatActivity() {
         }
     }
 
+    /** 选择结果 → WebView 要的 Uri 数组。取消或无数据一律 null。 */
+    private fun parseChooserResult(resultCode: Int, data: Intent?): Array<Uri>? {
+        if (resultCode != RESULT_OK || data == null) return null
+        data.clipData?.let { clip ->
+            // 多选走 clipData
+            val list = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+            if (list.isNotEmpty()) return list.toTypedArray()
+        }
+        return data.data?.let { arrayOf(it) }
+    }
+
+    /**
+     * 交给系统 DownloadManager 落到公共 Download/DSH-Folk。
+     *
+     * 用 DownloadManager 而不是自己拉流：它有通知栏进度、断点、失败重试，
+     * 而且写公共目录不需要存储权限（自带 MediaStore 登记）。
+     * 回环地址没有 Cookie 也无妨，dsh 的鉴权走的是同源会话；带上 Cookie 只是兜底。
+     */
+    private fun startHttpDownload(
+        downloadUrl: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?,
+    ) {
+        // DownloadManager 只认 http/https；blob:/data: 由 JS 那条路处理
+        if (!downloadUrl.startsWith("http://") && !downloadUrl.startsWith("https://")) {
+            Log.i(TAG, "download scheme not handled here: ${downloadUrl.take(24)}")
+            return
+        }
+        val name = runCatching {
+            URLUtil.guessFileName(downloadUrl, contentDisposition, mimeType)
+        }.getOrNull() ?: "download"
+        val ok = runCatching {
+            val req = DownloadManager.Request(Uri.parse(downloadUrl))
+                .setMimeType(mimeType)
+                .setTitle(name)
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_DOWNLOADS,
+                    "$PUBLIC_SUBDIR/$name",
+                )
+            if (!userAgent.isNullOrEmpty()) req.addRequestHeader("User-Agent", userAgent)
+            CookieManager.getInstance().getCookie(downloadUrl)?.takeIf { it.isNotEmpty() }
+                ?.let { req.addRequestHeader("Cookie", it) }
+            (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
+            true
+        }.getOrElse {
+            Log.e(TAG, "enqueue download failed", it)
+            false
+        }
+        showToast(
+            this,
+            if (ok) getString(R.string.dsh_webui_downloading, name)
+            else getString(R.string.dsh_webui_download_failed),
+        )
+    }
+
+    /**
+     * blob:/data: 下载的原生落点：JS 把内容读成 base64 递过来，这里写文件。
+     *
+     * 只从回环页面注入（[BLOB_SHIM] 由 onPageFinished 在校验 origin 后执行）。
+     * 即便如此也不信任入参：文件名只取 basename 并过滤路径分隔符，写入目录写死。
+     */
+    private inner class BlobBridge {
+        @JavascriptInterface
+        fun save(base64: String, fileName: String) {
+            val safe = fileName.substringAfterLast('/').substringAfterLast('\\')
+                .filter { it.isLetterOrDigit() || it in "._- ()[]" }
+                .take(120)
+                .ifEmpty { "download" }
+            val ok = runCatching {
+                val bytes = Base64.decode(base64, Base64.DEFAULT)
+                val dir = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    PUBLIC_SUBDIR,
+                )
+                // 公共 Download 写不进去（分区存储、无「所有文件」权限）时退到应用外部目录，
+                // 那里始终可写，用户仍能通过「打开目录」拿到文件
+                val target = if (dir.isDirectory || dir.mkdirs()) {
+                    File(dir, safe)
+                } else {
+                    val fb = File(
+                        getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir,
+                        PUBLIC_SUBDIR,
+                    )
+                    fb.mkdirs()
+                    File(fb, safe)
+                }
+                target.writeBytes(bytes)
+                // 让文件在系统「下载」/文件管理器里可见（公共目录才需要）
+                runCatching {
+                    android.media.MediaScannerConnection.scanFile(
+                        this@DshWebUiActivity, arrayOf(target.absolutePath), null, null,
+                    )
+                }
+                target.absolutePath
+            }.getOrElse {
+                Log.e(TAG, "blob save failed", it)
+                null
+            }
+            runOnUiThread {
+                showToast(
+                    this@DshWebUiActivity,
+                    if (ok != null) getString(R.string.dsh_webui_downloaded, safe)
+                    else getString(R.string.dsh_webui_download_failed),
+                )
+            }
+        }
+    }
+
+    /** 注入的 JS 只处理 WebView 天生不管的 blob:/data:，http(s) 仍走 DownloadListener。 */
+    private fun isLoopback(u: String?): Boolean {
+        val host = runCatching { Uri.parse(u ?: return false).host }.getOrNull() ?: return false
+        return host == "127.0.0.1" || host == "localhost" || host == "::1"
+    }
+
     override fun onDestroy() {
         // 不销毁的话 WebView 会连着 Activity 一起泄漏
         runCatching {
@@ -266,11 +490,56 @@ class DshWebUiActivity : AppCompatActivity() {
             }
         }
         webView = null
+        // 页面走了但选择器回调还挂着时也要放掉，否则 WebView 内部一直等
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
         super.onDestroy()
     }
 
     companion object {
         const val EXTRA_URL = "dsh_webui_url"
+        private const val TAG = "DshWebUi"
+
+        /** 下载落地的公共子目录（用户找得到）。 */
+        private const val PUBLIC_SUBDIR = "DSH-Folk"
+
+        /** JS 侧看到的桥名。 */
+        private const val BLOB_BRIDGE = "DshFolkDownload"
+
+        /**
+         * 拦 blob:/data: 下载。
+         *
+         * WebView 对这两种 scheme 不会触发 DownloadListener（没有网络请求可拦），
+         * 所以在页面里挂一个 `click` 捕获监听：看到带 download 属性、且 href 是
+         * blob:/data: 的锚点就自己读成 base64 交给原生，并阻止默认行为。
+         * 同时兜住 `URL.createObjectURL` + 程序化 click 的写法（那也是一个真锚点）。
+         *
+         * 幂等：重复注入（刷新、SPA 路由）只装一次监听。
+         */
+        private const val BLOB_SHIM = """
+(function(){
+  if (window.__dshFolkBlobShim) return; window.__dshFolkBlobShim = 1;
+  function grab(href, name){
+    fetch(href).then(function(r){return r.blob()}).then(function(b){
+      var fr = new FileReader();
+      fr.onloadend = function(){
+        var s = String(fr.result || '');
+        var i = s.indexOf(',');
+        if (i >= 0) DshFolkDownload.save(s.slice(i+1), name || 'download');
+      };
+      fr.readAsDataURL(b);
+    }).catch(function(e){ console.warn('dsh-folk blob download failed', e); });
+  }
+  document.addEventListener('click', function(ev){
+    var a = ev.target && ev.target.closest ? ev.target.closest('a[download]') : null;
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (href.indexOf('blob:') !== 0 && href.indexOf('data:') !== 0) return;
+    ev.preventDefault();
+    grab(href, a.getAttribute('download'));
+  }, true);
+})();
+"""
     }
 }
 

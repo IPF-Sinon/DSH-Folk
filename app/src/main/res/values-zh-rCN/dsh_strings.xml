@@ -18,6 +18,10 @@
     <string name="dsh_webui_reload">刷新</string>
     <string name="dsh_webui_open_external">用浏览器打开</string>
     <string name="dsh_webui_load_failed">加载失败</string>
+    <string name="dsh_webui_no_file_picker">这台设备上找不到可用的文件选择器</string>
+    <string name="dsh_webui_downloading">正在下载 %1$s…</string>
+    <string name="dsh_webui_downloaded">已保存到 Download/DSH-Folk/%1$s</string>
+    <string name="dsh_webui_download_failed">下载失败</string>
     <string name="dsh_webui_ball">Web 界面控制</string>
     <string name="dsh_webui_close">关闭</string>
     <!-- WebUI 打开方式设置 -->
@@ -145,7 +149,7 @@
     <string name="dsh_backup_plugin_missing">运行时里没有 dsh-config-manager，请先从插件商店安装。</string>
     <string name="dsh_backup_exporting">正在导出…</string>
     <string name="dsh_backup_importing">正在导入…</string>
-    <string name="dsh_backup_open_dir_failed">打不开目录，文件在 Download/DSH-Folk/ConfigBackups。</string>
+    <string name="dsh_backup_open_dir_failed">打不开目录，文件在 Download/DSH-Folk。</string>
 
     <!-- 插件设置页 -->
     <string name="dsh_plugin_disable_update_check">禁用更新检查</string>
@@ -361,4 +365,10 @@
     <string name="dsh_backup_rescue_install_cli">在容器内安装救急 CLI</string>
     <string name="dsh_backup_rescue_open_terminal">打开终端</string>
     <string name="dsh_backup_rescue_cmds_title">在「终端」页执行这些命令</string>
+    <string name="dsh_plugin_allow_builds_title">是否放行构建脚本？</string>
+    <string name="dsh_plugin_allow_builds_text">安装 %1$s 需要运行它的构建脚本，pnpm 默认拦下了这一步。</string>
+    <string name="dsh_plugin_allow_builds_warn">这会在容器内执行包作者提供的代码，只有你信任这个来源时才放行。</string>
+    <string name="dsh_plugin_allow_builds_go">放行并重试</string>
+    <string name="dsh_backup_include_sessions">包含会话记录（sessions）</string>
+    <string name="dsh_backup_include_sessions_summary">会话记录可达几百 MB 且含敏感信息，默认关闭。</string>
 </resources>

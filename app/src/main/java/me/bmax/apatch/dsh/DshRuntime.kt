@@ -93,6 +93,9 @@ object DshRuntime {
     private const val PNPM_IMPORT_KEY = "packageImportMethod"
     private const val PNPM_IMPORT_LINE = "packageImportMethod: copy"
 
+    /** 放行依赖构建脚本的顶层键（见 [allowProfileBuilds]）。 */
+    private const val PNPM_ALLOW_BUILDS_KEY = "allowBuilds"
+
     /** v1.3 写进 /root/.npmrc 的无效行，只为清理它而保留。 */
     private const val NPMRC_LEGACY_LINE = "package-import-method=copy"
 
@@ -592,7 +595,7 @@ object DshRuntime {
         for (pkg in missing) {
             appendLog("> 预装插件 $pkg …")
             val out = runCatching {
-                DshPluginRepo.install(pkg) { line -> appendLog(line) }
+                DshPluginRepo.install(pkg, onLine = { line -> appendLog(line) })
             }.getOrElse { "预装异常: ${it.message ?: it.javaClass.simpleName}" }
             val code = out.lineSequence()
                 .lastOrNull { it.startsWith(DshPluginRepo.EXIT_MARKER) }
@@ -1003,6 +1006,90 @@ object DshRuntime {
             ?: return "hardlink（默认）"
         val value = line.substringAfter(':', "").trim().ifEmpty { "?" }
         return "$value（profile pnpm-workspace.yaml）"
+    }
+
+    /**
+     * 把包名写进 profile `pnpm-workspace.yaml` 的 `allowBuilds`，放行它们的构建脚本。
+     *
+     * pnpm 11 默认不执行依赖的 install/postinstall/prepare 脚本，且**直接失败**
+     * （ERR_PNPM_IGNORED_BUILDS，退出码 1），官方出路是交互式 `pnpm approve-builds` ——
+     * 在容器里没有 TTY，跑不了。所以由这里代写配置。
+     *
+     * 格式是**映射**而不是列表，已实测：
+     * ```yaml
+     * allowBuilds:
+     *   esbuild: true
+     * ```
+     * 写成 `- esbuild` 会被 pnpm 改写成 `'0': esbuild`，等于没放行。
+     *
+     * 还有一个坑：pnpm 失败时会**自己**往文件里塞
+     * `esbuild: set this to true or false` 这样的占位行。只看「键在不在」会把它
+     * 当成已放行而跳过，于是重试仍然失败（本地实测踩到过）。所以这里按**值**判断，
+     * 只认 `true`，占位行原地改写。
+     *
+     * 做的是有针对性的合并，不是整文件重写：文件里还有 packageImportMethod、
+     * minimumReleaseAgeExclude 等别人的配置，解析后重新序列化会丢注释与顺序。
+     *
+     * @return 这次真正放行的包名（本来就是 true 的不算）
+     */
+    fun allowProfileBuilds(packages: List<String>, onLine: (String) -> Unit = {}): List<String> {
+        if (packages.isEmpty()) return emptyList()
+        val ws = File(DshEnv.rootfs(appContext), "$PROFILE_GUEST_REL/pnpm-workspace.yaml")
+        if (!ws.isFile) {
+            onLine("[DSH-Folk] 找不到 $PROFILE_GUEST_REL/pnpm-workspace.yaml，无法放行构建脚本")
+            return emptyList()
+        }
+        return runCatching {
+            val lines = ws.readText(StandardCharsets.UTF_8).lines().toMutableList()
+            val blockAt = lines.indexOfFirst { it.trimEnd() == "$PNPM_ALLOW_BUILDS_KEY:" }
+
+            // 块内已有的键：值为 true 才算放行，其余（pnpm 的占位串）记下行号待改写
+            val allowed = mutableSetOf<String>()
+            val placeholders = mutableMapOf<String, Int>()
+            if (blockAt >= 0) {
+                for (i in (blockAt + 1) until lines.size) {
+                    val raw = lines[i]
+                    if (raw.isBlank()) continue
+                    // 回到顶层缩进即块结束
+                    if (!raw.startsWith(" ") && !raw.startsWith("\t")) break
+                    val body = raw.trim()
+                    val colon = body.indexOf(':')
+                    if (colon <= 0) continue
+                    val key = body.substring(0, colon).trim().trim('\'', '"')
+                    val value = body.substring(colon + 1).trim()
+                    if (value == "true") allowed += key else placeholders[key] = i
+                }
+            }
+
+            val want = packages.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            val todo = want.filter { it !in allowed }
+            if (todo.isEmpty()) return@runCatching emptyList()
+
+            // 包名带 @ 或斜杠时必须加引号，否则 YAML 解析会走偏
+            fun entry(p: String) = "  '${p.replace("'", "''")}': true"
+            val insert = mutableListOf<String>()
+            for (p in todo) {
+                val at = placeholders[p]
+                if (at != null) lines[at] = entry(p) else insert += entry(p)
+            }
+            if (insert.isNotEmpty()) {
+                if (blockAt >= 0) {
+                    lines.addAll(blockAt + 1, insert)
+                } else {
+                    if (lines.isNotEmpty() && lines.last().isBlank()) lines.removeAt(lines.size - 1)
+                    lines += "$PNPM_ALLOW_BUILDS_KEY:"
+                    lines += insert
+                }
+            }
+            ws.writeText(lines.joinToString("\n").trimEnd() + "\n", StandardCharsets.UTF_8)
+            android.util.Log.i(TAG, "已放行构建脚本: ${todo.joinToString(", ")}")
+            onLine("[DSH-Folk] 已放行构建脚本：${todo.joinToString("、")}")
+            todo
+        }.getOrElse {
+            android.util.Log.e(TAG, "写 allowBuilds 失败", it)
+            onLine("[DSH-Folk] 写入 allowBuilds 失败：${it.message}")
+            emptyList()
+        }
     }
 
     // ────────────────────────── web 服务 ──────────────────────────

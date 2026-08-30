@@ -82,18 +82,48 @@ function scan(src) {
       i += 3;
       continue;
     }
-    // 普通字符串
+    // 普通字符串。必须单独处理 `${…}` 模板：里面是真正的 Kotlin 代码，可以有
+    // 字符字面量、嵌套字符串和大括号。不理解模板的话，
+    // `"  '${p.replace("'", "''")}': true"` 会被误判成「字符串里出现换行」——
+    // 模板里的第一个 " 被当成字符串结束，后面的 ' 又被当成字符字面量开头。
     if (c === '"') {
       i++;
-      while (i < n && src[i] !== '"') {
-        if (src[i] === '\\') i++;
-        else if (src[i] === '\n') {
+      while (i < n) {
+        const d = src[i];
+        if (d === '\\') { i += 2; continue; }
+        if (d === '"') { i++; break; }
+        if (d === '\n') {
           errors.push(`line ${line}: 字符串里出现换行（缺右引号？）`);
           break;
         }
+        if (d === '$' && src[i + 1] === '{') {
+          // 跳到配对的右大括号，期间跳过其中的字符串与字符字面量
+          i += 2;
+          let depth = 1;
+          while (i < n && depth > 0) {
+            const e = src[i];
+            if (e === '\n') line++;
+            else if (e === '{') depth++;
+            else if (e === '}') depth--;
+            else if (e === '"') {
+              i++;
+              while (i < n && src[i] !== '"') {
+                if (src[i] === '\\') i++;
+                i++;
+              }
+            } else if (e === "'") {
+              i++;
+              while (i < n && src[i] !== "'") {
+                if (src[i] === '\\') i++;
+                i++;
+              }
+            }
+            i++;
+          }
+          continue;
+        }
         i++;
       }
-      i++;
       continue;
     }
     // 字符字面量
