@@ -48,8 +48,9 @@ skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentia
 - 首次启动需要联网下载运行时（约 150 MB 压缩包，解压后约 600 MB；可在设置里选镜像或自动测速）
 - 存储空间建议预留 2 GB 以上
 
-首次启动下载完运行时后会自动预装 `dsh-web-mobile`（移动端适配）与 `dshmarket`（WebUI 内的插件市场），
-这一步会多花几十秒；失败不影响启动，之后可以在插件商店里手动装。
+首次启动下载完运行时后会自动预装三个插件：`dsh-web-mobile`（移动端适配）、`dshmarket`（WebUI 内的插件市场）、
+`dsh-config-manager`（**配置备份功能的依赖**，设置里的导出/导入走它的回环 API）。
+这一步会多花一两分钟；失败不影响启动，之后可以在插件商店里手动装。
 
 root / Shizuku / 无线 ADB 都是**可选**的。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）与已授权的 Shizuku / Sui，
 自身不打任何内核补丁、不安装 su、不内置 Shizuku Server。

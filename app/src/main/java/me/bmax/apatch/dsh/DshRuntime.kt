@@ -107,10 +107,12 @@ object DshRuntime {
     /**
      * 首启预装的插件（npm 包名，已人工验证可装）。
      *
-     * 手机上没有这两个体验差很多：dsh-web-mobile 做移动端适配，dshmarket 提供
-     * WebUI 内的插件市场。
+     * 手机上没有这几个体验差很多：dsh-web-mobile 做移动端适配，dshmarket 提供
+     * WebUI 内的插件市场，dsh-config-manager 则是**本应用配置备份的依赖** ——
+     * 设置里的导出/导入走的正是它的回环 HTTP API（见 [DshConfigBackup]），
+     * 没装的话那一页直接不可用。
      */
-    private val SEED_PLUGINS = listOf("dsh-web-mobile", "dshmarket")
+    private val SEED_PLUGINS = listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager")
 
     /**
      * 插件树/客户端包加载失败的日志签名。

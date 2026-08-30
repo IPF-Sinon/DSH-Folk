@@ -146,9 +146,17 @@ object DshPluginRepo {
     /** 验证通过的自制标记（`dsh web: http` 出现即写）。 */
     private const val VERIFY_OK_MARK = "[DSH-Folk-verify-ok]"
 
+    /** 验证进程的输出落盘位置（不能走管道，见 [verifyBoot]）。 */
+    private const val VERIFY_LOG = "/root/.dsh/verify-boot.log"
+
+    /** 轮询次数上限，每轮 1s；比 [VERIFY_TIMEOUT_MS] 略小，让脚本自己先收尾。 */
+    private const val VERIFY_POLLS = 170
+
     /**
      * 验证等待上限。本环境实测约 25s 就打印就绪行，180s 是保守值 ——
      * 误判的后果是插件被回滚、用户可关掉开关重装，不是数据损坏。
+     *
+     * 这是宿主侧的**兜底**：正常路径下脚本命中就绪行就自己退出（真机实测 3s 内）。
      */
     private const val VERIFY_TIMEOUT_MS = 180_000L
 
@@ -786,22 +794,41 @@ object DshPluginRepo {
      * 那恰恰是主要价值。代价是失败时真实 profile 被短暂改动过 —— 但新插件要重启才
      * 生效，验证期间正在跑的服务不受影响，回滚也是我们自己发起的确定动作。
      *
-     * @return null 表示通过；非 null 是失败原因（已含关键日志行）。
+     * **不能用 `node … | while read` 那种管道**：`while` 里 break 只结束了读循环，
+     * 而 `dsh web` 打完就绪行就一直在提供 HTTP 服务、不再写 stdout，所以它既收不到
+     * SIGPIPE 也不会退出；bash 要等齐整条管道的所有进程，于是自己也不退出，
+     * 宿主侧的读流拿不到 EOF —— 界面就卡在「验证中」直到 [VERIFY_TIMEOUT_MS] 兜底
+     * （真机表现：装完插件对话框卡住，强杀应用后发现其实早装好了）。
+     *
+     * 改成：后台起 node 并把输出重定向到文件，主循环轮询文件增量转发，命中就绪行后
+     * 显式 kill 掉它。这样 bash 自己掌握 node 的生命周期，命中即退出。
      */
     suspend fun verifyBoot(onLine: (String) -> Unit): String? = withContext(Dispatchers.IO) {
         onLine("[DSH-Folk] 正在验证插件能否启动（临时端口，不影响当前服务）…")
-        val out = DshRuntime.execRootfsStreaming(
-            "export DSH_HOME=/root/.dsh; export BROWSER=true; " +
-                "mkdir -p /root/workspace 2>/dev/null; cd /root/workspace; " +
-                "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); " +
-                // --port 0 让系统挑空闲端口；就绪行一出就自己退出，别把验证进程留着
-                "node --expose-internals \"\$DSH_REAL\" web --port 0 2>&1 | " +
-                "while IFS= read -r l; do echo \"\$l\"; " +
-                "case \"\$l\" in 'dsh web: http'*) echo '$VERIFY_OK_MARK'; break;; esac; done",
-            VERIFY_TIMEOUT_MS,
-            onLine,
-        )
-        // 收尾：管道里的 node 可能还活着（break 只断了读循环）
+        val script = buildString {
+            append("export DSH_HOME=/root/.dsh; export BROWSER=true; ")
+            append("mkdir -p /root/workspace /root/.dsh 2>/dev/null; cd /root/workspace; ")
+            append("DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); ")
+            append("LOG='$VERIFY_LOG'; : > \"\$LOG\"; ")
+            // 后台跑，输出进文件：绝不能让它待在管道里（见 KDoc）
+            append("node --expose-internals \"\$DSH_REAL\" web --port 0 > \"\$LOG\" 2>&1 & ")
+            append("PID=\$!; SENT=0; OK=0; I=0; ")
+            append("while [ \$I -lt $VERIFY_POLLS ]; do ")
+            append("I=\$((I+1)); ")
+            // 增量转发：只吐新增的行，界面才有实时进度
+            append("TOTAL=\$(wc -l < \"\$LOG\" 2>/dev/null | tr -d ' '); [ -n \"\$TOTAL\" ] || TOTAL=0; ")
+            append("if [ \"\$TOTAL\" -gt \"\$SENT\" ]; then tail -n +\$((SENT+1)) \"\$LOG\"; SENT=\$TOTAL; fi; ")
+            append("if grep -q '^dsh web: http' \"\$LOG\" 2>/dev/null; then OK=1; break; fi; ")
+            // 进程提前退出 = 启动失败，再收一次尾巴就够了
+            append("kill -0 \"\$PID\" 2>/dev/null || break; ")
+            append("sleep 1; done; ")
+            append("TOTAL=\$(wc -l < \"\$LOG\" 2>/dev/null | tr -d ' '); [ -n \"\$TOTAL\" ] || TOTAL=0; ")
+            append("[ \"\$TOTAL\" -gt \"\$SENT\" ] && tail -n +\$((SENT+1)) \"\$LOG\"; ")
+            append("kill \"\$PID\" 2>/dev/null; sleep 1; kill -9 \"\$PID\" 2>/dev/null; ")
+            append("[ \"\$OK\" = 1 ] && echo '$VERIFY_OK_MARK'; true")
+        }
+        val out = DshRuntime.execRootfsStreaming(script, VERIFY_TIMEOUT_MS, onLine)
+        // 收尾：node 可能有子孙进程没随 kill 一起走
         runCatching {
             DshRuntime.execRootfsForOutput("pkill -f 'web --port 0' 2>/dev/null; true", 30_000)
         }
