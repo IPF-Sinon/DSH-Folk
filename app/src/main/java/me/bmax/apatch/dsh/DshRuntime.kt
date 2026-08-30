@@ -551,24 +551,50 @@ object DshRuntime {
     }
 
     /**
-     * 首次安装运行时后预装两个插件。
+     * 预装内置插件（首启，以及从旧版本升级后补装新增的那几个）。
      *
-     * 放在服务启动**之前**：首启本来就要下 135MB + 解压，再加一轮 pnpm 是等比例的；
+     * 放在服务启动**之前**：首启本来就要下 150MB + 解压，再加一轮 pnpm 是等比例的；
      * 而服务只启动一次、插件已经生效，不会出现「就绪了又要重启」的突兀体验。
      *
-     * 无论成功失败都置位标记：失败不该在每次冷启动重试（用户可以自己去商店装），
-     * 否则每次开应用都要多等一轮 pnpm。
+     * **按包名逐个记账**而不是记一个「已完成」布尔量：1.6 把清单从 2 个加到 3 个，
+     * 如果沿用布尔量，1.5 老用户的标记已经是 true，新增的 dsh-config-manager 就
+     * 永远轮不到装 —— 而它恰好是配置备份功能的依赖。记名字才能让老用户补上增量。
+     *
+     * 装过就不再重试（无论成功失败）：失败不该在每次冷启动重来，用户可以去商店手动装。
+     * 但已经真装上的会先被跳过 —— 用 [DshPluginRepo.bundles] 对一遍，
+     * 手动装过的同样算数，不会重复跑一次 pnpm。
      *
      * 这里**不做**安装后验证：插件是我们自己挑的、已人工验证过，在首启路径上再跑
      * 一次 `dsh web --port 0` 只会把首启拖长几分钟。
      */
     private suspend fun seedPlugins() {
         if (!DshEnv.isRuntimeInstalled(appContext)) return
-        if (prefs().getBoolean(DshEnv.KEY_SEED_PLUGINS_DONE, false)) return
+
+        val p = prefs()
+        val attempted = p.getString(DshEnv.KEY_SEEDED_PLUGINS, null)
+            ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toMutableSet()
+            // 首次迁移：1.5 及更早只有布尔量，true 就意味着当时那两个已经试过了
+            ?: if (@Suppress("DEPRECATION") p.getBoolean(DshEnv.KEY_SEED_PLUGINS_DONE, false)) {
+                mutableSetOf("dsh-web-mobile", "dshmarket")
+            } else {
+                mutableSetOf()
+            }
+
+        val todo = SEED_PLUGINS.filter { it !in attempted }
+        if (todo.isEmpty()) return
+
+        // 已经装上的（含用户手动装的）直接记账跳过，别白跑 pnpm
+        val installed = runCatching { DshPluginRepo.bundles() }.getOrElse { emptyList() }.toSet()
+        val missing = todo.filter { it !in installed }
+        if (missing.isEmpty()) {
+            persistSeeded(attempted + todo)
+            return
+        }
+
         _state.update {
             it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_plugin_seeding))
         }
-        for (pkg in SEED_PLUGINS) {
+        for (pkg in missing) {
             appendLog("> 预装插件 $pkg …")
             val out = runCatching {
                 DshPluginRepo.install(pkg) { line -> appendLog(line) }
@@ -578,10 +604,17 @@ object DshRuntime {
                 ?.removePrefix(DshPluginRepo.EXIT_MARKER)?.trim()?.toIntOrNull()
             appendLog(if (code == 0) "> 预装完成 $pkg" else "! 预装失败 $pkg（可稍后在插件商店手动安装）")
         }
-        prefs().edit().putBoolean(DshEnv.KEY_SEED_PLUGINS_DONE, true).apply()
+        persistSeeded(attempted + todo)
         // 预装会大幅改变 node_modules 体积，顺手重算一次缓存
         refreshRootfsSize()
         _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
+    }
+
+    /** 记下「已尝试预装」的包名集合。 */
+    private fun persistSeeded(names: Collection<String>) {
+        prefs().edit()
+            .putString(DshEnv.KEY_SEEDED_PLUGINS, names.distinct().joinToString(","))
+            .apply()
     }
 
     /**
@@ -623,7 +656,10 @@ object DshRuntime {
             bootMutex.withLock {
                 stopServer()
                 // 重装等于换了一套全新 rootfs，容器里的插件确实没了，该重新预装
-                prefs().edit().putBoolean(DshEnv.KEY_SEED_PLUGINS_DONE, false).apply()
+                prefs().edit()
+                    .remove(DshEnv.KEY_SEEDED_PLUGINS)
+                    .remove(@Suppress("DEPRECATION") DshEnv.KEY_SEED_PLUGINS_DONE)
+                    .apply()
                 downloadAndInstall()
                 if (_state.value.phase != DshPhase.ERROR) {
                     setupResolvConf()

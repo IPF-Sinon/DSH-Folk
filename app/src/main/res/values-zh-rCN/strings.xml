@@ -436,6 +436,7 @@
     <string name="update_action">更新</string>
     <string name="update_close">关闭</string>
     <string name="update_latest">您已是最新版本</string>
+    <string name="update_check_failed">检查更新失败：网络不可用或 GitHub 接口限流</string>
     <!--折叠选项-->
     <string name="settings_category_general">常规</string>
     <string name="settings_category_appearance">外观</string>

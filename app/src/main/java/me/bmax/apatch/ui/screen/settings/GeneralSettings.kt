@@ -161,12 +161,14 @@ fun GeneralSettingsContent(
             ExpressiveCard(flat = flat, onClick = {
                 scope.launch {
                     loadingDialog.show()
-                    val hasUpdate = UpdateChecker.checkUpdate()
+                    val status = UpdateChecker.check()
                     loadingDialog.hide()
-                    if (hasUpdate) {
-                        showUpdateDialog.value = true
-                    } else {
-                        showToast(context, R.string.update_latest)
+                    when {
+                        status.hasUpdate -> showUpdateDialog.value = true
+                        // 查不到不能报「已是最新」：那是一句肯定的错误结论。
+                        // 匿名 GitHub API 只有 60/h，插件商店那边也在用，烧完就查不动了
+                        status.failure != null -> showToast(context, R.string.update_check_failed)
+                        else -> showToast(context, R.string.update_latest)
                     }
                 }
             }) {

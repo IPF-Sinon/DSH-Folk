@@ -147,7 +147,7 @@ private fun HarnessCard(
     ) {
         InfoRow(
             label = stringResource(R.string.dsh_status),
-            value = dshPhaseLabel(state.phase)
+            value = dshPhaseLabel(state)
         )
         state.version?.let {
             InfoRow(label = stringResource(R.string.dsh_runtime_version), value = it)

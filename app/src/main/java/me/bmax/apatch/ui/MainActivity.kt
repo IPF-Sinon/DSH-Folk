@@ -534,7 +534,8 @@ class MainActivity : AppCompatActivity() {
                         withContext(Dispatchers.IO) {
                              // Delay a bit to wait for network connection
                              kotlinx.coroutines.delay(2000)
-                             val hasUpdate = me.bmax.apatch.util.UpdateChecker.checkUpdate()
+                             // 自动检查是静默的：查不到就什么都不做，别在冷启动弹错误
+                             val hasUpdate = me.bmax.apatch.util.UpdateChecker.check().hasUpdate
                              if (hasUpdate) {
                                  showUpdateDialog.value = true
                              }

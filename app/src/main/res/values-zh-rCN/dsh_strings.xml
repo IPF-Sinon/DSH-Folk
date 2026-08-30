@@ -69,6 +69,7 @@
     <string name="dsh_perm_adb">无线 ADB</string>
 
     <string name="dsh_phase_not_ready">未安装</string>
+    <string name="dsh_phase_stopped">已停止</string>
     <string name="dsh_phase_downloading">下载中</string>
     <string name="dsh_phase_extracting">安装中</string>
     <string name="dsh_phase_starting">启动中</string>

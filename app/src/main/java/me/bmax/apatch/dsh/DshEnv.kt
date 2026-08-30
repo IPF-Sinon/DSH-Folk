@@ -77,8 +77,21 @@ object DshEnv {
      *
      * 无论成功失败都置位：失败不该在每次冷启动重试（用户可以自己去商店装），
      * 否则每次开应用都要多等一轮 pnpm。
+     *
+     * 只保留给旧版本迁移用：布尔量记不住「装过哪些」，1.6 把预装清单从 2 个加到 3 个
+     * 之后，1.5 老用户的这个标记已经是 true，新增那个就永远轮不到装。
+     * 现在的判据是 [KEY_SEEDED_PLUGINS]。
      */
+    @Deprecated("用 KEY_SEEDED_PLUGINS，它记得住装过哪些")
     const val KEY_SEED_PLUGINS_DONE = "seed_plugins_done"
+
+    /**
+     * 已经尝试预装过的包名（英文逗号分隔）。
+     *
+     * 记名字而不是记布尔：预装清单以后还会增删，只有逐个记名才能让老用户在升级后
+     * 补上新增的那个，同时不重复跑已经装过的。
+     */
+    const val KEY_SEEDED_PLUGINS = "seeded_plugins"
 
     /** 安装插件后是否用 `dsh web --port 0` 验证一次能否启动（默认开）。 */
     const val KEY_VERIFY_AFTER_INSTALL = "verify_after_install"

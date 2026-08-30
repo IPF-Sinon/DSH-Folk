@@ -107,6 +107,7 @@ fun HomeScreenDsh(
 
         DshHeroCard(
             phase = state.phase,
+            installed = state.installed,
             message = state.message,
             progress = state.progress,
             version = state.runtimeVersion,
@@ -163,6 +164,8 @@ private fun permHint(s: PermissionManager.Status): String = when (s.channel) {
 @Composable
 private fun DshHeroCard(
     phase: DshPhase,
+    /** 运行时是否已装好；NOT_READY 同时表示「未安装」和「已停止」，靠它区分。 */
+    installed: Boolean,
     message: String,
     progress: Float,
     version: String?,
@@ -229,7 +232,7 @@ private fun DshHeroCard(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = phaseLabel(phase) + (version?.let { " · v$it" } ?: ""),
+                    text = phaseLabel(phase, installed) + (version?.let { " · v$it" } ?: ""),
                     style = MaterialTheme.typography.titleSmall,
                     color = content.copy(alpha = 0.9f),
                 )
@@ -357,9 +360,12 @@ private fun DshSmallCard(
 }
 
 @Composable
-private fun phaseLabel(phase: DshPhase): String = stringResource(
+private fun phaseLabel(phase: DshPhase, installed: Boolean): String = stringResource(
     when (phase) {
-        DshPhase.NOT_READY -> R.string.dsh_phase_not_ready
+        // NOT_READY 兼表「未安装」与「装好但停着」，只按 phase 取名会在停止时
+        // 显示「未安装 · v0.1.1-rc.2」这种自相矛盾的行
+        DshPhase.NOT_READY ->
+            if (installed) R.string.dsh_phase_stopped else R.string.dsh_phase_not_ready
         DshPhase.DOWNLOADING -> R.string.dsh_phase_downloading
         DshPhase.EXTRACTING -> R.string.dsh_phase_extracting
         DshPhase.STARTING -> R.string.dsh_phase_starting

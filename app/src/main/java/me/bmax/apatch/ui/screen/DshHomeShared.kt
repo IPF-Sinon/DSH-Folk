@@ -205,11 +205,19 @@ fun ProvideDshHomeState(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalDshHomeState provides ui) { content() }
 }
 
-/** 阶段名：未安装 / 下载中 / 安装中 / 启动中 / 运行中 / 出错。 */
+/**
+ * 阶段名：未安装 / 已停止 / 下载中 / 安装中 / 启动中 / 运行中 / 出错。
+ *
+ * 必须看 [DshHomeUiState.installed] 而不是只看 phase：`NOT_READY` 同时表示
+ * 「运行时还没装」和「装好了但服务停着」两件事（[DshRuntime.stopServer] 也把 phase
+ * 置回 NOT_READY）。只按 phase 取名的话，装好后停止时卡片会显示
+ * 「未安装 · v0.1.1-rc.2-ubuntunoble」—— 既说没装又报出版本号，自相矛盾。
+ */
 @Composable
-fun dshPhaseLabel(phase: DshPhase): String = stringResource(
-    when (phase) {
-        DshPhase.NOT_READY -> R.string.dsh_phase_not_ready
+fun dshPhaseLabel(state: DshHomeUiState): String = stringResource(
+    when (state.phase) {
+        DshPhase.NOT_READY ->
+            if (state.installed) R.string.dsh_phase_stopped else R.string.dsh_phase_not_ready
         DshPhase.DOWNLOADING -> R.string.dsh_phase_downloading
         DshPhase.EXTRACTING -> R.string.dsh_phase_extracting
         DshPhase.STARTING -> R.string.dsh_phase_starting

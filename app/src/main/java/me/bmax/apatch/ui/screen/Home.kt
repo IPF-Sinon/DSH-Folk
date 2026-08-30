@@ -205,9 +205,9 @@ private fun DshStatusCardList() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = if (BackgroundConfig.isListWorkingCardModeHidden && state.isRunning) {
-                                dshPhaseLabel(state.phase) + "😋"
+                                dshPhaseLabel(state) + "😋"
                             } else {
-                                dshPhaseLabel(state.phase)
+                                dshPhaseLabel(state)
                             },
                             style = MaterialTheme.typography.titleMedium
                         )

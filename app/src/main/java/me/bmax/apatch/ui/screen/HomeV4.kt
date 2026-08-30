@@ -377,7 +377,7 @@ private fun HeroStatusCard() {
 
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = dshPhaseLabel(state.phase),
+                        text = dshPhaseLabel(state),
                         style = MaterialTheme.typography.titleMedium
                     )
                     val detail = dshPhaseDetail(state)

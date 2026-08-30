@@ -121,7 +121,7 @@ fun StatusCardCircle() {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = dshPhaseLabel(state.phase),
+                        text = dshPhaseLabel(state),
                         style = MaterialTheme.typography.titleMedium,
                         color = content
                     )

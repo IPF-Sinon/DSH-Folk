@@ -470,6 +470,7 @@
     <string name="update_action">Update</string>
     <string name="update_close">Close</string>
     <string name="update_latest">You are on the latest version</string>
+    <string name="update_check_failed">Could not check for updates — network unavailable or GitHub rate limit reached</string>
     <string name="settings_category_general">General</string>
     <string name="settings_category_appearance">Appearance</string>
     <string name="settings_category_behavior">Behavior</string>

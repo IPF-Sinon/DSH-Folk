@@ -76,6 +76,7 @@
 
     <!-- 运行时状态 -->
     <string name="dsh_phase_not_ready">Not installed</string>
+    <string name="dsh_phase_stopped">Stopped</string>
     <string name="dsh_phase_downloading">Downloading</string>
     <string name="dsh_phase_extracting">Installing</string>
     <string name="dsh_phase_starting">Starting</string>

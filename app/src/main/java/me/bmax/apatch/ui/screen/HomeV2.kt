@@ -247,7 +247,7 @@ fun StatusCardBig(
                 Column(modifier = Modifier.align(Alignment.BottomStart)) {
                     if (!BackgroundConfig.isGridWorkingCardTextHidden) {
                         Text(
-                            text = dshPhaseLabel(state.phase),
+                            text = dshPhaseLabel(state),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = contentColor
