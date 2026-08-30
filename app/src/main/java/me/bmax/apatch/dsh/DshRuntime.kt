@@ -94,9 +94,15 @@ object DshRuntime {
      */
     private const val PROROOT_FAIL_LIMIT = 1
 
-    /** 容器 npmrc 里固定 pnpm 的导入方式（见 [ensureContainerNpmrc]）。 */
-    private const val NPMRC_IMPORT_KEY = "package-import-method"
-    private const val NPMRC_IMPORT_LINE = "package-import-method=copy"
+    /** profile pnpm 设置里固定导入方式（见 [ensureProfilePnpmSettings]）。 */
+    private const val PNPM_IMPORT_KEY = "packageImportMethod"
+    private const val PNPM_IMPORT_LINE = "packageImportMethod: copy"
+
+    /** v1.3 写进 /root/.npmrc 的无效行，只为清理它而保留。 */
+    private const val NPMRC_LEGACY_LINE = "package-import-method=copy"
+
+    /** web profile 在 rootfs 内的相对路径（guest 侧是 /root/.dsh/profiles/web）。 */
+    private const val PROFILE_GUEST_REL = "root/.dsh/profiles/web"
 
     /**
      * 插件树/客户端包加载失败的日志签名。
@@ -335,7 +341,7 @@ object DshRuntime {
         // 每条 exec 路径都要保证 DNS 在：冷启动直接进插件页 / 终端页时不会走 bootstrap，
         // 少了这一步容器里 pnpm、apt 全是 EAI_AGAIN。已存在则原样保留（用户可能改过）。
         ensureContainerDns()
-        ensureContainerNpmrc()
+        ensureProfilePnpmSettings()
         if (runtime().id() != "proot") return
         // jniLibs 里叫 libtalloc.so / libandroidshmem.so，proot 按 SONAME 找
         copyExec(nativeLib("libtalloc.so"), File(libDir, "libtalloc.so.2"))
@@ -900,26 +906,73 @@ object DshRuntime {
      * 没有 lib/ 目录，必然 ENOENT。真机表现是任何带 `exports["./client"]` 的插件
      * 装完就让 `dsh web` 起不来（MissingClientBundleError）。
      *
-     * 选 copy 而不是设法让硬链接可用：copy 绕开整个链接语义，在 proot 与 proroot
-     * 下都成立，不依赖硬链接探测是否准确。代价是 CAS 去重失效、rootfs 变大。
+     * 选 copy 而不是设法让硬链接可用：真机探测报的是
+     * `AccessDeniedException`（系统不允许在 App 私有目录建硬链接），不在 App 能改的
+     * 范围内。copy 绕开整个链接语义，代价是 CAS 去重失效、rootfs 变大。
      *
-     * 写 `/root/.npmrc` 而不是 profile 目录下的 `.npmrc`：profile 目录要等
-     * `dsh plugin` 首次运行才创建，而用户在终端页手敲 pnpm 也该受同一条约束。
+     * **写 pnpm-workspace.yaml 而不是 .npmrc**：pnpm 11 起这类 pnpm 专有设置已从
+     * `.npmrc` 迁到 `pnpm-workspace.yaml`。实测 `pnpm config get package-import-method`
+     * 对 .npmrc 里的同名项返回 undefined，而 workspace 里的 `packageImportMethod`
+     * 返回 copy（.npmrc 本身没失效 —— 同文件里的 registry= 照样生效）。v1.3 写
+     * .npmrc 那一版因此完全没生效。
+     *
+     * **只在文件已存在时追加**：dsh 的 `initProfile` 见到文件存在就不写自己的模板
+     * （dsh-app-boot 里 `if (!existsSync(workspacePath))`），抢先创建会把
+     * `nodeLinker: hoisted` 与 `autoInstallPeers: false` 弄丢。profile 尚未初始化时
+     * 靠安装命令上的 `--package-import-method copy` 兜住那一次。
      *
      * 用户显式写过这一项时**不覆盖** —— 显式配置优先于我们的推断。
      */
-    private fun ensureContainerNpmrc() {
+    private fun ensureProfilePnpmSettings() {
+        runCatching { removeLegacyNpmrcImportLine() }
         if (!linkBecomesSymlink()) return
         runCatching {
-            val root = File(DshEnv.rootfs(appContext), "root")
-            if (!root.isDirectory && !root.mkdirs()) return@runCatching
-            val rc = File(root, ".npmrc")
-            val old = if (rc.isFile) rc.readText(StandardCharsets.UTF_8) else ""
-            if (old.lineSequence().any { it.trimStart().startsWith(NPMRC_IMPORT_KEY) }) return@runCatching
+            val ws = File(DshEnv.rootfs(appContext), "$PROFILE_GUEST_REL/pnpm-workspace.yaml")
+            // 不存在就不建：见 KDoc，抢在 dsh initProfile 之前会弄丢它的模板
+            if (!ws.isFile) return@runCatching
+            val old = ws.readText(StandardCharsets.UTF_8)
+            if (old.lineSequence().any { it.trimStart().startsWith(PNPM_IMPORT_KEY) }) return@runCatching
             val sep = if (old.isEmpty() || old.endsWith("\n")) "" else "\n"
-            rc.writeText(old + sep + NPMRC_IMPORT_LINE + "\n", StandardCharsets.UTF_8)
-            android.util.Log.i(TAG, "已写入容器 npmrc: $NPMRC_IMPORT_LINE")
+            // 追加顶层键而不是解析重写整个 YAML：这文件里还有 minimumReleaseAgeExclude、
+            // allowBuilds 等结构化内容，字符串追加最不容易弄坏别人的配置
+            ws.writeText(old + sep + PNPM_IMPORT_LINE + "\n", StandardCharsets.UTF_8)
+            android.util.Log.i(TAG, "已写入 profile pnpm 设置: $PNPM_IMPORT_LINE")
         }
+    }
+
+    /**
+     * 清掉 v1.3 写进 `/root/.npmrc` 的那行 —— 它已知无效（pnpm 11 不读），
+     * 留着只会在排查时误导。只删精确匹配的那一行，用户自己写的其它行一律不碰；
+     * 文件因此变空就把文件删掉。
+     */
+    private fun removeLegacyNpmrcImportLine() {
+        val rc = File(DshEnv.rootfs(appContext), "root/.npmrc")
+        if (!rc.isFile) return
+        val old = rc.readText(StandardCharsets.UTF_8)
+        if (!old.contains(NPMRC_LEGACY_LINE)) return
+        val kept = old.lineSequence().filter { it.trim() != NPMRC_LEGACY_LINE }.toList()
+        if (kept.all { it.isBlank() }) {
+            rc.delete()
+        } else {
+            rc.writeText(kept.joinToString("\n").trimEnd() + "\n", StandardCharsets.UTF_8)
+        }
+        android.util.Log.i(TAG, "已清理无效的 npmrc 行: $NPMRC_LEGACY_LINE")
+    }
+
+    /**
+     * pnpm 实际读到的导入方式，供启动日志用。
+     *
+     * 读文件而不是回答「我们写过没有」：v1.3 的教训正是日志宣称了一件没生效的事。
+     */
+    private fun pnpmImportMethodLine(): String {
+        val ws = File(DshEnv.rootfs(appContext), "$PROFILE_GUEST_REL/pnpm-workspace.yaml")
+        if (!ws.isFile) return "未配置（profile 未初始化）"
+        val line = runCatching {
+            ws.readLines().firstOrNull { it.trimStart().startsWith(PNPM_IMPORT_KEY) }
+        }.getOrNull()
+            ?: return "hardlink（默认）"
+        val value = line.substringAfter(':', "").trim().ifEmpty { "?" }
+        return "$value（profile pnpm-workspace.yaml）"
     }
 
     // ────────────────────────── web 服务 ──────────────────────────
@@ -964,6 +1017,7 @@ object DshRuntime {
 
         appendLog("> 运行时: ${runtime().displayName()}")
         appendLog("> 硬链接: " + hardlinkLogLine())
+        appendLog("> pnpm 导入方式: " + pnpmImportMethodLine())
         appendLog("> 启动 dsh web，端口 $port")
 
         serverProcess = try {
@@ -1133,7 +1187,11 @@ object DshRuntime {
      *
      * 只写结论是不够的：App 私有目录本该支持硬链接，报「不支持」是反常的，
      * 而 bugreport 里的 logcat 只覆盖最近几分钟、抓不到启动时那条 Log.i。
-     * 把原因写进 dsh.log 才能在下一份 bugreport 里直接看到。
+     * 把原因写进 dsh.log 才能在下一份 bugreport 里直接看到 —— 真机上就是靠这条
+     * 才拿到 `AccessDeniedException`（系统不允许在 App 私有目录建硬链接）。
+     *
+     * 这里**不再**声称 pnpm 的导入方式：那是 [pnpmImportMethodLine] 的事，它读
+     * 真实配置。v1.3 在这行里写「pnpm 已切为 copy 导入」，而那一版的配置压根没生效。
      */
     private fun hardlinkLogLine(): String {
         val ok = hardlinkSupported()
@@ -1147,7 +1205,6 @@ object DshRuntime {
                 !ok -> append(" · 启用 l2s 模拟")
                 else -> append(" · 不加 --link2symlink")
             }
-            if (linkBecomesSymlink()) append(" · pnpm 已切为 copy 导入")
         }
     }
 

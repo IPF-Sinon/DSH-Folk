@@ -551,7 +551,7 @@ object DshPluginRepo {
     ): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext "包名为空，无法安装"
         val spec = if (version.isBlank()) pkg else "$pkg@$version"
-        val out = dshPlugin("add '$spec'", 900_000, onLine)
+        val out = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
         out + repairIfLinkageBroken(onLine)
     }
 
@@ -561,6 +561,7 @@ object DshPluginRepo {
         onLine: (String) -> Unit = {},
     ): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext "包名为空，无法卸载"
+        // remove 不从 store 导入文件，不需要 importFlag
         dshPlugin("remove '$pkg'", 600_000, onLine)
     }
 
@@ -570,9 +571,24 @@ object DshPluginRepo {
         onLine: (String) -> Unit = {},
     ): String = withContext(Dispatchers.IO) {
         // 绝对路径原样传给 pnpm（dsh 只重写相对路径 spec），tgz 装完同样会被 reconcile
-        val out = dshPlugin("add '$containerPath'", 900_000, onLine)
+        val out = dshPlugin("add ${importFlag()}'$containerPath'", 900_000, onLine)
         out + repairIfLinkageBroken(onLine)
     }
+
+    /**
+     * 安装命令上的导入方式标志（带尾随空格，无需时为空串）。
+     *
+     * 为什么命令行和 pnpm-workspace.yaml 两处都要：profile **首次**初始化时
+     * `pnpm-workspace.yaml` 是 dsh 在同一次 `dsh plugin` 调用里现写的，我们来不及
+     * 提前追加（抢先创建会把 dsh 的模板弄丢，见 DshRuntime.ensureProfilePnpmSettings），
+     * 那一次只有 CLI 标志能覆盖。之后由 workspace 配置长期生效，也覆盖用户在终端页
+     * 手敲的 pnpm。
+     *
+     * 位置放在子命令之后、包名之前：已实测 dsh 的 anchorPathSpec 只重写 `./`、`../`
+     * 开头的相对路径 spec，不碰 `--` 开头的参数。
+     */
+    private fun importFlag(): String =
+        if (DshRuntime.linkBecomesSymlink()) "--package-import-method copy " else ""
 
     /**
      * 装完顺手检查依赖是不是被 l2s 装成了指向内容存储的符号链接；是就立刻重建。
@@ -586,7 +602,7 @@ object DshPluginRepo {
     private suspend fun repairIfLinkageBroken(onLine: (String) -> Unit): String {
         if (!DshRuntime.linkBecomesSymlink()) return ""
         if (!storeLinkageBroken()) return ""
-        onLine("[DSH-Folk] 检测到依赖被装成指向内容存储的链接，正在重建…")
+        onLine("[DSH-Folk] 检测到依赖被装成指向内容存储的链接，正在重建（清空 node_modules 后重装，可能要几分钟）…")
         return "\n" + repairStore(onLine)
     }
 
@@ -615,16 +631,36 @@ object DshPluginRepo {
     }
 
     /**
-     * 重建 profile 依赖（`pnpm install --force`）。
+     * 重建 profile 依赖：**先清空 node_modules 再重装**。
+     *
+     * 不能只用 `pnpm install --force`。已实测：lockfile 与 node_modules 都满足时
+     * `--force` 只报 `Already up to date` 就退出（真机日志里 561ms 就跑完了），
+     * 它的语义是「跳过 up-to-date 检查、重新解析」，不是「重新导入已就位的文件」。
+     * 删掉 node_modules 后重装才真正换成 copy 导入（实测 nlink 从 3 变 1）。
+     *
+     * **保留 pnpm-lock.yaml**：删掉它会让所有依赖重新解析版本，可能把用户装好的
+     * 东西升到别的版本。留着则解析结果不变，只是重新导入。
      *
      * 走 [dshPlugin] 而不是直接调 pnpm：`dsh plugin` 会把参数原样转发给 pnpm，
      * 同时保留它自己的 bundles reconcile —— 绕过它会让 `dsh.profile.bundles`
      * 与实际安装状态失步。
      *
-     * 超时给到 15 分钟：copy 模式下几十个依赖全量重拷比硬链接慢得多。
+     * 超时给到 15 分钟：copy 模式下几十个依赖全量复制比硬链接慢得多。
      */
     suspend fun repairStore(onLine: (String) -> Unit = {}): String = withContext(Dispatchers.IO) {
-        dshPlugin("install --force", 900_000, onLine)
+        // 删之前确认这确实是个已初始化的 profile：目录异常时不对着空路径递归删。
+        // 路径写死为常量，不接受任何外部输入拼接。
+        val probe = DshRuntime.execRootfsForOutput(
+            "test -f '$PROFILE_DIR/package.json' && echo OK",
+            30_000,
+        )
+        if (!probe.contains("OK")) {
+            onLine("[DSH-Folk] profile 尚未初始化（找不到 $PROFILE_DIR/package.json），跳过重建")
+            return@withContext "profile 尚未初始化，跳过重建"
+        }
+        onLine("[DSH-Folk] 清空 node_modules（保留 pnpm-lock.yaml）…")
+        DshRuntime.execRootfsForOutput("rm -rf '$PROFILE_DIR/node_modules'", 120_000)
+        dshPlugin("install ${importFlag()}".trimEnd(), 900_000, onLine)
     }
 
     /** 暂存目录在容器里的绝对路径。 */

@@ -243,7 +243,7 @@ class DshPluginViewModel : ViewModel() {
      * 需要实时日志和失败留存，没有理由另做一套 UI。
      */
     fun repairStore(onDone: (String) -> Unit = {}) {
-        run("pnpm install --force", { DshPluginRepo.repairStore(it) }, onDone)
+        run("重建插件依赖", { DshPluginRepo.repairStore(it) }, onDone)
     }
 
     /**

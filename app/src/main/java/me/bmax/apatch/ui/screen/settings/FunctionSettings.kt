@@ -99,7 +99,7 @@ fun FunctionSettingsContent(
     runtimeVersion: String,
     /** 重新下载并覆盖容器。 */
     onReinstallRuntime: () -> Unit,
-    /** 重建 profile 插件依赖（pnpm install --force）。 */
+    /** 重建 profile 插件依赖（清空 node_modules 后重装）。 */
     onRepairPlugins: () -> Unit,
     /** 重建正在进行中（与安装共用同一把锁）。 */
     repairBusy: Boolean,
