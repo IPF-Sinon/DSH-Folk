@@ -6,6 +6,7 @@
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg?logo=gnu)](./LICENSE)
 [![Build](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml/badge.svg)](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/IPF-Sinon/DSH-Folk?logo=github)](https://github.com/IPF-Sinon/DSH-Folk/releases/latest)
 
 </div>
 
@@ -20,7 +21,7 @@ DSH-Folk 把 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)�
 | --- | --- |
 | **主页** | 一键启动 / 停止 / 重启 DSH，显示运行阶段、Web UI 地址、当前运行方式与权限通道，带可复制的启动日志 |
 | **终端** | 容器内的真 PTY 终端（基于 Termux 的 `terminal-view`），直接 `bash` 进容器 |
-| **插件** | 管理容器里 DSH 的插件，展示 npm 周下载量、GitHub star 与 dsh-market 点赞，内置 dsh-market 插件商店，支持本地安装 |
+| **插件** | 管理容器里 DSH 的插件，展示 npm 周下载量、GitHub star 与 dsh-market 点赞；内置插件商店（下载完整目录后本地搜索，2600+ 条），支持本地 .tgz 安装。装完会用临时端口验证一次插件树能否加载，不通过自动卸载 |
 | **设置** | 常规 / 外观 / 行为 / 功能 / 安全 / 备份 / 插件 / 多媒体，界面主题体系沿用 FolkPatch（`theme.json` 完全兼容） |
 
 **配置备份**与 DSH 桌面端的 `dsh-config-manager` 插件使用**同一套导出格式**（走它的回环 HTTP API，不是另写一份 ZIP 打包器），
@@ -32,8 +33,11 @@ skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentia
 
 - Android 8.0 (API 26) 或更高
 - **arm64-v8a** 设备（不支持 32 位）
-- 首次启动需要联网下载运行时（约 130 MB 压缩包，解压后约 530 MB；可在设置里选镜像或自动测速）
+- 首次启动需要联网下载运行时（约 150 MB 压缩包，解压后约 600 MB；可在设置里选镜像或自动测速）
 - 存储空间建议预留 2 GB 以上
+
+首次启动下载完运行时后会自动预装 `dsh-web-mobile`（移动端适配）与 `dshmarket`（WebUI 内的插件市场），
+这一步会多花几十秒；失败不影响启动，之后可以在插件商店里手动装。
 
 root / Shizuku / 无线 ADB 都是**可选**的。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）与已授权的 Shizuku / Sui，
 自身不打任何内核补丁、不安装 su、不内置 Shizuku Server。
@@ -44,15 +48,17 @@ root / Shizuku / 无线 ADB 都是**可选**的。DSH-Folk 只探测并复用设
 
 ## 安装
 
-从 [Releases](https://github.com/IPF-Sinon/DSH-Folk/releases) 下载 APK 安装。
+到 [Releases](https://github.com/IPF-Sinon/DSH-Folk/releases/latest) 下载 `DSH-Folk-<版本>.apk`，
+同目录的 `.sha256` 可用于校验。
 
-目前还没有正式版本发布（仓库里唯一的 tag `runtime-latest` 是容器运行时的滚动发布位，不是 App）。
-在那之前请到 [Actions](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml) 里取构建产物：
-选一次成功的运行，下载 `dsh-folk-debug-*` 工件，里面是 APK 与配套的 `.sha256`。
+也可以到 [Actions](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml) 取开发构建：
+选一次成功的运行，下载 `dsh-folk-debug-*` 或 `dsh-folk-release-*` 工件。
 
 APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出包：在 Actions 里手动触发 **Build DSH-Folk**
-（`workflow_dispatch`，可选 debug / release）。release 需要在仓库 secrets 里配置
-`KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`；没配置时会退回默认调试签名。
+（`workflow_dispatch`，可选 debug / release / both）。release 需要在仓库 secrets 里配置
+`KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PRIVATE_PASSWORD`；
+缺任何一项会**直接构建失败**而不是退回调试签名 —— 一个用 debug key 签出来的「release」装得上、看着正常，
+但和正式包签名不同、之后无法覆盖升级，比构建失败危险得多。构建末尾还有一道签名自检拦住这种情况。
 
 容器运行时由另一个工作流 **Build DSH runtime rootfs** 生成，产物（`rootfs.tar.gz` + `metadata.json`）
 发布到滚动 tag `runtime-latest`，应用启动时读取其中的 `metadata.json` 决定下载什么。
@@ -64,6 +70,7 @@ DSH-Folk (Android app)
   └─ proot / proroot                      ← 打包在 APK 里的可执行 .so
        └─ Ubuntu 24.04 arm64 rootfs       ← 首次启动时在线下载
             ├─ python3                     ← 无线 ADB 配对用，已预装
+            ├─ git                          ← git 源插件用，已预装
             └─ Node.js 24 + @deepseek-ai/dsh
                  └─ dsh web --port 3080    ← 只监听 127.0.0.1
                       └─ 手机浏览器 / 应用内打开
@@ -72,7 +79,12 @@ DSH-Folk (Android app)
 几个不得不这么做的地方：
 
 - Android 的 `app_data_file` 带 **noexec**，只有 `nativeLibraryDir` 里的 `.so` 可执行，所以 proot / proroot 以 `.so` 形式打包进 APK。
-- 部分设备的私有目录禁止 `link(2)`，应用会先探测硬链接是否可用，不可用时给 proot 加 `--link2symlink`。
+- 部分设备的私有目录禁止 `link(2)`（真机实测报 `AccessDeniedException`），应用会先探测硬链接是否可用，不可用时给 proot 加 `--link2symlink`；
+  proroot 则无条件启用它。而 pnpm 正是用 `link()` 从内容存储装包 —— 链接一旦被改写成符号链接，
+  Node 的 `require.resolve` 做 realpath 就会解析进内容存储的扁平哈希目录，插件声明的 `./lib/client.cjs` 再也拼不出来
+  （表现是装完插件 `dsh web` 报 `MissingClientBundleError`）。所以这种环境下会给 profile 的 `pnpm-workspace.yaml`
+  写上 `packageImportMethod: copy`，让 pnpm 复制真实文件。代价是内容存储的去重失效，容器体积会大一些。
+- 插件目录里超过一半的条目是 `github:owner/name` 安装规格，pnpm 解析它要 `git ls-remote`，所以 git 也预装进了 rootfs。
 - `dsh web` 只绑定回环地址；配置备份走的也是同一个回环 HTTP 接口，不对局域网开放。
 
 ## 项目结构
