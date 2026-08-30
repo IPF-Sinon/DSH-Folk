@@ -141,6 +141,10 @@ DSH-Folk 的 UI 直接复用 FolkPatch，容器与运行时交付思路来自 DS
 [GNU General Public License v3.0](./LICENSE)。本项目派生自 GPL-3.0 的 FolkPatch，因此整体沿用 GPL-3.0：
 分发（含二次修改）必须同样以 GPLv3 开源并提供完整源码。
 
+## 友情链接
+
+LINUX DO 开源社区 | [linux.do](https://linux.do) 
+
 ## 交流
 
 - QQ 群：[1109060326](https://qm.qq.com/q/t7HDoR5ACk)
