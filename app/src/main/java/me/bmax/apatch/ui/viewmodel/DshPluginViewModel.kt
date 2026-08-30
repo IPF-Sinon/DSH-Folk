@@ -237,6 +237,16 @@ class DshPluginViewModel : ViewModel() {
     }
 
     /**
+     * 重建插件依赖。
+     *
+     * 与安装共用 [run] 的进度对话框：它同样是一次几分钟的 pnpm 操作，
+     * 需要实时日志和失败留存，没有理由另做一套 UI。
+     */
+    fun repairStore(onDone: (String) -> Unit = {}) {
+        run("pnpm install --force", { DshPluginRepo.repairStore(it) }, onDone)
+    }
+
+    /**
      * 装 / 卸 / 本地装共用的执行壳。
      *
      * 成功后置 [needsRestart]：dsh 在启动时组合 profile 的 patch 层，

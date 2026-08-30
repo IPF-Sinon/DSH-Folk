@@ -89,6 +89,7 @@ object SettingsRegistry {
             add(SettingEntry("appearance_theme_mode", R.string.settings_theme_mode, R.string.settings_theme_mode_summary, SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_save_theme", R.string.settings_save_theme, category = SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_import_theme", R.string.settings_import_theme, category = SettingCategory.APPEARANCE))
+            add(SettingEntry("appearance_terminal_bg_alpha", R.string.settings_terminal_bg_alpha, R.string.settings_terminal_bg_alpha_summary, SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_reset_theme", R.string.settings_reset_theme, category = SettingCategory.APPEARANCE))
 
             // === Behavior ===
@@ -125,6 +126,7 @@ object SettingsRegistry {
             add(SettingEntry("function_autostart", R.string.dsh_autostart, R.string.dsh_autostart_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_download_source", R.string.dsh_source_section, R.string.dsh_source_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_runtime", R.string.dsh_runtime_section, R.string.dsh_runtime_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_repair_plugins", R.string.dsh_plugin_repair, R.string.dsh_plugin_repair_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_permission", R.string.dsh_perm_section, R.string.dsh_perm_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_wireless_adb", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.FUNCTION))
         }

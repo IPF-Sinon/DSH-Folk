@@ -94,6 +94,23 @@ object DshRuntime {
      */
     private const val PROROOT_FAIL_LIMIT = 1
 
+    /** 容器 npmrc 里固定 pnpm 的导入方式（见 [ensureContainerNpmrc]）。 */
+    private const val NPMRC_IMPORT_KEY = "package-import-method"
+    private const val NPMRC_IMPORT_LINE = "package-import-method=copy"
+
+    /**
+     * 插件树/客户端包加载失败的日志签名。
+     *
+     * 命中这些就**不能**判定为 proroot 故障：它与容器运行时无关，换 proot 重试
+     * 照样失败（真机实测就是这样），而 [PROROOT_FAIL_LIMIT] = 1 会一次就把用户的
+     * proroot 偏好静默清掉。
+     */
+    private val PLUGIN_FAILURE_MARKS = listOf(
+        "plugin tree failed to load",
+        "client bundles not found",
+        "failed to apply loader entry modules",
+    )
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow(DshState())
     val state: StateFlow<DshState> = _state.asStateFlow()
@@ -103,6 +120,15 @@ object DshRuntime {
     private var startedAt: Long = 0L
 
     @Volatile private var hardlinkOk: Boolean? = null
+
+    /**
+     * 硬链接探测失败的原因（异常类名 + message），成功时为空。
+     *
+     * 必须留下来：原来只走 Log.i，而 logcat 在 bugreport 里只有最近几分钟，
+     * App 早已启动完，那一行永远抓不到 —— 于是「为什么这台设备不支持硬链接」
+     * 每次都只能靠猜。现在它会随 [startServer] 一起写进 dsh.log。
+     */
+    @Volatile private var hardlinkDetail: String = ""
 
     /**
      * 只绑定 Context，不做任何 IO。**必须在任何 Composable 读取本对象之前调用**
@@ -207,9 +233,17 @@ object DshRuntime {
     @Volatile
     private var prorootFellBack = false
 
-    /** 记一次 proroot 启动失败；达上限强制切回 proot。返回是否触发了回退。 */
+    /**
+     * 记一次 proroot 启动失败；达上限强制切回 proot。返回是否触发了回退。
+     *
+     * 插件层面的失败不算：见 [PLUGIN_FAILURE_MARKS]。
+     */
     fun noteProrootFailure(why: String): Boolean {
         if (runtimeId() != "proroot") return false
+        if (lastLogSuggestsPluginFailure()) {
+            appendLog("! 失败发生在插件树加载阶段，与容器运行时无关，保留 proroot")
+            return false
+        }
         val n = prefs().getInt(DshEnv.KEY_PROROOT_FAIL, 0) + 1
         return if (n >= PROROOT_FAIL_LIMIT) {
             prefs().edit().putString(DshEnv.KEY_RUNTIME, "proot").putInt(DshEnv.KEY_PROROOT_FAIL, 0).apply()
@@ -222,6 +256,25 @@ object DshRuntime {
             false
         }
     }
+
+    /**
+     * 启动日志尾部是否指向插件树加载失败。
+     *
+     * 保守匹配：宁可漏判（退回旧的误降级行为）也不误判（把真正的 proroot 故障
+     * 当成插件问题、让用户一直卡在坏运行时上）。
+     */
+    private fun lastLogSuggestsPluginFailure(): Boolean {
+        if (!ready) return false
+        val tail = runCatching {
+            LogStore.named(DshEnv.serverLog(appContext)).tail(200)
+        }.getOrDefault("")
+        if (tail.isEmpty()) return false
+        return PLUGIN_FAILURE_MARKS.any { tail.contains(it, ignoreCase = true) }
+    }
+
+    /** 插件树加载失败的可修复提示；无此迹象时返回 null。 */
+    fun pluginTreeFailureHint(): String? =
+        if (lastLogSuggestsPluginFailure()) str(R.string.dsh_err_plugin_tree_failed) else null
 
     private fun nativeLib(name: String): File = File(DshEnv.nativeLibDir(appContext), name)
 
@@ -257,9 +310,23 @@ object DshRuntime {
             }
             android.util.Log.i(TAG, "硬链接支持=$ok${if (detail.isEmpty()) "" else "（$detail）"}")
             hardlinkOk = ok
+            hardlinkDetail = detail
             return ok
         }
     }
+
+    /** 硬链接探测失败的原因；成功时为空。供启动日志记录用。 */
+    fun hardlinkDetail(): String = hardlinkDetail
+
+    /**
+     * guest 里的 `link()` 是否会被改写成符号链接。
+     *
+     * 不能只看 [hardlinkSupported]：proroot **无条件**加 `--link2symlink`
+     * （见 ContainerRuntime.Proroot.baseArgv），所以哪怕宿主文件系统支持真硬链接，
+     * 容器内拿到的仍然是符号链接。pnpm 正是用 `link()` 从内容存储装包，一旦被改写，
+     * `require.resolve` 的 realpath 就会跳进 CAS、把包目录结构解析没了。
+     */
+    fun linkBecomesSymlink(): Boolean = !hardlinkSupported() || runtimeId() == "proroot"
 
     /** 复制 proot 的 NEEDED 依赖到可写 lib 目录（proroot 不需要）。 */
     private fun ensureRuntimeFiles() {
@@ -268,6 +335,7 @@ object DshRuntime {
         // 每条 exec 路径都要保证 DNS 在：冷启动直接进插件页 / 终端页时不会走 bootstrap，
         // 少了这一步容器里 pnpm、apt 全是 EAI_AGAIN。已存在则原样保留（用户可能改过）。
         ensureContainerDns()
+        ensureContainerNpmrc()
         if (runtime().id() != "proot") return
         // jniLibs 里叫 libtalloc.so / libandroidshmem.so，proot 按 SONAME 找
         copyExec(nativeLib("libtalloc.so"), File(libDir, "libtalloc.so.2"))
@@ -820,6 +888,40 @@ object DshRuntime {
         }
     }
 
+    /**
+     * 让容器内的 pnpm 用「复制」而不是「硬链接」从内容存储装包。
+     *
+     * 为什么必须这么做：pnpm 用 `link()` 把 CAS 里的文件装进 node_modules，而
+     * proot/proroot 的 `--link2symlink` 会把它改写成符号链接（见 [linkBecomesSymlink]）。
+     * Node 的 `require.resolve` 默认 realpath，于是
+     * `node_modules/<pkg>/package.json` 解析成 `<store>/files/<xx>/<hash>`，
+     * dsh 再按 `join(dirname(pkgPath), "./lib/client.cjs")` 拼客户端包路径，
+     * 得到 `<store>/files/<xx>/lib/client.cjs` —— CAS 里只有扁平的哈希文件，
+     * 没有 lib/ 目录，必然 ENOENT。真机表现是任何带 `exports["./client"]` 的插件
+     * 装完就让 `dsh web` 起不来（MissingClientBundleError）。
+     *
+     * 选 copy 而不是设法让硬链接可用：copy 绕开整个链接语义，在 proot 与 proroot
+     * 下都成立，不依赖硬链接探测是否准确。代价是 CAS 去重失效、rootfs 变大。
+     *
+     * 写 `/root/.npmrc` 而不是 profile 目录下的 `.npmrc`：profile 目录要等
+     * `dsh plugin` 首次运行才创建，而用户在终端页手敲 pnpm 也该受同一条约束。
+     *
+     * 用户显式写过这一项时**不覆盖** —— 显式配置优先于我们的推断。
+     */
+    private fun ensureContainerNpmrc() {
+        if (!linkBecomesSymlink()) return
+        runCatching {
+            val root = File(DshEnv.rootfs(appContext), "root")
+            if (!root.isDirectory && !root.mkdirs()) return@runCatching
+            val rc = File(root, ".npmrc")
+            val old = if (rc.isFile) rc.readText(StandardCharsets.UTF_8) else ""
+            if (old.lineSequence().any { it.trimStart().startsWith(NPMRC_IMPORT_KEY) }) return@runCatching
+            val sep = if (old.isEmpty() || old.endsWith("\n")) "" else "\n"
+            rc.writeText(old + sep + NPMRC_IMPORT_LINE + "\n", StandardCharsets.UTF_8)
+            android.util.Log.i(TAG, "已写入容器 npmrc: $NPMRC_IMPORT_LINE")
+        }
+    }
+
     // ────────────────────────── web 服务 ──────────────────────────
 
     /**
@@ -861,7 +963,7 @@ object DshRuntime {
         }
 
         appendLog("> 运行时: ${runtime().displayName()}")
-        appendLog("> 硬链接: ${if (hardlinkSupported()) "支持（不加 --link2symlink）" else "不支持（启用 l2s 模拟）"}")
+        appendLog("> 硬链接: " + hardlinkLogLine())
         appendLog("> 启动 dsh web，端口 $port")
 
         serverProcess = try {
@@ -936,11 +1038,13 @@ object DshRuntime {
                 return
             }
             if (serverProcess?.isAlive == false) {
-                val detail = str(R.string.dsh_err_process_exited)
-                appendLog("! $detail")
-                if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
+                val base = str(R.string.dsh_err_process_exited)
+                appendLog("! $base")
+                if (runtimeId() == "proroot" && noteProrootFailure(base)) {
                     appendLog("> 已切回 proot，请重新启动服务")
                 }
+                // 插件树失败时给出可执行的下一步，而不是只说「进程已退出」
+                val detail = pluginTreeFailureHint() ?: base
                 _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
                 return
             }
@@ -1022,6 +1126,29 @@ object DshRuntime {
 
     fun appendLog(line: String) {
         if (::appContext.isInitialized) LogStore.named(DshEnv.serverLog(appContext)).append(line)
+    }
+
+    /**
+     * 硬链接状态的日志行，**带上探测失败的原因**。
+     *
+     * 只写结论是不够的：App 私有目录本该支持硬链接，报「不支持」是反常的，
+     * 而 bugreport 里的 logcat 只覆盖最近几分钟、抓不到启动时那条 Log.i。
+     * 把原因写进 dsh.log 才能在下一份 bugreport 里直接看到。
+     */
+    private fun hardlinkLogLine(): String {
+        val ok = hardlinkSupported()
+        val detail = hardlinkDetail()
+        return buildString {
+            if (ok) append("支持") else append("不支持")
+            if (detail.isNotEmpty()) append("（$detail）")
+            when {
+                // proroot 无条件加 --link2symlink，探测结果在它下面不代表 guest 的实际能力
+                runtimeId() == "proroot" -> append(" · proroot 无条件启用 l2s")
+                !ok -> append(" · 启用 l2s 模拟")
+                else -> append(" · 不加 --link2symlink")
+            }
+            if (linkBecomesSymlink()) append(" · pnpm 已切为 copy 导入")
+        }
     }
 
     private fun fail(message: String) {

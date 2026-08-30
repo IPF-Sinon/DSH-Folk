@@ -6,7 +6,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -69,6 +68,7 @@ import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.ui.component.DshPluginDetailSheet
 import me.bmax.apatch.ui.component.DshPluginProgressDialog
 import me.bmax.apatch.ui.component.ModuleLabel
+import me.bmax.apatch.ui.component.ScrollableEmptyState
 import me.bmax.apatch.ui.component.SearchAppBar
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
 import me.bmax.apatch.util.ui.HomeBottomSpacer
@@ -210,20 +210,22 @@ internal fun DshRuntimeNeeded(
     modifier: Modifier = Modifier,
     onGoHome: () -> Unit,
 ) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.dsh_plugin_needs_runtime),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 32.dp),
-        )
-        Spacer(Modifier.height(16.dp))
-        TextButton(onClick = onGoHome) {
-            Text(stringResource(R.string.dsh_plugin_go_home))
+    // 可滚动：否则底栏自动隐藏后无法下拉唤回（见 ScrollableEmptyState）
+    ScrollableEmptyState(modifier) {
+        Column(
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = stringResource(R.string.dsh_plugin_needs_runtime),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 32.dp),
+            )
+            Spacer(Modifier.height(16.dp))
+            TextButton(onClick = onGoHome) {
+                Text(stringResource(R.string.dsh_plugin_go_home))
+            }
         }
     }
 }
@@ -251,10 +253,8 @@ private fun DshPluginList(
     }
 
     if (list.isEmpty()) {
-        Box(
-            Modifier.fillMaxSize().padding(innerPadding),
-            contentAlignment = Alignment.Center,
-        ) {
+        // 必须可滚动：否则底栏自动隐藏后无法下拉唤回（见 ScrollableEmptyState）
+        ScrollableEmptyState(Modifier.padding(innerPadding)) {
             // 三态分开：正在读 / 一个都没装 / 装了但搜索没命中。
             // 合成一条会让搜不到时误报「尚未安装任何插件」。
             val query = viewModel.search

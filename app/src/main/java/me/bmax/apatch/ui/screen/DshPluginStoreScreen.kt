@@ -6,7 +6,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -69,6 +68,7 @@ import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
 import me.bmax.apatch.ui.component.DshPluginDetailSheet
 import me.bmax.apatch.ui.component.ModuleLabel
+import me.bmax.apatch.ui.component.ScrollableEmptyState
 import me.bmax.apatch.ui.component.SearchAppBar
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
 import me.bmax.apatch.util.ui.HomeBottomSpacer
@@ -291,12 +291,13 @@ private fun StoreGrid(
 
     when {
         viewModel.storeRefreshing && viewModel.storeAll.isEmpty() -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            // 可滚动：否则底栏自动隐藏后无法下拉唤回（见 ScrollableEmptyState）
+            ScrollableEmptyState {
                 CircularProgressIndicator()
             }
         }
         list.isEmpty() -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            ScrollableEmptyState {
                 Text(
                     text = when {
                         viewModel.storeRefreshing ->

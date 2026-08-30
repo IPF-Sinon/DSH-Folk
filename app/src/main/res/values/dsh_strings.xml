@@ -350,4 +350,12 @@
     <string name="dsh_adb_disconnect_confirm_text">This removes the paired key; you\'ll need to pair again.</string>
     <string name="dsh_adb_disconnected">Disconnected</string>
     <string name="dsh_adb_disconnect_failed">Disconnect failed</string>
+
+    <!-- 终端外观 / 插件依赖修复 -->
+    <string name="settings_terminal_bg_alpha">Terminal background opacity</string>
+    <string name="settings_terminal_bg_alpha_summary">How opaque the terminal panel is; lower lets the wallpaper show through</string>
+    <string name="dsh_plugin_repair">Rebuild plugin dependencies</string>
+    <string name="dsh_plugin_repair_summary">Without real hardlink support, pnpm\'s links point into its content store, so a plugin\'s client bundle cannot be found and the service fails to start. Rebuilding copies real files instead. If you set package-import-method yourself in /root/.npmrc, that setting is kept and this may not help.</string>
+    <string name="dsh_plugin_repair_go">Rebuild now</string>
+    <string name="dsh_err_plugin_tree_failed">Plugin tree failed to load. Try Settings → Function → Rebuild plugin dependencies, or remove the plugin that was just installed.</string>
 </resources>

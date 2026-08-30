@@ -59,6 +59,7 @@ import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPtySession
+import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.isImeVisible
 import me.bmax.apatch.util.ui.showToast
@@ -81,13 +82,6 @@ private const val TERM_BG = 0xFF101014.toInt()
 private const val TERM_FG = 0xFFE6E6E6.toInt()
 private const val TERM_CURSOR = 0xFF7DD3FC.toInt()
 
-/**
- * 终端底板的不透明度。
- *
- * 留一点透，让自定义背景/主题在终端边缘透出来一些；0.88 下正文对比度仍然足够
- * （深底 #101014 对亮字 #E6E6E6）。真机观察偏淡就往 0.94 调。
- */
-private const val TERM_BG_ALPHA = 0.88f
 private const val FONT_MIN_SP = 8
 private const val FONT_MAX_SP = 24
 private const val FONT_DEF_SP = 13
@@ -260,8 +254,10 @@ fun DshTerminalScreen(navigator: DestinationsNavigator) {
             // 字符本身不受影响 —— TerminalRenderer 只在 backColor 与调色盘的
             // COLOR_INDEX_BACKGROUND 不同时才画背景矩形（见 [applyTermColors] 的说明），
             // 默认背景压根不绘制，所以半透明只作用在「空白」区域。
+            //
+            // 不透明度由外观设置里的滑块决定，默认 0.88。
             Surface(
-                color = Color(TERM_BG).copy(alpha = TERM_BG_ALPHA),
+                color = Color(TERM_BG).copy(alpha = BackgroundConfig.terminalBgAlpha),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()

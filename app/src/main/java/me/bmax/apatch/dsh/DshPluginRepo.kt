@@ -551,7 +551,8 @@ object DshPluginRepo {
     ): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext "包名为空，无法安装"
         val spec = if (version.isBlank()) pkg else "$pkg@$version"
-        dshPlugin("add '$spec'", 900_000, onLine)
+        val out = dshPlugin("add '$spec'", 900_000, onLine)
+        out + repairIfLinkageBroken(onLine)
     }
 
     /** 卸载一个插件（同样交给 dsh plugin，才会从 bundles 里摘掉）。 */
@@ -569,7 +570,61 @@ object DshPluginRepo {
         onLine: (String) -> Unit = {},
     ): String = withContext(Dispatchers.IO) {
         // 绝对路径原样传给 pnpm（dsh 只重写相对路径 spec），tgz 装完同样会被 reconcile
-        dshPlugin("add '$containerPath'", 900_000, onLine)
+        val out = dshPlugin("add '$containerPath'", 900_000, onLine)
+        out + repairIfLinkageBroken(onLine)
+    }
+
+    /**
+     * 装完顺手检查依赖是不是被 l2s 装成了指向内容存储的符号链接；是就立刻重建。
+     *
+     * 为什么装完就修而不是只给个按钮：症状出现在**下一次启动服务**时
+     * （`MissingClientBundleError`），用户很难从「装好了」推断出「要重建依赖」。
+     *
+     * npmrc 里的 `package-import-method=copy` 只影响**新**安装，已经装坏的包必须
+     * 重跑一次才会变成真实副本，所以两者必须同时存在。
+     */
+    private suspend fun repairIfLinkageBroken(onLine: (String) -> Unit): String {
+        if (!DshRuntime.linkBecomesSymlink()) return ""
+        if (!storeLinkageBroken()) return ""
+        onLine("[DSH-Folk] 检测到依赖被装成指向内容存储的链接，正在重建…")
+        return "\n" + repairStore(onLine)
+    }
+
+    /**
+     * profile 依赖里是否有包的 realpath 落在 pnpm 内容存储内。
+     *
+     * 这正是插件起不来的判据：dsh 用 `require.resolve(<pkg>/package.json)` 定位包，
+     * Node 默认 realpath，链接被 l2s 改写后就解析成 `<store>/files/<xx>/<hash>`，
+     * 再拼相对的 `./lib/client.cjs` 必然 ENOENT（CAS 里只有扁平哈希文件）。
+     *
+     * 只认 `/pnpm/store/`：若 pnpm 将来改了 CAS 布局，这里退化成「不修」，
+     * 不会反过来误触发一次几分钟的重建。
+     */
+    suspend fun storeLinkageBroken(): Boolean = withContext(Dispatchers.IO) {
+        val script = "const fs=require('fs'),path=require('path');" +
+            "const dir=process.argv[1];" +
+            "let m;try{m=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){process.exit(0)}" +
+            "for(const n of Object.keys(m.dependencies||{})){" +
+            "try{const r=fs.realpathSync(path.join(dir,'node_modules',n,'package.json'));" +
+            "if(r.includes('/pnpm/store/')){console.log('BROKEN');break}}catch(e){}}"
+        val out = DshRuntime.execRootfsForOutput(
+            "node -e \"$script\" " + PROFILE_DIR + " 2>/dev/null",
+            120_000,
+        )
+        out.contains("BROKEN")
+    }
+
+    /**
+     * 重建 profile 依赖（`pnpm install --force`）。
+     *
+     * 走 [dshPlugin] 而不是直接调 pnpm：`dsh plugin` 会把参数原样转发给 pnpm，
+     * 同时保留它自己的 bundles reconcile —— 绕过它会让 `dsh.profile.bundles`
+     * 与实际安装状态失步。
+     *
+     * 超时给到 15 分钟：copy 模式下几十个依赖全量重拷比硬链接慢得多。
+     */
+    suspend fun repairStore(onLine: (String) -> Unit = {}): String = withContext(Dispatchers.IO) {
+        dshPlugin("install --force", 900_000, onLine)
     }
 
     /** 暂存目录在容器里的绝对路径。 */

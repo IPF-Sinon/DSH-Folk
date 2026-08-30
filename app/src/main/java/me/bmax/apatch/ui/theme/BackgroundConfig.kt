@@ -116,6 +116,16 @@ object BackgroundConfig {
     var titleImageOffsetX: Float by mutableStateOf(0f)
         private set
 
+    /**
+     * 终端底板的不透明度。
+     *
+     * 默认 0.88 是真机确认过的值：深底 #101014 配亮字 #E6E6E6，这个透明度下
+     * 正文对比度仍然足够，同时能让自定义背景在终端边缘透出来一些。
+     * 别改默认值；用户要更透或更实，用外观设置里的滑块调。
+     */
+    var terminalBgAlpha: Float by mutableStateOf(DEFAULT_TERMINAL_BG_ALPHA)
+        private set
+
     // FocusUI Card Wallpapers (4 cards: KernelPatch, App, DeviceStatus, Storage)
     var focusCardKernelBgUri: String? by mutableStateOf(null)
         private set
@@ -233,6 +243,11 @@ object BackgroundConfig {
     private const val KEY_TITLE_IMAGE_NIGHT_OPACITY = "title_image_night_opacity"
     private const val KEY_TITLE_IMAGE_DIM = "title_image_dim"
     private const val KEY_TITLE_IMAGE_OFFSET_X = "title_image_offset_x"
+
+    private const val KEY_TERMINAL_BG_ALPHA = "terminal_bg_alpha"
+
+    /** 终端底板不透明度的默认值；唯一真值来源（DshTerminalScreen 读这里）。 */
+    const val DEFAULT_TERMINAL_BG_ALPHA = 0.88f
 
     private const val KEY_FOCUS_CARD_KERNEL_BG_URI = "focus_card_kernel_bg_uri"
     private const val KEY_FOCUS_CARD_APP_BG_URI = "focus_card_app_bg_uri"
@@ -530,6 +545,10 @@ object BackgroundConfig {
         titleImageNightOpacity = opacity
     }
 
+    fun setTerminalBgAlphaValue(alpha: Float) {
+        terminalBgAlpha = alpha
+    }
+
     fun getEffectiveTitleImageOpacity(isDarkTheme: Boolean): Float {
         return if (isDarkTheme) titleImageNightOpacity else titleImageDayOpacity
     }
@@ -711,6 +730,8 @@ object BackgroundConfig {
             putFloat(KEY_TITLE_IMAGE_DIM, titleImageDim)
             putFloat(KEY_TITLE_IMAGE_OFFSET_X, titleImageOffsetX)
 
+            putFloat(KEY_TERMINAL_BG_ALPHA, terminalBgAlpha)
+
             putString(KEY_FOCUS_CARD_KERNEL_BG_URI, focusCardKernelBgUri)
             putString(KEY_FOCUS_CARD_APP_BG_URI, focusCardAppBgUri)
             putString(KEY_FOCUS_CARD_DEVICE_BG_URI, focusCardDeviceBgUri)
@@ -805,6 +826,8 @@ object BackgroundConfig {
         val titleDim = prefs.getFloat(KEY_TITLE_IMAGE_DIM, 0.0f)
         val titleOffsetX = prefs.getFloat(KEY_TITLE_IMAGE_OFFSET_X, 0f)
 
+        val termAlpha = prefs.getFloat(KEY_TERMINAL_BG_ALPHA, DEFAULT_TERMINAL_BG_ALPHA)
+
         val focusCardKernelBg = prefs.getString(KEY_FOCUS_CARD_KERNEL_BG_URI, null)
         val focusCardAppBg = prefs.getString(KEY_FOCUS_CARD_APP_BG_URI, null)
         val focusCardDeviceBg = prefs.getString(KEY_FOCUS_CARD_DEVICE_BG_URI, null)
@@ -890,6 +913,8 @@ object BackgroundConfig {
         titleImageNightOpacity = titleNightOpacity
         titleImageDim = titleDim
         titleImageOffsetX = titleOffsetX
+
+        terminalBgAlpha = termAlpha
 
         focusCardKernelBgUri = focusCardKernelBg
         focusCardAppBgUri = focusCardAppBg
@@ -978,6 +1003,8 @@ object BackgroundConfig {
         titleImageNightOpacity = 1.0f
         titleImageDim = 0.0f
         titleImageOffsetX = 0f
+
+        terminalBgAlpha = DEFAULT_TERMINAL_BG_ALPHA
 
         focusCardKernelBgUri = null
         focusCardAppBgUri = null

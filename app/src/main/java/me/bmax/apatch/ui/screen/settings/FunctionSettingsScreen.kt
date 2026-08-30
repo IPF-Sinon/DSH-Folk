@@ -32,6 +32,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
@@ -46,6 +47,8 @@ import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.DshWebUi
+import me.bmax.apatch.ui.screen.PluginProgressHost
+import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
 import rikka.shizuku.Shizuku
@@ -64,6 +67,8 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     val scope = rememberCoroutineScope()
     val snackBarHost = LocalSnackbarHost.current
     val perm by PermissionManager.status.collectAsStateWithLifecycle()
+    // 插件依赖重建复用插件页那套进度对话框与忙碌锁
+    val pluginViewModel = viewModel<DshPluginViewModel>()
 
     val dshPrefs = context.getSharedPreferences(DshEnv.PREF, android.content.Context.MODE_PRIVATE)
 
@@ -297,6 +302,8 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                         // 回首页就能看到进度，这里不再阻塞设置页
                         DshRuntime.reinstallRuntime()
                     },
+                    onRepairPlugins = { pluginViewModel.repairStore() },
+                    repairBusy = pluginViewModel.installing,
                     adbPairCode = adbPairCode,
                     onAdbPairCodeChange = { adbPairCode = it.filter { c -> c.isDigit() }.take(6) },
                     adbPairPort = adbPairPort,
@@ -365,6 +372,9 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
             item { NavigationBarsSpacer() }
         }
     }
+
+    // 重建插件依赖的实时日志（与插件页共用同一套对话框）
+    PluginProgressHost(pluginViewModel)
 }
 
 private const val SHIZUKU_REQ_CODE = 4210

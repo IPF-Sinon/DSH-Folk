@@ -1136,6 +1136,20 @@ fun AppearanceSettingsContent(
                 )
             }
 
+            // 终端底板不透明度。默认 0.88（BackgroundConfig.DEFAULT_TERMINAL_BG_ALPHA）
+            // 是真机确认的值；下界只放到 0.5，再低正文对比度就不够了。
+            item(key = "appearance_terminal_bg_alpha") {
+                SliderSettingCard(
+                    flat = flat,
+                    title = stringResource(id = R.string.settings_terminal_bg_alpha),
+                    value = BackgroundConfig.terminalBgAlpha,
+                    valueRange = 0.5f..1f,
+                    steps = 9,
+                    onValueChange = { BackgroundConfig.setTerminalBgAlphaValue(it) },
+                    onValueChangeFinished = { BackgroundConfig.save(context) },
+                )
+            }
+
             item(key = "appearance_advanced_title") {
                 ToggleSettingCard(
                     flat = flat,

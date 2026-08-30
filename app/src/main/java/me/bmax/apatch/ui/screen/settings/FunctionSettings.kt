@@ -16,6 +16,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -98,6 +99,10 @@ fun FunctionSettingsContent(
     runtimeVersion: String,
     /** 重新下载并覆盖容器。 */
     onReinstallRuntime: () -> Unit,
+    /** 重建 profile 插件依赖（pnpm install --force）。 */
+    onRepairPlugins: () -> Unit,
+    /** 重建正在进行中（与安装共用同一把锁）。 */
+    repairBusy: Boolean,
     adbPairCode: String,
     onAdbPairCodeChange: (String) -> Unit,
     adbPairPort: String,
@@ -341,6 +346,26 @@ fun FunctionSettingsContent(
                                 }
                             },
                         )
+                    }
+                }
+            }
+        }
+
+        // ───────── 插件依赖修复 ─────────
+        item(key = "function_repair_plugins") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    SectionHeader(
+                        icon = { Icon(Icons.Filled.Build, null, Modifier.size(20.dp)) },
+                        title = stringResource(R.string.dsh_plugin_repair),
+                        summary = stringResource(R.string.dsh_plugin_repair_summary),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = onRepairPlugins,
+                        enabled = runtimeInstalled && !repairBusy,
+                    ) {
+                        Text(stringResource(R.string.dsh_plugin_repair_go))
                     }
                 }
             }
