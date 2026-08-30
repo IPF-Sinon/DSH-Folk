@@ -207,6 +207,13 @@ fun DshPluginProgressDialog(
     onDismiss: () -> Unit,
     onCopy: (String) -> Unit,
     onRestart: () -> Unit,
+    /**
+     * 这次操作是否需要重启 DSH 才生效。
+     *
+     * 装插件要（dsh 只在启动时组合 profile 的 patch 层）；而装全局 CLI 之类的操作
+     * 与插件树无关，提示「重启后生效」是错的。
+     */
+    needsRestart: Boolean = true,
 ) {
     val scroll = rememberScrollState()
     // 新日志到达就滚到底，否则用户得一直手动追着滚
@@ -230,7 +237,7 @@ fun DshPluginProgressDialog(
                 if (running) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                     Spacer(Modifier.height(12.dp))
-                } else if (!failed) {
+                } else if (!failed && needsRestart) {
                     // dsh 只在启动时组合 profile 的 patch 层，不重启新插件不会加载
                     Text(
                         text = stringResource(R.string.dsh_plugin_needs_restart),
@@ -257,7 +264,7 @@ fun DshPluginProgressDialog(
         },
         confirmButton = {
             // 装成功后主操作是重启 DSH：不重启新插件不会被加载
-            if (!running && !failed) {
+            if (!running && !failed && needsRestart) {
                 TextButton(onClick = { onDismiss(); onRestart() }) {
                     Text(stringResource(R.string.dsh_plugin_restart_now))
                 }
@@ -279,7 +286,7 @@ fun DshPluginProgressDialog(
                         modifier = Modifier.size(18.dp),
                     )
                 }
-                if (!running && !failed) {
+                if (!running && !failed && needsRestart) {
                     TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
                 }
             }

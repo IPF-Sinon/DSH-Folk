@@ -140,8 +140,20 @@ object DshPluginRepo {
     private const val PROFILE = "web"
     private const val PROFILE_DIR = "/root/.dsh/profiles/web"
 
-    /** git 已就绪的标记文件（避免每次 git 规格安装都探一遍 apt）。 */
-    private const val GIT_READY_MARK = "/root/.dsh/.git-ready"
+    /**
+     * git **能力**已验证过的标记（不只是「git 这个文件在」）。
+     *
+     * 带 v2 后缀让 v1.5–v1.7 写过的旧标记自动失效：那时只探 `command -v git`，
+     * 而故障恰恰是 git 在、却因为缺动态库跑不起来 —— 沿用旧标记会直接跳过探测。
+     */
+    private const val GIT_READY_MARK = "/root/.dsh/.git-ready-v2"
+
+    /** 动态加载器失败的输出签名（proot/proroot 下 exec 缺库时长这样）。 */
+    private val LDSO_FAILURE_MARKS = listOf(
+        "cannot find lib",
+        "proroot-ldso",
+        "error while loading shared libraries",
+    )
 
     /** 验证通过的自制标记（`dsh web: http` 出现即写）。 */
     private const val VERIFY_OK_MARK = "[DSH-Folk-verify-ok]"
@@ -586,41 +598,78 @@ object DshPluginRepo {
     }
 
     /**
-     * git 规格安装前确保容器里有 git。
+     * git 规格安装前确保容器里的 git **真的能跑**。
      *
-     * 目录里 2659 条有 1357 条（51%）的 install 是 `github:` 规格，而 ubuntu-base
+     * 目录里 2663 条有 1357 条（51%）的 install 是 `github:` 规格，而 ubuntu-base
      * 里没有 git —— pnpm 直接报 `git ls-remote failed: git executable not found`。
      *
-     * 新版 runtime 已把 git 预解包进 rootfs（见 runtime-builder/build-rootfs.sh），
-     * 这里只兜存量安装：装过一次就写标记，不必每次都探。
+     * 探的是能力而不是「文件在不在」。r1 运行时给 git 漏了 libcurl 的 8 个传递依赖：
+     * `command -v git` 有、`git --version` 也有（本体只链 libpcre2/libz/libc），
+     * 但 pnpm 真正 exec 的 `git-remote-https` 一跑就
+     * `cannot find libnghttp2.so.14 (needed by libcurl-gnutls.so.4)`。
+     * 只探路径的旧实现对这种情况完全无效，所以这里直接让 git 走一次 https 传输：
+     * 连 127.0.0.1:1（必然拒连）—— 不需要外网，却会完整加载 git-remote-https
+     * 及其全部动态库。缺库时输出是加载器错误，库齐时是连接错误，两者好区分。
      *
      * apt 在 proot 下不保证成功（builder 当初正是因为这个才改成预解包 python3），
-     * 所以失败也继续往下走原安装命令 —— 用户至少能看到完整的 apt 报错，
+     * 所以失败也继续往下走原安装命令 —— 用户至少能看到完整报错，
      * 而不是一句没有上下文的 `git executable not found`。
      */
     private fun ensureGit(onLine: (String) -> Unit) {
-        val probe = DshRuntime.execRootfsForOutput(
-            "test -f '$GIT_READY_MARK' && command -v git >/dev/null 2>&1 && echo HAVE_GIT; " +
-                "command -v git >/dev/null 2>&1 && echo GIT_ON_PATH",
-            60_000,
-        )
-        if (probe.contains("GIT_ON_PATH")) {
-            if (!probe.contains("HAVE_GIT")) {
-                runCatching { DshRuntime.execRootfsForOutput("touch '$GIT_READY_MARK'", 30_000) }
-            }
-            return
-        }
-        onLine("[DSH-Folk] 这个插件来自 git 源，但容器里没有 git，正在安装（apt，可能要几分钟）…")
-        val out = DshRuntime.execRootfsStreaming(
+        if (probeGit().ok) return
+
+        onLine("[DSH-Folk] 这个插件来自 git 源，容器里的 git 不可用，正在修复（apt，可能要几分钟）…")
+        // git 缺失 → 装 git；git 在但加载失败 → 缺的是 libcurl 一族，
+        // --reinstall 让 apt 自己把依赖补齐（比手写包名可靠）
+        DshRuntime.execRootfsStreaming(
             "apt-get update -qq 2>&1 | tail -5; " +
-                "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git 2>&1 | tail -30; " +
-                "command -v git >/dev/null 2>&1 && { mkdir -p \"\$(dirname '$GIT_READY_MARK')\"; " +
-                "touch '$GIT_READY_MARK'; echo '[DSH-Folk] git 已就绪'; } || " +
-                "echo '[DSH-Folk] git 安装失败，下面的安装大概率也会失败；请更新运行时（新版已内置 git）'",
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends " +
+                "git libcurl3t64-gnutls 2>&1 | tail -40; " +
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall " +
+                "libcurl3t64-gnutls 2>&1 | tail -20",
             600_000,
             onLine,
         )
-        android.util.Log.i("DshPluginRepo", "ensureGit: ${out.takeLast(200)}")
+
+        val after = probeGit()
+        if (after.ok) {
+            onLine("[DSH-Folk] git 已修复")
+        } else {
+            onLine(
+                "[DSH-Folk] git 仍不可用（${after.reason}）。" +
+                    "请到 设置 → 功能 → 运行时 更新运行时 —— 新版已内置完整的 git 依赖。"
+            )
+        }
+    }
+
+    private data class GitProbe(val ok: Boolean, val reason: String)
+
+    /**
+     * 探测 git 能否完成一次 https 传输。
+     *
+     * 命中标记文件就跳过（这个探测要 fork 一次 git + 加载十几个库，
+     * 每装一个 git 插件都跑一遍没必要）。
+     */
+    private fun probeGit(): GitProbe {
+        val out = DshRuntime.execRootfsForOutput(
+            "test -f '$GIT_READY_MARK' && { echo MARKED; exit 0; }; " +
+                "command -v git >/dev/null 2>&1 || { echo NO_GIT; exit 0; }; " +
+                // 必然连不上，目的只是把 git-remote-https 及其依赖完整加载一遍
+                "git ls-remote https://127.0.0.1:1/probe.git 2>&1 | tail -5",
+            120_000,
+        )
+        if (out.contains("MARKED")) return GitProbe(true, "已验证")
+        if (out.contains("NO_GIT")) return GitProbe(false, "未安装 git")
+        val ldso = LDSO_FAILURE_MARKS.firstOrNull { out.contains(it, ignoreCase = true) }
+        if (ldso != null) return GitProbe(false, "动态库缺失：$ldso")
+        // 走到这里说明 git-remote-https 成功加载并真的尝试了连接（然后被拒）
+        runCatching {
+            DshRuntime.execRootfsForOutput(
+                "mkdir -p \"\$(dirname '$GIT_READY_MARK')\" && touch '$GIT_READY_MARK'",
+                30_000,
+            )
+        }
+        return GitProbe(true, "可用")
     }
 
     /**
@@ -768,6 +817,31 @@ object DshPluginRepo {
         onLine("[DSH-Folk] 清空 node_modules（保留 pnpm-lock.yaml）…")
         DshRuntime.execRootfsForOutput("rm -rf '$PROFILE_DIR/node_modules'", 120_000)
         dshPlugin("install ${importFlag()}".trimEnd(), 900_000, onLine)
+    }
+
+    /**
+     * 在容器内全局安装 dsh-config-manager 的**独立 CLI**。
+     *
+     * 与装插件是两回事：插件只启用 GUI（回环 HTTP API），不会产生
+     * `dsh-config-manager` 命令 —— 命令来自这个包的 `bin` 字段，要 `npm i -g`。
+     *
+     * `--omit=peer` 必须带：它声明了 16 个 `@deepseek-ai/*` peerDependencies，
+     * 而离线 CLI 一个都不用（运行时依赖只有 js-yaml，已实测 peer 全缺时
+     * `snapshots` / `help` 均正常退出 0）。不带这个标志会在手机上白装十几个包。
+     *
+     * 走 npm 而不是 [dshPlugin]：这是全局命令，不属于任何 profile。
+     */
+    suspend fun installRescueCli(onLine: (String) -> Unit = {}): String = withContext(Dispatchers.IO) {
+        onLine("[DSH-Folk] 正在安装 dsh-config-manager CLI（全局，独立于 DSH 运行时）…")
+        DshRuntime.execRootfsStreaming(
+            "npm install -g dsh-config-manager@latest --omit=peer --registry=$NPM_REGISTRY 2>&1; " +
+                "echo \"$EXIT_MARKER \$?\"; " +
+                "command -v dsh-config-manager >/dev/null 2>&1 && " +
+                "echo '[DSH-Folk] CLI 已就绪：dsh-config-manager help' || " +
+                "echo '[DSH-Folk] 未找到 dsh-config-manager 命令，安装可能失败'",
+            900_000,
+            onLine,
+        )
     }
 
     // ────────────────────────── 安装后验证 / 回滚 ──────────────────────────

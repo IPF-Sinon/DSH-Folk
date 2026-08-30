@@ -115,6 +115,8 @@ fun GeneralSettingsContent(
     val predictiveBackSummary = stringResource(id = R.string.settings_predictive_back_summary)
 
     val showUpdateDialog = remember { mutableStateOf(false) }
+    // 检查结果带到对话框：应用内更新要用它的 apkUrl / sha256 / notes
+    val updateStatus = remember { mutableStateOf<UpdateChecker.Status?>(null) }
     val showCleanStorageDialog = remember { mutableStateOf(false) }
     val showAppTitleDialog = remember { mutableStateOf(false) }
     val showCustomAppTitleDialog = remember { mutableStateOf(false) }
@@ -164,7 +166,11 @@ fun GeneralSettingsContent(
                     val status = UpdateChecker.check()
                     loadingDialog.hide()
                     when {
-                        status.hasUpdate -> showUpdateDialog.value = true
+                        status.hasUpdate -> {
+                            // 把结果带给对话框：它据此决定能不能走应用内更新
+                            updateStatus.value = status
+                            showUpdateDialog.value = true
+                        }
                         // 查不到不能报「已是最新」：那是一句肯定的错误结论。
                         // 匿名 GitHub API 只有 60/h，插件商店那边也在用，烧完就查不动了
                         status.failure != null -> showToast(context, R.string.update_check_failed)
@@ -481,7 +487,8 @@ fun GeneralSettingsContent(
             onUpdate = {
                 showUpdateDialog.value = false
                 UpdateChecker.openUpdateUrl(context)
-            }
+            },
+            status = updateStatus.value,
         )
     }
 

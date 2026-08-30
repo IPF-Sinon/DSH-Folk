@@ -35,6 +35,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.DshWebUi
@@ -322,13 +324,38 @@ fun FunctionSettingsContent(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+
+                    // 有新运行时可用时明确说出来。之前完全没有这个检测：
+                    // r1 的 git 依赖不全，修好了也没人告诉用户该更新。
+                    var latest by remember { mutableStateOf<String?>(null) }
+                    var checking by remember { mutableStateOf(false) }
+                    LaunchedEffect(runtimeInstalled, runtimeVersion) {
+                        if (!runtimeInstalled) return@LaunchedEffect
+                        checking = true
+                        latest = runCatching { DshRuntime.checkRuntimeUpdate() }.getOrNull()
+                        checking = false
+                    }
+                    latest?.let {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_runtime_update_available, it),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+
                     Spacer(Modifier.height(8.dp))
                     var confirming by remember { mutableStateOf(false) }
                     OutlinedButton(
                         onClick = { confirming = true },
                         enabled = runtimeInstalled,
                     ) {
-                        Text(stringResource(R.string.dsh_runtime_reinstall))
+                        Text(
+                            stringResource(
+                                if (latest != null) R.string.dsh_runtime_update_go
+                                else R.string.dsh_runtime_reinstall
+                            )
+                        )
                     }
                     // 重装会连带删掉容器内的插件与 ADB 密钥，必须确认
                     if (confirming) {

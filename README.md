@@ -51,6 +51,10 @@ skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentia
 首次启动下载完运行时后会自动预装三个插件：`dsh-web-mobile`（移动端适配）、`dshmarket`（WebUI 内的插件市场）、
 `dsh-config-manager`（**配置备份功能的依赖**，设置里的导出/导入走它的回环 API）。
 这一步会多花一两分钟；失败不影响启动，之后可以在插件商店里手动装。
+预装清单按包名逐个记账，所以从旧版本升级上来会自动补装新增的那几个。
+
+应用自身的更新可以在 设置 → 常规 → 检查更新 里完成：它会对三条下载渠道（GitHub 直连 / 两个 gh-proxy）
+测延迟与吞吐，下载支持断点续传，装之前必须通过 release 附带的 `.sha256` 校验 —— 校验不过一律不装。
 
 root / Shizuku / 无线 ADB 都是**可选**的。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）与已授权的 Shizuku / Sui，
 自身不打任何内核补丁、不安装 su、不内置 Shizuku Server。
@@ -98,6 +102,10 @@ DSH-Folk (Android app)
   （表现是装完插件 `dsh web` 报 `MissingClientBundleError`）。所以这种环境下会给 profile 的 `pnpm-workspace.yaml`
   写上 `packageImportMethod: copy`，让 pnpm 复制真实文件。代价是内容存储的去重失效，容器体积会大一些。
 - 插件目录里超过一半的条目是 `github:owner/name` 安装规格，pnpm 解析它要 `git ls-remote`，所以 git 也预装进了 rootfs。
+  注意 rootfs 是用 `dpkg-deb -x` 纯解包装出来的（runner 是 x86_64，跑不了 arm64 的 maintainer script），
+  **dpkg 的依赖关系没人替我们解** —— 包列表写漏一个传递依赖，构建期一切正常，到手机上 exec 那一刻才报
+  `cannot find libxxx.so.N`。所以构建末尾有一步 `check-elf-closure.js`：从 git-core / perl 扩展 / python3
+  出发递归解析 ELF 的 `DT_NEEDED`，任何 SONAME 找不到提供者就让构建失败。
 - `dsh web` 只绑定回环地址；配置备份走的也是同一个回环 HTTP 接口，不对局域网开放。
 
 ## 项目结构
@@ -108,7 +116,7 @@ app/src/main/java/me/bmax/apatch/
   ui/screen/HomeDsh.kt  主页
   ui/screen/Dsh*.kt     终端 / 插件 / 插件商店
   ui/screen/settings/   设置各分页
-runtime-builder/        容器 rootfs 构建脚本（在 CI 上跑）
+runtime-builder/        容器 rootfs 构建脚本（在 CI 上跑）+ 动态库闭包检查
 .github/workflows/      build.yml（APK） + runtime.yml（rootfs）
 ```
 

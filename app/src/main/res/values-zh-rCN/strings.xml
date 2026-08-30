@@ -437,6 +437,23 @@
     <string name="update_close">关闭</string>
     <string name="update_latest">您已是最新版本</string>
     <string name="update_check_failed">检查更新失败：网络不可用或 GitHub 接口限流</string>
+    <string name="update_in_app">应用内更新</string>
+    <string name="update_download_now">开始下载</string>
+    <string name="update_open_browser">用浏览器打开</string>
+    <string name="update_speed_testing">正在测试下载渠道…</string>
+    <string name="update_channel_result">%1$d ms · %2$s</string>
+    <string name="update_channel_recommended">%1$s（推荐）</string>
+    <string name="update_channel_unreachable">不可达</string>
+    <string name="update_all_channels_down">所有下载渠道都不可达</string>
+    <string name="update_downloading">下载中 %1$d%% · %2$s</string>
+    <string name="update_verifying">正在校验…</string>
+    <string name="update_ready">校验通过，可以安装了。</string>
+    <string name="update_verify_failed">下载或校验失败，已丢弃该安装包</string>
+    <string name="update_no_asset">这个版本没有附带 APK，请改用浏览器下载</string>
+    <string name="update_no_checksum">这个版本没有 .sha256 校验文件，不安装未校验的包</string>
+    <string name="update_install">安装</string>
+    <string name="update_install_permission_needed">请先允许安装未知应用，然后再点「安装」</string>
+    <string name="update_notes_title">更新内容</string>
     <!--折叠选项-->
     <string name="settings_category_general">常规</string>
     <string name="settings_category_appearance">外观</string>
@@ -629,8 +646,8 @@
 
     <!-- Backup Settings -->
     <string name="settings_category_backup">备份</string>
-    <string name="settings_enable_cloud_backup">启用云端备份</string>
-    <string name="settings_enable_cloud_backup_summary">自动备份刷入过的模块到云端服务</string>
+    <string name="settings_enable_cloud_backup">同步到 WebDAV</string>
+    <string name="settings_enable_cloud_backup_summary">导出 DSH 配置后自动上传一份到 WebDAV（需先配置服务地址）</string>
     <string name="settings_configure_webdav">配置 WebDAV 服务</string>
     <string name="webdav_config_title">WebDAV 配置</string>
     <string name="webdav_url">WebDAV 地址</string>

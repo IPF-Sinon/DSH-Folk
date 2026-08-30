@@ -305,6 +305,8 @@
     <string name="dsh_runtime_installed_version">Installed: %1$s</string>
     <string name="dsh_runtime_not_installed">Not installed yet — start the service on the home page to download it</string>
     <string name="dsh_runtime_reinstall">Reinstall runtime</string>
+    <string name="dsh_runtime_update_available">Update available: %1$s</string>
+    <string name="dsh_runtime_update_go">Update runtime</string>
     <string name="dsh_runtime_reinstall_confirm_title">Reinstall the runtime?</string>
     <string name="dsh_runtime_reinstall_confirm_text">This downloads the runtime again (about 140 MB) and overwrites the container. Files under /root/.dsh — installed plugins, ADB keys and your DSH configuration — are inside that container and will be lost. The service stops first.</string>
     <string name="dsh_runtime_reinstall_go">Reinstall</string>
@@ -366,4 +368,15 @@
     <string name="dsh_plugin_verify_failed">Verification failed: %1$s. The plugin is still installed — remove it from the Installed page if the service will not start.</string>
     <string name="dsh_plugin_rolled_back">Verification failed: %2$s. %1$s has been uninstalled automatically; nothing was changed.</string>
     <string name="dsh_plugin_seeding">Installing bundled plugins…</string>
+    <string name="dsh_backup_plugin_checking">Checking dsh-config-manager…</string>
+    <string name="dsh_backup_plugin_ready">dsh-config-manager ready (%1$s)</string>
+    <string name="dsh_backup_plugin_not_ready">Unavailable: %1$s</string>
+    <string name="dsh_backup_plugin_install">Install the plugin</string>
+    <string name="dsh_backup_rescue_section">When config is broken / DSH will not start</string>
+    <string name="dsh_backup_rescue_expand">Details</string>
+    <string name="dsh_backup_rescue_collapse">Collapse</string>
+    <string name="dsh_backup_rescue_desc">Everything above goes through the dsh-config-manager plugin, which lives inside DSH — if DSH will not start, neither will it. The same project also ships a standalone CLI that does not depend on the DSH runtime at all, so it is the first thing to reach for when configuration is broken or you are restoring onto a new machine. Installing or updating the plugin does not give you the CLI command: it must be installed separately with the first command below.</string>
+    <string name="dsh_backup_rescue_install_cli">Install rescue CLI in container</string>
+    <string name="dsh_backup_rescue_open_terminal">Open terminal</string>
+    <string name="dsh_backup_rescue_cmds_title">Run these on the Terminal page</string>
 </resources>

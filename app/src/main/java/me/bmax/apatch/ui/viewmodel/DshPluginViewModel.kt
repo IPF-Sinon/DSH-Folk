@@ -268,18 +268,36 @@ class DshPluginViewModel : ViewModel() {
     }
 
     /**
+     * 在容器内安装 dsh-config-manager 的独立 CLI（备份页的救急入口）。
+     *
+     * 同样复用 [run]：它是一次分钟级的 npm 操作，需要实时日志和失败留存。
+     * 不置 needsRestart —— 这是个全局命令，与 profile 的插件树无关。
+     */
+    fun installRescueCli(onDone: (String) -> Unit = {}) {
+        run(
+            "安装救急 CLI",
+            { DshPluginRepo.installRescueCli(it) },
+            onDone,
+            affectsPluginTree = false,
+        )
+    }
+
+    /**
      * 装 / 卸 / 本地装共用的执行壳。
      *
      * 成功后置 [needsRestart]：dsh 在启动时组合 profile 的 patch 层，
      * 装完不重启进程新插件不会加载 —— 这与 dsh plugin 自己的 needsRestart 语义一致。
      *
      * @param verify 安装成功后跑一次启动验证；失败则自动回滚（仅安装路径需要）。
+     * @param affectsPluginTree 这次操作会不会改变 profile 的插件树。装全局 CLI 不会 ——
+     *        对它提示「重启 DSH 后生效」是错的。
      */
     private fun run(
         target: String,
         action: suspend ((String) -> Unit) -> String,
         onDone: (String) -> Unit,
         verify: Boolean = false,
+        affectsPluginTree: Boolean = true,
     ) {
         if (installing) return
         viewModelScope.launch {
@@ -329,8 +347,8 @@ class DshPluginViewModel : ViewModel() {
             lastOutput = if (extra.isEmpty()) out else "$extra\n$out"
             installFailed = failed
             installing = false
-            // 回滚过就等于什么都没装，不该提示重启
-            if (!failed) needsRestart = true
+            // 回滚过就等于什么都没装，不该提示重启；不动插件树的操作同样不提示
+            if (!failed && affectsPluginTree) needsRestart = true
             onDone(lastOutput)
             refresh()
         }

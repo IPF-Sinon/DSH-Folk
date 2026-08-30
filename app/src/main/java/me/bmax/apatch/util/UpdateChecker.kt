@@ -54,8 +54,19 @@ object UpdateChecker {
     data class Status(
         val hasUpdate: Boolean,
         val latestTag: String = "",
+        /** APK 资产的下载地址；空表示这次没找到可直装的包，UI 应退回浏览器。 */
+        val apkUrl: String = "",
+        val apkName: String = "",
+        val apkSize: Long = 0,
+        /** 期望的 sha256（来自同名 .sha256 资产）；空表示无法校验。 */
+        val sha256: String = "",
+        /** release 正文，给对话框显示更新内容。 */
+        val notes: String = "",
         val failure: String? = null,
-    )
+    ) {
+        /** 能不能走应用内更新：要有包，也要有校验值 —— 不校验就装是不可接受的。 */
+        val canInstallInApp: Boolean get() = apkUrl.isNotEmpty() && sha256.isNotEmpty()
+    }
 
     suspend fun check(): Status = withContext(Dispatchers.IO) {
         var lastError: String? = null
@@ -75,8 +86,9 @@ object UpdateChecker {
                     null
                 } ?: continue
 
-                val tag = runCatching { newestVersionTag(body) }.getOrNull()
-                if (tag.isNullOrEmpty()) {
+                val release = runCatching { newestVersionRelease(body) }.getOrNull()
+                val tag = release?.optString("tag_name")?.trim().orEmpty()
+                if (tag.isEmpty()) {
                     Log.i(TAG, "no version-shaped tag from $base$path")
                     continue
                 }
@@ -85,7 +97,18 @@ object UpdateChecker {
                 // 用 DshPluginRepo 那套 semver 比较：预发布标识必须参与，否则装着
                 // v1.6-rc.1 的用户看不到 v1.6 正式版的更新
                 val newer = me.bmax.apatch.dsh.compareVersions(tag, BuildConfig.VERSION_NAME) > 0
-                return@withContext Status(hasUpdate = newer, latestTag = tag)
+                if (!newer) return@withContext Status(hasUpdate = false, latestTag = tag)
+
+                val asset = pickApkAsset(release!!)
+                return@withContext Status(
+                    hasUpdate = true,
+                    latestTag = tag,
+                    apkUrl = asset?.url.orEmpty(),
+                    apkName = asset?.name.orEmpty(),
+                    apkSize = asset?.size ?: 0L,
+                    sha256 = asset?.let { fetchSha256(it.shaUrl) }.orEmpty(),
+                    notes = release.optString("body").trim(),
+                )
             }
         }
 
@@ -93,27 +116,82 @@ object UpdateChecker {
         Status(hasUpdate = false, failure = lastError ?: "no release found")
     }
 
+    private data class ApkAsset(
+        val name: String,
+        val url: String,
+        val size: Long,
+        /** 同名 + `.sha256` 的资产地址；空 = 这个 release 没带校验文件。 */
+        val shaUrl: String,
+    )
+
     /**
-     * 从 latest 对象或 releases 数组里挑出最新的**版本形** tag。
+     * 从 release 的 assets 里挑 APK，并配对它的 `.sha256`。
+     *
+     * 严格按「同名 + .sha256」配对，不去猜别的命名：配错了校验值就等于没校验，
+     * 而校验失败会阻止安装 —— 宁可退回浏览器下载。
+     */
+    private fun pickApkAsset(release: JSONObject): ApkAsset? {
+        val assets = release.optJSONArray("assets") ?: return null
+        var apk: JSONObject? = null
+        val byName = HashMap<String, JSONObject>()
+        for (i in 0 until assets.length()) {
+            val a = assets.optJSONObject(i) ?: continue
+            val name = a.optString("name")
+            byName[name] = a
+            if (apk == null && name.endsWith(".apk", ignoreCase = true)) apk = a
+        }
+        val a = apk ?: return null
+        val name = a.optString("name")
+        return ApkAsset(
+            name = name,
+            url = a.optString("browser_download_url"),
+            size = a.optLong("size", 0L),
+            shaUrl = byName["$name.sha256"]?.optString("browser_download_url").orEmpty(),
+        )
+    }
+
+    /**
+     * 拉 `.sha256` 文件并取出十六进制摘要。
+     *
+     * 内容形如 `<hex>  <filename>`（sha256sum 的输出），所以取第一段。
+     */
+    private fun fetchSha256(url: String): String {
+        if (url.isEmpty()) return ""
+        val body = FolkApiClient.fetchJson(url, ttlMs = 30 * 60 * 1000L, maxRetries = 1)
+            .getOrNull().orEmpty()
+        val hex = body.trim().substringBefore(' ').trim()
+        return if (hex.length == 64 && hex.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }) {
+            hex.lowercase()
+        } else {
+            ""
+        }
+    }
+
+    /**
+     * 从 latest 对象或 releases 数组里挑出最新的**版本形** release。
      *
      * 数组按发布时间倒序，但不能只取第一个：`runtime-latest` 也在同一个列表里。
      */
-    private fun newestVersionTag(body: String): String {
+    private fun newestVersionRelease(body: String): JSONObject? {
         val trimmed = body.trimStart()
         if (trimmed.startsWith("[")) {
             val arr = JSONArray(trimmed)
-            var best = ""
+            var best: JSONObject? = null
+            var bestTag = ""
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 if (o.optBoolean("draft")) continue
                 val tag = o.optString("tag_name").trim()
                 if (!VERSION_TAG.matches(tag)) continue
-                if (best.isEmpty() || me.bmax.apatch.dsh.compareVersions(tag, best) > 0) best = tag
+                if (bestTag.isEmpty() || me.bmax.apatch.dsh.compareVersions(tag, bestTag) > 0) {
+                    best = o
+                    bestTag = tag
+                }
             }
             return best
         }
-        val tag = JSONObject(trimmed).optString("tag_name").trim()
-        return if (VERSION_TAG.matches(tag)) tag else ""
+        val o = JSONObject(trimmed)
+        return if (VERSION_TAG.matches(o.optString("tag_name").trim())) o else null
     }
 
     fun openUpdateUrl(context: Context) {

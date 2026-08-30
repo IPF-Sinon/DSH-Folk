@@ -197,6 +197,9 @@ internal fun PluginProgressHost(viewModel: DshPluginViewModel) {
             viewModel.clearNeedsRestart()
             DshRuntime.restart()
         },
+        // 装全局 CLI 那类操作不动插件树，别提示「重启后生效」。
+        // needsRestart 由 run() 在成功时按操作类型置位。
+        needsRestart = viewModel.needsRestart,
     )
 }
 

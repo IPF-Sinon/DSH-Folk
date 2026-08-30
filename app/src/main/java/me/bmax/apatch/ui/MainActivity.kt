@@ -471,6 +471,9 @@ class MainActivity : AppCompatActivity() {
             ) {
                 
                 val showUpdateDialog = remember { mutableStateOf(false) }
+                // 自动检查的结果：对话框要用它的资产信息才能走应用内更新
+                val autoUpdateStatus =
+                    remember { mutableStateOf<me.bmax.apatch.util.UpdateChecker.Status?>(null) }
                 val context = LocalContext.current
 
                 val loadingDialog = rememberLoadingDialog()
@@ -535,8 +538,9 @@ class MainActivity : AppCompatActivity() {
                              // Delay a bit to wait for network connection
                              kotlinx.coroutines.delay(2000)
                              // 自动检查是静默的：查不到就什么都不做，别在冷启动弹错误
-                             val hasUpdate = me.bmax.apatch.util.UpdateChecker.check().hasUpdate
-                             if (hasUpdate) {
+                             val st = me.bmax.apatch.util.UpdateChecker.check()
+                             if (st.hasUpdate) {
+                                 autoUpdateStatus.value = st
                                  showUpdateDialog.value = true
                              }
                         }
@@ -549,7 +553,8 @@ class MainActivity : AppCompatActivity() {
                         onUpdate = {
                             showUpdateDialog.value = false
                             UpdateChecker.openUpdateUrl(context)
-                        }
+                        },
+                        status = autoUpdateStatus.value,
                     )
                 }
 

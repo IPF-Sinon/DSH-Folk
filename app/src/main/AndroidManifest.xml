@@ -39,6 +39,9 @@
     <uses-permission
         android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
+    <!-- 应用内更新：下载并校验 APK 后唤起系统安装器。
+         不做静默安装（需要 device owner 或系统签名）；sha256 校验不通过一律不装。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".APApplication"

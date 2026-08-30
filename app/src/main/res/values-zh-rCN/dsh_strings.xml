@@ -287,6 +287,8 @@
     <string name="dsh_runtime_installed_version">已安装：%1$s</string>
     <string name="dsh_runtime_not_installed">尚未安装 —— 在首页启动服务即会下载</string>
     <string name="dsh_runtime_reinstall">重装运行时</string>
+    <string name="dsh_runtime_update_available">可更新到 %1$s</string>
+    <string name="dsh_runtime_update_go">更新运行时</string>
     <string name="dsh_runtime_reinstall_confirm_title">重装运行时？</string>
     <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并覆盖容器。/root/.dsh 下的东西 —— 已装的插件、ADB 密钥、你的 DSH 配置 —— 都在这个容器里，会一并丢失。开始前会先停止服务。</string>
     <string name="dsh_runtime_reinstall_go">重装</string>
@@ -348,4 +350,15 @@
     <string name="dsh_plugin_verify_failed">验证未通过：%1$s。插件仍在，若服务起不来请到「已安装」页卸载它。</string>
     <string name="dsh_plugin_rolled_back">验证未通过：%2$s。已自动卸载 %1$s，未对现有环境造成改动。</string>
     <string name="dsh_plugin_seeding">正在预装内置插件…</string>
+    <string name="dsh_backup_plugin_checking">正在检测 dsh-config-manager…</string>
+    <string name="dsh_backup_plugin_ready">dsh-config-manager 已就绪（%1$s）</string>
+    <string name="dsh_backup_plugin_not_ready">当前不可用：%1$s</string>
+    <string name="dsh_backup_plugin_install">去安装插件</string>
+    <string name="dsh_backup_rescue_section">配置损坏 / DSH 起不来时</string>
+    <string name="dsh_backup_rescue_desc">上面这些功能都走 dsh-config-manager 插件，而插件住在 DSH 里面 —— DSH 起不来时它也帮不了你。同一个项目还提供一个独立的命令行工具，完全不依赖 DSH 运行时，所以配置损坏、或换新机器要还原环境时，它是第一救急手段。注意：安装或更新插件并不会产生这个命令，必须用下面第一条命令单独安装。</string>
+    <string name="dsh_backup_rescue_expand">展开说明</string>
+    <string name="dsh_backup_rescue_collapse">收起</string>
+    <string name="dsh_backup_rescue_install_cli">在容器内安装救急 CLI</string>
+    <string name="dsh_backup_rescue_open_terminal">打开终端</string>
+    <string name="dsh_backup_rescue_cmds_title">在「终端」页执行这些命令</string>
 </resources>

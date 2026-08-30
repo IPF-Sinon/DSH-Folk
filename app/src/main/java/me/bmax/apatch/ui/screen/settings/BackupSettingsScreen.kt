@@ -20,6 +20,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -32,8 +33,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.DshPluginStoreScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.DshTerminalScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -41,8 +45,10 @@ import kotlinx.coroutines.withContext
 import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshConfigBackup
+import me.bmax.apatch.ui.screen.PluginProgressHost
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.ui.theme.BackupConfig
+import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
 import me.bmax.apatch.util.WebDavUtils
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
@@ -61,6 +67,24 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var dshMessage by rememberSaveable { mutableStateOf("") }
     var dshPassword by rememberSaveable { mutableStateOf("") }
     var dshRemote by rememberSaveable { mutableStateOf(listOf<String>()) }
+
+    // 插件状态：进页面就查一次，别等用户点了「导出」才报错。
+    // null = 检测中；下面的 LaunchedEffect 只跑一次（备份页不是热路径）。
+    var pluginReady by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var pluginDetail by rememberSaveable { mutableStateOf("") }
+    val pluginViewModel = viewModel<DshPluginViewModel>()
+
+    LaunchedEffect(Unit) {
+        val st = withContext(Dispatchers.IO) { DshConfigBackup.status(context) }
+        pluginReady = st.ready
+        // 就绪时报版本，不就绪时报原因 —— status.error 已能区分
+        // 「DSH 没运行」和「插件缺失」，别把两者混成一句
+        pluginDetail = if (st.ready) {
+            st.pluginVersion.ifEmpty { "—" }
+        } else {
+            st.error.ifEmpty { context.getString(R.string.dsh_backup_plugin_missing) }
+        }
+    }
 
     val notRunning = stringResource(R.string.dsh_backup_needs_running)
     val pluginMissing = stringResource(R.string.dsh_backup_plugin_missing)
@@ -196,6 +220,11 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         }.getOrDefault(false)
                         if (!opened) dshMessage = openDirFailed
                     },
+                    pluginReady = pluginReady,
+                    pluginDetail = pluginDetail,
+                    onGoInstallPlugin = { navigator.navigate(DshPluginStoreScreenDestination) },
+                    onInstallRescueCli = { pluginViewModel.installRescueCli() },
+                    onOpenTerminal = { navigator.navigate(DshTerminalScreenDestination) },
                     flat = flat,
                     highlightKey = highlightKey,
                 )
@@ -204,4 +233,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
             item { NavigationBarsSpacer() }
         }
     }
+
+    // CLI 安装与插件安装共用同一套进度对话框（都是分钟级的 npm/pnpm 操作）
+    PluginProgressHost(pluginViewModel)
 }

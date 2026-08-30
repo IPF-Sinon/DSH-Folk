@@ -471,6 +471,23 @@
     <string name="update_close">Close</string>
     <string name="update_latest">You are on the latest version</string>
     <string name="update_check_failed">Could not check for updates — network unavailable or GitHub rate limit reached</string>
+    <string name="update_in_app">Update in app</string>
+    <string name="update_download_now">Download now</string>
+    <string name="update_open_browser">Open in browser</string>
+    <string name="update_speed_testing">Testing download channels…</string>
+    <string name="update_channel_result">%1$d ms · %2$s</string>
+    <string name="update_channel_recommended">%1$s (recommended)</string>
+    <string name="update_channel_unreachable">Unreachable</string>
+    <string name="update_all_channels_down">All download channels are unreachable</string>
+    <string name="update_downloading">Downloading %1$d%% · %2$s</string>
+    <string name="update_verifying">Verifying checksum…</string>
+    <string name="update_ready">Verified. Ready to install.</string>
+    <string name="update_verify_failed">Download or checksum verification failed — the package was discarded</string>
+    <string name="update_no_asset">This release has no APK attached — use the browser instead</string>
+    <string name="update_no_checksum">This release has no .sha256 checksum — refusing to install unverified package</string>
+    <string name="update_install">Install</string>
+    <string name="update_install_permission_needed">Allow installing unknown apps first, then tap Install again</string>
+    <string name="update_notes_title">What is new</string>
     <string name="settings_category_general">General</string>
     <string name="settings_category_appearance">Appearance</string>
     <string name="settings_category_behavior">Behavior</string>
@@ -672,8 +689,8 @@
 
     <!-- Backup Settings -->
     <string name="settings_category_backup">Backup</string>
-    <string name="settings_enable_cloud_backup">Enable Cloud Backup</string>
-    <string name="settings_enable_cloud_backup_summary">Automatically backup flashed modules to cloud service</string>
+    <string name="settings_enable_cloud_backup">Sync to WebDAV</string>
+    <string name="settings_enable_cloud_backup_summary">After exporting DSH configuration, also upload a copy to WebDAV (configure the server first)</string>
     <string name="settings_configure_webdav">Configure WebDAV Service</string>
     <string name="webdav_config_title">WebDAV Configuration</string>
     <string name="webdav_url">WebDAV URL</string>

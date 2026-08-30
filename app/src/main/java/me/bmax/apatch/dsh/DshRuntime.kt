@@ -2,17 +2,12 @@ package me.bmax.apatch.dsh
 
 import android.content.Context
 import android.os.StatFs
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
-import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -783,6 +778,25 @@ object DshRuntime {
     }.getOrNull()
 
     /**
+     * 有没有更新的运行时可用。
+     *
+     * 判据是版本串**不相等**，不是语义比较：`0.1.1-rc.2-ubuntunoble-r2` 里混了
+     * dsh 版本、ubuntu 代号和 rootfs 修订号，semver 比较对它没有意义；而任何一段
+     * 变了都值得重装。r2 就是这么来的 —— 内容修了但 dsh 版本没动。
+     *
+     * @return 远端版本串（有更新时），null = 已是最新或查不到
+     */
+    suspend fun checkRuntimeUpdate(): String? = withContext(Dispatchers.IO) {
+        if (!DshEnv.isRuntimeInstalled(appContext)) return@withContext null
+        val meta = fetchMeta() ?: return@withContext null
+        val local = prefs().getString(DshEnv.KEY_RUNTIME_VERSION, null).orEmpty()
+        // 本地版本未知（早期版本装的，没记过）时不谎报有更新：重装要重下 150MB，
+        // 不能靠猜就让用户付这个代价
+        if (local.isEmpty()) return@withContext null
+        if (meta.version == local) null else meta.version
+    }
+
+    /**
      * 逐个下载源尝试，第一个成功即返回。
      *
      * metadata 的 mirrors 本身就是加了代理前缀的 URL，再给它们叠一次前缀只会产生
@@ -812,101 +826,33 @@ object DshRuntime {
     /**
      * 下载单个文件，支持断点续传。
      *
-     * 130 MB 的包在手机网络上断一次很常见，原来每次失败都从 0 开始重下。GitHub Release
-     * 与两个代理都支持 Range（实测返回 206 + content-range），所以已下载部分够大时带上
-     * `Range: bytes=N-` 续传；服务端不给 206 就退回从头下载并截断旧文件。
+     * 续传逻辑本身住在 [DshDownloader]（APK 更新也用同一套）；这里只把进度接到
+     * 运行时的状态与启动日志上。
      */
     private fun downloadFile(url: String, target: File, sizeBytes: Long): Boolean {
-        var conn: HttpURLConnection? = null
-        var input: InputStream? = null
-        var out: OutputStream? = null
-        var ok = false
-        return try {
-            // 太小的残片不值得续传（可能是上次刚建好文件就断了），直接重下
-            val have = if (target.isFile && target.length() > 1L * 1024 * 1024) target.length() else 0L
-            conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 30_000
-            conn.instanceFollowRedirects = true
-            if (have > 0) conn.setRequestProperty("Range", "bytes=$have-")
-            if (conn.responseCode !in 200..299) return false
-            // 206 才是真的续传；服务端忽略 Range 返回 200 时必须从头写
-            val resumed = have > 0 && conn.responseCode == 206
-            if (have > 0 && !resumed) appendLog("> 服务端不支持续传，从头下载")
-            if (resumed) appendLog("> 断点续传：已有 ${have / 1024 / 1024} MB")
-            val contentLength = if (sizeBytes > 0) sizeBytes
-                else conn.contentLengthLong.let { if (it > 0 && resumed) it + have else it }
-            target.parentFile?.mkdirs()
-            // stream 是非空局部量：循环里写它，out 只留给 finally 关句柄。
-            // （out 是 OutputStream? 且循环内会被置空，直接用它写会丢智能转换）
-            val stream = BufferedOutputStream(FileOutputStream(target, resumed))
-            out = stream
-            input = conn.inputStream
-            val buf = ByteArray(64 * 1024)
-            var total = if (resumed) have else 0L
-            var lastUpdate = total
-            var lastLoggedBucket = -1
-            var speedBps = 0L
-            var lastSpeedAt = System.currentTimeMillis()
-            var lastSpeedTotal = total
-            while (true) {
-                val n = input.read(buf)
-                if (n < 0) break
-                stream.write(buf, 0, n)
-                total += n
-                val now = System.currentTimeMillis()
-                if (now - lastSpeedAt >= 500) {
-                    val dt = (now - lastSpeedAt) / 1000.0
-                    if (dt > 0.0) speedBps = ((total - lastSpeedTotal) / dt).toLong()
-                    lastSpeedAt = now
-                    lastSpeedTotal = total
+        var lastLoggedBucket = -1
+        return DshDownloader.download(
+            url = url,
+            target = target,
+            expectedSize = sizeBytes,
+            onLog = { appendLog(it) },
+            onProgress = { p ->
+                if (p.contentLength <= 0) return@download
+                val pctInt = p.percent
+                // 日志每 5% 一行就够了，否则 400 行上限很快被下载进度占满
+                if (pctInt / 5 > lastLoggedBucket) {
+                    lastLoggedBucket = pctInt / 5
+                    appendLog("> 下载中 $pctInt%（${formatSpeed(p.speedBytesPerSec)}）")
                 }
-                if (total - lastUpdate > 512 * 1024 || (contentLength > 0 && total >= contentLength)) {
-                    lastUpdate = total
-                    if (contentLength > 0) {
-                        val pct = (total.toDouble() / contentLength).coerceIn(0.0, 1.0)
-                        val pctInt = (pct * 100).toInt()
-                        if (pctInt / 5 > lastLoggedBucket) {
-                            lastLoggedBucket = pctInt / 5
-                            appendLog("> 下载中 $pctInt%（${formatSpeed(speedBps)}）")
-                        }
-                        _state.update {
-                            it.copy(
-                                progress = pct.toFloat(),
-                                speedBytesPerSec = speedBps,
-                                message = str(R.string.dsh_msg_downloading_pct, pctInt, formatSpeed(speedBps)),
-                            )
-                        }
-                    }
+                _state.update {
+                    it.copy(
+                        progress = p.fraction,
+                        speedBytesPerSec = p.speedBytesPerSec,
+                        message = str(R.string.dsh_msg_downloading_pct, pctInt, formatSpeed(p.speedBytesPerSec)),
+                    )
                 }
-                // 超出预期大小：文件已经错了，删掉再报失败 —— 留着的话下次续传会
-                // 从一个比目标还长的偏移接着请求，服务端只会回 416。
-                if (contentLength > 0 && total > contentLength) {
-                    appendLog("! 下载超出预期大小（$total > $contentLength），丢弃重下")
-                    // 先关流再删：否则 finally 里的 close 会把缓冲区刷回一个刚被删掉的路径
-                    runCatching { stream.close() }
-                    out = null
-                    runCatching { target.delete() }
-                    return false
-                }
-            }
-            if (contentLength > 0 && total != contentLength) {
-                appendLog("! 下载不完整: 预期 $contentLength 实际 $total")
-                return false
-            }
-            ok = true
-            true
-        } catch (e: Exception) {
-            appendLog("! 下载异常: ${e.javaClass.simpleName}: ${e.message}")
-            false
-        } finally {
-            runCatching { input?.close() }
-            runCatching { out?.close() }
-            runCatching { conn?.disconnect() }
-            // 失败时保留已下载部分供下次续传；只有明显不可续（大小超出预期）时才删，
-            // 那种情况由上面的 return false 之前就地处理。
-            if (!ok && target.length() < 1L * 1024 * 1024) runCatching { target.delete() }
-        }
+            },
+        )
     }
 
     /** 解压 rootfs.tar.gz 到 filesDir/rootfs（整体替换）。 */
@@ -1317,19 +1263,9 @@ object DshRuntime {
     }
 
     private fun verifySha256(file: File, expected: String): Boolean {
+        // metadata 里没给 sha256 时不拦（早期 runtime 发布没有这一项）
         if (expected.isBlank()) return true
-        return runCatching {
-            val digest = MessageDigest.getInstance("SHA-256")
-            BufferedInputStream(file.inputStream(), 256 * 1024).use { input ->
-                val buf = ByteArray(64 * 1024)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    digest.update(buf, 0, n)
-                }
-            }
-            digest.digest().joinToString("") { "%02x".format(it) }.equals(expected, ignoreCase = true)
-        }.getOrDefault(false)
+        return DshDownloader.sha256(file).equals(expected, ignoreCase = true)
     }
 
     private fun availableSpace(dir: File): Long = runCatching {
