@@ -53,7 +53,7 @@ class DshDocumentsProvider : DocumentsProvider() {
         val base = ctx.dataDir
         val stats = android.os.StatFs(base.absolutePath)
         val cursor = MatrixCursor(projection ?: DEFAULT_ROOT_PROJECTION)
-        val row = MatrixCursor.RowBuilder(cursor)
+        val row = cursor.newRow()
         row.add(DocumentsContract.Root.COLUMN_ROOT_ID, rootId)
         row.add(
             DocumentsContract.Root.COLUMN_FLAGS,
@@ -202,7 +202,7 @@ class DshDocumentsProvider : DocumentsProvider() {
     }
 
     private fun addDocumentRow(cursor: MatrixCursor, file: File) {
-        val row = MatrixCursor.RowBuilder(cursor)
+        val row = cursor.newRow()
         val isDir = file.isDirectory
         val flags = if (isDir) 0 else DocumentsContract.Document.FLAG_SUPPORTS_DELETE or
             DocumentsContract.Document.FLAG_SUPPORTS_RENAME or
