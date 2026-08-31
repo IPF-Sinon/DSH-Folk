@@ -7,6 +7,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.BuildConfig
+import me.bmax.apatch.dsh.DshSource
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -156,17 +157,31 @@ object UpdateChecker {
      * 内容形如 `<hex>  <filename>`（sha256sum 的输出），所以取第一段。
      * 不是 64 位十六进制就返回空 —— 宁可让 UI 退回浏览器，也不拿一个可疑的
      * 期望值去比对（那等于没校验）。
+     *
+     * 直连 `github.com/releases/download/…` 会 302 到
+     * `release-assets.githubusercontent.com`（Azure blob），国内直连经常超时；
+     * 而 APK 下载那边（[AppUpdater]）走的是 gh-proxy 镜像。校验值必须跟着走
+     * 同一批镜像，否则「包下得来、校验值拿不到」照样被 [Status.canInstallInApp]
+     * 判成不能应用内更新。每个候选只试一次（串行、命中即返回），控制总超时。
      */
     private suspend fun fetchSha256(url: String): String {
         if (url.isEmpty()) return ""
-        val body = FolkApiClient.fetchJson(url, ttlMs = 30 * 60 * 1000L, maxRetries = 1)
-            .getOrNull().orEmpty()
-        val hex = body.trim().substringBefore(' ').trim()
-        return if (hex.length == 64 && hex.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }) {
-            hex.lowercase()
-        } else {
-            ""
+        val candidates = buildList {
+            add(url)
+            if (url.startsWith("https://github.com/")) {
+                add(DshSource.proxyPrefix(DshSource.SOURCE_GHPROXY_CF) + url)
+                add(DshSource.proxyPrefix(DshSource.SOURCE_GHPROXY_AXISNOW) + url)
+            }
+        }.distinct()
+        for (c in candidates) {
+            val body = FolkApiClient.fetchJson(c, ttlMs = 30 * 60 * 1000L, maxRetries = 0)
+                .getOrNull().orEmpty()
+            val hex = body.trim().substringBefore(' ').trim()
+            if (hex.length == 64 && hex.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }) {
+                return hex.lowercase()
+            }
         }
+        return ""
     }
 
     /**
