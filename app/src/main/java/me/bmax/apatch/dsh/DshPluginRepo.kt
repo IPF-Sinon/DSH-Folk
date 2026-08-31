@@ -621,6 +621,27 @@ object DshPluginRepo {
         "else{for(const k of Object.keys(node))collect(node[k],out,seen)}}"
 
     /**
+     * 把一个包的 `dsh.bundle.patch` 解析成 cordis patch 结构。
+     *
+     * **`patch` 通常是一个相对包目录的文件路径字符串**（dsh 自己的约定，例如
+     * `"./cordis.patch.yml"`），不是内联的 YAML 文本。原来的代码直接
+     * `YAML.parse(patch)` —— YAML 把 `"./cordis.patch.yml"` 解析回同一个字符串，
+     * [COLLECT_IDS_JS] 在字符串上一个 id 也收不到，于是**每个插件的 entryIds 都是空**，
+     * 插件页所有开关（`enabled = entryIds.isNotEmpty()`）全部变灰、无法停用。
+     * 真机上 dsh-base 的 patch 文件里有 78 个 id，被这一步整体丢掉。
+     *
+     * 所以：字符串按路径读文件再 parse；已经是对象/数组的直接用（少数插件内联声明）。
+     * 读不到 / 解析失败一律返回 null，由调用方按「无 entry」处理，不影响其余包。
+     */
+    private val LOAD_PATCH_JS = "function loadPatch(pkgDir,patch){" +
+        "if(patch==null||!YAML)return null;" +
+        "if(typeof patch==='string'){" +
+        "const f=path.resolve(pkgDir,patch);" +
+        "if(!fs.existsSync(f))return null;" +
+        "try{return YAML.parse(fs.readFileSync(f,'utf8'),{logLevel:'silent'})}catch(e){return null}}" +
+        "return patch}"
+
+    /**
      * 每个已装 bundle 的 loader entry id 列表（key = npm 包名）。
      *
      * 关插件靠的是「在 profile 的 cordis.patch.yml 里给这些 id 写 disabled:true」，
@@ -633,15 +654,16 @@ object DshPluginRepo {
             YAML_REQUIRE_JS + ";" +
             "const dir=process.argv[2];" +
             COLLECT_IDS_JS + ";" +
+            LOAD_PATCH_JS + ";" +
             "let m;try{m=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){process.exit(0)}" +
             "const b=(m.dsh&&m.dsh.profile&&m.dsh.profile.bundles)||[];" +
             "for(const n of b){" +
             "if(n.startsWith('@deepseek-ai/'))continue;" +
             "let ids=[];" +
-            "try{const q=JSON.parse(fs.readFileSync(path.join(dir,'node_modules',n,'package.json'),'utf8'));" +
-            "let patch=q.dsh&&q.dsh.bundle&&q.dsh.bundle.patch;" +
-            "if(typeof patch!=='string')patch=JSON.stringify(patch);" +
-            "if(patch&&YAML){const doc=YAML.parse(patch,{logLevel:'silent'});const s=new Set();collect(doc,s,new Set());ids=Array.from(s)}}catch(e){}" +
+            "try{const pkgDir=path.join(dir,'node_modules',n);" +
+            "const q=JSON.parse(fs.readFileSync(path.join(pkgDir,'package.json'),'utf8'));" +
+            "const doc=loadPatch(pkgDir,q.dsh&&q.dsh.bundle&&q.dsh.bundle.patch);" +
+            "if(doc){const s=new Set();collect(doc,s,new Set());ids=Array.from(s)}}catch(e){}" +
             "console.log(n+'\\t'+ids.join(','))}"
         val out = DshRuntime.execRootfsForOutput(
             dshRealPrefix() + "node -e \"$script\" \"\$DSH_REAL\" " + PROFILE_DIR + " 2>/dev/null",
@@ -697,14 +719,15 @@ object DshPluginRepo {
             "if(!YAML){console.log('NO_YAML');process.exit(1)}" +
             "const dir=process.argv[2],pkg=process.argv[3],want=process.argv[4]==='1';" +
             COLLECT_IDS_JS + ";" +
+            LOAD_PATCH_JS + ";" +
             "let m;try{m=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){console.log('NO_PROFILE');process.exit(1)}" +
             "const b=(m.dsh&&m.dsh.profile&&m.dsh.profile.bundles)||[];" +
             "if(b.indexOf(pkg)<0){console.log('NOT_BUNDLE');process.exit(1)}" +
             "let ids=[];" +
-            "try{const q=JSON.parse(fs.readFileSync(path.join(dir,'node_modules',pkg,'package.json'),'utf8'));" +
-            "let patch=q.dsh&&q.dsh.bundle&&q.dsh.bundle.patch;" +
-            "if(typeof patch!=='string')patch=JSON.stringify(patch);" +
-            "if(patch){const doc=YAML.parse(patch,{logLevel:'silent'});const s=new Set();collect(doc,s,new Set());ids=Array.from(s)}}catch(e){}" +
+            "try{const pkgDir=path.join(dir,'node_modules',pkg);" +
+            "const q=JSON.parse(fs.readFileSync(path.join(pkgDir,'package.json'),'utf8'));" +
+            "const doc=loadPatch(pkgDir,q.dsh&&q.dsh.bundle&&q.dsh.bundle.patch);" +
+            "if(doc){const s=new Set();collect(doc,s,new Set());ids=Array.from(s)}}catch(e){}" +
             "if(ids.length===0){console.log('NO_ENTRIES');process.exit(1)}" +
             "const f=path.join(dir,'cordis.patch.yml');" +
             "let arr=[];" +
