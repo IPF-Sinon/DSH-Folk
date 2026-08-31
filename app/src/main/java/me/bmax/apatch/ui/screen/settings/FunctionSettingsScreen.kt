@@ -84,6 +84,8 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
         mutableStateOf(dshPrefs.getString(DshEnv.KEY_WEBUI_MODE, DshWebUi.MODE_IN_APP) ?: DshWebUi.MODE_IN_APP)
     }
     var autostart by rememberSaveable { mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_AUTOSTART, false)) }
+    var port by rememberSaveable { mutableStateOf(DshRuntime.port()) }
+    var lanEnabled by rememberSaveable { mutableStateOf(DshRuntime.lanEnabled()) }
     var verifyAfterInstall by rememberSaveable {
         mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, true))
     }
@@ -211,6 +213,16 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     onAutostartChange = { on ->
                         autostart = on
                         dshPrefs.edit().putBoolean(DshEnv.KEY_AUTOSTART, on).apply()
+                    },
+                    port = port,
+                    onPortChange = { p ->
+                        port = p
+                        DshRuntime.setPort(p)
+                    },
+                    lanEnabled = lanEnabled,
+                    onLanChange = { on ->
+                        lanEnabled = on
+                        DshRuntime.setLanEnabled(on)
                     },
                     downloadSource = downloadSource,
                     onDownloadSourceChange = { src ->

@@ -49,6 +49,15 @@ object DshEnv {
     const val KEY_PORT = "dsh_port"
     const val KEY_RUNTIME_VERSION = "runtime_version"
 
+    /** 局域网访问开关（默认关；开则 dsh web 绑 0.0.0.0）。 */
+    const val KEY_LAN = "dsh_lan"
+
+    /** 文件桥回环 token（随机生成，写进容器内配置文件供 dsh-fs 使用）。 */
+    const val KEY_FS_TOKEN = "fs_bridge_token"
+
+    /** 容器内文件桥配置（JSON：port + token），由 App 写、dsh-fs 读。 */
+    fun fsBridgeConfig(ctx: Context): File = File(dshHome(ctx), "fs-bridge.json")
+
     /**
      * 容器体积（字节）的缓存值。
      *

@@ -374,6 +374,13 @@ private fun DshPluginItem(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(bottom = 8.dp),
             ) {
+                if (plugin.seeded) {
+                    ModuleLabel(
+                        text = stringResource(R.string.dsh_plugin_seeded_label),
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 ModuleLabel(
                     text = "↓ " + formatCount(plugin.downloads),
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,

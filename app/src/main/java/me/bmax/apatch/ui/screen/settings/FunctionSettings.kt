@@ -20,8 +20,10 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
@@ -76,6 +78,12 @@ fun FunctionSettingsContent(
     /** 开机自启（BootCompletedReceiver 会读同一个 pref）。 */
     autostart: Boolean,
     onAutostartChange: (Boolean) -> Unit,
+    /** Web 服务监听端口。 */
+    port: Int,
+    onPortChange: (Int) -> Unit,
+    /** 局域网访问开关（默认关；开则 dsh web 绑 0.0.0.0）。 */
+    lanEnabled: Boolean,
+    onLanChange: (Boolean) -> Unit,
     /** 运行时下载源：DshSource.SOURCE_* 之一。 */
     downloadSource: String,
     onDownloadSourceChange: (String) -> Unit,
@@ -176,6 +184,84 @@ fun FunctionSettingsContent(
                 description = stringResource(R.string.dsh_autostart_summary),
                 checked = autostart,
                 onCheckedChange = onAutostartChange,
+            )
+        }
+
+        // ───────── 端口 ─────────
+        item(key = "function_port") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    SectionHeader(
+                        icon = { Icon(Icons.Filled.Tune, null, Modifier.size(20.dp)) },
+                        title = stringResource(R.string.dsh_port_title),
+                        summary = stringResource(R.string.dsh_port_summary),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_port_current, port),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    var editing by remember { mutableStateOf(false) }
+                    OutlinedButton(onClick = { editing = true }) {
+                        Text(stringResource(R.string.dsh_port_edit))
+                    }
+                    if (editing) {
+                        var input by remember { mutableStateOf(port.toString()) }
+                        var inputError by remember { mutableStateOf(false) }
+                        AlertDialog(
+                            onDismissRequest = { editing = false },
+                            title = { Text(stringResource(R.string.dsh_port_title)) },
+                            text = {
+                                OutlinedTextField(
+                                    value = input,
+                                    onValueChange = {
+                                        input = it.filter(Char::isDigit)
+                                        inputError = false
+                                    },
+                                    label = { Text(stringResource(R.string.dsh_port_input_hint)) },
+                                    isError = inputError,
+                                    supportingText = if (inputError) {
+                                        { Text(stringResource(R.string.dsh_port_invalid)) }
+                                    } else {
+                                        null
+                                    },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val p = input.toIntOrNull()
+                                    if (p == null || p !in 1..65535) {
+                                        inputError = true
+                                    } else {
+                                        onPortChange(p)
+                                        editing = false
+                                    }
+                                }) { Text(stringResource(R.string.dsh_port_confirm)) }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { editing = false }) {
+                                    Text(stringResource(android.R.string.cancel))
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        // ───────── 局域网访问 ─────────
+        item(key = "function_lan") {
+            ToggleSettingCard(
+                flat = flat,
+                icon = Icons.Filled.Public,
+                title = stringResource(R.string.dsh_lan_title),
+                description = stringResource(R.string.dsh_lan_summary),
+                checked = lanEnabled,
+                onCheckedChange = onLanChange,
             )
         }
 

@@ -71,6 +71,12 @@ data class DshPlugin(
      * 「用户主动关掉了它的 loader entry」。两者可以同时为 true。
      */
     val disabled: Boolean = false,
+    /**
+     * 是否为 DSH-Folk 预装插件（见 [DshRuntime.SEED_PLUGINS]）。
+     *
+     * 只作展示标签，不参与安装/停用逻辑。
+     */
+    val seeded: Boolean = false,
 ) {
     val installed: Boolean get() = installedVersion.isNotEmpty()
 
@@ -585,6 +591,7 @@ object DshPluginRepo {
                 installedVersion = ver,
                 // 缺这一列（旧格式输出）时按生效算，别把已装插件全标成停用
                 enabled = parts.getOrElse(3) { "1" }.trim() != "0",
+                seeded = DshRuntime.isSeedPlugin(pkg),
             )
         }.distinctBy { it.pkg }
         // 停用状态与 loader entry id 是单独一层信息（profile cordis.patch.yml），

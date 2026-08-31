@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Layers
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -42,11 +44,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -54,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
@@ -65,6 +73,7 @@ import me.bmax.apatch.dsh.DshPhase
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.HarnessService
 import me.bmax.apatch.dsh.PermissionManager
+import me.bmax.apatch.dsh.PortConflictAction
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 
@@ -147,6 +156,82 @@ fun HomeScreenDsh(
 
         HomeBottomSpacer()
     }
+
+    if (state.portConflict) {
+        PortConflictDialog(
+            port = state.port,
+            onAuto = { DshRuntime.resolvePortConflict(PortConflictAction.AUTO) },
+            onManual = { p -> DshRuntime.resolvePortConflict(PortConflictAction.MANUAL, p) },
+            onForce = { DshRuntime.resolvePortConflict(PortConflictAction.FORCE) },
+        )
+    }
+}
+
+/**
+ * 「端口被占用」对话框：换一个 / 手动指定 / 仍用此端口。
+ *
+ * 不允许点外部关闭 —— 冲突没解决就放用户回首页，服务永远是停的，反而更糊涂。
+ * 「手动指定」复用同一个 AlertDialog，切换出数字输入框。
+ */
+@Composable
+private fun PortConflictDialog(
+    port: Int,
+    onAuto: () -> Unit,
+    onManual: (Int) -> Unit,
+    onForce: () -> Unit,
+) {
+    var showInput by remember { mutableStateOf(false) }
+    var input by remember { mutableStateOf("") }
+    var inputError by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { /* 必须显式选择，禁止点外/返回键关闭 */ },
+        title = { Text(stringResource(R.string.dsh_port_conflict_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.dsh_port_conflict_message, port))
+                if (showInput) {
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = {
+                            input = it.filter(Char::isDigit)
+                            inputError = false
+                        },
+                        label = { Text(stringResource(R.string.dsh_port_input_hint)) },
+                        isError = inputError,
+                        supportingText = if (inputError) {
+                            { Text(stringResource(R.string.dsh_port_invalid)) }
+                        } else {
+                            null
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (showInput) {
+                TextButton(
+                    onClick = {
+                        val p = input.toIntOrNull()
+                        if (p == null || p !in 1..65535 || DshRuntime.isPortInUse(p)) {
+                            inputError = true
+                        } else {
+                            onManual(p)
+                        }
+                    },
+                ) { Text(stringResource(R.string.dsh_port_confirm)) }
+            } else {
+                TextButton(onClick = onAuto) { Text(stringResource(R.string.dsh_port_change_auto)) }
+                TextButton(onClick = { showInput = true }) { Text(stringResource(R.string.dsh_port_change_manual)) }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onForce) { Text(stringResource(R.string.dsh_port_force)) }
+        },
+    )
 }
 
 @Composable

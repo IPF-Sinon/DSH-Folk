@@ -14,6 +14,7 @@ import me.bmax.apatch.apApp
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
+import me.bmax.apatch.dsh.DshRuntime
 
 /**
  * DSH 插件页状态。
@@ -96,12 +97,15 @@ class DshPluginViewModel : ViewModel() {
                         p.author.contains(q, true) ||
                         p.description.contains(q, true))
             }.map { p ->
-                val local = installedByPkg[p.pkg] ?: return@map p
+                val local = installedByPkg[p.pkg]
+                val seeded = DshRuntime.isSeedPlugin(p.pkg)
+                if (local == null) return@map p.copy(seeded = seeded)
                 p.copy(
                     installedVersion = local.installedVersion,
                     enabled = local.enabled,
                     entryIds = local.entryIds,
                     disabled = local.disabled,
+                    seeded = seeded,
                 )
             }.toList()
         }

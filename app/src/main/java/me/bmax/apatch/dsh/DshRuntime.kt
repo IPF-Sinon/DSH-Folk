@@ -27,6 +27,9 @@ import org.json.JSONObject
 /** 运行时阶段。 */
 enum class DshPhase { NOT_READY, DOWNLOADING, EXTRACTING, STARTING, RUNNING, ERROR }
 
+/** 端口冲突时用户的选择。 */
+enum class PortConflictAction { AUTO, MANUAL, FORCE }
+
 /** 运行时状态快照（首页卡片与启动日志面板消费）。 */
 data class DshState(
     val phase: DshPhase = DshPhase.NOT_READY,
@@ -43,6 +46,13 @@ data class DshState(
      * 走缓存 + 后台重算而不是现算：见 [DshEnv.KEY_ROOTFS_SIZE]。
      */
     val rootfsSizeBytes: Long = 0L,
+    /**
+     * 启动前探测到端口被外部进程占用、正等用户决定。
+     *
+     * 置位时首页弹「端口被占用」对话框，用户在 [DshRuntime.resolvePortConflict]
+     * 里选择换端口 / 手动指定 / 强制启动。
+     */
+    val portConflict: Boolean = false,
 ) {
     val webUrl: String get() = "http://127.0.0.1:$port/"
 }
@@ -110,7 +120,77 @@ object DshRuntime {
      * 设置里的导出/导入走的正是它的回环 HTTP API（见 [DshConfigBackup]），
      * 没装的话那一页直接不可用。
      */
-    private val SEED_PLUGINS = listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager")
+    val SEED_PLUGINS = listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager")
+
+    /** 预装插件集合（供插件列表/商店渲染「预装」标签）。 */
+    fun isSeedPlugin(pkg: String): Boolean = pkg in SEED_PLUGINS
+
+    /** 容器内 `dsh-fs` CLI（node 脚本，读 /root/.dsh/fs-bridge.json 后回环调用文件桥）。 */
+    private val FS_BRIDGE_CLI_SCRIPT = """
+        #!/usr/bin/env node
+        const fs = require('fs');
+        const http = require('http');
+        const CFG = '/root/.dsh/fs-bridge.json';
+        if (!fs.existsSync(CFG)) { console.error('dsh-fs: 文件桥未就绪（缺 ' + CFG + '）'); process.exit(1); }
+        const cfg = JSON.parse(fs.readFileSync(CFG, 'utf8'));
+        const enc = encodeURIComponent;
+        function req(method, path, body) {
+          return new Promise(function (resolve, reject) {
+            const r = http.request({
+              host: '127.0.0.1', port: cfg.port, method: method, path: path,
+              headers: { 'X-Dsh-Fs-Token': cfg.token }
+            }, function (res) {
+              const chunks = [];
+              res.on('data', function (c) { chunks.push(c); });
+              res.on('end', function () { resolve({ status: res.statusCode, body: Buffer.concat(chunks) }); });
+            });
+            r.on('error', reject);
+            if (body) r.write(body);
+            r.end();
+          });
+        }
+        const cmd = process.argv[2];
+        const a = process.argv.slice(3);
+        function rel(p) { return p === undefined ? '' : p; }
+        (async function () {
+          try {
+            if (cmd === 'list' || cmd === 'stat') {
+              const r = await req('GET', '/' + cmd + '?path=' + enc(rel(a[0])));
+              process.stdout.write(r.body.toString());
+              if (r.status !== 200) process.exitCode = 1;
+              process.stdout.write('\n');
+            } else if (cmd === 'read') {
+              const r = await req('GET', '/read?path=' + enc(rel(a[0])));
+              if (r.status === 200) process.stdout.write(r.body);
+              else { process.stderr.write(r.body.toString() + '\n'); process.exitCode = 1; }
+            } else if (cmd === 'write') {
+              const data = fs.readFileSync(a[0]);
+              const dst = a.length > 1 ? a[1] : a[0];
+              const r = await req('PUT', '/write?path=' + enc(dst), data);
+              process.stdout.write(r.body.toString() + '\n');
+              if (r.status !== 200) process.exitCode = 1;
+            } else if (cmd === 'rm') {
+              const r = await req('DELETE', '/delete?path=' + enc(rel(a[0])));
+              process.stdout.write(r.body.toString() + '\n');
+              if (r.status !== 200) process.exitCode = 1;
+            } else if (cmd === 'mv') {
+              const r = await req('POST', '/move?src=' + enc(rel(a[0])) + '&dst=' + enc(rel(a[1])));
+              process.stdout.write(r.body.toString() + '\n');
+              if (r.status !== 200) process.exitCode = 1;
+            } else if (cmd === 'mkdir') {
+              const r = await req('POST', '/mkdir?path=' + enc(rel(a[0])));
+              process.stdout.write(r.body.toString() + '\n');
+              if (r.status !== 200) process.exitCode = 1;
+            } else {
+              console.error('usage: dsh-fs list|read|write|rm|mv|stat|mkdir <path>...');
+              process.exitCode = 1;
+            }
+          } catch (e) {
+            console.error('dsh-fs: ' + (e && e.message ? e.message : e));
+            process.exitCode = 1;
+          }
+        })();
+    """.trimIndent()
 
     /**
      * 插件树/客户端包加载失败的日志签名。
@@ -211,6 +291,94 @@ object DshRuntime {
         prefs().edit().putInt(DshEnv.KEY_PORT, p).apply()
         _state.update { it.copy(port = p) }
     }
+
+    // ────────────────────────── 端口占用检测 ──────────────────────────
+
+    /** 127.0.0.1:port 是否已被某个进程监听（TCP connect 探测）。 */
+    fun isPortInUse(port: Int): Boolean = runCatching {
+        java.net.Socket().use { s ->
+            s.connect(java.net.InetSocketAddress("127.0.0.1", port), 800)
+            true
+        }
+    }.getOrDefault(false)
+
+    /**
+     * 从 [from] 起向后扫第一个空闲端口。
+     *
+     * 供「端口被占用 → 换一个」用；扫到 65535 还没有就回退默认端口（仍可能占用，
+     * 但比拿一个越界端口强）。
+     */
+    fun findFreePort(from: Int = port() + 1): Int {
+        var p = from.coerceIn(1, 65535)
+        while (p <= 65535) {
+            if (!isPortInUse(p)) return p
+            p++
+        }
+        return DshEnv.DEFAULT_PORT
+    }
+
+    /**
+     * 用户对「端口被占用」作出的决定。
+     *
+     * [PortConflictAction.AUTO]：换一个空闲端口；[PortConflictAction.MANUAL]：用
+     * [newPort]（越界或仍被占用则保留冲突标记，交由 UI 提示）；[PortConflictAction.FORCE]：
+     * 不改端口、强行继续启动。
+     *
+     * `setPort` 只是同步 prefs 写 + state 更新，改完端口再调 [bootstrap] 重跑；
+     * FORCE 则跳过端口探测、直接 [startAndAwait]。
+     */
+    fun resolvePortConflict(action: PortConflictAction, newPort: Int? = null) {
+        if (!ready) return
+        when (action) {
+            PortConflictAction.AUTO -> {
+                setPort(findFreePort())
+                _state.update { it.copy(portConflict = false) }
+                bootstrap()
+            }
+            PortConflictAction.MANUAL -> {
+                val p = newPort ?: return
+                if (p !in 1..65535 || isPortInUse(p)) return // 保留 portConflict，UI 继续提示
+                setPort(p)
+                _state.update { it.copy(portConflict = false) }
+                bootstrap()
+            }
+            PortConflictAction.FORCE -> {
+                // 强行启动：跳过端口探测直接拉起（用户明知端口被占仍要用）
+                _state.update { it.copy(portConflict = false) }
+                scope.launch {
+                    bootMutex.withLock { startAndAwait() }
+                }
+            }
+        }
+    }
+
+    // ────────────────────────── 局域网访问 ──────────────────────────
+
+    /** 局域网访问开关（默认关）。 */
+    fun lanEnabled(): Boolean =
+        ready && prefs().getBoolean(DshEnv.KEY_LAN, false)
+
+    fun setLanEnabled(enabled: Boolean) {
+        if (!ready) return
+        prefs().edit().putBoolean(DshEnv.KEY_LAN, enabled).apply()
+    }
+
+    /** 本机局域网 IPv4（site-local），取不到返回 null。 */
+    fun lanIp(): String? = runCatching {
+        val ifaces = java.net.NetworkInterface.getNetworkInterfaces()
+        while (ifaces.hasMoreElements()) {
+            val nif = ifaces.nextElement()
+            if (!nif.isUp || nif.isLoopback) continue
+            val addrs = nif.inetAddresses
+            while (addrs.hasMoreElements()) {
+                val a = addrs.nextElement()
+                if (a is java.net.Inet4Address && !a.isLoopbackAddress && a.isSiteLocalAddress) {
+                    return@runCatching a.hostAddress
+                }
+            }
+        }
+        null
+    }.getOrNull()
 
     // ────────────────────────── 容器运行时选择 ──────────────────────────
 
@@ -543,6 +711,8 @@ object DshRuntime {
                 }
                 setupResolvConf()
                 seedPlugins()
+                ensureFsBridgeCli()
+                if (checkPortConflict()) return@withLock
                 startAndAwait()
             }
         }
@@ -637,12 +807,78 @@ object DshRuntime {
         it == DshPhase.DOWNLOADING || it == DshPhase.EXTRACTING || it == DshPhase.STARTING
     }
 
+    /**
+     * 启动前探测端口占用。
+     *
+     * 本服务自己的进程在跑（`serverProcess?.isAlive`）不算冲突 —— 那是正常监听，
+     * `startServer` 自会识别并跳过。只在「我们没在跑、端口却连得上」时置 [DshState.portConflict]
+     * 并中止本轮启动，等 [resolvePortConflict] 决定。
+     *
+     * @return true 表示已置冲突标记、应当中止本轮启动
+     */
+    private fun checkPortConflict(): Boolean {
+        if (serverProcess?.isAlive == true) return false
+        if (!isPortInUse(port())) return false
+        _state.update { it.copy(portConflict = true) }
+        appendLog("! 端口 ${port()} 已被占用，等待用户选择（换端口 / 手动指定 / 仍用此端口）")
+        return true
+    }
+
+    // ────────────────────────── 文件桥 ──────────────────────────
+
+    /** 取（或首先生成）文件桥 token。 */
+    private fun ensureFsToken(): String {
+        val p = prefs()
+        p.getString(DshEnv.KEY_FS_TOKEN, null)?.takeIf { it.isNotEmpty() }?.let { return it }
+        val t = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
+            .joinToString("") { b -> "%02x".format(b.toInt() and 0xff) }
+        p.edit().putString(DshEnv.KEY_FS_TOKEN, t).apply()
+        return t
+    }
+
+    /** 把端口 + token 写进容器内配置文件，供 `dsh-fs` 读。 */
+    private fun writeFsBridgeConfig(port: Int, token: String) {
+        runCatching {
+            DshEnv.fsBridgeConfig(appContext).parentFile?.mkdirs()
+            DshEnv.fsBridgeConfig(appContext).writeText(
+                "{\"port\":$port,\"token\":\"$token\"}",
+                StandardCharsets.UTF_8,
+            )
+        }
+    }
+
+    /**
+     * 把 `dsh-fs` CLI 写进容器（rootfs 就在 App 私有目录，直接落盘，不必 execRootfs heredoc）。
+     *
+     * 只在引导路径（bootstrap / reinstall）调用一次；CLI 内容不变时重复写无害。
+     */
+    private fun ensureFsBridgeCli() {
+        if (!DshEnv.isRuntimeInstalled(appContext)) return
+        runCatching {
+            val f = File(DshEnv.rootfs(appContext), "usr/local/bin/dsh-fs")
+            f.writeText(FS_BRIDGE_CLI_SCRIPT, StandardCharsets.UTF_8)
+            f.setExecutable(true, false)
+        }
+    }
+
+    /** 启动文件桥（选空闲端口 + 写配置 + 监听）。 */
+    private fun startFsBridge() {
+        runCatching {
+            val fsPort = findFreePort(DshFsBridge.PORT_BASE)
+            val fsToken = ensureFsToken()
+            writeFsBridgeConfig(fsPort, fsToken)
+            DshFsBridge.start(fsPort, fsToken)
+            appendLog("> 文件桥已启动：容器内可用 dsh-fs（根目录 /sdcard）")
+        }.onFailure { appendLog("! 文件桥启动失败: ${it.message}") }
+    }
+
     /** 强制重启 web 服务。 */
     fun restart() {
         scope.launch {
             bootMutex.withLock {
                 stopServer()
                 delay(500)
+                if (checkPortConflict()) return@withLock
                 startAndAwait()
             }
         }
@@ -662,6 +898,8 @@ object DshRuntime {
                 if (_state.value.phase != DshPhase.ERROR) {
                     setupResolvConf()
                     seedPlugins()
+                    ensureFsBridgeCli()
+                    if (checkPortConflict()) return@withLock
                     startAndAwait()
                 }
             }
@@ -1102,7 +1340,8 @@ object DshRuntime {
      * 而 NODE_OPTIONS 传不了它（node 明确拒绝），只能作为命令行参数。
      *
      * 默认端口 3080 不显式传 --port，避免 commander 的 'argument missing'。
-     * 服务只绑 127.0.0.1，不提供 --host 0.0.0.0 开关；鉴权由 dsh 自己的登录页负责。
+     * 服务默认只绑 127.0.0.1；开启「局域网访问」后追加 --host 0.0.0.0。
+     * 鉴权由 dsh 自己的登录页负责。
      */
     fun startServer() {
         // 守卫只看真实进程，不看 phase。看 phase 会把上一步（例如安装完成）
@@ -1118,7 +1357,11 @@ object DshRuntime {
         clearLog()
 
         val port = port()
-        val opts = if (port == DshEnv.DEFAULT_PORT) "" else " --port $port"
+        val lan = lanEnabled()
+        val opts = buildString {
+            if (port != DshEnv.DEFAULT_PORT) append(" --port $port")
+            if (lan) append(" --host 0.0.0.0")
+        }
         val cmd = buildString {
             append("export DSH_HOME=/root/.dsh && ")
             // 不让 dsh 拉系统浏览器：我们用 Intent 打开 WebUI
@@ -1136,6 +1379,16 @@ object DshRuntime {
         appendLog("> 硬链接: " + hardlinkLogLine())
         appendLog("> pnpm 导入方式: " + pnpmImportMethodLine())
         appendLog("> 启动 dsh web，端口 $port")
+        if (lan) {
+            val ip = lanIp()
+            if (ip != null) {
+                appendLog("> 局域网访问已开启: http://$ip:$port（局域网内均可访问，请确认网络可信）")
+            } else {
+                appendLog("> 局域网访问已开启，但未能获取本机局域网 IP")
+            }
+        } else {
+            appendLog("> 局域网访问已关闭，仅监听 127.0.0.1")
+        }
 
         serverProcess = try {
             execRootfs(cmd)
@@ -1152,6 +1405,7 @@ object DshRuntime {
             return
         }
         forwardOutput(serverProcess)
+        startFsBridge()
         startedAt = System.currentTimeMillis()
         _state.update { it.copy(phase = DshPhase.STARTING, port = port, message = str(R.string.dsh_msg_starting)) }
     }
@@ -1196,7 +1450,7 @@ object DshRuntime {
         }
         val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
-            if (portOpen(port()) && httpResponds(port())) {
+            if (isPortInUse(port()) && httpResponds(port())) {
                 _state.update {
                     it.copy(
                         phase = DshPhase.RUNNING,
@@ -1231,13 +1485,6 @@ object DshRuntime {
         }
         _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
     }
-
-    private fun portOpen(port: Int): Boolean = runCatching {
-        java.net.Socket().use { s ->
-            s.connect(java.net.InetSocketAddress("127.0.0.1", port), 800)
-            true
-        }
-    }.getOrDefault(false)
 
     /**
      * 回环 HTTP 是否有响应。
@@ -1281,6 +1528,7 @@ object DshRuntime {
         runCatching { serverProcess?.destroyForcibly() }
         serverProcess = null
         startedAt = 0L
+        DshFsBridge.stop()
         _state.update { it.copy(phase = DshPhase.NOT_READY, pid = null, message = str(R.string.dsh_msg_stopped)) }
     }
 

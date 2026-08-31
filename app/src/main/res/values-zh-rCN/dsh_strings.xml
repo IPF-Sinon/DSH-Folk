@@ -402,4 +402,25 @@
     <string name="dsh_log_window_1h">最近 1 小时</string>
     <string name="dsh_log_window_12h">最近 12 小时</string>
     <string name="dsh_log_window_all">全部</string>
+
+    <!-- 端口占用检测 + 端口配置 -->
+    <string name="dsh_port_title">端口</string>
+    <string name="dsh_port_summary">DSH Web 服务监听端口（默认 3080）</string>
+    <string name="dsh_port_current">当前端口：%1$d</string>
+    <string name="dsh_port_edit">修改</string>
+    <string name="dsh_port_confirm">确定</string>
+    <string name="dsh_port_input_hint">端口号</string>
+    <string name="dsh_port_invalid">端口无效（1-65535）或已被占用</string>
+    <string name="dsh_port_conflict_title">端口被占用</string>
+    <string name="dsh_port_conflict_message">端口 %1$d 已被其他程序占用，是否更换端口？</string>
+    <string name="dsh_port_change_auto">换一个端口</string>
+    <string name="dsh_port_change_manual">手动指定</string>
+    <string name="dsh_port_force">仍用此端口</string>
+
+    <!-- 局域网访问 -->
+    <string name="dsh_lan_title">局域网访问</string>
+    <string name="dsh_lan_summary">开启后同一局域网的设备可访问 WebUI（鉴权由 dsh 登录页负责）</string>
+
+    <!-- 预装插件标签 -->
+    <string name="dsh_plugin_seeded_label">预装</string>
 </resources>

@@ -420,4 +420,25 @@
     <string name="dsh_log_window_1h">Last 1 hour</string>
     <string name="dsh_log_window_12h">Last 12 hours</string>
     <string name="dsh_log_window_all">Everything</string>
+
+    <!-- 端口占用检测 + 端口配置 -->
+    <string name="dsh_port_title">Port</string>
+    <string name="dsh_port_summary">Listening port of the DSH Web service (default 3080)</string>
+    <string name="dsh_port_current">Current port: %1$d</string>
+    <string name="dsh_port_edit">Change</string>
+    <string name="dsh_port_confirm">OK</string>
+    <string name="dsh_port_input_hint">Port number</string>
+    <string name="dsh_port_invalid">Invalid port (1-65535) or already in use</string>
+    <string name="dsh_port_conflict_title">Port in use</string>
+    <string name="dsh_port_conflict_message">Port %1$d is already used by another process. Change to a different port?</string>
+    <string name="dsh_port_change_auto">Pick a free port</string>
+    <string name="dsh_port_change_manual">Specify manually</string>
+    <string name="dsh_port_force">Use anyway</string>
+
+    <!-- 局域网访问 -->
+    <string name="dsh_lan_title">LAN access</string>
+    <string name="dsh_lan_summary">Expose the WebUI to other devices on the same network. Authentication is handled by the dsh login page.</string>
+
+    <!-- 预装插件标签 -->
+    <string name="dsh_plugin_seeded_label">Preinstalled</string>
 </resources>
