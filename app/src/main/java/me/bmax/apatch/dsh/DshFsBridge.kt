@@ -37,6 +37,8 @@ object DshFsBridge {
     private const val TAG = "DshFsBridge"
     private const val HEADER_TOKEN = "X-Dsh-Fs-Token"
     private const val MAX_READ_BYTES = 64L * 1024 * 1024
+    private const val CR: Byte = 13
+    private const val LF: Byte = 10
 
     /** 桥接默认端口基准；被占用则向后扫描。 */
     const val PORT_BASE = 3081
@@ -282,7 +284,7 @@ object DshFsBridge {
             out.write(b)
             val buf = out.toByteArray()
             val n = buf.size
-            if (n >= 4 && buf[n - 4] == 13 && buf[n - 3] == 10 && buf[n - 2] == 13 && buf[n - 1] == 10) {
+            if (n >= 4 && buf[n - 4] == CR && buf[n - 3] == LF && buf[n - 2] == CR && buf[n - 1] == LF) {
                 return buf.copyOf(n - 4)
             }
         }
