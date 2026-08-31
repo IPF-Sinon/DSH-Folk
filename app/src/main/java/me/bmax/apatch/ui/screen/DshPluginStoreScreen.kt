@@ -119,6 +119,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
             onInstall = { viewModel.install(p.addSpec) },
             onUpdate = { viewModel.install(p.addSpec) },
             onUninstall = { viewModel.uninstall(p.pkg) },
+            onToggle = { viewModel.setDisabled(p.pkg, !p.disabled) },
             onOpenRepo = { openPluginRepo(context, p) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },
         )
     }

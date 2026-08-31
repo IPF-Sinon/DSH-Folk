@@ -389,4 +389,35 @@
     <string name="dsh_plugin_allow_builds_go">Allow and retry</string>
     <string name="dsh_backup_include_sessions">Include session history (sessions)</string>
     <string name="dsh_backup_include_sessions_summary">Session records can be hundreds of MB and contain sensitive data. Off by default.</string>
+    <string name="dsh_backup_import_sessions">Import session history (sessions)</string>
+    <string name="dsh_backup_import_sessions_summary">Only takes effect when the backup contains sessions. Restored files land under the local workspace.</string>
+    <string name="dsh_bk_sessions_restored">%1$d session files restored (%2$d skipped)</string>
+    <string name="dsh_bk_sessions_all_present">%1$d session files already present, nothing restored</string>
+    <string name="dsh_bk_sessions_none">No session history in this backup</string>
+    <string name="dsh_bk_sessions_failed">; %1$d session files failed to restore</string>
+    <string name="dsh_bk_sessions_foreign_workspace">Imported sessions keep the backup\'s original workspace label, so they appear under that label in the WebUI session list.</string>
+
+    <!-- 插件启用/停用开关 -->
+    <string name="dsh_plugin_disabled_label">Stopped</string>
+    <string name="dsh_plugin_toggle_on">Enable plugin</string>
+    <string name="dsh_plugin_toggle_off">Disable plugin</string>
+    <string name="dsh_plugin_toggle_unavailable">No loader entry to toggle</string>
+    <string name="dsh_plugin_toggle_restart_hint">Toggled — restart DSH to make sure it fully takes effect.</string>
+
+    <!-- 免 root 文件访问（DocumentsProvider） -->
+    <string name="dsh_docs_open_title">Open data directory in file manager</string>
+    <string name="dsh_docs_open_summary">Browse rootfs/root/.dsh (sessions, profiles) without root. Editing container files may stop DSH from starting.</string>
+    <string name="dsh_docs_open_failed">Could not open the file picker. Open your system Files app and choose the DSH-Folk root in the sidebar.</string>
+
+    <!-- 发送日志的时间裁剪 -->
+    <string name="dsh_log_trim_title">Trim log by time?</string>
+    <string name="dsh_log_trim_message">Only the system log (logcat) can be trimmed by time; other collected files are sent as-is.</string>
+    <string name="dsh_log_trim_yes">Trim</string>
+    <string name="dsh_log_trim_all">Send everything</string>
+    <string name="dsh_log_window_title">Log time window</string>
+    <string name="dsh_log_window_10m">Last 10 minutes</string>
+    <string name="dsh_log_window_30m">Last 30 minutes</string>
+    <string name="dsh_log_window_1h">Last 1 hour</string>
+    <string name="dsh_log_window_12h">Last 12 hours</string>
+    <string name="dsh_log_window_all">Everything</string>
 </resources>

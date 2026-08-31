@@ -56,6 +56,9 @@ fun BackupSettingsContent(
     /** 导出是否带上 sessions（会话记录）；默认关。 */
     includeSessions: Boolean = false,
     onIncludeSessionsChange: (Boolean) -> Unit = {},
+    /** 导入是否恢复 sessions（会话记录）；默认关。 */
+    importSessions: Boolean = false,
+    onImportSessionsChange: (Boolean) -> Unit = {},
     onDshExport: () -> Unit,
     onDshImport: () -> Unit,
     onDshOpenDir: () -> Unit,
@@ -176,6 +179,30 @@ fun BackupSettingsContent(
                             )
                             Text(
                                 text = stringResource(R.string.dsh_backup_include_sessions_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Switch(
+                            checked = importSessions,
+                            onCheckedChange = onImportSessionsChange,
+                            enabled = !dshBusy,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_backup_import_sessions),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.dsh_backup_import_sessions_summary),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

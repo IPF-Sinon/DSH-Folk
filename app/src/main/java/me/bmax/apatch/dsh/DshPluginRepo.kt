@@ -58,6 +58,19 @@ data class DshPlugin(
      * 这个列表；装了但没声明 `dsh.bundle.patch` 的依赖只是普通库，不是生效的插件。
      */
     val enabled: Boolean = true,
+    /**
+     * 这个 bundle 往 loader entry 列表里插的行 id（来自它自己 `dsh.bundle.patch` 的
+     * `insert[].id`）。空表示它不是 bundle 或解析不出 id —— 那种插件本来就不会被加载，
+     * 也就没有「关掉」可言。
+     */
+    val entryIds: List<String> = emptyList(),
+    /**
+     * 用户是否停用了这个插件（通过 profile 的 `cordis.patch.yml` 写 `disabled: true`）。
+     *
+     * 与 [enabled] 是两回事：enabled 表示「在 dsh.profile.bundles 里」，disabled 表示
+     * 「用户主动关掉了它的 loader entry」。两者可以同时为 true。
+     */
+    val disabled: Boolean = false,
 ) {
     val installed: Boolean get() = installedVersion.isNotEmpty()
 
@@ -558,7 +571,7 @@ object DshPluginRepo {
             "node -e \"$script\" " + PROFILE_DIR + " 2>/dev/null",
             60_000,
         )
-        out.lines().mapNotNull { line ->
+        val base = out.lines().mapNotNull { line ->
             val parts = line.split('\t')
             if (parts.size < 2 || parts[0].isBlank()) return@mapNotNull null
             val pkg = parts[0].trim()
@@ -574,6 +587,135 @@ object DshPluginRepo {
                 enabled = parts.getOrElse(3) { "1" }.trim() != "0",
             )
         }.distinctBy { it.pkg }
+        // 停用状态与 loader entry id 是单独一层信息（profile cordis.patch.yml），
+        // 与「是否在 bundles 里」无关，合并进来才能让开关和「已停用」标签有据可依。
+        val entries = pluginEntries()
+        val disabled = disabledEntries()
+        base.map { p ->
+            val ids = entries[p.pkg] ?: emptyList()
+            p.copy(
+                entryIds = ids,
+                disabled = ids.isNotEmpty() && ids.all { it in disabled },
+            )
+        }
+    }
+
+    /** `command -v dsh` + readlink 出 dsh 真实入口，供容器内 node 脚本 `createRequire` 用。 */
+    private fun dshRealPrefix(): String =
+        "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); "
+
+    /** [pluginEntries] / [disabledEntries] 共用的 JS 片段：从 dsh 入口解析出 yaml 库。 */
+    private val YAML_REQUIRE_JS = "let YAML=null;try{YAML=require('module').createRequire(process.argv[1])('yaml')}catch(e){}"
+
+    /** 递归收集 cordis patch 里所有对象的 `id` 字段（含 group/嵌套，带环保护）。 */
+    private val COLLECT_IDS_JS = "function collect(node,out,seen){" +
+        "if(!node||typeof node!=='object')return;if(seen.has(node))return;seen.add(node);" +
+        "if(Array.isArray(node)){for(const it of node){if(it&&typeof it==='object'&&typeof it.id==='string'&&it.id)out.add(it.id);collect(it,out,seen)}}" +
+        "else{for(const k of Object.keys(node))collect(node[k],out,seen)}}"
+
+    /**
+     * 每个已装 bundle 的 loader entry id 列表（key = npm 包名）。
+     *
+     * 关插件靠的是「在 profile 的 cordis.patch.yml 里给这些 id 写 disabled:true」，
+     * 而 id 只能从插件自己的 `dsh.bundle.patch`（`insert[].id`）里读 —— 那是它向
+     * loader 插行的声明。用容器里 dsh 自带的 yaml 库解析（createRequire(dsh 入口)），
+     * 避免我们再引入 YAML 依赖。解析失败的包输出空 id，不影响其余。
+     */
+    suspend fun pluginEntries(): Map<String, List<String>> = withContext(Dispatchers.IO) {
+        val script = "const fs=require('fs'),path=require('path');" +
+            YAML_REQUIRE_JS + ";" +
+            "const dir=process.argv[2];" +
+            COLLECT_IDS_JS + ";" +
+            "let m;try{m=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){process.exit(0)}" +
+            "const b=(m.dsh&&m.dsh.profile&&m.dsh.profile.bundles)||[];" +
+            "for(const n of b){" +
+            "if(n.startsWith('@deepseek-ai/'))continue;" +
+            "let ids=[];" +
+            "try{const q=JSON.parse(fs.readFileSync(path.join(dir,'node_modules',n,'package.json'),'utf8'));" +
+            "let patch=q.dsh&&q.dsh.bundle&&q.dsh.bundle.patch;" +
+            "if(typeof patch!=='string')patch=JSON.stringify(patch);" +
+            "if(patch&&YAML){const doc=YAML.parse(patch,{logLevel:'silent'});const s=new Set();collect(doc,s,new Set());ids=Array.from(s)}}catch(e){}" +
+            "console.log(n+'\\t'+ids.join(','))}"
+        val out = DshRuntime.execRootfsForOutput(
+            dshRealPrefix() + "node -e \"$script\" \"\$DSH_REAL\" " + PROFILE_DIR + " 2>/dev/null",
+            60_000,
+        )
+        out.lines().mapNotNull { line ->
+            val i = line.indexOf('\t')
+            if (i < 0) return@mapNotNull null
+            val pkg = line.substring(0, i).trim()
+            if (pkg.isEmpty()) return@mapNotNull null
+            pkg to line.substring(i + 1).split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        }.toMap()
+    }
+
+    /** profile cordis.patch.yml 里当前被停用的 loader entry id 集合。 */
+    suspend fun disabledEntries(): Set<String> = withContext(Dispatchers.IO) {
+        val script = "const fs=require('fs'),path=require('path');" +
+            YAML_REQUIRE_JS + ";" +
+            "if(!YAML)process.exit(0);" +
+            "const f=path.join(process.argv[2],'cordis.patch.yml');" +
+            "if(!fs.existsSync(f))process.exit(0);" +
+            "let arr=[];try{const d=YAML.parse(fs.readFileSync(f,'utf8'),{logLevel:'silent'});if(Array.isArray(d))arr=d}catch(e){}" +
+            "for(const it of arr){if(it&&typeof it==='object'&&typeof it.id==='string'&&it.disabled===true)console.log(it.id)}"
+        val out = DshRuntime.execRootfsForOutput(
+            dshRealPrefix() + "node -e \"$script\" \"\$DSH_REAL\" " + PROFILE_DIR + " 2>/dev/null",
+            60_000,
+        )
+        out.lines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }
+
+    /**
+     * 关/开一个插件的 loader entry：对 profile 的 `cordis.patch.yml` 做结构化读改写。
+     *
+     * - 绝不用模板整文件重写：文件里可能有用户自己的配置（如带凭据的 remote 行），
+     *   一律 YAML.parse → 改 → YAML.stringify 保留其余内容。
+     * - 写走「先 .tmp 再 rename」保证原子，避免半截写入。
+     * - YAML 解析失败时**不写**，宁可失败也不弄坏用户的 patch 层。
+     *
+     * @return 是否成功写入（成功时脚本 `process.exit(0)`，否则非零）
+     */
+    suspend fun setPluginDisabled(
+        pkg: String,
+        disabled: Boolean,
+        onLine: (String) -> Unit = {},
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (pkg.isBlank()) {
+            onLine("[DSH-Folk] 包名为空，无法切换")
+            return@withContext false
+        }
+        val flag = if (disabled) "1" else "0"
+        val script = "const fs=require('fs'),path=require('path');" +
+            YAML_REQUIRE_JS + ";" +
+            "if(!YAML){console.log('NO_YAML');process.exit(1)}" +
+            "const dir=process.argv[2],pkg=process.argv[3],want=process.argv[4]==='1';" +
+            COLLECT_IDS_JS + ";" +
+            "let m;try{m=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){console.log('NO_PROFILE');process.exit(1)}" +
+            "const b=(m.dsh&&m.dsh.profile&&m.dsh.profile.bundles)||[];" +
+            "if(b.indexOf(pkg)<0){console.log('NOT_BUNDLE');process.exit(1)}" +
+            "let ids=[];" +
+            "try{const q=JSON.parse(fs.readFileSync(path.join(dir,'node_modules',pkg,'package.json'),'utf8'));" +
+            "let patch=q.dsh&&q.dsh.bundle&&q.dsh.bundle.patch;" +
+            "if(typeof patch!=='string')patch=JSON.stringify(patch);" +
+            "if(patch){const doc=YAML.parse(patch,{logLevel:'silent'});const s=new Set();collect(doc,s,new Set());ids=Array.from(s)}}catch(e){}" +
+            "if(ids.length===0){console.log('NO_ENTRIES');process.exit(1)}" +
+            "const f=path.join(dir,'cordis.patch.yml');" +
+            "let arr=[];" +
+            "if(fs.existsSync(f)){try{const d=YAML.parse(fs.readFileSync(f,'utf8'),{logLevel:'silent'});if(Array.isArray(d))arr=d}catch(e){console.log('BAD_YAML');process.exit(1)}}" +
+            "for(const id of ids){const idx=arr.findIndex(function(e){return e&&typeof e==='object'&&e.id===id});" +
+            "if(want){if(idx>=0)arr[idx].disabled=true;else arr.push({id:id,disabled:true})}" +
+            "else{if(idx>=0){delete arr[idx].disabled;if(Object.keys(arr[idx]).length===1)arr.splice(idx,1)}}}" +
+            "fs.writeFileSync(f+'.tmp',YAML.stringify(arr,{lineWidth:0}),'utf8');fs.renameSync(f+'.tmp',f);" +
+            "console.log((want?'disabled ':'enabled ')+ids.length+' entry(ies) for '+pkg)"
+        val out = DshRuntime.execRootfsStreaming(
+            dshRealPrefix() + "node -e \"$script\" \"\$DSH_REAL\" " + PROFILE_DIR + " '$pkg' $flag" +
+                " 2>&1; echo \"" + EXIT_MARKER + " \$?\"",
+            60_000,
+            onLine,
+        )
+        val marker = out.lineSequence().lastOrNull { it.startsWith(EXIT_MARKER) }
+        val code = marker?.removePrefix(EXIT_MARKER)?.trim()?.toIntOrNull()
+        code == 0
     }
 
     /**

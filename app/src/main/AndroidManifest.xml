@@ -172,6 +172,19 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- 免 root 文件访问：把应用数据目录（含 rootfs/root/.dsh）注册进系统文件选择器。
+             MANAGE_DOCUMENTS 是签名级权限，只有系统持有，普通应用只能通过用户主动挑中的 URI 访问。 -->
+        <provider
+            android:name=".util.DshDocumentsProvider"
+            android:authorities="${applicationId}.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+
         <!-- Shizuku 客户端 Provider（官方实现）：接收 Shizuku / Sui 推送的 Binder。
              DSH-Folk 只做客户端，不再内置 Shizuku Server。 -->
         <provider

@@ -35,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -294,6 +295,7 @@ private fun DshPluginList(
             onInstall = { viewModel.install(p.pkg) },
             onUpdate = { viewModel.install(p.pkg) },
             onUninstall = { viewModel.uninstall(p.pkg) },
+            onToggle = { viewModel.setDisabled(p.pkg, !p.disabled) },
             onOpenRepo = { openPluginRepo(context, p) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },
         )
     }
@@ -333,6 +335,7 @@ private fun DshPluginList(
                 showMoreInfo = viewModel.showMoreInfo,
                 onUpdate = { viewModel.install(plugin.pkg) },
                 onUninstall = { viewModel.uninstall(plugin.pkg) },
+                onToggle = { viewModel.setDisabled(plugin.pkg, !plugin.disabled) },
                 onOpenDetail = { detail = plugin },
             )
         }
@@ -348,6 +351,7 @@ private fun DshPluginItem(
     showMoreInfo: Boolean,
     onUpdate: () -> Unit,
     onUninstall: () -> Unit,
+    onToggle: (Boolean) -> Unit,
     onOpenDetail: () -> Unit,
 ) {
     // 长按仍展开描述（原来的单击行为），单击改为打开详情弹层
@@ -402,13 +406,31 @@ private fun DshPluginItem(
                         contentColor = MaterialTheme.colorScheme.onErrorContainer,
                     )
                 }
+                if (plugin.disabled) {
+                    ModuleLabel(
+                        text = stringResource(R.string.dsh_plugin_disabled_label),
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
             }
 
-            Text(
-                text = plugin.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = plugin.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = !plugin.disabled,
+                    onCheckedChange = onToggle,
+                    enabled = plugin.entryIds.isNotEmpty(),
+                )
+            }
             Text(
                 text = if (plugin.updatable) "${plugin.installedVersion} → ${plugin.version}"
                 else plugin.installedVersion.ifEmpty { plugin.version },

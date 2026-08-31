@@ -371,4 +371,35 @@
     <string name="dsh_plugin_allow_builds_go">放行并重试</string>
     <string name="dsh_backup_include_sessions">包含会话记录（sessions）</string>
     <string name="dsh_backup_include_sessions_summary">会话记录可达几百 MB 且含敏感信息，默认关闭。</string>
+    <string name="dsh_backup_import_sessions">导入会话记录（sessions）</string>
+    <string name="dsh_backup_import_sessions_summary">仅当备份包内含会话时生效；恢复的文件落在本地工作区。</string>
+    <string name="dsh_bk_sessions_restored">已恢复 %1$d 个会话文件（跳过 %2$d 个）</string>
+    <string name="dsh_bk_sessions_all_present">%1$d 个会话文件已存在，无需恢复</string>
+    <string name="dsh_bk_sessions_none">此备份包内没有会话记录</string>
+    <string name="dsh_bk_sessions_failed">；%1$d 个会话文件恢复失败</string>
+    <string name="dsh_bk_sessions_foreign_workspace">导入的会话沿用备份里的原工作区标签，在 WebUI 会话列表中以该标签显示。</string>
+
+    <!-- 插件启用/停用开关 -->
+    <string name="dsh_plugin_disabled_label">已停用</string>
+    <string name="dsh_plugin_toggle_on">启用插件</string>
+    <string name="dsh_plugin_toggle_off">停用插件</string>
+    <string name="dsh_plugin_toggle_unavailable">没有可停用的加载入口</string>
+    <string name="dsh_plugin_toggle_restart_hint">已切换，重启 DSH 可确保完全生效。</string>
+
+    <!-- 免 root 文件访问（DocumentsProvider） -->
+    <string name="dsh_docs_open_title">在文件管理器中打开数据目录</string>
+    <string name="dsh_docs_open_summary">免 root 浏览 rootfs/root/.dsh（sessions、profiles）。改动容器文件可能导致 DSH 无法启动。</string>
+    <string name="dsh_docs_open_failed">无法打开文件选择器。请在系统「文件」应用侧栏选择 DSH-Folk。</string>
+
+    <!-- 发送日志的时间裁剪 -->
+    <string name="dsh_log_trim_title">是否只发送最近一段时间的日志？</string>
+    <string name="dsh_log_trim_message">只有系统日志（logcat）能按时间裁剪，其余文件按原样发送。</string>
+    <string name="dsh_log_trim_yes">裁剪</string>
+    <string name="dsh_log_trim_all">发送全部</string>
+    <string name="dsh_log_window_title">日志时间范围</string>
+    <string name="dsh_log_window_10m">最近 10 分钟</string>
+    <string name="dsh_log_window_30m">最近 30 分钟</string>
+    <string name="dsh_log_window_1h">最近 1 小时</string>
+    <string name="dsh_log_window_12h">最近 12 小时</string>
+    <string name="dsh_log_window_all">全部</string>
 </resources>

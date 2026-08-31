@@ -97,7 +97,12 @@ class DshPluginViewModel : ViewModel() {
                         p.description.contains(q, true))
             }.map { p ->
                 val local = installedByPkg[p.pkg] ?: return@map p
-                p.copy(installedVersion = local.installedVersion, enabled = local.enabled)
+                p.copy(
+                    installedVersion = local.installedVersion,
+                    enabled = local.enabled,
+                    entryIds = local.entryIds,
+                    disabled = local.disabled,
+                )
             }.toList()
         }
 
@@ -293,6 +298,29 @@ class DshPluginViewModel : ViewModel() {
 
     fun uninstall(pkg: String, onDone: (String) -> Unit = {}) {
         run(pkg, { DshPluginRepo.uninstall(pkg, it) }, onDone)
+    }
+
+    /**
+     * 停用/启用一个插件（不卸载）。
+     *
+     * 复用 [run] 的进度壳（有日志留存与「重启 DSH」提示），但不跑安装后验证：这只是
+     * 改一行 profile 的 cordis.patch.yml，不需要为它起一次服务去验插件树。
+     */
+    fun setDisabled(pkg: String, disabled: Boolean, onDone: (String) -> Unit = {}) {
+        run(
+            pkg,
+            { onLine ->
+                val ok = DshPluginRepo.setPluginDisabled(pkg, disabled, onLine)
+                if (ok) {
+                    apApp.getString(R.string.dsh_plugin_toggle_restart_hint) +
+                        "\n" + DshPluginRepo.EXIT_MARKER + " 0"
+                } else {
+                    DshPluginRepo.EXIT_MARKER + " 1"
+                }
+            },
+            onDone,
+            verify = false,
+        )
     }
 
     fun installLocal(containerPath: String, onDone: (String) -> Unit = {}) {

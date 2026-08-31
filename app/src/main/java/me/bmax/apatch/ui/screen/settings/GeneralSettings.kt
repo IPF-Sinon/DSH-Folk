@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import me.bmax.apatch.util.ui.showToast
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.*
@@ -124,6 +125,9 @@ fun GeneralSettingsContent(
     val showDpiDialog = remember { mutableStateOf(false) }
     val showFolkXAnimationTypeDialog = remember { mutableStateOf(false) }
     val showFolkXAnimationSpeedDialog = remember { mutableStateOf(false) }
+    val showLogTrimDialog = remember { mutableStateOf(false) }
+    val showLogWindowDialog = remember { mutableStateOf(false) }
+    var logWindowIndex by remember { mutableStateOf(0f) }
 
     val useAltIcon = remember { mutableStateOf(prefs.getBoolean("use_alt_icon", false)) }
     var autoUpdateCheck by remember { mutableStateOf(prefs.getBoolean("auto_update_check", true)) }
@@ -131,6 +135,34 @@ fun GeneralSettingsContent(
     var currentType by remember { mutableStateOf(prefs.getString("folkx_animation_type", "linear") ?: "linear") }
     var currentSpeed by remember { mutableStateOf(prefs.getFloat("folkx_animation_speed", 1.0f)) }
     var predictiveBackEnabled by remember { mutableStateOf(prefs.getBoolean("predictive_back_enabled", true)) }
+
+    // 采集并分享日志（两级对话框确认时间窗口后调用）。
+    val collectAndShare: (LogWindow) -> Unit = { window ->
+        scope.launch {
+            val bugreport = loadingDialog.withLoading {
+                withContext(Dispatchers.IO) {
+                    getBugreportFile(context, window)
+                }
+            }
+            val uri: Uri = FileProvider.getUriForFile(
+                context,
+                "${BuildConfig.APPLICATION_ID}.fileprovider",
+                bugreport
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                putExtra(Intent.EXTRA_STREAM, uri)
+                type = "application/gzip"
+                clipData = android.content.ClipData.newRawUri(null, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(
+                Intent.createChooser(
+                    shareIntent,
+                    context.getString(R.string.send_log)
+                )
+            )
+        }
+    }
 
     SplicedColumnGroup(flat = flat, highlightKey = highlightKey) {
 
@@ -411,35 +443,7 @@ fun GeneralSettingsContent(
         }
 
         item(key = "general_send_log") {
-            ExpressiveCard(flat = flat, onClick = {
-                scope.launch {
-                    val bugreport = loadingDialog.withLoading {
-                        withContext(Dispatchers.IO) {
-                            getBugreportFile(context)
-                        }
-                    }
-
-                    val uri: Uri = FileProvider.getUriForFile(
-                        context,
-                        "${BuildConfig.APPLICATION_ID}.fileprovider",
-                        bugreport
-                    )
-
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        type = "application/gzip"
-                        clipData = android.content.ClipData.newRawUri(null, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-
-                    context.startActivity(
-                        Intent.createChooser(
-                            shareIntent,
-                            context.getString(R.string.send_log)
-                        )
-                    )
-                }
-            }) {
+            ExpressiveCard(flat = flat, onClick = { showLogTrimDialog.value = true }) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -451,6 +455,44 @@ fun GeneralSettingsContent(
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                }
+            }
+        }
+
+        item(key = "general_open_data_dir") {
+            ExpressiveCard(flat = flat, onClick = {
+                val authority = "${BuildConfig.APPLICATION_ID}.documents"
+                val tree = DocumentsContract.buildTreeDocumentUri(authority, "")
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                    .putExtra(DocumentsContract.EXTRA_INITIAL_URI, tree)
+                    .addFlags(
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                    )
+                val opened = runCatching { context.startActivity(intent) }.isSuccess
+                if (!opened) showToast(context, R.string.dsh_docs_open_failed)
+            }) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(imageVector = Icons.Filled.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            text = stringResource(R.string.dsh_docs_open_title),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_docs_open_summary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -528,6 +570,67 @@ fun GeneralSettingsContent(
         FolkXAnimationSpeedDialog(showFolkXAnimationSpeedDialog) { newSpeed ->
             currentSpeed = newSpeed
         }
+    }
+
+    if (showLogTrimDialog.value) {
+        AlertDialog(
+            onDismissRequest = { showLogTrimDialog.value = false },
+            title = { Text(stringResource(R.string.dsh_log_trim_title)) },
+            text = { Text(stringResource(R.string.dsh_log_trim_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogTrimDialog.value = false
+                    showLogWindowDialog.value = true
+                }) {
+                    Text(stringResource(R.string.dsh_log_trim_yes))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showLogTrimDialog.value = false
+                    collectAndShare(LogWindow.All)
+                }) {
+                    Text(stringResource(R.string.dsh_log_trim_all))
+                }
+            },
+        )
+    }
+
+    if (showLogWindowDialog.value) {
+        val levels = listOf(LogWindow.M10, LogWindow.M30, LogWindow.H1, LogWindow.H12, LogWindow.All)
+        val currentLevel = levels[logWindowIndex.toInt().coerceIn(0, levels.size - 1)]
+        AlertDialog(
+            onDismissRequest = { showLogWindowDialog.value = false },
+            title = { Text(stringResource(R.string.dsh_log_window_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(currentLevel.labelRes),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Slider(
+                        value = logWindowIndex,
+                        onValueChange = { logWindowIndex = it },
+                        valueRange = 0f..4f,
+                        steps = 3,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogWindowDialog.value = false
+                    val lv = levels[logWindowIndex.toInt().coerceIn(0, levels.size - 1)]
+                    collectAndShare(lv)
+                }) {
+                    Text(stringResource(R.string.send_log))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogWindowDialog.value = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
     }
 
 }

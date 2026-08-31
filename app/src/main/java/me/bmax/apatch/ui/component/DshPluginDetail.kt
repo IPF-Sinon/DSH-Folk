@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -61,6 +62,7 @@ fun DshPluginDetailSheet(
     onInstall: () -> Unit,
     onUpdate: () -> Unit,
     onUninstall: () -> Unit,
+    onToggle: (Boolean) -> Unit,
     onOpenRepo: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -103,6 +105,41 @@ fun DshPluginDetailSheet(
                         text = stringResource(R.string.dsh_plugin_likes, formatCount(plugin.likes)),
                         containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
+            }
+
+            if (plugin.installed) {
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (plugin.disabled) {
+                        ModuleLabel(
+                            text = stringResource(R.string.dsh_plugin_disabled_label),
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(
+                        text = stringResource(
+                            if (plugin.disabled) R.string.dsh_plugin_toggle_on
+                            else R.string.dsh_plugin_toggle_off
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Switch(
+                        checked = !plugin.disabled,
+                        onCheckedChange = onToggle,
+                        enabled = plugin.entryIds.isNotEmpty(),
+                    )
+                }
+                if (plugin.entryIds.isEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_plugin_toggle_unavailable),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

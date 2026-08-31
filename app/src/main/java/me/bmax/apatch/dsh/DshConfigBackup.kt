@@ -201,17 +201,31 @@ object DshConfigBackup {
                 put(MediaStore.Downloads.DISPLAY_NAME, name)
                 put(MediaStore.Downloads.MIME_TYPE, "application/zip")
                 put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$PUBLIC_SUBDIR")
+                // API 29/30 上 IS_PENDING=1 → 写字节 → 翻成 0 是让文件立刻可见的官方路径。
+                // 不走这一步，备份要重启或重新挂载才在「下载」里出现，对用户不可见。
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
             }
             val uri = runCatching {
                 ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             }.getOrNull()
             if (uri != null) {
-                val copied = runCatching {
+                val written = runCatching {
                     ctx.contentResolver.openOutputStream(uri)?.use { out ->
                         src.inputStream().use { it.copyTo(out) }
                     }
-                }.getOrNull() != null
-                if (copied) return "${Environment.DIRECTORY_DOWNLOADS}/$PUBLIC_SUBDIR/$name"
+                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+                        val done = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                        ctx.contentResolver.update(uri, done, null, null)
+                    }
+                    true
+                }.getOrElse {
+                    // 写失败就把这条 pending 行删掉，免得留着一条 0 字节的尸体
+                    runCatching { ctx.contentResolver.delete(uri, null, null) }
+                    false
+                }
+                if (written) return "${Environment.DIRECTORY_DOWNLOADS}/$PUBLIC_SUBDIR/$name"
             }
         }
         // 兜底：公共目录直接可写（SDK<29 有 WRITE_EXTERNAL_STORAGE），或退回应用专属目录
@@ -319,12 +333,15 @@ object DshConfigBackup {
      *
      * @param strategy 冲突策略：merge（保守，冲突保留）/ replace / skipExisting
      * @param password 加密备份的解锁密码
+     * @param includeSessions 插件导入结束后，额外把包里的会话记录补写进
+     *        `~/.dsh/sessions`。**必须由我们自己做**，原因见 [restoreSessionsFromZip]。
      */
     suspend fun import(
         ctx: Context,
         zip: File,
         strategy: String = "merge",
         password: String = "",
+        includeSessions: Boolean = false,
     ): ImportResult = withContext(Dispatchers.IO) {
         val up = upload(zip) ?: return@withContext ImportResult(false, ctx.getString(R.string.dsh_bk_upload_failed))
         val upObj = runCatching { JSONObject(up) }.getOrNull()
@@ -472,6 +489,23 @@ object DshConfigBackup {
         }
         val needsRestart = execObj.optBoolean("needsRestart", planObj.optBoolean("needsRestart", false))
         val ok = execObj.optBoolean("ok", failed == 0) && rollback == null
+
+        // 会话记录必须在插件跑完之后再补：插件失败会整体回滚，先写会话就会留下
+        // 一堆没有对应配置的孤立会话。回滚发生时干脆不写。
+        var sessionNote = ""
+        if (includeSessions && rollback == null) {
+            val r = restoreSessionsFromZip(ctx, zip)
+            sessionNote = when {
+                r.restored > 0 -> ctx.getString(R.string.dsh_bk_sessions_restored, r.restored, r.skipped) +
+                    "\n" + ctx.getString(R.string.dsh_bk_sessions_foreign_workspace)
+                r.skipped > 0 -> ctx.getString(R.string.dsh_bk_sessions_all_present, r.skipped)
+                else -> ctx.getString(R.string.dsh_bk_sessions_none)
+            }
+            if (r.failed > 0) {
+                sessionNote += "\n" + ctx.getString(R.string.dsh_bk_sessions_failed, r.failed)
+            }
+        }
+
         val head = buildString {
             // 「导入完成：」这种以空格/冒号收尾的前缀不能单独做一条资源：
             // AAPT2 会把 XML 文本值的首尾空白 trim 掉（英文那条 "Import finished: "
@@ -493,7 +527,106 @@ object DshConfigBackup {
             execObj.optString("snapshotId").takeIf { it.isNotEmpty() }
                 ?.let { append(ctx.getString(R.string.dsh_bk_snapshot, it)) }
         }
-        ImportResult(ok, head, notes.toString())
+        val detail = if (sessionNote.isEmpty()) notes.toString()
+        else notes.toString() + "↺ " + sessionNote
+        ImportResult(ok, head, detail)
+    }
+
+    /** [restoreSessionsFromZip] 的结果计数。 */
+    data class SessionRestore(val restored: Int, val skipped: Int, val failed: Int)
+
+    /**
+     * 把备份包里的会话记录直接写进 `~/.dsh/sessions`。
+     *
+     * ## 为什么不交给插件
+     *
+     * dsh-config-manager 的导入执行阶段按一张固定的 `APPLY_ORDER` 遍历 adapter，
+     * 而那张表**只有 12 个分区**（settings/ui/providers/prompts/skills/agentPresets/
+     * agentInstructions/workspaces/pluginFiles/mcp/plugins/credentialsStatus）——
+     * `sessions` 不在其中。它的 analyze 会正确解析出 ZIP 里 `sessions/` 的文件、
+     * plan 也会把这些项算进去，但 execute 永远不会 apply 它们：**静默丢弃，连
+     * warning 都没有**。所以「导出勾了会话，导入却找不到历史聊天」不是参数问题，
+     * 传什么都救不回来。
+     *
+     * 而这件事我们自己做得到：会话就是纯文件
+     * （`~/.dsh/sessions/<projectKey>/<sessionId>/session.jsonl.zstd`），
+     * 而 `~/.dsh` 就在应用私有目录里（[DshEnv.dshHome]），直接落盘即可。
+     *
+     * ## 冲突与安全
+     *
+     * - 已存在的目标文件**跳过不覆盖**：会话日志是只追加的不可变流，同 id 即同会话，
+     *   覆盖只会丢掉本机更新的那部分。这也让重复导入天然幂等。
+     * - 逐段校验 ZIP 内路径（拒绝空段、`.`、`..`、绝对路径、反斜杠），再用
+     *   canonicalPath 二次确认落点仍在目标目录内 —— ZIP 是不可信输入，
+     *   `../` 条目能写到应用私有目录的任何地方。
+     * - 单个文件失败只计数，不中断整轮。
+     */
+    suspend fun restoreSessionsFromZip(ctx: Context, zip: File): SessionRestore =
+        withContext(Dispatchers.IO) {
+            val base = File(DshEnv.dshHome(ctx), "sessions")
+            if (!base.isDirectory && !base.mkdirs()) {
+                return@withContext SessionRestore(0, 0, 1)
+            }
+            val baseCanon = runCatching { base.canonicalPath }.getOrNull()
+                ?: return@withContext SessionRestore(0, 0, 1)
+            var restored = 0
+            var skipped = 0
+            var failed = 0
+            runCatching {
+                java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
+                    while (true) {
+                        val entry = zis.nextEntry ?: break
+                        val rel = safeSessionRel(entry.name)
+                        if (rel == null) {
+                            // 不是会话条目（别的分区/目录项）不算跳过；真正被拒的路径才计数
+                            if (entry.name.startsWith(SESSION_PREFIX) && !entry.isDirectory) skipped++
+                            zis.closeEntry()
+                            continue
+                        }
+                        val dest = File(base, rel)
+                        val destCanon = runCatching { dest.canonicalPath }.getOrNull()
+                        if (destCanon == null || !destCanon.startsWith(baseCanon + File.separator)) {
+                            skipped++
+                            zis.closeEntry()
+                            continue
+                        }
+                        if (dest.exists()) {
+                            skipped++
+                            zis.closeEntry()
+                            continue
+                        }
+                        val wrote = runCatching {
+                            dest.parentFile?.mkdirs()
+                            dest.outputStream().use { out -> zis.copyTo(out) }
+                            true
+                        }.getOrDefault(false)
+                        if (wrote) restored++ else failed++
+                        zis.closeEntry()
+                    }
+                }
+            }.onFailure { failed++ }
+            SessionRestore(restored, skipped, failed)
+        }
+
+    /** 会话文件在导出 ZIP 内的目录前缀（插件 SECTION_FILE_PREFIXES.sessions）。 */
+    private const val SESSION_PREFIX = "sessions/"
+
+    /**
+     * ZIP 条目名 → 相对会话目录的安全路径；不是会话文件或路径不可信时返回 null。
+     *
+     * 逐段拒绝而不是只查开头的 `../`：`sessions/x/../../y` 开头完全正常，
+     * 拼接后照样能逃出目标目录。
+     */
+    private fun safeSessionRel(entryName: String): String? {
+        if (!entryName.startsWith(SESSION_PREFIX)) return null
+        val rel = entryName.removePrefix(SESSION_PREFIX)
+        if (rel.isEmpty() || rel.endsWith("/")) return null
+        if (rel.startsWith("/") || rel.contains('\\')) return null
+        // 盘符（C:/…）在 Android 上无意义，但它是 ZIP 里常见的越界写法
+        if (rel.length >= 2 && rel[1] == ':') return null
+        val parts = rel.split('/')
+        if (parts.any { it.isEmpty() || it == "." || it == ".." }) return null
+        return parts.joinToString("/")
     }
 
     /** 把 SAF 选中的文件先落到应用可控目录，再上传（ContentResolver 的 Uri 不能直接给 HTTP）。 */

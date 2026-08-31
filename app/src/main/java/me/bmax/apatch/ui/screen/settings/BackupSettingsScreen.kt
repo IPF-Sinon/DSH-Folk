@@ -66,6 +66,8 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var dshRemote by rememberSaveable { mutableStateOf(listOf<String>()) }
     // 是否把 sessions（会话记录）也导进去：体积能到几百 MB 且含敏感信息，默认关。
     var dshIncludeSessions by rememberSaveable { mutableStateOf(false) }
+    // 导入时是否恢复备份包里的 sessions（会话记录）：默认关，与导出开关独立。
+    var dshImportSessions by rememberSaveable { mutableStateOf(false) }
 
     // 插件状态：进页面就查一次，别等用户点了「导出」才报错。
     // null = 检测中；下面的 LaunchedEffect 只跑一次（备份页不是热路径）。
@@ -109,7 +111,11 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
             val text = if (staged == null) {
                 context.getString(R.string.dsh_plugin_local_read_failed)
             } else {
-                val r = DshConfigBackup.import(context, staged, password = dshPassword)
+                val r = DshConfigBackup.import(
+                    context, staged,
+                    password = dshPassword,
+                    includeSessions = dshImportSessions,
+                )
                 staged.delete()
                 if (r.detail.isBlank()) r.message else "${r.message}\n${r.detail}"
             }
@@ -215,6 +221,8 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                     },
                     includeSessions = dshIncludeSessions,
                     onIncludeSessionsChange = { dshIncludeSessions = it },
+                    importSessions = dshImportSessions,
+                    onImportSessionsChange = { dshImportSessions = it },
                     pluginReady = pluginReady,
                     pluginDetail = pluginDetail,
                     onGoInstallPlugin = { navigator.navigate(DshPluginStoreScreenDestination) },
