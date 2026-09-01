@@ -103,10 +103,6 @@ android {
         buildConfigField("boolean", "DEBUG_FAKE_ROOT", localProperties.getProperty("debug.fake_root", "false"))
 
         base.archivesName = "DSH-Folk_${managerVersionCode}_${managerVersionName}_on_${branchName}"
-
-        // 支持的 ABI。x86_64 面向模拟器 / Android-x86 / ChromeOS：容器执行只用 proot
-        // （proroot 上游只发 arm64-v8a），rootfs 也按设备架构下载不同资产。
-        ndk.abiFilters.addAll(arrayOf("arm64-v8a", "x86_64"))
     }
 
     // 按 ABI 拆包，不出 universal APK。
@@ -114,6 +110,11 @@ android {
     // 两个架构的原生库合起来只多约 0.3 MB，拆包的理由不是体积而是**明确性**：
     // 下载页上「哪个包能装」一眼可见，而不是装完才发现容器起不来。
     // 代价是 release 里有两个 APK，应用内更新必须按本机 ABI 挑（见 UpdateChecker）。
+    //
+    // 这里**不能**再写 defaultConfig.ndk.abiFilters：AGP 明确拒绝两者并存
+    // （Conflicting configuration: ndk abiFilters cannot be present when splits
+    // abi filters are set）。ABI 集合由这份 include 单独决定 —— 它同时限定了
+    // 产出哪些 APK、以及每个 APK 从 app/libs/<abi>/ 收哪一份原生库。
     splits {
         abi {
             isEnable = true
