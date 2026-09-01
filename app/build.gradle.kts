@@ -61,10 +61,6 @@ android {
 
     buildTypes {
         debug {
-            // debug 用独立包名，与 release（top.funcun.dshfolk）共存，可同时安装测试。
-            // manifest 里 provider 的 authority 都写 ${applicationId}，代码里也一律
-            // 用 context.packageName / BuildConfig.APPLICATION_ID 拼，会自动跟随。
-            applicationId = "top.funcun.folkpatch.debug"
             isDebuggable = true
             isMinifyEnabled = false
             isShrinkResources = false
@@ -142,6 +138,17 @@ android {
         kotlin.directories += "build/generated/ksp/$name/kotlin"
         // proot/proroot 等预编译 .so 放在 app/libs/arm64-v8a/ 下，由 CI 下载后就位
         jniLibs.directories += "libs"
+    }
+}
+
+// debug 用独立包名，与 release（top.funcun.dshfolk）共存，可同时安装测试。
+// buildType 上没有 applicationId 全量覆盖（只有 applicationIdSuffix，会产生
+// .dshfolk.debug 而不是要求的 folkpatch.debug），所以走 variant API 直接改。
+// manifest 的 provider authority 都写 ${applicationId}，代码里也一律用
+// context.packageName / BuildConfig.APPLICATION_ID 拼，会自动跟随新包名。
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        variant.applicationId.set("top.funcun.folkpatch.debug")
     }
 }
 
