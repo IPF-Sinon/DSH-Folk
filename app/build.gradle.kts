@@ -61,6 +61,10 @@ android {
 
     buildTypes {
         debug {
+            // debug 用独立包名，与 release（top.funcun.dshfolk）共存，可同时安装测试。
+            // manifest 里 provider 的 authority 都写 ${applicationId}，代码里也一律
+            // 用 context.packageName / BuildConfig.APPLICATION_ID 拼，会自动跟随。
+            applicationId = "top.funcun.folkpatch.debug"
             isDebuggable = true
             isMinifyEnabled = false
             isShrinkResources = false
