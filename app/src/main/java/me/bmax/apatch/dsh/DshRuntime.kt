@@ -118,9 +118,15 @@ object DshRuntime {
      * 手机上没有这几个体验差很多：dsh-web-mobile 做移动端适配，dshmarket 提供
      * WebUI 内的插件市场，dsh-config-manager 则是**本应用配置备份的依赖** ——
      * 设置里的导出/导入走的正是它的回环 HTTP API（见 [DshConfigBackup]），
-     * 没装的话那一页直接不可用。
+     * 没装的话那一页直接不可用。dsh-file-upload 补上手机端最缺的一环：
+     * 拖拽/回形针上传、文档转 Markdown、图片 OCR、语音输入 —— 手机上没有
+     * 命令行贴文件这条路，全靠它把本地文件送进会话。
+     *
+     * 往这个清单里加包是安全的：[seedPlugins] 按包名逐个记账，老用户下次冷启动
+     * 会补装增量（不会因为「已完成」标记而永远跳过）。
      */
-    val SEED_PLUGINS = listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager")
+    val SEED_PLUGINS =
+        listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager", "dsh-file-upload")
 
     /** 预装插件集合（供插件列表/商店渲染「预装」标签）。 */
     fun isSeedPlugin(pkg: String): Boolean = pkg in SEED_PLUGINS
