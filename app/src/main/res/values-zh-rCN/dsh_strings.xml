@@ -248,6 +248,7 @@
     <string name="dsh_mode_proroot_name">proroot（实验，零 ptrace 开销）</string>
     <string name="dsh_mode_proot_missing">APK 内的 libproot.so 缺失（安装包可能损坏，建议重装）</string>
     <string name="dsh_mode_proroot_missing">缺 %1$d 个运行时文件（%2$s 等）—— 这些随 APK 分发，缺失说明安装包不完整，建议重装</string>
+    <string name="dsh_mode_proroot_arch_only">proroot 仅支持 arm64-v8a，本机使用 proot</string>
     <string name="dsh_bk_not_running">DSH 未运行或 dsh-config-manager 未安装</string>
     <string name="dsh_bk_bad_json">返回内容无法解析</string>
     <string name="dsh_bk_export_req_failed">导出请求失败：DSH 未运行或插件未安装</string>

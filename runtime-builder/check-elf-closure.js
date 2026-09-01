@@ -2,29 +2,51 @@
 /**
  * 检查 rootfs 里一组入口程序的动态库依赖是否闭合。
  *
- * 为什么需要这个：build-rootfs.sh 是用 `dpkg-deb -x` 纯解包装东西的（不能跑
- * maintainer script —— runner 是 x86_64，包是 arm64），所以 dpkg 的依赖关系
+ * 为什么需要这个：build-rootfs.sh 是用 `dpkg-deb -x` 纯解包装东西的（不跑
+ * maintainer script —— 它们要在目标架构上执行），所以 dpkg 的依赖关系
  * **完全没人替我们解**。包列表是手写的，写漏一个传递依赖，构建期一切正常，
- * 到手机上才在 exec 的那一刻报 `cannot find libxxx.so.N`。
+ * 到设备上才在 exec 的那一刻报 `cannot find libxxx.so.N`。
  *
  * v1.5 就这么翻过车：git 本体只链 libpcre2/libz/libc，装完看着好用；而
  * `git-remote-https`（pnpm 走 https 克隆真正 exec 的那个）链 libcurl-gnutls，
  * 它自己又要 8 个库 —— 一个都没打包。结果目录里 51% 的 `github:` 插件全装不上。
- * 当时的自检只验了「文件存在 + 是 aarch64 ELF」，这两条都通过了。
+ * 当时的自检只验了「文件存在 + 是 ELF」，这两条都通过了。
  *
  * 所以这里做的是真闭包：从入口出发递归解析 ELF 的 DT_NEEDED，凡是在 rootfs
  * 里找不到提供者的 SONAME 就报错并指出谁需要它。
  *
  * 纯 Node，无外部依赖（CI 上 readelf 未必有，且它读的是 host 的 ELF 工具链，
- * 自己解析 aarch64 ELF 反而更省事）。
+ * 自己解析 ELF 反而更省事）。
  *
- * 用法: node check-elf-closure.js <rootfs 目录> [入口 glob 前缀…]
- * 退出码: 0 = 闭合，1 = 有缺失，2 = 用法/环境错误
+ * 用法: node check-elf-closure.js [--arch=arm64|amd64] <rootfs 目录> [入口目录…]
+ *       --arch 缺省 arm64（保持既有调用方式兼容）
+ * 退出码: 0 = 闭合，1 = 有缺失/架构不符，2 = 用法/环境错误
  */
 'use strict';
 
 const fs = require('node:fs');
 const path = require('node:path');
+
+/**
+ * 架构相关的常量表。
+ *
+ * 加 x86_64 支持时才发现原来这些值散落在四处（库搜索路径、默认入口、动态
+ * 链接器名、e_machine 判据），集中到一张表里，加架构就只改这里。
+ */
+const ARCH_TABLE = {
+  arm64: {
+    machine: 183, // EM_AARCH64
+    multiarch: 'aarch64-linux-gnu',
+    loader: 'ld-linux-aarch64.so.1',
+    label: 'aarch64',
+  },
+  amd64: {
+    machine: 62, // EM_X86_64
+    multiarch: 'x86_64-linux-gnu',
+    loader: 'ld-linux-x86-64.so.2',
+    label: 'x86_64',
+  },
+};
 
 /** 解析 ELF64 的 .dynamic，取 DT_NEEDED 列表与 DT_SONAME。 */
 function readElf(file) {
@@ -36,13 +58,13 @@ function readElf(file) {
   }
   // 4 字节 magic + 至少一个完整 ELF64 头
   if (b.length < 64 || b.readUInt32BE(0) !== 0x7f454c46) return null;
-  if (b[4] !== 2) return null; // EI_CLASS: 只处理 ELF64（本项目只有 aarch64）
+  if (b[4] !== 2) return null; // EI_CLASS: 只处理 ELF64（arm64 与 amd64 都是 64 位）
   const le = b[5] === 1;
   const u16 = (o) => (le ? b.readUInt16LE(o) : b.readUInt16BE(o));
   const u32 = (o) => (le ? b.readUInt32LE(o) : b.readUInt32BE(o));
   const u64 = (o) => Number(le ? b.readBigUInt64LE(o) : b.readBigUInt64BE(o));
 
-  const machine = u16(0x12); // EM_AARCH64 = 183
+  const machine = u16(0x12); // EM_AARCH64 = 183 / EM_X86_64 = 62
   const shoff = u64(0x28);
   const shentsize = u16(0x3a);
   const shnum = u16(0x3c);
@@ -110,23 +132,42 @@ function collectElf(root, rel, out) {
 }
 
 function main() {
-  const root = process.argv[2];
+  // --arch=… 可以出现在任意位置；其余位置参数依次是 rootfs 与入口目录。
+  const argv = process.argv.slice(2);
+  let archKey = 'arm64';
+  const positional = [];
+  for (const a of argv) {
+    const m = /^--arch=(.+)$/.exec(a);
+    if (m) {
+      archKey = m[1];
+      continue;
+    }
+    positional.push(a);
+  }
+  const arch = ARCH_TABLE[archKey];
+  if (!arch) {
+    console.error(`用法: --arch 只支持 ${Object.keys(ARCH_TABLE).join(' / ')}，收到 ${archKey}`);
+    process.exit(2);
+  }
+
+  const root = positional[0];
   if (!root || !fs.existsSync(root)) {
-    console.error('用法: node check-elf-closure.js <rootfs 目录> [额外入口目录…]');
+    console.error('用法: node check-elf-closure.js [--arch=arm64|amd64] <rootfs 目录> [额外入口目录…]');
     process.exit(2);
   }
 
   // 库搜索路径。加 sasl2 / perl 的私有目录：它们是 dlopen 出来的插件目录，
   // 不在标准搜索路径上，但里面的 .so 同样会拉依赖。
+  const ma = arch.multiarch;
   const libDirs = [
-    'usr/lib/aarch64-linux-gnu',
-    'lib/aarch64-linux-gnu',
+    `usr/lib/${ma}`,
+    `lib/${ma}`,
     'usr/lib',
     'lib',
     'usr/local/lib',
     'usr/lib/git-core',
-    'usr/lib/aarch64-linux-gnu/sasl2',
-    'usr/lib/aarch64-linux-gnu/perl',
+    `usr/lib/${ma}/sasl2`,
+    `usr/lib/${ma}/perl`,
     'usr/lib/python3.12/lib-dynload',
   ];
 
@@ -159,10 +200,10 @@ function main() {
   }
 
   // 入口：命令行给的目录 + 默认那几处
-  const entryDirs = process.argv.slice(3);
+  const entryDirs = positional.slice(1);
   const entryFiles = ['usr/bin/git', 'usr/bin/perl', 'usr/bin/python3.12'];
   const entries = [];
-  for (const d of entryDirs.length ? entryDirs : ['usr/lib/git-core', 'usr/lib/aarch64-linux-gnu/perl']) {
+  for (const d of entryDirs.length ? entryDirs : ['usr/lib/git-core', `usr/lib/${ma}/perl`]) {
     collectElf(root, d, entries);
   }
   for (const f of entryFiles) {
@@ -174,11 +215,12 @@ function main() {
     process.exit(2);
   }
 
-  // ld.so 由内核/加载器提供，不在包里；proot 自己也会注入
+  // ld.so 由内核/加载器提供，不在包里；proot 自己也会注入。
+  // 两个架构的链接器名都放行：判架构靠下面的 e_machine，不靠这份集合。
   const ignore = new Set([
     'ld-linux-aarch64.so.1',
-    'linux-vdso.so.1',
     'ld-linux-x86-64.so.2',
+    'linux-vdso.so.1',
   ]);
 
   const seen = new Set();
@@ -187,7 +229,7 @@ function main() {
   const wrongArch = [];
   for (const e of entries) {
     const info = readElf(path.join(root, e));
-    if (info.machine !== 183) wrongArch.push(`${e} (e_machine=${info.machine})`);
+    if (info.machine !== arch.machine) wrongArch.push(`${e} (e_machine=${info.machine})`);
     for (const n of info.needed) queue.push([n, e]);
   }
 
@@ -204,9 +246,9 @@ function main() {
     if (info) for (const n of info.needed) queue.push([n, so]);
   }
 
-  console.log(`    入口 ELF ${entries.length} 个，解析 SONAME ${seen.size} 个`);
+  console.log(`    入口 ELF ${entries.length} 个，解析 SONAME ${seen.size} 个（${arch.label}）`);
   if (wrongArch.length) {
-    console.error('!! 以下入口不是 aarch64:');
+    console.error(`!! 以下入口不是 ${arch.label}（期望 e_machine=${arch.machine}）:`);
     for (const w of wrongArch) console.error(`     ${w}`);
     process.exit(1);
   }

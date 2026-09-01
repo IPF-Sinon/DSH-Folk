@@ -1,5 +1,6 @@
 @file:Suppress("UnstableApiUsage")
 
+import com.android.build.api.variant.FilterConfiguration
 import com.android.build.gradle.tasks.PackageAndroidArtifact
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
@@ -103,7 +104,23 @@ android {
 
         base.archivesName = "DSH-Folk_${managerVersionCode}_${managerVersionName}_on_${branchName}"
 
-        ndk.abiFilters.addAll(arrayOf("arm64-v8a"))
+        // 支持的 ABI。x86_64 面向模拟器 / Android-x86 / ChromeOS：容器执行只用 proot
+        // （proroot 上游只发 arm64-v8a），rootfs 也按设备架构下载不同资产。
+        ndk.abiFilters.addAll(arrayOf("arm64-v8a", "x86_64"))
+    }
+
+    // 按 ABI 拆包，不出 universal APK。
+    //
+    // 两个架构的原生库合起来只多约 0.3 MB，拆包的理由不是体积而是**明确性**：
+    // 下载页上「哪个包能装」一眼可见，而不是装完才发现容器起不来。
+    // 代价是 release 里有两个 APK，应用内更新必须按本机 ABI 挑（见 UpdateChecker）。
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
     }
 
     compileOptions {
@@ -136,10 +153,21 @@ android {
 
     android.sourceSets.named("main") {
         kotlin.directories += "build/generated/ksp/$name/kotlin"
-        // proot/proroot 等预编译 .so 放在 app/libs/arm64-v8a/ 下，由 CI 下载后就位
+        // proot/proroot 等预编译 .so 放在 app/libs/<abi>/ 下（arm64-v8a、x86_64）
         jniLibs.directories += "libs"
     }
 }
+
+// 每个 ABI 一个独立 versionCode。
+//
+// 拆包后两个 APK 的 versionCode 不能相同：装了 arm64 包的设备遇到同号的 x86_64
+// 包会被系统当作「同一版本」，覆盖安装与升级判定都会出错。
+//
+// 规则是 managerVersionCode * 10 + ABI 偏移，**乘 10 而不是加个大常数**，
+// 这样跨版本严格单调：本版 10706 → 107061/107062，下一版 10707 的最小值
+// 107071 仍大于本版最大值 107062。versionName 不加偏移 —— UpdateChecker 拿
+// tag 与 BuildConfig.VERSION_NAME 比较，改动它会让自比较失准。
+val abiVersionOffsets = mapOf("arm64-v8a" to 1, "x86_64" to 2)
 
 // debug 用独立包名，与 release（top.funcun.dshfolk）共存，可同时安装测试。
 // buildType 上没有 applicationId 全量覆盖（只有 applicationIdSuffix，会产生
@@ -149,6 +177,15 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("debug")) { variant ->
         variant.applicationId.set("top.funcun.folkpatch.debug")
+    }
+    onVariants { variant ->
+        for (output in variant.outputs) {
+            val abi = output.filters
+                .firstOrNull { it.filterType == FilterConfiguration.FilterType.ABI }
+                ?.identifier
+            val offset = abiVersionOffsets[abi] ?: 0
+            output.versionCode.set(managerVersionCode * 10 + offset)
+        }
     }
 }
 

@@ -11,6 +11,12 @@ on:
         description: 'Node.js version (e.g. v24.19.0)'
         required: false
         default: 'v24.19.0'
+      arch:
+        description: 'Target architecture'
+        required: false
+        default: 'both'
+        type: choice
+        options: [ both, arm64, amd64 ]
       publish:
         description: 'Publish to the runtime-latest release'
         required: false
@@ -21,9 +27,32 @@ permissions:
   contents: write
 
 jobs:
-  rootfs:
-    name: Assemble arm64 rootfs
+  # 把 arch 输入摊成 matrix。放单独一个 job 而不是给 matrix 项写 if：
+  # 后者会留下一堆 skipped 的空 job，看不出到底跑了哪些架构。
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      arches: ${{ steps.set.outputs.arches }}
+    steps:
+      - id: set
+        run: |
+          case "${{ inputs.arch }}" in
+            arm64) A='["arm64"]' ;;
+            amd64) A='["amd64"]' ;;
+            *)     A='["arm64","amd64"]' ;;
+          esac
+          echo "arches=$A" >> "$GITHUB_OUTPUT"
+          echo "building: $A"
+
+  rootfs:
+    name: Assemble ${{ matrix.arch }} rootfs
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      # 一个架构失败不该带走另一个：产物互不相干，各自发布。
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(needs.plan.outputs.arches) }}
     steps:
       - uses: actions/checkout@v5
 
@@ -35,6 +64,7 @@ jobs:
         env:
           DSH_VERSION: ${{ inputs.dsh_version }}
           NODE_VER: ${{ inputs.node_version }}
+          TARGET_ARCH: ${{ matrix.arch }}
           OUT: ${{ github.workspace }}/out
           RELEASE_TAG: runtime-latest
         run: bash runtime-builder/build-rootfs.sh
@@ -43,33 +73,45 @@ jobs:
         run: |
           ls -la out
           {
-            echo '### DSH runtime'
+            echo "### DSH runtime (${{ matrix.arch }})"
             echo
             echo '```json'
-            cat out/metadata.json
+            cat out/metadata*.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dsh-runtime-rootfs
+          name: dsh-runtime-rootfs-${{ matrix.arch }}
           path: |
-            out/rootfs.tar.gz
-            out/metadata.json
+            out/rootfs*.tar.gz
+            out/metadata*.json
           retention-days: 7
 
-      # runtime-latest 是一个滚动 tag：App 里的 DshSource.META_URL 固定指向它，
+      # runtime-latest 是一个滚动 tag：App 里的 DshSource 固定指向它，
       # 所以这里必须覆盖同名资产而不是新建 tag。
+      #
+      # 每个架构只上传**自己的**资产（arm64 用无后缀的旧名，amd64 带 -x86_64）：
+      # 用通配符一把梭在两条并行时会互相覆盖，而 arm64 的旧名一旦被 amd64 的内容
+      # 顶掉，所有存量用户下一次检查更新就会拿到跑不了的 rootfs。
       - name: Publish to runtime-latest release
         if: inputs.publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARCH: ${{ matrix.arch }}
         run: |
           if ! gh release view runtime-latest >/dev/null 2>&1; then
             gh release create runtime-latest \
               --title 'DSH runtime (rolling)' \
-              --notes 'Rolling container runtime for DSH-Folk. Assets are replaced in place; metadata.json always describes the current rootfs.tar.gz.' \
+              --notes 'Rolling container runtime for DSH-Folk. Assets are replaced in place; each metadata*.json describes the matching rootfs*.tar.gz. arm64-v8a keeps the unsuffixed names for backward compatibility.' \
               --latest=false
           fi
+          if [ "$ARCH" = "arm64" ]; then
+            SUFFIX=""
+          else
+            SUFFIX="-x86_64"
+          fi
+          test -f "out/rootfs${SUFFIX}.tar.gz"
+          test -f "out/metadata${SUFFIX}.json"
           gh release upload runtime-latest \
-            out/rootfs.tar.gz out/metadata.json --clobber
+            "out/rootfs${SUFFIX}.tar.gz" "out/metadata${SUFFIX}.json" --clobber

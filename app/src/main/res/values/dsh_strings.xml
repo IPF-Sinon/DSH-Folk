@@ -266,6 +266,7 @@
     <string name="dsh_mode_proroot_name">proroot (experimental, no ptrace overhead)</string>
     <string name="dsh_mode_proot_missing">libproot.so is missing from the APK — the install may be damaged; reinstall</string>
     <string name="dsh_mode_proroot_missing">%1$d runtime files are missing (%2$s and others). They ship with the APK, so this means the install is incomplete; reinstall</string>
+    <string name="dsh_mode_proroot_arch_only">proroot only supports arm64-v8a; this device uses proot</string>
     <string name="dsh_bk_not_running">DSH is not running, or dsh-config-manager is not installed</string>
     <string name="dsh_bk_bad_json">Could not parse the response</string>
     <string name="dsh_bk_export_req_failed">Export request failed: DSH is not running or the plugin is missing</string>

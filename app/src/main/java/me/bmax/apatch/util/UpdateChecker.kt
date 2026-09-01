@@ -126,22 +126,46 @@ object UpdateChecker {
     )
 
     /**
-     * 从 release 的 assets 里挑 APK，并配对它的 `.sha256`。
+     * 从 release 的 assets 里挑**本机架构**的 APK，并配对它的 `.sha256`。
      *
-     * 严格按「同名 + .sha256」配对，不去猜别的命名：配错了校验值就等于没校验，
+     * 1.7.6 起按 ABI 拆包，一个 release 里同时有 `…-arm64-v8a.apk` 与 `…-x86_64.apk`。
+     * 原来「取第一个 .apk」会把 arm64 包发给 x86_64 用户（装上也起不了容器），所以
+     * 这里按 [DshSource.runtimeArch] 精确匹配文件名里的 ABI。
+     *
+     * 三种情形：
+     * - 有本机 ABI 的包 → 用它；
+     * - 整个 release 里**没有任何**带 ABI 后缀的包 → 那是 1.7.5 及更早的单包 release，
+     *   回退到「第一个 .apk」，与旧行为一致；
+     * - 只有别的架构的包 → 返回 null，让 UI 退回浏览器下载。**绝不**退而求其次发一个
+     *   装不上/跑不起来的包。
+     *
+     * sha256 仍严格按「同名 + .sha256」配对，不去猜别的命名：配错了校验值等于没校验，
      * 而校验失败会阻止安装 —— 宁可退回浏览器下载。
      */
     private fun pickApkAsset(release: JSONObject): ApkAsset? {
         val assets = release.optJSONArray("assets") ?: return null
-        var apk: JSONObject? = null
         val byName = HashMap<String, JSONObject>()
+        val apks = ArrayList<JSONObject>()
         for (i in 0 until assets.length()) {
             val a = assets.optJSONObject(i) ?: continue
             val name = a.optString("name")
             byName[name] = a
-            if (apk == null && name.endsWith(".apk", ignoreCase = true)) apk = a
+            if (name.endsWith(".apk", ignoreCase = true)) apks.add(a)
         }
-        val a = apk ?: return null
+        if (apks.isEmpty()) return null
+
+        val arch = DshSource.runtimeArch()
+        val abiTagged = apks.filter { hasAbiTag(it.optString("name")) }
+        val a = when {
+            // 本机架构的包
+            abiTagged.any { it.optString("name").contains(arch, ignoreCase = true) } ->
+                abiTagged.first { it.optString("name").contains(arch, ignoreCase = true) }
+            // 旧 release（没有任何 ABI 后缀）：单包，沿用旧行为
+            abiTagged.isEmpty() -> apks.first()
+            // 只有别的架构 → 不发错包
+            else -> return null
+        }
+
         val name = a.optString("name")
         return ApkAsset(
             name = name,
@@ -150,6 +174,13 @@ object UpdateChecker {
             shaUrl = byName["$name.sha256"]?.optString("browser_download_url").orEmpty(),
         )
     }
+
+    /** 文件名里是否带我们已知的 ABI 标记（用来区分拆包 release 与旧的单包 release）。 */
+    private fun hasAbiTag(name: String): Boolean =
+        KNOWN_ABIS.any { name.contains(it, ignoreCase = true) }
+
+    /** 拆包会出现在资产名里的 ABI。只列本项目实际发布的两个。 */
+    private val KNOWN_ABIS = listOf("arm64-v8a", "x86_64")
 
     /**
      * 拉 `.sha256` 文件并取出十六进制摘要。

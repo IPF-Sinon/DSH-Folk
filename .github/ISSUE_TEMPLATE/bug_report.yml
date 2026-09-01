@@ -16,15 +16,25 @@ body:
           required: true
         - label: 我使用的是 Releases 里的 APK 或 Actions 构建产物，不是自行改动过的版本
           required: true
-        - label: 我的设备是 arm64-v8a
+        - label: 我下载的 APK 与设备架构一致（arm64-v8a 包装在 arm64 设备上，x86_64 包装在 x86_64 设备上）
           required: true
+
+  - type: dropdown
+    id: arch
+    attributes:
+      label: 设备架构
+      options:
+        - arm64-v8a
+        - x86_64
+    validations:
+      required: true
 
   - type: input
     id: version
     attributes:
       label: DSH-Folk 版本
       description: 见 设置 → 关于，或 APK 文件名里的短 commit
-      placeholder: 0.1.0 (a29a320)
+      placeholder: 1.7.6 (0a88640)
     validations:
       required: true
 

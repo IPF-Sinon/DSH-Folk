@@ -147,9 +147,13 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
         bypassHiddenApiRestrictions()
         Log.d(TAG, "APApplication onCreate started")
 
-        val isArm64 = Build.SUPPORTED_ABIS.any { it == "arm64-v8a" }
-        Log.d(TAG, "Device architecture check: isArm64=$isArm64, supported ABIs=${Build.SUPPORTED_ABIS.joinToString(", ")}")
-        if (!isArm64) {
+        // 支持 arm64-v8a 与 x86_64（后者面向模拟器 / Android-x86 / ChromeOS）。
+        // 两者都不在才退出：APK 按 ABI 拆包，装错架构的包会缺 proot 可执行 .so，
+        // 与其让容器启动时报 Exec format error，不如在这里明确拒绝。
+        val abis = Build.SUPPORTED_ABIS
+        val archSupported = abis.any { it == "arm64-v8a" || it == "x86_64" }
+        Log.d(TAG, "Device architecture check: supported=$archSupported, ABIs=${abis.joinToString(", ")}")
+        if (!archSupported) {
             Log.e(TAG, "Unsupported architecture!")
             showToast(applicationContext, "Unsupported architecture!")
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({

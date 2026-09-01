@@ -87,7 +87,13 @@ interface ContainerRuntime {
         override fun prepare() { /* 内置库由系统提取，无额外准备 */ }
     }
 
-    /** 实验实现：proroot（coderredlab/proroot），LD_PRELOAD 路径翻译，零 ptrace。 */
+    /**
+     * 实验实现：proroot（coderredlab/proroot），LD_PRELOAD 路径翻译，零 ptrace。
+     *
+     * **只支持 arm64-v8a**：上游只发布 arm64 的 .so（README 的 Requirements 明写
+     * arm64-v8a + Ubuntu arm64 rootfs），x86_64 包里没有这五个文件，
+     * [available] 自然为 false，[DshRuntime.runtime] 会静默用 proot。
+     */
     class Proroot(private val ctx: Context, private val dir: File) : ContainerRuntime {
         override fun id() = "proroot"
         override fun displayName() = ctx.getString(R.string.dsh_mode_proroot_name)
@@ -97,6 +103,11 @@ interface ContainerRuntime {
         override fun unavailableReason(): String {
             val missing = LIBS.filter { File(dir, it).let { f -> !f.isFile || f.length() == 0L } }
             if (missing.isEmpty()) return ""
+            // 非 arm64 设备上五个文件必然全缺，报「缺 5 个文件」会把用户引到去找文件；
+            // 真实原因是上游不支持这个架构，直接说清楚。
+            if (!android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a")) {
+                return ctx.getString(R.string.dsh_mode_proroot_arch_only)
+            }
             return ctx.getString(R.string.dsh_mode_proroot_missing, missing.size, missing.first())
         }
 

@@ -57,17 +57,30 @@ jobs:
 
       - run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Collect APK
+      # 拆包后每个 buildType 出两个 APK（arm64-v8a / x86_64）。原来这里 `head -1`
+      # 只收一个，会静默丢掉另一个架构；现在逐 ABI 收并断言恰好两个 —— 少于两个
+      # 说明 splits 配置退化成单包了，那是必须拦住的回归。
+      - name: Collect APKs
         run: |
           SHORT="${GITHUB_SHA::7}"
-          APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -1)
-          if [ -z "$APK" ]; then
-            echo "::error::debug APK not produced"
+          found=0
+          for abi in arm64-v8a x86_64; do
+            APK=$(find app/build/outputs/apk/debug -name "*${abi}*.apk" -type f | head -1)
+            if [ -z "$APK" ]; then
+              echo "::error::debug APK for ${abi} not produced"
+              continue
+            fi
+            OUT="DSH-Folk-Debug-${SHORT}-${abi}.apk"
+            mv "$APK" "$OUT"
+            sha256sum "$OUT" > "$OUT.sha256"
+            echo "  $OUT  $(stat -c %s "$OUT") bytes"
+            found=$((found + 1))
+          done
+          if [ "$found" -ne 2 ]; then
+            echo "::error::expected 2 debug APKs (one per ABI), got $found"
             find app/build/outputs -type f -name "*.apk" || true
             exit 1
           fi
-          mv "$APK" "DSH-Folk-Debug-${SHORT}.apk"
-          sha256sum "DSH-Folk-Debug-${SHORT}.apk" > "DSH-Folk-Debug-${SHORT}.apk.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -121,32 +134,54 @@ jobs:
 
       - run: ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Collect APK
+      - name: Collect APKs
         run: |
           SHORT="${GITHUB_SHA::7}"
-          APK=$(find app/build/outputs/apk/release -name "*.apk" -type f | head -1)
-          if [ -z "$APK" ]; then
-            echo "::error::release APK not produced"
+          found=0
+          for abi in arm64-v8a x86_64; do
+            APK=$(find app/build/outputs/apk/release -name "*${abi}*.apk" -type f | head -1)
+            if [ -z "$APK" ]; then
+              echo "::error::release APK for ${abi} not produced"
+              continue
+            fi
+            OUT="DSH-Folk-Release-${SHORT}-${abi}.apk"
+            mv "$APK" "$OUT"
+            sha256sum "$OUT" > "$OUT.sha256"
+            echo "  $OUT  $(stat -c %s "$OUT") bytes"
+            found=$((found + 1))
+          done
+          if [ "$found" -ne 2 ]; then
+            echo "::error::expected 2 release APKs (one per ABI), got $found"
             find app/build/outputs -type f -name "*.apk" || true
             exit 1
           fi
-          mv "$APK" "DSH-Folk-Release-${SHORT}.apk"
-          sha256sum "DSH-Folk-Release-${SHORT}.apk" > "DSH-Folk-Release-${SHORT}.apk.sha256"
 
       # 签名自检：debug key 的证书主体固定是 CN=Android Debug。真出现它说明
       # keystore 没生效（Gradle 静默回退），必须在发包之前拦住。
       # 用 keytool 而不是 apksigner：keytool 随 setup-java 一定在 PATH 上，
       # 而 apksigner 的路径取决于 AGP 装了哪个 build-tools 版本，find 出来不稳。
+      #
+      # 拆包后**每个** APK 都要验：只验一个等于给另一个架构留了后门。
       - name: Verify signer
         run: |
-          SHORT="${GITHUB_SHA::7}"
-          keytool -printcert -jarfile "DSH-Folk-Release-${SHORT}.apk" > signer.txt
-          grep -E "Owner|Valid from" signer.txt || true
-          if grep -q "CN=Android Debug" signer.txt; then
-            echo "::error::release APK is signed with the Android debug key"
+          checked=0
+          for apk in DSH-Folk-Release-*.apk; do
+            [ -f "$apk" ] || continue
+            echo "== $apk"
+            keytool -printcert -jarfile "$apk" > signer.txt
+            grep -E "Owner|Valid from" signer.txt || true
+            if grep -q "CN=Android Debug" signer.txt; then
+              echo "::error::$apk is signed with the Android debug key"
+              rm -f signer.txt
+              exit 1
+            fi
+            rm -f signer.txt
+            checked=$((checked + 1))
+          done
+          if [ "$checked" -ne 2 ]; then
+            echo "::error::expected to verify 2 release APKs, verified $checked"
             exit 1
           fi
-          rm -f signer.txt
 
       - name: Remove signing material
         if: always()

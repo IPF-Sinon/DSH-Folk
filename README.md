@@ -11,7 +11,7 @@
 </div>
 
 DSH-Folk 把 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)（一个 Node.js 的编码 Agent CLI）装进手机：
-应用下载一份 arm64 Linux 容器运行时，用 proot / proroot 在容器里启动 `dsh web`，然后你在手机上直接打开它的 Web UI。
+应用下载一份 Linux 容器运行时（arm64 或 x86_64，按设备架构），用 proot / proroot 在容器里启动 `dsh web`，然后你在手机上直接打开它的 Web UI。
 
 不需要 root，也不需要 Termux。有 root / Shizuku / 无线 ADB 时会自动利用，用于放宽某些受限操作。
 
@@ -44,13 +44,14 @@ skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentia
 ## 环境要求
 
 - Android 8.0 (API 26) 或更高
-- **arm64-v8a** 设备（不支持 32 位）
+- **arm64-v8a** 或 **x86_64** 设备（不支持 32 位）
 - 首次启动需要联网下载运行时（约 150 MB 压缩包，解压后约 600 MB；可在设置里选镜像或自动测速）
 - 存储空间建议预留 2 GB 以上
 
-首次启动下载完运行时后会自动预装三个插件：`dsh-web-mobile`（移动端适配）、`dshmarket`（WebUI 内的插件市场）、
-`dsh-config-manager`（**配置备份功能的依赖**，设置里的导出/导入走它的回环 API）。
-这一步会多花一两分钟；失败不影响启动，之后可以在插件商店里手动装。
+首次启动下载完运行时后会自动预装四个插件：`dsh-web-mobile`（移动端适配）、`dshmarket`（WebUI 内的插件市场）、
+`dsh-config-manager`（**配置备份功能的依赖**，设置里的导出/导入走它的回环 API）、
+`dsh-file-upload`（拖拽上传 / 文档转 Markdown / 图片 OCR / 语音输入）。
+这一步会多花几分钟；失败不影响启动，之后可以在插件商店里手动装。
 预装清单按包名逐个记账，所以从旧版本升级上来会自动补装新增的那几个。
 
 应用自身的更新可以在 设置 → 常规 → 检查更新 里完成：它会对三条下载渠道（GitHub 直连 / 两个 gh-proxy）
@@ -65,8 +66,13 @@ root / Shizuku / 无线 ADB 都是**可选**的。DSH-Folk 只探测并复用设
 
 ## 安装
 
-到 [Releases](https://github.com/IPF-Sinon/DSH-Folk/releases/latest) 下载 `DSH-Folk-<版本>.apk`，
-同目录的 `.sha256` 可用于校验。
+到 [Releases](https://github.com/IPF-Sinon/DSH-Folk/releases/latest) 下载**对应架构**的 APK，同目录的 `.sha256` 可用于校验：
+
+- `DSH-Folk-<版本>-arm64-v8a.apk` —— 绝大多数手机、平板
+- `DSH-Folk-<版本>-x86_64.apk` —— Android 模拟器、Android-x86、ChromeOS
+
+两个包功能相同，区别只在打包的原生二进制与下载的容器 rootfs。装错架构会在启动时提示
+「Unsupported architecture」并退出。不确定的话：手机选 arm64-v8a。
 
 也可以到 [Actions](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml) 取开发构建：
 选一次成功的运行，下载 `dsh-folk-debug-*` 或 `dsh-folk-release-*` 工件。
@@ -77,36 +83,40 @@ APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出
 缺任何一项会**直接构建失败**而不是退回调试签名 —— 一个用 debug key 签出来的「release」装得上、看着正常，
 但和正式包签名不同、之后无法覆盖升级，比构建失败危险得多。构建末尾还有一道签名自检拦住这种情况。
 
-容器运行时由另一个工作流 **Build DSH runtime rootfs** 生成，产物（`rootfs.tar.gz` + `metadata.json`）
-发布到滚动 tag `runtime-latest`，应用启动时读取其中的 `metadata.json` 决定下载什么。
+容器运行时由另一个工作流 **Build DSH runtime rootfs** 生成（可选 `arch=both / arm64 / amd64`），
+产物发布到滚动 tag `runtime-latest`：arm64 是 `rootfs.tar.gz` + `metadata.json`，
+x86_64 是 `rootfs-x86_64.tar.gz` + `metadata-x86_64.json`（arm64 沿用无后缀的旧名以兼容存量版本）。
+应用按本机架构读取对应的 `metadata*.json` 决定下载什么。
 
 ## 它是怎么跑起来的
 
 ```
-DSH-Folk (Android app)
-  └─ proot / proroot                      ← 打包在 APK 里的可执行 .so
-       └─ Ubuntu 24.04 arm64 rootfs       ← 首次启动时在线下载
-            ├─ python3                     ← 无线 ADB 配对用，已预装
-            ├─ git                          ← git 源插件用，已预装
+DSH-Folk (Android app)                      ← 按 ABI 拆包：arm64-v8a / x86_64
+  └─ proot / proroot                        ← 打包在 APK 里的可执行 .so
+       └─ Ubuntu 24.04 rootfs               ← 首次启动时在线下载（arm64 或 x86_64）
+            ├─ python3                       ← 无线 ADB 配对用，已预装
+            ├─ git                            ← git 源插件用，已预装
             └─ Node.js 24 + @deepseek-ai/dsh
-                 └─ dsh web --port 3080    ← 只监听 127.0.0.1
+                 └─ dsh web --port 3080      ← 默认只监听 127.0.0.1
                       └─ 手机浏览器 / 应用内打开
 ```
 
 几个不得不这么做的地方：
 
 - Android 的 `app_data_file` 带 **noexec**，只有 `nativeLibraryDir` 里的 `.so` 可执行，所以 proot / proroot 以 `.so` 形式打包进 APK。
+- proroot 只有 arm64 版本（[上游](https://github.com/coderredlab/proroot) 只发布 arm64-v8a），所以 x86_64 设备上运行方式固定为 proot，
+  设置里那一项会禁选并说明原因。
 - 部分设备的私有目录禁止 `link(2)`（真机实测报 `AccessDeniedException`），应用会先探测硬链接是否可用，不可用时给 proot 加 `--link2symlink`；
   proroot 则无条件启用它。而 pnpm 正是用 `link()` 从内容存储装包 —— 链接一旦被改写成符号链接，
   Node 的 `require.resolve` 做 realpath 就会解析进内容存储的扁平哈希目录，插件声明的 `./lib/client.cjs` 再也拼不出来
   （表现是装完插件 `dsh web` 报 `MissingClientBundleError`）。所以这种环境下会给 profile 的 `pnpm-workspace.yaml`
   写上 `packageImportMethod: copy`，让 pnpm 复制真实文件。代价是内容存储的去重失效，容器体积会大一些。
 - 插件目录里超过一半的条目是 `github:owner/name` 安装规格，pnpm 解析它要 `git ls-remote`，所以 git 也预装进了 rootfs。
-  注意 rootfs 是用 `dpkg-deb -x` 纯解包装出来的（runner 是 x86_64，跑不了 arm64 的 maintainer script），
-  **dpkg 的依赖关系没人替我们解** —— 包列表写漏一个传递依赖，构建期一切正常，到手机上 exec 那一刻才报
+  注意 rootfs 是用 `dpkg-deb -x` 纯解包装出来的（不跑 maintainer script —— 它们要在目标架构上执行），
+  **dpkg 的依赖关系没人替我们解** —— 包列表写漏一个传递依赖，构建期一切正常，到设备上 exec 那一刻才报
   `cannot find libxxx.so.N`。所以构建末尾有一步 `check-elf-closure.js`：从 git-core / perl 扩展 / python3
-  出发递归解析 ELF 的 `DT_NEEDED`，任何 SONAME 找不到提供者就让构建失败。
-- `dsh web` 只绑定回环地址；配置备份走的也是同一个回环 HTTP 接口，不对局域网开放。
+  出发递归解析 ELF 的 `DT_NEEDED`，任何 SONAME 找不到提供者就让构建失败（并断言入口是目标架构）。
+- `dsh web` 默认只绑定回环地址；配置备份走的也是同一个回环 HTTP 接口。局域网访问是设置里一个默认关闭的开关。
 
 ## 项目结构
 

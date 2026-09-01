@@ -30,13 +30,37 @@ object DshSource {
     private const val KEY_AUTO_SOURCE = "auto_source"
     private const val KEY_AUTO_SOURCE_AT = "auto_source_at"
 
-    /** DSH-Folk 运行时发布位置：runtime-latest tag 的 metadata.json 常驻最新。 */
-    const val META_URL =
-        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-latest/metadata.json"
+    /** 运行时发布位置（滚动 tag runtime-latest；资产名按架构区分）。 */
+    private const val RUNTIME_BASE =
+        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-latest/"
 
-    /** 吞吐测速目标（Range 拉前 1MB）。 */
-    private const val SPEED_PROBE_URL =
-        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-latest/rootfs.tar.gz"
+    /**
+     * 本机要用的运行时架构。
+     *
+     * **arm64 优先，不能只取 `SUPPORTED_ABIS` 的第一项**：带 arm 转译层的 x86_64 设备
+     * 两个 ABI 都会报，而原生执行永远优于转译；反过来 arm64 设备不会报 x86_64。
+     * 所以「列表里有 arm64-v8a 就用 arm64-v8a」这一条同时覆盖两类设备。
+     *
+     * 返回值与 metadata.json 的 `arch` 字段、[android.os.Build.SUPPORTED_ABIS] 对齐
+     * （`arm64-v8a` / `x86_64`），[DshRuntime] 的架构校验才能直接比较。
+     */
+    fun runtimeArch(): String =
+        if (android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a")) "arm64-v8a" else "x86_64"
+
+    /**
+     * 运行时资产名后缀。
+     *
+     * arm64 **必须沿用无后缀的旧名**（`metadata.json` / `rootfs.tar.gz`）：1.7.5 及更早
+     * 把这两个名字写死在代码里，改名等于让所有存量用户拉不到运行时。x86_64 是新增
+     * 架构、没有存量，用独立后缀。
+     */
+    private fun assetSuffix(): String = if (runtimeArch() == "arm64-v8a") "" else "-x86_64"
+
+    /** 本机架构对应的 metadata.json 地址（不含镜像前缀）。 */
+    fun metaUrl(): String = RUNTIME_BASE + "metadata" + assetSuffix() + ".json"
+
+    /** 吞吐测速目标（Range 拉前 1MB）：打本机真正会下载的那个 rootfs。 */
+    private fun speedProbeUrl(): String = RUNTIME_BASE + "rootfs" + assetSuffix() + ".tar.gz"
 
     fun proxyPrefix(source: String): String = when (source) {
         SOURCE_GHPROXY_CF -> "https://v6.gh-proxy.org/"
@@ -99,7 +123,7 @@ object DshSource {
             val custom = customMetaUrl(ctx)
             if (custom.isNotEmpty()) return custom
         }
-        return proxyPrefix(resolved) + META_URL
+        return proxyPrefix(resolved) + metaUrl()
     }
 
     private fun cachedAuto(ctx: Context): String? {
@@ -130,16 +154,18 @@ object DshSource {
 
     /** 三候选源全部测一遍（延迟 + 对最优两个测吞吐）。同步阻塞，调用方放 IO 线程。 */
     fun speedTest(): List<SpeedResult> {
+        val meta = metaUrl()
+        val probe = speedProbeUrl()
         val candidates = listOf(
-            SOURCE_GHPROXY_AXISNOW to "https://axisnow.gh-proxy.org/$META_URL",
-            SOURCE_GHPROXY_CF to "https://v6.gh-proxy.org/$META_URL",
-            SOURCE_GITHUB to META_URL,
+            SOURCE_GHPROXY_AXISNOW to "https://axisnow.gh-proxy.org/$meta",
+            SOURCE_GHPROXY_CF to "https://v6.gh-proxy.org/$meta",
+            SOURCE_GITHUB to meta,
         )
         val latency = candidates.map { (src, url) -> SpeedResult(src, probeLatency(url)) }
         val top = latency.sortedBy { it.latencyMs }.take(2).map { it.source }.toSet()
         return latency.map { r ->
             if (r.source !in top || r.latencyMs >= Long.MAX_VALUE / 4) r
-            else r.copy(speedKBps = probeSpeed(proxyPrefix(r.source) + SPEED_PROBE_URL))
+            else r.copy(speedKBps = probeSpeed(proxyPrefix(r.source) + probe))
         }
     }
 

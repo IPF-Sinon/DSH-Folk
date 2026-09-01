@@ -1,0 +1,10 @@
+# 保留 proot 预编译可执行 .so（DSH 容器运行时），忽略其它构建产物。
+# 这里没有 proroot：上游 coderredlab/proroot 只发布 arm64-v8a，x86_64 走 proot。
+libbootctl.so
+libbusybox.so
+libresetprop.so
+libkptools.so
+libkpatch.so
+libapjni.so
+libapd.so
+*.so.version
