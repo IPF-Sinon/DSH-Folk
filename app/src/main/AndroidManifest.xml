@@ -162,6 +162,17 @@
             android:name=".ui.CrashHandleActivity"
             android:exported="false" />
 
+        <!-- MT 管理器「一键启动」的落点：被系统标为 stopped 的应用不会因为一次 provider
+             查询而被拉起，MT 那边就表现为目录空白。这个 Activity 只做 finish()，
+             用户看不到界面，但进程被唤起、stopped 标记被清掉。
+             全限定名沿用 MT 的约定（MT 按名字找入口），改名等于失效。 -->
+        <activity
+            android:name="bin.mt.file.content.MTDataFilesWakeUpActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:taskAffinity="${applicationId}.MTDataFilesWakeUp" />
+
         <provider
             android:name=".util.SafeFileProvider"
             android:authorities="${applicationId}.fileprovider"

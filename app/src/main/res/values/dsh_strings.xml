@@ -409,6 +409,14 @@
     <string name="dsh_docs_open_title">Open data directory in file manager</string>
     <string name="dsh_docs_open_summary">Browse rootfs/root/.dsh (sessions, profiles) without root. Editing container files may stop DSH from starting.</string>
     <string name="dsh_docs_open_failed">Could not open the file picker. Open your system Files app and choose the DSH-Folk root in the sidebar.</string>
+    <string name="dsh_docs_grant_title">Grant data directory to MT Manager</string>
+    <string name="dsh_docs_grant_summary">Use this when MT Manager says "No persistable permission grants found" after picking the folder. Grants access directly, without the system picker.</string>
+    <string name="dsh_docs_grant_message">This grants %1$s read and write access to DSH-Folk\'s private data directory, including the container rootfs. Only do this if you trust that app; you can revoke it here at any time.</string>
+    <string name="dsh_docs_grant_confirm">Grant</string>
+    <string name="dsh_docs_grant_revoke">Revoke</string>
+    <string name="dsh_docs_grant_done">Granted. In MT Manager, add the local storage again — it should no longer fail.</string>
+    <string name="dsh_docs_grant_failed">Could not grant access.</string>
+    <string name="dsh_docs_grant_revoked">Access revoked.</string>
 
     <!-- 发送日志的时间裁剪 -->
     <string name="dsh_log_trim_title">Trim log by time?</string>

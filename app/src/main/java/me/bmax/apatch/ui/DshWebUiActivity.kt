@@ -74,6 +74,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import java.io.File
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
@@ -156,11 +158,22 @@ private val BALL_INSET = 8.dp
  *   （dsh-session-log-export）用的正是 `anchor.download = …; anchor.click()`。
  * - `blob:` URL 更特殊：它连 DownloadListener 都不会走（那是浏览器进程内的对象，
  *   没有网络请求），所以额外注入一小段 JS 把 blob 读成 base64 交回原生。
+ *
+ * ## 旧 WebView 内核要补 JS API
+ *
+ * WebView 是可独立升级的组件，系统版本高**不代表**内核新：有真机报过 Android 15
+ * 上装着 Chromium 110 的 WebView。dsh 前端用到 `AbortSignal.any`（Chrome 116）与
+ * `Promise.withResolvers`（Chrome 119），在这种设备上打开工作区就是
+ * `AbortSignal.any is not a function`。[COMPAT_SHIM] 在文档开始前补齐这两个 API，
+ * 见 [installCompatShim]。
  */
 class DshWebUiActivity : AppCompatActivity() {
 
     private var webView: WebView? = null
     private var canGoBack = false
+
+    /** document-start 垫片是否已装上；没装上才需要在 onPageStarted 里补注入。 */
+    private var compatShimInstalled = false
 
     /** 待回填给 `<input type="file">` 的回调；同一时刻只可能有一个选择器。 */
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
@@ -278,6 +291,11 @@ class DshWebUiActivity : AppCompatActivity() {
                                         favicon: android.graphics.Bitmap?,
                                     ) {
                                         progress = 1
+                                        // document-start 装不上时的回落：这里注入虽然已经晚于
+                                        // 文档开头，但仍早于绝大多数模块求值，能救回一部分场景
+                                        if (!compatShimInstalled && isLoopback(u)) {
+                                            view?.evaluateJavascript(COMPAT_SHIM, null)
+                                        }
                                         super.onPageStarted(view, u, favicon)
                                     }
 
@@ -338,6 +356,9 @@ class DshWebUiActivity : AppCompatActivity() {
                                 setDownloadListener { dl, userAgent, disposition, mime, _ ->
                                     startHttpDownload(dl, userAgent, disposition, mime)
                                 }
+                                // 兼容垫片必须在 loadUrl 之前装：addDocumentStartJavaScript
+                                // 只对「调用返回之后才开始加载」的 frame 生效
+                                compatShimInstalled = installCompatShim(this, url)
                                 webView = this
                                 loadUrl(url)
                             }
@@ -481,6 +502,37 @@ class DshWebUiActivity : AppCompatActivity() {
         return host == "127.0.0.1" || host == "localhost" || host == "::1"
     }
 
+    /**
+     * 在**文档开始前**给旧内核补上 dsh 前端用到的新 JS API，返回是否装上了。
+     *
+     * 必须是 document-start：`AbortSignal.any` 在模块顶层就会被引用路径碰到，
+     * 等到 `onPageFinished` 再补已经晚了（那时异常早就抛完了）。
+     * [WebViewCompat.addDocumentStartJavaScript] 就是干这个的，能力位由
+     * [WebViewFeature.DOCUMENT_START_SCRIPT] 决定；不支持时回落到 `onPageStarted`
+     * 里 `evaluateJavascript`（尽力而为，比什么都不做好）。
+     *
+     * 只对回环 origin 生效：origin 规则里端口**必须写出来**，不写会被当成 80/443，
+     * 所以规则从实际要加载的 URL 和 [DshRuntime.port] 现算，不能写死。
+     */
+    private fun installCompatShim(view: WebView, url: String): Boolean {
+        val supported = runCatching {
+            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        }.getOrDefault(false)
+        if (!supported) {
+            Log.i(TAG, "document-start script unsupported, falling back to onPageStarted")
+            return false
+        }
+        val rules = loopbackOriginRules(url)
+        return runCatching {
+            WebViewCompat.addDocumentStartJavaScript(view, COMPAT_SHIM, rules)
+            true
+        }.getOrElse {
+            // 规则非法（IllegalArgumentException）或内核临时不支持都在这里兜住
+            Log.w(TAG, "addDocumentStartJavaScript failed for $rules", it)
+            false
+        }
+    }
+
     override fun onDestroy() {
         // 不销毁的话 WebView 会连着 Activity 一起泄漏
         runCatching {
@@ -505,6 +557,102 @@ class DshWebUiActivity : AppCompatActivity() {
 
         /** JS 侧看到的桥名。 */
         private const val BLOB_BRIDGE = "DshFolkDownload"
+
+        /**
+         * document-start 脚本允许的 origin 规则。
+         *
+         * 格式 `SCHEME "://" HOSTNAME_PATTERN [":" PORT]`，**端口不写就默认 80/443**，
+         * 所以三个回环写法都要带上真实端口，否则规则匹配不到、脚本静默不注入。
+         * IPv6 字面量要方括号。
+         */
+        internal fun loopbackOriginRules(url: String): Set<String> {
+            val parsed = runCatching { Uri.parse(url) }.getOrNull()
+            val port = parsed?.port?.takeIf { it in 1..65535 } ?: DshRuntime.port()
+            return setOf(
+                "http://127.0.0.1:$port",
+                "http://localhost:$port",
+                "http://[::1]:$port",
+            )
+        }
+
+        /**
+         * 旧 WebView 兼容垫片：把 dsh 前端用到、但内核太老没有的 JS API 补齐。
+         *
+         * 现象是「打开工作区报 `AbortSignal.any is not a function`」。设备上的
+         * WebView 是 Chromium 110（OPPO PJJ110，SDK 35 却带着 110.0.5481.154），
+         * 而 dsh 前端用到：
+         *
+         * | API | 需要 | 用在哪 |
+         * |---|---|---|
+         * | `AbortSignal.any` | Chrome 116 | 每个带 signal 的 RPC（`ctx.sessions.search`、`ctx.workspaces.listDirectory`…）、`postJson` 超时合并 |
+         * | `Promise.withResolvers` | Chrome 119 | cordis 的 `ctx.timeout()` / `ctx.interval()` |
+         *
+         * 都是纯语言/平台 API，能在主线程用几行 JS 等价实现。前端全部代码里没有
+         * `new Worker` / `SharedWorker` / service worker，所以主文档一份就够。
+         *
+         * 幂等：重复注入（同页多 frame、SPA、刷新）只装一次。
+         * 只补缺的，新内核上什么都不动。
+         */
+        private const val COMPAT_SHIM = """
+(function(){
+  if (window.__dshFolkCompat) return; window.__dshFolkCompat = 1;
+  // AbortSignal.any(signals)：任一 abort 即 abort，并带上原 reason。
+  //
+  // 用 WeakRef 持有返回的 controller：真实实现里「派生 signal」被源 signal 弱引用，
+  // 没人用了就能回收。这里的调用点之一是
+  //   AbortSignal.any([token.abort.signal, callerSignal])
+  // 而 token.abort.signal 活得和整个挂载一样久 —— 若强引用，每次 RPC 都会在它上面
+  // 留下一个永不摘除的闭包，一次长会话累积成千上万个。WeakRef 是 Chrome 84 起有的。
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any !== 'function') {
+    AbortSignal.any = function(signals){
+      var list = [];
+      var raw = signals || [];
+      for (var i = 0; i < raw.length; i++) { if (raw[i]) list.push(raw[i]); }
+      var ctrl = new AbortController();
+      for (var n = 0; n < list.length; n++) {
+        // 已经 abort 的输入要立刻反映，不能等事件
+        if (list[n].aborted) { ctrl.abort(list[n].reason); return ctrl.signal; }
+      }
+      var weak = typeof WeakRef === 'function' ? new WeakRef(ctrl) : null;
+      var onAbort = function(ev){
+        var target = weak ? weak.deref() : ctrl;
+        for (var j = 0; j < list.length; j++) {
+          if (list[j].removeEventListener) list[j].removeEventListener('abort', onAbort);
+        }
+        // 派生 signal 已被回收 —— 没人再关心这次 abort，顺手把监听摘掉就行
+        if (!target) return;
+        var src = ev && ev.target ? ev.target : null;
+        if (src) target.abort(src.reason); else target.abort();
+      };
+      for (var k = 0; k < list.length; k++) {
+        if (list[k].addEventListener) list[k].addEventListener('abort', onAbort);
+      }
+      return ctrl.signal;
+    };
+  }
+  // AbortSignal.timeout(ms)：110 已有，仅极旧内核兜底
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout !== 'function') {
+    AbortSignal.timeout = function(ms){
+      var ctrl = new AbortController();
+      setTimeout(function(){
+        var err;
+        try { err = new DOMException('signal timed out', 'TimeoutError'); }
+        catch (e) { err = new Error('signal timed out'); }
+        ctrl.abort(err);
+      }, ms);
+      return ctrl.signal;
+    };
+  }
+  // Promise.withResolvers()：把 resolve/reject 掏到外面
+  if (typeof Promise !== 'undefined' && typeof Promise.withResolvers !== 'function') {
+    Promise.withResolvers = function(){
+      var res, rej;
+      var p = new Promise(function(a, b){ res = a; rej = b; });
+      return { promise: p, resolve: res, reject: rej };
+    };
+  }
+})();
+"""
 
         /**
          * 拦 blob:/data: 下载。

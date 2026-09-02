@@ -130,6 +130,10 @@ fun GeneralSettingsContent(
     val showLogWindowDialog = remember { mutableStateOf(false) }
     var logWindowIndex by remember { mutableStateOf(0f) }
 
+    val showGrantDocsDialog = remember { mutableStateOf(false) }
+    // 装了哪些可授权的文件管理器；没装就整条设置项都不出现
+    val mtCandidates = remember { DshDocsAccess.installedCandidates(context) }
+
     val useAltIcon = remember { mutableStateOf(prefs.getBoolean("use_alt_icon", false)) }
     var autoUpdateCheck by remember { mutableStateOf(prefs.getBoolean("auto_update_check", true)) }
     var folkXEngineEnabled by remember { mutableStateOf(prefs.getBoolean("folkx_engine_enabled", true)) }
@@ -507,6 +511,36 @@ fun GeneralSettingsContent(
             }
         }
 
+        // 直接把数据目录授权给 MT 管理器：某些 ROM（documentsui 与系统共享 uid 1000）
+        // 上，走系统选择器拿到的授权会被 UriGrantsManagerService 静默丢弃，
+        // MT 随后 takePersistableUriPermission 报 SecurityException。详见 DshDocsAccess。
+        if (mtCandidates.isNotEmpty()) {
+            item(key = "general_grant_docs_mt") {
+                ExpressiveCard(flat = flat, onClick = { showGrantDocsDialog.value = true }) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Filled.Key, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                text = stringResource(R.string.dsh_docs_grant_title),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.dsh_docs_grant_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         item(key = "general_clean_storage") {
             ExpressiveCard(flat = flat, onClick = { showCleanStorageDialog.value = true }) {
                 Row(
@@ -638,6 +672,44 @@ fun GeneralSettingsContent(
             dismissButton = {
                 TextButton(onClick = { showLogWindowDialog.value = false }) {
                     Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
+    if (showGrantDocsDialog.value) {
+        val names = mtCandidates.joinToString("、") { it.label }
+        AlertDialog(
+            onDismissRequest = { showGrantDocsDialog.value = false },
+            title = { Text(stringResource(R.string.dsh_docs_grant_title)) },
+            text = { Text(stringResource(R.string.dsh_docs_grant_message, names)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showGrantDocsDialog.value = false
+                    val granted = mtCandidates.count { DshDocsAccess.grant(context, it.packageName) }
+                    showToast(
+                        context,
+                        if (granted > 0) R.string.dsh_docs_grant_done
+                        else R.string.dsh_docs_grant_failed,
+                    )
+                }) {
+                    Text(stringResource(R.string.dsh_docs_grant_confirm))
+                }
+            },
+            dismissButton = {
+                // 「撤销」和「取消」都放这一格：AlertDialog 只有两个按钮位，
+                // 而这里需要三种动作（授权 / 撤销 / 什么都不做）
+                Row {
+                    TextButton(onClick = {
+                        showGrantDocsDialog.value = false
+                        DshDocsAccess.revokeAll(context)
+                        showToast(context, R.string.dsh_docs_grant_revoked)
+                    }) {
+                        Text(stringResource(R.string.dsh_docs_grant_revoke))
+                    }
+                    TextButton(onClick = { showGrantDocsDialog.value = false }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
                 }
             },
         )

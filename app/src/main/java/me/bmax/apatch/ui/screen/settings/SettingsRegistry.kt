@@ -50,6 +50,8 @@ object SettingsRegistry {
             add(SettingEntry("general_desktop_app_name", R.string.desktop_app_name, category = SettingCategory.GENERAL))
             add(SettingEntry("general_dpi", R.string.settings_app_dpi, category = SettingCategory.GENERAL))
             add(SettingEntry("general_send_log", R.string.send_log, category = SettingCategory.GENERAL))
+            add(SettingEntry("general_open_data_dir", R.string.dsh_docs_open_title, R.string.dsh_docs_open_summary, SettingCategory.GENERAL))
+            add(SettingEntry("general_grant_docs_mt", R.string.dsh_docs_grant_title, R.string.dsh_docs_grant_summary, SettingCategory.GENERAL))
             add(SettingEntry("general_clean_storage", R.string.settings_clean_storage, R.string.settings_clean_storage_summary, SettingCategory.GENERAL))
 
             // === Appearance ===
