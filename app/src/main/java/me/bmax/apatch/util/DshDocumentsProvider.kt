@@ -34,6 +34,29 @@ import java.io.FileNotFoundException
  *
  * `cache/`、`code_cache/`、`no_backup/` 不列出：噪音大且随时被系统回收。
  * `rootfs/` 正常列出 —— 这正是用户要浏览的东西（`rootfs/root/.dsh` 含 sessions、profiles）。
+ *
+ * ## documentId 不能是空串
+ *
+ * 1.7.3～1.7.7 把 root 的 `COLUMN_DOCUMENT_ID` 写成 `""`，浏览必然失败（真机现象：系统
+ * 选择器里能看到 DSH-Folk 这个 root，点进去只有「暂时无法加载内容」）。原因在
+ * [DocumentsProvider] 自带的 `UriMatcher`：空 id 拼进 URI 会产生**空路径段**，而
+ * `Uri.getPathSegments()` 会把空段丢掉，于是所有模式全部错位 ——
+ *
+ * | 构造 | 实际 path | 分段 | 匹配 |
+ * |---|---|---|---|
+ * | `buildDocumentUri(a, "")` | `/document/` | `[document]` | 无匹配 → `Unsupported Uri` |
+ * | `buildChildDocumentsUri(a, "")` | `/document//children` | `[document, children]` | 错配到 `document` + 通配段 → 调到 `queryDocument("children")` |
+ * | `buildTreeDocumentUri(a, "")` | `/tree/` | `[tree]` | 无匹配 |
+ *
+ * 所以 root 文档的 id 是 [ROOT_DOC_ID]（`"/"`），其余 id 形如 `/files/rootfs`：
+ * 非空、且因为 `Uri.Builder.appendPath` 会把 `/` 编码成 `%2F` 而始终是**单个**路径段。
+ *
+ * ## 声明 FLAG_SUPPORTS_IS_CHILD 就必须重写 isChildDocument
+ *
+ * [DocumentsProvider.isChildDocument] 的默认实现**恒返回 false**。tree URI 的每次访问
+ * 都要过 `enforceTree()` → `isChildDocument()`，false 就是 `SecurityException`，
+ * 于是 `ACTION_OPEN_DOCUMENT_TREE` + `DocumentFile.listFiles()` 这条路（MT 管理器
+ * 「添加本地存储」走的正是它）被完全堵死。声明了 flag 却不实现，比不声明更糟。
  */
 class DshDocumentsProvider : DocumentsProvider() {
 
@@ -66,7 +89,7 @@ class DshDocumentsProvider : DocumentsProvider() {
             DocumentsContract.Root.COLUMN_SUMMARY,
             "rootfs/root/.dsh (sessions, profiles) — edit container files at your own risk",
         )
-        row.add(DocumentsContract.Root.COLUMN_DOCUMENT_ID, "")
+        row.add(DocumentsContract.Root.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
         row.add(DocumentsContract.Root.COLUMN_AVAILABLE_BYTES, stats.availableBytes)
         row.add(DocumentsContract.Root.COLUMN_CAPACITY_BYTES, stats.totalBytes)
         row.add(DocumentsContract.Root.COLUMN_MIME_TYPES, "*/*")
@@ -75,7 +98,7 @@ class DshDocumentsProvider : DocumentsProvider() {
 
     override fun queryDocument(documentId: String?, projection: Array<out String>?): Cursor {
         if (!shouldInit) return MatrixCursor(projection ?: DEFAULT_DOC_PROJECTION)
-        val file = resolve(documentId.orEmpty())
+        val file = resolveExisting(documentId.orEmpty())
         return documentCursor(file, projection ?: DEFAULT_DOC_PROJECTION)
     }
 
@@ -85,14 +108,18 @@ class DshDocumentsProvider : DocumentsProvider() {
         sortOrder: String?,
     ): Cursor {
         if (!shouldInit) return MatrixCursor(projection ?: DEFAULT_DOC_PROJECTION)
-        val parent = resolve(parentDocumentId.orEmpty())
+        val parent = resolveExisting(parentDocumentId.orEmpty())
+        if (!parent.isDirectory) throw FileNotFoundException("Not a directory: $parentDocumentId")
         val cursor = MatrixCursor(projection ?: DEFAULT_DOC_PROJECTION)
         val root = context!!.dataDir.canonicalFile
         val children = parent.listFiles()
             ?.filter { f ->
-                // 只在根层排除会被系统随时回收的目录
-                parent == root && f.name !in EXCLUDED_TOP
+                // 只在根层排除会被系统随时回收的目录。
+                // 谓词必须是 `parent != root ||`：写成 `parent == root &&` 会让**所有**
+                // 子目录返回空列表（1.7.3～1.7.7 的 bug，进一级就什么都没有）。
+                parent != root || f.name !in EXCLUDED_TOP
             }
+            ?.filter { f -> withinRoot(f, root) }
             ?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
             ?: emptyList()
         for (child in children) {
@@ -101,13 +128,26 @@ class DshDocumentsProvider : DocumentsProvider() {
         return cursor
     }
 
+    /**
+     * tree URI 的访问校验（`enforceTree`）靠这个方法。
+     *
+     * 默认实现恒返回 false，会让整棵树无法浏览 —— 见类 KDoc。语义对齐 AOSP
+     * `ExternalStorageProvider`：相等或后代都算 child，任何异常按 false 处理。
+     */
+    override fun isChildDocument(parentDocumentId: String?, documentId: String?): Boolean =
+        runCatching {
+            val parent = resolve(parentDocumentId.orEmpty())
+            val child = resolve(documentId.orEmpty())
+            child.path == parent.path || child.path.startsWith(parent.path + File.separator)
+        }.getOrDefault(false)
+
     override fun openDocument(
         documentId: String?,
         mode: String?,
         signal: CancellationSignal?,
     ): ParcelFileDescriptor {
         if (!shouldInit) throw FileNotFoundException("Not available in this process")
-        val file = resolve(documentId.orEmpty())
+        val file = resolveExisting(documentId.orEmpty())
         val accessMode = when (mode.orEmpty()) {
             "r" -> ParcelFileDescriptor.MODE_READ_ONLY
             "w", "wt" -> ParcelFileDescriptor.MODE_WRITE_ONLY or
@@ -127,7 +167,7 @@ class DshDocumentsProvider : DocumentsProvider() {
         displayName: String?,
     ): String? {
         if (!shouldInit) return null
-        val parent = resolve(parentDocumentId.orEmpty())
+        val parent = resolveExisting(parentDocumentId.orEmpty())
         if (!parent.isDirectory) throw FileNotFoundException("Parent is not a directory")
         val name = displayName?.takeIf { it.isNotBlank() } ?: "untitled"
         val target = File(parent, name)
@@ -142,15 +182,18 @@ class DshDocumentsProvider : DocumentsProvider() {
 
     override fun deleteDocument(documentId: String?) {
         if (!shouldInit) return
-        val file = resolve(documentId.orEmpty())
-        if (file == context?.dataDir) throw FileNotFoundException("Cannot delete root")
+        val file = resolveExisting(documentId.orEmpty())
+        // 与**规范化**的 base 比：resolve 返回 canonicalFile，而 dataDir 可能是
+        // /data/user/0/<pkg>（软链到 /data/data/<pkg>），直接比对象会让这道防护失效
+        val base = context?.dataDir?.canonicalFile
+        if (base != null && file.path == base.path) throw FileNotFoundException("Cannot delete root")
         val ok = file.deleteRecursively()
         if (!ok) throw FileNotFoundException("Cannot delete $documentId")
     }
 
     override fun renameDocument(documentId: String?, displayName: String?): String? {
         if (!shouldInit) return null
-        val file = resolve(documentId.orEmpty())
+        val file = resolveExisting(documentId.orEmpty())
         val parent = file.parentFile ?: throw FileNotFoundException("No parent")
         val target = File(parent, displayName ?: file.name)
         if (!file.renameTo(target)) throw FileNotFoundException("Cannot rename")
@@ -163,8 +206,8 @@ class DshDocumentsProvider : DocumentsProvider() {
         targetParentDocumentId: String?,
     ): String? {
         if (!shouldInit) return null
-        val src = resolve(sourceDocumentId.orEmpty())
-        val targetParent = resolve(targetParentDocumentId.orEmpty())
+        val src = resolveExisting(sourceDocumentId.orEmpty())
+        val targetParent = resolveExisting(targetParentDocumentId.orEmpty())
         if (!targetParent.isDirectory) throw FileNotFoundException("Target is not a directory")
         val dest = File(targetParent, src.name)
         if (!src.renameTo(dest)) throw FileNotFoundException("Cannot move")
@@ -175,11 +218,16 @@ class DshDocumentsProvider : DocumentsProvider() {
 
     /**
      * documentId → dataDir 下的真实文件。越界抛 [FileNotFoundException]，这是唯一边界。
+     *
+     * **不检查存在性**：[isChildDocument] 需要对还不存在的路径也能回答父子关系。
+     * 需要「必须存在」的入口用 [resolveExisting]。
      */
     private fun resolve(documentId: String): File {
         val ctx = context ?: throw FileNotFoundException("Provider not ready")
         val base = ctx.dataDir.canonicalFile
-        val target = if (documentId.isEmpty()) base else File(base, documentId)
+        // id 形如 "/" 或 "/files/rootfs"；去掉前导斜杠才能当相对路径拼
+        val rel = documentId.trim('/')
+        val target = if (rel.isEmpty()) base else File(base, rel)
         val canon = target.canonicalFile
         val basePath = base.path
         if (canon.path != basePath && !canon.path.startsWith(basePath + File.separator)) {
@@ -188,11 +236,32 @@ class DshDocumentsProvider : DocumentsProvider() {
         return canon
     }
 
-    private fun getDocIdForFile(file: File): String {
-        val ctx = context ?: return file.name
-        val base = ctx.dataDir.canonicalFile.path
+    /** [resolve] + 存在性检查。查询/打开/改名/删除/移动都必须用这个。 */
+    private fun resolveExisting(documentId: String): File {
+        val file = resolve(documentId)
+        if (!file.exists()) throw FileNotFoundException("No such document: $documentId")
+        return file
+    }
+
+    /** 这个文件（按符号链接解析后）是否仍在 dataDir 里。 */
+    private fun withinRoot(file: File, root: File): Boolean = runCatching {
         val canon = file.canonicalPath
-        return if (canon == base) "" else canon.removePrefix(base + File.separator)
+        canon == root.path || canon.startsWith(root.path + File.separator)
+    }.getOrDefault(false)
+
+    /**
+     * 文件 → documentId，形如 `/files/rootfs`；base 自身是 [ROOT_DOC_ID]。
+     *
+     * 用 `absolutePath` 而**不是** `canonicalPath` 算相对部分：rootfs 里有大量符号链接
+     * （`etc/mtab -> /proc/self/mounts` 之类），canonicalize 会把 id 变成外部路径，
+     * 再经 [resolve] 就成了越界、点开即报错。链接指向哪里由 [withinRoot] 单独把关。
+     */
+    private fun getDocIdForFile(file: File): String {
+        val ctx = context ?: return ROOT_DOC_ID
+        val base = ctx.dataDir.canonicalFile.path
+        val path = file.absolutePath
+        if (path == base) return ROOT_DOC_ID
+        return ROOT_DOC_ID + path.removePrefix(base + File.separator)
     }
 
     private fun documentCursor(file: File, projection: Array<out String>): Cursor {
@@ -204,12 +273,25 @@ class DshDocumentsProvider : DocumentsProvider() {
     private fun addDocumentRow(cursor: MatrixCursor, file: File) {
         val row = cursor.newRow()
         val isDir = file.isDirectory
-        val flags = if (isDir) 0 else DocumentsContract.Document.FLAG_SUPPORTS_DELETE or
-            DocumentsContract.Document.FLAG_SUPPORTS_RENAME or
+        val docId = getDocIdForFile(file)
+        // 只声明真正实现了的能力：copyDocument / querySearchDocuments 没实现，
+        // 所以绝不声明 FLAG_SUPPORTS_COPY / FLAG_DIR_SUPPORTS_SEARCH —— 声明了就是骗客户端。
+        // 目录原来 flags 恒为 0，导致「新建文件夹」在任何目录里都不可用，与 root 声明的
+        // FLAG_SUPPORTS_CREATE 自相矛盾。
+        var flags = if (isDir) {
+            DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE
+        } else {
             DocumentsContract.Document.FLAG_SUPPORTS_WRITE
+        }
+        // 根文档不给删除/改名/移动：删了它就是清掉整个应用数据
+        if (docId != ROOT_DOC_ID) {
+            flags = flags or DocumentsContract.Document.FLAG_SUPPORTS_DELETE or
+                DocumentsContract.Document.FLAG_SUPPORTS_RENAME or
+                DocumentsContract.Document.FLAG_SUPPORTS_MOVE
+        }
         for (col in cursor.columnNames) {
             when (col) {
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID -> row.add(getDocIdForFile(file))
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID -> row.add(docId)
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME -> row.add(file.name.ifEmpty { "DSH-Folk" })
                 DocumentsContract.Document.COLUMN_MIME_TYPE -> row.add(mimeTypeFor(file))
                 DocumentsContract.Document.COLUMN_SIZE -> row.add(if (isDir) null else file.length())
@@ -236,6 +318,16 @@ class DshDocumentsProvider : DocumentsProvider() {
     }
 
     private companion object {
+        /**
+         * 根文档的 documentId。
+         *
+         * **必须非空**，否则 [DocumentsProvider] 内建的 `UriMatcher` 会因为空路径段被
+         * `Uri.getPathSegments()` 丢弃而全部错位（见类 KDoc 的对照表）。取 `"/"` 让
+         * 所有 id 都是一个绝对路径形状；`Uri.Builder.appendPath` 会把它编码成 `%2F`，
+         * 所以含斜杠的 id 在 URI 里仍是单个路径段。
+         */
+        const val ROOT_DOC_ID = "/"
+
         val EXCLUDED_TOP = setOf("cache", "code_cache", "no_backup")
 
         val DEFAULT_ROOT_PROJECTION = arrayOf(

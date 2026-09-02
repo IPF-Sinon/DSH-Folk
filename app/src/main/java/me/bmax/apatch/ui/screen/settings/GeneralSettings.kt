@@ -27,6 +27,7 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 import me.bmax.apatch.ui.component.ToggleSettingCard
@@ -462,9 +463,18 @@ fun GeneralSettingsContent(
         item(key = "general_open_data_dir") {
             ExpressiveCard(flat = flat, onClick = {
                 val authority = "${BuildConfig.APPLICATION_ID}.documents"
-                val tree = DocumentsContract.buildTreeDocumentUri(authority, "")
+                // documentId 绝不能是空串：空路径段会被 Uri.getPathSegments() 丢掉，
+                // DocumentsProvider 的 UriMatcher 随之全部错位（详见 DshDocumentsProvider 的 KDoc）。
+                // 直接深链到 .dsh，用户少点四五级；.dsh 还没建（运行时未安装）时落在数据目录根。
+                val dshHome = DshEnv.dshHome(context)
+                val base = context.dataDir.canonicalFile.path
+                val initialDocId = runCatching {
+                    val p = dshHome.absolutePath
+                    if (dshHome.isDirectory && p.startsWith("$base/")) "/" + p.removePrefix("$base/") else "/"
+                }.getOrDefault("/")
+                val target = DocumentsContract.buildDocumentUri(authority, initialDocId)
                 val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                    .putExtra(DocumentsContract.EXTRA_INITIAL_URI, tree)
+                    .putExtra(DocumentsContract.EXTRA_INITIAL_URI, target)
                     .addFlags(
                         Intent.FLAG_GRANT_READ_URI_PERMISSION or
                             Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
