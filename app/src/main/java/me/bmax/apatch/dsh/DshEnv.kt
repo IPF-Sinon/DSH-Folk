@@ -102,6 +102,19 @@ object DshEnv {
      */
     const val KEY_SEEDED_PLUGINS = "seeded_plugins"
 
+    /**
+     * 已应用的「预装补修」轮次（见 [DshRuntime.SEED_REPAIR_REV]）。
+     *
+     * [KEY_SEEDED_PLUGINS] 记的是「试过」，无论成败都置位 —— 这在当时是对的（失败不该
+     * 每次冷启动重试），但代价是**修好了根因也救不回已经失败的那次**。1.7.6 的
+     * dsh-file-upload 就卡在这里：pnpm 拦下构建脚本导致它没进 bundles，而包名已被记账，
+     * 下次启动不会再试。
+     *
+     * 这个轮次号让「修好根因」能顺带补修历史：轮次变大时，把**记过账但实际没生效**的
+     * 预装包从账本里摘掉，让它们再试一次。只补真正没生效的，不会重跑已生效的。
+     */
+    const val KEY_SEED_REPAIR_REV = "seed_repair_rev"
+
     /** 安装插件后是否用 `dsh web --port 0` 验证一次能否启动（默认开）。 */
     const val KEY_VERIFY_AFTER_INSTALL = "verify_after_install"
 }

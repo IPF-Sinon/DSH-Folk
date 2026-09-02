@@ -37,15 +37,80 @@ object DshSource {
     /**
      * 本机要用的运行时架构。
      *
-     * **arm64 优先，不能只取 `SUPPORTED_ABIS` 的第一项**：带 arm 转译层的 x86_64 设备
-     * 两个 ABI 都会报，而原生执行永远优于转译；反过来 arm64 设备不会报 x86_64。
-     * 所以「列表里有 arm64-v8a 就用 arm64-v8a」这一条同时覆盖两类设备。
+     * **判据是「本 APK 里的原生库是什么架构」，不是 `SUPPORTED_ABIS` 里有什么。**
      *
-     * 返回值与 metadata.json 的 `arch` 字段、[android.os.Build.SUPPORTED_ABIS] 对齐
-     * （`arm64-v8a` / `x86_64`），[DshRuntime] 的架构校验才能直接比较。
+     * 1.7.6 用「列表里有 arm64-v8a 就选 arm64」，在带 arm 转译层的 x86_64 设备上直接
+     * 错了：那类设备（真实案例 OPPO PJJ110，Intel i5-10400 + houdini）报的
+     * `SUPPORTED_ABIS = [x86_64, arm64-v8a, x86]`，于是 x86_64 包下载了 arm64 rootfs，
+     * 而 APK 里的 proot 是 x86_64 原生二进制、**不经过转译层**，一执行 arm64 的
+     * `ld-linux-aarch64.so.1` 就 SIGILL（日志里的 `terminated with signal 4`）。
+     *
+     * 转译层只服务于 Dalvik/JNI 里的 arm64 .so，救不了我们自己 fork 出来的 proot 子进程 ——
+     * 所以能跑的 rootfs 架构必须与 **APK 内 proot 的架构** 一致，而后者由构建时的
+     * ABI split 唯一确定。用 `Build.SUPPORTED_ABIS` 猜是错的，用装了哪个包才是对的。
+     *
+     * 实现上读 `nativeLibraryDir` 里 `libproot.so` 的 ELF `e_machine`：那就是「本机
+     * 真正会执行的那个二进制」自己的架构，没有比它更权威的来源。读不到时（文件缺失、
+     * 权限异常）退回按 `SUPPORTED_ABIS` 的**第一项**判断 —— 首项是设备的原生 ABI，
+     * 转译 ABI 总排在后面。
+     *
+     * 返回值与 metadata.json 的 `arch` 字段、`Build.SUPPORTED_ABIS` 命名对齐
+     * （`arm64-v8a` / `x86_64`）。
      */
-    fun runtimeArch(): String =
-        if (android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a")) "arm64-v8a" else "x86_64"
+    fun runtimeArch(): String = archFromProot() ?: archFromPrimaryAbi()
+
+    /** ELF e_machine：183 = AArch64，62 = x86-64。 */
+    private const val EM_AARCH64 = 183
+    private const val EM_X86_64 = 62
+
+    @Volatile
+    private var cachedArch: String? = null
+
+    /**
+     * 读 APK 提取出来的 `libproot.so` 的 ELF 头，取它的真实架构。
+     *
+     * 只读前 20 字节（magic + e_machine），成本可忽略；结果缓存，因为它在一个安装
+     * 生命周期内不可能变。
+     */
+    private fun archFromProot(): String? {
+        cachedArch?.let { return it }
+        // apApp 是 lateinit：极早期（Application.onCreate 之前）访问会抛，runCatching 兜住
+        val dir = runCatching { me.bmax.apatch.apApp.applicationInfo.nativeLibraryDir }
+            .getOrNull() ?: return null
+        val f = java.io.File(dir, "libproot.so")
+        val machine = runCatching {
+            java.io.FileInputStream(f).use { s ->
+                val head = ByteArray(20)
+                if (s.read(head) < 20) return@runCatching null
+                // 0x7f 'E' 'L' 'F'
+                if (head[0] != 0x7f.toByte() || head[1] != 'E'.code.toByte() ||
+                    head[2] != 'L'.code.toByte() || head[3] != 'F'.code.toByte()
+                ) {
+                    return@runCatching null
+                }
+                // e_machine 在偏移 0x12，2 字节；EI_DATA(head[5]) == 1 表示小端
+                val lo = head[18].toInt() and 0xff
+                val hi = head[19].toInt() and 0xff
+                if (head[5] == 1.toByte()) lo or (hi shl 8) else hi or (lo shl 8)
+            }
+        }.getOrNull() ?: return null
+        val arch = when (machine) {
+            EM_AARCH64 -> "arm64-v8a"
+            EM_X86_64 -> "x86_64"
+            else -> return null
+        }
+        cachedArch = arch
+        return arch
+    }
+
+    /**
+     * 兜底：按 `SUPPORTED_ABIS` 的**首项**判断。
+     *
+     * 首项是设备的原生 ABI（转译出来的 ABI 排在后面），所以这条在转译设备上也成立；
+     * 只有在 libproot.so 读不到时才会走到这里。
+     */
+    private fun archFromPrimaryAbi(): String =
+        if (android.os.Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a") "arm64-v8a" else "x86_64"
 
     /**
      * 运行时资产名后缀。

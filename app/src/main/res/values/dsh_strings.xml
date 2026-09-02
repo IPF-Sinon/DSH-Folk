@@ -244,7 +244,7 @@
     <string name="dsh_msg_stopped">Service stopped</string>
     <string name="dsh_msg_not_installed">Runtime is not installed</string>
     <string name="dsh_err_meta_failed">Could not fetch runtime info. Check the network or switch mirror.</string>
-    <string name="dsh_err_arch_mismatch">Runtime architecture mismatch: package is %1$s, this device supports %2$s</string>
+    <string name="dsh_err_arch_mismatch">Runtime architecture mismatch: package is %1$s, this app build needs %2$s</string>
     <string name="dsh_err_no_space">Not enough storage (%1$d MB free, about %2$d MB needed). Free some space and retry.</string>
     <string name="dsh_err_download_failed">Runtime download failed. Check the network or switch mirror.</string>
     <string name="dsh_err_sha_mismatch">Runtime verification failed (sha256 mismatch). The broken file was removed — please retry.</string>

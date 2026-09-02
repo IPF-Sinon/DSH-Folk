@@ -3,6 +3,7 @@ package me.bmax.apatch.dsh
 import android.content.Context
 import android.os.StatFs
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -99,6 +100,10 @@ object DshRuntime {
      */
     private const val PROROOT_FAIL_LIMIT = 1
 
+    /** ELF `e_machine`：183 = AArch64，62 = x86-64（见 [rootfsArchMismatch]）。 */
+    private const val ELF_MACHINE_AARCH64 = 183
+    private const val ELF_MACHINE_X86_64 = 62
+
     /** profile pnpm 设置里固定导入方式（见 [ensureProfilePnpmSettings]）。 */
     private const val PNPM_IMPORT_KEY = "packageImportMethod"
     private const val PNPM_IMPORT_LINE = "packageImportMethod: copy"
@@ -127,6 +132,14 @@ object DshRuntime {
      */
     val SEED_PLUGINS =
         listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager", "dsh-file-upload")
+
+    /**
+     * 「预装补修」轮次（见 [applySeedRepair]）。
+     *
+     * 修好一个会让预装失败的根因后 +1，让**记过账但实际没生效**的预装包再试一次。
+     *   1 = 1.7.7：修 pnpm 拦构建脚本导致 dsh-file-upload 装了但没进 bundles
+     */
+    private const val SEED_REPAIR_REV = 1
 
     /** 预装插件集合（供插件列表/商店渲染「预装」标签）。 */
     fun isSeedPlugin(pkg: String): Boolean = pkg in SEED_PLUGINS
@@ -714,6 +727,15 @@ object DshRuntime {
                 if (!DshEnv.isRuntimeInstalled(appContext)) {
                     downloadAndInstall()
                     if (_state.value.phase == DshPhase.ERROR) return@withLock
+                } else if (rootfsArchMismatch()) {
+                    // 已装的 rootfs 架构不对，重下一份正确的。
+                    // 1.7.6 在带 arm 转译层的 x86_64 设备上会装成 arm64 rootfs（见
+                    // DshSource.runtimeArch 的注释），那份 rootfs 一执行就 SIGILL，
+                    // 而 isRuntimeInstalled 只看文件在不在、会一直认为「已安装」——
+                    // 不在这里自愈，用户就只能手动重装运行时才能脱困。
+                    appendLog("! 已安装的运行时架构与本机不符，正在重新下载正确的版本…")
+                    downloadAndInstall()
+                    if (_state.value.phase == DshPhase.ERROR) return@withLock
                 }
                 setupResolvConf()
                 seedPlugins()
@@ -723,6 +745,42 @@ object DshRuntime {
             }
         }
     }
+
+    /**
+     * 已解压的 rootfs 是不是别的架构。
+     *
+     * 判据取 rootfs 里 `usr/local/bin/node` 的 ELF `e_machine` —— 它就是 proot 起来后
+     * 第一个真正要 exec 的目标。读不到（文件缺失、异常）返回 false：宁可放行也不要因为
+     * 一次读失败就把用户的 150MB 运行时删了重下。
+     */
+    private fun rootfsArchMismatch(): Boolean = runCatching {
+        val node = File(DshEnv.rootfs(appContext), "usr/local/bin/node")
+        val machine = elfMachine(node) ?: return@runCatching false
+        val want = when (DshSource.runtimeArch()) {
+            "arm64-v8a" -> ELF_MACHINE_AARCH64
+            else -> ELF_MACHINE_X86_64
+        }
+        if (machine == want) return@runCatching false
+        appendLog("! rootfs 里的 node 是 e_machine=$machine，本机需要 $want")
+        true
+    }.getOrDefault(false)
+
+    /** 读 ELF 头的 `e_machine`（偏移 0x12，2 字节）。不是 ELF 或读不到返回 null。 */
+    private fun elfMachine(f: File): Int? = runCatching {
+        if (!f.isFile) return@runCatching null
+        FileInputStream(f).use { s ->
+            val head = ByteArray(20)
+            if (s.read(head) < 20) return@runCatching null
+            if (head[0] != 0x7f.toByte() || head[1] != 'E'.code.toByte() ||
+                head[2] != 'L'.code.toByte() || head[3] != 'F'.code.toByte()
+            ) {
+                return@runCatching null
+            }
+            val lo = head[18].toInt() and 0xff
+            val hi = head[19].toInt() and 0xff
+            if (head[5] == 1.toByte()) lo or (hi shl 8) else hi or (lo shl 8)
+        }
+    }.getOrNull()
 
     /**
      * 预装内置插件（首启，以及从旧版本升级后补装新增的那几个）。
@@ -754,11 +812,15 @@ object DshRuntime {
                 mutableSetOf()
             }
 
+        // 已经装上的（含用户手动装的）。放在补修之前取：补修要靠它判断「记过账但没生效」。
+        val installed = runCatching { DshPluginRepo.bundles() }.getOrElse { emptyList() }.toSet()
+
+        // 修好根因后补修历史失败（见 KEY_SEED_REPAIR_REV）
+        applySeedRepair(p, attempted, installed)
+
         val todo = SEED_PLUGINS.filter { it !in attempted }
         if (todo.isEmpty()) return
 
-        // 已经装上的（含用户手动装的）直接记账跳过，别白跑 pnpm
-        val installed = runCatching { DshPluginRepo.bundles() }.getOrElse { emptyList() }.toSet()
         val missing = todo.filter { it !in installed }
         if (missing.isEmpty()) {
             persistSeeded(attempted + todo)
@@ -770,12 +832,33 @@ object DshRuntime {
         }
         for (pkg in missing) {
             appendLog("> 预装插件 $pkg …")
-            val out = runCatching {
+            var out = runCatching {
                 DshPluginRepo.install(pkg, onLine = { line -> appendLog(line) })
             }.getOrElse { "预装异常: ${it.message ?: it.javaClass.simpleName}" }
-            val code = out.lineSequence()
-                .lastOrNull { it.startsWith(DshPluginRepo.EXIT_MARKER) }
-                ?.removePrefix(DshPluginRepo.EXIT_MARKER)?.trim()?.toIntOrNull()
+            var code = exitCodeOf(out)
+
+            // pnpm 拦下依赖的构建脚本时 **不是**「装不上」，而是「等人点头」：
+            // 它以退出码 1 结束，于是 dsh 不 reconcile bundles，插件躺在 node_modules 里
+            // 却进不了 profile 的 bundles —— 界面上就是「预装了但未生效」（1.7.6 的
+            // dsh-file-upload 正是这样：它的传递依赖 sharp / tesseract.js 带 install 脚本）。
+            //
+            // 交互式 `pnpm approve-builds` 在容器里跑不了，而预装发生在启动路径上、
+            // 根本没有人可问，所以这里自动放行**这一次预装自己拉进来的**构建脚本并重试。
+            // 放行范围仅限 pnpm 点名的那几个包，不是全局开关。
+            if (code != 0) {
+                val pending = DshPluginRepo.pendingBuildApproval(out)
+                if (pending.isNotEmpty()) {
+                    appendLog("> pnpm 拦下了构建脚本（${pending.joinToString("、")}），自动放行后重试…")
+                    out = runCatching {
+                        DshPluginRepo.install(
+                            pkg,
+                            onLine = { line -> appendLog(line) },
+                            allowBuilds = pending,
+                        )
+                    }.getOrElse { "预装重试异常: ${it.message ?: it.javaClass.simpleName}" }
+                    code = exitCodeOf(out)
+                }
+            }
             appendLog(if (code == 0) "> 预装完成 $pkg" else "! 预装失败 $pkg（可稍后在插件商店手动安装）")
         }
         persistSeeded(attempted + todo)
@@ -784,11 +867,41 @@ object DshRuntime {
         _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
     }
 
+    /** 从 dsh plugin 的输出里取真实退出码；没有标记行（超时/容器没起来）返回 null。 */
+    private fun exitCodeOf(out: String): Int? = out.lineSequence()
+        .lastOrNull { it.startsWith(DshPluginRepo.EXIT_MARKER) }
+        ?.removePrefix(DshPluginRepo.EXIT_MARKER)?.trim()?.toIntOrNull()
+
     /** 记下「已尝试预装」的包名集合。 */
     private fun persistSeeded(names: Collection<String>) {
         prefs().edit()
             .putString(DshEnv.KEY_SEEDED_PLUGINS, names.distinct().joinToString(","))
             .apply()
+    }
+
+    /**
+     * 补修历史预装失败：把**记过账但实际没进 bundles**的包从账本里摘掉，让它们再试一次。
+     *
+     * 为什么需要：[persistSeeded] 无论成败都记账（失败不该每次冷启动重试），于是修好
+     * 根因也救不回已经失败的那次。1.7.6 的 dsh-file-upload 正卡在这里 —— pnpm 拦下
+     * 传递依赖的构建脚本导致它没进 bundles，而包名已被记账，之后永远不再尝试。
+     *
+     * 只摘「不在 bundles 里」的：已生效的包不会被重跑。轮次号只前进一次，所以补修
+     * 最多发生一轮，不会变成每次启动都重试失败项。
+     */
+    private fun applySeedRepair(
+        p: android.content.SharedPreferences,
+        attempted: MutableSet<String>,
+        installed: Set<String>,
+    ) {
+        if (p.getInt(DshEnv.KEY_SEED_REPAIR_REV, 0) >= SEED_REPAIR_REV) return
+        val retry = attempted.filter { it in SEED_PLUGINS && it !in installed }
+        if (retry.isNotEmpty()) {
+            attempted.removeAll(retry.toSet())
+            persistSeeded(attempted)
+            appendLog("> 补修预装：${retry.joinToString("、")} 之前没生效，重试一次")
+        }
+        p.edit().putInt(DshEnv.KEY_SEED_REPAIR_REV, SEED_REPAIR_REV).apply()
     }
 
     /**
@@ -939,8 +1052,14 @@ object DshRuntime {
         }
         // 架构必须先对上：自定义源可以指向任何 metadata.json，下错架构的 rootfs 要到
         // 启动 node 时才报 "Exec format error"，白下 130 MB 还看不懂错在哪。
-        if (meta.arch.isNotEmpty() && !android.os.Build.SUPPORTED_ABIS.contains(meta.arch)) {
-            fail(str(R.string.dsh_err_arch_mismatch, meta.arch, android.os.Build.SUPPORTED_ABIS.joinToString("/")))
+        //
+        // 判据是 [DshSource.runtimeArch]（= APK 里 proot 的真实架构），**不是**
+        // `Build.SUPPORTED_ABIS.contains(...)`：带 arm 转译层的 x86_64 设备两个 ABI 都报，
+        // 用 contains 判会把 arm64 的 rootfs 放行，而 proot 是 x86_64 原生二进制、
+        // 不走转译层，执行 arm64 的 ld.so 直接 SIGILL（1.7.6 真机上就是这么炸的）。
+        val want = DshSource.runtimeArch()
+        if (meta.arch.isNotEmpty() && meta.arch != want) {
+            fail(str(R.string.dsh_err_arch_mismatch, meta.arch, want))
             return
         }
         // 空间检查放在下载之前：rootfs 解压后约为压缩包的 3 倍，加上压缩包自身
@@ -1382,6 +1501,8 @@ object DshRuntime {
         }
 
         appendLog("> 运行时: ${runtime().displayName()}")
+        // 架构写进日志：x86_64 + arm 转译设备上「装了哪个包 / 用了哪份 rootfs」是首要排障线索
+        appendLog("> 架构: ${DshSource.runtimeArch()}（设备 ABI: ${android.os.Build.SUPPORTED_ABIS.joinToString("/")}）")
         appendLog("> 硬链接: " + hardlinkLogLine())
         appendLog("> pnpm 导入方式: " + pnpmImportMethodLine())
         appendLog("> 启动 dsh web，端口 $port")
