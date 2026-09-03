@@ -17,7 +17,23 @@ import java.util.Locale
 import me.bmax.apatch.R
 
 /**
- * 发送日志的时间窗口。裁剪只作用于 logcat（其余命令要么需要 root、要么本就无时间戳）。
+ * 发送日志的时间窗口。
+ *
+ * 窗口作用于**所有带时间信息的采集项**：
+ *
+ * | 采集项 | 怎么裁 |
+ * |---|---|
+ * | `logcat.txt` | `logcat -d -T '<起点>'`，ROM 不认 `-T` 时回落到按行首时间戳过滤 |
+ * | `dmesg.txt` | 行首是相对开机秒，按 `/proc/uptime` 换算下界后过滤 |
+ * | `tombstones` / `dropbox` / `pstore` / `diag` / `oplus` / `bootlog` | `find -mmin` 出清单交给 `tar -T` |
+ * | `kallsyms.txt` | 窗口内没有任何崩溃转储就不采集（它只用于符号化） |
+ *
+ * 其余项（`props` / `mounts` / `cpuinfo` / `packages` / `defconfig` / `ap_tree`）是**当前状态
+ * 快照**，没有时间维度，无论选哪个窗口都原样收集。
+ *
+ * 所以「选了短窗口但归档没小多少」有三种正常原因：设备刚开机（缓冲区本来就短于窗口）、
+ * 窗口内确实发生过崩溃（转储被保留）、或剩下的体积本就来自无时间维度的状态快照。
+ * `basic.txt` 里的 `Collected` 与 `Uptime` 两行就是为了让收报告的人一眼分辨这三种情况。
  *
  * @param minutes 回看多少分钟；0 表示全量。
  */
@@ -57,6 +73,33 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
     val cutoffTs = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(cutoffMillis)
 
     tryGetRootShell().use { shell ->
+        // 崩溃转储目录按 mtime 收窗口内的文件：find 出相对路径清单，再交给 tar -T。
+        // toybox find 的 `-mmin -N` 语义是「距今不足 N 分钟」（compare_numsign 的 '-' 分支），
+        // GNU find 同义，两边都可用。只列 -type f：清单里出现目录会让 tar 递归整棵子树，
+        // 把目录下的旧文件一起带进来。
+        //
+        // 清单落在 bugreportDir，不在被扫描目录内 —— 否则它自己刚创建、mtime 是现在，
+        // 会被 find 命中而进归档。目录不存在时 `cd` 失败、`&&` 短路，清单保持空，
+        // tar 产出空归档（toybox `tar_main` 里 `!TT.incl && !FLAG(T)` 才报 empty archive，
+        // 给了 -T 就不报），与改动前对缺失目录的行为一致。
+        //
+        // extra 里的 `--exclude` 必须排在文件参数**之前**：GNU tar 的 --exclude 是位置相关的，
+        // 放在 `.` 或 `-T` 之后会打印 "has no effect" 并以失败退出（toybox 的参数解析不看
+        // 位置，所以旧写法只是在设备上侥幸生效）。
+        fun tarDir(out: File, dir: String, extra: String = "") {
+            if (window == LogWindow.All) {
+                shell.newJob().add("tar -czf ${out.absolutePath} -C $dir $extra .").exec()
+                return
+            }
+            val list = File(bugreportDir, "${out.name}.list")
+            shell.newJob().add(
+                "touch ${list.absolutePath}; " +
+                    "cd $dir && find . -type f -mmin -${window.minutes} > ${list.absolutePath}; " +
+                    "tar -czf ${out.absolutePath} -C $dir $extra -T ${list.absolutePath}; " +
+                    "rm -f ${list.absolutePath}"
+            ).exec()
+        }
+
         shell.newJob().add("dmesg > ${dmesgFile.absolutePath}").exec()
         if (window == LogWindow.All) {
             shell.newJob().add("logcat -d > ${logcatFile.absolutePath}").exec()
@@ -68,16 +111,32 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
             val full = ShellUtils.fastCmd(shell, "logcat -d")
             logcatFile.writeText(filterLogcatByTime(full, cutoffMillis))
         }
-        shell.newJob().add("tar -czf ${tombstonesFile.absolutePath} -C /data/tombstones .").exec()
-        shell.newJob().add("tar -czf ${dropboxFile.absolutePath} -C /data/system/dropbox .").exec()
-        shell.newJob().add("tar -czf ${pstoreFile.absolutePath} -C /sys/fs/pstore .").exec()
-        shell.newJob().add("tar -czf ${diagFile.absolutePath} -C /data/vendor/diag . --exclude=./minidump.gz").exec()
-        shell.newJob().add("tar -czf ${oplusFile.absolutePath} -C /mnt/oplus/op2/media/log/boot_log/ .").exec()
-        shell.newJob().add("tar -czf ${bootlogFile.absolutePath} -C /data/adb/ap/log .").exec()
+        // dmesg 行首是相对开机秒（无绝对时间），按 /proc/uptime 换算窗口下界再过滤。
+        val uptimeSeconds = ShellUtils.fastCmd(shell, "cat /proc/uptime")
+            .trim().substringBefore(' ').toDoubleOrNull()
+        if (window != LogWindow.All && uptimeSeconds != null && dmesgFile.length() > 0) {
+            val cutoffUptime = uptimeSeconds - window.minutes * 60.0
+            dmesgFile.writeText(filterDmesgByUptime(dmesgFile.readText(), cutoffUptime))
+        }
+        tarDir(tombstonesFile, "/data/tombstones")
+        tarDir(dropboxFile, "/data/system/dropbox")
+        tarDir(pstoreFile, "/sys/fs/pstore")
+        tarDir(diagFile, "/data/vendor/diag", "--exclude=./minidump.gz")
+        tarDir(oplusFile, "/mnt/oplus/op2/media/log/boot_log/")
+        tarDir(bootlogFile, "/data/adb/ap/log")
 
         shell.newJob().add("cat /proc/1/mountinfo > ${mountsFile.absolutePath}").exec()
         shell.newJob().add("cat /proc/filesystems > ${fileSystemsFile.absolutePath}").exec()
-        shell.newJob().add("cat /proc/kallsyms > ${kallsymsFile.absolutePath}").exec()
+        // kallsyms 是这份归档里最大的一项（实测 4.3 MB，压缩后仍占归档近一半），
+        // 唯一用途是给内核崩溃地址符号化。窗口内没有任何崩溃转储时就别收了。
+        val wantKallsyms = window == LogWindow.All || ShellUtils.fastCmd(
+            shell,
+            "find /data/tombstones /data/system/dropbox /sys/fs/pstore " +
+                "-type f -mmin -${window.minutes} 2>/dev/null | head -1"
+        ).isNotBlank()
+        if (wantKallsyms) {
+            shell.newJob().add("cat /proc/kallsyms > ${kallsymsFile.absolutePath}").exec()
+        }
         shell.newJob().add("cat /proc/cpuinfo > ${cpuinfoFile.absolutePath}").exec()
         shell.newJob().add("cat /proc/cmdline > ${cmdlineFile.absolutePath}").exec()
         shell.newJob().add("ls -alRZ /data/adb > ${apFileTree.absolutePath}").exec()
@@ -103,6 +162,10 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
             pw.println("Manager: " + Version.getManagerVersion())
             pw.println("SELinux: $selinux")
             pw.println("LogWindow: " + context.getString(window.labelRes))
+            // 窗口只能裁掉「有时间信息」的内容；采集时刻和开机时长写进来，
+            // 收到报告的人一眼能看出「归档没变小」是因为设备刚开机、缓冲区本来就短
+            pw.println("Collected: " + SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(System.currentTimeMillis()))
+            pw.println("Uptime: " + uptimeSeconds.let { if (it == null) "unknown" else "%.0fs".format(it) })
 
             val uname = Os.uname()
             pw.println("KernelRelease: ${uname.release}")
@@ -160,5 +223,25 @@ private fun filterLogcatByTime(text: String, cutoffMillis: Long): String {
             return@filter true
         }
         parsed >= cutoffMillis
+    }.joinToString("\n")
+}
+
+/**
+ * 按行首相对开机秒过滤 dmesg。
+ *
+ * dmesg 行首是 `[ 1234.567890]`，那是**开机以来的秒数**，没有绝对时间，所以窗口下界要
+ * 用采集时刻的 `/proc/uptime` 换算：`uptime - 窗口秒数`。下界为负（开机时长还不够一个
+ * 窗口）说明整段 dmesg 都在窗口内，原样返回。
+ *
+ * 没有可解析时间戳的行（多行续行、内核自己打的无前缀输出）一律保留。
+ */
+private fun filterDmesgByUptime(text: String, cutoffUptime: Double): String {
+    if (cutoffUptime <= 0.0) return text
+    return text.lineSequence().filter { line ->
+        val open = line.indexOf('[')
+        val close = line.indexOf(']')
+        if (open != 0 || close <= 1) return@filter true
+        val secs = line.substring(1, close).trim().toDoubleOrNull() ?: return@filter true
+        secs >= cutoffUptime
     }.joinToString("\n")
 }

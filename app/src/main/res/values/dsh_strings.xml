@@ -420,7 +420,7 @@
 
     <!-- 发送日志的时间裁剪 -->
     <string name="dsh_log_trim_title">Trim log by time?</string>
-    <string name="dsh_log_trim_message">Only the system log (logcat) can be trimmed by time; other collected files are sent as-is.</string>
+    <string name="dsh_log_trim_message">The window applies to logcat, the kernel log and crash dumps. Device state snapshots (properties, mounts, kernel config) have no time dimension and are always collected in full, so right after a reboot — or when a crash happened inside the window — the archive may not shrink much.</string>
     <string name="dsh_log_trim_yes">Trim</string>
     <string name="dsh_log_trim_all">Send everything</string>
     <string name="dsh_log_window_title">Log time window</string>
