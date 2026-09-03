@@ -52,12 +52,15 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DragIndicator
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -81,6 +84,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.ui.theme.APatchTheme
+import me.bmax.apatch.util.DshWebCompat
 import me.bmax.apatch.util.ui.showToast
 
 /**
@@ -133,6 +137,42 @@ private val BALL_SIZE = 44.dp
 
 /** 球体与屏幕边缘的内缩。 */
 private val BALL_INSET = 8.dp
+
+/**
+ * 首次在旧内核上打开 WebUI 时的说明框。
+ *
+ * 明确告诉用户「要往页面里注入一小段 JS」以及不注入的后果，两个按钮都会把选择固化下来，
+ * 之后不再打扰。划掉不存任何选择，下次再问。
+ */
+@Composable
+private fun DshCompatShimDialog(
+    kernel: DshWebCompat.Kernel,
+    onPick: (enable: Boolean) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { /* 划掉 = 这次先不决定，下次打开再问 */ },
+        title = { Text(stringResource(R.string.dsh_webui_compat_title)) },
+        text = {
+            Text(
+                text = stringResource(
+                    R.string.dsh_webui_compat_body,
+                    kernel.display.ifEmpty { "?" },
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onPick(true) }) {
+                Text(stringResource(R.string.dsh_webui_compat_enable))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onPick(false) }) {
+                Text(stringResource(R.string.dsh_webui_compat_skip))
+            }
+        },
+    )
+}
 
 /**
  * 内置 WebUI 容器。
@@ -216,6 +256,35 @@ class DshWebUiActivity : AppCompatActivity() {
             APatchTheme(allowCustomBackground = false) {
                 var progress by remember { mutableIntStateOf(0) }
 
+                // 首次遇到旧内核时问一次要不要装兼容垫片。
+                // 在这里问而不是在设置页：只有真正打开 WebUI 才知道内核是哪个，
+                // 而且此刻用户正要用它，说明「不装会打不开工作区」最有说服力。
+                val kernel = remember { DshWebCompat.kernel(this@DshWebUiActivity) }
+                var askCompat by remember {
+                    mutableStateOf(DshWebCompat.shouldAsk(this@DshWebUiActivity, kernel))
+                }
+                if (askCompat) {
+                    DshCompatShimDialog(
+                        kernel = kernel,
+                        onPick = { enable ->
+                            DshWebCompat.setMode(
+                                this@DshWebUiActivity,
+                                if (enable) DshWebCompat.MODE_ON else DshWebCompat.MODE_OFF,
+                            )
+                            askCompat = false
+                            if (enable) {
+                                // 页面已经在加载了，而 addDocumentStartJavaScript 只对
+                                // 「调用返回之后才开始加载」的 frame 生效 —— 所以这里补装一次
+                                // 再 reload，让垫片真的落在 document-start 上
+                                webView?.let { view ->
+                                    compatShimInstalled = installCompatShim(view, url)
+                                    view.reload()
+                                }
+                            }
+                        },
+                    )
+                }
+
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -292,8 +361,12 @@ class DshWebUiActivity : AppCompatActivity() {
                                     ) {
                                         progress = 1
                                         // document-start 装不上时的回落：这里注入虽然已经晚于
-                                        // 文档开头，但仍早于绝大多数模块求值，能救回一部分场景
-                                        if (!compatShimInstalled && isLoopback(u)) {
+                                        // 文档开头，但仍早于绝大多数模块求值，能救回一部分场景。
+                                        // 同样受开关约束 —— compatShimInstalled 为 false 有两种
+                                        // 原因（不该注入 / 想注入但装不上），所以这里要再问一次
+                                        if (!compatShimInstalled && isLoopback(u) &&
+                                            DshWebCompat.shouldInject(this@DshWebUiActivity)
+                                        ) {
                                             view?.evaluateJavascript(COMPAT_SHIM, null)
                                         }
                                         super.onPageStarted(view, u, favicon)
@@ -513,8 +586,14 @@ class DshWebUiActivity : AppCompatActivity() {
      *
      * 只对回环 origin 生效：origin 规则里端口**必须写出来**，不写会被当成 80/443，
      * 所以规则从实际要加载的 URL 和 [DshRuntime.port] 现算，不能写死。
+     *
+     * 是否注入由 [DshWebCompat] 决定（默认只在旧内核上注入，且先问过用户）。
      */
     private fun installCompatShim(view: WebView, url: String): Boolean {
+        if (!DshWebCompat.shouldInject(this)) {
+            Log.i(TAG, "compat shim disabled for this WebView")
+            return false
+        }
         val supported = runCatching {
             WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         }.getOrDefault(false)
@@ -649,6 +728,22 @@ class DshWebUiActivity : AppCompatActivity() {
       var res, rej;
       var p = new Promise(function(a, b){ res = a; rej = b; });
       return { promise: p, resolve: res, reject: rej };
+    };
+  }
+  // crypto.randomUUID()：它**只在安全上下文提供**。http://127.0.0.1 算安全，
+  // 但开了「局域网访问」后页面是 http://<手机IP>:<端口>，不算 —— 于是
+  // 前端里直接调它的地方（会话消息 id、附件草稿）会炸。
+  // getRandomValues 在非安全源照常可用，按 RFC 4122 拼一个 v4 出来即可。
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID !== 'function'
+      && typeof crypto.getRandomValues === 'function') {
+    crypto.randomUUID = function(){
+      var b = crypto.getRandomValues(new Uint8Array(16));
+      b[6] = (b[6] & 0x0f) | 0x40;   // version 4
+      b[8] = (b[8] & 0x3f) | 0x80;   // variant 10xx
+      var h = [];
+      for (var i = 0; i < 16; i++) h.push((b[i] + 0x100).toString(16).slice(1));
+      return h[0]+h[1]+h[2]+h[3] + '-' + h[4]+h[5] + '-' + h[6]+h[7]
+        + '-' + h[8]+h[9] + '-' + h[10]+h[11]+h[12]+h[13]+h[14]+h[15];
     };
   }
 })();

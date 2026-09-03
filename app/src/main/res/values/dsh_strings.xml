@@ -418,6 +418,20 @@
     <string name="dsh_docs_grant_failed">Could not grant access.</string>
     <string name="dsh_docs_grant_revoked">Access revoked.</string>
 
+    <!-- 旧 WebView 内核的 JS 兼容垫片 -->
+    <string name="dsh_webui_compat_title">This WebView is out of date</string>
+    <string name="dsh_webui_compat_body">Your system WebView is Chromium %1$s, which lacks JavaScript APIs the DSH web interface needs — opening a workspace fails with "AbortSignal.any is not a function".\n\nDSH-Folk can inject a small compatibility script into the local page before it loads. It only adds missing APIs and never changes anything else, and it applies only to http://127.0.0.1. Updating Android System WebView from your app store is the proper fix.</string>
+    <string name="dsh_webui_compat_enable">Inject</string>
+    <string name="dsh_webui_compat_skip">Not now</string>
+    <string name="dsh_webui_compat_section">Old-WebView compatibility</string>
+    <string name="dsh_webui_compat_section_summary">Add missing JavaScript APIs to the in-app web interface. Current WebView: %1$s</string>
+    <string name="dsh_webui_compat_auto">Automatic</string>
+    <string name="dsh_webui_compat_auto_desc">Ask once if an outdated WebView is detected; otherwise inject nothing</string>
+    <string name="dsh_webui_compat_on">Always inject</string>
+    <string name="dsh_webui_compat_on_desc">Use this if the web interface misbehaves even though the WebView looks current</string>
+    <string name="dsh_webui_compat_off">Never inject</string>
+    <string name="dsh_webui_compat_off_desc">Leave the page completely untouched</string>
+
     <!-- 发送日志的时间裁剪 -->
     <string name="dsh_log_trim_title">Trim log by time?</string>
     <string name="dsh_log_trim_message">The window applies to logcat, the kernel log and crash dumps. Device state snapshots (properties, mounts, kernel config) have no time dimension and are always collected in full, so right after a reboot — or when a crash happened inside the window — the archive may not shrink much.</string>

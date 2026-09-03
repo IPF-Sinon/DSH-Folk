@@ -82,6 +82,22 @@ object DshEnv {
     const val KEY_WEBUI_BALL_Y = "webui_ball_y"
 
     /**
+     * 旧内核 JS 兼容垫片：auto | on | off。
+     *
+     * auto（默认）= 还没决定，此时不注入；只有在检测到 WebView 内核 ≤
+     * [DSH_COMPAT_MIN_CHROMIUM] 时弹一次说明，用户的选择固化成 on/off。
+     */
+    const val KEY_WEBUI_COMPAT = "webui_compat_shim"
+
+    /**
+     * 需要垫片的 Chromium 主版本上界（含）。
+     *
+     * 垫片补的是 `AbortSignal.any`（Chrome 116）、`Promise.withResolvers`（119）与
+     * 非安全上下文下缺失的 `crypto.randomUUID`。119 及以下都可能缺，120 起齐全。
+     */
+    const val DSH_COMPAT_MIN_CHROMIUM = 119
+
+    /**
      * 首启预装插件是否已经跑过。
      *
      * 无论成功失败都置位：失败不该在每次冷启动重试（用户可以自己去商店装），

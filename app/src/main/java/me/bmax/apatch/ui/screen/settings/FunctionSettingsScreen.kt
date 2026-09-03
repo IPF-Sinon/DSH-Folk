@@ -22,6 +22,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -49,6 +50,7 @@ import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.screen.PluginProgressHost
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
+import me.bmax.apatch.util.DshWebCompat
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
 import rikka.shizuku.Shizuku
@@ -83,6 +85,9 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var webuiMode by rememberSaveable {
         mutableStateOf(dshPrefs.getString(DshEnv.KEY_WEBUI_MODE, DshWebUi.MODE_IN_APP) ?: DshWebUi.MODE_IN_APP)
     }
+    var webCompatMode by rememberSaveable { mutableStateOf(DshWebCompat.mode(context)) }
+    // WebView 内核版本只用于显示；读包信息不会触发 WebView 加载，但也没必要每次重组都读
+    val webviewVersion = remember { DshWebCompat.kernel(context).display }
     var autostart by rememberSaveable { mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_AUTOSTART, false)) }
     var port by rememberSaveable { mutableStateOf(DshRuntime.port()) }
     var lanEnabled by rememberSaveable { mutableStateOf(DshRuntime.lanEnabled()) }
@@ -294,6 +299,12 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                         webuiMode = mode
                         DshWebUi.setMode(context.applicationContext, mode)
                     },
+                    webCompatMode = webCompatMode,
+                    onWebCompatModeChange = { mode ->
+                        webCompatMode = mode
+                        DshWebCompat.setMode(context.applicationContext, mode)
+                    },
+                    webviewVersion = webviewVersion,
                     permPrefName = permPrefName,
                     onPermPrefChange = { name ->
                         permPrefName = name

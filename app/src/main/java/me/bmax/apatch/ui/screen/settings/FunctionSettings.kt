@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Public
@@ -59,6 +60,7 @@ import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.ExpressiveSwitch
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 import me.bmax.apatch.ui.component.ToggleSettingCard
+import me.bmax.apatch.util.DshWebCompat
 
 /**
  * 功能设置内容：**运行方式** 与 **权限通道**（含无线 ADB 配对）。
@@ -101,6 +103,11 @@ fun FunctionSettingsContent(
     /** WebUI 打开方式：in | browser | ask。 */
     webuiMode: String,
     onWebuiModeChange: (String) -> Unit,
+    /** 旧内核 JS 兼容垫片：auto | on | off。 */
+    webCompatMode: String,
+    onWebCompatModeChange: (String) -> Unit,
+    /** 当前 WebView 内核版本名（读不到时为空），只用于显示。 */
+    webviewVersion: String,
     /** 权限通道首选（auto | root | shizuku | adb）。 */
     permPrefName: String,
     onPermPrefChange: (String) -> Unit,
@@ -296,6 +303,46 @@ fun FunctionSettingsContent(
                         title = stringResource(R.string.dsh_webui_mode_ask),
                         summary = stringResource(R.string.dsh_webui_mode_ask_desc),
                         onSelect = { onWebuiModeChange(DshWebUi.MODE_ASK) },
+                    )
+                }
+            }
+        }
+
+        // ───────── 旧内核 JS 兼容垫片 ─────────
+        // 只对应用内 WebUI 生效。默认「自动」= 不注入，除非检测到旧内核并经用户同意。
+        item(key = "function_webui_compat") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    SectionHeader(
+                        icon = { Icon(Icons.Filled.Extension, null, Modifier.size(20.dp)) },
+                        title = stringResource(R.string.dsh_webui_compat_section),
+                        summary = stringResource(
+                            R.string.dsh_webui_compat_section_summary,
+                            webviewVersion.ifEmpty { "?" },
+                        ),
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    RuntimeOption(
+                        selected = webCompatMode == DshWebCompat.MODE_AUTO,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_webui_compat_auto),
+                        summary = stringResource(R.string.dsh_webui_compat_auto_desc),
+                        onSelect = { onWebCompatModeChange(DshWebCompat.MODE_AUTO) },
+                    )
+                    RuntimeOption(
+                        selected = webCompatMode == DshWebCompat.MODE_ON,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_webui_compat_on),
+                        summary = stringResource(R.string.dsh_webui_compat_on_desc),
+                        onSelect = { onWebCompatModeChange(DshWebCompat.MODE_ON) },
+                    )
+                    RuntimeOption(
+                        selected = webCompatMode == DshWebCompat.MODE_OFF,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_webui_compat_off),
+                        summary = stringResource(R.string.dsh_webui_compat_off_desc),
+                        onSelect = { onWebCompatModeChange(DshWebCompat.MODE_OFF) },
                     )
                 }
             }
