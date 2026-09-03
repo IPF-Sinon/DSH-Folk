@@ -62,7 +62,6 @@ import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.ExpressiveSwitch
 import me.bmax.apatch.ui.component.SwitchIconState
-import me.bmax.apatch.ui.component.FilePickerDialog
 import me.bmax.apatch.ui.component.DualBackgroundSettings
 
 import me.bmax.apatch.ui.component.SplicedColumnGroup
@@ -76,7 +75,6 @@ import me.bmax.apatch.ui.component.LoadingDialogHandle
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.ui.theme.BackgroundManager
 import me.bmax.apatch.ui.theme.FontConfig
-import me.bmax.apatch.ui.theme.ThemeManager
 import me.bmax.apatch.ui.theme.refreshTheme
 import me.bmax.apatch.ui.screen.settings.appearance.AppearanceFontSection
 import me.bmax.apatch.ui.screen.settings.appearance.AppearanceThemeSection
@@ -84,8 +82,6 @@ import me.bmax.apatch.ui.screen.settings.appearance.AppearanceBannerSection
 import me.bmax.apatch.ui.screen.settings.appearance.HomeLayoutChooseDialog
 import me.bmax.apatch.ui.screen.settings.appearance.NavModeChooseDialog
 import me.bmax.apatch.ui.screen.settings.appearance.StatsTopLayoutChooseDialog
-import me.bmax.apatch.ui.screen.settings.appearance.ThemeExportDialog
-import me.bmax.apatch.ui.screen.settings.appearance.ThemeImportDialog
 import me.bmax.apatch.ui.screen.settings.appearance.ThemeChooseDialog
 import me.bmax.apatch.ui.screen.settings.appearance.colorNameToString
 import me.bmax.apatch.ui.screen.settings.appearance.homeLayoutStyleToString
@@ -105,7 +101,6 @@ import coil.compose.AsyncImage
 @Composable
 fun AppearanceSettingsContent(
     snackBarHost: SnackbarHostState,
-    onNavigateToThemeStore: () -> Unit,
     onNavigateToApiMarketplace: () -> Unit,
     flat: Boolean = false,
     highlightKey: String? = null,
@@ -379,37 +374,6 @@ fun AppearanceSettingsContent(
                     refreshTheme.value = true
                 } else {
                     snackBarHost.showSnackbar(message = context.getString(R.string.settings_title_image_error))
-                }
-            }
-        }
-    }
-
-    var pendingExportMetadata by remember { mutableStateOf<ThemeManager.ThemeMetadata?>(null) }
-    val showExportDialog = remember { mutableStateOf(false) }
-    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingImportMetadata by remember { mutableStateOf<ThemeManager.ThemeMetadata?>(null) }
-    val showImportDialog = remember { mutableStateOf(false) }
-    val showFilePicker = remember { mutableStateOf(false) }
-
-    val importThemeLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            scope.launch {
-                loadingDialog.show()
-                val metadata = ThemeManager.readThemeMetadata(context, uri)
-                loadingDialog.hide()
-                if (metadata != null) {
-                    pendingImportUri = uri
-                    pendingImportMetadata = metadata
-                    showImportDialog.value = true
-                } else {
-                    loadingDialog.show()
-                    val success = ThemeManager.importTheme(context, uri)
-                    loadingDialog.hide()
-                    snackBarHost.showSnackbar(
-                        message = if (success) context.getString(R.string.settings_theme_imported) else context.getString(R.string.settings_theme_import_failed)
-                    )
                 }
             }
         }
@@ -2067,11 +2031,8 @@ fun AppearanceSettingsContent(
         AppearanceThemeSection(
             flat = flat,
             highlightKey = highlightKey,
-            onNavigateToThemeStore = onNavigateToThemeStore,
             themeStoreMode = themeStoreMode,
             onThemeStoreModeChanged = onThemeStoreModeChanged,
-            showExportDialog = showExportDialog,
-            showFilePicker = showFilePicker,
             snackBarHost = snackBarHost,
             loadingDialog = loadingDialog,
         )
@@ -2107,90 +2068,6 @@ fun AppearanceSettingsContent(
                 showStatsTopLayoutDialog = false
             },
             onDismiss = { showStatsTopLayoutDialog = false }
-        )
-    }
-
-    if (showExportDialog.value) {
-        ThemeExportDialog(
-            showDialog = showExportDialog,
-            onConfirm = { metadata ->
-                pendingExportMetadata = metadata
-                scope.launch {
-                    loadingDialog.show()
-                    try {
-                        // 不能写死 /storage/emulated/0：分区存储下没有「所有文件」权限时
-                        // 那个路径建不出来，导出会静默失败
-                        val exportDir = java.io.File(
-                            me.bmax.apatch.util.getSafeDownloadsDir(context),
-                            "DSH-Folk/Themes",
-                        )
-                        if (!exportDir.exists()) {
-                            exportDir.mkdirs()
-                        }
-                        val safeName = metadata.name.replace("[\\\\/:*?\"<>|]".toRegex(), "_")
-                        val fileName = "$safeName.fpt"
-                        val file = java.io.File(exportDir, fileName)
-                        val uri = Uri.fromFile(file)
-                        val success = ThemeManager.exportTheme(context, uri, metadata)
-                        loadingDialog.hide()
-                        snackBarHost.showSnackbar(
-                            message = if (success) context.getString(R.string.settings_theme_saved) + ": ${file.absolutePath}" else context.getString(R.string.settings_theme_save_failed)
-                        )
-                    } catch (e: Exception) {
-                        loadingDialog.hide()
-                        snackBarHost.showSnackbar(message = context.getString(R.string.settings_theme_save_failed) + ": ${e.message}")
-                    }
-                    pendingExportMetadata = null
-                }
-            }
-        )
-    }
-
-    if (showImportDialog.value && pendingImportMetadata != null) {
-        ThemeImportDialog(
-            showDialog = showImportDialog,
-            metadata = pendingImportMetadata!!,
-            onConfirm = {
-                pendingImportUri?.let { uri ->
-                    scope.launch {
-                        loadingDialog.show()
-                        val success = ThemeManager.importTheme(context, uri)
-                        loadingDialog.hide()
-                        snackBarHost.showSnackbar(
-                            message = if (success) context.getString(R.string.settings_theme_imported) else context.getString(R.string.settings_theme_import_failed)
-                        )
-                        pendingImportUri = null
-                        pendingImportMetadata = null
-                    }
-                }
-            }
-        )
-    }
-
-    if (showFilePicker.value) {
-        FilePickerDialog(
-            onDismissRequest = { showFilePicker.value = false },
-            onFileSelected = { file ->
-                showFilePicker.value = false
-                val uri = Uri.fromFile(file)
-                scope.launch {
-                    loadingDialog.show()
-                    val metadata = ThemeManager.readThemeMetadata(context, uri)
-                    loadingDialog.hide()
-                    if (metadata != null) {
-                        pendingImportUri = uri
-                        pendingImportMetadata = metadata
-                        showImportDialog.value = true
-                    } else {
-                        loadingDialog.show()
-                        val success = ThemeManager.importTheme(context, uri)
-                        loadingDialog.hide()
-                        snackBarHost.showSnackbar(
-                            message = if (success) context.getString(R.string.settings_theme_imported) else context.getString(R.string.settings_theme_import_failed)
-                        )
-                    }
-                }
-            }
         )
     }
 }

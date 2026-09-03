@@ -239,9 +239,13 @@ private fun permHint(s: PermissionManager.Status): String = when (s.channel) {
     PermissionManager.Channel.ROOT -> stringResource(R.string.dsh_perm_hint_root)
     PermissionManager.Channel.SHIZUKU -> stringResource(R.string.dsh_perm_hint_shizuku)
     PermissionManager.Channel.ADB -> stringResource(R.string.dsh_perm_hint_adb)
-    PermissionManager.Channel.NONE ->
-        if (s.shizukuRunning) stringResource(R.string.dsh_perm_hint_shizuku_ungranted)
-        else stringResource(R.string.dsh_perm_hint_none)
+    PermissionManager.Channel.NONE -> when {
+        // 特权未启用是**默认状态**，得先说这件事：否则装了 Shizuku 的用户会看到
+        // 「Shizuku 在运行但未授权」，跑去授权 Shizuku 也不会有任何变化
+        !s.elevationEnabled -> stringResource(R.string.dsh_perm_hint_disabled)
+        s.shizukuRunning -> stringResource(R.string.dsh_perm_hint_shizuku_ungranted)
+        else -> stringResource(R.string.dsh_perm_hint_none)
+    }
 }
 
 /** Hero 卡：DeepSeek Harness 大标题 + 阶段 + 进度 + 操作。 */

@@ -42,6 +42,8 @@
     <string name="dsh_webui_mode_remember">Remember my choice</string>
     <!-- 权限通道首选 -->
     <string name="dsh_perm_prefer">Preferred channel</string>
+    <string name="dsh_perm_prefer_off">Disabled</string>
+    <string name="dsh_perm_prefer_off_desc">Never elevate. The container does not need root; hardware stats, log collection and the reboot menu lose their privileged parts.</string>
     <string name="dsh_perm_prefer_auto">Automatic</string>
     <string name="dsh_perm_prefer_auto_desc">Root first, then Shizuku, then wireless ADB</string>
     <string name="dsh_perm_fell_back">Preferred channel is unavailable; using %1$s instead</string>
@@ -138,6 +140,7 @@
     <string name="dsh_perm_root_detail">su found: %1$s · provider: %2$s</string>
     <string name="dsh_perm_request_shizuku">Request Shizuku permission</string>
     <string name="dsh_perm_none_hint">No elevated channel. DSH still runs inside the container; only system-path access and some plugins are limited.</string>
+    <string name="dsh_perm_detected_not_enabled">An elevated channel was detected but privileges are disabled. Pick a channel above to enable it.</string>
 
     <string name="dsh_adb_section">Wireless ADB pairing</string>
     <string name="dsh_adb_summary">Pair with the system wireless-debugging service to get shell (uid 2000) without root or Shizuku.</string>
@@ -188,6 +191,7 @@
     <string name="dsh_perm_hint_shizuku">Shell permission (uid 2000)</string>
     <string name="dsh_perm_hint_adb">Paired — shell permission</string>
     <string name="dsh_perm_hint_shizuku_ungranted">Shizuku is running but not granted</string>
+    <string name="dsh_perm_hint_disabled">Privileges disabled — tap to configure</string>
     <string name="dsh_perm_hint_none">Tap to set up an elevated channel</string>
     <string name="dsh_log_empty">No log yet. Tap Start to install and run DeepSeek Harness.</string>
     <string name="dsh_term_exited">Session ended (exit code %1$d)</string>
@@ -464,4 +468,27 @@
 
     <!-- 预装插件标签 -->
     <string name="dsh_plugin_seeded_label">Preinstalled</string>
+
+    <!-- 原生能力桥 -->
+    <string name="dsh_native_section">Native capabilities</string>
+    <string name="dsh_native_summary">Let the agent inside the container post notifications, vibrate and use the clipboard through the app</string>
+    <string name="dsh_native_enable">Enable native bridge</string>
+    <string name="dsh_native_enable_summary">Off by default. The container also runs third-party plugins, and they share the same loopback token — turn on only the capabilities you actually want.</string>
+    <string name="dsh_native_caps">Capabilities</string>
+    <string name="dsh_native_cap_notify">Notifications</string>
+    <string name="dsh_native_cap_notify_desc">Post and cancel notifications in a channel separate from the service one</string>
+    <string name="dsh_native_cap_toast">Toast</string>
+    <string name="dsh_native_cap_toast_desc">Show a short on-screen message</string>
+    <string name="dsh_native_cap_vibrate">Vibration</string>
+    <string name="dsh_native_cap_vibrate_desc">Vibrate for up to 3 seconds</string>
+    <string name="dsh_native_cap_clipboard">Clipboard</string>
+    <string name="dsh_native_cap_clipboard_desc">Read and write the clipboard. Reading only works while the app is in the foreground.</string>
+    <string name="dsh_native_cap_intent">Share and open links</string>
+    <string name="dsh_native_cap_intent_desc">Bring up the share sheet, or open an http/https link. Requires the app to be in the foreground.</string>
+    <string name="dsh_native_cap_device">Device info</string>
+    <string name="dsh_native_cap_device_desc">Model, Android version, ABI, battery level and charging state</string>
+    <string name="dsh_native_need_notif_perm">Notification permission not granted — tap to open system settings</string>
+    <string name="dsh_native_cli_hint">Inside the container: dsh-native notify &lt;title&gt; [body] / toast / vibrate / clip / share / open / device / caps</string>
+    <string name="dsh_native_notif_channel_name">Agent notifications</string>
+    <string name="dsh_native_notif_channel_desc">Notifications posted by the agent running inside the container</string>
 </resources>

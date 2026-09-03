@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.Store
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,6 +57,14 @@ fun AppearanceSettingsScreen(navigator: DestinationsNavigator, highlightKey: Str
                     IconButton(onClick = { navigator.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    IconButton(onClick = { navigator.navigate(ThemeStoreScreenDestination) }) {
+                        Icon(
+                            Icons.Filled.Store,
+                            contentDescription = stringResource(R.string.theme_store_title),
+                        )
+                    }
                 }
             )
         },
@@ -69,7 +78,6 @@ fun AppearanceSettingsScreen(navigator: DestinationsNavigator, highlightKey: Str
             item {
                 AppearanceSettingsContent(
                     snackBarHost = snackBarHost,
-                    onNavigateToThemeStore = { navigator.navigate(ThemeStoreScreenDestination) },
                     onNavigateToApiMarketplace = { navigator.navigate(ApiMarketplaceScreenDestination) },
                     flat = flat,
                     highlightKey = highlightKey,

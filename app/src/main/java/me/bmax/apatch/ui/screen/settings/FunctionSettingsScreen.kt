@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
@@ -44,6 +45,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.AdbBridge
 import me.bmax.apatch.dsh.ContainerRuntime
 import me.bmax.apatch.dsh.DshEnv
+import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
@@ -51,6 +53,7 @@ import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.screen.PluginProgressHost
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
 import me.bmax.apatch.util.DshWebCompat
+import me.bmax.apatch.util.PermissionUtils
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
 import rikka.shizuku.Shizuku
@@ -75,11 +78,12 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     val dshPrefs = context.getSharedPreferences(DshEnv.PREF, android.content.Context.MODE_PRIVATE)
 
     var runtimeId by rememberSaveable { mutableStateOf(DshRuntime.runtimeId()) }
-    // null = 自动（按优先级）。存的是字符串，rememberSaveable 不能直接存 enum?
+    // 存的是字符串，rememberSaveable 不能直接存 enum?
+    // 缺省 PREF_OFF：默认不提权，老用户由 PermissionManager.migratePreference 迁移。
     var permPrefName by rememberSaveable {
         mutableStateOf(
-            dshPrefs.getString(DshEnv.KEY_PERM_CHANNEL, PermissionManager.PREF_AUTO)
-                ?: PermissionManager.PREF_AUTO
+            dshPrefs.getString(DshEnv.KEY_PERM_CHANNEL, PermissionManager.PREF_OFF)
+                ?: PermissionManager.PREF_OFF
         )
     }
     var webuiMode by rememberSaveable {
@@ -112,6 +116,16 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     }
     var adbRootAllowed by rememberSaveable {
         mutableStateOf(AdbBridge.granted(context, AdbBridge.ShellGrant.ROOT))
+    }
+    // 原生能力桥：总开关 + 分项。Set<Cap> 不是 Parcelable，用 remember 就够
+    // （返回本页会重读 prefs，这才是权威值）。
+    var nativeBridgeEnabled by remember {
+        mutableStateOf(DshNativeBridge.enabled(context))
+    }
+    var nativeCaps by remember { mutableStateOf(DshNativeBridge.enabledCaps(context)) }
+    // 通知权限可能在系统设置里被改，回到本页时重读
+    var notifPermGranted by remember {
+        mutableStateOf(PermissionUtils.hasNotificationPermission(context))
     }
 
     val runtimeInstalled = DshEnv.isRuntimeInstalled(context)
@@ -158,6 +172,14 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                 Shizuku.removeBinderReceivedListener(onBinder)
             }
         }
+    }
+
+    // 通知权限与原生能力开关都可能在系统设置 / 另一处被改，回到本页时重读一遍
+    LifecycleResumeEffect(Unit) {
+        notifPermGranted = PermissionUtils.hasNotificationPermission(context)
+        nativeBridgeEnabled = DshNativeBridge.enabled(context)
+        nativeCaps = DshNativeBridge.enabledCaps(context)
+        onPauseOrDispose { }
     }
 
     LaunchedEffect(Unit) {
@@ -308,9 +330,12 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     permPrefName = permPrefName,
                     onPermPrefChange = { name ->
                         permPrefName = name
-                        // 手动选通道只是显示/菜单偏好，容器执行仍走 proot/proroot；
-                        // 不选 = 自动按 root > shizuku > adb 的优先级挑一条可用的
+                        // 这条偏好是全应用「要不要提权」的总闸：选「未启用」时硬件监控、
+                        // 日志采集、root 文件兜底都会走非特权路径，首页重启菜单也不出现。
+                        // 容器执行本身不依赖它（proot/proroot 从来不需要 root）。
+                        // 「自动」= 按 root > shizuku > adb 的优先级挑一条可用的。
                         val ch = when (name) {
+                            PermissionManager.PREF_OFF -> PermissionManager.Channel.NONE
                             PermissionManager.PREF_ROOT -> PermissionManager.Channel.ROOT
                             PermissionManager.PREF_SHIZUKU -> PermissionManager.Channel.SHIZUKU
                             PermissionManager.PREF_ADB -> PermissionManager.Channel.ADB
@@ -319,6 +344,25 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                         PermissionManager.setPreference(context.applicationContext, ch)
                         scope.launch(Dispatchers.IO) {
                             PermissionManager.refresh(context.applicationContext)
+                        }
+                    },
+                    nativeBridgeEnabled = nativeBridgeEnabled,
+                    onNativeBridgeEnabledChange = { on ->
+                        nativeBridgeEnabled = on
+                        DshNativeBridge.setEnabled(context.applicationContext, on)
+                    },
+                    nativeCaps = nativeCaps,
+                    onNativeCapChange = { cap, on ->
+                        DshNativeBridge.setCapEnabled(context.applicationContext, cap, on)
+                        nativeCaps = DshNativeBridge.enabledCaps(context.applicationContext)
+                    },
+                    notifPermGranted = notifPermGranted,
+                    onOpenNotifSettings = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            )
                         }
                     },
                     runtimeInstalled = runtimeInstalled,

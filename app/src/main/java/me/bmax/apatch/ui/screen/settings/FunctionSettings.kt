@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
@@ -52,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
@@ -108,9 +110,19 @@ fun FunctionSettingsContent(
     onWebCompatModeChange: (String) -> Unit,
     /** 当前 WebView 内核版本名（读不到时为空），只用于显示。 */
     webviewVersion: String,
-    /** 权限通道首选（auto | root | shizuku | adb）。 */
+    /** 权限通道首选（off | auto | root | shizuku | adb）。 */
     permPrefName: String,
     onPermPrefChange: (String) -> Unit,
+    /** 原生能力桥总开关。 */
+    nativeBridgeEnabled: Boolean,
+    onNativeBridgeEnabledChange: (Boolean) -> Unit,
+    /** 已启用的原生能力分项。 */
+    nativeCaps: Set<DshNativeBridge.Cap>,
+    onNativeCapChange: (DshNativeBridge.Cap, Boolean) -> Unit,
+    /** 系统通知权限是否已授予（Android 13 起是运行时权限）。 */
+    notifPermGranted: Boolean,
+    /** 跳系统通知设置。 */
+    onOpenNotifSettings: () -> Unit,
     /** 运行时是否已安装（无线 ADB 需要容器内的 python）。 */
     runtimeInstalled: Boolean,
     /** 已安装的运行时版本；未安装时为空。 */
@@ -596,7 +608,14 @@ fun FunctionSettingsContent(
                     if (perm.channel == PermissionManager.Channel.NONE) {
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            text = stringResource(R.string.dsh_perm_none_hint),
+                            text = if (!perm.elevationEnabled &&
+                                (perm.suPresent || perm.shizukuRunning || perm.adbPaired)
+                            ) {
+                                // 有通道可用、只是用户没启用：别让他以为设备不支持
+                                stringResource(R.string.dsh_perm_detected_not_enabled)
+                            } else {
+                                stringResource(R.string.dsh_perm_none_hint)
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -609,6 +628,13 @@ fun FunctionSettingsContent(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.height(4.dp))
+                    RuntimeOption(
+                        selected = permPrefName == PermissionManager.PREF_OFF,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_perm_prefer_off),
+                        summary = stringResource(R.string.dsh_perm_prefer_off_desc),
+                        onSelect = { onPermPrefChange(PermissionManager.PREF_OFF) },
+                    )
                     RuntimeOption(
                         selected = permPrefName == PermissionManager.PREF_AUTO,
                         enabled = true,
@@ -660,6 +686,97 @@ fun FunctionSettingsContent(
                                 Text(stringResource(R.string.dsh_perm_request_shizuku))
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // ───────── 原生能力桥 ─────────
+        item(key = "function_native_bridge") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    SectionHeader(
+                        icon = { Icon(Icons.Filled.NotificationsActive, null, Modifier.size(20.dp)) },
+                        title = stringResource(R.string.dsh_native_section),
+                        summary = stringResource(R.string.dsh_native_summary),
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_native_enable),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.dsh_native_enable_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        ExpressiveSwitch(
+                            checked = nativeBridgeEnabled,
+                            onCheckedChange = onNativeBridgeEnabledChange,
+                        )
+                    }
+
+                    // 总开关关着时分项没有意义，但仍然显示（灰掉），
+                    // 否则用户开总开关后会看到一堆凭空出现的开关
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_native_caps),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    for (cap in DshNativeBridge.Cap.entries) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(nativeCapTitleRes(cap)),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    text = stringResource(nativeCapSummaryRes(cap)),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            ExpressiveSwitch(
+                                checked = cap in nativeCaps,
+                                onCheckedChange = { on -> onNativeCapChange(cap, on) },
+                                enabled = nativeBridgeEnabled,
+                            )
+                        }
+                    }
+
+                    // 通知项开了但系统权限没给：开关是勾上的，通知却一条也不会出现
+                    if (!notifPermGranted &&
+                        DshNativeBridge.Cap.NOTIFY in nativeCaps &&
+                        nativeBridgeEnabled
+                    ) {
+                        Spacer(Modifier.height(4.dp))
+                        TextButton(onClick = onOpenNotifSettings) {
+                            Text(stringResource(R.string.dsh_native_need_notif_perm))
+                        }
+                    }
+
+                    if (nativeBridgeEnabled) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_native_cli_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -913,6 +1030,26 @@ private fun RuntimeOption(
             )
         }
     }
+}
+
+/** 原生能力 → 标题串。 */
+internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
+    DshNativeBridge.Cap.NOTIFY -> R.string.dsh_native_cap_notify
+    DshNativeBridge.Cap.TOAST -> R.string.dsh_native_cap_toast
+    DshNativeBridge.Cap.VIBRATE -> R.string.dsh_native_cap_vibrate
+    DshNativeBridge.Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard
+    DshNativeBridge.Cap.INTENT -> R.string.dsh_native_cap_intent
+    DshNativeBridge.Cap.DEVICE -> R.string.dsh_native_cap_device
+}
+
+/** 原生能力 → 说明串。 */
+internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
+    DshNativeBridge.Cap.NOTIFY -> R.string.dsh_native_cap_notify_desc
+    DshNativeBridge.Cap.TOAST -> R.string.dsh_native_cap_toast_desc
+    DshNativeBridge.Cap.VIBRATE -> R.string.dsh_native_cap_vibrate_desc
+    DshNativeBridge.Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard_desc
+    DshNativeBridge.Cap.INTENT -> R.string.dsh_native_cap_intent_desc
+    DshNativeBridge.Cap.DEVICE -> R.string.dsh_native_cap_device_desc
 }
 
 /** 下载源 id → 可本地化标签；DshSource.displayName 只用于日志。 */

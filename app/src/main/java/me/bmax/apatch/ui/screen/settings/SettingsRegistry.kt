@@ -18,11 +18,23 @@ enum class SettingCategory(
     FUNCTION("function", R.string.settings_category_function),
 }
 
+/**
+ * 不属于任何设置分类页、需要直接跳到独立页面的搜索结果。
+ *
+ * 「主题商店 / 保存主题 / 导入主题」从外观页搬到主题商店页之后，这几条如果还按
+ * 分类跳外观页，落地页里根本没有对应的 item key，高亮会静默失效 —— 用户看到的就是
+ * 「搜到了，点进去什么也没发生」。
+ */
+enum class SettingsTarget {
+    THEME_STORE,
+}
+
 data class SettingEntry(
     val key: String,
     @StringRes val titleResId: Int,
     @StringRes val summaryResId: Int? = null,
     val category: SettingCategory,
+    val directTarget: SettingsTarget? = null,
 )
 
 /** Pre-resolved searchable text for fast filtering without repeated resource lookups. */
@@ -72,7 +84,7 @@ object SettingsRegistry {
             add(SettingEntry("appearance_floating_auto_hide", R.string.settings_floating_auto_hide, R.string.settings_floating_auto_hide_summary, SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_floating_swipe_hide", R.string.settings_floating_swipe_hide, R.string.settings_floating_swipe_hide_summary, SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_list_card_badge", R.string.settings_list_card_hide_status_badge, R.string.settings_list_card_hide_status_badge_summary, SettingCategory.APPEARANCE))
-            add(SettingEntry("appearance_custom_badge_text", R.string.settings_custom_badge_text, category = SettingCategory.APPEARANCE))
+            add(SettingEntry("appearance_custom_badge_text_list", R.string.settings_custom_badge_text, category = SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_list_info_icons", R.string.settings_list_info_show_icons, R.string.settings_list_info_show_icons_summary, SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_advanced_title", R.string.settings_advanced_title_style, R.string.settings_advanced_title_style_summary, SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_custom_background", R.string.settings_custom_background, R.string.settings_custom_background_summary, SettingCategory.APPEARANCE))
@@ -87,10 +99,10 @@ object SettingsRegistry {
             add(SettingEntry("appearance_banner_api_mode", R.string.apm_banner_api_mode, R.string.apm_banner_api_mode_summary, SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_banner_opacity", R.string.settings_banner_custom_opacity, R.string.settings_banner_custom_opacity_summary, SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_custom_font", R.string.settings_custom_font, R.string.settings_custom_font_summary, SettingCategory.APPEARANCE))
-            add(SettingEntry("appearance_theme_store", R.string.theme_store_title, category = SettingCategory.APPEARANCE))
-            add(SettingEntry("appearance_theme_mode", R.string.settings_theme_mode, R.string.settings_theme_mode_summary, SettingCategory.APPEARANCE))
-            add(SettingEntry("appearance_save_theme", R.string.settings_save_theme, category = SettingCategory.APPEARANCE))
-            add(SettingEntry("appearance_import_theme", R.string.settings_import_theme, category = SettingCategory.APPEARANCE))
+            add(SettingEntry("appearance_theme_store", R.string.theme_store_title, category = SettingCategory.APPEARANCE, directTarget = SettingsTarget.THEME_STORE))
+            add(SettingEntry("appearance_theme_store_mode", R.string.settings_theme_mode, R.string.settings_theme_mode_summary, SettingCategory.APPEARANCE))
+            add(SettingEntry("appearance_save_theme", R.string.settings_save_theme, category = SettingCategory.APPEARANCE, directTarget = SettingsTarget.THEME_STORE))
+            add(SettingEntry("appearance_import_theme", R.string.settings_import_theme, category = SettingCategory.APPEARANCE, directTarget = SettingsTarget.THEME_STORE))
             add(SettingEntry("appearance_terminal_bg_alpha", R.string.settings_terminal_bg_alpha, R.string.settings_terminal_bg_alpha_summary, SettingCategory.APPEARANCE))
             add(SettingEntry("appearance_reset_theme", R.string.settings_reset_theme, category = SettingCategory.APPEARANCE))
 
@@ -136,6 +148,7 @@ object SettingsRegistry {
             add(SettingEntry("function_repair_plugins", R.string.dsh_plugin_repair, R.string.dsh_plugin_repair_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_verify_install", R.string.dsh_verify_after_install, R.string.dsh_verify_after_install_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_permission", R.string.dsh_perm_section, R.string.dsh_perm_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_native_bridge", R.string.dsh_native_section, R.string.dsh_native_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_wireless_adb", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.FUNCTION))
         }
     }

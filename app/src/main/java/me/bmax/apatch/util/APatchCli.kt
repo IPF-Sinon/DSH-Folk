@@ -177,10 +177,20 @@ fun rootAvailable(): Boolean {
     return shell.isRoot
 }
 
-/** 不带 initializer 的一次性 shell（bugreport 采集用）。 */
-fun tryGetRootShell(): Shell {
+/**
+ * 不带 initializer 的一次性 shell（bugreport 采集用）。
+ *
+ * 传了 [ctx] 且用户选了「特权未启用」时直接建普通 `sh`，不去碰 `su` —— 否则用户只是想
+ * 导一份日志，却先被弹一次授权框。降级的代价是 dmesg / tombstones / dropbox 那几段采不到，
+ * basic.txt 里的 `ElevationEnabled` 会记下这件事。
+ */
+fun tryGetRootShell(ctx: Context? = null): Shell {
     Shell.enableVerboseLogging = BuildConfig.DEBUG
     val builder = Shell.Builder.create()
+    if (ctx != null && !me.bmax.apatch.dsh.PermissionManager.elevationEnabled(ctx)) {
+        Log.i(TAG, "特权未启用，bugreport 采集使用普通 sh")
+        return builder.build("sh")
+    }
     return try {
         builder.build("su")
     } catch (e: Throwable) {
@@ -195,10 +205,54 @@ fun shellForResult(shell: Shell, vararg cmds: String): Shell.Result {
     return shell.newJob().add(*cmds).to(out, err).exec()
 }
 
+/**
+ * 无条件用 root shell 跑命令。
+ *
+ * 现在没有调用方：只读采集全部改走 [dataShellForResult]（受「特权是否启用」约束）。
+ * 保留是因为它是 FolkPatch 上游的公开工具函数，删掉会让后续 merge 无谓地冲突。
+ */
+@Suppress("unused")
 fun rootShellForResult(vararg cmds: String): Shell.Result {
     val out = ArrayList<String>()
     val err = ArrayList<String>()
     return getRootShell().newJob().add(*cmds).to(out, err).exec()
+}
+
+@Volatile
+private var _dataShell: Shell? = null
+
+/**
+ * 只读数据用的 shell：特权启用时是 root shell，未启用时是普通 `sh`。
+ *
+ * 存在的理由是「特权默认未启用」（见 [me.bmax.apatch.dsh.PermissionManager]）。硬件监控
+ * 那一组 `cat /proc/...` 每隔几秒就跑一次，直接用 [getRootShell] 会让 libsu 自己去 spawn
+ * `su` —— 用户明明选了不启用，却还是被弹授权框。而 /proc/stat、/proc/meminfo、
+ * /sys/class/thermal 这些节点绝大多数设备对普通应用就是可读的，降级到 sh 只会少几行数据，
+ * 调用方本来就都有 `isSuccess` 判空分支。
+ */
+fun dataShell(ctx: Context): Shell {
+    if (me.bmax.apatch.dsh.PermissionManager.elevationEnabled(ctx)) {
+        return getRootShell()
+    }
+    _dataShell?.let { if (it.isAlive) return it }
+    return synchronized(APatchCli) {
+        _dataShell?.let { if (it.isAlive) return@synchronized it }
+        val sh = try {
+            Shell.Builder.create().build("sh")
+        } catch (e: Throwable) {
+            Log.e(TAG, "non-root sh creation failed", e)
+            throw IOException("Unable to create a non-root shell", e)
+        }
+        _dataShell = sh
+        sh
+    }
+}
+
+/** [dataShell] 上跑一组命令。失败不抛，交给调用方看 [Shell.Result.isSuccess]。 */
+fun dataShellForResult(ctx: Context, vararg cmds: String): Shell.Result {
+    val out = ArrayList<String>()
+    val err = ArrayList<String>()
+    return dataShell(ctx).newJob().add(*cmds).to(out, err).exec()
 }
 
 private fun configureRootProcessEnv(builder: ProcessBuilder) {

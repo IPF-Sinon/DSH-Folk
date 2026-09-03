@@ -144,7 +144,11 @@ object DshRuntime {
     /** 预装插件集合（供插件列表/商店渲染「预装」标签）。 */
     fun isSeedPlugin(pkg: String): Boolean = pkg in SEED_PLUGINS
 
-    /** 容器内 `dsh-fs` CLI（node 脚本，读 /root/.dsh/fs-bridge.json 后回环调用文件桥）。 */
+    /**
+     * 容器内 `dsh-fs` CLI（node 脚本，读 /root/.dsh/fs-bridge.json 后回环调用文件桥）。
+     *
+     * 这是 Kotlin raw string：里面**不能出现 `${'$'}`**，否则会被当成模板插值。
+     */
     private val FS_BRIDGE_CLI_SCRIPT = """
         #!/usr/bin/env node
         const fs = require('fs');
@@ -155,9 +159,13 @@ object DshRuntime {
         const enc = encodeURIComponent;
         function req(method, path, body) {
           return new Promise(function (resolve, reject) {
+            const headers = { 'X-Dsh-Fs-Token': cfg.token };
+            // Content-Length 必须显式给：只 r.write(body) 的话 Node 会改用
+            // Transfer-Encoding: chunked，而宿主侧要求 Content-Length，直接 400。
+            if (body) headers['Content-Length'] = Buffer.byteLength(body);
             const r = http.request({
               host: '127.0.0.1', port: cfg.port, method: method, path: path,
-              headers: { 'X-Dsh-Fs-Token': cfg.token }
+              headers: headers
             }, function (res) {
               const chunks = [];
               res.on('data', function (c) { chunks.push(c); });
@@ -168,44 +176,204 @@ object DshRuntime {
             r.end();
           });
         }
-        const cmd = process.argv[2];
-        const a = process.argv.slice(3);
+        const argv = process.argv.slice(2);
+        const cmd = argv[0];
+        // --key value / --flag 从位置参数里剥出来，剩下的按顺序用
+        const opt = {};
+        const a = [];
+        for (let i = 1; i < argv.length; i++) {
+          const t = argv[i];
+          if (t.slice(0, 2) === '--') {
+            const eq = t.indexOf('=');
+            if (eq > 2) { opt[t.slice(2, eq)] = t.slice(eq + 1); }
+            else if (i + 1 < argv.length && argv[i + 1].slice(0, 2) !== '--') { opt[t.slice(2)] = argv[++i]; }
+            else { opt[t.slice(2)] = '1'; }
+          } else { a.push(t); }
+        }
         function rel(p) { return p === undefined ? '' : p; }
+        function q(pairs) {
+          const out = [];
+          for (const k in pairs) { if (pairs[k] !== undefined) out.push(k + '=' + enc(String(pairs[k]))); }
+          return out.length ? '?' + out.join('&') : '';
+        }
+        function say(r) {
+          process.stdout.write(r.body.toString() + '\n');
+          if (r.status !== 200) process.exitCode = 1;
+        }
+        const USAGE = [
+          'usage: dsh-fs <command> [args] [options]',
+          '  list [path] [--recursive] [--maxDepth N] [--limit N]',
+          '  stat <path>',
+          '  read <path> [--offset N] [--length N]      # 二进制写到 stdout',
+          '  write <localFile> [remotePath] [--append]',
+          '  rm <path> [-r|--recursive]',
+          '  mv <src> <dst>',
+          '  cp <src> <dst> [--overwrite]',
+          '  mkdir <path>',
+          '  find <path> --glob <pattern> [--maxDepth N] [--limit N]',
+          '  space [path]',
+          '  health',
+          '所有路径都是相对共享存储根（/sdcard）的相对路径。'
+        ].join('\n');
         (async function () {
           try {
-            if (cmd === 'list' || cmd === 'stat') {
-              const r = await req('GET', '/' + cmd + '?path=' + enc(rel(a[0])));
-              process.stdout.write(r.body.toString());
-              if (r.status !== 200) process.exitCode = 1;
-              process.stdout.write('\n');
+            if (cmd === 'list') {
+              say(await req('GET', '/list' + q({
+                path: rel(a[0]), recursive: opt.recursive, maxDepth: opt.maxDepth, limit: opt.limit
+              })));
+            } else if (cmd === 'stat') {
+              say(await req('GET', '/stat' + q({ path: rel(a[0]) })));
+            } else if (cmd === 'health') {
+              say(await req('GET', '/health'));
+            } else if (cmd === 'space') {
+              say(await req('GET', '/space' + q({ path: rel(a[0]) })));
             } else if (cmd === 'read') {
-              const r = await req('GET', '/read?path=' + enc(rel(a[0])));
+              const r = await req('GET', '/read' + q({
+                path: rel(a[0]), offset: opt.offset, length: opt.length
+              }));
               if (r.status === 200) process.stdout.write(r.body);
               else { process.stderr.write(r.body.toString() + '\n'); process.exitCode = 1; }
             } else if (cmd === 'write') {
+              if (!a[0]) { console.error(USAGE); process.exit(1); }
               const data = fs.readFileSync(a[0]);
               const dst = a.length > 1 ? a[1] : a[0];
-              const r = await req('PUT', '/write?path=' + enc(dst), data);
-              process.stdout.write(r.body.toString() + '\n');
-              if (r.status !== 200) process.exitCode = 1;
+              say(await req('PUT', '/write' + q({ path: dst, append: opt.append }), data));
             } else if (cmd === 'rm') {
-              const r = await req('DELETE', '/delete?path=' + enc(rel(a[0])));
-              process.stdout.write(r.body.toString() + '\n');
-              if (r.status !== 200) process.exitCode = 1;
+              // -r 是 unix 习惯，不带 -- 所以落在位置参数里，得手动挑出来
+              const recursive = (opt.recursive || opt.r || a.indexOf('-r') >= 0) ? '1' : undefined;
+              const path = a.filter(function (x) { return x !== '-r'; })[0];
+              say(await req('DELETE', '/delete' + q({ path: rel(path), recursive: recursive })));
             } else if (cmd === 'mv') {
-              const r = await req('POST', '/move?src=' + enc(rel(a[0])) + '&dst=' + enc(rel(a[1])));
-              process.stdout.write(r.body.toString() + '\n');
-              if (r.status !== 200) process.exitCode = 1;
+              say(await req('POST', '/move' + q({ src: rel(a[0]), dst: rel(a[1]) })));
+            } else if (cmd === 'cp') {
+              say(await req('POST', '/copy' + q({
+                src: rel(a[0]), dst: rel(a[1]), overwrite: opt.overwrite
+              })));
             } else if (cmd === 'mkdir') {
-              const r = await req('POST', '/mkdir?path=' + enc(rel(a[0])));
-              process.stdout.write(r.body.toString() + '\n');
-              if (r.status !== 200) process.exitCode = 1;
+              say(await req('POST', '/mkdir' + q({ path: rel(a[0]) })));
+            } else if (cmd === 'find') {
+              if (!opt.glob) { console.error(USAGE); process.exit(1); }
+              say(await req('GET', '/find' + q({
+                path: rel(a[0]), glob: opt.glob, maxDepth: opt.maxDepth, limit: opt.limit
+              })));
             } else {
-              console.error('usage: dsh-fs list|read|write|rm|mv|stat|mkdir <path>...');
+              console.error(USAGE);
               process.exitCode = 1;
             }
           } catch (e) {
             console.error('dsh-fs: ' + (e && e.message ? e.message : e));
+            process.exitCode = 1;
+          }
+        })();
+    """.trimIndent()
+
+    /**
+     * 容器内 `dsh-native` CLI：调宿主的原生能力（通知/振动/toast/剪贴板/分享/设备信息）。
+     *
+     * 与 `dsh-fs` 共用同一个回环端口与 token（同一份 fs-bridge.json）。失败时把宿主返回的
+     * `reason` 打到 stderr 并以非 0 退出，agent 能据此区分「没启用」「没权限」「不在前台」。
+     *
+     * 同样是 raw string：里面**不能出现 `${'$'}`**。
+     */
+    private val NATIVE_CLI_SCRIPT = """
+        #!/usr/bin/env node
+        const fs = require('fs');
+        const http = require('http');
+        const CFG = '/root/.dsh/fs-bridge.json';
+        if (!fs.existsSync(CFG)) { console.error('dsh-native: 回环桥未就绪（缺 ' + CFG + '）'); process.exit(1); }
+        const cfg = JSON.parse(fs.readFileSync(CFG, 'utf8'));
+        const enc = encodeURIComponent;
+        function req(method, path) {
+          return new Promise(function (resolve, reject) {
+            const r = http.request({
+              host: '127.0.0.1', port: cfg.port, method: method, path: path,
+              headers: { 'X-Dsh-Fs-Token': cfg.token }
+            }, function (res) {
+              const chunks = [];
+              res.on('data', function (c) { chunks.push(c); });
+              res.on('end', function () { resolve({ status: res.statusCode, body: Buffer.concat(chunks) }); });
+            });
+            r.on('error', reject);
+            r.end();
+          });
+        }
+        const argv = process.argv.slice(2);
+        const cmd = argv[0];
+        const opt = {};
+        const a = [];
+        for (let i = 1; i < argv.length; i++) {
+          const t = argv[i];
+          if (t.slice(0, 2) === '--') {
+            const eq = t.indexOf('=');
+            if (eq > 2) { opt[t.slice(2, eq)] = t.slice(eq + 1); }
+            else if (i + 1 < argv.length && argv[i + 1].slice(0, 2) !== '--') { opt[t.slice(2)] = argv[++i]; }
+            else { opt[t.slice(2)] = '1'; }
+          } else { a.push(t); }
+        }
+        function q(pairs) {
+          const out = [];
+          for (const k in pairs) { if (pairs[k] !== undefined) out.push(k + '=' + enc(String(pairs[k]))); }
+          return out.length ? '?' + out.join('&') : '';
+        }
+        function say(r) {
+          const text = r.body.toString();
+          if (r.status === 200) { process.stdout.write(text + '\n'); return; }
+          process.stderr.write(text + '\n');
+          process.exitCode = 1;
+        }
+        const USAGE = [
+          'usage: dsh-native <command> [args] [options]',
+          '  notify <title> [body] [--id N] [--ongoing]',
+          '  notify-cancel [--id N]',
+          '  toast <text>',
+          '  vibrate [--ms N] [--amplitude 1..255]',
+          '  clip get',
+          '  clip set <text> [--label L]',
+          '  share <text> [--title T]',
+          '  open <https URL>',
+          '  device',
+          '  caps',
+          '需要在「设置 → 功能 → 原生能力」里先启用总开关与对应能力。'
+        ].join('\n');
+        (async function () {
+          try {
+            if (cmd === 'caps') {
+              say(await req('GET', '/native/capabilities'));
+            } else if (cmd === 'device') {
+              say(await req('GET', '/native/device'));
+            } else if (cmd === 'notify') {
+              if (!a[0]) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/native/notify' + q({
+                title: a[0], body: a[1], id: opt.id, ongoing: opt.ongoing
+              })));
+            } else if (cmd === 'notify-cancel') {
+              say(await req('DELETE', '/native/notify' + q({ id: opt.id })));
+            } else if (cmd === 'toast') {
+              if (!a[0]) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/native/toast' + q({ text: a[0] })));
+            } else if (cmd === 'vibrate') {
+              say(await req('POST', '/native/vibrate' + q({ ms: opt.ms, amplitude: opt.amplitude })));
+            } else if (cmd === 'clip') {
+              if (a[0] === 'get') {
+                say(await req('GET', '/native/clipboard'));
+              } else if (a[0] === 'set' && a[1]) {
+                say(await req('POST', '/native/clipboard' + q({ text: a[1], label: opt.label })));
+              } else {
+                console.error(USAGE);
+                process.exitCode = 1;
+              }
+            } else if (cmd === 'share') {
+              if (!a[0]) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/native/share' + q({ text: a[0], title: opt.title })));
+            } else if (cmd === 'open') {
+              if (!a[0]) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/native/open' + q({ url: a[0] })));
+            } else {
+              console.error(USAGE);
+              process.exitCode = 1;
+            }
+          } catch (e) {
+            console.error('dsh-native: ' + (e && e.message ? e.message : e));
             process.exitCode = 1;
           }
         })();
@@ -967,27 +1135,36 @@ object DshRuntime {
     }
 
     /**
-     * 把 `dsh-fs` CLI 写进容器（rootfs 就在 App 私有目录，直接落盘，不必 execRootfs heredoc）。
+     * 把 `dsh-fs` / `dsh-native` CLI 写进容器（rootfs 就在 App 私有目录，直接落盘，
+     * 不必 execRootfs heredoc）。
      *
      * 只在引导路径（bootstrap / reinstall）调用一次；CLI 内容不变时重复写无害。
+     * 两个脚本都读同一份 fs-bridge.json，所以不需要各自的配置或 ROOTFS_REV 变更。
      */
     private fun ensureFsBridgeCli() {
         if (!DshEnv.isRuntimeInstalled(appContext)) return
-        runCatching {
-            val f = File(DshEnv.rootfs(appContext), "usr/local/bin/dsh-fs")
-            f.writeText(FS_BRIDGE_CLI_SCRIPT, StandardCharsets.UTF_8)
-            f.setExecutable(true, false)
+        val bin = File(DshEnv.rootfs(appContext), "usr/local/bin")
+        for ((name, script) in listOf(
+            "dsh-fs" to FS_BRIDGE_CLI_SCRIPT,
+            "dsh-native" to NATIVE_CLI_SCRIPT,
+        )) {
+            runCatching {
+                val f = File(bin, name)
+                f.parentFile?.mkdirs()
+                f.writeText(script, StandardCharsets.UTF_8)
+                f.setExecutable(true, false)
+            }.onFailure { android.util.Log.w(TAG, "写 $name 失败: ${it.message}") }
         }
     }
 
-    /** 启动文件桥（选空闲端口 + 写配置 + 监听）。 */
+    /** 启动回环桥（选空闲端口 + 写配置 + 监听）。文件端点与原生端点共用它。 */
     private fun startFsBridge() {
         runCatching {
             val fsPort = findFreePort(DshFsBridge.PORT_BASE)
             val fsToken = ensureFsToken()
             writeFsBridgeConfig(fsPort, fsToken)
-            DshFsBridge.start(fsPort, fsToken)
-            appendLog("> 文件桥已启动：容器内可用 dsh-fs（根目录 /sdcard）")
+            DshFsBridge.start(fsPort, fsToken, appContext)
+            appendLog("> 文件桥已启动：容器内可用 dsh-fs（根目录 /sdcard）、dsh-native（原生能力）")
         }.onFailure { appendLog("! 文件桥启动失败: ${it.message}") }
     }
 

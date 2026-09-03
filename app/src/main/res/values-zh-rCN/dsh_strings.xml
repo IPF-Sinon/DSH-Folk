@@ -38,6 +38,8 @@
     <string name="dsh_webui_mode_remember">记住我的选择</string>
     <!-- 权限通道首选 -->
     <string name="dsh_perm_prefer">首选通道</string>
+    <string name="dsh_perm_prefer_off">未启用</string>
+    <string name="dsh_perm_prefer_off_desc">完全不提权。容器本身不需要 root，只有硬件监控、日志采集与重启菜单会少掉需要特权的那部分。</string>
     <string name="dsh_perm_prefer_auto">自动</string>
     <string name="dsh_perm_prefer_auto_desc">优先 root，其次 Shizuku，再次无线 ADB</string>
     <string name="dsh_perm_fell_back">首选通道当前不可用，已回退为 %1$s</string>
@@ -121,6 +123,7 @@
     <string name="dsh_perm_root_detail">找到 su：%1$s · 提供者：%2$s</string>
     <string name="dsh_perm_request_shizuku">申请 Shizuku 权限</string>
     <string name="dsh_perm_none_hint">没有可用的提权通道。DSH 仍能在容器里运行，只是访问系统路径与部分插件功能受限。</string>
+    <string name="dsh_perm_detected_not_enabled">检测到可用的提权通道，但特权处于未启用状态。在上面选一条通道即可启用。</string>
 
     <string name="dsh_adb_section">无线 ADB 配对</string>
     <string name="dsh_adb_summary">通过系统「无线调试」配对，在没有 root 也没有 Shizuku 时拿到 shell（uid 2000）权限。</string>
@@ -170,6 +173,7 @@
     <string name="dsh_perm_hint_shizuku">shell 权限（uid 2000）</string>
     <string name="dsh_perm_hint_adb">已配对，shell 权限</string>
     <string name="dsh_perm_hint_shizuku_ungranted">Shizuku 在运行但未授权</string>
+    <string name="dsh_perm_hint_disabled">特权未启用，点此配置</string>
     <string name="dsh_perm_hint_none">点此配置提权通道</string>
     <string name="dsh_log_empty">尚无日志。点击「启动」开始安装并运行 DeepSeek Harness。</string>
     <string name="dsh_term_exited">会话已结束（退出码 %1$d）</string>
@@ -446,4 +450,27 @@
 
     <!-- 预装插件标签 -->
     <string name="dsh_plugin_seeded_label">预装</string>
+
+    <!-- 原生能力桥 -->
+    <string name="dsh_native_section">原生能力</string>
+    <string name="dsh_native_summary">让容器里的 agent 借应用之手发通知、振动、用剪贴板</string>
+    <string name="dsh_native_enable">启用原生能力桥</string>
+    <string name="dsh_native_enable_summary">默认关闭。容器里同时跑着第三方插件，它们共用同一个回环 token，所以只勾你真的需要的那几项。</string>
+    <string name="dsh_native_caps">能力分项</string>
+    <string name="dsh_native_cap_notify">通知</string>
+    <string name="dsh_native_cap_notify_desc">发送与撤销通知，使用与服务通知分开的渠道</string>
+    <string name="dsh_native_cap_toast">Toast</string>
+    <string name="dsh_native_cap_toast_desc">在屏幕上弹一条短提示</string>
+    <string name="dsh_native_cap_vibrate">振动</string>
+    <string name="dsh_native_cap_vibrate_desc">最长 3 秒的振动</string>
+    <string name="dsh_native_cap_clipboard">剪贴板</string>
+    <string name="dsh_native_cap_clipboard_desc">读写剪贴板。读取只在应用处于前台时有效。</string>
+    <string name="dsh_native_cap_intent">分享与打开链接</string>
+    <string name="dsh_native_cap_intent_desc">拉起分享面板，或打开 http/https 链接。需要应用处于前台。</string>
+    <string name="dsh_native_cap_device">设备信息</string>
+    <string name="dsh_native_cap_device_desc">型号、Android 版本、ABI、电量与充电状态</string>
+    <string name="dsh_native_need_notif_perm">尚未授予通知权限，点这里去系统设置开启</string>
+    <string name="dsh_native_cli_hint">容器内命令：dsh-native notify &lt;标题&gt; [正文] / toast / vibrate / clip / share / open / device / caps</string>
+    <string name="dsh_native_notif_channel_name">Agent 通知</string>
+    <string name="dsh_native_notif_channel_desc">容器内 agent 主动发出的通知</string>
 </resources>

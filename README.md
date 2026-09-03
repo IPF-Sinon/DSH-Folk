@@ -36,6 +36,8 @@ DSH-Folk 把 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)�
 | **插件** | 管理容器里 DSH 的插件，展示 npm 周下载量、GitHub star 与 dsh-market 点赞；内置插件商店（下载完整目录后本地搜索，2600+ 条），支持本地 .tgz 安装。装完会用临时端口验证一次插件树能否加载，不通过自动卸载 |
 | **设置** | 常规 / 外观 / 行为 / 功能 / 安全 / 备份 / 插件 / 多媒体，界面主题体系沿用 FolkPatch（`theme.json` 完全兼容） |
 
+主题商店的入口在 **设置 → 外观** 页右上角；主题存档（`.fpt`）的导出与导入在商店页顶栏。
+
 **配置备份**与 DSH 桌面端的 `dsh-config-manager` 插件使用**同一套导出格式**（走它的回环 HTTP API，不是另写一份 ZIP 打包器），
 所以手机上导出的 zip 能直接在电脑上导入，反之亦然。默认导出 settings / ui / providers / plugins / mcp / prompts /
 skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentialsStatus / self，
@@ -57,8 +59,12 @@ skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentia
 应用自身的更新可以在 设置 → 常规 → 检查更新 里完成：它会对三条下载渠道（GitHub 直连 / 两个 gh-proxy）
 测延迟与吞吐，下载支持断点续传，装之前必须通过 release 附带的 `.sha256` 校验 —— 校验不过一律不装。
 
-root / Shizuku / 无线 ADB 都是**可选**的。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）与已授权的 Shizuku / Sui，
+root / Shizuku / 无线 ADB 都是**可选**的，并且**默认不启用**。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）与已授权的 Shizuku / Sui，
 自身不打任何内核补丁、不安装 su、不内置 Shizuku Server。
+
+「特权」默认是**未启用**：容器本身不需要 root（proot/proroot 从来不需要），只有硬件监控里几项 `/proc` 读取、
+bugreport 里的 dmesg/tombstones 段、以及首页的重启菜单需要它。要用就去 **设置 → 功能 → 权限通道 → 首选通道**
+选一条（或选「自动」按 root > Shizuku > 无线 ADB 挑）。从旧版本升级上来的用户如果此前授权过 root，会自动迁移到「自动」。
 
 配对成功后容器里多出一个 `adb-shell` 命令（以 shell / uid 2000 身份在设备上执行）。默认只放行只读命令
 （`getprop` / `dumpsys` / `ls` / `cat` 之类）；写操作和 `--su` 提权要在 **设置 → 功能** 里分别打开开关，
@@ -87,6 +93,46 @@ APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出
 产物发布到滚动 tag `runtime-latest`：arm64 是 `rootfs.tar.gz` + `metadata.json`，
 x86_64 是 `rootfs-x86_64.tar.gz` + `metadata-x86_64.json`（arm64 沿用无后缀的旧名以兼容存量版本）。
 应用按本机架构读取对应的 `metadata*.json` 决定下载什么。
+
+## 容器里能调宿主的什么
+
+容器内除了 dsh 本体，还有两个由 App 落盘的命令，都走同一个只绑 `127.0.0.1` 的回环桥（带随机 token，
+其它 App 读不到本应用私有目录，也就拿不到 token）：
+
+`dsh-fs` —— 受控访问共享存储（根目录固定 `/sdcard`，路径逐段校验 + canonical 二次确认，防符号链接逃逸）：
+
+```
+dsh-fs list [路径] [--recursive] [--maxDepth N] [--limit N]
+dsh-fs stat <路径>
+dsh-fs read <路径> [--offset N] [--length N]     # 二进制写到 stdout
+dsh-fs write <本地文件> [远端路径] [--append]
+dsh-fs rm <路径> [-r]
+dsh-fs mv <源> <目标>
+dsh-fs cp <源> <目标> [--overwrite]
+dsh-fs mkdir <路径>
+dsh-fs find <路径> --glob '*.log' [--maxDepth N] [--limit N]
+dsh-fs space [路径]
+dsh-fs health
+```
+
+`dsh-native` —— 借 App 之手调原生能力。**默认整体关闭**，要在 **设置 → 功能 → 原生能力** 里打开总开关，
+再逐项勾选想给的能力（通知 / Toast / 振动 / 剪贴板 / 分享与打开链接 / 设备信息）：
+
+```
+dsh-native notify <标题> [正文] [--id N] [--ongoing]
+dsh-native notify-cancel [--id N]
+dsh-native toast <文本>
+dsh-native vibrate [--ms N] [--amplitude 1..255]
+dsh-native clip get | clip set <文本>
+dsh-native share <文本> [--title T]
+dsh-native open <https 链接>
+dsh-native device
+dsh-native caps            # 查当前哪些能力开着、能不能用
+```
+
+分项而不是一个总开关，是因为容器里同时跑着用户自己装的第三方插件，它们共享同一个 token —— 「能调这个接口」
+等价于「容器内任何代码都能调」。读剪贴板与拉起分享/链接受 Android 的后台限制约束，应用不在前台时会返回
+`409 not_foreground` 而不是假装成功。
 
 ## 它是怎么跑起来的
 

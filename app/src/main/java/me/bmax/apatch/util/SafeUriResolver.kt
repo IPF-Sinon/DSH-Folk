@@ -84,7 +84,17 @@ object SafeUriResolver {
         return null
     }
 
+    /**
+     * 用 root shell 把文件拷进 cacheDir 再读。
+     *
+     * `Shell.cmd` 会让 libsu 自己去 spawn `su`，所以特权未启用时必须直接返回 null ——
+     * 调用方本来就把它当作「尽力而为的兜底」，返回 null 只是继续往下试 file:// 分支。
+     */
     private fun copyViaRoot(context: Context, sourcePath: String): InputStream? {
+        if (!me.bmax.apatch.dsh.PermissionManager.elevationEnabled(context)) {
+            Log.i(TAG, "特权未启用，跳过 root 拷贝兜底")
+            return null
+        }
         val cacheDir = context.cacheDir
         val tempFile = File(cacheDir, "safe_uri_${System.currentTimeMillis()}")
         try {

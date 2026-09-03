@@ -44,6 +44,7 @@ import com.ramcosta.composedestinations.generated.destinations.BackupSettingsScr
 import com.ramcosta.composedestinations.generated.destinations.ModuleSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.MultimediaSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.ThemeStoreScreenDestination
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.SearchAppBar
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
@@ -132,15 +133,20 @@ fun SettingsSearchScreen(navigator: DestinationsNavigator) {
                         categoryName = stringResource(resolved.entry.category.labelResId),
                         onClick = {
                             val highlightKey = resolved.entry.key
-                            when (category) {
-                                SettingCategory.GENERAL -> navigator.navigate(GeneralSettingsScreenDestination(highlightKey))
-                                SettingCategory.APPEARANCE -> navigator.navigate(AppearanceSettingsScreenDestination(highlightKey))
-                                SettingCategory.BEHAVIOR -> navigator.navigate(BehaviorSettingsScreenDestination(highlightKey))
-                                SettingCategory.SECURITY -> navigator.navigate(SecuritySettingsScreenDestination(highlightKey))
-                                SettingCategory.BACKUP -> navigator.navigate(BackupSettingsScreenDestination(highlightKey))
-                                SettingCategory.MODULE -> navigator.navigate(ModuleSettingsScreenDestination(highlightKey))
-                                SettingCategory.MULTIMEDIA -> navigator.navigate(MultimediaSettingsScreenDestination(highlightKey))
-                                SettingCategory.FUNCTION -> navigator.navigate(FunctionSettingsScreenDestination(highlightKey))
+                            when (resolved.entry.directTarget) {
+                                // 不在分类页上的设置项：直接开它真正所在的页面
+                                SettingsTarget.THEME_STORE ->
+                                    navigator.navigate(ThemeStoreScreenDestination)
+                                null -> when (category) {
+                                    SettingCategory.GENERAL -> navigator.navigate(GeneralSettingsScreenDestination(highlightKey))
+                                    SettingCategory.APPEARANCE -> navigator.navigate(AppearanceSettingsScreenDestination(highlightKey))
+                                    SettingCategory.BEHAVIOR -> navigator.navigate(BehaviorSettingsScreenDestination(highlightKey))
+                                    SettingCategory.SECURITY -> navigator.navigate(SecuritySettingsScreenDestination(highlightKey))
+                                    SettingCategory.BACKUP -> navigator.navigate(BackupSettingsScreenDestination(highlightKey))
+                                    SettingCategory.MODULE -> navigator.navigate(ModuleSettingsScreenDestination(highlightKey))
+                                    SettingCategory.MULTIMEDIA -> navigator.navigate(MultimediaSettingsScreenDestination(highlightKey))
+                                    SettingCategory.FUNCTION -> navigator.navigate(FunctionSettingsScreenDestination(highlightKey))
+                                }
                             }
                         },
                     )

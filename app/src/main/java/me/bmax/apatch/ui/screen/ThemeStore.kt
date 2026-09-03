@@ -41,11 +41,17 @@ import kotlinx.coroutines.launch
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.AppLoadingIndicator
+import me.bmax.apatch.ui.component.FilePickerDialog
+import me.bmax.apatch.ui.component.rememberLoadingDialog
+import me.bmax.apatch.ui.screen.settings.appearance.ThemeExportDialog
+import me.bmax.apatch.ui.screen.settings.appearance.ThemeImportDialog
+import me.bmax.apatch.ui.theme.ThemeManager
 import me.bmax.apatch.ui.viewmodel.ThemeStoreViewModel
 import java.io.File
 import me.bmax.apatch.util.DownloadProgress
 import me.bmax.apatch.util.DownloadStatus
 import me.bmax.apatch.util.ThemeDownloader
+import me.bmax.apatch.util.getSafeDownloadsDir
 
 @Destination<RootGraph>
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -80,6 +86,15 @@ fun ThemeStoreScreen(
     var downloadCompletedTheme by remember { mutableStateOf<ThemeStoreViewModel.RemoteTheme?>(null) }
     var isSearchActive by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
+
+    // 主题存档的导出/导入。原先挂在外观设置页，现已收到商店页顶栏，
+    // 让「取主题」和「搬主题」在同一个地方。
+    val loadingDialog = rememberLoadingDialog()
+    val showExportDialog = remember { mutableStateOf(false) }
+    val showFilePicker = remember { mutableStateOf(false) }
+    val showImportDialog = remember { mutableStateOf(false) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingImportMetadata by remember { mutableStateOf<ThemeManager.ThemeMetadata?>(null) }
 
     // Onboarding dialog for first-time theme store entry
     if (showOnboardingDialog) {
@@ -409,6 +424,23 @@ fun ThemeStoreScreen(
                     }
                 },
                 actions = {
+                    // 搜索态下让出顶栏空间，只留清除按钮
+                    if (!isSearchActive) {
+                        // 导出/导入在两种模式下都给：兼容模式本来就是留给「内置商店用不了」
+                        // 的设备的，把导入藏起来正好砍掉它存在的理由。
+                        IconButton(onClick = { showExportDialog.value = true }) {
+                            Icon(
+                                Icons.Filled.FileDownload,
+                                contentDescription = stringResource(R.string.settings_save_theme),
+                            )
+                        }
+                        IconButton(onClick = { showFilePicker.value = true }) {
+                            Icon(
+                                Icons.Filled.FileUpload,
+                                contentDescription = stringResource(R.string.settings_import_theme),
+                            )
+                        }
+                    }
                     // "我的主题"按钮 — hidden in compat mode
                     if (!isCompatMode) {
                         IconButton(onClick = { navigator.navigate(MyThemesScreenDestination) }) {
@@ -479,6 +511,99 @@ fun ThemeStoreScreen(
                 }
             }
         }
+    }
+
+    if (showExportDialog.value) {
+        ThemeExportDialog(
+            showDialog = showExportDialog,
+            onConfirm = { metadata ->
+                scope.launch {
+                    loadingDialog.show()
+                    try {
+                        // 不能写死 /storage/emulated/0：分区存储下没有「所有文件」权限时
+                        // 那个路径建不出来，导出会静默失败
+                        val exportDir = File(getSafeDownloadsDir(context), "DSH-Folk/Themes")
+                        if (!exportDir.exists()) {
+                            exportDir.mkdirs()
+                        }
+                        val safeName = metadata.name.replace("[\\\\/:*?\"<>|]".toRegex(), "_")
+                        val file = File(exportDir, "$safeName.fpt")
+                        val success = ThemeManager.exportTheme(context, Uri.fromFile(file), metadata)
+                        loadingDialog.hide()
+                        snackbarHostState.showSnackbar(
+                            message = if (success) {
+                                context.getString(R.string.settings_theme_saved) + ": ${file.absolutePath}"
+                            } else {
+                                context.getString(R.string.settings_theme_save_failed)
+                            }
+                        )
+                    } catch (e: Exception) {
+                        loadingDialog.hide()
+                        snackbarHostState.showSnackbar(
+                            message = context.getString(R.string.settings_theme_save_failed) + ": ${e.message}"
+                        )
+                    }
+                }
+            }
+        )
+    }
+
+    if (showFilePicker.value) {
+        FilePickerDialog(
+            onDismissRequest = { showFilePicker.value = false },
+            onFileSelected = { file ->
+                showFilePicker.value = false
+                val uri = Uri.fromFile(file)
+                scope.launch {
+                    loadingDialog.show()
+                    val metadata = ThemeManager.readThemeMetadata(context, uri)
+                    loadingDialog.hide()
+                    if (metadata != null) {
+                        pendingImportUri = uri
+                        pendingImportMetadata = metadata
+                        showImportDialog.value = true
+                    } else {
+                        // 读不出元数据不等于不是主题包（旧格式没有 metadata），直接试装
+                        loadingDialog.show()
+                        val success = ThemeManager.importTheme(context, uri)
+                        loadingDialog.hide()
+                        snackbarHostState.showSnackbar(
+                            message = if (success) {
+                                context.getString(R.string.settings_theme_imported)
+                            } else {
+                                context.getString(R.string.settings_theme_import_failed)
+                            }
+                        )
+                    }
+                }
+            }
+        )
+    }
+
+    val importMetadata = pendingImportMetadata
+    if (showImportDialog.value && importMetadata != null) {
+        ThemeImportDialog(
+            showDialog = showImportDialog,
+            metadata = importMetadata,
+            onConfirm = {
+                pendingImportUri?.let { uri ->
+                    scope.launch {
+                        loadingDialog.show()
+                        val success = ThemeManager.importTheme(context, uri)
+                        loadingDialog.hide()
+                        snackbarHostState.showSnackbar(
+                            message = if (success) {
+                                context.getString(R.string.settings_theme_imported)
+                            } else {
+                                context.getString(R.string.settings_theme_import_failed)
+                            }
+                        )
+                        pendingImportUri = null
+                        pendingImportMetadata = null
+                    }
+                }
+            }
+        )
     }
 }
 

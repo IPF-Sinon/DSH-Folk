@@ -69,8 +69,27 @@ object DshEnv {
     const val KEY_PROROOT_FAIL = "proroot_fail_streak"
     const val KEY_AUTOSTART = "dsh_autostart"     // 开机自启（BootCompletedReceiver 读取）
 
-    /** 权限通道首选：auto | root | shizuku | adb。 */
+    /**
+     * 权限通道首选：off | auto | root | shizuku | adb。
+     *
+     * **默认 off**（未启用）。见 [PermissionManager.readPreference] 与迁移逻辑。
+     */
     const val KEY_PERM_CHANNEL = "perm_channel_pref"
+
+    /**
+     * 原生能力桥总开关（默认关）。
+     *
+     * 关闭时 `/native/` 下的全部端点 一律 403。容器里跑的是 dsh 和用户自己装的第三方插件，
+     * 让它们随手弹通知、读剪贴板、拉起分享面板是实打实的能力扩张，必须显式同意。
+     */
+    const val KEY_NATIVE_BRIDGE = "native_bridge_enabled"
+
+    /**
+     * 已启用的原生能力（英文逗号分隔的能力 id，见 [DshNativeBridge.Cap]）。
+     *
+     * 总开关之外再分项：想让 agent 发通知的人不一定想让它读剪贴板。
+     */
+    const val KEY_NATIVE_CAPS = "native_bridge_caps"
 
     /** WebUI 打开方式：in | browser | ask。 */
     const val KEY_WEBUI_MODE = "webui_open_mode"

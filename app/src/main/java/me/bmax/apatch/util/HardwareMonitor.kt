@@ -1,8 +1,10 @@
 package me.bmax.apatch.util
 
 import android.util.Log
+import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.bmax.apatch.apApp
 import java.io.File
 
 /**
@@ -11,6 +13,19 @@ import java.io.File
  */
 object HardwareMonitor {
     private const val TAG = "HardwareMonitor"
+
+    /**
+     * 读 /proc、/sys 与 df 用的 shell 封装。
+     *
+     * 之前直接用 rootShellForResult，于是仪表盘每几秒的轮询都会让 libsu 去 spawn `su`：
+     * 用户即便在设置里选了「特权未启用」，也照样被弹授权框。这里统一走
+     * [dataShellForResult]，特权关闭时降级到普通 `sh`。
+     *
+     * 这些节点（/proc/stat、/proc/meminfo、/sys/class/thermal、df）在绝大多数设备上
+     * 对普通应用可读；读不到的分支本来就有 isSuccess 判空处理，只是少几行数据。
+     */
+    private fun procReadForResult(vararg cmds: String): Shell.Result =
+        dataShellForResult(apApp, *cmds)
 
     // CPU State
     private var prevTotalCpu: Long = 0
@@ -58,7 +73,7 @@ object HardwareMonitor {
     suspend fun getCpuUsage(): Int {
         return withContext(Dispatchers.IO) {
             try {
-                val result = rootShellForResult("cat /proc/stat")
+                val result = procReadForResult("cat /proc/stat")
                 if (result.isSuccess && result.out.isNotEmpty()) {
                     val line = result.out.firstOrNull { it.startsWith("cpu ") } ?: return@withContext 0
                     val parts = line.split(Regex("\\s+"))
@@ -110,7 +125,7 @@ object HardwareMonitor {
                 var rawGpu = -1
 
                 // 1. Try Direct Percentage Path (New Adreno)
-                val adrenoPercentResult = rootShellForResult("cat $ADRENO_PATH_NEW")
+                val adrenoPercentResult = procReadForResult("cat $ADRENO_PATH_NEW")
                 if (adrenoPercentResult.isSuccess && adrenoPercentResult.out.isNotEmpty()) {
                     val content = adrenoPercentResult.out[0].trim().replace("%", "")
                     val value = content.toIntOrNull()
@@ -119,7 +134,7 @@ object HardwareMonitor {
 
                 // 2. Try Adreno (Cumulative Differential)
                 if (rawGpu < 0) {
-                    val adrenoResult = rootShellForResult("cat $ADRENO_PATH")
+                    val adrenoResult = procReadForResult("cat $ADRENO_PATH")
                     if (adrenoResult.isSuccess && adrenoResult.out.isNotEmpty()) {
                         val content = adrenoResult.out[0].trim()
                         val parts = content.split(Regex("\\s+"))
@@ -152,7 +167,7 @@ object HardwareMonitor {
 
                 // 3. Try Mali (Direct Value)
                 if (rawGpu < 0) {
-                    val maliResult = rootShellForResult("cat $MALI_PATH")
+                    val maliResult = procReadForResult("cat $MALI_PATH")
                     if (maliResult.isSuccess && maliResult.out.isNotEmpty()) {
                         val value = maliResult.out[0].trim().toIntOrNull() ?: 0
                         rawGpu = if (value > 100) {
@@ -165,7 +180,7 @@ object HardwareMonitor {
                 
                 // 4. Try Generic
                 if (rawGpu < 0) {
-                    val genericResult = rootShellForResult("cat $GENERIC_PATH")
+                    val genericResult = procReadForResult("cat $GENERIC_PATH")
                     if (genericResult.isSuccess && genericResult.out.isNotEmpty()) {
                         val content = genericResult.out[0].trim().replace("%", "")
                         rawGpu = content.toIntOrNull()?.coerceIn(0, 100) ?: 0
@@ -203,7 +218,7 @@ object HardwareMonitor {
 
             try {
                 // Use /proc/meminfo for more reliable parsing
-                val memInfoResult = rootShellForResult("cat /proc/meminfo")
+                val memInfoResult = procReadForResult("cat /proc/meminfo")
                 if (memInfoResult.isSuccess) {
                     var memTotal = 0L
                     var memFree = 0L
@@ -247,7 +262,7 @@ object HardwareMonitor {
                 }
                 
                 // Parse /proc/swaps to distinguish ZRAM vs Swap File
-                val swapsResult = rootShellForResult("cat /proc/swaps")
+                val swapsResult = procReadForResult("cat /proc/swaps")
                 if (swapsResult.isSuccess) {
                     swapsResult.out.forEach { line ->
                         if (line.trim().startsWith("Filename")) return@forEach
@@ -282,7 +297,7 @@ object HardwareMonitor {
     suspend fun getCpuTemperature(): Float {
         return withContext(Dispatchers.IO) {
             try {
-                val result = rootShellForResult(
+                val result = procReadForResult(
                     "grep -rl 'cpu' /sys/class/thermal/thermal_zone*/type 2>/dev/null | " +
                     "sed 's|/type$|/temp|' | xargs cat 2>/dev/null | head -1"
                 )
@@ -293,17 +308,17 @@ object HardwareMonitor {
                     }
                 }
 
-                val allZones = rootShellForResult("ls /sys/class/thermal/ 2>/dev/null")
+                val allZones = procReadForResult("ls /sys/class/thermal/ 2>/dev/null")
                 if (allZones.isSuccess) {
                     for (zone in allZones.out) {
                         val zoneName = zone.trim()
                         if (!zoneName.startsWith("thermal_zone")) continue
-                        val typeResult = rootShellForResult("cat /sys/class/thermal/$zoneName/type 2>/dev/null")
+                        val typeResult = procReadForResult("cat /sys/class/thermal/$zoneName/type 2>/dev/null")
                         if (!typeResult.isSuccess || typeResult.out.isEmpty()) continue
                         val type = typeResult.out[0].trim().lowercase()
                         if (!type.contains("cpu")) continue
 
-                        val tempResult = rootShellForResult("cat /sys/class/thermal/$zoneName/temp 2>/dev/null")
+                        val tempResult = procReadForResult("cat /sys/class/thermal/$zoneName/temp 2>/dev/null")
                         if (tempResult.isSuccess && tempResult.out.isNotEmpty()) {
                             val temp = tempResult.out[0].trim().toFloatOrNull()
                             if (temp != null && temp > 0) {
@@ -324,7 +339,7 @@ object HardwareMonitor {
     suspend fun getCpuFrequencies(): List<CpuFreqInfo> {
         return withContext(Dispatchers.IO) {
             try {
-                val result = rootShellForResult("ls /sys/devices/system/cpu/ 2>/dev/null | grep -E '^cpu[0-9]+$'")
+                val result = procReadForResult("ls /sys/devices/system/cpu/ 2>/dev/null | grep -E '^cpu[0-9]+$'")
                 if (!result.isSuccess) return@withContext emptyList()
 
                 val infos = mutableListOf<CpuFreqInfo>()
@@ -333,13 +348,13 @@ object HardwareMonitor {
                     val match = Regex("cpu(\\d+)").find(coreName) ?: continue
                     val coreIndex = match.groupValues[1].toIntOrNull() ?: continue
 
-                    val onlineResult = rootShellForResult("cat /sys/devices/system/cpu/$coreName/online 2>/dev/null")
+                    val onlineResult = procReadForResult("cat /sys/devices/system/cpu/$coreName/online 2>/dev/null")
                     if (onlineResult.isSuccess && onlineResult.out.isNotEmpty()) {
                         if (onlineResult.out[0].trim() == "0") continue
                     }
 
-                    val curFreqResult = rootShellForResult("cat /sys/devices/system/cpu/$coreName/cpufreq/scaling_cur_freq 2>/dev/null")
-                    val maxFreqResult = rootShellForResult("cat /sys/devices/system/cpu/$coreName/cpufreq/cpuinfo_max_freq 2>/dev/null")
+                    val curFreqResult = procReadForResult("cat /sys/devices/system/cpu/$coreName/cpufreq/scaling_cur_freq 2>/dev/null")
+                    val maxFreqResult = procReadForResult("cat /sys/devices/system/cpu/$coreName/cpufreq/cpuinfo_max_freq 2>/dev/null")
 
                     val curFreq = if (curFreqResult.isSuccess && curFreqResult.out.isNotEmpty())
                         curFreqResult.out[0].trim().toLongOrNull() ?: 0L else 0L
@@ -370,7 +385,7 @@ object HardwareMonitor {
 
                 val infos = mutableListOf<StoragePartitionInfo>()
                 for ((path, label) in partitions) {
-                    val result = rootShellForResult("df -k $path 2>/dev/null")
+                    val result = procReadForResult("df -k $path 2>/dev/null")
                     if (result.isSuccess && result.out.size >= 2) {
                         val dataLine = result.out.lastOrNull()?.trim() ?: continue
                         val parts = dataLine.split(Regex("\\s+"))

@@ -72,7 +72,7 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
     val cutoffMillis = System.currentTimeMillis() - window.minutes * 60_000L
     val cutoffTs = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(cutoffMillis)
 
-    tryGetRootShell().use { shell ->
+    tryGetRootShell(context).use { shell ->
         // 崩溃转储目录按 mtime 收窗口内的文件：find 出相对路径清单，再交给 tar -T。
         // toybox find 的 `-mmin -N` 语义是「距今不足 N 分钟」（compare_numsign 的 '-' 分支），
         // GNU find 同义，两边都可用。只列 -type f：清单里出现目录会让 tar 递归整棵子树，
@@ -178,6 +178,12 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
             pw.println("DshPhase: ${me.bmax.apatch.dsh.DshRuntime.state.value.phase}")
             pw.println("ContainerRuntime: ${me.bmax.apatch.dsh.DshRuntime.runtimeId()}")
             pw.println("PermissionChannel: ${me.bmax.apatch.dsh.PermissionManager.status.value.channel}")
+            // 没有这一行，日后看到 dmesg / dropbox / tombstones 段为空时无法区分
+            // 「采集代码坏了」和「用户没启用特权，su 段本来就采不到」
+            pw.println(
+                "ElevationEnabled: " +
+                    me.bmax.apatch.dsh.PermissionManager.elevationEnabled(context)
+            )
         }
 
         // DSH 启动日志（替代原来的内核模块列表）
