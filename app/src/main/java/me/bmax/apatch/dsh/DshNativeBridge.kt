@@ -334,11 +334,11 @@ object DshNativeBridge {
         runCatching {
             val ch = NotificationChannel(
                 CHANNEL_ID,
-                ctx.getString(R.string.dsh_native_notif_channel_name),
+                ctx.appString(R.string.dsh_native_notif_channel_name),
                 // 与前台服务那条 IMPORTANCE_LOW 分开：agent 主动发的通知本来就是要人看见的
                 NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
-                description = ctx.getString(R.string.dsh_native_notif_channel_desc)
+                description = ctx.appString(R.string.dsh_native_notif_channel_desc)
             }
             ctx.getSystemService(NotificationManager::class.java)?.createNotificationChannel(ch)
             channelReady = true
