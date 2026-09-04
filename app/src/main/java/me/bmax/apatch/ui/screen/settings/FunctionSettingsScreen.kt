@@ -137,17 +137,18 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var hostPromptEnabled by rememberSaveable {
         mutableStateOf(DshHostPrompt.enabled(context))
     }
-    // 通知权限可能在系统设置里被改，回到本页时重读
-    var notifPermGranted by remember {
-        mutableStateOf(PermissionUtils.hasNotificationPermission(context))
+    // 每一项能力的权限是否齐了。任何一项都可能在系统设置里被撤销，而撤销之后开关
+    // 还是亮的 —— 所以必须每次回到本页重读（见下面的 LifecycleResumeEffect），
+    // 不能只在首次组合时读一次。
+    var capsWithPermission by remember {
+        mutableStateOf(DshNativeBridge.capsWithPermission(context))
     }
-    // 媒体 / 麦克风 / 所有文件访问同理：三者都能在系统设置里被撤销，而撤销之后
-    // 开关还是亮的 —— 必须每次回到本页重读，不能只在首次组合时读一次。
-    var mediaPermGranted by remember {
-        mutableStateOf(PermissionUtils.hasAnyMediaPermission(context))
-    }
-    var micPermGranted by remember {
-        mutableStateOf(PermissionUtils.hasMicrophonePermission(context))
+    // 「只给了大致位置」不是缺权限，是一种需要单独说明的状态
+    var coarseLocationOnly by remember {
+        mutableStateOf(
+            PermissionUtils.hasLocationPermission(context) &&
+                !PermissionUtils.hasPreciseLocationPermission(context)
+        )
     }
     var allFilesGranted by remember {
         mutableStateOf(PermissionUtils.hasAllFilesAccess(context))
@@ -162,27 +163,72 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        notifPermGranted = PermissionUtils.hasNotificationPermission(context)
-        mediaPermGranted = PermissionUtils.hasAnyMediaPermission(context)
-        micPermGranted = PermissionUtils.hasMicrophonePermission(context)
+        capsWithPermission = DshNativeBridge.capsWithPermission(context)
+        coarseLocationOnly = PermissionUtils.hasLocationPermission(context) &&
+            !PermissionUtils.hasPreciseLocationPermission(context)
         // 权限变了，提示词里的能力清单也得跟着变
         DshHostPrompt.writeFacts(context.applicationContext)
     }
 
     /**
-     * 为某项能力申请它缺的运行时权限。
+     * 跳某项特殊权限的系统设置页。
+     *
+     * 带包名的 Intent 在少数 ROM 上会打不开，所以失败后退回不带包名的全局列表页；
+     * 勿扰访问那个页面本身就不接受包名（[DshNativeBridge.Special.perAppUri] 是 false）。
+     * 两级都失败时退到应用信息页 —— 总比按下去什么都不发生好。
+     */
+    val openSpecialSettings: (DshNativeBridge.Special) -> Unit = { special ->
+        val withPackage = if (special.perAppUri) {
+            Intent(special.action)
+                .setData(Uri.fromParts("package", context.packageName, null))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        } else {
+            null
+        }
+        val ok = withPackage != null &&
+            runCatching { context.startActivity(withPackage) }.isSuccess
+        if (!ok) {
+            val plain = runCatching {
+                context.startActivity(
+                    Intent(special.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }.isSuccess
+            if (!plain) {
+                runCatching {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            .setData(Uri.fromParts("package", context.packageName, null))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            }
+        }
+    }
+    /**
+     * 为某项能力补上它缺的权限。
+     *
+     * 两条路：能 requestPermissions 的直接申请；特殊权限（改系统设置 / 勿扰访问 /
+     * 安装未知应用）只能跳系统页。走错路的后果是按钮按下去毫无反应。
      *
      * 用户第二次拒绝之后系统不再弹窗（`shouldShowRequestPermissionRationale` 为 false
      * 且权限仍未授予），此时 launch 会立即回调、界面毫无反应 —— 那种情况下直接送去
      * 系统设置页，否则用户会以为按钮坏了。
      */
     val requestCapPermission: (DshNativeBridge.Cap) -> Unit = { cap ->
-        val needed = DshNativeBridge.runtimePermissions(cap)
-            .filter {
+        // 特殊权限（改系统设置 / 勿扰访问 / 安装未知应用）不走 requestPermissions ——
+        // 那对它们永远返回拒绝，launch 一下界面毫无反应。它们各有一个专门的系统页。
+        val special = DshNativeBridge.specialPermissionOf(cap)
+        val needed = if (special != null) {
+            emptyList()
+        } else {
+            DshNativeBridge.runtimePermissions(cap).filter {
                 ContextCompat.checkSelfPermission(context, it) !=
                     PackageManager.PERMISSION_GRANTED
             }
-        if (needed.isNotEmpty()) {
+        }
+        if (special != null) {
+            openSpecialSettings(special)
+        } else if (needed.isNotEmpty()) {
             val activity = context as? Activity
             val canAsk = activity == null || !prefsAskedPermission(dshPrefs, cap) ||
                 needed.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
@@ -209,6 +255,7 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
             }
         }
     }
+
 
     /**
      * 跳「所有文件访问」的系统设置页。
@@ -286,11 +333,12 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
 
     // 权限与原生能力开关都可能在系统设置 / 另一处被改，回到本页时重读一遍
     LifecycleResumeEffect(Unit) {
-        notifPermGranted = PermissionUtils.hasNotificationPermission(context)
-        // 这三项都可能在系统设置页里被改（「所有文件访问」**只能**在那里改），
-        // 而用户从设置页返回走的正是 onResume —— 少了这几行，回来看到的还是旧状态。
-        mediaPermGranted = PermissionUtils.hasAnyMediaPermission(context)
-        micPermGranted = PermissionUtils.hasMicrophonePermission(context)
+        // 这些状态都可能在系统设置页里被改（「所有文件访问」「修改系统设置」
+        // 「勿扰访问」「安装未知应用」**只能**在那里改），而用户从设置页返回走的正是
+        // onResume —— 少了这几行，回来看到的还是旧状态。
+        capsWithPermission = DshNativeBridge.capsWithPermission(context)
+        coarseLocationOnly = PermissionUtils.hasLocationPermission(context) &&
+            !PermissionUtils.hasPreciseLocationPermission(context)
         allFilesGranted = PermissionUtils.hasAllFilesAccess(context)
         nativeBridgeEnabled = DshNativeBridge.enabled(context)
         nativeCaps = DshNativeBridge.enabledCaps(context)
@@ -484,9 +532,8 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                         hostPromptEnabled = on
                         DshHostPrompt.setEnabled(context.applicationContext, on)
                     },
-                    notifPermGranted = notifPermGranted,
-                    mediaPermGranted = mediaPermGranted,
-                    micPermGranted = micPermGranted,
+                    capsWithPermission = capsWithPermission,
+                    coarseLocationOnly = coarseLocationOnly,
                     allFilesGranted = allFilesGranted,
                     onRequestCapPermission = { cap -> requestCapPermission(cap) },
                     onOpenAllFilesSettings = { openAllFilesSettings() },

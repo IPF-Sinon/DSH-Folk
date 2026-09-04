@@ -123,15 +123,18 @@ fun FunctionSettingsContent(
     /** 已启用的原生能力分项。 */
     nativeCaps: Set<DshNativeBridge.Cap>,
     onNativeCapChange: (DshNativeBridge.Cap, Boolean) -> Unit,
-    /** 系统通知权限是否已授予（Android 13 起是运行时权限）。 */
-    notifPermGranted: Boolean,
-    /** 至少一类媒体读权限是否已授予。 */
-    mediaPermGranted: Boolean,
-    /** 麦克风权限是否已授予。 */
-    micPermGranted: Boolean,
+    /**
+     * 权限已经齐了的能力集合。
+     *
+     * 原来是三个布尔（通知/媒体/麦克风），加到十几项之后那种写法会变成一串参数 ——
+     * 而且每加一项能力都要改三处签名。改成集合后界面只问「这一项齐了吗」。
+     */
+    capsWithPermission: Set<DshNativeBridge.Cap>,
+    /** 是否只拿到了「大致位置」（精确位置未授予）。单独一行提示，不算缺权限。 */
+    coarseLocationOnly: Boolean,
     /** 「所有文件访问」是否已授予（appop 特殊权限，只能跳系统设置页）。 */
     allFilesGranted: Boolean,
-    /** 为某项能力申请它缺的运行时权限（通知/媒体/麦克风）。 */
+    /** 为某项能力申请它缺的权限：运行时权限直接申请，特殊权限跳系统页。 */
     onRequestCapPermission: (DshNativeBridge.Cap) -> Unit,
     /** 跳「所有文件访问」的系统设置页。 */
     onOpenAllFilesSettings: () -> Unit,
@@ -748,39 +751,57 @@ fun FunctionSettingsContent(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.height(4.dp))
-                    for (cap in DshNativeBridge.Cap.entries) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(nativeCapTitleRes(cap)),
-                                    style = MaterialTheme.typography.bodyMedium,
+                    // 十几项平铺成一列会变成一堵开关墙，所以按「这项能力动的是什么」分组。
+                    // 分组只是视觉的：开关语义、prefs 存储、协议 id 全都不变。
+                    for (group in CapGroup.entries) {
+                        val caps = group.caps
+                        if (caps.isEmpty()) continue
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(group.titleRes),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        for (cap in caps) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(nativeCapTitleRes(cap)),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        text = stringResource(nativeCapSummaryRes(cap)),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                ExpressiveSwitch(
+                                    checked = cap in nativeCaps,
+                                    onCheckedChange = { on -> onNativeCapChange(cap, on) },
+                                    enabled = nativeBridgeEnabled,
                                 )
+                            }
+                            // 勾上了但权限没给：开关是亮的，调用却一定失败。每项自己紧跟一行
+                            // 提示，而不是攒到卡片末尾 —— 用户要知道是**哪一项**缺权限。
+                            val on = nativeBridgeEnabled && cap in nativeCaps
+                            if (on && cap !in capsWithPermission) {
+                                TextButton(onClick = { onRequestCapPermission(cap) }) {
+                                    Text(stringResource(capPermissionHintRes(cap)))
+                                }
+                            } else if (on && cap == DshNativeBridge.Cap.LOCATION &&
+                                coarseLocationOnly
+                            ) {
+                                // 大致位置**不是**缺权限（很多人就想只给这个），所以是一行
+                                // 说明而不是「去授权」按钮：点了也只会再弹一次同样的框。
                                 Text(
-                                    text = stringResource(nativeCapSummaryRes(cap)),
+                                    text = stringResource(R.string.dsh_native_precise_location),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            ExpressiveSwitch(
-                                checked = cap in nativeCaps,
-                                onCheckedChange = { on -> onNativeCapChange(cap, on) },
-                                enabled = nativeBridgeEnabled,
-                            )
-                        }
-                        // 勾上了但系统权限没给：开关是亮的，调用却一定失败。
-                        // 每项自己紧跟一行提示，而不是攒到卡片末尾 —— 用户要知道是**哪一项**缺权限。
-                        val hint = if (nativeBridgeEnabled && cap in nativeCaps) {
-                            capPermissionHintRes(cap, notifPermGranted, mediaPermGranted, micPermGranted)
-                        } else {
-                            null
-                        }
-                        if (hint != null) {
-                            TextButton(onClick = { onRequestCapPermission(cap) }) {
-                                Text(stringResource(hint))
                             }
                         }
                     }
@@ -1129,6 +1150,16 @@ internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.DEVICE -> R.string.dsh_native_cap_device
     DshNativeBridge.Cap.MEDIA -> R.string.dsh_native_cap_media
     DshNativeBridge.Cap.MIC -> R.string.dsh_native_cap_mic
+    DshNativeBridge.Cap.CAMERA -> R.string.dsh_native_cap_camera
+    DshNativeBridge.Cap.CALENDAR -> R.string.dsh_native_cap_calendar
+    DshNativeBridge.Cap.CONTACTS -> R.string.dsh_native_cap_contacts
+    DshNativeBridge.Cap.LOCATION -> R.string.dsh_native_cap_location
+    DshNativeBridge.Cap.PHONE -> R.string.dsh_native_cap_phone
+    DshNativeBridge.Cap.SENSORS -> R.string.dsh_native_cap_sensors
+    DshNativeBridge.Cap.NETWORK -> R.string.dsh_native_cap_network
+    DshNativeBridge.Cap.VOLUME -> R.string.dsh_native_cap_volume
+    DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_cap_settings
+    DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_cap_install
 }
 
 /** 原生能力 → 说明串。 */
@@ -1141,27 +1172,102 @@ internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.DEVICE -> R.string.dsh_native_cap_device_desc
     DshNativeBridge.Cap.MEDIA -> R.string.dsh_native_cap_media_desc
     DshNativeBridge.Cap.MIC -> R.string.dsh_native_cap_mic_desc
+    DshNativeBridge.Cap.CAMERA -> R.string.dsh_native_cap_camera_desc
+    DshNativeBridge.Cap.CALENDAR -> R.string.dsh_native_cap_calendar_desc
+    DshNativeBridge.Cap.CONTACTS -> R.string.dsh_native_cap_contacts_desc
+    DshNativeBridge.Cap.LOCATION -> R.string.dsh_native_cap_location_desc
+    DshNativeBridge.Cap.PHONE -> R.string.dsh_native_cap_phone_desc
+    DshNativeBridge.Cap.SENSORS -> R.string.dsh_native_cap_sensors_desc
+    DshNativeBridge.Cap.NETWORK -> R.string.dsh_native_cap_network_desc
+    DshNativeBridge.Cap.VOLUME -> R.string.dsh_native_cap_volume_desc
+    DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_cap_settings_desc
+    DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_cap_install_desc
 }
 
 /**
- * 这项能力缺权限时该显示哪一行提示；不缺就返回 null。
+ * 这项能力缺权限时显示的那一行。
  *
- * 只覆盖**可以申请**的运行时权限。「所有文件访问」不在这里：它是 appop 特殊权限，
- * 走的是独立的一行 + 跳系统设置页。
+ * 措辞按「点下去会发生什么」分成两类：运行时权限说「点这里授权」（会弹系统框），
+ * 特殊权限说「点这里打开系统页」（会离开应用）。把两者写成同一句话是这类界面最常见的
+ * 骗人写法 —— 用户点了以为要弹框，结果被丢进设置里。
+ *
+ * 「所有文件访问」不在这里：它不是 Cap，走独立的一行。
  */
-internal fun capPermissionHintRes(
-    cap: DshNativeBridge.Cap,
-    notifGranted: Boolean,
-    mediaGranted: Boolean,
-    micGranted: Boolean,
-): Int? = when (cap) {
-    DshNativeBridge.Cap.NOTIFY ->
-        if (notifGranted) null else R.string.dsh_native_need_notif_perm
-    DshNativeBridge.Cap.MEDIA ->
-        if (mediaGranted) null else R.string.dsh_native_need_media_perm
-    DshNativeBridge.Cap.MIC ->
-        if (micGranted) null else R.string.dsh_native_need_mic_perm
-    else -> null
+internal fun capPermissionHintRes(cap: DshNativeBridge.Cap): Int = when (cap) {
+    DshNativeBridge.Cap.NOTIFY -> R.string.dsh_native_need_notif_perm
+    DshNativeBridge.Cap.MEDIA -> R.string.dsh_native_need_media_perm
+    DshNativeBridge.Cap.MIC -> R.string.dsh_native_need_mic_perm
+    DshNativeBridge.Cap.CAMERA -> R.string.dsh_native_need_camera_perm
+    DshNativeBridge.Cap.CALENDAR -> R.string.dsh_native_need_calendar_perm
+    DshNativeBridge.Cap.CONTACTS -> R.string.dsh_native_need_contacts_perm
+    DshNativeBridge.Cap.LOCATION -> R.string.dsh_native_need_location_perm
+    DshNativeBridge.Cap.PHONE -> R.string.dsh_native_need_phone_perm
+    DshNativeBridge.Cap.SENSORS -> R.string.dsh_native_need_sensors_perm
+    // 下面三项是特殊权限：点了会跳系统设置页，不会弹授权框
+    DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_need_write_settings
+    DshNativeBridge.Cap.VOLUME -> R.string.dsh_native_need_dnd_access
+    DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_need_install_perm
+    // 剩下的（toast/振动/剪贴板/分享/设备信息/网络）不需要任何权限。
+    // 界面只在 cap !in capsWithPermission 时才取这一行，而这些项恒在集合里，
+    // 所以这个分支实际不会被显示；给一个中性串而不是抛，免得将来加了新能力就崩。
+    else -> R.string.dsh_native_need_notif_perm
+}
+
+/**
+ * 能力分组。
+ *
+ * 顺序就是界面顺序，从「只影响这台手机的表面」到「读走个人数据」再到「改系统状态」——
+ * 越往下越该慎重，用户从上往下扫的时候压力是递增的。
+ *
+ * [caps] 必须覆盖 [DshNativeBridge.Cap] 的每一项，否则新加的能力会在界面上凭空消失，
+ * 却仍然可以被 prefs 里的旧值打开。`FunctionSettingsCapGroupTest` 盯着这一点。
+ */
+internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.Cap>) {
+    /** 只影响这台设备的即时表现，不读也不改任何持久状态。 */
+    INTERACT(
+        R.string.dsh_native_group_interact,
+        listOf(
+            DshNativeBridge.Cap.NOTIFY,
+            DshNativeBridge.Cap.TOAST,
+            DshNativeBridge.Cap.VIBRATE,
+            DshNativeBridge.Cap.CLIPBOARD,
+            DshNativeBridge.Cap.INTENT,
+        ),
+    ),
+
+    /** 读设备与环境状态，都是只读、都不涉及个人内容。 */
+    SENSE(
+        R.string.dsh_native_group_sense,
+        listOf(
+            DshNativeBridge.Cap.DEVICE,
+            DshNativeBridge.Cap.NETWORK,
+            DshNativeBridge.Cap.PHONE,
+            DshNativeBridge.Cap.SENSORS,
+        ),
+    ),
+
+    /** 读（少数情况下写）属于用户本人的内容。这一组最该逐项想清楚。 */
+    PERSONAL(
+        R.string.dsh_native_group_personal,
+        listOf(
+            DshNativeBridge.Cap.MEDIA,
+            DshNativeBridge.Cap.CAMERA,
+            DshNativeBridge.Cap.MIC,
+            DshNativeBridge.Cap.LOCATION,
+            DshNativeBridge.Cap.CALENDAR,
+            DshNativeBridge.Cap.CONTACTS,
+        ),
+    ),
+
+    /** 改系统的全局状态。改完不会自动恢复，所以放在最后。 */
+    CONTROL(
+        R.string.dsh_native_group_control,
+        listOf(
+            DshNativeBridge.Cap.VOLUME,
+            DshNativeBridge.Cap.SETTINGS,
+            DshNativeBridge.Cap.INSTALL,
+        ),
+    ),
 }
 
 /**

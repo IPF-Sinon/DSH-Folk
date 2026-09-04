@@ -27,6 +27,37 @@
          只在应用处于前台时可用 —— 我们的前台服务类型是 specialUse，它**不**授予
          后台录音；Android 9 起后台录音只会拿到静音，而不是报错。 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- 相机：/native/camera/photo 让宿主无预览地拍一张照。
+         同样只在前台可用 —— Android 9 起后台进程访问相机拿不到画面。 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- 日历：读事件 + 新建事件（/native/calendar/*）。 -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- 通讯录：只读（/native/contacts/list）。没有写入接口，改别人的通讯录
+         不该由容器里的代码代劳。 -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- 位置：/native/location。只申请前台位置 —— ACCESS_BACKGROUND_LOCATION 是
+         独立的一次授权、且必须先拿到前台位置才能申请，而这项能力本来就要求前台。
+         COARSE 与 FINE 都声明：Android 12 起用户可以只给「大致位置」，
+         少声明 COARSE 会让那种选择变成「完全没有位置」。 -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- 电话状态：运营商、网络制式、SIM 与通话状态（/native/phone/info）。
+         没有 CALL_PHONE —— 拨号走 ACTION_DIAL 只把号码填进拨号盘，由用户按下通话键。
+         也没有 READ_CALL_LOG / READ_SMS：通话记录与短信不在本次范围内。 -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- 传感器：普通传感器（加速度/陀螺/光/气压…）不需要权限，这两项是例外 ——
+         心率属于人体传感器，计步器在 Android 10 起归入身体活动。 -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <!-- 修改系统设置（亮度、休眠时间、自动旋转…）。protectionLevel 含 appop，
+         requestPermissions() 拿不到，只能跳 ACTION_MANAGE_WRITE_SETTINGS；
+         用 Settings.System.canWrite() 检查。 -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- 静音/勿扰：setRingerMode 进 SILENT、以及在勿扰开启时改音量都需要它。
+         同样是特殊权限，走 ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS。 -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Shizuku API：作为客户端向已安装的 Shizuku / Sui 申请授权。
          不要重复声明同名 <permission>，官方 Shizuku 已声明，重复会导致
@@ -50,7 +81,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- 无线 ADB 配对需要读 WiFi 状态解析本机 IP 与 mDNS 发现 -->
+    <!-- 无线 ADB 配对需要读 WiFi 状态解析本机 IP 与 mDNS 发现。
+         ACCESS_WIFI_STATE / ACCESS_NETWORK_STATE 同时供 /native/network 读网络状态。
+         注意 Android 10 起 getConnectionInfo() 的 SSID/BSSID 需要位置权限才返回真值，
+         没有位置权限时系统给的是占位串 —— /native/network 会据此省略这两个字段，
+         而不是把 "<unknown ssid>" 当成网络名交出去。 -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- 无线调试自动开启（配对成功后由 adb shell 授予）；未授予时相关功能自动降级 -->
@@ -60,6 +95,32 @@
     <!-- 应用内更新：下载并校验 APK 后唤起系统安装器。
          不做静默安装（需要 device owner 或系统签名）；sha256 校验不通过一律不装。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- 上面那些权限会**隐式**声明硬件要求，必须逐条改成 required=false。
+         Android 的规则：申请 CAMERA 等于要求 android.hardware.camera 与
+         camera.autofocus，ACCESS_FINE_LOCATION 等于要求 GPS，RECORD_AUDIO 等于要求
+         麦克风，ACCESS_WIFI_STATE 等于要求 WiFi —— 而且默认都是 required=true。
+
+         本应用的核心是在容器里跑 Node，没有摄像头 / GPS / 麦克风时其余功能一个不少：
+         那些能力本来就默认关闭，而 /native/capabilities 会如实报 available:false。
+         不写这几行，一台没有自动对焦或没有陀螺仪的平板会被应用商店直接判为不兼容。 -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.location.network" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.light" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.proximity" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.barometer" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.heartrate" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
 
     <application
         android:name=".APApplication"

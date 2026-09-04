@@ -10,6 +10,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.os.BatteryManager
 import android.os.Build
@@ -19,8 +20,10 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.MediaStore
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import me.bmax.apatch.R
 import me.bmax.apatch.util.appString
@@ -62,7 +65,7 @@ object DshNativeBridge {
     private const val NOTIFICATION_ID_BASE = 2000
     private const val MAX_NOTIFICATION_SLOT = 999
 
-    private const val MAX_TEXT_LEN = 4096
+    internal const val MAX_TEXT_LEN = 4096
     private const val MAX_VIBRATE_MS = 3000L
 
     /** 主线程操作的等待上限：桥接线程不能被 UI 卡死。 */
@@ -87,13 +90,38 @@ object DshNativeBridge {
         MEDIA("media"),
         /** 麦克风录音。 */
         MIC("mic"),
+        /** 无预览拍照。 */
+        CAMERA("camera"),
+        /** 日历：读事件 + 新建事件。 */
+        CALENDAR("calendar"),
+        /** 通讯录：只读。 */
+        CONTACTS("contacts"),
+        /** 位置。 */
+        LOCATION("location"),
+        /** 电话状态（运营商/制式/SIM/通话状态），不含拨号与短信。 */
+        PHONE("phone"),
+        /** 传感器读数。 */
+        SENSORS("sensors"),
+        /** 网络状态，只读。 */
+        NETWORK("network"),
+        /** 音量与响铃模式。 */
+        VOLUME("volume"),
+        /** 系统设置：亮度、休眠时间、自动旋转。 */
+        SETTINGS("settings"),
+        /**
+         * 「允许安装未知应用」的状态查询。
+         *
+         * 只读一个开关，不代替用户安装 —— 装 APK 仍然由系统安装器弹窗确认。
+         * 给它一项开关是因为「这台机器允不允许侧载」本身就是设备指纹的一部分。
+         */
+        INSTALL("install"),
     }
 
     /**
      * 这项能力需要的**运行时**权限（可以直接 `requestPermissions` 的那种）。
      *
-     * 空数组表示不需要任何运行时权限。注意「所有文件访问」不在这里 —— 它是 appop
-     * 特殊权限，申请不到，只能跳系统设置页（见「功能」设置页的共享存储那一行）。
+     * 空数组表示不需要任何运行时权限 —— 有两类：真的不需要（toast、振动、网络状态），
+     * 以及需要一项**特殊**权限（[specialPermissionOf]）。后者申请不到，只能跳系统页。
      */
     fun runtimePermissions(cap: Cap): Array<String> = when (cap) {
         Cap.NOTIFY ->
@@ -104,8 +132,86 @@ object DshNativeBridge {
             }
         Cap.MEDIA -> PermissionUtils.mediaPermissions()
         Cap.MIC -> arrayOf(android.Manifest.permission.RECORD_AUDIO)
+        Cap.CAMERA -> arrayOf(android.Manifest.permission.CAMERA)
+        Cap.CALENDAR -> PermissionUtils.calendarPermissions()
+        Cap.CONTACTS -> arrayOf(android.Manifest.permission.READ_CONTACTS)
+        Cap.LOCATION -> PermissionUtils.locationPermissions()
+        Cap.PHONE -> arrayOf(android.Manifest.permission.READ_PHONE_STATE)
+        // 绝大多数传感器不需要权限；这两个只影响心率与计步两项，
+        // 缺了它们这项能力**依然可用**（见 availability）
+        Cap.SENSORS -> PermissionUtils.sensorPermissions()
         else -> emptyArray()
     }
+
+    /**
+     * 这项能力需要的**特殊**权限（`requestPermissions` 拿不到、必须跳系统页的那种）。
+     *
+     * 与 [runtimePermissions] 互斥：一项能力要么走运行时申请，要么走系统页，
+     * 不会两者都要。null 表示不需要特殊权限。
+     */
+    fun specialPermissionOf(cap: Cap): Special? = when (cap) {
+        Cap.SETTINGS -> Special.WRITE_SETTINGS
+        Cap.VOLUME -> Special.NOTIFICATION_POLICY
+        Cap.INSTALL -> Special.REQUEST_INSTALL
+        else -> null
+    }
+
+    /**
+     * 申请不到的特殊权限。
+     *
+     * 每一项都对应一个专门的系统设置页 Action —— 通用的「应用信息」页对用户多两跳，
+     * 而且 WRITE_SETTINGS 那个开关在应用信息页里根本找不到（它在「特殊应用权限」下面）。
+     */
+    enum class Special(val action: String, val perAppUri: Boolean) {
+        /** 修改系统设置：亮度、休眠时间、自动旋转。 */
+        WRITE_SETTINGS(Settings.ACTION_MANAGE_WRITE_SETTINGS, true),
+
+        /**
+         * 勿扰访问权。
+         *
+         * 这个页面**不接受** package: uri —— 传了也只会被忽略，只能列出所有应用让用户
+         * 自己找到本应用。所以 [perAppUri] 是 false。
+         */
+        NOTIFICATION_POLICY(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS, false),
+
+        /** 安装未知应用。 */
+        REQUEST_INSTALL(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, true),
+    }
+
+    /** 这项特殊权限现在是否已经授予。 */
+    fun specialGranted(ctx: Context, special: Special): Boolean = when (special) {
+        Special.WRITE_SETTINGS -> PermissionUtils.canWriteSystemSettings(ctx)
+        Special.NOTIFICATION_POLICY -> PermissionUtils.hasNotificationPolicyAccess(ctx)
+        Special.REQUEST_INSTALL -> PermissionUtils.canRequestPackageInstalls(ctx)
+    }
+
+    /**
+     * 这项能力的权限是否已经齐了（运行时的与特殊的一并判断）。
+     *
+     * 界面用它决定要不要在那一项下面显示「去授权」。返回 true **不代表**能力可用 ——
+     * 设备可能压根没有麦克风或摄像头，那是 [availability] 的事。
+     *
+     * 位置这一项只要求拿到任一档：只给了「大致位置」也算齐，精度差异由界面单独一行说明，
+     * 而不是逼用户去追求精确位置。传感器同理 —— 缺 BODY_SENSORS 只是少两个传感器。
+     */
+    fun permissionSatisfied(ctx: Context, cap: Cap): Boolean {
+        specialPermissionOf(cap)?.let { return specialGranted(ctx, it) }
+        val needed = runtimePermissions(cap)
+        if (needed.isEmpty()) return true
+        return when (cap) {
+            // 三类媒体给一类就够（用户可能只想给照片）
+            Cap.MEDIA -> PermissionUtils.hasAnyMediaPermission(ctx)
+            // 大致位置也算给了
+            Cap.LOCATION -> PermissionUtils.hasLocationPermission(ctx)
+            else -> needed.all {
+                ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+    }
+
+    /** 权限齐了的能力集合。界面一次算好，避免每一行各查一遍。 */
+    fun capsWithPermission(ctx: Context): Set<Cap> =
+        Cap.entries.filter { permissionSatisfied(ctx, it) }.toSet()
 
     // ────────────────────────── 开关 ──────────────────────────
 
@@ -158,12 +264,48 @@ object DshNativeBridge {
             if (!PermissionUtils.hasMicrophonePermission(ctx)) false to "no_audio_permission"
             else if (!hasMicrophone(ctx)) false to "no_microphone"
             else true to ""
+        Cap.CAMERA ->
+            if (!PermissionUtils.hasCameraPermission(ctx)) false to "no_camera_permission"
+            else if (!DshCamera.hasCamera(ctx)) false to "no_camera"
+            else true to ""
+        // 读能力只要读权限：写日历缺权限时由 /native/calendar/create 自己回 403，
+        // 不能因为不能写就把「看日程」也判成不可用
+        Cap.CALENDAR ->
+            if (PermissionUtils.hasCalendarReadPermission(ctx)) true to ""
+            else false to "no_calendar_permission"
+        Cap.CONTACTS ->
+            if (PermissionUtils.hasContactsPermission(ctx)) true to ""
+            else false to "no_contacts_permission"
+        Cap.LOCATION ->
+            if (PermissionUtils.hasLocationPermission(ctx)) true to ""
+            else false to "no_location_permission"
+        Cap.PHONE ->
+            if (!PermissionUtils.hasPhoneStatePermission(ctx)) false to "no_phone_permission"
+            else if (!hasTelephony(ctx)) false to "no_telephony"
+            else true to ""
+        // 传感器这一项**不**因缺权限而不可用：加速度、光、气压等都不需要权限，
+        // BODY_SENSORS / ACTIVITY_RECOGNITION 只影响心率与计步两条，
+        // 由 /native/sensors/list 的 needPermission 字段说明
+        Cap.SENSORS -> true to ""
+        // 这三项走特殊权限：申请不到，只能跳系统页
+        Cap.SETTINGS ->
+            if (PermissionUtils.canWriteSystemSettings(ctx)) true to ""
+            else false to "no_write_settings"
+        // 音量读取从不需要授权，只有「勿扰开着时改音量」「设静音/振动」才要策略访问权
+        // —— 所以这一项恒可用，权限不足时由具体的写操作回 403
+        Cap.VOLUME -> true to ""
+        Cap.INSTALL -> true to ""
         else -> true to ""
     }
 
     private fun hasMicrophone(ctx: Context): Boolean = runCatching {
-        ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_MICROPHONE)
+        ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
     }.getOrDefault(true)
+
+    /** 平板与模拟器常常没有电话功能，那时 TelephonyManager 的字段全是空的。 */
+    private fun hasTelephony(ctx: Context): Boolean = runCatching {
+        ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+    }.getOrDefault(false)
 
     // ────────────────────────── 分发 ──────────────────────────
 
@@ -218,6 +360,34 @@ object DshNativeBridge {
             method == "GET" && path == "/native/media/list" -> mediaList(ctx, params)
             method == "GET" && path == "/native/media/read" -> mediaRead(ctx, params)
             method == "POST" && path == "/native/mic/record" -> micRecord(ctx, params)
+            method == "POST" && path == "/native/camera/photo" -> DshCamera.photo(ctx, params)
+            method == "GET" && path == "/native/calendar/list" ->
+                DshPersonalData.calendarList(ctx, params)
+            method == "POST" && path == "/native/calendar/create" ->
+                DshPersonalData.calendarCreate(ctx, params)
+            method == "GET" && path == "/native/contacts/list" ->
+                DshPersonalData.contactsList(ctx, params)
+            method == "GET" && path == "/native/location" ->
+                DshPersonalData.location(ctx, params)
+            method == "GET" && path == "/native/phone/info" -> DshDeviceSense.phoneInfo(ctx)
+            method == "GET" && path == "/native/sensors/list" ->
+                DshDeviceSense.sensorList(ctx)
+            method == "GET" && path == "/native/sensors/read" ->
+                DshDeviceSense.sensorRead(ctx, params)
+            method == "GET" && path == "/native/network" -> DshDeviceSense.networkInfo(ctx)
+            method == "GET" && path == "/native/volume" -> DshSystemCtl.volumeGet(ctx)
+            method == "POST" && path == "/native/volume" ->
+                DshSystemCtl.volumeSet(ctx, params)
+            method == "POST" && path == "/native/ringer" ->
+                DshSystemCtl.ringerSet(ctx, params)
+            method == "GET" && path == "/native/settings" -> DshSystemCtl.settingsGet(ctx)
+            method == "POST" && path == "/native/settings/brightness" ->
+                DshSystemCtl.brightnessSet(ctx, params)
+            method == "POST" && path == "/native/settings/timeout" ->
+                DshSystemCtl.timeoutSet(ctx, params)
+            method == "POST" && path == "/native/settings/rotation" ->
+                DshSystemCtl.rotationSet(ctx, params)
+            method == "GET" && path == "/native/install" -> DshSystemCtl.installStatus(ctx)
             else -> methodNotAllowed(ctx, method, path)
         }
     }
@@ -239,6 +409,16 @@ object DshNativeBridge {
             Cap.DEVICE -> R.string.dsh_native_cap_device
             Cap.MEDIA -> R.string.dsh_native_cap_media
             Cap.MIC -> R.string.dsh_native_cap_mic
+            Cap.CAMERA -> R.string.dsh_native_cap_camera
+            Cap.CALENDAR -> R.string.dsh_native_cap_calendar
+            Cap.CONTACTS -> R.string.dsh_native_cap_contacts
+            Cap.LOCATION -> R.string.dsh_native_cap_location
+            Cap.PHONE -> R.string.dsh_native_cap_phone
+            Cap.SENSORS -> R.string.dsh_native_cap_sensors
+            Cap.NETWORK -> R.string.dsh_native_cap_network
+            Cap.VOLUME -> R.string.dsh_native_cap_volume
+            Cap.SETTINGS -> R.string.dsh_native_cap_settings
+            Cap.INSTALL -> R.string.dsh_native_cap_install
         },
     )
 
@@ -251,6 +431,19 @@ object DshNativeBridge {
         "/native/device" -> Cap.DEVICE
         "/native/media/list", "/native/media/read" -> Cap.MEDIA
         "/native/mic/record" -> Cap.MIC
+        "/native/camera/photo" -> Cap.CAMERA
+        "/native/calendar/list", "/native/calendar/create" -> Cap.CALENDAR
+        "/native/contacts/list" -> Cap.CONTACTS
+        "/native/location" -> Cap.LOCATION
+        "/native/phone/info" -> Cap.PHONE
+        "/native/sensors/list", "/native/sensors/read" -> Cap.SENSORS
+        "/native/network" -> Cap.NETWORK
+        "/native/volume", "/native/ringer" -> Cap.VOLUME
+        "/native/settings",
+        "/native/settings/brightness",
+        "/native/settings/timeout",
+        "/native/settings/rotation" -> Cap.SETTINGS
+        "/native/install" -> Cap.INSTALL
         else -> null
     }
 
@@ -271,6 +464,9 @@ object DshNativeBridge {
             .put("ok", true)
             .put("bridgeEnabled", on)
             .put("foreground", isForeground(ctx))
+            // 特殊权限单独一段：它们申请不到，agent 该做的是提示用户去系统页开，
+            // 而不是反复撞 403
+            .put("special", DshSystemCtl.specialPermissions(ctx))
             .put("caps", caps)
             .toString()
     }
@@ -509,8 +705,8 @@ object DshNativeBridge {
     /** 暂存区里保留的文件数上限：超出就删最旧的，别让 rootfs 被无声吃满。 */
     private const val STAGE_KEEP = 32
 
-    private const val DEFAULT_MEDIA_LIMIT = 50
-    private const val MAX_MEDIA_LIMIT = 500
+    internal const val DEFAULT_MEDIA_LIMIT = 50
+    internal const val MAX_MEDIA_LIMIT = 500
 
     /** 单次取媒体的字节上限：容器里读它还要再占一份，64MB 已经很宽松。 */
     private const val MAX_MEDIA_BYTES = 64L * 1024 * 1024
@@ -535,14 +731,14 @@ object DshNativeBridge {
      */
     private val recording = java.util.concurrent.atomic.AtomicBoolean(false)
 
-    private fun stageDir(ctx: Context): File =
+    internal fun stageDir(ctx: Context): File =
         File(DshEnv.tmpDir(ctx), STAGE_DIR_NAME).apply { mkdirs() }
 
     /** 暂存目录对应的**容器内**路径（rootfs/tmp → /tmp）。 */
-    private fun stageGuestPath(name: String): String = "/tmp/$STAGE_DIR_NAME/$name"
+    internal fun stageGuestPath(name: String): String = "/tmp/$STAGE_DIR_NAME/$name"
 
     /** 只保留最近 [STAGE_KEEP] 个文件。 */
-    private fun trimStage(dir: File) {
+    internal fun trimStage(dir: File) {
         runCatching {
             val files = dir.listFiles()?.filter { it.isFile }?.sortedBy { it.lastModified() }
                 ?: return
@@ -552,7 +748,7 @@ object DshNativeBridge {
     }
 
     /** 文件名里只留安全字符：这个名字会拼进容器路径。 */
-    private fun safeName(raw: String, fallbackExt: String): String {
+    internal fun safeName(raw: String, fallbackExt: String): String {
         val cleaned = raw.map { c ->
             if (c.isLetterOrDigit() || c == '.' || c == '-' || c == '_') c else '_'
         }.joinToString("").trim('.', '_')
@@ -831,14 +1027,14 @@ object DshNativeBridge {
      * 桥接请求跑在自己的连接线程上。前台服务给的是 IMPORTANCE_FOREGROUND_SERVICE(125)，
      * 只有真的有 Activity 在前面才是 IMPORTANCE_FOREGROUND(100) —— 正好是需要的区分。
      */
-    private fun isForeground(ctx: Context): Boolean = runCatching {
+    internal fun isForeground(ctx: Context): Boolean = runCatching {
         val info = android.app.ActivityManager.RunningAppProcessInfo()
         android.app.ActivityManager.getMyMemoryState(info)
         info.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
     }.getOrDefault(false)
 
     /** 在主线程跑一段并等它结束（有超时，不让桥接线程被 UI 卡死）。 */
-    private fun onMain(block: () -> Unit) {
+    internal fun onMain(block: () -> Unit) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             block()
             return
@@ -855,12 +1051,12 @@ object DshNativeBridge {
     }
 
     /** 文本参数：空串归为「没给」，并截断到 [MAX_TEXT_LEN]。 */
-    private fun text(v: String?): String? {
+    internal fun text(v: String?): String? {
         if (v.isNullOrEmpty()) return null
         return if (v.length > MAX_TEXT_LEN) v.substring(0, MAX_TEXT_LEN) else v
     }
 
-    private fun okJson(): String = JSONObject().put("ok", true).toString()
+    internal fun okJson(): String = JSONObject().put("ok", true).toString()
 
     /**
      * 取一条本地化文案。
@@ -873,12 +1069,12 @@ object DshNativeBridge {
      * 取不到就退回资源名：桥不能因为一次资源查找失败而回 500，那会把「参数写错了」
      * 变成「宿主坏了」。
      */
-    private fun str(ctx: Context, resId: Int, vararg args: Any): String = runCatching {
+    internal fun str(ctx: Context, resId: Int, vararg args: Any): String = runCatching {
         ctx.appString(resId, *args)
     }.getOrElse { ctx.resources.getResourceEntryName(resId) ?: "error" }
 
     /** 错误体带机器可读的 [reason]：agent 需要据此决定是重试还是提示用户。 */
-    private fun err(msg: String, reason: String): String = JSONObject()
+    internal fun err(msg: String, reason: String): String = JSONObject()
         .put("ok", false)
         .put("error", msg)
         .put("reason", reason)

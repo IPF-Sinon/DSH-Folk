@@ -471,7 +471,7 @@
 
     <!-- 原生能力桥 -->
     <string name="dsh_native_section">Native capabilities</string>
-    <string name="dsh_native_summary">Let the agent inside the container borrow the app to post notifications, vibrate, use the clipboard, read the media library, record audio and reach shared storage</string>
+    <string name="dsh_native_summary">Let the agent inside the container borrow the app: notifications, clipboard and sharing, device, network and sensor readings, the media library, camera and microphone, location, calendar and contacts, volume and system settings</string>
     <string name="dsh_native_enable">Enable native bridge</string>
     <string name="dsh_native_enable_summary">Off by default. The container also runs third-party plugins, and they share the same loopback token — turn on only the capabilities you actually want.</string>
     <string name="dsh_native_caps">Capabilities</string>
@@ -488,7 +488,7 @@
     <string name="dsh_native_cap_device">Device info</string>
     <string name="dsh_native_cap_device_desc">Model, Android version, ABI, battery level and charging state</string>
     <string name="dsh_native_need_notif_perm">Notification permission not granted — tap to grant</string>
-    <string name="dsh_native_cli_hint">Inside the container: dsh-native notify &lt;title&gt; [body] / toast / vibrate / clip / share / open / media / mic / device / caps</string>
+    <string name="dsh_native_cli_hint">Inside the container: dsh-native notify &lt;title&gt; [body] / toast / vibrate / clip / share / open / device / media / mic / camera / calendar / contacts / location / phone / sensors / network / volume / ringer / settings / caps</string>
     <string name="dsh_native_notif_channel_name">Agent notifications</string>
     <string name="dsh_native_notif_channel_desc">Notifications posted by the agent running inside the container</string>
     <string name="dsh_host_prompt_title">Tell the agent about these</string>
@@ -533,6 +533,81 @@
     <string name="dsh_native_err_mic_empty">Recording produced no audio</string>
     <string name="dsh_native_err_mic_busy">Another recording is already in progress</string>
     <string name="dsh_native_err_mic_background">Recording needs the app in the foreground — in the background Android returns silence, not an error</string>
+
+
+    <!-- ── 能力分组标题 ── -->
+    <string name="dsh_native_group_interact">Interact with the device</string>
+    <string name="dsh_native_group_sense">Read device state</string>
+    <string name="dsh_native_group_personal">Personal data</string>
+    <string name="dsh_native_group_control">Change system state</string>
+
+    <!-- ── 相机 / 日历 / 通讯录 / 位置 / 电话 / 传感器 / 网络 / 音量 / 系统设置 / 安装 ── -->
+    <string name="dsh_native_cap_camera">Camera</string>
+    <string name="dsh_native_cap_camera_desc">Take a photo with no preview and land it in the container temp dir. Requires the app to be in the foreground.</string>
+    <string name="dsh_native_cap_calendar">Calendar</string>
+    <string name="dsh_native_cap_calendar_desc">Read upcoming events, and create new ones.</string>
+    <string name="dsh_native_cap_contacts">Contacts</string>
+    <string name="dsh_native_cap_contacts_desc">Read names and phone numbers. There is no write access.</string>
+    <string name="dsh_native_cap_location">Location</string>
+    <string name="dsh_native_cap_location_desc">Read the current location. A recent cached fix is used when available; only otherwise is the GPS woken.</string>
+    <string name="dsh_native_cap_phone">Phone status</string>
+    <string name="dsh_native_cap_phone_desc">Carrier, network type, SIM and call state. No dialling, no messages, no IMEI.</string>
+    <string name="dsh_native_cap_sensors">Sensors</string>
+    <string name="dsh_native_cap_sensors_desc">Read a single sample from the accelerometer, gyroscope, light, pressure and other sensors.</string>
+    <string name="dsh_native_cap_network">Network status</string>
+    <string name="dsh_native_cap_network_desc">Connection type, whether it is actually validated, metered state and the Wi-Fi signal.</string>
+    <string name="dsh_native_cap_volume">Volume and ringer</string>
+    <string name="dsh_native_cap_volume_desc">Read and set the volume of each stream, and switch between normal, vibrate and silent.</string>
+    <string name="dsh_native_cap_settings">System settings</string>
+    <string name="dsh_native_cap_settings_desc">Brightness, screen timeout and auto-rotate. Android requires this to be granted on a system settings page.</string>
+    <string name="dsh_native_cap_install">Install permission status</string>
+    <string name="dsh_native_cap_install_desc">Read whether installing unknown apps is allowed. It never installs anything by itself.</string>
+
+    <string name="dsh_native_need_camera_perm">Camera permission not granted — tap to grant</string>
+    <string name="dsh_native_need_calendar_perm">Calendar permission not granted — tap to grant</string>
+    <string name="dsh_native_need_contacts_perm">Contacts permission not granted — tap to grant</string>
+    <string name="dsh_native_need_location_perm">Location permission not granted — tap to grant</string>
+    <string name="dsh_native_need_phone_perm">Phone state permission not granted — tap to grant</string>
+    <string name="dsh_native_need_sensors_perm">Heart rate and step count also need body sensors permission — tap to grant</string>
+    <string name="dsh_native_need_write_settings">Modify system settings not granted — tap to open system settings</string>
+    <string name="dsh_native_need_dnd_access">Do Not Disturb access is needed to set silent or to change volume while DND is on — tap to open system settings</string>
+    <string name="dsh_native_need_install_perm">Installing unknown apps is not allowed — tap to open system settings</string>
+    <string name="dsh_native_precise_location">Only approximate location granted; coordinates are blurred to a few kilometres</string>
+
+    <!-- ── 新增能力的报错（会出现在 dsh-native 的输出里）── -->
+    <string name="dsh_native_err_camera_background">Taking a photo needs the app in the foreground — Android hands background apps a black frame</string>
+    <string name="dsh_native_err_camera_busy">Another capture is already in progress</string>
+    <string name="dsh_native_err_camera_none">This device has no usable camera</string>
+    <string name="dsh_native_err_camera_open">Could not open camera %1$s</string>
+    <string name="dsh_native_err_camera_no_size">The camera reported no usable JPEG size</string>
+    <string name="dsh_native_err_camera_capture">Capture failed</string>
+    <string name="dsh_native_err_camera_write">Could not write the photo</string>
+    <string name="dsh_native_err_calendar_denied">Permission to read the calendar is not granted</string>
+    <string name="dsh_native_err_calendar_write_denied">Permission to write the calendar is not granted</string>
+    <string name="dsh_native_err_calendar_query">Calendar query failed: %1$s</string>
+    <string name="dsh_native_err_calendar_bad_range">end must be later than start</string>
+    <string name="dsh_native_err_calendar_none">No writable calendar account was found on this device</string>
+    <string name="dsh_native_err_calendar_insert">Could not create the event</string>
+    <string name="dsh_native_err_contacts_denied">Permission to read contacts is not granted</string>
+    <string name="dsh_native_err_contacts_query">Contacts query failed: %1$s</string>
+    <string name="dsh_native_err_location_denied">Location permission is not granted</string>
+    <string name="dsh_native_err_location_disabled">Location services are switched off on this device</string>
+    <string name="dsh_native_err_location_stale">No recent fix is cached and wait was 0</string>
+    <string name="dsh_native_err_location_timeout">No fix within %1$d seconds — indoors this can take much longer</string>
+    <string name="dsh_native_err_bad_sensor">id must be one of: %1$s</string>
+    <string name="dsh_native_err_sensor_denied">Reading %1$s needs a permission that is not granted</string>
+    <string name="dsh_native_err_sensor_absent">This device has no %1$s</string>
+    <string name="dsh_native_err_sensor_read">Could not subscribe to %1$s</string>
+    <string name="dsh_native_err_sensor_timeout">%1$s produced no reading in time</string>
+    <string name="dsh_native_err_phone_denied">Phone state permission is not granted</string>
+    <string name="dsh_native_err_write_settings_denied">Modify system settings is not granted — enable it in Settings › Features › System settings</string>
+    <string name="dsh_native_err_setting_write">Could not write %1$s</string>
+    <string name="dsh_native_err_bad_stream">stream must be one of: %1$s</string>
+    <string name="dsh_native_err_dnd_denied">This needs Do Not Disturb access — enable it in Settings › Features › Volume and ringer</string>
+    <string name="dsh_native_err_volume_unavailable">Stream %1$s is unavailable on this device</string>
+    <string name="dsh_native_err_volume_set">Could not set the volume</string>
+    <string name="dsh_native_err_bad_ringer">mode must be one of: %1$s</string>
+    <string name="dsh_native_err_ringer_set">Could not set the ringer mode</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">All files access is not granted — enable it in Settings › Features › Shared storage</string>

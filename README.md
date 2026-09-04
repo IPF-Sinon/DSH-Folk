@@ -128,36 +128,78 @@ protectionLevel 是 `signature|appop`，应用申请不到）。没授予时上�
 顺带说明：`/storage/emulated/0` 本来就 bind mount 进了容器，普通 `read`/`write`/`glob` 常常够用，
 这个桥的价值是**窄而可审计**的那条路径，不是访问本身。
 
-`dsh-native` —— 借 App 之手调原生能力。**默认整体关闭**，要在 **设置 → 功能 → 原生能力** 里打开总开关，
-再逐项勾选想给的能力（通知 / Toast / 振动 / 剪贴板 / 分享与打开链接 / 设备信息 / 媒体库 / 麦克风）：
+`dsh-native` —— 借 App 之手调原生能力，共 18 项，**默认整体关闭**：要在 **设置 → 功能 → 原生能力**
+里打开总开关，再逐项勾选。界面按「这项能力动的是什么」分四组，越往下越该慎重：
+
+```
+与设备交互   notify / toast / vibrate / clipboard / intent（分享与打开链接）
+读设备状态   device / network / phone / sensors
+个人数据     media / camera / mic / location / calendar / contacts
+更改系统状态 volume / settings / install
+```
+
+命令：
 
 ```
 dsh-native notify <标题> [正文] [--id N] [--ongoing]
 dsh-native notify-cancel [--id N]
 dsh-native toast <文本>
 dsh-native vibrate [--ms N] [--amplitude 1..255]
-dsh-native clip get | clip set <文本>
+dsh-native clip get | clip set <文本> [--label L]
 dsh-native share <文本> [--title T]
 dsh-native open <https 链接>
+dsh-native device
+dsh-native network                       # 连接类型 / 是否真能上网 / 是否计费 / WiFi 信号
+dsh-native phone                         # 运营商 / 制式 / SIM / 通话状态
+dsh-native sensors list | sensors read <id>
 dsh-native media list [--type image|video|audio] [--q 名字] [--limit N]
 dsh-native media get <id> [--type image|video|audio]
+dsh-native camera photo [--facing back|front] [--max N]
 dsh-native mic record [--ms N]
-dsh-native device
-dsh-native caps            # 查当前哪些能力开着、能不能用
+dsh-native location [--maxAge ms] [--wait ms]
+dsh-native calendar list [--days N] | calendar add <标题> --start <epochMs> [--minutes N]
+dsh-native contacts list [--q 名字或号码] [--limit N]
+dsh-native volume | volume set <0..100> [--stream music|ring|alarm|notification|call|system]
+dsh-native ringer <normal|vibrate|silent>
+dsh-native settings | settings brightness <1..100> [--auto 0|1] | settings timeout <ms>
+dsh-native settings rotation <0|1>
+dsh-native install                       # 这台机器允不允许安装未知应用
+dsh-native caps                          # 查当前哪些能力开着、能不能用
 ```
 
-勾上一项就会立刻弹它缺的系统权限（通知 / 媒体 / 麦克风）；被永久拒绝之后不再弹空窗，而是直接
-跳到系统设置页 —— 那种情况下 `launch` 会立即回调、界面毫无反应，用户只会以为按钮坏了。
+勾上一项就会立刻申请它缺的权限；被永久拒绝之后不再弹空窗，而是直接跳系统设置页 —— 那种情况下
+`launch` 会立即回调、界面毫无反应，用户只会以为按钮坏了。三项走的是**特殊权限**（`settings` 要
+「修改系统设置」、`volume` 的静音与勿扰下调音量要「勿扰访问」、`install` 是「安装未知应用」），
+它们 `requestPermissions()` 永远拿不到，只能跳系统页，所以那三行提示的措辞也不同：说的是
+「点这里打开系统页」而不是「点这里授权」。
 
-`media get` 与 `mic record` **不回二进制**：字节落进容器的 `/tmp`，回一个容器内路径，agent 用普通文件
-工具读。容器 rootfs 是本应用私有目录，写它不需要任何存储权限，也少一次 base64 膨胀。
-媒体权限在 Android 13 起按类型拆开，所以 `media list` 的响应里带 `granted` —— 只给了照片时
-agent 该知道音频是**没授权**，而不是「设备上没有音频」。录音固定要求前台：Android 9 起后台录音
-只会拿到**静音而不是报错**，与其交一段静音出去，不如直接 `409 not_foreground`。
+`media get` / `camera photo` / `mic record` **都不回二进制**：字节落进容器的 `/tmp/dsh-native/`，
+回一个容器内路径，agent 用普通文件工具读，只保留最新 32 个。容器 rootfs 是本应用私有目录，写它
+不需要任何存储权限，也少一次 base64 膨胀。
+
+几处只有真机上才会发现的取舍：
+
+- **相机**无预览直接出图（拉起系统相机等于让用户自己按快门，那不是「agent 拍一张」）。要丢掉前
+  5 帧等自动曝光收敛 —— 单发一张 `STILL_CAPTURE` 在多数机型上就是一张黑图。
+- **录音与拍照**固定要求前台：Android 后台录音只给**静音**、后台开相机只给**黑帧**，两者都不报错。
+  与其交一份废数据，不如直接 `409 not_foreground`。
+- **位置**先用缓存点位（响应里 `fresh: false`），只有过期了才唤醒 GNSS —— 室内主动定位可能几十秒
+  无果。Android 12 起用户可以只给「大致位置」，那时坐标被系统模糊到公里级，响应里 `precise: false`
+  说明这一点，界面上也单独一行提示，而不是当成缺权限反复索要。
+- **亮度与音量**收的是百分比：不同机型的原始量程差别很大（媒体常见 15 档、通话 5 档），让 agent
+  先查一次 max 再算是多余的往返。亮度不接受 0（全黑屏幕用户没法自己调回来），音量接受。
+  自动亮度开着时写入会在几秒内被系统覆盖，所以响应里带 `autoBrightness` 提醒。
+- **每个写操作都返回改动前后的值**：改完不会有人替用户恢复，agent 至少要能说清自己改了什么。
+- **传感器**这一项不因缺权限而不可用：加速度、光、气压等都不需要权限，只有心率（`BODY_SENSORS`）
+  与计步（`ACTIVITY_RECOGNITION`）要，缺了就从列表里消失并在 `needPermission` 里列出。
+- **通讯录只读**，也只返回姓名与号码。**电话**只给网络环境，没有拨号、短信、IMEI —— 拨号真要做，
+  正确形式是 `ACTION_DIAL`（号码填进拨号盘、由用户按下通话键），那属于已有的 `intent` 能力。
+- **网络**的带宽是系统**估值**不是实测，字段名里带 `estimated` 就是为了别被当测速结果；
+  `validated: false` + `connected: true` 是门户认证那种「连上了但上不了网」。
 
 分项而不是一个总开关，是因为容器里同时跑着用户自己装的第三方插件，它们共享同一个 token —— 「能调这个接口」
-等价于「容器内任何代码都能调」。读剪贴板、拉起分享/链接、录音都受 Android 的后台限制约束，应用不在前台时
-会返回 `409 not_foreground` 而不是假装成功。
+等价于「容器内任何代码都能调」。读剪贴板、拉起分享/链接、录音、拍照都受 Android 的后台限制约束，
+应用不在前台时会返回 `409 not_foreground` 而不是假装成功。
 
 两个桥的报错都是**双份**的：`error` 是跟随应用语言的人话（给用户看），`reason` 是稳定的机器码（给 agent 判断）。
 用户把手机切成英文不会改变程序行为。
@@ -166,6 +208,8 @@ agent 默认**不知道**这些东西存在（dsh 上游没有 Android 宿主的
 cordis 插件，往 dsh 的系统提示词里加一段说明：宿主是什么机型/系统、`/sdcard` 已经挂进来了、有
 `dsh-fs` / `dsh-native` 这两个命令、此刻**哪些**能力真的开着、缺哪些系统权限、设备语言是什么、以及提权是不是关的。
 勾掉哪一项，下一轮对话里那一项就从提示词里消失，agent 不会再去调一个注定 403 的接口。
+每项还附一句最容易踩错的地方 —— 日历的时间戳是毫秒、位置可能被模糊到公里级、带宽是估值不是测速、
+自动亮度会覆盖刚写入的亮度。
 那段本身是英文的（与 dsh 自带的各段一致，避免给模型的输出语言添偏置），设备语言只作为一条**事实**告诉它。
 不想让它知道就在 **设置 → 功能 → 让 agent 知道这些能力** 关掉（关掉不卸插件，只是那一段渲染成空）。
 

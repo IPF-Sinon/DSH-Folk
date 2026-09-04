@@ -329,14 +329,31 @@ object DshRuntime {
           '  notify-cancel [--id N]',
           '  toast <text>',
           '  vibrate [--ms N] [--amplitude 1..255]',
-          '  clip get',
-          '  clip set <text> [--label L]',
+          '  clip get | clip set <text> [--label L]',
           '  share <text> [--title T]',
           '  open <https URL>',
+          '  device',
           '  media list [--type image|video|audio] [--q name] [--limit N]',
           '  media get <id> [--type image|video|audio]   # lands in /tmp; JSON carries path',
           '  mic record [--ms N]                         # 30000 max; lands in /tmp',
-          '  device',
+          '  camera photo [--facing back|front] [--max N]  # no preview; lands in /tmp',
+          '  calendar list [--days N] [--limit N]',
+          '  calendar add <title> --start <epochMs> [--minutes N] [--end <epochMs>]',
+          '                [--location L] [--description D]',
+          '  contacts list [--q name-or-number] [--limit N]',
+          '  location [--maxAge ms] [--wait ms]         # cached fix first, then a live one',
+          '  phone                                      # carrier / network type / SIM / call state',
+          '  sensors list',
+          '  sensors read <id>                          # one sample, e.g. light or accelerometer',
+          '  network                                    # transport / validated / metered / wifi',
+          '  volume                                     # read every stream',
+          '  volume set <0..100> [--stream music|ring|alarm|notification|call|system]',
+          '  ringer <normal|vibrate|silent>             # needs Do Not Disturb access',
+          '  settings                                   # brightness / timeout / auto-rotate',
+          '  settings brightness <1..100> [--auto 0|1]  # needs Modify system settings',
+          '  settings timeout <ms>',
+          '  settings rotation <0|1>',
+          '  install                                    # may this device install unknown apps?',
           '  caps',
           'Settings > Features > Native capabilities: enable the master switch and the item first.'
         ].join('\n');
@@ -391,6 +408,68 @@ object DshRuntime {
             } else if (cmd === 'open') {
               if (!a[0]) { console.error(USAGE); process.exit(1); }
               say(await req('POST', '/native/open' + q({ url: a[0] })));
+            } else if (cmd === 'camera') {
+              if (a[0] === 'photo') {
+                say(await req('POST', '/native/camera/photo' + q({
+                  facing: opt.facing, max: opt.max
+                })));
+              } else { console.error(USAGE); process.exitCode = 1; }
+            } else if (cmd === 'calendar') {
+              if (a[0] === 'list') {
+                say(await req('GET', '/native/calendar/list' + q({
+                  days: opt.days, limit: opt.limit
+                })));
+              } else if (a[0] === 'add' && a[1]) {
+                say(await req('POST', '/native/calendar/create' + q({
+                  title: a[1], start: opt.start, end: opt.end, minutes: opt.minutes,
+                  location: opt.location, description: opt.description
+                })));
+              } else { console.error(USAGE); process.exitCode = 1; }
+            } else if (cmd === 'contacts') {
+              if (a[0] === 'list') {
+                say(await req('GET', '/native/contacts/list' + q({
+                  q: opt.q, limit: opt.limit
+                })));
+              } else { console.error(USAGE); process.exitCode = 1; }
+            } else if (cmd === 'location') {
+              say(await req('GET', '/native/location' + q({
+                maxAge: opt.maxAge, wait: opt.wait
+              })));
+            } else if (cmd === 'phone') {
+              say(await req('GET', '/native/phone/info'));
+            } else if (cmd === 'sensors') {
+              if (a[0] === 'list') {
+                say(await req('GET', '/native/sensors/list'));
+              } else if (a[0] === 'read' && a[1]) {
+                say(await req('GET', '/native/sensors/read' + q({ id: a[1] })));
+              } else { console.error(USAGE); process.exitCode = 1; }
+            } else if (cmd === 'network') {
+              say(await req('GET', '/native/network'));
+            } else if (cmd === 'volume') {
+              if (!a[0]) {
+                say(await req('GET', '/native/volume'));
+              } else if (a[0] === 'set' && a[1] !== undefined) {
+                say(await req('POST', '/native/volume' + q({
+                  percent: a[1], stream: opt.stream
+                })));
+              } else { console.error(USAGE); process.exitCode = 1; }
+            } else if (cmd === 'ringer') {
+              if (!a[0]) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/native/ringer' + q({ mode: a[0] })));
+            } else if (cmd === 'settings') {
+              if (!a[0]) {
+                say(await req('GET', '/native/settings'));
+              } else if (a[0] === 'brightness') {
+                say(await req('POST', '/native/settings/brightness' + q({
+                  percent: a[1], auto: opt.auto
+                })));
+              } else if (a[0] === 'timeout' && a[1]) {
+                say(await req('POST', '/native/settings/timeout' + q({ ms: a[1] })));
+              } else if (a[0] === 'rotation' && a[1] !== undefined) {
+                say(await req('POST', '/native/settings/rotation' + q({ on: a[1] })));
+              } else { console.error(USAGE); process.exitCode = 1; }
+            } else if (cmd === 'install') {
+              say(await req('GET', '/native/install'));
             } else {
               console.error(USAGE);
               process.exitCode = 1;

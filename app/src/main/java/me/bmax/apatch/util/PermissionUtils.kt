@@ -1,10 +1,12 @@
 package me.bmax.apatch.util
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -149,6 +151,109 @@ object PermissionUtils {
 
     fun hasMicrophonePermission(context: Context): Boolean =
         granted(context, Manifest.permission.RECORD_AUDIO)
+
+    fun hasCameraPermission(context: Context): Boolean =
+        granted(context, Manifest.permission.CAMERA)
+
+    /** 日历要读也要写：`/native/calendar/create` 建事件，list 只读。 */
+    fun calendarPermissions(): Array<String> = arrayOf(
+        Manifest.permission.READ_CALENDAR,
+        Manifest.permission.WRITE_CALENDAR,
+    )
+
+    fun hasCalendarReadPermission(context: Context): Boolean =
+        granted(context, Manifest.permission.READ_CALENDAR)
+
+    fun hasCalendarWritePermission(context: Context): Boolean =
+        granted(context, Manifest.permission.WRITE_CALENDAR)
+
+    fun hasContactsPermission(context: Context): Boolean =
+        granted(context, Manifest.permission.READ_CONTACTS)
+
+    /**
+     * 位置权限：COARSE 与 FINE 一起申请。
+     *
+     * Android 12 起权限弹窗给用户三个选项（精确 / 大致 / 拒绝），只申请 FINE 时选
+     * 「大致」也只会授予 COARSE —— 所以两个都要申请、也都要检查。不申请
+     * ACCESS_BACKGROUND_LOCATION：它必须在拿到前台位置**之后**单独发起，且会把用户
+     * 送进系统设置页选「始终允许」，而这项能力本来就要求应用在前台。
+     */
+    fun locationPermissions(): Array<String> = arrayOf(
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+    )
+
+    /** 有任一档位置权限就算可用；精度差别由 `/native/location` 的 `precise` 字段说明。 */
+    fun hasLocationPermission(context: Context): Boolean =
+        granted(context, Manifest.permission.ACCESS_COARSE_LOCATION) ||
+            granted(context, Manifest.permission.ACCESS_FINE_LOCATION)
+
+    /** 是否拿到了**精确**位置（Android 12 起用户可能只给了大致位置）。 */
+    fun hasPreciseLocationPermission(context: Context): Boolean =
+        granted(context, Manifest.permission.ACCESS_FINE_LOCATION)
+
+    fun hasPhoneStatePermission(context: Context): Boolean =
+        granted(context, Manifest.permission.READ_PHONE_STATE)
+
+    /**
+     * 传感器权限。
+     *
+     * 绝大多数传感器（加速度、陀螺、光、气压、磁场…）**不需要任何权限**，只有两类要：
+     * 心率之类的人体传感器要 BODY_SENSORS，计步器/计步检测在 Android 10 起要
+     * ACTIVITY_RECOGNITION。所以这项能力在没有这两个权限时依然可用（只是列不到那几个），
+     * 权限提示是「想读心率/计步还缺这个」而不是「这项功能不可用」。
+     */
+    fun sensorPermissions(): Array<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            arrayOf(Manifest.permission.BODY_SENSORS, Manifest.permission.ACTIVITY_RECOGNITION)
+        } else {
+            arrayOf(Manifest.permission.BODY_SENSORS)
+        }
+
+    fun hasBodySensorsPermission(context: Context): Boolean =
+        granted(context, Manifest.permission.BODY_SENSORS)
+
+    fun hasActivityRecognitionPermission(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            granted(context, Manifest.permission.ACTIVITY_RECOGNITION)
+
+    // ─────────────── 特殊权限（申请不到，只能跳系统页） ───────────────
+
+    /**
+     * 能不能改系统设置（亮度、休眠时间、自动旋转…）。
+     *
+     * `WRITE_SETTINGS` 的 protectionLevel 含 `appop`，`requestPermissions()` 永远拿不到
+     * —— 必须把用户送去 [android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS]。
+     * 检查也不能用 checkSelfPermission：那只反映 manifest 里声明了，用户是否在那个
+     * 页面上打开了开关得问 `Settings.System.canWrite()`。
+     */
+    fun canWriteSystemSettings(context: Context): Boolean =
+        runCatching { Settings.System.canWrite(context) }.getOrDefault(false)
+
+    /**
+     * 能不能改勿扰策略。
+     *
+     * 影响的不只是「开勿扰」：勿扰开着时调音量、以及把响铃模式设成静音/振动，
+     * 都要求这项授权，否则 `setRingerMode` 静默无效或抛 SecurityException。
+     * 同样是特殊权限，入口是 [android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS]。
+     */
+    fun hasNotificationPolicyAccess(context: Context): Boolean = runCatching {
+        context.getSystemService(NotificationManager::class.java)?.isNotificationPolicyAccessGranted
+            ?: false
+    }.getOrDefault(false)
+
+    /**
+     * 能不能请求安装其他应用。
+     *
+     * `REQUEST_INSTALL_PACKAGES` 在 Android 8 起也是一项用户可撤销的**特殊**权限
+     * （「安装未知应用」），`canRequestPackageInstalls()` 才是真相；应用内更新正是走这条。
+     */
+    fun canRequestPackageInstalls(context: Context): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false)
+        } else {
+            true
+        }
 }
 
 /**

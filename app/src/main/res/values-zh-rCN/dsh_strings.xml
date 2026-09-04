@@ -453,7 +453,7 @@
 
     <!-- 原生能力桥 -->
     <string name="dsh_native_section">原生能力</string>
-    <string name="dsh_native_summary">让容器里的 agent 借应用之手发通知、振动、用剪贴板、读媒体库、录音、访问共享存储</string>
+    <string name="dsh_native_summary">让容器里的 agent 借用本应用：通知、剪贴板与分享，设备、网络与传感器读数，相册、摄像头与麦克风，位置、日历与通讯录，音量与系统设置</string>
     <string name="dsh_native_enable">启用原生能力桥</string>
     <string name="dsh_native_enable_summary">默认关闭。容器里同时跑着第三方插件，它们共用同一个回环 token，所以只勾你真的需要的那几项。</string>
     <string name="dsh_native_caps">能力分项</string>
@@ -470,7 +470,7 @@
     <string name="dsh_native_cap_device">设备信息</string>
     <string name="dsh_native_cap_device_desc">型号、Android 版本、ABI、电量与充电状态</string>
     <string name="dsh_native_need_notif_perm">尚未授予通知权限，点这里授予</string>
-    <string name="dsh_native_cli_hint">容器内命令：dsh-native notify &lt;标题&gt; [正文] / toast / vibrate / clip / share / open / media / mic / device / caps</string>
+    <string name="dsh_native_cli_hint">容器内：dsh-native notify &lt;标题&gt; [正文] / toast / vibrate / clip / share / open / device / media / mic / camera / calendar / contacts / location / phone / sensors / network / volume / ringer / settings / caps</string>
     <string name="dsh_native_notif_channel_name">Agent 通知</string>
     <string name="dsh_native_notif_channel_desc">容器内 agent 主动发出的通知</string>
     <string name="dsh_host_prompt_title">让 agent 知道这些能力</string>
@@ -515,6 +515,81 @@
     <string name="dsh_native_err_mic_empty">录音没有拿到任何音频</string>
     <string name="dsh_native_err_mic_busy">已经有一次录音在进行中</string>
     <string name="dsh_native_err_mic_background">录音需要应用处于前台；后台录音 Android 只会给静音，不会报错</string>
+
+
+    <!-- ── 能力分组标题 ── -->
+    <string name="dsh_native_group_interact">与设备交互</string>
+    <string name="dsh_native_group_sense">读取设备状态</string>
+    <string name="dsh_native_group_personal">个人数据</string>
+    <string name="dsh_native_group_control">更改系统状态</string>
+
+    <!-- ── 相机 / 日历 / 通讯录 / 位置 / 电话 / 传感器 / 网络 / 音量 / 系统设置 / 安装 ── -->
+    <string name="dsh_native_cap_camera">摄像头</string>
+    <string name="dsh_native_cap_camera_desc">无预览拍一张照片，落到容器暂存目录。需要应用处于前台。</string>
+    <string name="dsh_native_cap_calendar">日历</string>
+    <string name="dsh_native_cap_calendar_desc">读取近期日程，以及新建日程。</string>
+    <string name="dsh_native_cap_contacts">通讯录</string>
+    <string name="dsh_native_cap_contacts_desc">读取姓名与电话号码。没有写入权限。</string>
+    <string name="dsh_native_cap_location">位置</string>
+    <string name="dsh_native_cap_location_desc">读取当前位置。有较新的缓存点位就直接用，只有在没有时才唤醒 GPS。</string>
+    <string name="dsh_native_cap_phone">电话状态</string>
+    <string name="dsh_native_cap_phone_desc">运营商、网络制式、SIM 与通话状态。不含拨号、短信与 IMEI。</string>
+    <string name="dsh_native_cap_sensors">传感器</string>
+    <string name="dsh_native_cap_sensors_desc">读取加速度、陀螺仪、光线、气压等传感器的单次读数。</string>
+    <string name="dsh_native_cap_network">网络状态</string>
+    <string name="dsh_native_cap_network_desc">连接类型、是否真的能上网、是否按流量计费，以及 Wi-Fi 信号。</string>
+    <string name="dsh_native_cap_volume">音量与响铃</string>
+    <string name="dsh_native_cap_volume_desc">读取与设置各路音量，以及在响铃、振动、静音之间切换。</string>
+    <string name="dsh_native_cap_settings">系统设置</string>
+    <string name="dsh_native_cap_settings_desc">亮度、熄屏时间与自动旋转。Android 要求这一项在系统设置页里授予。</string>
+    <string name="dsh_native_cap_install">安装权限状态</string>
+    <string name="dsh_native_cap_install_desc">读取「允许安装未知应用」是否已开启。它自己不会安装任何东西。</string>
+
+    <string name="dsh_native_need_camera_perm">未授予相机权限 —— 点这里授权</string>
+    <string name="dsh_native_need_calendar_perm">未授予日历权限 —— 点这里授权</string>
+    <string name="dsh_native_need_contacts_perm">未授予通讯录权限 —— 点这里授权</string>
+    <string name="dsh_native_need_location_perm">未授予位置权限 —— 点这里授权</string>
+    <string name="dsh_native_need_phone_perm">未授予电话状态权限 —— 点这里授权</string>
+    <string name="dsh_native_need_sensors_perm">心率与计步还需要身体传感器权限 —— 点这里授权</string>
+    <string name="dsh_native_need_write_settings">未获得「修改系统设置」—— 点这里打开系统页</string>
+    <string name="dsh_native_need_dnd_access">设为静音、或在勿扰开启时改音量需要勿扰访问权 —— 点这里打开系统页</string>
+    <string name="dsh_native_need_install_perm">未允许安装未知应用 —— 点这里打开系统页</string>
+    <string name="dsh_native_precise_location">只授予了大致位置，坐标被模糊到公里级</string>
+
+    <!-- ── 新增能力的报错（会出现在 dsh-native 的输出里）── -->
+    <string name="dsh_native_err_camera_background">拍照需要应用处于前台 —— 后台时 Android 只会给一张黑图</string>
+    <string name="dsh_native_err_camera_busy">已经有一次拍照在进行中</string>
+    <string name="dsh_native_err_camera_none">这台设备没有可用的摄像头</string>
+    <string name="dsh_native_err_camera_open">打不开摄像头 %1$s</string>
+    <string name="dsh_native_err_camera_no_size">摄像头没有报告可用的 JPEG 尺寸</string>
+    <string name="dsh_native_err_camera_capture">拍照失败</string>
+    <string name="dsh_native_err_camera_write">照片写入失败</string>
+    <string name="dsh_native_err_calendar_denied">未授予读取日历的权限</string>
+    <string name="dsh_native_err_calendar_write_denied">未授予写入日历的权限</string>
+    <string name="dsh_native_err_calendar_query">日历查询失败：%1$s</string>
+    <string name="dsh_native_err_calendar_bad_range">结束时间必须晚于开始时间</string>
+    <string name="dsh_native_err_calendar_none">这台设备上没有可写入的日历账户</string>
+    <string name="dsh_native_err_calendar_insert">日程创建失败</string>
+    <string name="dsh_native_err_contacts_denied">未授予读取通讯录的权限</string>
+    <string name="dsh_native_err_contacts_query">通讯录查询失败：%1$s</string>
+    <string name="dsh_native_err_location_denied">未授予位置权限</string>
+    <string name="dsh_native_err_location_disabled">这台设备的定位服务是关闭的</string>
+    <string name="dsh_native_err_location_stale">没有较新的缓存点位，而 wait 是 0</string>
+    <string name="dsh_native_err_location_timeout">%1$d 秒内没有定位结果 —— 室内可能要久得多</string>
+    <string name="dsh_native_err_bad_sensor">id 必须是其中之一：%1$s</string>
+    <string name="dsh_native_err_sensor_denied">读取 %1$s 需要一项尚未授予的权限</string>
+    <string name="dsh_native_err_sensor_absent">这台设备没有 %1$s</string>
+    <string name="dsh_native_err_sensor_read">无法订阅 %1$s</string>
+    <string name="dsh_native_err_sensor_timeout">%1$s 在限时内没有给出读数</string>
+    <string name="dsh_native_err_phone_denied">未授予电话状态权限</string>
+    <string name="dsh_native_err_write_settings_denied">未获得「修改系统设置」—— 在 设置 › 功能 › 系统设置 里开启</string>
+    <string name="dsh_native_err_setting_write">写入 %1$s 失败</string>
+    <string name="dsh_native_err_bad_stream">stream 必须是其中之一：%1$s</string>
+    <string name="dsh_native_err_dnd_denied">这项需要勿扰访问权 —— 在 设置 › 功能 › 音量与响铃 里开启</string>
+    <string name="dsh_native_err_volume_unavailable">这台设备上没有 %1$s 这路音量</string>
+    <string name="dsh_native_err_volume_set">音量设置失败</string>
+    <string name="dsh_native_err_bad_ringer">mode 必须是其中之一：%1$s</string>
+    <string name="dsh_native_err_ringer_set">响铃模式设置失败</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">尚未授予「所有文件访问」，请在 设置 → 功能 → 共享存储 里开启</string>

@@ -59,6 +59,43 @@ const CAP_USAGE = {
     'dsh-native media get <id> [--type image|video|audio]   # copies the file into /tmp, returns its path',
   ],
   mic: ['dsh-native mic record [--ms N]                         # record up to 30000ms into /tmp'],
+  camera: [
+    'dsh-native camera photo [--facing back|front] [--max N]  # no preview; copies a JPEG into /tmp',
+  ],
+  calendar: [
+    'dsh-native calendar list [--days N] [--limit N]        # upcoming events, repeats expanded',
+    'dsh-native calendar add <title> --start <epochMs> [--minutes N] [--location L]',
+  ],
+  contacts: [
+    'dsh-native contacts list [--q name-or-number] [--limit N]  # names and numbers, read only',
+  ],
+  location: [
+    'dsh-native location [--maxAge ms] [--wait ms]          # cached fix first, GPS only if needed',
+  ],
+  phone: [
+    'dsh-native phone                                       # carrier / network type / SIM / call state',
+  ],
+  sensors: [
+    'dsh-native sensors list                                # which sensors this device has',
+    'dsh-native sensors read <id>                           # one sample, e.g. light, accelerometer',
+  ],
+  network: [
+    'dsh-native network                                     # transport, validated, metered, wifi signal',
+  ],
+  volume: [
+    'dsh-native volume                                      # every stream with its max',
+    'dsh-native volume set <0..100> [--stream music|ring|alarm|notification|call|system]',
+    'dsh-native ringer <normal|vibrate|silent>              # needs Do Not Disturb access',
+  ],
+  settings: [
+    'dsh-native settings                                    # brightness / timeout / auto-rotate',
+    'dsh-native settings brightness <1..100> [--auto 0|1]',
+    'dsh-native settings timeout <ms>',
+    'dsh-native settings rotation <0|1>',
+  ],
+  install: [
+    'dsh-native install                                     # may this device install unknown apps?',
+  ],
 };
 
 /** Per-capability caveats; only worth tokens while that capability is on. */
@@ -81,6 +118,48 @@ const CAP_CAVEAT = {
     'Recording needs the app in the foreground: in the background Android hands out SILENCE rather ' +
     'than an error, so the host refuses with 409 not_foreground instead of returning a silent file. ' +
     'Recording is a physically intrusive act — only do it when the user asked for it in this turn.',
+  camera:
+    'Like mic, the camera needs the app in the foreground (a background app gets a black frame) and ' +
+    'the photo lands in /tmp as a path, not as bytes. Taking a picture is physically intrusive — ' +
+    'only when the user asked in this turn.',
+  calendar:
+    'Times are epoch MILLISECONDS in the device timezone. calendar add creates a real event the ' +
+    'user will see and get reminders for, so confirm the details before writing rather than ' +
+    'guessing a time. There is no delete endpoint: a wrong event has to be removed by hand.',
+  contacts:
+    'Read only, and it returns just names and numbers. Do not dump the whole address book into ' +
+    'your reasoning — pass --q and --limit to fetch only who you actually need.',
+  location:
+    'A cached fix is returned when recent enough (fresh:false says so); only otherwise is the GPS ' +
+    'woken, which can take tens of seconds indoors. precise:false means the user granted only ' +
+    'approximate location and the coordinates are deliberately blurred to a few kilometres — do ' +
+    'not present them as a street address.',
+  phone:
+    'Network environment only. There is no dialling, no SMS and no IMEI: Android does not hand ' +
+    'those to ordinary apps, and this host will not proxy them.',
+  sensors:
+    'One sample per call, not a stream. Most sensors need no permission; heart rate and step count ' +
+    'do, and the list response says which ones are missing a permission rather than hiding them ' +
+    'silently. proximity and light settle fast; expect a 409 read_timeout on sensors this device ' +
+    'only updates on change.',
+  network:
+    'validated:false with connected:true is the captive-portal case: associated but no real ' +
+    'internet. The bandwidth numbers are the system ESTIMATE, not a measurement — never report ' +
+    'them as a speed test. ssidHidden:true means location permission is missing, not that the ' +
+    'network has no name.',
+  volume:
+    'Percentages, because the number of steps differs per stream and per device; the raw value and ' +
+    'max come back in the response. Setting silent, or changing volume while Do Not Disturb is on, ' +
+    'needs Do Not Disturb access and fails with 403 no_dnd_access otherwise. Nothing restores the ' +
+    'previous level for the user — say what you changed.',
+  settings:
+    'Brightness is 1..100 (never 0 — a black screen is unrecoverable by hand). If autoBrightness ' +
+    'is still true in the response, the system will overwrite your value within seconds; pass ' +
+    '--auto 0 when you mean it to stick. These changes are global and permanent: report the ' +
+    'before/after values the response gives you.',
+  install:
+    'Status only — it installs nothing. Use it before suggesting the in-app update: when ' +
+    'canRequestInstall is false the download will succeed and the install will not.',
 };
 
 let cached = null;
@@ -215,8 +294,9 @@ function render(f) {
   if (!bridgeOn || usable.length === 0) {
     lines.push(
       '`dsh-native` can borrow the host to post notifications, show a toast, vibrate, use the ' +
-        'clipboard, open a share sheet or link, read device info, read the media library and record ' +
-        'audio — but it is currently **off** (' +
+        'clipboard, open a share sheet or link, read device info and network state, read sensors, ' +
+        'read the media library, take a photo, record audio, read location, calendar and contacts, ' +
+        'and change volume or system settings — but it is currently **off** (' +
         (bridgeOn ? 'the master switch is on, but no capability is ticked' : 'the master switch is off') +
         '), so every call returns 403.'
     );
@@ -253,11 +333,43 @@ function render(f) {
     }
 
     // Ticked but the OS permission is missing: the call fails, or worse, silently does nothing.
+    // Only the counter-intuitive ones get their own line — an ordinary 403 with a reason is
+    // self-explanatory and does not need prompt real estate.
     if (usable.includes('notify') && f.notificationPermission === false) {
       lines.push('');
       lines.push(
         'Note: the system notification permission is NOT granted, so `notify` returns success while ' +
           'the user sees nothing. Ask them to grant notifications first.'
+      );
+    }
+    if (usable.includes('location') && f.preciseLocation === false) {
+      lines.push('');
+      lines.push(
+        'Note: only APPROXIMATE location is granted. Coordinates come back deliberately blurred to ' +
+          'a few kilometres — usable for a city, not for an address. Do not ask for the precise ' +
+          'permission repeatedly; many people grant this on purpose.'
+      );
+    }
+    if (usable.includes('settings') && f.writeSettings === false) {
+      lines.push('');
+      lines.push(
+        'Note: "Modify system settings" is NOT granted, so every settings write returns 403 ' +
+          '(`reason: "no_write_settings"`). It cannot be requested from code — only the user can ' +
+          'grant it on a system page. Say so once and move on.'
+      );
+    }
+    if (usable.includes('volume') && f.dndAccess === false) {
+      lines.push('');
+      lines.push(
+        'Note: Do Not Disturb access is NOT granted. Reading volume works; setting silent/vibrate, ' +
+          'and changing volume while DND is on, return 403 (`reason: "no_dnd_access"`).'
+      );
+    }
+    if (usable.includes('install') && f.canRequestInstall === false) {
+      lines.push('');
+      lines.push(
+        'Note: this device does not currently allow installing unknown apps, so an in-app update ' +
+          'would download fine and then fail to install.'
       );
     }
     if (usable.includes('media')) {

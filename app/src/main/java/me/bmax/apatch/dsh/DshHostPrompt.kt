@@ -69,7 +69,7 @@ object DshHostPrompt {
      * 读一遍 assets 再全量覆盖。版本号存在 prefs 里，与 rootfs 无关 —— 重装运行时后
      * 文件没了但版本号还在，所以 [ensureInstalled] 另外检查文件是否真的存在。
      */
-    private const val PLUGIN_REV = 2
+    private const val PLUGIN_REV = 3
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =
@@ -177,6 +177,15 @@ object DshHostPrompt {
                 // 而不是以为设备上没有音频文件。
                 .put("mediaPermissions", grantedMediaJson(ctx))
                 .put("microphonePermission", PermissionUtils.hasMicrophonePermission(ctx))
+                .put("cameraPermission", PermissionUtils.hasCameraPermission(ctx))
+                // 位置有两档：只给了「大致」时系统把坐标模糊到公里级，agent 不该
+                // 把它当街道级坐标用
+                .put("preciseLocation", PermissionUtils.hasPreciseLocationPermission(ctx))
+                // 这三项申请不到、只能由用户在系统页里开。agent 知道状态才能决定
+                // 要不要提示用户，而不是撞一串 403
+                .put("writeSettings", PermissionUtils.canWriteSystemSettings(ctx))
+                .put("dndAccess", PermissionUtils.hasNotificationPolicyAccess(ctx))
+                .put("canRequestInstall", PermissionUtils.canRequestPackageInstalls(ctx))
                 // 提权通道给 agent 看的是「有没有」，不是具体哪条 —— 它用不上具体通道，
                 // 但需要知道「别指望 su」。
                 .put("elevation", elevationLabel(ctx))
