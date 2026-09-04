@@ -6,9 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.MediaRecorder
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
@@ -16,13 +18,16 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.MediaStore
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.MainActivity
 import me.bmax.apatch.util.PermissionUtils
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -77,6 +82,28 @@ object DshNativeBridge {
         /** 分享面板与「打开链接/文件」共用一项：两者都是拉起外部 Activity。 */
         INTENT("intent"),
         DEVICE("device"),
+        /** 媒体库（相册/视频/音频）的读取。 */
+        MEDIA("media"),
+        /** 麦克风录音。 */
+        MIC("mic"),
+    }
+
+    /**
+     * 这项能力需要的**运行时**权限（可以直接 `requestPermissions` 的那种）。
+     *
+     * 空数组表示不需要任何运行时权限。注意「所有文件访问」不在这里 —— 它是 appop
+     * 特殊权限，申请不到，只能跳系统设置页（见「功能」设置页的共享存储那一行）。
+     */
+    fun runtimePermissions(cap: Cap): Array<String> = when (cap) {
+        Cap.NOTIFY ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                emptyArray()
+            }
+        Cap.MEDIA -> PermissionUtils.mediaPermissions()
+        Cap.MIC -> arrayOf(android.Manifest.permission.RECORD_AUDIO)
+        else -> emptyArray()
     }
 
     // ────────────────────────── 开关 ──────────────────────────
@@ -121,8 +148,21 @@ object DshNativeBridge {
             else false to "no_notification_permission"
         Cap.VIBRATE ->
             if (vibrator(ctx)?.hasVibrator() == true) true to "" else false to "no_vibrator"
+        // 只要有一类媒体可读就算可用：用户可能只给了照片。具体缺哪一类由
+        // /native/media/list 的 granted 字段说明，不在这里一刀切成不可用。
+        Cap.MEDIA ->
+            if (PermissionUtils.hasAnyMediaPermission(ctx)) true to ""
+            else false to "no_media_permission"
+        Cap.MIC ->
+            if (!PermissionUtils.hasMicrophonePermission(ctx)) false to "no_audio_permission"
+            else if (!hasMicrophone(ctx)) false to "no_microphone"
+            else true to ""
         else -> true to ""
     }
+
+    private fun hasMicrophone(ctx: Context): Boolean = runCatching {
+        ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_MICROPHONE)
+    }.getOrDefault(true)
 
     // ────────────────────────── 分发 ──────────────────────────
 
@@ -139,18 +179,30 @@ object DshNativeBridge {
     ): Pair<Int, String> {
         // capabilities 必须在总开关关闭时也能查：否则容器侧只能靠 403 猜是「没开」还是「没这功能」
         if (path == "/native/capabilities") {
-            return if (method == "GET") capabilitiesJson(ctx) else methodNotAllowed(method, path)
+            return if (method == "GET") capabilitiesJson(ctx) else methodNotAllowed(ctx, method, path)
         }
         if (!enabled(ctx)) {
-            return 403 to err("原生能力桥未启用（设置 → 功能 → 原生能力）", "disabled")
+            return 403 to err(str(ctx, R.string.dsh_native_err_disabled), "disabled")
         }
 
-        val cap = capOf(path) ?: return 404 to err("未知端点 $method $path", "unknown_endpoint")
+        val cap = capOf(path)
+            ?: return 404 to err(
+                str(ctx, R.string.dsh_native_err_unknown_endpoint, method, path),
+                "unknown_endpoint",
+            )
         if (!capEnabled(ctx, cap)) {
-            return 403 to err("能力「${cap.id}」未启用", "cap_disabled")
+            return 403 to err(
+                str(ctx, R.string.dsh_native_err_cap_disabled, capName(ctx, cap)),
+                "cap_disabled",
+            )
         }
         val (ok, why) = availability(ctx, cap)
-        if (!ok) return 409 to err("能力「${cap.id}」当前不可用", why)
+        if (!ok) {
+            return 409 to err(
+                str(ctx, R.string.dsh_native_err_cap_unavailable, capName(ctx, cap)),
+                why,
+            )
+        }
 
         return when {
             method == "POST" && path == "/native/notify" -> notify(ctx, params)
@@ -162,9 +214,32 @@ object DshNativeBridge {
             method == "POST" && path == "/native/share" -> share(ctx, params)
             method == "POST" && path == "/native/open" -> open(ctx, params)
             method == "GET" && path == "/native/device" -> device(ctx)
-            else -> methodNotAllowed(method, path)
+            method == "GET" && path == "/native/media/list" -> mediaList(ctx, params)
+            method == "GET" && path == "/native/media/read" -> mediaRead(ctx, params)
+            method == "POST" && path == "/native/mic/record" -> micRecord(ctx, params)
+            else -> methodNotAllowed(ctx, method, path)
         }
     }
+
+    /**
+     * 能力的**本地化**名字，用在给用户看的报错里。
+     *
+     * 不直接用 [Cap.id]：那是协议 id（`clipboard`），报错里该出现的是「剪贴板」。
+     * 名字表放 UI 层（`nativeCapTitleRes`）会让 dsh 包依赖 ui 包，所以这里单独映射。
+     */
+    private fun capName(ctx: Context, cap: Cap): String = str(
+        ctx,
+        when (cap) {
+            Cap.NOTIFY -> R.string.dsh_native_cap_notify
+            Cap.TOAST -> R.string.dsh_native_cap_toast
+            Cap.VIBRATE -> R.string.dsh_native_cap_vibrate
+            Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard
+            Cap.INTENT -> R.string.dsh_native_cap_intent
+            Cap.DEVICE -> R.string.dsh_native_cap_device
+            Cap.MEDIA -> R.string.dsh_native_cap_media
+            Cap.MIC -> R.string.dsh_native_cap_mic
+        },
+    )
 
     private fun capOf(path: String): Cap? = when (path) {
         "/native/notify" -> Cap.NOTIFY
@@ -173,6 +248,8 @@ object DshNativeBridge {
         "/native/clipboard" -> Cap.CLIPBOARD
         "/native/share", "/native/open" -> Cap.INTENT
         "/native/device" -> Cap.DEVICE
+        "/native/media/list", "/native/media/read" -> Cap.MEDIA
+        "/native/mic/record" -> Cap.MIC
         else -> null
     }
 
@@ -200,7 +277,7 @@ object DshNativeBridge {
     // ────────────────────────── 能力实现 ──────────────────────────
 
     private fun notify(ctx: Context, params: Map<String, String>): Pair<Int, String> {
-        val title = text(params["title"]) ?: return 400 to err("缺 title", "missing_title")
+        val title = text(params["title"]) ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "title"), "missing_title")
         val body = text(params["body"]) ?: ""
         val slot = (params["id"]?.toIntOrNull() ?: 0).coerceIn(0, MAX_NOTIFICATION_SLOT)
         val ongoing = params["ongoing"] == "1"
@@ -208,13 +285,13 @@ object DshNativeBridge {
 
         ensureChannel(ctx)
         val nm = ctx.getSystemService(NotificationManager::class.java)
-            ?: return 500 to err("拿不到 NotificationManager", "no_service")
+            ?: return 500 to err(str(ctx, R.string.dsh_native_err_no_service, "NotificationManager"), "no_service")
         return runCatching {
             nm.notify(id, buildNotification(ctx, title, body, ongoing))
             200 to JSONObject().put("ok", true).put("id", slot).toString()
         }.getOrElse { e ->
             Log.w(TAG, "notify 失败: ${e.message}")
-            500 to err("发送通知失败：${e.message}", "notify_failed")
+            500 to err(str(ctx, R.string.dsh_native_err_notify_failed, e.message ?: ""), "notify_failed")
         }
     }
 
@@ -268,7 +345,8 @@ object DshNativeBridge {
     }
 
     private fun toast(ctx: Context, params: Map<String, String>): Pair<Int, String> {
-        val msg = text(params["text"]) ?: return 400 to err("缺 text", "missing_text")
+        val msg = text(params["text"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "text"), "missing_text")
         // Toast 必须有 Looper；桥接线程没有
         onMain { me.bmax.apatch.util.ui.showToast(ctx, msg) }
         return 200 to okJson()
@@ -279,13 +357,14 @@ object DshNativeBridge {
         val amplitude = (params["amplitude"]?.toIntOrNull() ?: -1).let {
             if (it < 0) VibrationEffect.DEFAULT_AMPLITUDE else it.coerceIn(1, 255)
         }
-        val v = vibrator(ctx) ?: return 500 to err("拿不到 Vibrator", "no_service")
+        val v = vibrator(ctx)
+            ?: return 500 to err(str(ctx, R.string.dsh_native_err_no_service, "Vibrator"), "no_service")
         return runCatching {
             v.vibrate(VibrationEffect.createOneShot(ms, amplitude))
             200 to JSONObject().put("ok", true).put("ms", ms).toString()
         }.getOrElse { e ->
             Log.w(TAG, "vibrate 失败: ${e.message}")
-            500 to err("振动失败：${e.message}", "vibrate_failed")
+            500 to err(str(ctx, R.string.dsh_native_err_vibrate_failed, e.message ?: ""), "vibrate_failed")
         }
     }
 
@@ -303,7 +382,8 @@ object DshNativeBridge {
     }.getOrNull()
 
     private fun clipboardSet(ctx: Context, params: Map<String, String>): Pair<Int, String> {
-        val value = text(params["text"]) ?: return 400 to err("缺 text", "missing_text")
+        val value = text(params["text"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "text"), "missing_text")
         val label = text(params["label"]) ?: "DSH"
         var failure: String? = null
         onMain {
@@ -313,13 +393,14 @@ object DshNativeBridge {
             }.onFailure { e -> failure = e.message ?: "set_failed" }
         }
         val f = failure
-        return if (f == null) 200 to okJson() else 500 to err("写剪贴板失败：$f", "clipboard_failed")
+        return if (f == null) 200 to okJson()
+        else 500 to err(str(ctx, R.string.dsh_native_err_clipboard_write, f), "clipboard_failed")
     }
 
     private fun clipboardGet(ctx: Context): Pair<Int, String> {
         // Android 10 起后台读剪贴板恒为 null，别把它当成「剪贴板是空的」
         if (!isForeground(ctx)) {
-            return 409 to err("读剪贴板需要应用处于前台，请让用户先切回 DSH-Folk", "not_foreground")
+            return 409 to err(str(ctx, R.string.dsh_native_err_clipboard_background), "not_foreground")
         }
         var value: String? = null
         var present = false
@@ -343,9 +424,10 @@ object DshNativeBridge {
         ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
 
     private fun share(ctx: Context, params: Map<String, String>): Pair<Int, String> {
-        val value = text(params["text"]) ?: return 400 to err("缺 text", "missing_text")
+        val value = text(params["text"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "text"), "missing_text")
         val title = text(params["title"])
-        if (!isForeground(ctx)) return backgroundActivityDenied()
+        if (!isForeground(ctx)) return backgroundActivityDenied(ctx)
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, value)
@@ -355,16 +437,17 @@ object DshNativeBridge {
     }
 
     private fun open(ctx: Context, params: Map<String, String>): Pair<Int, String> {
-        val url = text(params["url"]) ?: return 400 to err("缺 url", "missing_url")
+        val url = text(params["url"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "url"), "missing_url")
         // 只放 http/https：file:// 要经 FileProvider 换 content URI，而 intent:// 之类
         // 能被用来拉起任意组件，不是这个接口该提供的能力
         val lower = url.lowercase(Locale.US)
         if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
-            return 400 to err("只支持 http/https", "unsupported_scheme")
+            return 400 to err(str(ctx, R.string.dsh_native_err_scheme), "unsupported_scheme")
         }
-        if (!isForeground(ctx)) return backgroundActivityDenied()
+        if (!isForeground(ctx)) return backgroundActivityDenied(ctx)
         val uri = runCatching { android.net.Uri.parse(url) }.getOrNull()
-            ?: return 400 to err("url 无法解析", "bad_url")
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_bad_url), "bad_url")
         return startChooser(ctx, Intent(Intent.ACTION_VIEW, uri))
     }
 
@@ -374,11 +457,11 @@ object DshNativeBridge {
             200 to okJson()
         }.getOrElse { e ->
             Log.w(TAG, "startActivity 失败: ${e.message}")
-            500 to err("拉起失败：${e.message}", "start_failed")
+            500 to err(str(ctx, R.string.dsh_native_err_start_failed, e.message ?: ""), "start_failed")
         }
 
-    private fun backgroundActivityDenied(): Pair<Int, String> =
-        409 to err("拉起界面需要应用处于前台，请让用户先切回 DSH-Folk", "not_foreground")
+    private fun backgroundActivityDenied(ctx: Context): Pair<Int, String> =
+        409 to err(str(ctx, R.string.dsh_native_err_activity_background), "not_foreground")
 
     private fun device(ctx: Context): Pair<Int, String> {
         val json = JSONObject()
@@ -406,6 +489,337 @@ object DshNativeBridge {
         }
         return 200 to json.toString()
     }
+
+    // ────────────────────────── 媒体与麦克风 ──────────────────────────
+
+    /**
+     * 为什么媒体与录音的结果**落到容器里**，而不是流式回给调用方。
+     *
+     * 这两个端点和其它端点的形状不同：它们的产物是二进制，而 [handle] 的返回是
+     * `状态码 to JSON`。要流式回传就得把 socket 一路传进来，与 [DshFsBridge] 的
+     * 响应生命周期纠缠在一起（那条路上已经踩过一次：写了头就再也改不回 JSON 错误）。
+     *
+     * 换个思路：容器的 rootfs 本来就是本 App 的私有目录，写它**不需要任何存储权限**。
+     * 于是把字节落到 `rootfs/tmp/...`，把**容器内**路径回给调用方，agent 直接用普通
+     * 文件工具读 —— 少一条二进制通道，也少一次 base64 膨胀。
+     */
+    private const val STAGE_DIR_NAME = "dsh-native"
+
+    /** 暂存区里保留的文件数上限：超出就删最旧的，别让 rootfs 被无声吃满。 */
+    private const val STAGE_KEEP = 32
+
+    private const val DEFAULT_MEDIA_LIMIT = 50
+    private const val MAX_MEDIA_LIMIT = 500
+
+    /** 单次取媒体的字节上限：容器里读它还要再占一份，64MB 已经很宽松。 */
+    private const val MAX_MEDIA_BYTES = 64L * 1024 * 1024
+
+    private const val DEFAULT_RECORD_MS = 5_000L
+
+    /**
+     * 录音时长上限。
+     *
+     * 30 秒不是协议限制（`soTimeout` 只管阻塞读，写响应前handler 慢多久都不会被它掐断），
+     * 而是三件事的交集：请求占着一条连接线程直到录完；用户必须一直把应用留在前台，
+     * 否则后半段全是静音；`agent` 想要更长的录音应该分多段。真需要更长再谈。
+     */
+    private const val MAX_RECORD_MS = 30_000L
+
+    /**
+     * 录音互斥。
+     *
+     * `MediaRecorder` 抢的是全局音频输入：第二个请求会在 `start()` 抛
+     * `IllegalStateException`，而两个请求都已经建好文件 —— 报错的那个留下一个 0 字节
+     * 残骸，成功的那个时长莫名变短。用一个标志直接回 409，比事后清理干净。
+     */
+    private val recording = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    private fun stageDir(ctx: Context): File =
+        File(DshEnv.tmpDir(ctx), STAGE_DIR_NAME).apply { mkdirs() }
+
+    /** 暂存目录对应的**容器内**路径（rootfs/tmp → /tmp）。 */
+    private fun stageGuestPath(name: String): String = "/tmp/$STAGE_DIR_NAME/$name"
+
+    /** 只保留最近 [STAGE_KEEP] 个文件。 */
+    private fun trimStage(dir: File) {
+        runCatching {
+            val files = dir.listFiles()?.filter { it.isFile }?.sortedBy { it.lastModified() }
+                ?: return
+            val excess = files.size - STAGE_KEEP
+            if (excess > 0) files.take(excess).forEach { it.delete() }
+        }
+    }
+
+    /** 文件名里只留安全字符：这个名字会拼进容器路径。 */
+    private fun safeName(raw: String, fallbackExt: String): String {
+        val cleaned = raw.map { c ->
+            if (c.isLetterOrDigit() || c == '.' || c == '-' || c == '_') c else '_'
+        }.joinToString("").trim('.', '_')
+        val name = cleaned.ifEmpty { "media" }
+        return if (name.contains('.')) name.take(96) else "${name.take(90)}.$fallbackExt"
+    }
+
+    private fun mediaTypeOf(raw: String?): PermissionUtils.MediaType? =
+        PermissionUtils.MediaType.entries.firstOrNull { it.id == (raw ?: "image") }
+
+    private fun mediaCollection(type: PermissionUtils.MediaType) = when (type) {
+        PermissionUtils.MediaType.IMAGE -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        PermissionUtils.MediaType.VIDEO -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        PermissionUtils.MediaType.AUDIO -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+    }
+
+    /**
+     * 列媒体库。
+     *
+     * 走 MediaStore 而不是直接遍历 `/sdcard/DCIM`：后者需要「所有文件访问」，而
+     * `READ_MEDIA_*` 只授权前者。返回里带 `granted` —— 用户可能只给了照片，
+     * agent 得能看出「音频不是没有，是没授权」。
+     */
+    private fun mediaList(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val type = mediaTypeOf(params["type"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_bad_media_type), "bad_type")
+        if (!PermissionUtils.hasMediaPermission(ctx, type)) {
+            return 403 to err(
+                str(ctx, R.string.dsh_native_err_media_type_denied, type.id),
+                "no_media_permission",
+            )
+        }
+        val limit = (params["limit"]?.toIntOrNull() ?: DEFAULT_MEDIA_LIMIT)
+            .coerceIn(1, MAX_MEDIA_LIMIT)
+        val nameLike = text(params["q"])
+
+        val cols = mutableListOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DATE_MODIFIED,
+            MediaStore.MediaColumns.MIME_TYPE,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            cols += MediaStore.MediaColumns.RELATIVE_PATH
+        }
+
+        val where = if (nameLike != null) "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?" else null
+        val args = if (nameLike != null) arrayOf("%$nameLike%") else null
+        val order = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+
+        val entries = JSONArray()
+        val queryResult = runCatching {
+            ctx.contentResolver.query(
+                mediaCollection(type), cols.toTypedArray(), where, args, order,
+            )?.use { c ->
+                val idIdx = c.getColumnIndex(MediaStore.MediaColumns._ID)
+                val nameIdx = c.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                val sizeIdx = c.getColumnIndex(MediaStore.MediaColumns.SIZE)
+                val dateIdx = c.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
+                val mimeIdx = c.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE)
+                val relIdx = c.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
+                while (c.moveToNext() && entries.length() < limit) {
+                    val o = JSONObject()
+                        .put("id", if (idIdx >= 0) c.getLong(idIdx) else -1L)
+                        .put("name", if (nameIdx >= 0) c.getString(nameIdx) ?: "" else "")
+                        .put("size", if (sizeIdx >= 0) c.getLong(sizeIdx) else -1L)
+                        // MediaStore 的 DATE_MODIFIED 是**秒**，不是毫秒
+                        .put("mtime", if (dateIdx >= 0) c.getLong(dateIdx) * 1000L else 0L)
+                        .put("mime", if (mimeIdx >= 0) c.getString(mimeIdx) ?: "" else "")
+                    if (relIdx >= 0) o.put("dir", c.getString(relIdx) ?: "")
+                    entries.put(o)
+                }
+            }
+        }
+        queryResult.onFailure { e ->
+            Log.w(TAG, "media 查询失败: ${e.message}")
+            return 500 to err(
+                str(ctx, R.string.dsh_native_err_media_query, e.message ?: ""),
+                "query_failed",
+            )
+        }
+
+        val granted = JSONArray()
+        for (t in PermissionUtils.grantedMediaTypes(ctx)) granted.put(t.id)
+        return 200 to JSONObject()
+            .put("ok", true)
+            .put("type", type.id)
+            .put("granted", granted)
+            .put("entries", entries)
+            .toString()
+    }
+
+    /**
+     * 取一条媒体的字节，落到容器暂存区。
+     *
+     * 用 `openInputStream(content://…)` 而不是拼 `_DATA` 路径：分区存储下后者可能
+     * 根本读不到，而 ContentResolver 走的正是 `READ_MEDIA_*` 授权的那条路。
+     */
+    private fun mediaRead(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val type = mediaTypeOf(params["type"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_bad_media_type), "bad_type")
+        if (!PermissionUtils.hasMediaPermission(ctx, type)) {
+            return 403 to err(
+                str(ctx, R.string.dsh_native_err_media_type_denied, type.id),
+                "no_media_permission",
+            )
+        }
+        val id = params["id"]?.toLongOrNull()
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_id), "missing_id")
+        val uri = ContentUris.withAppendedId(mediaCollection(type), id)
+
+        var displayName = "media"
+        var declaredSize = -1L
+        runCatching {
+            ctx.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE),
+                null, null, null,
+            )?.use { c ->
+                if (c.moveToFirst()) {
+                    displayName = c.getString(0) ?: displayName
+                    declaredSize = c.getLong(1)
+                }
+            }
+        }
+        // SIZE 已经超限就不必开流了；SIZE 缺失（-1）时靠下面边写边数兜底
+        if (declaredSize > MAX_MEDIA_BYTES) {
+            return 400 to err(
+                str(ctx, R.string.dsh_native_err_media_too_big, MAX_MEDIA_BYTES / (1024 * 1024)),
+                "too_large",
+            )
+        }
+
+        val fallbackExt = when (type) {
+            PermissionUtils.MediaType.IMAGE -> "jpg"
+            PermissionUtils.MediaType.VIDEO -> "mp4"
+            PermissionUtils.MediaType.AUDIO -> "m4a"
+        }
+        val dir = stageDir(ctx)
+        val out = File(dir, "${id}_${safeName(displayName, fallbackExt)}")
+        var copied = 0L
+        // MediaStore 的 SIZE 可能缺失或不准（查询失败时是 -1），所以边写边数；
+        // 超限与读失败要分开报，不然「文件太大」会显示成「宿主读不了」。
+        var overflow = false
+        val ok = runCatching {
+            ctx.contentResolver.openInputStream(uri)?.use { input ->
+                java.io.FileOutputStream(out).use { o ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        copied += n
+                        if (copied > MAX_MEDIA_BYTES) {
+                            overflow = true
+                            return@runCatching false
+                        }
+                        o.write(buf, 0, n)
+                    }
+                }
+                true
+            } ?: false
+        }.getOrElse { e ->
+            Log.w(TAG, "media 读取失败: ${e.message}")
+            false
+        }
+        if (!ok) {
+            out.delete()
+            return if (overflow) {
+                400 to err(
+                    str(ctx, R.string.dsh_native_err_media_too_big, MAX_MEDIA_BYTES / (1024 * 1024)),
+                    "too_large",
+                )
+            } else {
+                500 to err(str(ctx, R.string.dsh_native_err_media_read), "read_failed")
+            }
+        }
+        trimStage(dir)
+        return 200 to JSONObject()
+            .put("ok", true)
+            .put("path", stageGuestPath(out.name))
+            .put("bytes", copied)
+            .put("name", displayName)
+            .toString()
+    }
+
+    /**
+     * 录一段音，落到容器暂存区。
+     *
+     * 前台限制不是我们加的：Android 9 起没有前台界面/前台服务类型的进程录音**只会拿到
+     * 静音**，不报错。我们的前台服务是 specialUse 类型，它不授予麦克风 —— 所以后台请求
+     * 直接回 409，而不是交一段几百 KB 的静音出去。
+     */
+    private fun micRecord(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        if (!isForeground(ctx)) return backgroundMicDenied(ctx)
+        if (!recording.compareAndSet(false, true)) {
+            return 409 to err(str(ctx, R.string.dsh_native_err_mic_busy), "already_recording")
+        }
+        try {
+            return doRecord(ctx, params)
+        } finally {
+            recording.set(false)
+        }
+    }
+
+    private fun doRecord(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val ms = (params["ms"]?.toLongOrNull() ?: DEFAULT_RECORD_MS).coerceIn(500L, MAX_RECORD_MS)
+        val dir = stageDir(ctx)
+        val out = File(dir, "rec_${System.currentTimeMillis()}.m4a")
+
+        @Suppress("DEPRECATION")
+        val recorder = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(ctx)
+            else MediaRecorder()
+        }.getOrElse { e ->
+            return 500 to err(
+                str(ctx, R.string.dsh_native_err_mic_init, e.message ?: ""),
+                "recorder_failed",
+            )
+        }
+
+        val started = runCatching {
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            recorder.setAudioEncodingBitRate(64_000)
+            recorder.setAudioSamplingRate(44_100)
+            recorder.setOutputFile(out.absolutePath)
+            recorder.prepare()
+            recorder.start()
+            true
+        }.getOrElse { e ->
+            Log.w(TAG, "录音启动失败: ${e.message}")
+            runCatching { recorder.release() }
+            out.delete()
+            false
+        }
+        if (!started) {
+            return 500 to err(str(ctx, R.string.dsh_native_err_mic_start), "record_failed")
+        }
+
+        runCatching { Thread.sleep(ms) }
+        // stop() 在「一帧都没录到」时会抛，此时产物是个坏文件，必须删掉再报错
+        val stopped = runCatching { recorder.stop(); true }.getOrElse { e ->
+            Log.w(TAG, "录音停止失败: ${e.message}")
+            false
+        }
+        runCatching { recorder.release() }
+        if (!stopped || !out.isFile || out.length() == 0L) {
+            out.delete()
+            return 500 to err(str(ctx, R.string.dsh_native_err_mic_empty), "record_empty")
+        }
+        // 录完再确认一次前台：中途切走的那段是静音，交出去等于交半份假数据
+        if (!isForeground(ctx)) {
+            out.delete()
+            return backgroundMicDenied(ctx)
+        }
+        trimStage(dir)
+        return 200 to JSONObject()
+            .put("ok", true)
+            .put("path", stageGuestPath(out.name))
+            .put("bytes", out.length())
+            .put("ms", ms)
+            .toString()
+    }
+
+    private fun backgroundMicDenied(ctx: Context): Pair<Int, String> =
+        409 to err(str(ctx, R.string.dsh_native_err_mic_background), "not_foreground")
 
     // ────────────────────────── 工具 ──────────────────────────
 
@@ -447,6 +861,19 @@ object DshNativeBridge {
 
     private fun okJson(): String = JSONObject().put("ok", true).toString()
 
+    /**
+     * 取一条本地化文案。
+     *
+     * 这些串会经 `dsh-native` 的 stderr 出现在**用户**眼前（agent 也读它，但 agent 认的是
+     * [err] 里的 `reason`，不是这段人话），所以要跟随应用语言。
+     *
+     * 取不到就退回资源名：桥不能因为一次资源查找失败而回 500，那会把「参数写错了」
+     * 变成「宿主坏了」。
+     */
+    private fun str(ctx: Context, resId: Int, vararg args: Any): String = runCatching {
+        if (args.isEmpty()) ctx.getString(resId) else ctx.getString(resId, *args)
+    }.getOrElse { ctx.resources.getResourceEntryName(resId) ?: "error" }
+
     /** 错误体带机器可读的 [reason]：agent 需要据此决定是重试还是提示用户。 */
     private fun err(msg: String, reason: String): String = JSONObject()
         .put("ok", false)
@@ -454,6 +881,9 @@ object DshNativeBridge {
         .put("reason", reason)
         .toString()
 
-    private fun methodNotAllowed(method: String, path: String): Pair<Int, String> =
-        404 to err("未知端点 $method $path", "unknown_endpoint")
+    private fun methodNotAllowed(ctx: Context, method: String, path: String): Pair<Int, String> =
+        404 to err(
+            str(ctx, R.string.dsh_native_err_unknown_endpoint, method, path),
+            "unknown_endpoint",
+        )
 }

@@ -453,7 +453,7 @@
 
     <!-- 原生能力桥 -->
     <string name="dsh_native_section">原生能力</string>
-    <string name="dsh_native_summary">让容器里的 agent 借应用之手发通知、振动、用剪贴板</string>
+    <string name="dsh_native_summary">让容器里的 agent 借应用之手发通知、振动、用剪贴板、读媒体库、录音、访问共享存储</string>
     <string name="dsh_native_enable">启用原生能力桥</string>
     <string name="dsh_native_enable_summary">默认关闭。容器里同时跑着第三方插件，它们共用同一个回环 token，所以只勾你真的需要的那几项。</string>
     <string name="dsh_native_caps">能力分项</string>
@@ -469,10 +469,94 @@
     <string name="dsh_native_cap_intent_desc">拉起分享面板，或打开 http/https 链接。需要应用处于前台。</string>
     <string name="dsh_native_cap_device">设备信息</string>
     <string name="dsh_native_cap_device_desc">型号、Android 版本、ABI、电量与充电状态</string>
-    <string name="dsh_native_need_notif_perm">尚未授予通知权限，点这里去系统设置开启</string>
-    <string name="dsh_native_cli_hint">容器内命令：dsh-native notify &lt;标题&gt; [正文] / toast / vibrate / clip / share / open / device / caps</string>
+    <string name="dsh_native_need_notif_perm">尚未授予通知权限，点这里授予</string>
+    <string name="dsh_native_cli_hint">容器内命令：dsh-native notify &lt;标题&gt; [正文] / toast / vibrate / clip / share / open / media / mic / device / caps</string>
     <string name="dsh_native_notif_channel_name">Agent 通知</string>
     <string name="dsh_native_notif_channel_desc">容器内 agent 主动发出的通知</string>
     <string name="dsh_host_prompt_title">让 agent 知道这些能力</string>
     <string name="dsh_host_prompt_summary">往 dsh 的系统提示词里加一段说明：宿主是什么、有 dsh-fs / dsh-native 这两个命令、此刻哪些能力开着。关掉则 agent 不会知道它们存在。</string>
+    <!-- ── 文件访问（所有文件访问 / MANAGE_EXTERNAL_STORAGE）── -->
+    <string name="dsh_storage_cap_title">共享存储</string>
+    <string name="dsh_storage_cap_desc">通过 dsh-fs 读写整个共享存储（/sdcard）。Android 规定这项只能在系统设置页里授予。</string>
+    <string name="dsh_storage_need_perm">尚未授予「所有文件访问」，点这里去系统设置开启</string>
+    <string name="dsh_storage_granted">已授予「所有文件访问」</string>
+
+    <!-- ── 媒体与麦克风分项 ── -->
+    <string name="dsh_native_cap_media">媒体库</string>
+    <string name="dsh_native_cap_media_desc">经 MediaStore 列出并取回照片、视频与音频。取回的文件落在容器临时目录里。</string>
+    <string name="dsh_native_cap_mic">麦克风</string>
+    <string name="dsh_native_cap_mic_desc">录最长 30 秒的音频到容器临时目录。需要应用处于前台。</string>
+    <string name="dsh_native_need_media_perm">尚未授予媒体读取权限，点这里授予</string>
+    <string name="dsh_native_need_mic_perm">尚未授予麦克风权限，点这里授予</string>
+
+    <!-- ── 原生桥错误（会出现在 dsh-native 的输出里，用户看得到）── -->
+    <string name="dsh_native_err_disabled">原生能力桥未启用（设置 → 功能 → 原生能力）</string>
+    <string name="dsh_native_err_unknown_endpoint">未知端点 %1$s %2$s</string>
+    <string name="dsh_native_err_cap_disabled">能力「%1$s」未启用</string>
+    <string name="dsh_native_err_cap_unavailable">能力「%1$s」当前不可用</string>
+    <string name="dsh_native_err_missing_param">缺 %1$s</string>
+    <string name="dsh_native_err_no_service">拿不到 %1$s</string>
+    <string name="dsh_native_err_notify_failed">发送通知失败：%1$s</string>
+    <string name="dsh_native_err_vibrate_failed">振动失败：%1$s</string>
+    <string name="dsh_native_err_clipboard_write">写剪贴板失败：%1$s</string>
+    <string name="dsh_native_err_clipboard_background">读剪贴板需要应用处于前台，请让用户先切回 DSH-Folk</string>
+    <string name="dsh_native_err_scheme">只支持 http/https</string>
+    <string name="dsh_native_err_bad_url">url 无法解析</string>
+    <string name="dsh_native_err_start_failed">拉起失败：%1$s</string>
+    <string name="dsh_native_err_activity_background">拉起界面需要应用处于前台，请让用户先切回 DSH-Folk</string>
+    <string name="dsh_native_err_bad_media_type">type 只能是 image、video 或 audio</string>
+    <string name="dsh_native_err_media_type_denied">尚未授予读取 %1$s 的权限</string>
+    <string name="dsh_native_err_media_query">查询媒体库失败：%1$s</string>
+    <string name="dsh_native_err_media_too_big">这个文件超过 %1$d MB 上限</string>
+    <string name="dsh_native_err_media_read">读取媒体文件失败</string>
+    <string name="dsh_native_err_missing_id">缺 id（先用 media list 拿一个）</string>
+    <string name="dsh_native_err_mic_init">创建录音器失败：%1$s</string>
+    <string name="dsh_native_err_mic_start">录音没能启动</string>
+    <string name="dsh_native_err_mic_empty">录音没有拿到任何音频</string>
+    <string name="dsh_native_err_mic_busy">已经有一次录音在进行中</string>
+    <string name="dsh_native_err_mic_background">录音需要应用处于前台；后台录音 Android 只会给静音，不会报错</string>
+
+    <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
+    <string name="dsh_fs_err_no_storage">尚未授予「所有文件访问」，请在 设置 → 功能 → 共享存储 里开启</string>
+    <string name="dsh_fs_err_loopback_only">仅允许回环访问</string>
+    <string name="dsh_fs_err_bad_token">token 不匹配</string>
+    <string name="dsh_fs_err_unknown_endpoint">未知端点 %1$s %2$s</string>
+    <string name="dsh_fs_err_internal">内部错误：%1$s</string>
+    <string name="dsh_fs_err_native_uninit">原生桥未初始化</string>
+    <string name="dsh_fs_err_bad_path">非法路径</string>
+    <string name="dsh_fs_err_not_found">路径不存在</string>
+    <string name="dsh_fs_err_is_dir">是目录</string>
+    <string name="dsh_fs_err_not_dir">不是目录</string>
+    <string name="dsh_fs_err_not_int">%1$s 不是整数</string>
+    <string name="dsh_fs_err_negative">%1$s 不能为负</string>
+    <string name="dsh_fs_err_offset_past_end">offset 超过文件长度 %1$d</string>
+    <string name="dsh_fs_err_read_too_big">单次最多读 64 MB（本次 %1$d），请用 offset/length 分段</string>
+    <string name="dsh_fs_err_open_failed">打开失败：%1$s</string>
+    <string name="dsh_fs_err_seek_failed">定位失败：%1$s</string>
+    <string name="dsh_fs_err_missing_length">缺 Content-Length</string>
+    <string name="dsh_fs_err_bad_length">Content-Length 非法</string>
+    <string name="dsh_fs_err_write_failed">写入失败</string>
+    <string name="dsh_fs_err_short_body">请求体不完整：声明 %1$d 字节，实收 %2$d</string>
+    <string name="dsh_fs_err_file_exists">同名文件已存在</string>
+    <string name="dsh_fs_err_mkdir_failed">创建失败</string>
+    <string name="dsh_fs_err_bad_arg">非法 %1$s</string>
+    <string name="dsh_fs_err_src_missing">src 不存在</string>
+    <string name="dsh_fs_err_dst_inside_src">dst 在 src 内部</string>
+    <string name="dsh_fs_err_dst_inside_src_recursive">dst 在 src 内部，会无限递归</string>
+    <string name="dsh_fs_err_dst_exists">dst 已存在（加 overwrite=1 覆盖）</string>
+    <string name="dsh_fs_err_move_partial">已复制到 dst，但删除 src 失败</string>
+    <string name="dsh_fs_err_no_delete_root">不能删除根目录</string>
+    <string name="dsh_fs_err_dir_not_empty">目录非空（加 recursive=1 递归删除）</string>
+    <string name="dsh_fs_err_too_many_delete">条目超过 %1$d，拒绝递归删除</string>
+    <string name="dsh_fs_err_too_many_copy">条目超过 %1$d，拒绝递归复制</string>
+    <string name="dsh_fs_err_delete_failed">删除失败</string>
+    <string name="dsh_fs_err_missing_glob">缺 glob</string>
+    <string name="dsh_fs_err_bad_glob">glob 非法</string>
+    <string name="dsh_fs_err_statfs">statfs 失败：%1$s</string>
+    <string name="dsh_fs_err_escape">路径越界</string>
+    <string name="dsh_fs_err_escape_named">%1$s 越界</string>
+    <string name="dsh_fs_err_mkdir_named">建目录 %1$s 失败</string>
+    <string name="dsh_fs_err_exists_named">%1$s 已存在</string>
+    <string name="dsh_fs_err_overwrite_named">覆盖 %1$s 失败</string>
+    <string name="dsh_fs_err_copy_failed">复制失败：%1$s（已复制 %2$d 个文件）</string>
 </resources>

@@ -115,8 +115,15 @@ dsh-fs space [路径]
 dsh-fs health
 ```
 
+Android 规定读写整个共享存储要「所有文件访问」，而这一项**只能**在系统设置页里授予（它的
+protectionLevel 是 `signature|appop`，应用申请不到）。没授予时上面每条命令都回
+`403 no_storage`，`dsh-fs health` 会如实报 `storageGranted: false`；去
+**设置 → 功能 → 原生能力 → 共享存储** 点一下就能跳到那个系统页面。
+顺带说明：`/storage/emulated/0` 本来就 bind mount 进了容器，普通 `read`/`write`/`glob` 常常够用，
+这个桥的价值是**窄而可审计**的那条路径，不是访问本身。
+
 `dsh-native` —— 借 App 之手调原生能力。**默认整体关闭**，要在 **设置 → 功能 → 原生能力** 里打开总开关，
-再逐项勾选想给的能力（通知 / Toast / 振动 / 剪贴板 / 分享与打开链接 / 设备信息）：
+再逐项勾选想给的能力（通知 / Toast / 振动 / 剪贴板 / 分享与打开链接 / 设备信息 / 媒体库 / 麦克风）：
 
 ```
 dsh-native notify <标题> [正文] [--id N] [--ongoing]
@@ -126,18 +133,34 @@ dsh-native vibrate [--ms N] [--amplitude 1..255]
 dsh-native clip get | clip set <文本>
 dsh-native share <文本> [--title T]
 dsh-native open <https 链接>
+dsh-native media list [--type image|video|audio] [--q 名字] [--limit N]
+dsh-native media get <id> [--type image|video|audio]
+dsh-native mic record [--ms N]
 dsh-native device
 dsh-native caps            # 查当前哪些能力开着、能不能用
 ```
 
-分项而不是一个总开关，是因为容器里同时跑着用户自己装的第三方插件，它们共享同一个 token —— 「能调这个接口」
-等价于「容器内任何代码都能调」。读剪贴板与拉起分享/链接受 Android 的后台限制约束，应用不在前台时会返回
-`409 not_foreground` 而不是假装成功。
+勾上一项就会立刻弹它缺的系统权限（通知 / 媒体 / 麦克风）；被永久拒绝之后不再弹空窗，而是直接
+跳到系统设置页 —— 那种情况下 `launch` 会立即回调、界面毫无反应，用户只会以为按钮坏了。
 
-agent 默认**不知道**这些东西存在（dsh 上游没有 Android 宿主的概念）。App 会往容器里装一个几十行的
+`media get` 与 `mic record` **不回二进制**：字节落进容器的 `/tmp`，回一个容器内路径，agent 用普通文件
+工具读。容器 rootfs 是本应用私有目录，写它不需要任何存储权限，也少一次 base64 膨胀。
+媒体权限在 Android 13 起按类型拆开，所以 `media list` 的响应里带 `granted` —— 只给了照片时
+agent 该知道音频是**没授权**，而不是「设备上没有音频」。录音固定要求前台：Android 9 起后台录音
+只会拿到**静音而不是报错**，与其交一段静音出去，不如直接 `409 not_foreground`。
+
+分项而不是一个总开关，是因为容器里同时跑着用户自己装的第三方插件，它们共享同一个 token —— 「能调这个接口」
+等价于「容器内任何代码都能调」。读剪贴板、拉起分享/链接、录音都受 Android 的后台限制约束，应用不在前台时
+会返回 `409 not_foreground` 而不是假装成功。
+
+两个桥的报错都是**双份**的：`error` 是跟随应用语言的人话（给用户看），`reason` 是稳定的机器码（给 agent 判断）。
+用户把手机切成英文不会改变程序行为。
+
+agent 默认**不知道**这些东西存在（dsh 上游没有 Android 宿主的概念）。App 会往容器里装一个单文件
 cordis 插件，往 dsh 的系统提示词里加一段说明：宿主是什么机型/系统、`/sdcard` 已经挂进来了、有
-`dsh-fs` / `dsh-native` 这两个命令、此刻**哪些**能力真的开着、以及提权是不是关的。
+`dsh-fs` / `dsh-native` 这两个命令、此刻**哪些**能力真的开着、缺哪些系统权限、设备语言是什么、以及提权是不是关的。
 勾掉哪一项，下一轮对话里那一项就从提示词里消失，agent 不会再去调一个注定 403 的接口。
+那段本身是英文的（与 dsh 自带的各段一致，避免给模型的输出语言添偏置），设备语言只作为一条**事实**告诉它。
 不想让它知道就在 **设置 → 功能 → 让 agent 知道这些能力** 关掉（关掉不卸插件，只是那一段渲染成空）。
 
 ## 它是怎么跑起来的

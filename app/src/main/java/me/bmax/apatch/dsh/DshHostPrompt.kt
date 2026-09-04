@@ -69,7 +69,7 @@ object DshHostPrompt {
      * 读一遍 assets 再全量覆盖。版本号存在 prefs 里，与 rootfs 无关 —— 重装运行时后
      * 文件没了但版本号还在，所以 [ensureInstalled] 另外检查文件是否真的存在。
      */
-    private const val PLUGIN_REV = 1
+    private const val PLUGIN_REV = 2
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =
@@ -162,11 +162,20 @@ object DshHostPrompt {
                 .put("androidRelease", Build.VERSION.RELEASE ?: "")
                 .put("sdkInt", Build.VERSION.SDK_INT)
                 .put("abi", Build.SUPPORTED_ABIS.firstOrNull() ?: "")
+                // 设备语言是**事实**，不是让提示词跟着翻译的理由：段文本保持英文（与 dsh
+                // 自带的各段一致），但 agent 需要知道该用什么语言回话、通知该写成什么语言。
+                .put("locale", localeTag(ctx))
                 .put("containerRuntime", DshRuntime.runtimeId())
-                .put("fsBridge", true)
+                // 桥进程一直在，但没有「所有文件访问」时每个文件端点都回 403 ——
+                // 提示词必须说清是哪一种，否则 agent 会拿着 dsh-fs 一路撞 403。
+                .put("fsBridge", PermissionUtils.hasAllFilesAccess(ctx))
                 .put("nativeBridge", nativeOn)
                 .put("nativeCaps", caps)
                 .put("notificationPermission", PermissionUtils.hasNotificationPermission(ctx))
+                // 媒体是逐类授权的（Android 13 起）：只给了照片时 agent 该知道音频读不了，
+                // 而不是以为设备上没有音频文件。
+                .put("mediaPermissions", grantedMediaJson(ctx))
+                .put("microphonePermission", PermissionUtils.hasMicrophonePermission(ctx))
                 // 提权通道给 agent 看的是「有没有」，不是具体哪条 —— 它用不上具体通道，
                 // 但需要知道「别指望 su」。
                 .put("elevation", elevationLabel(ctx))
@@ -175,6 +184,25 @@ object DshHostPrompt {
             f.parentFile?.mkdirs()
             f.writeText(json, StandardCharsets.UTF_8)
         }.onFailure { android.util.Log.w(TAG, "写 host-facts 失败: ${it.message}") }
+    }
+
+    /**
+     * 当前生效的语言标签，如 `zh-CN` / `en-US`。
+     *
+     * 取的是**应用**的 locale（`resources.configuration.locales[0]`）而不是 `Locale.getDefault()`：
+     * 用户可能在系统里给 DSH-Folk 单独设了语言（Android 13 的 per-app language），
+     * 那时前者才是他真正看到的语言。
+     */
+    private fun localeTag(ctx: Context): String = runCatching {
+        val locales = ctx.resources.configuration.locales
+        if (locales.isEmpty) "" else locales.get(0).toLanguageTag()
+    }.getOrElse { "" }
+
+    /** 已授权的媒体类型 id 列表（`image` / `video` / `audio`）。 */
+    private fun grantedMediaJson(ctx: Context): JSONArray {
+        val arr = JSONArray()
+        for (t in PermissionUtils.grantedMediaTypes(ctx)) arr.put(t.id)
+        return arr
     }
 
     /** 提权状态的字符串形式：none / root / shizuku / adb。 */

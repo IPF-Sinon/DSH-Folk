@@ -471,7 +471,7 @@
 
     <!-- 原生能力桥 -->
     <string name="dsh_native_section">Native capabilities</string>
-    <string name="dsh_native_summary">Let the agent inside the container post notifications, vibrate and use the clipboard through the app</string>
+    <string name="dsh_native_summary">Let the agent inside the container borrow the app to post notifications, vibrate, use the clipboard, read the media library, record audio and reach shared storage</string>
     <string name="dsh_native_enable">Enable native bridge</string>
     <string name="dsh_native_enable_summary">Off by default. The container also runs third-party plugins, and they share the same loopback token — turn on only the capabilities you actually want.</string>
     <string name="dsh_native_caps">Capabilities</string>
@@ -487,10 +487,94 @@
     <string name="dsh_native_cap_intent_desc">Bring up the share sheet, or open an http/https link. Requires the app to be in the foreground.</string>
     <string name="dsh_native_cap_device">Device info</string>
     <string name="dsh_native_cap_device_desc">Model, Android version, ABI, battery level and charging state</string>
-    <string name="dsh_native_need_notif_perm">Notification permission not granted — tap to open system settings</string>
-    <string name="dsh_native_cli_hint">Inside the container: dsh-native notify &lt;title&gt; [body] / toast / vibrate / clip / share / open / device / caps</string>
+    <string name="dsh_native_need_notif_perm">Notification permission not granted — tap to grant</string>
+    <string name="dsh_native_cli_hint">Inside the container: dsh-native notify &lt;title&gt; [body] / toast / vibrate / clip / share / open / media / mic / device / caps</string>
     <string name="dsh_native_notif_channel_name">Agent notifications</string>
     <string name="dsh_native_notif_channel_desc">Notifications posted by the agent running inside the container</string>
     <string name="dsh_host_prompt_title">Tell the agent about these</string>
     <string name="dsh_host_prompt_summary">Adds a short section to the system prompt describing the host, the dsh-fs / dsh-native commands, and which capabilities are currently on. Turn it off to keep the agent unaware of them.</string>
+    <!-- ── 文件访问（所有文件访问 / MANAGE_EXTERNAL_STORAGE）── -->
+    <string name="dsh_storage_cap_title">Shared storage</string>
+    <string name="dsh_storage_cap_desc">Read and write the whole of shared storage (/sdcard) through dsh-fs. Android requires this to be granted on a system settings page.</string>
+    <string name="dsh_storage_need_perm">All files access not granted — tap to open system settings</string>
+    <string name="dsh_storage_granted">All files access granted</string>
+
+    <!-- ── 媒体与麦克风分项 ── -->
+    <string name="dsh_native_cap_media">Media library</string>
+    <string name="dsh_native_cap_media_desc">List and fetch photos, videos and audio through MediaStore. Fetched files land in the container temp dir.</string>
+    <string name="dsh_native_cap_mic">Microphone</string>
+    <string name="dsh_native_cap_mic_desc">Record up to 30 seconds of audio into the container temp dir. Requires the app to be in the foreground.</string>
+    <string name="dsh_native_need_media_perm">Media permission not granted — tap to grant</string>
+    <string name="dsh_native_need_mic_perm">Microphone permission not granted — tap to grant</string>
+
+    <!-- ── 原生桥错误（会出现在 dsh-native 的输出里，用户看得到）── -->
+    <string name="dsh_native_err_disabled">Native bridge is off (Settings › Features › Native capabilities)</string>
+    <string name="dsh_native_err_unknown_endpoint">Unknown endpoint %1$s %2$s</string>
+    <string name="dsh_native_err_cap_disabled">Capability “%1$s” is not enabled</string>
+    <string name="dsh_native_err_cap_unavailable">Capability “%1$s” is currently unavailable</string>
+    <string name="dsh_native_err_missing_param">Missing %1$s</string>
+    <string name="dsh_native_err_no_service">Could not obtain %1$s</string>
+    <string name="dsh_native_err_notify_failed">Could not post the notification: %1$s</string>
+    <string name="dsh_native_err_vibrate_failed">Vibration failed: %1$s</string>
+    <string name="dsh_native_err_clipboard_write">Could not write the clipboard: %1$s</string>
+    <string name="dsh_native_err_clipboard_background">Reading the clipboard needs the app in the foreground — ask the user to switch back to DSH-Folk</string>
+    <string name="dsh_native_err_scheme">Only http/https is supported</string>
+    <string name="dsh_native_err_bad_url">The url could not be parsed</string>
+    <string name="dsh_native_err_start_failed">Could not start the activity: %1$s</string>
+    <string name="dsh_native_err_activity_background">Opening a UI needs the app in the foreground — ask the user to switch back to DSH-Folk</string>
+    <string name="dsh_native_err_bad_media_type">type must be image, video or audio</string>
+    <string name="dsh_native_err_media_type_denied">Permission to read %1$s is not granted</string>
+    <string name="dsh_native_err_media_query">Media query failed: %1$s</string>
+    <string name="dsh_native_err_media_too_big">The file is over the %1$d MB limit</string>
+    <string name="dsh_native_err_media_read">Could not read the media file</string>
+    <string name="dsh_native_err_missing_id">Missing id (get one from media list first)</string>
+    <string name="dsh_native_err_mic_init">Could not create the recorder: %1$s</string>
+    <string name="dsh_native_err_mic_start">Recording could not start</string>
+    <string name="dsh_native_err_mic_empty">Recording produced no audio</string>
+    <string name="dsh_native_err_mic_busy">Another recording is already in progress</string>
+    <string name="dsh_native_err_mic_background">Recording needs the app in the foreground — in the background Android returns silence, not an error</string>
+
+    <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
+    <string name="dsh_fs_err_no_storage">All files access is not granted — enable it in Settings › Features › Shared storage</string>
+    <string name="dsh_fs_err_loopback_only">Loopback access only</string>
+    <string name="dsh_fs_err_bad_token">Token mismatch</string>
+    <string name="dsh_fs_err_unknown_endpoint">Unknown endpoint %1$s %2$s</string>
+    <string name="dsh_fs_err_internal">Internal error: %1$s</string>
+    <string name="dsh_fs_err_native_uninit">The native bridge is not initialised</string>
+    <string name="dsh_fs_err_bad_path">Illegal path</string>
+    <string name="dsh_fs_err_not_found">Path does not exist</string>
+    <string name="dsh_fs_err_is_dir">Is a directory</string>
+    <string name="dsh_fs_err_not_dir">Not a directory</string>
+    <string name="dsh_fs_err_not_int">%1$s is not an integer</string>
+    <string name="dsh_fs_err_negative">%1$s cannot be negative</string>
+    <string name="dsh_fs_err_offset_past_end">offset is past the file length %1$d</string>
+    <string name="dsh_fs_err_read_too_big">64 MB max per read (asked for %1$d) — use offset/length to page</string>
+    <string name="dsh_fs_err_open_failed">Could not open: %1$s</string>
+    <string name="dsh_fs_err_seek_failed">Could not seek: %1$s</string>
+    <string name="dsh_fs_err_missing_length">Missing Content-Length</string>
+    <string name="dsh_fs_err_bad_length">Illegal Content-Length</string>
+    <string name="dsh_fs_err_write_failed">Write failed</string>
+    <string name="dsh_fs_err_short_body">Incomplete body: declared %1$d bytes, received %2$d</string>
+    <string name="dsh_fs_err_file_exists">A file of that name already exists</string>
+    <string name="dsh_fs_err_mkdir_failed">Could not create the directory</string>
+    <string name="dsh_fs_err_bad_arg">Illegal %1$s</string>
+    <string name="dsh_fs_err_src_missing">src does not exist</string>
+    <string name="dsh_fs_err_dst_inside_src">dst is inside src</string>
+    <string name="dsh_fs_err_dst_inside_src_recursive">dst is inside src, which would recurse forever</string>
+    <string name="dsh_fs_err_dst_exists">dst already exists (pass overwrite=1 to replace it)</string>
+    <string name="dsh_fs_err_move_partial">Copied to dst, but deleting src failed</string>
+    <string name="dsh_fs_err_no_delete_root">The root directory cannot be deleted</string>
+    <string name="dsh_fs_err_dir_not_empty">Directory is not empty (pass recursive=1)</string>
+    <string name="dsh_fs_err_too_many_delete">More than %1$d entries — refusing to delete recursively</string>
+    <string name="dsh_fs_err_too_many_copy">More than %1$d entries — refusing to copy recursively</string>
+    <string name="dsh_fs_err_delete_failed">Delete failed</string>
+    <string name="dsh_fs_err_missing_glob">Missing glob</string>
+    <string name="dsh_fs_err_bad_glob">Illegal glob</string>
+    <string name="dsh_fs_err_statfs">statfs failed: %1$s</string>
+    <string name="dsh_fs_err_escape">Path escapes the root</string>
+    <string name="dsh_fs_err_escape_named">%1$s escapes the root</string>
+    <string name="dsh_fs_err_mkdir_named">Could not create directory %1$s</string>
+    <string name="dsh_fs_err_exists_named">%1$s already exists</string>
+    <string name="dsh_fs_err_overwrite_named">Could not overwrite %1$s</string>
+    <string name="dsh_fs_err_copy_failed">Copy failed: %1$s (%2$d files copied)</string>
 </resources>

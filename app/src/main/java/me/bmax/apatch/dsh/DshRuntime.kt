@@ -154,7 +154,7 @@ object DshRuntime {
         const fs = require('fs');
         const http = require('http');
         const CFG = '/root/.dsh/fs-bridge.json';
-        if (!fs.existsSync(CFG)) { console.error('dsh-fs: 文件桥未就绪（缺 ' + CFG + '）'); process.exit(1); }
+        if (!fs.existsSync(CFG)) { console.error('dsh-fs: bridge config missing: ' + CFG); process.exit(1); }
         const cfg = JSON.parse(fs.readFileSync(CFG, 'utf8'));
         const enc = encodeURIComponent;
         function req(method, path, body) {
@@ -204,7 +204,7 @@ object DshRuntime {
           'usage: dsh-fs <command> [args] [options]',
           '  list [path] [--recursive] [--maxDepth N] [--limit N]',
           '  stat <path>',
-          '  read <path> [--offset N] [--length N]      # 二进制写到 stdout',
+          '  read <path> [--offset N] [--length N]      # binary goes to stdout',
           '  write <localFile> [remotePath] [--append]',
           '  rm <path> [-r|--recursive]',
           '  mv <src> <dst>',
@@ -213,7 +213,7 @@ object DshRuntime {
           '  find <path> --glob <pattern> [--maxDepth N] [--limit N]',
           '  space [path]',
           '  health',
-          '所有路径都是相对共享存储根（/sdcard）的相对路径。'
+          'All paths are relative to the shared-storage root (/sdcard).'
         ].join('\n');
         (async function () {
           try {
@@ -280,7 +280,7 @@ object DshRuntime {
         const fs = require('fs');
         const http = require('http');
         const CFG = '/root/.dsh/fs-bridge.json';
-        if (!fs.existsSync(CFG)) { console.error('dsh-native: 回环桥未就绪（缺 ' + CFG + '）'); process.exit(1); }
+        if (!fs.existsSync(CFG)) { console.error('dsh-native: bridge config missing: ' + CFG); process.exit(1); }
         const cfg = JSON.parse(fs.readFileSync(CFG, 'utf8'));
         const enc = encodeURIComponent;
         function req(method, path) {
@@ -331,9 +331,12 @@ object DshRuntime {
           '  clip set <text> [--label L]',
           '  share <text> [--title T]',
           '  open <https URL>',
+          '  media list [--type image|video|audio] [--q name] [--limit N]',
+          '  media get <id> [--type image|video|audio]   # lands in /tmp; JSON carries path',
+          '  mic record [--ms N]                         # 30000 max; lands in /tmp',
           '  device',
           '  caps',
-          '需要在「设置 → 功能 → 原生能力」里先启用总开关与对应能力。'
+          'Settings > Features > Native capabilities: enable the master switch and the item first.'
         ].join('\n');
         (async function () {
           try {
@@ -358,6 +361,24 @@ object DshRuntime {
                 say(await req('GET', '/native/clipboard'));
               } else if (a[0] === 'set' && a[1]) {
                 say(await req('POST', '/native/clipboard' + q({ text: a[1], label: opt.label })));
+              } else {
+                console.error(USAGE);
+                process.exitCode = 1;
+              }
+            } else if (cmd === 'media') {
+              if (a[0] === 'list') {
+                say(await req('GET', '/native/media/list' + q({
+                  type: opt.type, q: opt.q, limit: opt.limit
+                })));
+              } else if (a[0] === 'get' && a[1]) {
+                say(await req('GET', '/native/media/read' + q({ type: opt.type, id: a[1] })));
+              } else {
+                console.error(USAGE);
+                process.exitCode = 1;
+              }
+            } else if (cmd === 'mic') {
+              if (a[0] === 'record') {
+                say(await req('POST', '/native/mic/record' + q({ ms: opt.ms })));
               } else {
                 console.error(USAGE);
                 process.exitCode = 1;

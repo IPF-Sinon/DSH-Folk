@@ -1,7 +1,13 @@
 package me.bmax.apatch.ui.screen.settings
 
+import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -32,6 +38,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -132,6 +141,102 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var notifPermGranted by remember {
         mutableStateOf(PermissionUtils.hasNotificationPermission(context))
     }
+    // 媒体 / 麦克风 / 所有文件访问同理：三者都能在系统设置里被撤销，而撤销之后
+    // 开关还是亮的 —— 必须每次回到本页重读，不能只在首次组合时读一次。
+    var mediaPermGranted by remember {
+        mutableStateOf(PermissionUtils.hasAnyMediaPermission(context))
+    }
+    var micPermGranted by remember {
+        mutableStateOf(PermissionUtils.hasMicrophonePermission(context))
+    }
+    var allFilesGranted by remember {
+        mutableStateOf(PermissionUtils.hasAllFilesAccess(context))
+    }
+
+    /**
+     * 运行时权限申请器。
+     *
+     * 用一个 launcher 应付三类能力：contract 收的是权限数组，回调里重读一遍状态就够了，
+     * 不必为每类各建一个 launcher（launcher 必须在组合期注册，条件注册会崩）。
+     */
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        notifPermGranted = PermissionUtils.hasNotificationPermission(context)
+        mediaPermGranted = PermissionUtils.hasAnyMediaPermission(context)
+        micPermGranted = PermissionUtils.hasMicrophonePermission(context)
+        // 权限变了，提示词里的能力清单也得跟着变
+        DshHostPrompt.writeFacts(context.applicationContext)
+    }
+
+    /**
+     * 为某项能力申请它缺的运行时权限。
+     *
+     * 用户第二次拒绝之后系统不再弹窗（`shouldShowRequestPermissionRationale` 为 false
+     * 且权限仍未授予），此时 launch 会立即回调、界面毫无反应 —— 那种情况下直接送去
+     * 系统设置页，否则用户会以为按钮坏了。
+     */
+    val requestCapPermission: (DshNativeBridge.Cap) -> Unit = { cap ->
+        val needed = DshNativeBridge.runtimePermissions(cap)
+            .filter {
+                ContextCompat.checkSelfPermission(context, it) !=
+                    PackageManager.PERMISSION_GRANTED
+            }
+        if (needed.isNotEmpty()) {
+            val activity = context as? Activity
+            val canAsk = activity == null || !prefsAskedPermission(dshPrefs, cap) ||
+                needed.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
+            if (canAsk) {
+                markAskedPermission(dshPrefs, cap)
+                permissionLauncher.launch(needed.toTypedArray())
+            } else if (cap == DshNativeBridge.Cap.NOTIFY) {
+                // 通知有专门的开关页，比通用的应用信息页少两跳
+                runCatching {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            } else {
+                runCatching {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            .setData(Uri.fromParts("package", context.packageName, null))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 跳「所有文件访问」的系统设置页。
+     *
+     * 这一项**不能**用 requestPermissions：MANAGE_EXTERNAL_STORAGE 的 protectionLevel 是
+     * `signature|appop|preinstalled`，运行时申请永远返回拒绝。带包名的 Intent 在少数
+     * ROM 上不被支持，所以失败后退回不带包名的全局列表页。
+     */
+    val openAllFilesSettings: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val withPackage = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                .setData(Uri.fromParts("package", context.packageName, null))
+            val ok = runCatching { context.startActivity(withPackage) }.isSuccess
+            if (!ok) {
+                runCatching {
+                    context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                }
+            }
+        } else {
+            // Android 10 及以下没有这个页面，走的是普通运行时权限
+            permissionLauncher.launch(
+                arrayOf(
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                )
+            )
+        }
+    }
 
     val runtimeInstalled = DshEnv.isRuntimeInstalled(context)
     // 已装版本从运行时状态读（同一份 prefs，下载成功时写入）
@@ -179,12 +284,17 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
         }
     }
 
-    // 通知权限与原生能力开关都可能在系统设置 / 另一处被改，回到本页时重读一遍
+    // 权限与原生能力开关都可能在系统设置 / 另一处被改，回到本页时重读一遍
     LifecycleResumeEffect(Unit) {
         notifPermGranted = PermissionUtils.hasNotificationPermission(context)
+        // 这三项都可能在系统设置页里被改（「所有文件访问」**只能**在那里改），
+        // 而用户从设置页返回走的正是 onResume —— 少了这几行，回来看到的还是旧状态。
+        mediaPermGranted = PermissionUtils.hasAnyMediaPermission(context)
+        micPermGranted = PermissionUtils.hasMicrophonePermission(context)
+        allFilesGranted = PermissionUtils.hasAllFilesAccess(context)
         nativeBridgeEnabled = DshNativeBridge.enabled(context)
         nativeCaps = DshNativeBridge.enabledCaps(context)
-        // 通知权限是提示词里的一条事实（没授权时 notify 会静默无效），跟着一起刷新
+        // 权限是提示词里的事实（没授权时对应能力会失败），跟着一起刷新
         DshHostPrompt.writeFacts(context.applicationContext)
         onPauseOrDispose { }
     }
@@ -365,6 +475,9 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                         DshNativeBridge.setCapEnabled(context.applicationContext, cap, on)
                         nativeCaps = DshNativeBridge.enabledCaps(context.applicationContext)
                         DshHostPrompt.writeFacts(context.applicationContext)
+                        // 刚打开一项能力就顺手把它缺的系统权限要了：不这么做用户要先勾开关、
+                        // 再点一行提示、再点系统弹窗，三步里前两步都不产生任何可见效果。
+                        if (on) requestCapPermission(cap)
                     },
                     hostPromptEnabled = hostPromptEnabled,
                     onHostPromptEnabledChange = { on ->
@@ -372,14 +485,11 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                         DshHostPrompt.setEnabled(context.applicationContext, on)
                     },
                     notifPermGranted = notifPermGranted,
-                    onOpenNotifSettings = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                            )
-                        }
-                    },
+                    mediaPermGranted = mediaPermGranted,
+                    micPermGranted = micPermGranted,
+                    allFilesGranted = allFilesGranted,
+                    onRequestCapPermission = { cap -> requestCapPermission(cap) },
+                    onOpenAllFilesSettings = { openAllFilesSettings() },
                     runtimeInstalled = runtimeInstalled,
                     runtimeVersion = runtimeState.runtimeVersion ?: "",
                     onReinstallRuntime = {
@@ -468,3 +578,25 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
 }
 
 private const val SHIZUKU_REQ_CODE = 4210
+
+/**
+ * 「这项能力的权限弹窗已经弹过一次了」的记账 key 前缀。
+ *
+ * 为什么需要记账：`shouldShowRequestPermissionRationale` 在**从未申请过**和
+ * **被永久拒绝**两种情况下都返回 false，光看它无法区分。不记账就会走成两种坏结果之一 ——
+ * 要么第一次就把用户丢去系统设置页（本该弹窗），要么永久拒绝后反复 launch 一个
+ * 立刻回调、界面毫无反应的弹窗。
+ */
+private const val ASKED_PERM_PREFIX = "asked_perm_"
+
+private fun prefsAskedPermission(
+    prefs: android.content.SharedPreferences,
+    cap: DshNativeBridge.Cap,
+): Boolean = prefs.getBoolean(ASKED_PERM_PREFIX + cap.id, false)
+
+private fun markAskedPermission(
+    prefs: android.content.SharedPreferences,
+    cap: DshNativeBridge.Cap,
+) {
+    prefs.edit { putBoolean(ASKED_PERM_PREFIX + cap.id, true) }
+}

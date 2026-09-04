@@ -1,65 +1,95 @@
-// DSH-Folk 宿主能力提示词注入插件（cordis / dsh 插件，零依赖单文件 ESM）。
+// DSH-Folk host-capability prompt plugin (cordis / dsh plugin, single zero-dependency ESM file).
 //
-// 作用：让容器里的 agent 知道它跑在 DSH-Folk 这个 Android 宿主里，以及宿主额外
-// 给了哪些命令（dsh-fs / dsh-native）、此刻哪些能力真的开着。
+// Purpose: tell the agent inside the container that it runs on an Android host, which extra
+// commands that host provides (dsh-fs / dsh-native), and which capabilities are actually on
+// right now.
 //
-// 为什么走 systemPrompt.section 而不是 AGENTS.md：
-//   - section 注册在 global layer，对所有 agent preset 的会话都可见；而 web profile
-//     把 agent-instructions 的全局行 disable 了、改由每个 preset 自己挂，用户换 preset
-//     就会静默失效。
-//   - 进的是 system prompt 前缀，KV cache 稳定，不占对话历史，compaction 后不用重注。
-//   - text 允许是求值函数，于是能力开关一改，下一轮组装就是新的，不必重启 dsh。
+// Why systemPrompt.section instead of AGENTS.md:
+//   - A section registered in the global layer is visible to every agent preset, while the web
+//     profile disables the global agent-instructions row and mounts it per preset instead — so
+//     an AGENTS.md rule silently disappears when the user switches preset.
+//   - It lands in the system-prompt prefix: stable KV cache, no conversation-history cost, and
+//     nothing to re-inject after compaction.
+//   - `text` may be a provider function, so flipping a switch changes the very next assemble
+//     without restarting dsh.
 //
-// 事实来源是宿主写的 /root/.dsh/host-facts.json（App 侧 DshHostPrompt.kt）。
-// 读文件而不是回环查桥：section 的 text 提供器是同步的，这里发不了 HTTP。
+// Why this text is English while the app UI is localized: every section dsh itself registers
+// (harness:identity, tool:read, tool:bash …) is English. A mixed-script system prompt nudges
+// the model's output language, which is not ours to decide — the user's language is passed as
+// a FACT below (`locale`) so the model can honour it deliberately.
+//
+// Facts come from /root/.dsh/host-facts.json, written by the app (DshHostPrompt.kt).
+// Reading a file rather than querying the bridge: a section text provider is synchronous, so
+// no HTTP can happen here.
 
 import { readFileSync, statSync } from 'node:fs';
 
-/** cordis 插件名。 */
+/** cordis plugin name. */
 export const name = 'dsh-folk-host';
 
-/** 只依赖提示词注册表。 */
+/** Only the prompt registry is needed. */
 export const inject = ['systemPrompt'];
 
-/** 宿主事实文件（App 每次状态变化都重写）。 */
+/** Host fact file; the app rewrites it on every relevant state change. */
 const FACTS_PATH = '/root/.dsh/host-facts.json';
 
-/** 段名与顺序：工具指导带（100–199）末尾，晚于各工具自己的说明。 */
+/** Section name and order: end of the tool-guidance band (100–199), after each tool's own text. */
 const SECTION_NAME = 'host:dsh-folk';
 const SECTION_ORDER = 165;
 
-/** 能力 id → 面向模型的说明。与 App 侧 DshNativeBridge.Cap 的 id 一一对应。 */
+/** Capability id -> model-facing usage. Ids match DshNativeBridge.Cap on the app side. */
 const CAP_USAGE = {
   notify: [
-    'dsh-native notify <标题> [正文] [--id N] [--ongoing]   # 发通知，--id 0..999 用于后续更新/撤销',
-    'dsh-native notify-cancel [--id N]                      # 撤销自己发的通知',
+    'dsh-native notify <title> [body] [--id N] [--ongoing]  # post a notification; --id 0..999 to update/cancel later',
+    'dsh-native notify-cancel [--id N]                      # cancel one you posted',
   ],
-  toast: ['dsh-native toast <文本>                                # 屏幕上一闪而过的短提示'],
-  vibrate: ['dsh-native vibrate [--ms N] [--amplitude 1..255]      # 振动，最长 3000ms'],
+  toast: ['dsh-native toast <text>                                # brief on-screen message'],
+  vibrate: ['dsh-native vibrate [--ms N] [--amplitude 1..255]      # vibrate, 3000ms max'],
   clipboard: [
-    'dsh-native clip get                                    # 读剪贴板（仅应用在前台时）',
-    'dsh-native clip set <文本> [--label L]                  # 写剪贴板',
+    'dsh-native clip get                                    # read the clipboard (foreground only)',
+    'dsh-native clip set <text> [--label L]                 # write the clipboard',
   ],
   intent: [
-    'dsh-native share <文本> [--title T]                     # 拉起系统分享面板',
-    'dsh-native open <https 链接>                            # 交给系统浏览器打开',
+    'dsh-native share <text> [--title T]                    # bring up the system share sheet',
+    'dsh-native open <https URL>                            # hand a link to the system browser',
   ],
-  device: ['dsh-native device                                      # 机型 / Android 版本 / 电量 / 存储'],
+  device: ['dsh-native device                                      # model / Android version / battery'],
+  media: [
+    'dsh-native media list [--type image|video|audio] [--q name] [--limit N]',
+    'dsh-native media get <id> [--type image|video|audio]   # copies the file into /tmp, returns its path',
+  ],
+  mic: ['dsh-native mic record [--ms N]                         # record up to 30000ms into /tmp'],
 };
 
-/** 逐能力的注意事项：只在该能力开着时才值得占 token。 */
+/** Per-capability caveats; only worth tokens while that capability is on. */
 const CAP_CAVEAT = {
-  notify: '通知会打断用户，只在任务真的结束或真的需要人介入时发，不要用来汇报进度。',
-  clipboard: '剪贴板读取受 Android 后台限制：应用不在前台时返回 409 not_foreground，这不是错误，别重试。',
-  intent: '分享与打开链接要拉起 Activity，同样只在应用前台可用，后台返回 409 not_foreground。',
+  notify:
+    'A notification interrupts the user. Post one when the task is genuinely done or genuinely ' +
+    'needs a human, never to report progress.',
+  clipboard:
+    'Clipboard reads are subject to Android background limits: 409 not_foreground when the app is ' +
+    'not in the foreground. That is a state, not an error — do not retry.',
+  intent:
+    'Sharing and opening links start an Activity, so they too need the app in the foreground; ' +
+    'the background answer is 409 not_foreground.',
+  media:
+    'media get does NOT stream bytes back: it copies the file into the container and returns a path ' +
+    'under /tmp, which you then read with ordinary file tools. Media permission is per type on ' +
+    'Android 13+, so `granted` in the list response tells you which types you may actually read — ' +
+    'an absent type means "not permitted", not "no such files".',
+  mic:
+    'Recording needs the app in the foreground: in the background Android hands out SILENCE rather ' +
+    'than an error, so the host refuses with 409 not_foreground instead of returning a silent file. ' +
+    'Recording is a physically intrusive act — only do it when the user asked for it in this turn.',
 };
 
 let cached = null;
 let cachedMtime = -1;
 
 /**
- * 读宿主事实。按 mtime 判失效 —— 用户在设置里拨一下开关，下一轮组装就是新的。
- * @returns {object|null} 解析后的事实，读不到或坏了返回 null。
+ * Read the host facts, invalidating on mtime — flipping a switch in settings takes effect on the
+ * very next assemble.
+ * @returns {object|null} parsed facts, or null when unreadable/malformed.
  */
 function readFacts() {
   let mtime;
@@ -81,66 +111,102 @@ function readFacts() {
   return cached;
 }
 
+/** Non-empty string, or null. */
+function str(v) {
+  return typeof v === 'string' && v !== '' ? v : null;
+}
+
 /**
- * 渲染宿主环境说明。
- * @param {object|null} f 宿主事实。
- * @returns {string} 提示词段文本；不该注入时返回空串（renderPrompt 会丢掉空段）。
+ * Render the host-environment section.
+ * @param {object|null} f host facts.
+ * @returns {string} section text; empty string when it must not be injected (renderPrompt drops
+ *   empty sections, so that is a zero-cost off switch).
  */
 function render(f) {
   if (f === null || f.promptEnabled === false) return '';
 
   const lines = [];
-  lines.push('# 宿主环境：DSH-Folk（Android）');
+  lines.push('# Host environment: DSH-Folk (Android)');
   lines.push('');
   lines.push(
-    '你跑在 DSH-Folk 这个 Android 应用里：一个 proot 容器中的 Ubuntu，宿主是手机而不是服务器。' +
-      '没有显示器、没有 systemd，容器随应用被系统杀掉而停止。'
+    'You are running inside DSH-Folk, an Android app: Ubuntu in a proot container on a phone, not a ' +
+      'server. There is no display and no systemd, and the container stops when Android kills the app.'
   );
 
   const env = [];
-  if (typeof f.appVersion === 'string' && f.appVersion !== '') env.push('DSH-Folk ' + f.appVersion);
-  if (typeof f.device === 'string' && f.device !== '') env.push(f.device);
-  if (typeof f.androidRelease === 'string' && f.androidRelease !== '') {
-    env.push('Android ' + f.androidRelease + (typeof f.sdkInt === 'number' ? '（API ' + f.sdkInt + '）' : ''));
+  const version = str(f.appVersion);
+  const device = str(f.device);
+  const release = str(f.androidRelease);
+  const abi = str(f.abi);
+  const runtime = str(f.containerRuntime);
+  if (version !== null) env.push('DSH-Folk ' + version);
+  if (device !== null) env.push(device);
+  if (release !== null) {
+    env.push('Android ' + release + (typeof f.sdkInt === 'number' ? ' (API ' + f.sdkInt + ')' : ''));
   }
-  if (typeof f.abi === 'string' && f.abi !== '') env.push(f.abi);
-  if (typeof f.containerRuntime === 'string' && f.containerRuntime !== '') env.push('容器 ' + f.containerRuntime);
+  if (abi !== null) env.push(abi);
+  if (runtime !== null) env.push('container ' + runtime);
   if (env.length > 0) {
     lines.push('');
-    lines.push('运行环境：' + env.join(' · '));
+    lines.push('Environment: ' + env.join(' · '));
   }
 
-  // 共享存储：先说清「普通文件工具本来就能用」，避免 agent 以为非得走桥。
+  // The user's language is a fact, not a reason to translate this section.
+  const locale = str(f.locale);
+  if (locale !== null) {
+    lines.push('');
+    lines.push(
+      "The device language is " +
+        locale +
+        '. Reply in the language the user writes in, and localize anything you put on their screen ' +
+        '(notification and toast text goes to a phone set to ' +
+        locale +
+        ').'
+    );
+  }
+
+  // Shared storage: say up front that ordinary file tools already work, so the agent does not
+  // assume the bridge is mandatory.
   lines.push('');
-  lines.push('## 共享存储');
+  lines.push('## Shared storage');
   lines.push('');
   lines.push(
-    '手机的共享存储已经 bind 挂进容器，`/sdcard` 与 `/storage/emulated/0` 都是它，' +
-      '普通的 read/write/glob/grep 和 shell 命令直接可用 —— 需要动用户文件时优先用这些。'
+    "The phone's shared storage is bind-mounted into the container — `/sdcard` and " +
+      '`/storage/emulated/0` are both it, and ordinary read/write/glob/grep and shell commands work ' +
+      'on it directly. Prefer those when you need to touch user files.'
   );
   if (f.fsBridge === true) {
     lines.push('');
     lines.push(
-      '另有 `dsh-fs` 走宿主的受控接口（路径逐段校验、不跟随符号链接出界），' +
-        '在普通工具不好办的场合更省事：'
+      'A `dsh-fs` command also goes through the host with a narrower, audited surface (every path ' +
+        'segment validated, symlinks cannot escape the root). It is easier for a few things:'
     );
     lines.push('');
     lines.push('```');
-    lines.push("dsh-fs find . --glob '*.log' [--maxDepth N] [--limit N]   # 带预算的递归查找");
-    lines.push('dsh-fs list [路径] [--recursive] [--maxDepth N] [--limit N]');
-    lines.push('dsh-fs space [路径]                                        # 剩余空间');
-    lines.push('dsh-fs read <路径> [--offset N] [--length N]               # 分段读，二进制进 stdout');
-    lines.push('dsh-fs write <本地文件> [远端路径] [--append]              # 写完才替换目标，不留半截文件');
-    lines.push('dsh-fs stat|mkdir|rm [-r]|mv|cp <路径…>');
+    lines.push("dsh-fs find . --glob '*.log' [--maxDepth N] [--limit N]   # budgeted recursive search");
+    lines.push('dsh-fs list [path] [--recursive] [--maxDepth N] [--limit N]');
+    lines.push('dsh-fs space [path]                                        # free space');
+    lines.push('dsh-fs read <path> [--offset N] [--length N]               # paged read, binary to stdout');
+    lines.push('dsh-fs write <localFile> [remotePath] [--append]           # replaces the target only once complete');
+    lines.push('dsh-fs stat|mkdir|rm [-r]|mv|cp <path…>');
     lines.push('dsh-fs health');
     lines.push('```');
     lines.push('');
-    lines.push('路径都相对 `/sdcard`。写入前先 `dsh-fs space` 看一眼：手机存储满是常态。');
+    lines.push('All paths are relative to `/sdcard`. Check `dsh-fs space` before writing: full phones are normal.');
+  } else {
+    lines.push('');
+    lines.push(
+      'The `dsh-fs` command exists but every file endpoint currently answers 403 ' +
+        '(`reason: "no_storage"`): Android requires "All files access", which has not been granted. ' +
+        'The bind mount above may still be readable, so try ordinary file tools first. If they also ' +
+        'fail, tell the user once to grant it in **Settings › Features › Shared storage** and move on ' +
+        '— do not retry dsh-fs in a loop.'
+    );
   }
 
-  // 原生能力：只列真的开着的，并说明关着时该怎么办。
+  // Native capabilities: list only what is genuinely on, and say what to do when it is not.
   lines.push('');
-  lines.push('## 原生能力（dsh-native）');
+  lines.push('## Native capabilities (dsh-native)');
   lines.push('');
   const bridgeOn = f.nativeBridge === true;
   const caps = Array.isArray(f.nativeCaps) ? f.nativeCaps.filter((c) => typeof c === 'string') : [];
@@ -148,22 +214,27 @@ function render(f) {
 
   if (!bridgeOn || usable.length === 0) {
     lines.push(
-      '`dsh-native` 能借宿主发通知、Toast、振动、读写剪贴板、拉起分享/链接、读设备信息，' +
-        '但当前**未启用**（' +
-        (bridgeOn ? '总开关已开，但没有勾选任何能力' : '总开关关闭') +
-        '）。调用只会返回 403。'
+      '`dsh-native` can borrow the host to post notifications, show a toast, vibrate, use the ' +
+        'clipboard, open a share sheet or link, read device info, read the media library and record ' +
+        'audio — but it is currently **off** (' +
+        (bridgeOn ? 'the master switch is on, but no capability is ticked' : 'the master switch is off') +
+        '), so every call returns 403.'
     );
     lines.push('');
     lines.push(
-      '需要它时，一次性告诉用户去 **设置 → 功能 → 原生能力** 打开总开关并勾选具体能力，然后继续做别的；' +
-        '不要反复重试，也不要反复索要权限。'
+      'If you need it, tell the user ONCE to open **Settings › Features › Native capabilities**, turn ' +
+        'on the master switch and tick the specific capability, then carry on with something else. Do ' +
+        'not retry, and do not keep asking.'
     );
   } else {
-    lines.push('以下能力**已启用**，可以直接调（失败时 stderr 有 reason，据此判断原因，不要盲目重试）：');
+    lines.push(
+      'These capabilities are **on** and can be called directly. On failure stderr carries a JSON ' +
+        '`reason` — read it and act on it rather than retrying blindly:'
+    );
     lines.push('');
     lines.push('```');
     for (const cap of usable) for (const line of CAP_USAGE[cap]) lines.push(line);
-    lines.push('dsh-native caps                                        # 查此刻哪些能力开着 / 可用');
+    lines.push('dsh-native caps                                        # which capabilities are on / available now');
     lines.push('```');
     const caveats = usable.map((c) => CAP_CAVEAT[c]).filter((x) => typeof x === 'string');
     if (caveats.length > 0) {
@@ -174,37 +245,68 @@ function render(f) {
     if (off.length > 0) {
       lines.push('');
       lines.push(
-        '未勾选（调用返回 403，需要就让用户去 设置 → 功能 → 原生能力 勾上，别重试）：' + off.join('、') + '。'
+        'Not ticked (calls return 403; if you need one, ask the user to tick it in Settings › Features ' +
+          '› Native capabilities and do not retry): ' +
+          off.join(', ') +
+          '.'
       );
     }
+
+    // Ticked but the OS permission is missing: the call fails, or worse, silently does nothing.
     if (usable.includes('notify') && f.notificationPermission === false) {
       lines.push('');
       lines.push(
-        '注意：系统通知权限尚未授予，`notify` 会成功返回但用户看不到任何东西 —— 先请用户在设置里放通知权限。'
+        'Note: the system notification permission is NOT granted, so `notify` returns success while ' +
+          'the user sees nothing. Ask them to grant notifications first.'
       );
     }
-    if (f.foregroundOnlyHint === true) {
+    if (usable.includes('media')) {
+      const granted = Array.isArray(f.mediaPermissions)
+        ? f.mediaPermissions.filter((t) => typeof t === 'string')
+        : [];
       lines.push('');
-      lines.push('用户此刻可能没把 DSH-Folk 放在前台，需要前台的能力会返回 409 not_foreground。');
+      if (granted.length === 0) {
+        lines.push(
+          'Note: no media read permission is granted, so every `media` call returns 403 ' +
+            '(`reason: "no_media_permission"`). Ask the user to grant it, once.'
+        );
+      } else if (granted.length < 3) {
+        lines.push(
+          'Media permission is granted for ' +
+            granted.join(', ') +
+            ' only; the other types answer 403 (`reason: "no_media_permission"`). That means ' +
+            '"not permitted", not "nothing found".'
+        );
+      }
+    }
+    if (usable.includes('mic') && f.microphonePermission === false) {
+      lines.push('');
+      lines.push(
+        'Note: the microphone permission is NOT granted, so `mic record` returns 409 ' +
+          '(`reason: "no_audio_permission"`). Ask the user to grant it, once.'
+      );
     }
   }
 
-  // 提权状态：直接决定 shell 命令能不能成，值得单独说一句。
-  if (typeof f.elevation === 'string' && f.elevation !== '') {
+  // Elevation decides whether shell commands can succeed at all, so it earns its own line.
+  const elevation = str(f.elevation);
+  if (elevation !== null) {
     lines.push('');
-    lines.push('## 提权');
+    lines.push('## Elevation');
     lines.push('');
-    if (f.elevation === 'none') {
+    if (elevation === 'none') {
       lines.push(
-        '宿主的特权通道**未启用**（默认如此）。容器里你是 proot 假装的 root，' +
-          '但对宿主 Android 系统没有任何特权：读不到 dmesg、动不了 /data、重启不了设备。' +
-          '需要这些时告诉用户去 设置 → 功能 → 权限通道 选一条（root / Shizuku / 无线 ADB），不要自己反复试。'
+        "The host's privileged channel is **off** (the default). Inside the container you are a root " +
+          'that proot is faking; you have no privilege over Android itself — no dmesg, no /data, no ' +
+          'reboot. When you need that, tell the user to pick a channel in Settings › Features › ' +
+          'Permission channel (root / Shizuku / wireless ADB) instead of trying repeatedly.'
       );
     } else {
       lines.push(
-        '宿主特权通道：' +
-          f.elevation +
-          '。它归 App 用，容器里的命令**不会**自动带上这份特权 —— 别假设 `su` 在容器内可用。'
+        "The host's privileged channel is " +
+          elevation +
+          '. It belongs to the app: commands you run in the container do NOT inherit it, so do not ' +
+          'assume `su` works in here.'
       );
     }
   }
@@ -213,8 +315,8 @@ function render(f) {
 }
 
 /**
- * 注册宿主环境说明段。
- * @param {import('@deepseek-ai/cordis').Context} ctx 携带 systemPrompt 服务的上下文。
+ * Register the host-environment section.
+ * @param {import('@deepseek-ai/cordis').Context} ctx context carrying the systemPrompt service.
  */
 export function apply(ctx) {
   ctx.effect(
@@ -228,5 +330,5 @@ export function apply(ctx) {
   );
 }
 
-// 供宿主侧的等价测试直接调用（不影响插件加载）。
+// Exposed for the host-side equivalence tests (does not affect plugin loading).
 export const __test = { render, CAP_USAGE, CAP_CAVEAT, FACTS_PATH, SECTION_NAME, SECTION_ORDER };

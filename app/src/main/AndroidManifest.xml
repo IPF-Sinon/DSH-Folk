@@ -4,11 +4,29 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- Android 10 及以下靠这两条读写共享存储；11 起被 MANAGE_EXTERNAL_STORAGE 取代，
+         所以加 maxSdkVersion，免得在新系统上出现一对永远拿不到、又出现在权限列表里的条目。
+         PermissionUtils.hasAllFilesAccess 按同一条界线分支。 -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
-    <!-- 用于访问外部存储上的媒体文件 -->
+    <!-- 用于访问外部存储上的媒体文件。
+         Android 13 起 READ_EXTERNAL_STORAGE 被按类型拆成三个：只给照片的用户不会
+         同时给音频，所以三个都要声明、也要分别检查（见 PermissionUtils.MediaType）。
+         READ_MEDIA_VISUAL_USER_SELECTED 是 Android 14 的「仅选定照片」——不声明它就
+         无法区分「用户拒绝了」和「用户只给了几张」，两者对 agent 的含义完全不同。 -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <!-- 录音：容器里的 agent 通过 /native/mic/record 让宿主录一段音。
+         只在应用处于前台时可用 —— 我们的前台服务类型是 specialUse，它**不**授予
+         后台录音；Android 9 起后台录音只会拿到静音，而不是报错。 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Shizuku API：作为客户端向已安装的 Shizuku / Sui 申请授权。
          不要重复声明同名 <permission>，官方 Shizuku 已声明，重复会导致

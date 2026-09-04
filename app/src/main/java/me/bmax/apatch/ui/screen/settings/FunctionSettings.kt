@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Layers
@@ -28,10 +29,12 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -122,8 +125,16 @@ fun FunctionSettingsContent(
     onNativeCapChange: (DshNativeBridge.Cap, Boolean) -> Unit,
     /** 系统通知权限是否已授予（Android 13 起是运行时权限）。 */
     notifPermGranted: Boolean,
-    /** 跳系统通知设置。 */
-    onOpenNotifSettings: () -> Unit,
+    /** 至少一类媒体读权限是否已授予。 */
+    mediaPermGranted: Boolean,
+    /** 麦克风权限是否已授予。 */
+    micPermGranted: Boolean,
+    /** 「所有文件访问」是否已授予（appop 特殊权限，只能跳系统设置页）。 */
+    allFilesGranted: Boolean,
+    /** 为某项能力申请它缺的运行时权限（通知/媒体/麦克风）。 */
+    onRequestCapPermission: (DshNativeBridge.Cap) -> Unit,
+    /** 跳「所有文件访问」的系统设置页。 */
+    onOpenAllFilesSettings: () -> Unit,
     /** 是否把宿主能力说明注入 dsh 的系统提示词。 */
     hostPromptEnabled: Boolean,
     onHostPromptEnabledChange: (Boolean) -> Unit,
@@ -760,16 +771,60 @@ fun FunctionSettingsContent(
                                 enabled = nativeBridgeEnabled,
                             )
                         }
+                        // 勾上了但系统权限没给：开关是亮的，调用却一定失败。
+                        // 每项自己紧跟一行提示，而不是攒到卡片末尾 —— 用户要知道是**哪一项**缺权限。
+                        val hint = if (nativeBridgeEnabled && cap in nativeCaps) {
+                            capPermissionHintRes(cap, notifPermGranted, mediaPermGranted, micPermGranted)
+                        } else {
+                            null
+                        }
+                        if (hint != null) {
+                            TextButton(onClick = { onRequestCapPermission(cap) }) {
+                                Text(stringResource(hint))
+                            }
+                        }
                     }
 
-                    // 通知项开了但系统权限没给：开关是勾上的，通知却一条也不会出现
-                    if (!notifPermGranted &&
-                        DshNativeBridge.Cap.NOTIFY in nativeCaps &&
-                        nativeBridgeEnabled
+                    // ── 共享存储 ──
+                    // 与上面的分项同列而不另开一张卡：对用户来说「让 agent 读写手机文件」
+                    // 和「让 agent 发通知」是同一类决定。但它**不是** Cap：MANAGE_EXTERNAL_STORAGE
+                    // 的 protectionLevel 是 signature|appop，requestPermissions() 申请不到，
+                    // 只能跳系统设置页，所以没有开关、只有状态与入口。
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Spacer(Modifier.height(4.dp))
-                        TextButton(onClick = onOpenNotifSettings) {
-                            Text(stringResource(R.string.dsh_native_need_notif_perm))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_storage_cap_title),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.dsh_storage_cap_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Icon(
+                            imageVector = if (allFilesGranted) Icons.Filled.CheckCircle
+                            else Icons.Filled.Warning,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = if (allFilesGranted) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    if (allFilesGranted) {
+                        Text(
+                            text = stringResource(R.string.dsh_storage_granted),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        TextButton(onClick = onOpenAllFilesSettings) {
+                            Text(stringResource(R.string.dsh_storage_need_perm))
                         }
                     }
 
@@ -1072,6 +1127,8 @@ internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard
     DshNativeBridge.Cap.INTENT -> R.string.dsh_native_cap_intent
     DshNativeBridge.Cap.DEVICE -> R.string.dsh_native_cap_device
+    DshNativeBridge.Cap.MEDIA -> R.string.dsh_native_cap_media
+    DshNativeBridge.Cap.MIC -> R.string.dsh_native_cap_mic
 }
 
 /** 原生能力 → 说明串。 */
@@ -1082,6 +1139,29 @@ internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard_desc
     DshNativeBridge.Cap.INTENT -> R.string.dsh_native_cap_intent_desc
     DshNativeBridge.Cap.DEVICE -> R.string.dsh_native_cap_device_desc
+    DshNativeBridge.Cap.MEDIA -> R.string.dsh_native_cap_media_desc
+    DshNativeBridge.Cap.MIC -> R.string.dsh_native_cap_mic_desc
+}
+
+/**
+ * 这项能力缺权限时该显示哪一行提示；不缺就返回 null。
+ *
+ * 只覆盖**可以申请**的运行时权限。「所有文件访问」不在这里：它是 appop 特殊权限，
+ * 走的是独立的一行 + 跳系统设置页。
+ */
+internal fun capPermissionHintRes(
+    cap: DshNativeBridge.Cap,
+    notifGranted: Boolean,
+    mediaGranted: Boolean,
+    micGranted: Boolean,
+): Int? = when (cap) {
+    DshNativeBridge.Cap.NOTIFY ->
+        if (notifGranted) null else R.string.dsh_native_need_notif_perm
+    DshNativeBridge.Cap.MEDIA ->
+        if (mediaGranted) null else R.string.dsh_native_need_media_perm
+    DshNativeBridge.Cap.MIC ->
+        if (micGranted) null else R.string.dsh_native_need_mic_perm
+    else -> null
 }
 
 /** 下载源 id → 可本地化标签；DshSource.displayName 只用于日志。 */
