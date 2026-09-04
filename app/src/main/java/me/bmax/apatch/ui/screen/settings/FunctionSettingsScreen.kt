@@ -45,6 +45,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.AdbBridge
 import me.bmax.apatch.dsh.ContainerRuntime
 import me.bmax.apatch.dsh.DshEnv
+import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
@@ -123,6 +124,10 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
         mutableStateOf(DshNativeBridge.enabled(context))
     }
     var nativeCaps by remember { mutableStateOf(DshNativeBridge.enabledCaps(context)) }
+    // 宿主能力提示词注入
+    var hostPromptEnabled by rememberSaveable {
+        mutableStateOf(DshHostPrompt.enabled(context))
+    }
     // 通知权限可能在系统设置里被改，回到本页时重读
     var notifPermGranted by remember {
         mutableStateOf(PermissionUtils.hasNotificationPermission(context))
@@ -179,6 +184,8 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
         notifPermGranted = PermissionUtils.hasNotificationPermission(context)
         nativeBridgeEnabled = DshNativeBridge.enabled(context)
         nativeCaps = DshNativeBridge.enabledCaps(context)
+        // 通知权限是提示词里的一条事实（没授权时 notify 会静默无效），跟着一起刷新
+        DshHostPrompt.writeFacts(context.applicationContext)
         onPauseOrDispose { }
     }
 
@@ -350,11 +357,19 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     onNativeBridgeEnabledChange = { on ->
                         nativeBridgeEnabled = on
                         DshNativeBridge.setEnabled(context.applicationContext, on)
+                        // 提示词里写着「哪些能力开着」，开关一变就得让容器侧看到新事实
+                        DshHostPrompt.writeFacts(context.applicationContext)
                     },
                     nativeCaps = nativeCaps,
                     onNativeCapChange = { cap, on ->
                         DshNativeBridge.setCapEnabled(context.applicationContext, cap, on)
                         nativeCaps = DshNativeBridge.enabledCaps(context.applicationContext)
+                        DshHostPrompt.writeFacts(context.applicationContext)
+                    },
+                    hostPromptEnabled = hostPromptEnabled,
+                    onHostPromptEnabledChange = { on ->
+                        hostPromptEnabled = on
+                        DshHostPrompt.setEnabled(context.applicationContext, on)
                     },
                     notifPermGranted = notifPermGranted,
                     onOpenNotifSettings = {

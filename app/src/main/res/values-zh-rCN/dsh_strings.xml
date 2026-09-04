@@ -473,4 +473,6 @@
     <string name="dsh_native_cli_hint">容器内命令：dsh-native notify &lt;标题&gt; [正文] / toast / vibrate / clip / share / open / device / caps</string>
     <string name="dsh_native_notif_channel_name">Agent 通知</string>
     <string name="dsh_native_notif_channel_desc">容器内 agent 主动发出的通知</string>
+    <string name="dsh_host_prompt_title">让 agent 知道这些能力</string>
+    <string name="dsh_host_prompt_summary">往 dsh 的系统提示词里加一段说明：宿主是什么、有 dsh-fs / dsh-native 这两个命令、此刻哪些能力开着。关掉则 agent 不会知道它们存在。</string>
 </resources>

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Public
@@ -123,6 +124,9 @@ fun FunctionSettingsContent(
     notifPermGranted: Boolean,
     /** 跳系统通知设置。 */
     onOpenNotifSettings: () -> Unit,
+    /** 是否把宿主能力说明注入 dsh 的系统提示词。 */
+    hostPromptEnabled: Boolean,
+    onHostPromptEnabledChange: (Boolean) -> Unit,
     /** 运行时是否已安装（无线 ADB 需要容器内的 python）。 */
     runtimeInstalled: Boolean,
     /** 已安装的运行时版本；未安装时为空。 */
@@ -776,6 +780,34 @@ fun FunctionSettingsContent(
                             style = MaterialTheme.typography.bodySmall,
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
+        // ───────── 宿主能力提示词注入 ─────────
+        // 独立成一张卡而不是塞进上面那张：它说明的不只是原生能力（还有共享存储、
+        // dsh-fs、提权状态），而且搜索高亮认的是 item key —— 挂在别人的 key 下面
+        // 会让「搜到了却什么也没高亮」。
+        item(key = "function_host_prompt") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            SectionHeader(
+                                icon = { Icon(Icons.Filled.Lightbulb, null, Modifier.size(20.dp)) },
+                                title = stringResource(R.string.dsh_host_prompt_title),
+                                summary = stringResource(R.string.dsh_host_prompt_summary),
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        ExpressiveSwitch(
+                            checked = hostPromptEnabled,
+                            onCheckedChange = onHostPromptEnabledChange,
                         )
                     }
                 }

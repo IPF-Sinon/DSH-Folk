@@ -152,4 +152,16 @@ object DshEnv {
 
     /** 安装插件后是否用 `dsh web --port 0` 验证一次能否启动（默认开）。 */
     const val KEY_VERIFY_AFTER_INSTALL = "verify_after_install"
+
+    /**
+     * 是否往 dsh 的系统提示词里注入宿主能力说明（默认开）。
+     *
+     * 关掉不卸插件，只是让 [DshHostPrompt] 写的事实文件里 `promptEnabled` 变 false，
+     * 插件那一段随即渲染成空串 —— dsh 的 renderPrompt 会丢掉空段，等于零开销。
+     * 卸插件要动 profile 的 bundles，重装一次就得再走 pnpm，不值得为一个开关做。
+     */
+    const val KEY_HOST_PROMPT = "host_prompt_enabled"
+
+    /** 宿主事实文件（JSON），由 App 写、dsh-folk-host 插件读。 */
+    fun hostFacts(ctx: Context): File = File(dshHome(ctx), "host-facts.json")
 }

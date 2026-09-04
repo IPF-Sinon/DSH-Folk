@@ -705,6 +705,7 @@ object DshRuntime {
         // 少了这一步容器里 pnpm、apt 全是 EAI_AGAIN。已存在则原样保留（用户可能改过）。
         ensureContainerDns()
         ensureProfilePnpmSettings()
+        ensureContainerGroups()
         if (runtime().id() != "proot") return
         // jniLibs 里叫 libtalloc.so / libandroidshmem.so，proot 按 SONAME 找
         copyExec(nativeLib("libtalloc.so"), File(libDir, "libtalloc.so.2"))
@@ -1467,6 +1468,148 @@ object DshRuntime {
         }
     }
 
+    /** Android 的 uid/gid 分段偏移（AID_USER_OFFSET）。 */
+    private const val AID_USER_OFFSET = 100000
+
+    /**
+     * 会被分配给应用进程的知名 AID → 名字。
+     *
+     * 取自 AOSP `android_filesystem_config.h`。只收「真的可能出现在应用补充组里」的那些：
+     * 权限派生（INTERNET→inet、蓝牙、各种 sdcard/media）、以及所有应用共有的 everybody。
+     * 表外的 gid 由 [androidGroupName] 兜底成 `aid_<gid>`，绝不留下无名 gid。
+     */
+    private val ANDROID_AIDS = mapOf(
+        1007 to "log",
+        1015 to "sdcard_rw",
+        1023 to "media_rw",
+        1028 to "sdcard_r",
+        1033 to "sdcard_pics",
+        1034 to "sdcard_av",
+        1035 to "sdcard_all",
+        1078 to "ext_data_rw",
+        1079 to "ext_obb_rw",
+        2000 to "shell",
+        3001 to "net_bt_admin",
+        3002 to "net_bt",
+        3003 to "inet",
+        3004 to "net_raw",
+        3005 to "net_admin",
+        3006 to "net_bw_stats",
+        3007 to "net_bw_acct",
+        9997 to "everybody",
+        9998 to "misc",
+        9999 to "nobody",
+    )
+
+    /**
+     * 按 bionic 的规则把一个 Android gid 翻译成组名。
+     *
+     * 复刻 `bionic/libc/bionic/grp_pwd.cpp` 的 `getgrgid_internal` +
+     * `print_app_name_from_gid`：先查知名 AID 表，再按分段推名字。分段与顺序都必须
+     * 与上游一致 —— 共享 gid（50000+）要在缓存 gid 之前判，否则 50054 会被算成
+     * `u0_a20054_cache` 之类的胡话。
+     *
+     * 一处刻意的简化：上游对 2900–2999 / 5000–5999 的 OEM 段会给出 `oem_<id>`，
+     * 这里一律落到 `aid_<gid>`。这个段不会出现在应用进程的补充组里（它是给
+     * OEM 自己的原生服务用的），而给不出名字才是问题，名字风格不是。
+     */
+    private fun androidGroupName(gid: Int): String {
+        val userId = gid / AID_USER_OFFSET
+        val appId = gid % AID_USER_OFFSET
+        return when {
+            appId >= 90000 -> "u${userId}_i${appId - 90000}"
+            userId == 0 && appId in 50000..59999 -> "all_a${appId - 50000}"
+            appId in 40000..49999 -> "u${userId}_a${appId - 40000}_ext_cache"
+            appId in 30000..39999 -> "u${userId}_a${appId - 30000}_ext"
+            appId in 20000..29999 -> "u${userId}_a${appId - 20000}_cache"
+            appId >= 10000 -> "u${userId}_a${appId - 10000}"
+            else -> {
+                val known = ANDROID_AIDS[appId]
+                when {
+                    known == null -> "aid_$gid"
+                    userId == 0 -> known
+                    else -> "u${userId}_$known"
+                }
+            }
+        }
+    }
+
+    /** 本进程的补充组（读 /proc/self/status 的 Groups 行）。 */
+    private fun supplementaryGids(): List<Int> = runCatching {
+        File("/proc/self/status").readLines()
+            .firstOrNull { it.startsWith("Groups:") }
+            ?.removePrefix("Groups:")
+            ?.trim()
+            ?.split(Regex("\\s+"))
+            ?.mapNotNull { it.toIntOrNull() }
+            ?: emptyList()
+    }.getOrDefault(emptyList())
+
+    /**
+     * 把本进程的 Android 补充组补进容器的 `/etc/group`。
+     *
+     * 为什么要做：proot 的 `-0` 只伪造 uid/gid 0，**不拦 getgroups()**，所以容器里看到的
+     * 补充组是宿主应用进程真实的那几个 Android gid（3003=inet、9997=everybody、
+     * 20054=本应用的 cache gid、50054=本应用的 shared gid）。容器 glibc 在 /etc/group
+     * 里查不到它们，于是每次调用 `groups` 都往 stderr 刷一串
+     * `groups: cannot find name for group ID 3003`。
+     *
+     * 而 Ubuntu 的 `/etc/bash.bashrc` 里有一段 sudo 提示，无条件跑 `case " $(groups) " in`
+     * （见 bash 包的 debian/etc.bash.bashrc）—— 于是每开一次终端就先糊四行警告。
+     * 用户看到的就是这个。
+     *
+     * 为什么在运行期做而不是打进 rootfs：cache/shared gid 由本应用的 uid 派生
+     * （appid + 20000 / 50000），每次安装都可能不同，构建期不可能知道。也因此不必动
+     * [ROOTFS_REV] —— 这个函数在每条 exec 路径上都会跑一遍，存量用户下次进终端就好了。
+     *
+     * 顺带写一个 `/root/.hushlogin`：那段 sudo 提示对本容器毫无意义（rootfs 里没装
+     * sudo，而且永远是 root），跳过它就少一次 fork+exec。两道措施互不依赖 —— 补组是
+     * 为了让用户真的敲 `groups`、`id -Gn` 时也不报错，hushlogin 只挡开场那一次。
+     *
+     * 只追加缺的行，不动已有内容：用户自己加过的组要保住。
+     */
+    private fun ensureContainerGroups() {
+        runCatching {
+            val rootfs = DshEnv.rootfs(appContext)
+            val f = File(rootfs, "etc/group")
+            if (!File(rootfs, "etc").isDirectory) return@runCatching
+            // base rootfs 里这个文件必然存在且非空；真要是空的就别写，
+            // 只补几个 Android gid 而丢掉 root/sudo 等基础组会更糟
+            if (f.length() == 0L) return@runCatching
+
+            val existing = f.readLines()
+            val haveGid = existing.mapNotNull {
+                it.split(':').getOrNull(2)?.trim()?.toIntOrNull()
+            }.toHashSet()
+            val haveName = existing.mapNotNull {
+                it.split(':').firstOrNull()?.trim()?.takeIf { n -> n.isNotEmpty() }
+            }.toHashSet()
+
+            val add = StringBuilder()
+            for (gid in supplementaryGids().distinct().sorted()) {
+                if (gid in haveGid) continue
+                val name = androidGroupName(gid)
+                // 名字撞了就退回 aid_<gid>：/etc/group 里重名会让 getgrnam 取到错的那条
+                val unique = if (name in haveName) "aid_$gid" else name
+                if (unique in haveName) continue
+                haveName += unique
+                haveGid += gid
+                add.append("$unique:x:$gid:\n")
+            }
+            if (add.isEmpty()) return@runCatching
+
+            // 补尾部换行：base 文件末尾没有 \n 时直接追加会把两条粘成一行
+            val needsNewline = f.readText(StandardCharsets.UTF_8).let {
+                it.isNotEmpty() && !it.endsWith("\n")
+            }
+            java.io.FileOutputStream(f, true).bufferedWriter(StandardCharsets.UTF_8).use { w ->
+                if (needsNewline) w.write("\n")
+                w.write(add.toString())
+            }
+            appendLog("> 已给容器补上 Android 补充组: " + add.toString().trim().replace("\n", "、"))
+        }.onFailure { android.util.Log.w(TAG, "补 /etc/group 失败: ${it.message}") }
+    }
+
     /**
      * 让容器内的 pnpm 用「复制」而不是「硬链接」从内容存储装包。
      *
@@ -1656,6 +1799,10 @@ object DshRuntime {
         DshEnv.dshHome(appContext).mkdirs()
         DshEnv.tmpDir(appContext).mkdirs()
         DshEnv.serverLog(appContext).parentFile?.mkdirs()
+        // 每次起服务都过一遍：既刷新宿主事实（用户可能在别处改了能力开关或系统通知
+        // 权限），也自愈「patch 行在、插件文件没了」——那种状态下 dsh 会因为一个
+        // entry 加载失败而整棵树起不来，而 restart() 不走 bootstrap，否则没人修。
+        DshHostPrompt.ensureInstalled(appContext)
         clearLog()
 
         val port = port()

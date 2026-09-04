@@ -491,4 +491,6 @@
     <string name="dsh_native_cli_hint">Inside the container: dsh-native notify &lt;title&gt; [body] / toast / vibrate / clip / share / open / device / caps</string>
     <string name="dsh_native_notif_channel_name">Agent notifications</string>
     <string name="dsh_native_notif_channel_desc">Notifications posted by the agent running inside the container</string>
+    <string name="dsh_host_prompt_title">Tell the agent about these</string>
+    <string name="dsh_host_prompt_summary">Adds a short section to the system prompt describing the host, the dsh-fs / dsh-native commands, and which capabilities are currently on. Turn it off to keep the agent unaware of them.</string>
 </resources>
