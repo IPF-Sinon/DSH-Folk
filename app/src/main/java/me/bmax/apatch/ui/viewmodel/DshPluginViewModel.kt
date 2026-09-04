@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
 import me.bmax.apatch.apApp
+import me.bmax.apatch.util.appString
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
@@ -316,7 +317,7 @@ class DshPluginViewModel : ViewModel() {
             { onLine ->
                 val ok = DshPluginRepo.setPluginDisabled(pkg, disabled, onLine)
                 if (ok) {
-                    apApp.getString(R.string.dsh_plugin_toggle_restart_hint) +
+                    apApp.appString(R.string.dsh_plugin_toggle_restart_hint) +
                         "\n" + DshPluginRepo.EXIT_MARKER + " 0"
                 } else {
                     DshPluginRepo.EXIT_MARKER + " 1"
@@ -412,9 +413,9 @@ class DshPluginViewModel : ViewModel() {
                     val victim = added.firstOrNull().orEmpty()
                     val rolled = if (victim.isEmpty()) false else DshPluginRepo.rollback(victim, append)
                     extra = if (rolled) {
-                        apApp.getString(R.string.dsh_plugin_rolled_back, victim, reason)
+                        apApp.appString(R.string.dsh_plugin_rolled_back, victim, reason)
                     } else {
-                        apApp.getString(R.string.dsh_plugin_verify_failed, reason)
+                        apApp.appString(R.string.dsh_plugin_verify_failed, reason)
                     }
                     append("[DSH-Folk] $extra")
                 }

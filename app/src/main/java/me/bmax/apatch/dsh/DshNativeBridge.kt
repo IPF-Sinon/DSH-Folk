@@ -23,6 +23,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
 import me.bmax.apatch.R
+import me.bmax.apatch.util.appString
 import me.bmax.apatch.ui.MainActivity
 import me.bmax.apatch.util.PermissionUtils
 import org.json.JSONArray
@@ -865,13 +866,15 @@ object DshNativeBridge {
      * 取一条本地化文案。
      *
      * 这些串会经 `dsh-native` 的 stderr 出现在**用户**眼前（agent 也读它，但 agent 认的是
-     * [err] 里的 `reason`，不是这段人话），所以要跟随应用语言。
+     * [err] 里的 `reason`，不是这段人话），所以要跟随应用语言。走 `appString` 而不是
+     * `ctx.getString`：这里的 Context 是 Application 的，而应用内语言在 API 33 以下
+     * 只作用于 Activity。
      *
      * 取不到就退回资源名：桥不能因为一次资源查找失败而回 500，那会把「参数写错了」
      * 变成「宿主坏了」。
      */
     private fun str(ctx: Context, resId: Int, vararg args: Any): String = runCatching {
-        if (args.isEmpty()) ctx.getString(resId) else ctx.getString(resId, *args)
+        ctx.appString(resId, *args)
     }.getOrElse { ctx.resources.getResourceEntryName(resId) ?: "error" }
 
     /** 错误体带机器可读的 [reason]：agent 需要据此决定是重试还是提示用户。 */

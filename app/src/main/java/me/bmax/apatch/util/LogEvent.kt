@@ -162,6 +162,10 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
             pw.println("Manager: " + Version.getManagerVersion())
             pw.println("SELinux: $selinux")
             pw.println("LogWindow: " + context.getString(window.labelRes))
+            // 应用内语言：dsh.log 与通知文案现在跟随它，收到报告的人得知道日志是哪种语言
+            // 写出来的（空 = 跟随系统）。诊断字段一律不翻译，所以这里给的是原始 tag。
+            pw.println("AppLocale: " + me.bmax.apatch.util.LocaleCtx.appLocaleTags().ifEmpty { "(system)" })
+            pw.println("SystemLocale: " + Locale.getDefault().toLanguageTag())
             // 窗口只能裁掉「有时间信息」的内容；采集时刻和开机时长写进来，
             // 收到报告的人一眼能看出「归档没变小」是因为设备刚开机、缓冲区本来就短
             pw.println("Collected: " + SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(System.currentTimeMillis()))

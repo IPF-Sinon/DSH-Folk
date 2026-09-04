@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
+import me.bmax.apatch.util.appString
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -132,6 +133,33 @@ data class PluginCategory(
  */
 object DshPluginRepo {
     private const val TAG = "DSH-Folk-Plugins"
+
+    /** 容器内操作日志的前缀：把这些行与 pnpm / dsh 自己的输出区分开。 */
+    private const val LOG_PREFIX = "[DSH-Folk] "
+
+    /**
+     * 写一行带前缀的日志（跟随应用语言）。
+     *
+     * 这些行会流进插件页的安装日志与首页的启动日志（预装路径），两处都是给人读的。
+     * 用 [me.bmax.apatch.util.appString] 而不是 `apApp.getString`：应用内语言在 API 33
+     * 以下只改 Activity 的 Configuration，Application 的 Context 会解析成系统语言。
+     */
+    private fun line(onLine: (String) -> Unit, resId: Int, vararg args: Any) {
+        onLine(LOG_PREFIX + str(resId, *args))
+    }
+
+    /** 取本地化字符串；Application 还没起来时返回空串（只会发生在极早期）。 */
+    private fun str(resId: Int, vararg args: Any): String =
+        runCatching { me.bmax.apatch.apApp.appString(resId, *args) }.getOrDefault("")
+
+    /**
+     * 把一段文本包成 shell 的单引号字面量。
+     *
+     * 这些文案现在来自资源，翻译里出现 `'` 完全正常（英文 "don't"、法语 "l'app"）；
+     * 一个裸单引号会提前闭合字符串，把后面的内容变成可执行的 shell 代码。`'\''` 是
+     * POSIX 里唯一可靠的写法：闭合、插入转义的引号、再打开。
+     */
+    private fun shellQuoted(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
     private const val MARKET_MANIFEST = "https://dsh-market.com/manifest/plugins.json"
     private const val MARKET_STATS = "https://dsh-market.com/api/stats"
@@ -710,7 +738,7 @@ object DshPluginRepo {
         onLine: (String) -> Unit = {},
     ): Boolean = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) {
-            onLine("[DSH-Folk] 包名为空，无法切换")
+            line(onLine, R.string.dsh_plug_log_no_pkg_toggle)
             return@withContext false
         }
         val flag = if (disabled) "1" else "0"
@@ -765,7 +793,7 @@ object DshPluginRepo {
         onLine: (String) -> Unit = {},
         allowBuilds: List<String> = emptyList(),
     ): String = withContext(Dispatchers.IO) {
-        if (pkg.isBlank()) return@withContext "包名为空，无法安装"
+        if (pkg.isBlank()) return@withContext str(R.string.dsh_plug_log_no_pkg_install)
         if (allowBuilds.isNotEmpty()) DshRuntime.allowProfileBuilds(allowBuilds, onLine)
         val resolved = resolveSpec(pkg, onLine)
         val spec = if (version.isBlank()) resolved else "$resolved@$version"
@@ -836,7 +864,7 @@ object DshPluginRepo {
     private fun ensureGit(onLine: (String) -> Unit) {
         if (probeGit().ok) return
 
-        onLine("[DSH-Folk] 这个插件来自 git 源，容器里的 git 不可用，正在修复（apt，可能要几分钟）…")
+        line(onLine, R.string.dsh_plug_log_git_repair)
         // git 缺失 → 装 git；git 在但加载失败 → 缺的是 libcurl 一族，
         // --reinstall 让 apt 自己把依赖补齐（比手写包名可靠）
         DshRuntime.execRootfsStreaming(
@@ -851,12 +879,9 @@ object DshPluginRepo {
 
         val after = probeGit()
         if (after.ok) {
-            onLine("[DSH-Folk] git 已修复")
+            line(onLine, R.string.dsh_plug_log_git_fixed)
         } else {
-            onLine(
-                "[DSH-Folk] git 仍不可用（${after.reason}）。" +
-                    "请到 设置 → 功能 → 运行时 更新运行时 —— 新版已内置完整的 git 依赖。"
-            )
+            line(onLine, R.string.dsh_plug_log_git_still_broken, after.reason)
         }
     }
 
@@ -876,10 +901,10 @@ object DshPluginRepo {
                 "git ls-remote https://127.0.0.1:1/probe.git 2>&1 | tail -5",
             120_000,
         )
-        if (out.contains("MARKED")) return GitProbe(true, "已验证")
-        if (out.contains("NO_GIT")) return GitProbe(false, "未安装 git")
+        if (out.contains("MARKED")) return GitProbe(true, str(R.string.dsh_plug_git_verified))
+        if (out.contains("NO_GIT")) return GitProbe(false, str(R.string.dsh_plug_git_absent))
         val ldso = LDSO_FAILURE_MARKS.firstOrNull { out.contains(it, ignoreCase = true) }
-        if (ldso != null) return GitProbe(false, "动态库缺失：$ldso")
+        if (ldso != null) return GitProbe(false, str(R.string.dsh_plug_git_missing_lib, ldso))
         // 走到这里说明 git-remote-https 成功加载并真的尝试了连接（然后被拒）
         runCatching {
             DshRuntime.execRootfsForOutput(
@@ -887,7 +912,7 @@ object DshPluginRepo {
                 30_000,
             )
         }
-        return GitProbe(true, "可用")
+        return GitProbe(true, str(R.string.dsh_plug_git_ok))
     }
 
     /**
@@ -922,7 +947,7 @@ object DshPluginRepo {
         }.getOrDefault("")
         specCache[ownerName] = resolved
         if (resolved.isEmpty()) return spec
-        onLine("[DSH-Folk] 目录未登记 npm 包名；已核对 npm 上的 $name 指向同一仓库（$ownerName），改用 npm 安装以避开 git")
+        line(onLine, R.string.dsh_plug_log_npm_instead_of_git, name, ownerName)
         return resolved
     }
 
@@ -934,7 +959,7 @@ object DshPluginRepo {
         pkg: String,
         onLine: (String) -> Unit = {},
     ): String = withContext(Dispatchers.IO) {
-        if (pkg.isBlank()) return@withContext "包名为空，无法卸载"
+        if (pkg.isBlank()) return@withContext str(R.string.dsh_plug_log_no_pkg_remove)
         // remove 不从 store 导入文件，不需要 importFlag
         dshPlugin("remove '$pkg'", 600_000, onLine)
     }
@@ -976,7 +1001,7 @@ object DshPluginRepo {
     private suspend fun repairIfLinkageBroken(onLine: (String) -> Unit): String {
         if (!DshRuntime.linkBecomesSymlink()) return ""
         if (!storeLinkageBroken()) return ""
-        onLine("[DSH-Folk] 检测到依赖被装成指向内容存储的链接，正在重建（清空 node_modules 后重装，可能要几分钟）…")
+        line(onLine, R.string.dsh_plug_log_relink_repair)
         return "\n" + repairStore(onLine)
     }
 
@@ -1029,10 +1054,10 @@ object DshPluginRepo {
             30_000,
         )
         if (!probe.contains("OK")) {
-            onLine("[DSH-Folk] profile 尚未初始化（找不到 $PROFILE_DIR/package.json），跳过重建")
-            return@withContext "profile 尚未初始化，跳过重建"
+            line(onLine, R.string.dsh_plug_log_profile_missing, PROFILE_DIR)
+            return@withContext str(R.string.dsh_plug_log_profile_missing_short)
         }
-        onLine("[DSH-Folk] 清空 node_modules（保留 pnpm-lock.yaml）…")
+        line(onLine, R.string.dsh_plug_log_clearing_modules)
         DshRuntime.execRootfsForOutput("rm -rf '$PROFILE_DIR/node_modules'", 120_000)
         dshPlugin("install ${importFlag()}".trimEnd(), 900_000, onLine)
     }
@@ -1050,13 +1075,13 @@ object DshPluginRepo {
      * 走 npm 而不是 [dshPlugin]：这是全局命令，不属于任何 profile。
      */
     suspend fun installRescueCli(onLine: (String) -> Unit = {}): String = withContext(Dispatchers.IO) {
-        onLine("[DSH-Folk] 正在安装 dsh-config-manager CLI（全局，独立于 DSH 运行时）…")
+        line(onLine, R.string.dsh_plug_log_installing_rescue_cli)
         DshRuntime.execRootfsStreaming(
             "npm install -g dsh-config-manager@latest --omit=peer --registry=$NPM_REGISTRY 2>&1; " +
                 "echo \"$EXIT_MARKER \$?\"; " +
                 "command -v dsh-config-manager >/dev/null 2>&1 && " +
-                "echo '[DSH-Folk] CLI 已就绪：dsh-config-manager help' || " +
-                "echo '[DSH-Folk] 未找到 dsh-config-manager 命令，安装可能失败'",
+                "echo " + shellQuoted(LOG_PREFIX + str(R.string.dsh_plug_log_cli_ready)) + " || " +
+                "echo " + shellQuoted(LOG_PREFIX + str(R.string.dsh_plug_log_cli_missing)),
             900_000,
             onLine,
         )
@@ -1096,7 +1121,7 @@ object DshPluginRepo {
      * 显式 kill 掉它。这样 bash 自己掌握 node 的生命周期，命中即退出。
      */
     suspend fun verifyBoot(onLine: (String) -> Unit): String? = withContext(Dispatchers.IO) {
-        onLine("[DSH-Folk] 正在验证插件能否启动（临时端口，不影响当前服务）…")
+        line(onLine, R.string.dsh_plug_log_verifying)
         val script = buildString {
             append("export DSH_HOME=/root/.dsh; export BROWSER=true; ")
             append("mkdir -p /root/workspace /root/.dsh 2>/dev/null; cd /root/workspace; ")
@@ -1128,7 +1153,7 @@ object DshPluginRepo {
         val key = out.lineSequence().firstOrNull { l ->
             VERIFY_FAILURE_MARKS.any { l.contains(it, ignoreCase = true) }
         }
-        key ?: "验证超时或进程提前退出（未出现就绪行）"
+        key ?: str(R.string.dsh_plug_verify_timeout)
     }
 
     /**
@@ -1140,12 +1165,12 @@ object DshPluginRepo {
     suspend fun rollback(pkg: String, onLine: (String) -> Unit): Boolean =
         withContext(Dispatchers.IO) {
             if (pkg.isBlank()) return@withContext false
-            onLine("[DSH-Folk] 验证未通过，正在自动卸载 $pkg …")
+            line(onLine, R.string.dsh_plug_log_rollback, pkg)
             val out = dshPlugin("remove '$pkg'", 600_000, onLine)
             val marker = out.lineSequence().lastOrNull { it.startsWith(EXIT_MARKER) }
             val code = marker?.removePrefix(EXIT_MARKER)?.trim()?.toIntOrNull()
             val ok = code == 0
-            if (!ok) onLine("[DSH-Folk] 自动卸载失败，请到「已安装」页手动卸载 $pkg")
+            if (!ok) line(onLine, R.string.dsh_plug_log_rollback_failed, pkg)
             ok
         }
 
@@ -1204,9 +1229,10 @@ object DshPluginRepo {
     ): String {
         val out = DshRuntime.execRootfsStreaming(
             "export DSH_HOME=/root/.dsh; cd /root; " +
-                "if ! command -v dsh >/dev/null 2>&1; then echo '[DSH-Folk] 容器内找不到 dsh'; exit 1; fi; " +
-                "if ! command -v pnpm >/dev/null 2>&1; then " +
-                "echo '[DSH-Folk] 容器内找不到 pnpm，请在设置中重装运行时'; exit 1; fi; " +
+                "if ! command -v dsh >/dev/null 2>&1; then echo " +
+                shellQuoted(LOG_PREFIX + str(R.string.dsh_plug_log_no_dsh)) + "; exit 1; fi; " +
+                "if ! command -v pnpm >/dev/null 2>&1; then echo " +
+                shellQuoted(LOG_PREFIX + str(R.string.dsh_plug_log_no_pnpm)) + "; exit 1; fi; " +
                 "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); " +
                 // 不再接 `| tail -30`：输出现在是逐行流式回调的，界面自己保留
                 // 滚动日志；而 tail 会把 pnpm 的输出攒到结束才一次吐出来，正好把
@@ -1217,7 +1243,7 @@ object DshPluginRepo {
             timeoutMs,
             onLine,
         )
-        return out.ifBlank { "没有输出（可能超时或容器未启动）" }
+        return out.ifBlank { str(R.string.dsh_plug_no_output) }
     }
 
     private fun httpGet(url: String): String? = runCatching {

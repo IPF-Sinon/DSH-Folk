@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.apApp
+import me.bmax.apatch.util.appString
 import me.bmax.apatch.util.AppData
 import me.bmax.apatch.util.HardwareMonitor
 import me.bmax.apatch.util.Version
@@ -351,10 +352,11 @@ class DashboardViewModel : ViewModel() {
 
     private suspend fun fetchSELinuxStatus(context: Context): String = withContext(Dispatchers.IO) {
         try {
-            val enforcing = context.getString(R.string.home_selinux_status_enforcing)
-            val permissive = context.getString(R.string.home_selinux_status_permissive)
-            val disabled = context.getString(R.string.home_selinux_status_disabled)
-            val unknown = context.getString(R.string.home_selinux_status_unknown)
+            // 这里的 context 是 apApp（见调用点），不受应用内语言影响 —— 用 appString
+            val enforcing = context.appString(R.string.home_selinux_status_enforcing)
+            val permissive = context.appString(R.string.home_selinux_status_permissive)
+            val disabled = context.appString(R.string.home_selinux_status_disabled)
+            val unknown = context.appString(R.string.home_selinux_status_unknown)
 
             val shell = Shell.Builder.create().build("sh")
             val list = ArrayList<String>()
@@ -376,7 +378,7 @@ class DashboardViewModel : ViewModel() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching SELinux status", e)
-            context.getString(R.string.home_selinux_status_unknown)
+            context.appString(R.string.home_selinux_status_unknown)
         }
     }
 

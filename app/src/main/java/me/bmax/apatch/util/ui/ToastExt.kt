@@ -10,6 +10,7 @@ import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
 import android.graphics.Color
+import me.bmax.apatch.util.appString
 
 private const val TAG = "SafeToast"
 
@@ -22,12 +23,15 @@ fun showToast(context: Context, message: String) {
     }
 }
 
+// 下面两个重载走 appString 而不是 getString：调用方经常传 applicationContext
+// （后台协程、单例、Service），而应用内语言在 API 33 以下只作用于 Activity ——
+// 那种情况下 getString 会拿到系统语言，Toast 与界面语言不一致。
 fun showToast(context: Context, resId: Int) {
-    showToast(context, context.getString(resId))
+    showToast(context, context.appString(resId))
 }
 
 fun showToast(context: Context, resId: Int, vararg formatArgs: Any) {
-    showToast(context, context.getString(resId, *formatArgs))
+    showToast(context, context.appString(resId, *formatArgs))
 }
 
 fun Toast.safeShow() {

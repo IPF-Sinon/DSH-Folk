@@ -1,6 +1,8 @@
 package me.bmax.apatch.dsh
 
 import android.util.Log
+import me.bmax.apatch.R
+import me.bmax.apatch.util.appString
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -22,6 +24,16 @@ import java.security.MessageDigest
  */
 object DshDownloader {
     private const val TAG = "DshDownloader"
+
+    /**
+     * 取本地化字符串。
+     *
+     * 本类刻意不依赖 UI 与 DshRuntime 的状态，也就没有 Context 形参，所以走全局
+     * apApp；用 appString 而不是 getString，因为应用内语言在 API 33 以下不会作用到
+     * Application 的 Context（那时它解析的是系统语言）。
+     */
+    private fun str(resId: Int, vararg args: Any): String =
+        runCatching { me.bmax.apatch.apApp.appString(resId, *args) }.getOrDefault("")
 
     /** 太小的残片不值得续传（可能是上次刚建好文件就断了），直接重下。 */
     private const val MIN_RESUME_BYTES = 1L * 1024 * 1024
@@ -70,8 +82,8 @@ object DshDownloader {
             if (conn.responseCode !in 200..299) return false
             // 206 才是真的续传；服务端忽略 Range 返回 200 时必须从头写
             val resumed = have > 0 && conn.responseCode == 206
-            if (have > 0 && !resumed) onLog("> 服务端不支持续传，从头下载")
-            if (resumed) onLog("> 断点续传：已有 ${have / 1024 / 1024} MB")
+            if (have > 0 && !resumed) onLog("> " + str(R.string.dsh_log_resume_unsupported))
+            if (resumed) onLog("> " + str(R.string.dsh_log_resume, have / 1024 / 1024))
             val contentLength = if (expectedSize > 0) expectedSize
                 else conn.contentLengthLong.let { if (it > 0 && resumed) it + have else it }
             target.parentFile?.mkdirs()
@@ -105,7 +117,7 @@ object DshDownloader {
                 // 超出预期大小：文件已经错了，删掉再报失败 —— 留着的话下次续传会
                 // 从一个比目标还长的偏移接着请求，服务端只会回 416。
                 if (contentLength > 0 && total > contentLength) {
-                    onLog("! 下载超出预期大小（$total > $contentLength），丢弃重下")
+                    onLog("! " + str(R.string.dsh_log_download_oversize, total, contentLength))
                     // 先关流再删：否则 finally 里的 close 会把缓冲区刷回一个刚被删掉的路径
                     runCatching { stream.close() }
                     out = null
@@ -114,13 +126,18 @@ object DshDownloader {
                 }
             }
             if (contentLength > 0 && total != contentLength) {
-                onLog("! 下载不完整: 预期 $contentLength 实际 $total")
+                onLog("! " + str(R.string.dsh_log_download_incomplete, contentLength, total))
                 return false
             }
             ok = true
             true
         } catch (e: Exception) {
-            onLog("! 下载异常: ${e.javaClass.simpleName}: ${e.message}")
+            onLog(
+                "! " + str(
+                    R.string.dsh_log_download_error,
+                    "${e.javaClass.simpleName}: ${e.message}",
+                )
+            )
             Log.w(TAG, "download failed: $url", e)
             false
         } finally {

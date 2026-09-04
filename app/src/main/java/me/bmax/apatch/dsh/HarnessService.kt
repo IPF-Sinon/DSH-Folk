@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.bmax.apatch.R
+import me.bmax.apatch.util.appString
 import me.bmax.apatch.ui.MainActivity
 
 /**
@@ -76,25 +77,31 @@ class HarnessService : Service() {
         }
     }
 
-    /** 通知条文案。走资源：通知会一直挂在状态栏，是最显眼的一处 UI。 */
+    /**
+     * 通知条文案。走资源：通知会一直挂在状态栏，是最显眼的一处 UI。
+     *
+     * 必须用 [appString] 而不是 Service 自己的 `getString` —— Service 的 Context 与
+     * Application 一样不受应用内语言影响（API 33 以下 setApplicationLocales 只改
+     * Activity 的 Configuration）。界面切成英文后通知栏还是中文，就是这里。
+     */
     private fun statusText(phase: DshPhase): String = when (phase) {
-        DshPhase.RUNNING -> getString(
+        DshPhase.RUNNING -> appString(
             R.string.dsh_notif_running,
             "http://127.0.0.1:${DshRuntime.state.value.port}",
         )
-        DshPhase.STARTING -> getString(R.string.dsh_notif_starting)
-        DshPhase.DOWNLOADING, DshPhase.EXTRACTING -> getString(R.string.dsh_notif_installing)
-        DshPhase.ERROR -> getString(R.string.dsh_notif_error)
-        DshPhase.NOT_READY -> getString(R.string.dsh_notif_stopped)
+        DshPhase.STARTING -> appString(R.string.dsh_notif_starting)
+        DshPhase.DOWNLOADING, DshPhase.EXTRACTING -> appString(R.string.dsh_notif_installing)
+        DshPhase.ERROR -> appString(R.string.dsh_notif_error)
+        DshPhase.NOT_READY -> appString(R.string.dsh_notif_stopped)
     }
 
     private fun createChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            getString(R.string.dsh_notif_channel_name),
+            appString(R.string.dsh_notif_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = getString(R.string.dsh_notif_channel_desc)
+            description = appString(R.string.dsh_notif_channel_desc)
             setShowBadge(false)
         }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -110,13 +117,13 @@ class HarnessService : Service() {
             PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.app_name))
+            .setContentTitle(appString(R.string.app_name))
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(0, getString(R.string.dsh_notif_stop_action), stopIntent)
+            .addAction(0, appString(R.string.dsh_notif_stop_action), stopIntent)
             .build()
     }
 

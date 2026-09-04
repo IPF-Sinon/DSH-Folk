@@ -23,6 +23,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
+import me.bmax.apatch.util.LocaleCtx
+import me.bmax.apatch.util.appString
 import org.json.JSONObject
 
 /** 运行时阶段。 */
@@ -631,14 +633,16 @@ object DshRuntime {
     fun noteProrootFailure(why: String): Boolean {
         if (runtimeId() != "proroot") return false
         if (lastLogSuggestsPluginFailure()) {
-            appendLog("! 失败发生在插件树加载阶段，与容器运行时无关，保留 proroot")
+            logWarn(R.string.dsh_log_plugin_stage_failure)
             return false
         }
         val n = prefs().getInt(DshEnv.KEY_PROROOT_FAIL, 0) + 1
         return if (n >= PROROOT_FAIL_LIMIT) {
             prefs().edit().putString(DshEnv.KEY_RUNTIME, "proot").putInt(DshEnv.KEY_PROROOT_FAIL, 0).apply()
-            val times = if (n > 1) "连续 $n 次" else ""
-            appendLog("! proroot ${times}启动失败（$why），已自动切回 proot")
+            // 两条独立的完整句子，而不是把「连续 N 次」拼进一句 —— 片段拼接在
+            // 别的语言里语序就散了（这也是为什么没有 dsh_log_proroot_failed_prefix）
+            if (n > 1) logWarn(R.string.dsh_log_proroot_failed_times, n, why)
+            else logWarn(R.string.dsh_log_proroot_failed, why)
             prorootFellBack = true
             true
         } else {
@@ -690,7 +694,7 @@ object DshRuntime {
                 Files.write(src.toPath(), byteArrayOf('o'.code.toByte(), 'k'.code.toByte()))
                 Files.createLink(dst.toPath(), src.toPath())
                 ok = dst.isFile && dst.length() == 2L
-                if (!ok) detail = "link 成功但目标不可读"
+                if (!ok) detail = str(R.string.dsh_log_hardlink_unreadable)
             } catch (e: Throwable) {
                 ok = false
                 detail = "${e.javaClass.simpleName}: ${e.message}"
@@ -890,7 +894,7 @@ object DshRuntime {
             // 超时：先杀进程让读流拿到 EOF，再给读线程一点时间收尾
             p.destroyForcibly()
             reader.join(1_000)
-            appendLog("! 命令超时（${timeoutMs / 1000}s）已终止: ${bashCommand.take(120)}")
+            logWarn(R.string.dsh_log_cmd_timeout, timeoutMs / 1000, bashCommand.take(120))
         } else if (!p.waitFor(2, TimeUnit.SECONDS)) {
             // 流已关但进程还在（少见：子孙进程继承了 stdout 又提前关掉）
             p.destroyForcibly()
@@ -923,7 +927,7 @@ object DshRuntime {
                     // DshSource.runtimeArch 的注释），那份 rootfs 一执行就 SIGILL，
                     // 而 isRuntimeInstalled 只看文件在不在、会一直认为「已安装」——
                     // 不在这里自愈，用户就只能手动重装运行时才能脱困。
-                    appendLog("! 已安装的运行时架构与本机不符，正在重新下载正确的版本…")
+                    logWarn(R.string.dsh_log_arch_mismatch_redownload)
                     downloadAndInstall()
                     if (_state.value.phase == DshPhase.ERROR) return@withLock
                 }
@@ -951,7 +955,7 @@ object DshRuntime {
             else -> ELF_MACHINE_X86_64
         }
         if (machine == want) return@runCatching false
-        appendLog("! rootfs 里的 node 是 e_machine=$machine，本机需要 $want")
+        logWarn(R.string.dsh_log_node_machine, machine, want)
         true
     }.getOrDefault(false)
 
@@ -1021,10 +1025,10 @@ object DshRuntime {
             it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_plugin_seeding))
         }
         for (pkg in missing) {
-            appendLog("> 预装插件 $pkg …")
+            logInfo(R.string.dsh_log_seeding, pkg)
             var out = runCatching {
                 DshPluginRepo.install(pkg, onLine = { line -> appendLog(line) })
-            }.getOrElse { "预装异常: ${it.message ?: it.javaClass.simpleName}" }
+            }.getOrElse { str(R.string.dsh_log_seed_exception, it.message ?: it.javaClass.simpleName) }
             var code = exitCodeOf(out)
 
             // pnpm 拦下依赖的构建脚本时 **不是**「装不上」，而是「等人点头」：
@@ -1038,18 +1042,19 @@ object DshRuntime {
             if (code != 0) {
                 val pending = DshPluginRepo.pendingBuildApproval(out)
                 if (pending.isNotEmpty()) {
-                    appendLog("> pnpm 拦下了构建脚本（${pending.joinToString("、")}），自动放行后重试…")
+                    logInfo(R.string.dsh_log_seed_builds_blocked, joinForLog(pending))
                     out = runCatching {
                         DshPluginRepo.install(
                             pkg,
                             onLine = { line -> appendLog(line) },
                             allowBuilds = pending,
                         )
-                    }.getOrElse { "预装重试异常: ${it.message ?: it.javaClass.simpleName}" }
+                    }.getOrElse { str(R.string.dsh_log_seed_retry_exception, it.message ?: it.javaClass.simpleName) }
                     code = exitCodeOf(out)
                 }
             }
-            appendLog(if (code == 0) "> 预装完成 $pkg" else "! 预装失败 $pkg（可稍后在插件商店手动安装）")
+            if (code == 0) logInfo(R.string.dsh_log_seed_done, pkg)
+            else logWarn(R.string.dsh_log_seed_failed, pkg)
         }
         persistSeeded(attempted + todo)
         // 预装会大幅改变 node_modules 体积，顺手重算一次缓存
@@ -1089,7 +1094,7 @@ object DshRuntime {
         if (retry.isNotEmpty()) {
             attempted.removeAll(retry.toSet())
             persistSeeded(attempted)
-            appendLog("> 补修预装：${retry.joinToString("、")} 之前没生效，重试一次")
+            logInfo(R.string.dsh_log_seed_repair, joinForLog(retry))
         }
         p.edit().putInt(DshEnv.KEY_SEED_REPAIR_REV, SEED_REPAIR_REV).apply()
     }
@@ -1104,7 +1109,7 @@ object DshRuntime {
         awaitReady()
         if (!prorootFellBack) return
         prorootFellBack = false
-        appendLog("> 用 proot 重试启动…")
+        logInfo(R.string.dsh_log_retry_with_proot)
         stopServer()
         delay(500)
         startServer()
@@ -1129,7 +1134,7 @@ object DshRuntime {
         if (serverProcess?.isAlive == true) return false
         if (!isPortInUse(port())) return false
         _state.update { it.copy(portConflict = true) }
-        appendLog("! 端口 ${port()} 已被占用，等待用户选择（换端口 / 手动指定 / 仍用此端口）")
+        logWarn(R.string.dsh_log_port_busy, port())
         return true
     }
 
@@ -1186,8 +1191,8 @@ object DshRuntime {
             val fsToken = ensureFsToken()
             writeFsBridgeConfig(fsPort, fsToken)
             DshFsBridge.start(fsPort, fsToken, appContext)
-            appendLog("> 文件桥已启动：容器内可用 dsh-fs（根目录 /sdcard）、dsh-native（原生能力）")
-        }.onFailure { appendLog("! 文件桥启动失败: ${it.message}") }
+            logInfo(R.string.dsh_log_bridge_up)
+        }.onFailure { logWarn(R.string.dsh_log_bridge_failed, it.message ?: it.javaClass.simpleName) }
     }
 
     /** 强制重启 web 服务。 */
@@ -1235,15 +1240,16 @@ object DshRuntime {
             )
         }
         if (DshSource.setting(appContext) == DshSource.SOURCE_AUTO) {
-            appendLog("> 自动测速选择下载源…")
+            logInfo(R.string.dsh_log_speedtest_start)
             val results = DshSource.speedTest()
             for (r in results.sortedBy { it.estimatedMs }) {
-                val speed = if (r.speedKBps > 0.0) String.format("%.1f MB/s", r.speedKBps / 1024.0) else "未测速"
-                appendLog("> 测速 ${DshSource.displayName(r.source)}: 延迟 ${r.latencyMs}ms · $speed")
+                val speed = if (r.speedKBps > 0.0) String.format("%.1f MB/s", r.speedKBps / 1024.0)
+                else str(R.string.dsh_log_speedtest_untested)
+                logInfo(R.string.dsh_log_speedtest_row, sourceName(r.source), r.latencyMs, speed)
             }
-            appendLog("> 已选择下载源: ${DshSource.displayName(DshSource.pickBest(results, appContext))}")
+            logInfo(R.string.dsh_log_source_chosen, sourceName(DshSource.pickBest(results, appContext)))
         }
-        appendLog("> 获取运行时信息…")
+        logInfo(R.string.dsh_log_fetching_meta)
         val meta = fetchMeta()
         if (meta == null) {
             fail(str(R.string.dsh_err_meta_failed))
@@ -1272,12 +1278,12 @@ object DshRuntime {
             }
         }
         val tarball = DshEnv.downloadZip(appContext)
-        appendLog("> 开始下载运行时 v${meta.version}（node ${meta.nodeVersion} · dsh ${meta.dsh}）")
+        logInfo(R.string.dsh_log_download_start, meta.version, meta.nodeVersion, meta.dsh)
         if (!downloadWithFallback(meta, tarball)) {
             fail(str(R.string.dsh_err_download_failed))
             return
         }
-        appendLog("> 下载完成（${tarball.length() / 1024 / 1024} MB），校验 sha256…")
+        logInfo(R.string.dsh_log_download_done, tarball.length() / 1024 / 1024)
         if (!verifySha256(tarball, meta.sha256)) {
             // 校验失败说明这份文件本身是坏的（续传时拼错、镜像给了旧包）——
             // 必须删掉，否则下次续传会一直基于这份坏数据往后接，永远校验不过。
@@ -1292,7 +1298,7 @@ object DshRuntime {
             fail(str(R.string.dsh_err_no_space, free / 1024 / 1024, need / 1024 / 1024))
             return
         }
-        appendLog("> sha256 校验通过，开始解压安装…")
+        logInfo(R.string.dsh_log_sha_ok)
         _state.update {
             it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_msg_installing))
         }
@@ -1302,7 +1308,7 @@ object DshRuntime {
             fail(str(R.string.dsh_err_extract_failed))
             return
         }
-        appendLog("> 运行时安装完成")
+        logInfo(R.string.dsh_log_install_done)
         prefs().edit().putString(DshEnv.KEY_RUNTIME_VERSION, meta.version).apply()
         // phase 必须回 NOT_READY，不能直接置 STARTING：[bootstrap] 下一步就调
         // [startServer]，而它的防重入守卫会把 STARTING 当成「已经在启动了」直接
@@ -1375,15 +1381,15 @@ object DshRuntime {
             else raw.map { if (it.startsWith("https://github.com/")) prefix + it else it } + raw
             ).distinct()
         for ((i, url) in candidates.withIndex()) {
-            appendLog("> 尝试下载源 [${i + 1}/${candidates.size}]: $url")
+            logInfo(R.string.dsh_log_source_try, i + 1, candidates.size, url)
             _state.update {
                 it.copy(message = str(R.string.dsh_msg_downloading, meta.version), speedBytesPerSec = 0L)
             }
             if (downloadFile(url, target, meta.sizeBytes)) {
-                appendLog("> 下载源 [${i + 1}] 成功")
+                logInfo(R.string.dsh_log_source_ok, i + 1)
                 return true
             }
-            appendLog("! 下载源 [${i + 1}] 失败")
+            logWarn(R.string.dsh_log_source_fail, i + 1)
         }
         return false
     }
@@ -1407,7 +1413,7 @@ object DshRuntime {
                 // 日志每 5% 一行就够了，否则 400 行上限很快被下载进度占满
                 if (pctInt / 5 > lastLoggedBucket) {
                     lastLoggedBucket = pctInt / 5
-                    appendLog("> 下载中 $pctInt%（${formatSpeed(p.speedBytesPerSec)}）")
+                    logInfo(R.string.dsh_log_downloading, pctInt, formatSpeed(p.speedBytesPerSec))
                 }
                 _state.update {
                     it.copy(
@@ -1435,15 +1441,15 @@ object DshRuntime {
             "usr/local/lib/node_modules/@deepseek-ai/dsh/package.json" to "dsh",
         ).filterNot { File(dest, it.first).exists() }
         if (missing.isNotEmpty()) {
-            appendLog("! 解压后 rootfs 缺少: " + missing.joinToString("、") { it.second })
+            logWarn(R.string.dsh_log_missing_after_extract, joinForLog(missing.map { it.second }))
             return@runCatching false
         }
         // 下面两个缺了不致命（插件装不了 / 无线 ADB 配不了，但 DSH 本身能跑），只记一行
-        if (!File(dest, "usr/bin/python3").exists()) appendLog("! 运行时缺少 python3，无线 ADB 配对不可用")
-        if (!File(dest, "usr/local/bin/pnpm").exists()) appendLog("! 运行时缺少 pnpm，插件安装不可用")
+        if (!File(dest, "usr/bin/python3").exists()) logWarn(R.string.dsh_log_missing_python)
+        if (!File(dest, "usr/local/bin/pnpm").exists()) logWarn(R.string.dsh_log_missing_pnpm)
         true
     }.getOrElse {
-        appendLog("! 解压失败: ${it.javaClass.simpleName}: ${it.message}")
+        logWarn(R.string.dsh_log_extract_failed, "${it.javaClass.simpleName}: ${it.message}")
         false
     }
 
@@ -1627,7 +1633,7 @@ object DshRuntime {
                 if (needsNewline) w.write("\n")
                 w.write(add.toString())
             }
-            appendLog("> 已给容器补上 Android 补充组: " + add.toString().trim().replace("\n", "、"))
+            logInfo(R.string.dsh_log_groups_added, joinForLog(add.toString().trim().lines()))
         }.onFailure { android.util.Log.w(TAG, "补 /etc/group 失败: ${it.message}") }
     }
 
@@ -1703,13 +1709,13 @@ object DshRuntime {
      */
     private fun pnpmImportMethodLine(): String {
         val ws = File(DshEnv.rootfs(appContext), "$PROFILE_GUEST_REL/pnpm-workspace.yaml")
-        if (!ws.isFile) return "未配置（profile 未初始化）"
+        if (!ws.isFile) return str(R.string.dsh_log_pnpm_unconfigured)
         val line = runCatching {
             ws.readLines().firstOrNull { it.trimStart().startsWith(PNPM_IMPORT_KEY) }
         }.getOrNull()
-            ?: return "hardlink（默认）"
+            ?: return str(R.string.dsh_log_pnpm_default)
         val value = line.substringAfter(':', "").trim().ifEmpty { "?" }
-        return "$value（profile pnpm-workspace.yaml）"
+        return str(R.string.dsh_log_pnpm_from_profile, value)
     }
 
     /**
@@ -1787,11 +1793,16 @@ object DshRuntime {
             }
             ws.writeText(lines.joinToString("\n").trimEnd() + "\n", StandardCharsets.UTF_8)
             android.util.Log.i(TAG, "已放行构建脚本: ${todo.joinToString(", ")}")
-            onLine("[DSH-Folk] 已放行构建脚本：${todo.joinToString("、")}")
+            onLine("[DSH-Folk] " + str(R.string.dsh_log_builds_allowed, joinForLog(todo)))
             todo
         }.getOrElse {
             android.util.Log.e(TAG, "写 allowBuilds 失败", it)
-            onLine("[DSH-Folk] 写入 allowBuilds 失败：${it.message}")
+            onLine(
+                "[DSH-Folk] " + str(
+                    R.string.dsh_log_builds_allow_failed,
+                    it.message ?: it.javaClass.simpleName,
+                )
+            )
             emptyList()
         }
     }
@@ -1842,24 +1853,30 @@ object DshRuntime {
             // dsh 是 wrapper，先 readlink 出真正的 bin.js 再交给 node（才能带 --expose-internals）
             append("DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); ")
             append("exec node --expose-internals \"\$DSH_REAL\" web" + opts + " 2>&1; ")
-            append("else echo '[DSH-Folk] 容器内找不到 dsh，请在设置中重装运行时'; exit 1; fi")
+            // 这行在容器里由 shell 输出，会被 forwardOutput 原样转进日志。文案取自
+            // 资源（跟随应用语言），单引号要转义成 shell 能接受的形式。
+            append("else echo '[DSH-Folk] " + shellSingleQuoted(str(R.string.dsh_log_dsh_missing_in_container)) + "'; exit 1; fi")
         }
 
-        appendLog("> 运行时: ${runtime().displayName()}")
+        logInfo(R.string.dsh_log_runtime_mode, runtime().displayName())
         // 架构写进日志：x86_64 + arm 转译设备上「装了哪个包 / 用了哪份 rootfs」是首要排障线索
-        appendLog("> 架构: ${DshSource.runtimeArch()}（设备 ABI: ${android.os.Build.SUPPORTED_ABIS.joinToString("/")}）")
-        appendLog("> 硬链接: " + hardlinkLogLine())
-        appendLog("> pnpm 导入方式: " + pnpmImportMethodLine())
-        appendLog("> 启动 dsh web，端口 $port")
+        logInfo(
+            R.string.dsh_log_arch,
+            DshSource.runtimeArch(),
+            android.os.Build.SUPPORTED_ABIS.joinToString("/"),
+        )
+        logInfo(R.string.dsh_log_hardlink, hardlinkLogLine())
+        logInfo(R.string.dsh_log_pnpm_import, pnpmImportMethodLine())
+        logInfo(R.string.dsh_log_starting_web, port)
         if (lan) {
             val ip = lanIp()
             if (ip != null) {
-                appendLog("> 局域网访问已开启: http://$ip:$port（局域网内均可访问，请确认网络可信）")
+                logInfo(R.string.dsh_log_lan_on, ip, port)
             } else {
-                appendLog("> 局域网访问已开启，但未能获取本机局域网 IP")
+                logInfo(R.string.dsh_log_lan_on_no_ip)
             }
         } else {
-            appendLog("> 局域网访问已关闭，仅监听 127.0.0.1")
+            logInfo(R.string.dsh_log_lan_off)
         }
 
         serverProcess = try {
@@ -1871,7 +1888,7 @@ object DshRuntime {
             val detail = str(R.string.dsh_err_start_failed, e.message ?: e.javaClass.simpleName)
             appendLog("! $detail")
             if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
-                appendLog("> 已切回 proot，请重新启动服务")
+                logInfo(R.string.dsh_log_switched_to_proot)
             }
             _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
             return
@@ -1930,7 +1947,7 @@ object DshRuntime {
                         message = str(R.string.dsh_msg_service_ready, it.webUrl),
                     )
                 }
-                appendLog("> 服务已就绪: http://127.0.0.1:${port()}/")
+                logInfo(R.string.dsh_log_ready, port())
                 prefs().edit().putInt(DshEnv.KEY_PROROOT_FAIL, 0).apply()
                 return
             }
@@ -1938,7 +1955,7 @@ object DshRuntime {
                 val base = str(R.string.dsh_err_process_exited)
                 appendLog("! $base")
                 if (runtimeId() == "proroot" && noteProrootFailure(base)) {
-                    appendLog("> 已切回 proot，请重新启动服务")
+                    logInfo(R.string.dsh_log_switched_to_proot)
                 }
                 // 插件树失败时给出可执行的下一步，而不是只说「进程已退出」
                 val detail = pluginTreeFailureHint() ?: base
@@ -1953,7 +1970,7 @@ object DshRuntime {
         val detail = str(R.string.dsh_err_start_timeout)
         appendLog("! $detail")
         if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
-            appendLog("> 已切回 proot，请重新启动服务")
+            logInfo(R.string.dsh_log_switched_to_proot)
         }
         _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
     }
@@ -2034,14 +2051,17 @@ object DshRuntime {
         val ok = hardlinkSupported()
         val detail = hardlinkDetail()
         return buildString {
-            if (ok) append("支持") else append("不支持")
+            append(str(if (ok) R.string.dsh_log_hardlink_yes else R.string.dsh_log_hardlink_no))
             if (detail.isNotEmpty()) append("（$detail）")
-            when {
-                // proroot 无条件加 --link2symlink，探测结果在它下面不代表 guest 的实际能力
-                runtimeId() == "proroot" -> append(" · proroot 无条件启用 l2s")
-                !ok -> append(" · 启用 l2s 模拟")
-                else -> append(" · 不加 --link2symlink")
-            }
+            append(" · ")
+            append(
+                when {
+                    // proroot 无条件加 --link2symlink，探测结果在它下面不代表 guest 的实际能力
+                    runtimeId() == "proroot" -> str(R.string.dsh_log_hardlink_l2s_forced)
+                    !ok -> str(R.string.dsh_log_hardlink_l2s_on)
+                    else -> str(R.string.dsh_log_hardlink_l2s_off)
+                }
+            )
         }
     }
 
@@ -2053,12 +2073,65 @@ object DshRuntime {
     /**
      * 取本地化字符串。
      *
-     * 状态消息会直接显示在首页大卡上，必须跟随应用语言 —— 原来这一层全是硬编码中文，
-     * 英文界面下首页照样弹中文。启动日志里的行仍保持中文原样：那是给排障看的技术输出，
-     * 混进资源里既难维护、也让日志在不同语言下对不上。
+     * 用 [me.bmax.apatch.util.appString] 而不是 `appContext.getString`：应用内语言在
+     * API 33 以下只改 Activity 的 Configuration，Application 的 Context 仍然解析成
+     * **系统语言**。少了这一层，界面切成英文之后首页状态和启动日志依旧是中文
+     * （风味语言那几套皮更是一行都不会出现，它们永远不是系统语言）。
      */
     private fun str(resId: Int, vararg args: Any): String =
-        if (::appContext.isInitialized) appContext.getString(resId, *args) else ""
+        if (::appContext.isInitialized) appContext.appString(resId, *args) else ""
+
+    /**
+     * 写一行「进展」日志（`>` 前缀）。
+     *
+     * 与 [appendLog] 分开的意义：调用方只提供资源 id 与参数，不再拼中文字面量 ——
+     * 日志同时进首页日志卡和 bugreport 的 dsh.log，两处都该跟随应用语言。
+     */
+    private fun logInfo(resId: Int, vararg args: Any) = appendLog("> " + str(resId, *args))
+
+    /** 写一行「异常」日志（`!` 前缀）。 */
+    private fun logWarn(resId: Int, vararg args: Any) = appendLog("! " + str(resId, *args))
+
+    /**
+     * 把若干项连成一句里的列表。
+     *
+     * 原来一律用「、」硬拼，那是中文的顿号 —— 英文界面下会看到 `sharp、tesseract.js`。
+     * ICU 的 ListFormatter 按语言给出正确的连接词与标点（en: "a, b, and c"，
+     * zh: "a、b和c"，es: "a, b y c"），API 24 就有，不需要自己维护一张表。
+     */
+    private fun joinForLog(items: Collection<String>): String {
+        val clean = items.map { it.trim() }.filter { it.isNotEmpty() }
+        if (clean.isEmpty()) return ""
+        return runCatching {
+            android.icu.text.ListFormatter.getInstance(LocaleCtx.currentLocale()).format(clean)
+        }.getOrElse { clean.joinToString(", ") }
+    }
+
+    /**
+     * 下载源的本地化名字。
+     *
+     * [DshSource.displayName] 是硬编码中文的（它当初只喂日志）；界面上的源名一直走
+     * `sourceLabelRes()` 取资源。日志现在也要跟随语言，于是这里走同一份资源。
+     */
+    private fun sourceName(source: String): String = str(
+        when (source) {
+            DshSource.SOURCE_AUTO -> R.string.dsh_source_auto
+            DshSource.SOURCE_GITHUB -> R.string.dsh_source_github
+            DshSource.SOURCE_GHPROXY_CF -> R.string.dsh_source_ghproxy_cf
+            DshSource.SOURCE_GHPROXY_AXISNOW -> R.string.dsh_source_ghproxy_axisnow
+            DshSource.SOURCE_CUSTOM -> R.string.dsh_source_custom
+            else -> R.string.dsh_source_auto
+        }
+    )
+
+    /**
+     * 让一段文本能安全地放进 shell 的单引号里。
+     *
+     * 这段文本现在来自资源，翻译里出现 `'` 完全正常（英文 "don't"、法语 "l'app"），
+     * 而一个裸单引号会提前闭合字符串、把后面的内容变成 shell 代码。`'\''` 是 POSIX 里
+     * 唯一可靠的写法：闭合、插入转义的引号、再打开。
+     */
+    private fun shellSingleQuoted(s: String): String = s.replace("'", "'\\''")
 
     // ────────────────────────── 工具 ──────────────────────────
 

@@ -38,6 +38,12 @@ DSH-Folk 把 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)�
 
 主题商店的入口在 **设置 → 外观** 页右上角；主题存档（`.fpt`）的导出与导入在商店页顶栏。
 
+界面语言在 **设置 → 常规 → 语言** 里选，与系统语言无关（还有几套「风味」皮：魔法大厅 / 圣光之殿 /
+后厨操作台 / 主世界 / 仙府主殿，只能从这里进）。**启动日志、通知栏、Toast 与两个桥的报错都跟着这一项走**，
+不是跟着系统语言 —— Android 在 13 以下把应用内语言只作用于 Activity，所以这些非 Activity 的文案都经
+`LocaleCtx` 取一份按应用内语言解析的 Context（见 `app/src/main/java/me/bmax/apatch/util/LocaleCtx.kt`）。
+bugreport 的 `basic.txt` 里同时记 `AppLocale` 与 `SystemLocale`，好判断一份日志是哪种语言写的。
+
 **配置备份**与 DSH 桌面端的 `dsh-config-manager` 插件使用**同一套导出格式**（走它的回环 HTTP API，不是另写一份 ZIP 打包器），
 所以手机上导出的 zip 能直接在电脑上导入，反之亦然。默认导出 settings / ui / providers / plugins / mcp / prompts /
 skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentialsStatus / self，

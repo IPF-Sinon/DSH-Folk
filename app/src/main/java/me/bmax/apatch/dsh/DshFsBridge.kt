@@ -5,6 +5,7 @@ import android.os.Environment
 import android.os.StatFs
 import android.util.Log
 import me.bmax.apatch.R
+import me.bmax.apatch.util.appString
 import me.bmax.apatch.util.PermissionUtils
 import org.json.JSONArray
 import org.json.JSONObject
@@ -587,12 +588,14 @@ object DshFsBridge {
      * 取一条本地化文案。
      *
      * 这些串会经 `dsh-fs` 的输出出现在**用户**眼前，所以要跟随应用语言。
+     * 走 `appString` 而不是 `ctx.getString`：这里的 Context 是 Application 的，
+     * 而应用内语言在 API 33 以下只作用于 Activity —— 直接 getString 会拿到系统语言。
      * 拿不到 Context（桥还没 start）时退回资源名，不让报错本身再抛一次。
      */
     private fun str(resId: Int, vararg args: Any): String {
         val ctx = appCtx ?: return "error"
         return runCatching {
-            if (args.isEmpty()) ctx.getString(resId) else ctx.getString(resId, *args)
+            ctx.appString(resId, *args)
         }.getOrElse { ctx.resources.getResourceEntryName(resId) ?: "error" }
     }
 
