@@ -598,9 +598,26 @@ object DshRuntime {
      * 默认 proroot：它不走 ptrace，容器内进程开销明显低于 proot。代价是在部分
      * 内核上会卡在 seccomp/ptrace 上起不来 —— 这条路由 [noteProrootFailure]
      * 兜底，失败一次就自动切回 proot，所以默认选快的那个是合理的。
+     *
+     * 注意这是**用户的选择**，不一定是实际在跑的那个：proroot 的五个 .so 只有
+     * arm64-v8a 有，x86_64 设备上这里返回 proroot 而 [runtime] 给的是 proot。
+     * 凡是描述或依赖「实际行为」的地方用 [effectiveRuntimeId]。
      */
     fun runtimeId(): String =
         if (!ready) "proroot" else prefs().getString(DshEnv.KEY_RUNTIME, "proroot") ?: "proroot"
+
+    /**
+     * 实际会用来起容器的运行时 id。
+     *
+     * 与 [runtimeId] 的差别只在「选了 proroot 但它在本机不可用」这一种情况，而这一种
+     * 在 x86_64 设备上是**常态**（proroot 上游只出 arm64）。分不清两者会同时产生
+     * 三个可观察的错误，报障包里都出现过：
+     *  - 启动日志第 1 行说 proot（走 runtime()），第 3 行说「proroot 无条件启用 l2s」；
+     *  - basic.txt 记 `ContainerRuntime: proroot`，与同一个包里的 dsh.log 自相矛盾；
+     *  - [linkBecomesSymlink] 误判为 true，pnpm 被无谓地降级成 `--package-import-method
+     *    copy` —— 明明 proot 在硬链接可用时根本不加 `--link2symlink`。
+     */
+    fun effectiveRuntimeId(): String = if (!ready) "proroot" else runtime().id()
 
     fun setRuntimeId(id: String) {
         if (!ready) return
@@ -720,7 +737,7 @@ object DshRuntime {
      * 容器内拿到的仍然是符号链接。pnpm 正是用 `link()` 从内容存储装包，一旦被改写，
      * `require.resolve` 的 realpath 就会跳进 CAS、把包目录结构解析没了。
      */
-    fun linkBecomesSymlink(): Boolean = !hardlinkSupported() || runtimeId() == "proroot"
+    fun linkBecomesSymlink(): Boolean = !hardlinkSupported() || effectiveRuntimeId() == "proroot"
 
     /** 复制 proot 的 NEEDED 依赖到可写 lib 目录（proroot 不需要）。 */
     private fun ensureRuntimeFiles() {
@@ -2056,8 +2073,10 @@ object DshRuntime {
             append(" · ")
             append(
                 when {
-                    // proroot 无条件加 --link2symlink，探测结果在它下面不代表 guest 的实际能力
-                    runtimeId() == "proroot" -> str(R.string.dsh_log_hardlink_l2s_forced)
+                    // proroot 无条件加 --link2symlink，探测结果在它下面不代表 guest 的实际能力。
+                    // 用 effectiveRuntimeId：x86_64 上「选了 proroot」但跑的是 proot，
+                    // 说成「proroot 无条件启用 l2s」与同一份日志第一行自相矛盾。
+                    effectiveRuntimeId() == "proroot" -> str(R.string.dsh_log_hardlink_l2s_forced)
                     !ok -> str(R.string.dsh_log_hardlink_l2s_on)
                     else -> str(R.string.dsh_log_hardlink_l2s_off)
                 }
@@ -2110,19 +2129,10 @@ object DshRuntime {
     /**
      * 下载源的本地化名字。
      *
-     * [DshSource.displayName] 是硬编码中文的（它当初只喂日志）；界面上的源名一直走
-     * `sourceLabelRes()` 取资源。日志现在也要跟随语言，于是这里走同一份资源。
+     * 走 [DshSource.labelRes] —— 与设置页、更新对话框同一份映射。日志此前用的是
+     * DshSource 里一份硬编码中文的 displayName()，现在那个函数已经不存在了。
      */
-    private fun sourceName(source: String): String = str(
-        when (source) {
-            DshSource.SOURCE_AUTO -> R.string.dsh_source_auto
-            DshSource.SOURCE_GITHUB -> R.string.dsh_source_github
-            DshSource.SOURCE_GHPROXY_CF -> R.string.dsh_source_ghproxy_cf
-            DshSource.SOURCE_GHPROXY_AXISNOW -> R.string.dsh_source_ghproxy_axisnow
-            DshSource.SOURCE_CUSTOM -> R.string.dsh_source_custom
-            else -> R.string.dsh_source_auto
-        }
-    )
+    private fun sourceName(source: String): String = str(DshSource.labelRes(source))
 
     /**
      * 让一段文本能安全地放进 shell 的单引号里。

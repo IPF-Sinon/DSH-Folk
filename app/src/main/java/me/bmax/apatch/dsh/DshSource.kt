@@ -3,6 +3,7 @@ package me.bmax.apatch.dsh
 import android.content.Context
 import java.net.HttpURLConnection
 import java.net.URL
+import me.bmax.apatch.R
 
 /**
  * 运行时下载源解析与测速（移植 DSHM SourceManager 的思路，简化为三候选 + 自定义）。
@@ -134,16 +135,23 @@ object DshSource {
     }
 
     /**
-     * 源名称。**仅供启动日志**（appendLog）使用，所以保持中文原样 ——
-     * 界面上的源名走 sourceLabelRes() 取资源。
+     * 源 id → 字符串资源 id。**界面与启动日志共用这一份**。
+     *
+     * 原来这里是一个硬编码中文的 `displayName()`，理由是「它只喂启动日志」；界面另有
+     * 一份 `sourceLabelRes()`。日志 i18n 之后那个理由不成立了，而两份平行的映射本身
+     * 就是漂移源头（曾经一份写 `gh-proxy (CF)`、另一份写 `gh-proxy（Cloudflare）`）。
+     *
+     * 取名 labelRes 而不是 displayName：返回的是资源 id，取字符串要调用方自己决定用
+     * `stringResource`（Composable）还是 `appString`（后台 / 日志）—— 这个区别在
+     * API 33 以下是实打实的（应用内语言只作用于 Activity）。
      */
-    fun displayName(source: String): String = when (source) {
-        SOURCE_AUTO -> "自动（测速选优）"
-        SOURCE_GITHUB -> "GitHub 直连"
-        SOURCE_GHPROXY_CF -> "gh-proxy (CF)"
-        SOURCE_GHPROXY_AXISNOW -> "gh-proxy (AxisNow)"
-        SOURCE_CUSTOM -> "自定义镜像"
-        else -> source
+    fun labelRes(source: String): Int = when (source) {
+        SOURCE_AUTO -> R.string.dsh_source_auto
+        SOURCE_GITHUB -> R.string.dsh_source_github
+        SOURCE_GHPROXY_CF -> R.string.dsh_source_ghproxy_cf
+        SOURCE_GHPROXY_AXISNOW -> R.string.dsh_source_ghproxy_axisnow
+        SOURCE_CUSTOM -> R.string.dsh_source_custom
+        else -> R.string.dsh_source_auto
     }
 
     data class SpeedResult(val source: String, val latencyMs: Long, val speedKBps: Double = 0.0) {

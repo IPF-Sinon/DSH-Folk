@@ -180,7 +180,10 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
 
             pw.println("DshRuntime: ${me.bmax.apatch.dsh.DshRuntime.state.value.runtimeVersion}")
             pw.println("DshPhase: ${me.bmax.apatch.dsh.DshRuntime.state.value.phase}")
-            pw.println("ContainerRuntime: ${me.bmax.apatch.dsh.DshRuntime.runtimeId()}")
+            // 两个都记：选的是什么、实际跑的是什么。x86_64 上 proroot 不可用会静默
+            // 回退，只记一个的话报障包会跟 dsh.log 自相矛盾。
+            pw.println("ContainerRuntime: ${me.bmax.apatch.dsh.DshRuntime.effectiveRuntimeId()}")
+            pw.println("ContainerRuntimePref: ${me.bmax.apatch.dsh.DshRuntime.runtimeId()}")
             pw.println("PermissionChannel: ${me.bmax.apatch.dsh.PermissionManager.status.value.channel}")
             // 没有这一行，日后看到 dmesg / dropbox / tombstones 段为空时无法区分
             // 「采集代码坏了」和「用户没启用特权，su 段本来就采不到」

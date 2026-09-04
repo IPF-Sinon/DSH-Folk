@@ -1164,15 +1164,13 @@ internal fun capPermissionHintRes(
     else -> null
 }
 
-/** 下载源 id → 可本地化标签；DshSource.displayName 只用于日志。 */
-internal fun sourceLabelRes(source: String): Int = when (source) {
-    DshSource.SOURCE_AUTO -> R.string.dsh_source_auto
-    DshSource.SOURCE_GITHUB -> R.string.dsh_source_github
-    DshSource.SOURCE_GHPROXY_CF -> R.string.dsh_source_ghproxy_cf
-    DshSource.SOURCE_GHPROXY_AXISNOW -> R.string.dsh_source_ghproxy_axisnow
-    DshSource.SOURCE_CUSTOM -> R.string.dsh_source_custom
-    else -> R.string.dsh_source_auto
-}
+/**
+ * 下载源 id → 可本地化标签。
+ *
+ * 保留这个名字只为不改动两处 Composable 的调用；真正的映射在 [DshSource.labelRes]，
+ * 界面与启动日志共用同一份（原先各有一份，文案曾经漂移过）。
+ */
+internal fun sourceLabelRes(source: String): Int = DshSource.labelRes(source)
 
 private fun yesNo(b: Boolean): String = if (b) "✓" else "✗"
 
