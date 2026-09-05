@@ -52,15 +52,15 @@ object DshHostPrompt {
     /** 插件在 APK assets 里的名字。 */
     private const val ASSET_NAME = "dsh-folk-host.mjs"
 
-    /** 插件在容器内的落点（宿主视角要拼 rootfs 前缀）。 */
+    /** 插件在容器内的落点（宿主视角要拼 [DshEnv.dshHome] 前缀）。 */
     private const val PLUGIN_GUEST_PATH = "/root/.dsh/plugins/dsh-folk-host.mjs"
-    private const val PLUGIN_HOST_REL = "root/.dsh/plugins/dsh-folk-host.mjs"
+    private const val PLUGIN_HOST_REL = "plugins/dsh-folk-host.mjs"
 
     /** loader entry id：写进 patch 行，也是将来要改/删时的锚点。 */
     private const val ENTRY_ID = "dsh-folk-host"
 
-    /** home 级 patch 文件（对所有 profile 生效），宿主视角的相对路径。 */
-    private const val HOME_PATCH_REL = "root/.dsh/cordis.patch.yml"
+    /** home 级 patch 文件（对所有 profile 生效），相对 [DshEnv.dshHome] 的路径。 */
+    private const val HOME_PATCH_REL = "cordis.patch.yml"
 
     /**
      * 插件内容版本。
@@ -95,7 +95,7 @@ object DshHostPrompt {
     fun ensureInstalled(ctx: Context) {
         if (!DshEnv.isRuntimeInstalled(ctx)) return
         runCatching {
-            val dst = File(DshEnv.rootfs(ctx), PLUGIN_HOST_REL)
+            val dst = File(DshEnv.dshHome(ctx), PLUGIN_HOST_REL)
             val revOk = prefs(ctx).getInt(KEY_PLUGIN_REV, 0) == PLUGIN_REV
             if (!revOk || !dst.isFile || dst.length() == 0L) {
                 val body = ctx.assets.open(ASSET_NAME).use {
@@ -121,7 +121,7 @@ object DshHostPrompt {
      * 数组，否则**整个 profile 启动失败**）。
      */
     private fun ensurePatchRow(ctx: Context) {
-        val f = File(DshEnv.rootfs(ctx), HOME_PATCH_REL)
+        val f = File(DshEnv.dshHome(ctx), HOME_PATCH_REL)
         val existing = if (f.isFile) f.readText(StandardCharsets.UTF_8) else ""
         // 判据用 id 而不是路径：将来路径变了也不会重复追加
         if (existing.contains("id: $ENTRY_ID")) return

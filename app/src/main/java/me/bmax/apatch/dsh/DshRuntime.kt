@@ -116,8 +116,8 @@ object DshRuntime {
     /** v1.3 写进 /root/.npmrc 的无效行，只为清理它而保留。 */
     private const val NPMRC_LEGACY_LINE = "package-import-method=copy"
 
-    /** web profile 在 rootfs 内的相对路径（guest 侧是 /root/.dsh/profiles/web）。 */
-    private const val PROFILE_GUEST_REL = "root/.dsh/profiles/web"
+    /** web profile 相对 [DshEnv.dshHome] 的路径（guest 侧是 /root/.dsh/profiles/web）。 */
+    private const val PROFILE_WEB_REL = "profiles/web"
 
     /**
      * 首启预装的插件（npm 包名，已人工验证可装）。
@@ -540,6 +540,10 @@ object DshRuntime {
     fun init(context: Context) {
         if (!::appContext.isInitialized) {
             appContext = context.applicationContext
+            // 一次性把旧版本落在 rootfs 里的 /root/.dsh 搬到独立数据目录（见
+            // DshEnv.migrateDshHome）。必须在任何 dshHome 访问之前做，否则数据被
+            // 空目录顶掉。rename 是原子的，放这里不会卡启动。
+            DshEnv.migrateDshHome(appContext)
             // 进程重启后旧日志不该残留：清一次，让启动日志按「本次运行」呈现。
             // startServer() 里还会再清一次，这里主要覆盖「只开 App 不启动服务」的情况。
             clearLog()
@@ -1323,7 +1327,8 @@ object DshRuntime {
         scope.launch {
             bootMutex.withLock {
                 stopServer()
-                // 重装等于换了一套全新 rootfs，容器里的插件确实没了，该重新预装
+                // 重装只换 rootfs（运行时层）；dsh 数据在独立 dsh-home 里不会丢。这里仍
+                // 重置预装记账：让内置插件再走一遍 install，确保它们还在（用户删掉的会补回）。
                 prefs().edit()
                     .remove(DshEnv.KEY_SEEDED_PLUGINS)
                     .remove(@Suppress("DEPRECATION") DshEnv.KEY_SEED_PLUGINS_DONE)
@@ -1781,7 +1786,7 @@ object DshRuntime {
         runCatching { removeLegacyNpmrcImportLine() }
         if (!linkBecomesSymlink()) return
         runCatching {
-            val ws = File(DshEnv.rootfs(appContext), "$PROFILE_GUEST_REL/pnpm-workspace.yaml")
+            val ws = File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/pnpm-workspace.yaml")
             // 不存在就不建：见 KDoc，抢在 dsh initProfile 之前会弄丢它的模板
             if (!ws.isFile) return@runCatching
             val old = ws.readText(StandardCharsets.UTF_8)
@@ -1819,7 +1824,7 @@ object DshRuntime {
      * 读文件而不是回答「我们写过没有」：v1.3 的教训正是日志宣称了一件没生效的事。
      */
     private fun pnpmImportMethodLine(): String {
-        val ws = File(DshEnv.rootfs(appContext), "$PROFILE_GUEST_REL/pnpm-workspace.yaml")
+        val ws = File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/pnpm-workspace.yaml")
         if (!ws.isFile) return str(R.string.dsh_log_pnpm_unconfigured)
         val line = runCatching {
             ws.readLines().firstOrNull { it.trimStart().startsWith(PNPM_IMPORT_KEY) }
@@ -1855,9 +1860,9 @@ object DshRuntime {
      */
     fun allowProfileBuilds(packages: List<String>, onLine: (String) -> Unit = {}): List<String> {
         if (packages.isEmpty()) return emptyList()
-        val ws = File(DshEnv.rootfs(appContext), "$PROFILE_GUEST_REL/pnpm-workspace.yaml")
+        val ws = File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/pnpm-workspace.yaml")
         if (!ws.isFile) {
-            onLine("[DSH-Folk] 找不到 $PROFILE_GUEST_REL/pnpm-workspace.yaml，无法放行构建脚本")
+            onLine("[DSH-Folk] 找不到 $PROFILE_WEB_REL/pnpm-workspace.yaml，无法放行构建脚本")
             return emptyList()
         }
         return runCatching {

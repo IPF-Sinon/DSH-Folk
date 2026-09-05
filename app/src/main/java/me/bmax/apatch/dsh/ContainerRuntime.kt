@@ -78,6 +78,11 @@ interface ContainerRuntime {
                 argv.add("-b")
                 argv.add(if (b.size == 1) b[0] else "${b[0]}:${b[1]}")
             }
+            // DSH 数据目录独立于 rootfs：挂成 /root/.dsh，更新运行时只换 rootfs 不丢数据
+            val dshHome = DshEnv.dshHome(ctx)
+            dshHome.mkdirs()
+            argv.add("-b")
+            argv.add("${dshHome.absolutePath}:/root/.dsh")
             return argv
         }
 
@@ -130,6 +135,11 @@ interface ContainerRuntime {
             shm.mkdirs()
             argv.add("-b")
             argv.add("${shm.absolutePath}:/dev/shm")
+            // DSH 数据目录独立于 rootfs：挂成 /root/.dsh，更新运行时只换 rootfs 不丢数据
+            val dshHome = DshEnv.dshHome(ctx)
+            dshHome.mkdirs()
+            argv.add("-b")
+            argv.add("${dshHome.absolutePath}:/root/.dsh")
             argv.add("--link2symlink")
             return argv
         }
