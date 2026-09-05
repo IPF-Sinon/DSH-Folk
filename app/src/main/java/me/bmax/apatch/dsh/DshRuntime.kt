@@ -507,6 +507,10 @@ object DshRuntime {
         "plugin tree failed to load",
         "client bundles not found",
         "failed to apply loader entry modules",
+        // dsh 在 loadProfile 里对 dsh.profile.bundles 逐项 resolveBundleDir，
+        // 解析不出来就抛这句并退出。同样与容器运行时无关（换 proot 一样失败）。
+        "cannot resolve profile bundle",
+        "declares no dsh.bundle",
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -543,6 +547,8 @@ object DshRuntime {
             // 把 1.8.3-beta.1 移出去的 dsh 数据搬回 rootfs（见 DshEnv.migrateDshHomeBack）。
             // 必须在任何 dshHome 访问之前做。rename 是原子的，放这里不会卡启动。
             DshEnv.migrateDshHomeBack(appContext)
+            // 上一次运行时替换如果被强杀打断，数据还停在暂存目录里 —— 认领回来。
+            DshEnv.recoverPreserved(appContext)
             // 进程重启后旧日志不该残留：清一次，让启动日志按「本次运行」呈现。
             // startServer() 里还会再清一次，这里主要覆盖「只开 App 不启动服务」的情况。
             clearLog()
@@ -1046,10 +1052,13 @@ object DshRuntime {
                     if (_state.value.phase == DshPhase.ERROR) return@withLock
                 }
                 setupResolvConf()
+                // 必须在 seedPlugins 之前：profile 里留着一条来源已消失的依赖时，
+                // pnpm 在解析阶段就整体失败，预装那几个包一个都装不上。
+                healProfileBundles()
                 seedPlugins()
                 ensureFsBridgeCli()
                 if (checkPortConflict()) return@withLock
-                startAndAwait()
+                startAndAwait(alreadyHealed = true)
             }
         }
     }
@@ -1214,10 +1223,70 @@ object DshRuntime {
     }
 
     /**
+     * 启动前自愈 profile：把解析不出来的 bundle 补装回来，补不回来的摘掉。
+     *
+     * 存在的理由是 1.8.4-beta.3 的真机故障：更新运行时后 `dsh web` 在启动第一步
+     * 抛 `cannot resolve profile bundle "dsh-llm-agentrouter"` 直接退出，用户在
+     * 手机上没有编辑 `profiles/web/package.json` 的现实路径，应用等于变砖。
+     * 根因（rootfs 替换连带删掉 l2s 与 pnpm 存储）已由 [DshEnv.PRESERVED_PATHS]
+     * 修掉，这里是**兜底**：存量已经坏掉的设备升上来必须能自己爬出坑，
+     * 别的原因造成的同类失衡（用户手动删过 node_modules、装插件中途断电）也一并救。
+     *
+     * 顺序是「先清障、再补装、最后才停用」：
+     * 1. 探测。healthy 就直接返回（正常路径只多一次 node 调用，不碰 pnpm）。
+     * 2. 摘掉**来源已消失的本地依赖**。这种 spec 会让 pnpm 在解析阶段整体失败，
+     *    连能装的包一起装不上，所以必须先清掉才有下一步。
+     * 3. `pnpm install` 按 package.json 补齐（不清 node_modules，已在位的会跳过）。
+     *    装回来的 bundle 由 dsh 自己的 reconcile 自动加回 `dsh.profile.bundles`。
+     * 4. 还是解析不出来的（下架的包、装到一半坏掉的）从 bundles 里停用，
+     *    只保留 dependencies 记录 —— 宁可少一个插件也要让服务起来，
+     *    用户去插件商店重装一次就自动复原。
+     *
+     * 只在 [DshEnv.isRuntimeInstalled] 且 profile 已初始化时有事可做，
+     * 全过程失败都只记日志不阻断启动 —— 它是救援措施，不该自己变成新的失败点。
+     */
+    private suspend fun healProfileBundles() {
+        if (!DshEnv.isRuntimeInstalled(appContext)) return
+        if (!File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/package.json").isFile) return
+        runCatching {
+            val initial = DshPluginRepo.unresolvableBundles()
+            if (initial.isEmpty()) return
+            logWarn(R.string.dsh_log_bundles_unresolved, joinForLog(initial))
+            _state.update {
+                it.copy(
+                    phase = DshPhase.EXTRACTING,
+                    progress = 0f,
+                    message = str(R.string.dsh_msg_healing_plugins),
+                )
+            }
+            DshPluginRepo.pruneDeadLocalBundles(initial) { line -> appendLog(line) }
+            DshPluginRepo.rehydrate { line -> appendLog(line) }
+            val still = DshPluginRepo.unresolvableBundles()
+            if (still.isNotEmpty() && DshPluginRepo.parkBundles(still).isEmpty()) {
+                logWarn(R.string.dsh_log_bundles_park_failed, joinForLog(still))
+            }
+            // 修好/停用以 profile 的最终状态为准，而不是拿中间动作反推
+            val current = runCatching { DshPluginRepo.bundles() }.getOrDefault(emptyList()).toSet()
+            val healed = initial.filter { it in current }
+            val gone = initial.filterNot { it in current }
+            if (healed.isNotEmpty()) logInfo(R.string.dsh_log_bundles_healed, joinForLog(healed))
+            if (gone.isNotEmpty()) logWarn(R.string.dsh_log_bundles_parked, joinForLog(gone))
+            refreshRootfsSize()
+            _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
+        }.onFailure {
+            logWarn(R.string.dsh_log_bundle_heal_error, it.message ?: it.javaClass.simpleName)
+        }
+    }
+
+    /**
      * 启动并等待就绪；如果这一轮触发了 proroot → proot 回退，就用 proot
      * 再试一次（只重试一次：proot 也起不来就是真错了，再试无意义）。
+     *
+     * @param alreadyHealed 本轮已经跑过 [healProfileBundles]（安装路径会在预装之前先跑，
+     *   见 [bootstrap]），跳过重复探测；重启/强制启动这类不带安装的路径用默认值。
      */
-    private suspend fun startAndAwait() {
+    private suspend fun startAndAwait(alreadyHealed: Boolean = false) {
+        if (!alreadyHealed) healProfileBundles()
         prorootFellBack = false
         startServer()
         awaitReady()
@@ -1336,10 +1405,12 @@ object DshRuntime {
                 downloadAndInstall()
                 if (_state.value.phase != DshPhase.ERROR) {
                     setupResolvConf()
+                    // 与 bootstrap 同理：先自愈 profile 依赖，预装才装得动
+                    healProfileBundles()
                     seedPlugins()
                     ensureFsBridgeCli()
                     if (checkPortConflict()) return@withLock
-                    startAndAwait()
+                    startAndAwait(alreadyHealed = true)
                 }
             }
         }
@@ -1557,30 +1628,49 @@ object DshRuntime {
     /** 解压 rootfs.tar.gz 到 filesDir/rootfs（整体替换）。 */
     private fun extractRootfs(tarball: File): Boolean = runCatching {
         val dest = DshEnv.rootfs(appContext)
-        // 数据目录 dshHome 就在 rootfs 里（rootfs/root/.dsh），整体删 rootfs 前先把它
+        val stash = DshEnv.dshPreserve(appContext)
+        // 要跨越这次替换的子树（见 DshEnv.PRESERVED_PATHS）：整体删 rootfs 之前逐个
         // rename 到 rootfs 之外的暂存目录（同一 filesDir，原子零拷贝），解压完再 rename
-        // 回去顶掉新 rootfs 自带的空 /root/.dsh。这样会话/插件/配置能活过运行时更新。
-        val home = DshEnv.dshHome(appContext)
-        val preserve = DshEnv.dshPreserve(appContext)
-        if (home.isDirectory) {
-            preserve.parentFile?.mkdirs()
-            if (preserve.exists()) preserve.deleteRecursively()
-            if (!home.renameTo(preserve)) {
-                logWarn(R.string.dsh_log_extract_failed, "rename dsh-home 暂存失败，中止以避免丢数据")
+        // 回去顶掉新 rootfs 自带的空目录。
+        //
+        // 集合里不只有 root/.dsh：l2s 中间文件与 pnpm 内容存储都在 .dsh 之外，而
+        // .dsh 里不少文件只是指向它们的符号链接。只保 .dsh 会留下一堆悬空链接，
+        // 启动时 dsh 解析不出 profile bundle 就直接退出（1.8.4-beta.3 的故障）。
+        //
+        // 先认领再清：上一次更新失败（解压抛异常、恢复那步没成）会把数据留在暂存
+        // 目录里，直接 delete 就是把用户的会话删了。recoverPreserved 之后还剩东西，
+        // 说明 rootfs 里已有在用的同名目录，那份残留才是被顶掉的旧副本，可以清。
+        DshEnv.recoverPreserved(appContext)
+        if (stash.exists()) stash.deleteRecursively()
+        for (rel in DshEnv.PRESERVED_PATHS) {
+            val src = File(dest, rel)
+            if (!src.isDirectory) continue
+            val dst = File(stash, rel)
+            dst.parentFile?.mkdirs()
+            if (!src.renameTo(dst)) {
+                logWarn(R.string.dsh_log_preserve_failed, rel)
+                // 已经搬出去的搬回来，保持「要么全成要么原样」
+                DshEnv.recoverPreserved(appContext)
                 return@runCatching false
             }
         }
         if (dest.exists()) dest.deleteRecursively()
         dest.mkdirs()
         TarGzipExtractor.extractRootfs(tarball, dest)
-        // 解压出的 rootfs 带一个空 /root/.dsh，删掉，用暂存的数据顶替。
-        if (preserve.isDirectory) {
-            if (home.exists()) home.deleteRecursively()
-            if (!preserve.renameTo(home)) {
-                logWarn(R.string.dsh_log_extract_failed, "rename dsh-home 恢复失败（数据仍在 ${preserve.name}，下次启动重试）")
+        // 解压出的 rootfs 带一份空的 /root/.dsh，删掉，用暂存的数据顶替。
+        for (rel in DshEnv.PRESERVED_PATHS) {
+            val src = File(stash, rel)
+            if (!src.isDirectory) continue
+            val dst = File(dest, rel)
+            dst.parentFile?.mkdirs()
+            if (dst.exists()) dst.deleteRecursively()
+            if (!src.renameTo(dst)) {
+                // 数据还在暂存目录里，下次启动 recoverPreserved 会认领回来
+                logWarn(R.string.dsh_log_restore_failed, rel, stash.name)
                 return@runCatching false
             }
         }
+        runCatching { if (stash.exists()) stash.deleteRecursively() }
         // 关键文件自检：解压不完整（断流 / 空间耗尽）时越早发现越好，
         // 否则要等到启动 dsh web 才报一句看不懂的错。
         // File.exists() 跟随符号链接，所以 python3 -> python3.12 这类条目也一并验证了。

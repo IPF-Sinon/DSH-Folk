@@ -224,6 +224,8 @@ object DshPluginRepo {
         "plugin tree failed to load",
         "client bundles not found",
         "failed to apply loader entry modules",
+        "cannot resolve profile bundle",
+        "declares no dsh.bundle",
         "ERR_PNPM",
     )
 
@@ -1085,6 +1087,151 @@ object DshPluginRepo {
             900_000,
             onLine,
         )
+    }
+
+    /**
+     * `dsh.profile.bundles` 里**解析不出来**的条目（不含 dsh 自带的 in-box bundle）。
+     *
+     * 判据与 dsh 自己的 `resolveBundleDir` 逐字一致（dsh-app-boot 的
+     * `packageDirFromAnchor`）：按 Node 的 node_modules 查找顺序，从「dsh 安装目录」
+     * 和「profile 目录」两个 anchor 找 `<包名>/package.json`，`existsSync` 跟随符号
+     * 链接。所以这里报出来的每一个名字，都会让 `dsh web` 在启动第一步抛
+     * `cannot resolve profile bundle` 然后退出。
+     *
+     * anchor 取 `dirname(readlink -f dsh)/../package.json` —— dsh 里
+     * `INSTALL_ANCHOR` 就是 `new URL("../package.json", import.meta.url)`，
+     * 而 bin 是 `lib/bin.js`，两者指向同一个 package.json。
+     *
+     * **anchor 必须先验证**（`name === "@deepseek-ai/dsh"`），否则整个判断反过来了：
+     * anchor 指错时连 `@deepseek-ai/dsh-base` 都会被报成「解析不出来」，
+     * 而调用方 [parkBundles] 照单摘掉就等于把服务彻底拆了。验不过就当作
+     * 「没有可诊断的问题」返回空 —— 少一次自愈远好过误伤。
+     *
+     * 同理**跳过 `@deepseek-ai/` 前缀**：那些由 dsh 安装目录提供，不是用户装的插件。
+     * 它们真缺了是运行时坏了（解压不完整），该走重装运行时，不是改 profile。
+     *
+     * 只读，不改任何东西；一次 node 调用，healthy 情况下输出为空。
+     */
+    suspend fun unresolvableBundles(): List<String> = withContext(Dispatchers.IO) {
+        val script = "const fs=require('fs'),path=require('path'),mod=require('module');" +
+            "const dir=process.argv[1],anchor=process.argv[2];" +
+            // anchor 自证：不是 dsh 的 manifest 就什么都不说（见 KDoc）
+            "try{if(JSON.parse(fs.readFileSync(anchor,'utf8')).name!=='@deepseek-ai/dsh')process.exit(0)}" +
+            "catch(e){process.exit(0)}" +
+            "let j;try{j=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){process.exit(0)}" +
+            "const ok=(a,n)=>{try{for(const p of mod.createRequire(a).resolve.paths(n)||[])" +
+            "if(fs.existsSync(path.join(p,n,'package.json')))return true}catch(e){}return false};" +
+            "for(const b of (j.dsh&&j.dsh.profile&&j.dsh.profile.bundles)||[]){" +
+            "if(b.startsWith('@deepseek-ai/'))continue;" +
+            "if(!ok(anchor,b)&&!ok(path.join(dir,'package.json'),b))console.log(b)}"
+        DshRuntime.execRootfsForOutput(
+            "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); " +
+                "test -n \"\$DSH_REAL\" || exit 0; " +
+                "node -e \"$script\" $PROFILE_DIR \"\$(dirname \"\$DSH_REAL\")/../package.json\" 2>/dev/null",
+            120_000,
+        ).lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("[") }
+    }
+
+    /**
+     * 摘掉**来源已经消失的本地依赖**（`file:`/`link:`/绝对路径，且目标不存在）。
+     *
+     * 为什么要单独一步：这种 spec 会让 pnpm 在**解析阶段**就整体失败
+     * （ERR_PNPM_FETCH / linking 前就退出），于是同一个 profile 里别的缺包也一起装不上。
+     * 只有把它从 `dependencies` 里摘掉，后面的 `pnpm install` 才轮得到剩下的包。
+     * 它同时从 `dsh.profile.bundles` 里摘掉 —— 来源都没了，永远装不回来。
+     *
+     * **只碰被点名、且确实已死的条目**：npm 版本号 spec（`^1.2.0`）一律不动，
+     * 那种只是没装上，重装就能回来。
+     *
+     * @return 真正摘掉的包名
+     */
+    suspend fun pruneDeadLocalBundles(names: List<String>, onLine: (String) -> Unit = {}): List<String> =
+        withContext(Dispatchers.IO) {
+            if (names.isEmpty()) return@withContext emptyList()
+            val script = "const fs=require('fs'),path=require('path');" +
+                "const dir=process.argv[1],drop=new Set(process.argv.slice(2));" +
+                "const f=path.join(dir,'package.json');" +
+                "const j=JSON.parse(fs.readFileSync(f,'utf8'));" +
+                "const deps=j.dependencies||{};const dead=[];" +
+                // 不用正则：整段脚本要穿过 bash 双引号，$ 与反斜杠在那里都是雷
+                "for(const n of drop){let s=deps[n];if(typeof s!=='string')continue;" +
+                "if(s.startsWith('file:')||s.startsWith('link:'))s=s.slice(5);" +
+                "if(!(s.startsWith('/')||s.startsWith('.')))continue;" +
+                "if(!fs.existsSync(path.resolve(dir,s))){delete deps[n];dead.push(n)}}" +
+                "if(dead.length===0){console.log('NOCHANGE');process.exit(0)}" +
+                "const prof=(j.dsh||{}).profile;" +
+                "if(prof&&prof.bundles)prof.bundles=prof.bundles.filter(x=>!dead.includes(x));" +
+                "fs.writeFileSync(f+'.dshfolk-tmp',JSON.stringify(j,null,2)+String.fromCharCode(10));" +
+                "fs.renameSync(f+'.dshfolk-tmp',f);" +
+                "console.log('PRUNED '+dead.join(' '));"
+            val pruned = markedNames(
+                DshRuntime.execRootfsForOutput(
+                    "node -e \"$script\" $PROFILE_DIR " +
+                        names.joinToString(" ") { shellQuoted(it) } + " 2>&1",
+                    120_000,
+                ),
+                "PRUNED ",
+            )
+            if (pruned.isNotEmpty()) line(onLine, R.string.dsh_plug_log_dep_pruned, pruned.joinToString(", "))
+            pruned
+        }
+
+    /**
+     * 把解析不出来的 bundle 从 `dsh.profile.bundles` 里摘掉，让服务能起来。
+     *
+     * 最后一道兜底：一个装不回来的插件会让 `dsh web` 每次启动都在第一步退出
+     * （`cannot resolve profile bundle`），而用户在手机上没有编辑
+     * `profiles/web/package.json` 的现实路径 —— 整个应用就此变砖。摘掉它换来的是
+     * 「少一个插件」，而不是「打不开」。
+     *
+     * **保留 `dependencies` 里的记录**：dsh 的 reconcilePlugins 会在下一次
+     * `dsh plugin` 成功后，把重新装上、且声明了 `dsh.bundle` 的依赖自动加回
+     * bundles —— 用户去插件商店装一次就自动复原，不需要我们记账。来源彻底消失的
+     * 那种由 [pruneDeadLocalBundles] 先摘掉，不会走到这里。
+     *
+     * 写法是 JSON 原地改写 + rename，不碰其它字段（dependencies、pnpm 配置、
+     * dsh.profile 下别的键都原样保留）。
+     *
+     * @return 真正摘掉的包名；空表示没改动（或改写失败）
+     */
+    suspend fun parkBundles(names: List<String>): List<String> = withContext(Dispatchers.IO) {
+        if (names.isEmpty()) return@withContext emptyList()
+        val script = "const fs=require('fs'),path=require('path');" +
+            "const dir=process.argv[1],drop=new Set(process.argv.slice(2));" +
+            "const f=path.join(dir,'package.json');" +
+            "const j=JSON.parse(fs.readFileSync(f,'utf8'));" +
+            "const prof=(j.dsh||{}).profile;const b=(prof&&prof.bundles)||[];" +
+            "const gone=b.filter(x=>drop.has(x));" +
+            "if(gone.length===0){console.log('NOCHANGE');process.exit(0)}" +
+            "prof.bundles=b.filter(x=>!drop.has(x));" +
+            "fs.writeFileSync(f+'.dshfolk-tmp',JSON.stringify(j,null,2)+String.fromCharCode(10));" +
+            "fs.renameSync(f+'.dshfolk-tmp',f);" +
+            "console.log('PARKED '+gone.join(' '));"
+        markedNames(
+            DshRuntime.execRootfsForOutput(
+                "node -e \"$script\" $PROFILE_DIR " +
+                    names.joinToString(" ") { shellQuoted(it) } + " 2>&1",
+                120_000,
+            ),
+            "PARKED ",
+        )
+    }
+
+    /** 从容器输出里取 `<MARK> a b c` 那一行的名字列表。 */
+    private fun markedNames(out: String, mark: String): List<String> =
+        out.lines().firstOrNull { it.startsWith(mark) }
+            ?.removePrefix(mark)?.split(' ')?.map { it.trim() }?.filter { it.isNotEmpty() }
+            ?: emptyList()
+
+    /**
+     * 按 `package.json` 重新装齐 profile 依赖（不清 node_modules）。
+     *
+     * 与 [repairStore] 的区别：那个是「装法不对，全删重装」（几分钟、全量复制），
+     * 这个是「缺东西，补齐」——已经在位的包 pnpm 会跳过。运行时更新后的自愈走这条，
+     * 一般设备上就是补几个包的事。
+     */
+    suspend fun rehydrate(onLine: (String) -> Unit = {}): String = withContext(Dispatchers.IO) {
+        dshPlugin("install ${importFlag()}".trimEnd(), 900_000, onLine)
     }
 
     // ────────────────────────── 安装后验证 / 回滚 ──────────────────────────

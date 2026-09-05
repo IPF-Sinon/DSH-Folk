@@ -278,6 +278,7 @@
     <string name="dsh_msg_service_ready">Service ready · %1$s</string>
     <string name="dsh_msg_stopped">Service stopped</string>
     <string name="dsh_msg_not_installed">Runtime is not installed</string>
+    <string name="dsh_msg_healing_plugins">Repairing plugin dependencies…</string>
     <string name="dsh_err_meta_failed">Could not fetch runtime info. Check the network or switch mirror.</string>
     <string name="dsh_err_arch_mismatch">Runtime architecture mismatch: package is %1$s, this app build needs %2$s</string>
     <string name="dsh_err_no_space">Not enough storage (%1$d MB free, about %2$d MB needed). Free some space and retry.</string>
@@ -747,6 +748,13 @@
     <string name="dsh_log_missing_python">The runtime has no python3, wireless ADB pairing is unavailable</string>
     <string name="dsh_log_missing_pnpm">The runtime has no pnpm, plugin installation is unavailable</string>
     <string name="dsh_log_extract_failed">Extraction failed: %1$s</string>
+    <string name="dsh_log_preserve_failed">Could not move %1$s aside before replacing the runtime; aborting so no data is lost</string>
+    <string name="dsh_log_restore_failed">Could not restore %1$s after the update (the data is still in %2$s and will be picked up on the next start)</string>
+    <string name="dsh_log_bundles_unresolved">These plugins cannot be resolved and would keep the service from starting: %1$s — repairing…</string>
+    <string name="dsh_log_bundles_healed">Plugins repaired: %1$s</string>
+    <string name="dsh_log_bundles_parked">%1$s could not be reinstalled and was disabled so the service can start; install it again from the plugin store to re-enable it</string>
+    <string name="dsh_log_bundles_park_failed">Could not disable the unresolvable plugins (%1$s); the service may fail to start</string>
+    <string name="dsh_log_bundle_heal_error">Plugin repair error: %1$s</string>
     <string name="dsh_log_groups_added">Added the Android supplementary groups to the container: %1$s</string>
     <string name="dsh_log_seeding">Pre-installing plugin %1$s …</string>
     <string name="dsh_log_seed_builds_blocked">pnpm blocked build scripts (%1$s), allowing them and retrying…</string>
@@ -769,6 +777,7 @@
     <string name="dsh_plug_log_profile_missing">The profile is not initialized (no %1$s/package.json), skipping the rebuild</string>
     <string name="dsh_plug_log_profile_missing_short">The profile is not initialized, skipping the rebuild</string>
     <string name="dsh_plug_log_clearing_modules">Clearing node_modules (keeping pnpm-lock.yaml)…</string>
+    <string name="dsh_plug_log_dep_pruned">Removed the dependency entry for %1$s as well: its local source no longer exists, so it can never be installed again</string>
     <string name="dsh_plug_log_installing_rescue_cli">Installing the dsh-config-manager CLI (global, independent of the DSH runtime)…</string>
     <string name="dsh_plug_log_verifying">Verifying that the plugin can start (on a temporary port, the running service is untouched)…</string>
     <string name="dsh_plug_log_rollback">Verification failed, uninstalling %1$s …</string>
