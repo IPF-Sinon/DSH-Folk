@@ -1110,6 +1110,11 @@ object DshPluginRepo {
      * 同理**跳过 `@deepseek-ai/` 前缀**：那些由 dsh 安装目录提供，不是用户装的插件。
      * 它们真缺了是运行时坏了（解压不完整），该走重装运行时，不是改 profile。
      *
+     * 每个名字带 `UNRESOLVED ` 前缀输出，宿主侧只认这个前缀：proot 自己的
+     * `proot warning: …` 是由容器进程写的，`2>/dev/null` 拦不住它（那是 bash 内部
+     * 的重定向），而 execRootfs 又把 stderr 并进了同一个流 —— 不打标记就会把
+     * 一句警告当成包名摘掉。
+     *
      * 只读，不改任何东西；一次 node 调用，healthy 情况下输出为空。
      */
     suspend fun unresolvableBundles(): List<String> = withContext(Dispatchers.IO) {
@@ -1123,13 +1128,15 @@ object DshPluginRepo {
             "if(fs.existsSync(path.join(p,n,'package.json')))return true}catch(e){}return false};" +
             "for(const b of (j.dsh&&j.dsh.profile&&j.dsh.profile.bundles)||[]){" +
             "if(b.startsWith('@deepseek-ai/'))continue;" +
-            "if(!ok(anchor,b)&&!ok(path.join(dir,'package.json'),b))console.log(b)}"
+            "if(!ok(anchor,b)&&!ok(path.join(dir,'package.json'),b))console.log('UNRESOLVED '+b)}"
         DshRuntime.execRootfsForOutput(
             "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); " +
                 "test -n \"\$DSH_REAL\" || exit 0; " +
                 "node -e \"$script\" $PROFILE_DIR \"\$(dirname \"\$DSH_REAL\")/../package.json\" 2>/dev/null",
             120_000,
-        ).lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("[") }
+        ).lines().mapNotNull { l ->
+            l.trim().takeIf { it.startsWith("UNRESOLVED ") }?.removePrefix("UNRESOLVED ")?.trim()
+        }.filter { it.isNotEmpty() }
     }
 
     /**
