@@ -27,7 +27,7 @@ object Changelog {
      * 与 `BuildConfig.VERSION_NAME` 的主号比较（测试版是 `1.8.1-beta.7` 这种）：同一批
      * 测试版共用一份更新说明，按完整版本名比会让每个测试版都被判成「没有对应说明」。
      */
-    const val VERSION = "1.8.1"
+    const val VERSION = "1.8.2"
 
     /** 记「哪个版本的说明已经弹过」的 prefs 键。 */
     const val KEY_SHOWN_FOR = "changelog_shown_for"
