@@ -424,6 +424,7 @@ object DshNativeBridge {
             Cap.MEDIA -> R.string.dsh_native_cap_media
             Cap.MIC -> R.string.dsh_native_cap_mic
             Cap.CAMERA -> R.string.dsh_native_cap_camera
+            Cap.TTS -> R.string.dsh_native_cap_tts
             Cap.CALENDAR -> R.string.dsh_native_cap_calendar
             Cap.CONTACTS -> R.string.dsh_native_cap_contacts
             Cap.LOCATION -> R.string.dsh_native_cap_location

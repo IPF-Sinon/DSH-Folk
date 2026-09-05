@@ -31,6 +31,36 @@ function ok(cond, msg) {
   if (!cond) fail++;
 }
 
+/**
+ * 取一个 `when (x) {` 的主体，并判断它有没有**顶层** else 分支。
+ *
+ * 深度感知是必须的：Compose 代码里分支体内部常有 `if/else` 和嵌套 `when { … else -> }`，
+ * 用一个 /else ->/ 正则去扫会把内层的 else 当成外层的兜底，于是「漏一个分支」这种
+ * 回归就检测不出来了（第一版就是这样）。
+ */
+function whenBody(src, at, header) {
+  const open = src.indexOf("{", at + header.length);
+  if (open < 0) return null;
+  let depth = 0;
+  let close = -1;
+  const topLevelElse = [];
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    } else if (depth === 1 && src.startsWith("else", i) && /^else\s*->/.test(src.slice(i))) {
+      // 深度 1 = 直接属于这个 when 的分支位置
+      topLevelElse.push(i);
+    }
+  }
+  if (close < 0) return null;
+  return { body: src.slice(open, close), hasElse: topLevelElse.length > 0 };
+}
 /** 取 `enum class Cap(...) { ... }` 里的 NAME("id") 对。 */
 function parseCaps() {
   const start = bridge.indexOf("enum class Cap(val id: String) {");
@@ -154,6 +184,38 @@ for (const [label, src, anchor] of TABLES) {
   const both = needsRuntime.filter((n) => needsSpecial.includes(n));
   ok(both.length === 0,
     "没有能力同时要求运行时权限与特殊权限" + (both.length ? " → " + both.join(",") : ""));
+}
+
+// ── 5b. 所有对 Cap 的穷尽 when 都必须覆盖每一项 ──
+//
+// 上面那张 TABLES 是手写的锚点清单，而手写清单会漏 —— 加 TTS 那次就漏了 capName，
+// 一路放行到 CI 才被 Kotlin 的穷尽性检查拦住。这里改为自己去找：凡是 `when (cap)` /
+// `when (c)` 形式且**没有** else 分支的，都是编译期要求穷尽的地方。
+console.log("\n── 穷尽 when ──");
+{
+  const FILES = [
+    ["DshNativeBridge.kt", bridge],
+    ["FunctionSettings.kt", ui],
+  ];
+  let found = 0;
+  for (const [name, src] of FILES) {
+    for (const m of src.matchAll(/when \((?:cap|c)\) \{/g)) {
+      const w = whenBody(src, m.index, m[0].slice(0, -1));
+      if (!w) continue;
+      // 有**顶层** else 兜底的不要求穷尽（capPermissionHintRes 就是这种，单独判过）。
+      // 内层 if/else 与嵌套 when 的 else 不算 —— 见 whenBody 的注释。
+      if (w.hasElse) continue;
+      const body = w.body;
+      found++;
+      const line = src.slice(0, m.index).split("\n").length;
+      const covered = [...new Set([...body.matchAll(/Cap\.([A-Z_]+)/g)].map((x) => x[1]))];
+      const miss = caps.filter((c) => !covered.includes(c.name));
+      ok(miss.length === 0,
+        `${name}:${line} 的 when (cap) 覆盖全部 ${caps.length} 项` +
+          (miss.length ? " → 缺 " + miss.map((c) => c.id).join(",") : ""));
+    }
+  }
+  ok(found > 0, `找到 ${found} 处需要穷尽的 when (cap)`);
 }
 
 // ── 6. 资源串 ──

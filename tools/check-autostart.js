@@ -23,6 +23,36 @@ const src = Object.fromEntries(
   Object.entries({ a: A, svc: SVC, rcv: RCV, hs: HS, sh: SH, a11y: A11Y, manifest: MANIFEST, strings: STRINGS })
     .map(([k, p]) => [k, fs.readFileSync(p, "utf8")])
 );
+/**
+ * 取一个 `when (x) {` 的主体，并判断它有没有**顶层** else 分支。
+ *
+ * 深度感知是必须的：Compose 代码里分支体内部常有 `if/else` 和嵌套 `when { … else -> }`，
+ * 用一个 /else ->/ 正则去扫会把内层的 else 当成外层的兜底，于是「漏一个分支」这种
+ * 回归就检测不出来了（第一版就是这样）。
+ */
+function whenBody(src, at, header) {
+  const open = src.indexOf("{", at + header.length);
+  if (open < 0) return null;
+  let depth = 0;
+  let close = -1;
+  const topLevelElse = [];
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    } else if (depth === 1 && src.startsWith("else", i) && /^else\s*->/.test(src.slice(i))) {
+      // 深度 1 = 直接属于这个 when 的分支位置
+      topLevelElse.push(i);
+    }
+  }
+  if (close < 0) return null;
+  return { body: src.slice(open, close), hasElse: topLevelElse.length > 0 };
+}
 /** 剥 Kotlin 注释：「不该出现 X」必须扫这个，否则会命中解释性 KDoc。 */
 const code = (s) => s.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
 /** 剥 XML 注释：同理 —— 注释里写「刻意没有 canRetrieveWindowContent」不该被当成有。 */
@@ -87,6 +117,23 @@ ok(inUi.length === modes.length,
   "界面上每种方式都有单选项" + (inUi.length !== modes.length
     ? " → 缺 " + modes.filter((m) => !inUi.includes(m)).map((m) => m.id).join(",") : ""));
 ok(uiBlock.includes("dsh_autostart_container"), "界面上有「同时拉起容器」开关");
+
+// 界面里那个 when (autostartMode) 是穷尽的：加一种方式却忘了给它一个分支，Kotlin 会直接
+// 编译失败（exhaustive 检查）—— 而那要等 CI 十几分钟才知道。
+{
+  const at = uiBlock.indexOf("when (autostartMode) {");
+  if (at < 0) {
+    ok(false, "界面里有 when (autostartMode) 处理每种方式的后续动作");
+  } else {
+    const w = whenBody(uiBlock, at, "when (autostartMode)");
+    const body = w ? w.body : "";
+    const hasElse = w ? w.hasElse : false;
+    const covered = [...new Set([...body.matchAll(/Mode\.([A-Z_]+)/g)].map((x) => x[1]))];
+    const miss = modes.filter((x) => !covered.includes(x.name));
+    ok(hasElse || miss.length === 0,
+      "when (autostartMode) 覆盖每种方式" + (miss.length ? " → 缺 " + miss.map((x) => x.id).join(",") : ""));
+  }
+}
 
 // ── 4. 脚本占位符 ↔ Kotlin ──
 console.log("\n── 脚本占位符 ──");
