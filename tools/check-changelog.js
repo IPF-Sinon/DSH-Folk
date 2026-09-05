@@ -89,16 +89,29 @@ const dialog = code(read("app/src/main/java/me/bmax/apatch/ui/component/WelcomeG
 
 // ── 1. 版本号三处一致 ──
 console.log("── 版本号 ──");
-const baseName = gradle.match(/BASE_VERSION_NAME = "([^"]+)"/);
-const baseCode = gradle.match(/BASE_VERSION_CODE = (\d+)/);
-ok(baseName !== null, "build.gradle.kts 有 BASE_VERSION_NAME" + (baseName ? ` = ${baseName[1]}` : ""));
-ok(baseCode !== null, "build.gradle.kts 有 BASE_VERSION_CODE" + (baseCode ? ` = ${baseCode[1]}` : ""));
+const baseName = gradle.match(/fun baseVersionName\(\): String = "([^"]+)"/);
+const baseCode = gradle.match(/fun baseVersionCode\(\): Int = (\d+)/);
+ok(baseName !== null, "build.gradle.kts 有 baseVersionName()" + (baseName ? ` = ${baseName[1]}` : ""));
+ok(baseCode !== null, "build.gradle.kts 有 baseVersionCode()" + (baseCode ? ` = ${baseCode[1]}` : ""));
+
+// `.kts` 的脚本体被编译成一个类的主体，那里**不允许** const val —— 写了就是
+// 「Const 'val' is only allowed on top level…」，而这只有 Kotlin 编译器会说，
+// 也就是要等 CI 十几分钟。基准版本一律用函数：另一个候选（普通 val）有更安静的坑，
+// 见那段 KDoc。
+ok(!/^\s*(private )?const val/m.test(gradle),
+  "build.gradle.kts 里没有 const val（脚本体不允许，只有 Kotlin 编译器会告诉你）");
+
+// 基准版本必须是**没有副作用、没有初始化顺序**的函数：`managerVersionCode by
+// extra(getVersionCode())` 在脚本很靠前的位置就执行，一个声明在后面的 val 此刻还是
+// 默认值，构建会静默拿到错误的版本号。
+ok(/fun baseVersionName\(\)/.test(gradle) && /fun baseVersionCode\(\)/.test(gradle),
+  "基准版本是函数而不是属性（脚本里的 val 有初始化顺序，会静默取到 0）");
 
 const clVersion = changelogKt.match(/VERSION = "([^"]+)"/);
 ok(clVersion !== null, "Changelog.VERSION 存在" + (clVersion ? ` = ${clVersion[1]}` : ""));
 if (baseName && clVersion) {
   ok(baseName[1] === clVersion[1],
-    `Changelog.VERSION 与 BASE_VERSION_NAME 一致（${clVersion[1]} vs ${baseName[1]}）`);
+    `Changelog.VERSION 与 baseVersionName() 一致（${clVersion[1]} vs ${baseName[1]}）`);
 }
 
 // versionCode 必须与版本名对应：1.8.0 → 10800。beta.yml 里那段推导用的是同一规则，
@@ -109,13 +122,15 @@ if (baseName && baseCode) {
     ? parts[0] * 10000 + parts[1] * 100 + parts[2]
     : null;
   ok(expect !== null && expect === Number(baseCode[1]),
-    `BASE_VERSION_CODE 与版本名对应（${baseName[1]} → 期望 ${expect}，实际 ${baseCode[1]}）`);
+    `baseVersionCode() 与版本名对应（${baseName[1]} → 期望 ${expect}，实际 ${baseCode[1]}）`);
 }
 
 // CI 覆盖必须存在：没有它，测试版工作流传的 -P 会被静默忽略，
 // 发出去的每个 beta 都自称正式版号，而 App 判成「不更新」
-ok(/gradleProperty\("dshVersionName"\)/.test(gradle), "版本名可被 -PdshVersionName 覆盖");
-ok(/gradleProperty\("dshVersionCode"\)/.test(gradle), "版本号可被 -PdshVersionCode 覆盖");
+ok(/dshVersionOverride\("dshVersionName"\)/.test(gradle), "版本名可被 -PdshVersionName 覆盖");
+ok(/dshVersionOverride\("dshVersionCode"\)/.test(gradle), "版本号可被 -PdshVersionCode 覆盖");
+ok(/providers\.gradleProperty/.test(gradle),
+  "覆盖走 providers.gradleProperty（findProperty 会让配置缓存失效）");
 
 // ── 2. 更新说明的内容 ──
 console.log("\n── 更新说明 ──");

@@ -32,11 +32,17 @@ fun getGitDescribe(): String {
 }
 
 /**
- * 本项目的基准版本。**改版本时只改这两个常量**，其余一切（versionCode、更新说明的
- * 版本校验、测试版的版本名）都从它们推导。
+ * 本项目的基准版本。**改版本时只改这两个函数的返回值**，其余一切（versionCode、
+ * 更新说明的版本校验、测试版的版本名）都从它们推导。
+ *
+ * 为什么是函数而不是常量：`.kts` 的脚本体被编译成一个**类的主体**，那里不允许
+ * `const val`（CI 就是这么挂的）；而换成普通 `val` 会引入一个更安静的坑 —— 上面
+ * `managerVersionCode by extra(getVersionCode())` 在脚本第 11 行就执行，一个声明在
+ * 后面的 `val` 此刻还是 0，构建会拿到错误的版本号而不报任何错。函数没有初始化顺序。
  */
-private const val BASE_VERSION_NAME = "1.8.1"
-private const val BASE_VERSION_CODE = 10801
+fun baseVersionName(): String = "1.8.1"
+
+fun baseVersionCode(): Int = 10801
 
 /**
  * 允许 CI 覆盖版本。
@@ -46,20 +52,21 @@ private const val BASE_VERSION_CODE = 10801
  * 判成不更新）。正式构建不传这两个属性，用上面的基准值。
  *
  * 用 providers.gradleProperty 而不是 findProperty：后者会让配置缓存失效。
+ * 写成 Project 扩展是照着这个文件里已有的 `Project.exec` —— 那条路径已经证明能从
+ * 脚本里的普通函数调到（`getGitCommitCount` 就是这么用的）。
  */
-fun getVersionCode(): Int {
-    val override = providers.gradleProperty("dshVersionCode").orNull?.trim()?.toIntOrNull()
-    return override ?: BASE_VERSION_CODE
-}
+fun Project.dshVersionOverride(name: String): String? =
+    providers.gradleProperty(name).orNull?.trim()?.takeIf { it.isNotEmpty() }
+
+fun getVersionCode(): Int =
+    dshVersionOverride("dshVersionCode")?.toIntOrNull() ?: baseVersionCode()
 
 fun getbranch(): String {
     return exec("git rev-parse --abbrev-ref HEAD", "unknown")
 }
 
-fun getVersionName(): String {
-    val override = providers.gradleProperty("dshVersionName").orNull?.trim()
-    return override?.takeIf { it.isNotEmpty() } ?: BASE_VERSION_NAME
-}
+fun getVersionName(): String =
+    dshVersionOverride("dshVersionName") ?: baseVersionName()
 
 tasks.register("printVersion") {
     doLast {
