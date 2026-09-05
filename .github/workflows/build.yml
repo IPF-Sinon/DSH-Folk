@@ -54,7 +54,7 @@ jobs:
     if: needs.prepare.outputs.build_debug == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # versionCode/branchName 由 git 元数据推导，需要完整历史
           fetch-depth: 0
@@ -88,7 +88,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dsh-folk-debug-${{ github.sha }}
           path: |
@@ -102,7 +102,7 @@ jobs:
     if: needs.prepare.outputs.build_release == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -204,7 +204,7 @@ jobs:
         if: always()
         run: rm -f dsh-folk.jks keystore.properties
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dsh-folk-release-${{ github.sha }}
           path: |

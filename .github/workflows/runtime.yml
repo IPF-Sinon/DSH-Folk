@@ -54,9 +54,9 @@ jobs:
       matrix:
         arch: ${{ fromJSON(needs.plan.outputs.arches) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
 
@@ -80,7 +80,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dsh-runtime-rootfs-${{ matrix.arch }}
           path: |
