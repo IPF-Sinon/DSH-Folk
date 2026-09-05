@@ -53,6 +53,7 @@ import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.AdbBridge
 import me.bmax.apatch.dsh.ContainerRuntime
+import me.bmax.apatch.dsh.DshAutostart
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
@@ -352,6 +353,11 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
         allFilesGranted = PermissionUtils.hasAllFilesAccess(context)
         nativeBridgeEnabled = DshNativeBridge.enabled(context)
         nativeCaps = DshNativeBridge.enabledCaps(context)
+        // 无障碍开关同样只能在系统设置里改。少了这一行，用户点「打开无障碍设置」、开好、
+        // 返回，看到的还是「服务尚未启用」—— 他会以为没生效，再去开一遍。
+        a11yEnabled = DshAutostart.a11yEnabled(context)
+        // 运行时可能刚在首页装好，那句「还没装所以自启没东西可拉」得跟着消失
+        runtimeInstalled = DshEnv.isRuntimeInstalled(context)
         // 权限是提示词里的事实（没授权时对应能力会失败），跟着一起刷新
         DshHostPrompt.writeFacts(context.applicationContext)
         onPauseOrDispose { }

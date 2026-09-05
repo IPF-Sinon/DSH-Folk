@@ -190,7 +190,7 @@
     <string name="dsh_autostart_mode_receiver">Boot broadcast</string>
     <string name="dsh_autostart_mode_receiver_desc">The standard way: listen for the system boot broadcast. Needs nothing extra, but many Chinese ROMs drop it unless the app is on their autostart whitelist</string>
     <string name="dsh_autostart_mode_script">Boot script (needs root)</string>
-    <string name="dsh_autostart_mode_script_desc">Installs a script into the root manager's service.d. Bypasses the ROM whitelist entirely and is the most reliable path — root only</string>
+    <string name="dsh_autostart_mode_script_desc">Installs a script into the root manager\'s service.d. Bypasses the ROM whitelist entirely and is the most reliable path — root only</string>
     <string name="dsh_autostart_mode_a11y">Accessibility service</string>
     <string name="dsh_autostart_mode_a11y_desc">The system binds accessibility services after boot and re-binds them when killed. No root and no whitelist needed, but you must turn on a switch that looks alarming</string>
     <string name="dsh_autostart_container">Also start the container</string>

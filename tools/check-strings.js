@@ -7,7 +7,8 @@
 //
 //  1. 键集完全一致（少一条就是某个语言下的空文案）；
 //  2. 同一键的占位符集合一致（%1$s vs 缺失 → 运行时 IllegalFormatException）；
-//  3. 没有未转义的裸 & 或非法 %（aapt2 直接编译失败）；
+//  3. 没有未转义的裸 &、裸撇号、非法 % 或残缺的 \u（aapt2 直接编译失败，而它对撇号
+//     报的是 "Invalid unicode escape sequence" 并给出合并后文件的行号，极难定位）；
 //  4. 代码里引用的 R.string.dsh_* 都存在，且带参调用的键真的有占位符。
 const fs = require("fs");
 const path = require("path");
@@ -76,6 +77,27 @@ for (const [file, { map }] of [[EN, en], [ZH, zh]]) {
     if (stripped.includes("%")) {
       console.log(`✗ ${dir}/${k}: 非法的 %（要么写成合法占位符，要么转义为 %%）`);
       escBad++;
+    }
+    // 裸的半角撇号：aapt2 直接拒（报的是 "Invalid unicode escape sequence"，
+    // 一个与撇号毫无关系的错误信息，而且它给的行号是合并后 values.xml 的行号 ——
+    // 光看 CI 日志几乎定位不到是哪条串。整串被双引号包裹时才不需要转义。
+    const trimmed = v.trim();
+    const quoted = trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length > 1;
+    if (!quoted) {
+      for (const a of v.matchAll(/'/g)) {
+        if (a.index === 0 || v[a.index - 1] !== "\\") {
+          console.log(`✗ ${dir}/${k}: 未转义的撇号（写成 \\' 或给整串加双引号）`);
+          escBad++;
+          break;
+        }
+      }
+    }
+    // \u 后面必须紧跟 4 位十六进制，否则同样是 aapt2 编译失败
+    for (const u of v.matchAll(/\\u/g)) {
+      if (!/^[0-9a-fA-F]{4}/.test(v.slice(u.index + 2))) {
+        console.log(`✗ ${dir}/${k}: \\u 后面不是 4 位十六进制`);
+        escBad++;
+      }
     }
   }
 }
