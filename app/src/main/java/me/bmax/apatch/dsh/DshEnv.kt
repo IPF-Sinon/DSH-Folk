@@ -15,36 +15,34 @@ object DshEnv {
     fun rootfs(ctx: Context): File = File(ctx.filesDir, "rootfs")
 
     /**
-     * 容器内 dsh 的 $DSH_HOME 对应宿主路径。
+     * 容器内 dsh 的 $DSH_HOME 对应宿主路径（rootfs/root/.dsh）。
      *
-     * 独立在 rootfs 之外（filesDir/dsh-home），再通过 bind mount 挂进容器的
-     * /root/.dsh：更新/重装运行时只替换 rootfs，不会碰这里，会话/插件/配置得以保留。
+     * 数据必须留在 rootfs 内：proroot/proot 的 `--link2symlink` 只覆盖 rootfs 树，
+     * 不覆盖 bind 挂载路径。dsh 会话落盘靠 `link()` 硬链接原子提交，一旦 .dsh 被
+     * bind 到 rootfs 之外，raw `link()` 会直达内核并被 SELinux 拒掉（会话报错）。
+     * 所以这里保持原位，靠 [DshRuntime.extractRootfs] 里 rename 暂存/恢复来跨更新。
      */
-    fun dshHome(ctx: Context): File = File(ctx.filesDir, "dsh-home")
+    fun dshHome(ctx: Context): File = File(rootfs(ctx), "root/.dsh")
+
+    /** 运行时替换期间暂存 dsh 数据的目录（rootfs 之外；rename 原子搬移，零拷贝）。 */
+    fun dshPreserve(ctx: Context): File = File(ctx.filesDir, ".dsh-preserve")
 
     /**
-     * 一次性迁移：把旧版本落在 rootfs 里的 /root/.dsh 搬到独立数据目录。
+     * 把 1.8.3-beta.1 移出去的 dsh 数据搬回 rootfs。
      *
-     * 1.8.3 之前 dshHome 就在 rootfs/root/.dsh，更新运行时会把它整体删掉。搬出去之后
-     * 才能靠 bind mount 让数据活过 rootfs 替换。两者都在 filesDir 下、同一文件系统，
-     * rename 是原子的、O(1)，不受数据体积影响；失败才退到复制 + 删除。幂等：数据目录
-     * 已存在就不再动。
+     * 那次 bind-mount 方案把 /root/.dsh 挪到了 filesDir/dsh-home，但 proroot 的
+     * link2symlink 不覆盖 bind 挂载路径，会话写入的硬链接被 SELinux 拒了。这里把
+     * 数据 rename 回 rootfs/root/.dsh。幂等：rootfs 里已有数据就不动，绝不覆盖。
      */
-    fun migrateDshHome(ctx: Context) {
-        val data = dshHome(ctx)
-        if (data.isDirectory) return
-        val legacy = File(rootfs(ctx), "root/.dsh")
-        if (legacy.isDirectory) {
-            data.parentFile?.mkdirs()
-            if (!legacy.renameTo(data)) {
-                runCatching {
-                    legacy.copyRecursively(data, overwrite = false)
-                    legacy.deleteRecursively()
-                }
-            }
-        } else {
-            data.mkdirs()
-        }
+    fun migrateDshHomeBack(ctx: Context) {
+        val moved = File(ctx.filesDir, "dsh-home")
+        if (!moved.isDirectory) return
+        val home = dshHome(ctx)
+        // 目标已有数据就不搬（说明已回迁过，或这是新装 + 遗留的孤儿目录）
+        if (home.isDirectory && home.list()?.isNotEmpty() == true) return
+        home.parentFile?.mkdirs()
+        if (home.exists()) home.deleteRecursively()
+        moved.renameTo(home)
     }
 
     /** proot 的 l2s 中间文件目录（无硬链接时启用），固定在 rootfs 内避免随 tmp 被清。 */

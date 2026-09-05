@@ -540,10 +540,9 @@ object DshRuntime {
     fun init(context: Context) {
         if (!::appContext.isInitialized) {
             appContext = context.applicationContext
-            // 一次性把旧版本落在 rootfs 里的 /root/.dsh 搬到独立数据目录（见
-            // DshEnv.migrateDshHome）。必须在任何 dshHome 访问之前做，否则数据被
-            // 空目录顶掉。rename 是原子的，放这里不会卡启动。
-            DshEnv.migrateDshHome(appContext)
+            // 把 1.8.3-beta.1 移出去的 dsh 数据搬回 rootfs（见 DshEnv.migrateDshHomeBack）。
+            // 必须在任何 dshHome 访问之前做。rename 是原子的，放这里不会卡启动。
+            DshEnv.migrateDshHomeBack(appContext)
             // 进程重启后旧日志不该残留：清一次，让启动日志按「本次运行」呈现。
             // startServer() 里还会再清一次，这里主要覆盖「只开 App 不启动服务」的情况。
             clearLog()
@@ -1327,8 +1326,9 @@ object DshRuntime {
         scope.launch {
             bootMutex.withLock {
                 stopServer()
-                // 重装只换 rootfs（运行时层）；dsh 数据在独立 dsh-home 里不会丢。这里仍
-                // 重置预装记账：让内置插件再走一遍 install，确保它们还在（用户删掉的会补回）。
+                // 重装只换 rootfs（运行时层）；dsh 数据在 rootfs/root/.dsh 里，由
+                // extractRootfs 暂存/恢复不会丢。这里仍重置预装记账：让内置插件再走
+                // 一遍 install，确保它们还在（用户删掉的会补回）。
                 prefs().edit()
                     .remove(DshEnv.KEY_SEEDED_PLUGINS)
                     .remove(@Suppress("DEPRECATION") DshEnv.KEY_SEED_PLUGINS_DONE)
@@ -1545,9 +1545,30 @@ object DshRuntime {
     /** 解压 rootfs.tar.gz 到 filesDir/rootfs（整体替换）。 */
     private fun extractRootfs(tarball: File): Boolean = runCatching {
         val dest = DshEnv.rootfs(appContext)
+        // 数据目录 dshHome 就在 rootfs 里（rootfs/root/.dsh），整体删 rootfs 前先把它
+        // rename 到 rootfs 之外的暂存目录（同一 filesDir，原子零拷贝），解压完再 rename
+        // 回去顶掉新 rootfs 自带的空 /root/.dsh。这样会话/插件/配置能活过运行时更新。
+        val home = DshEnv.dshHome(appContext)
+        val preserve = DshEnv.dshPreserve(appContext)
+        if (home.isDirectory) {
+            preserve.parentFile?.mkdirs()
+            if (preserve.exists()) preserve.deleteRecursively()
+            if (!home.renameTo(preserve)) {
+                logWarn(R.string.dsh_log_extract_failed, "rename dsh-home 暂存失败，中止以避免丢数据")
+                return@runCatching false
+            }
+        }
         if (dest.exists()) dest.deleteRecursively()
         dest.mkdirs()
         TarGzipExtractor.extractRootfs(tarball, dest)
+        // 解压出的 rootfs 带一个空 /root/.dsh，删掉，用暂存的数据顶替。
+        if (preserve.isDirectory) {
+            if (home.exists()) home.deleteRecursively()
+            if (!preserve.renameTo(home)) {
+                logWarn(R.string.dsh_log_extract_failed, "rename dsh-home 恢复失败（数据仍在 ${preserve.name}，下次启动重试）")
+                return@runCatching false
+            }
+        }
         // 关键文件自检：解压不完整（断流 / 空间耗尽）时越早发现越好，
         // 否则要等到启动 dsh web 才报一句看不懂的错。
         // File.exists() 跟随符号链接，所以 python3 -> python3.12 这类条目也一并验证了。

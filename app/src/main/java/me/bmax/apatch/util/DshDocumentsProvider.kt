@@ -68,8 +68,8 @@ import java.io.FileNotFoundException
  * ## 排除项
  *
  * `cache/`、`code_cache/`、`no_backup/` 不列出：噪音大且随时被系统回收。
- * `rootfs/` 正常列出 —— 这是容器运行时；用户数据（sessions、profiles）在 `dsh-home/`，
- * 与 `rootfs/` 同级（1.8.3 起 dsh 数据目录独立于 rootfs，更新运行时不再被清掉）。
+ * `rootfs/` 正常列出 —— 这是容器运行时；用户数据（sessions、profiles）在
+ * `rootfs/root/.dsh/` 里，更新运行时由 extractRootfs 暂存/恢复，不会丢。
  *
  * ## documentId 不能是空串
  *
@@ -123,7 +123,7 @@ class DshDocumentsProvider : DocumentsProvider() {
         row.add(DocumentsContract.Root.COLUMN_TITLE, "DSH-Folk")
         row.add(
             DocumentsContract.Root.COLUMN_SUMMARY,
-            "dsh-home (sessions, profiles) — edit container files at your own risk",
+            "rootfs/root/.dsh (sessions, profiles) — edit container files at your own risk",
         )
         row.add(DocumentsContract.Root.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
         row.add(DocumentsContract.Root.COLUMN_AVAILABLE_BYTES, stats.availableBytes)

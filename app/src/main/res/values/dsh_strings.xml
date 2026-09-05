@@ -347,7 +347,7 @@
     <string name="dsh_runtime_update_available">Update available: %1$s</string>
     <string name="dsh_runtime_update_go">Update runtime</string>
     <string name="dsh_runtime_reinstall_confirm_title">Reinstall the runtime?</string>
-    <string name="dsh_runtime_reinstall_confirm_text">This downloads the runtime again (about 140 MB) and overwrites the container. Files under /root/.dsh — installed plugins, ADB keys and your DSH configuration — are inside that container and will be lost. The service stops first.</string>
+    <string name="dsh_runtime_reinstall_confirm_text">This downloads the runtime again (about 140 MB) and replaces the container. Your data — sessions, installed plugins, DSH configuration and ADB keys — is kept. The service stops first.</string>
     <string name="dsh_runtime_reinstall_go">Reinstall</string>
 
     <!-- 插件商店：全量目录 + 本地检索 -->

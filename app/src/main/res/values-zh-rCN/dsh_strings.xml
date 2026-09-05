@@ -329,7 +329,7 @@
     <string name="dsh_runtime_update_available">可更新到 %1$s</string>
     <string name="dsh_runtime_update_go">更新运行时</string>
     <string name="dsh_runtime_reinstall_confirm_title">重装运行时？</string>
-    <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并覆盖容器。/root/.dsh 下的东西 —— 已装的插件、ADB 密钥、你的 DSH 配置 —— 都在这个容器里，会一并丢失。开始前会先停止服务。</string>
+    <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并替换容器。你的数据 —— 会话记录、已装插件、DSH 配置、ADB 密钥 —— 会保留，不会丢失。开始前会先停止服务。</string>
     <string name="dsh_runtime_reinstall_go">重装</string>
 
     <!-- 插件商店：全量目录 + 本地检索 -->
