@@ -72,6 +72,9 @@ for (const [name, body] of [["dsh-native", script], ["dsh-fs", fsScript]]) {
 const EXPECT = [
   // 新增命令
   [["camera", "photo", "--facing", "front", "--max", "1280"], "POST", "/native/camera/photo", { facing: "front", max: "1280" }],
+  [["tts", "say", "读一句", "--lang", "zh-CN", "--rate", "1.2"], "POST", "/native/tts/speak", { text: "读一句", lang: "zh-CN", rate: "1.2" }],
+  [["tts", "file", "存成文件"], "POST", "/native/tts/file", { text: "存成文件" }],
+  [["tts", "voices"], "GET", "/native/tts/voices", {}],
   [["calendar", "list", "--days", "3"], "GET", "/native/calendar/list", { days: "3" }],
   [["calendar", "add", "站会", "--start", "1737000000000", "--minutes", "30"], "POST", "/native/calendar/create", { title: "站会", start: "1737000000000", minutes: "30" }],
   [["contacts", "list", "--q", "张"], "GET", "/native/contacts/list", { q: "张" }],

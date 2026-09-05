@@ -159,11 +159,11 @@ protectionLevel 是 `signature|appop`，应用申请不到）。没授予时上�
 顺带说明：`/storage/emulated/0` 本来就 bind mount 进了容器，普通 `read`/`write`/`glob` 常常够用，
 这个桥的价值是**窄而可审计**的那条路径，不是访问本身。
 
-`dsh-native` —— 借 App 之手调原生能力，共 18 项，**默认整体关闭**：要在 **设置 → 功能 → 原生能力**
+`dsh-native` —— 借 App 之手调原生能力，共 19 项，**默认整体关闭**：要在 **设置 → 功能 → 原生能力**
 里打开总开关，再逐项勾选。界面按「这项能力动的是什么」分四组，越往下越该慎重：
 
 ```
-与设备交互   notify / toast / vibrate / clipboard / intent（分享与打开链接）
+与设备交互   notify / toast / vibrate / clipboard / intent（分享与打开链接）/ tts（语音合成）
 读设备状态   device / network / phone / sensors
 个人数据     media / camera / mic / location / calendar / contacts
 更改系统状态 volume / settings / install
@@ -186,6 +186,9 @@ dsh-native sensors list | sensors read <id>
 dsh-native media list [--type image|video|audio] [--q 名字] [--limit N]
 dsh-native media get <id> [--type image|video|audio]
 dsh-native camera photo [--facing back|front] [--max N]
+dsh-native tts say <文本> [--lang zh-CN] [--rate 0.1..3] [--pitch 0.5..2]
+dsh-native tts file <文本> [--lang L]    # 合成成 wav 落在 /tmp
+dsh-native tts voices                    # 这台设备能读哪些语言
 dsh-native mic record [--ms N]
 dsh-native location [--maxAge ms] [--wait ms]
 dsh-native calendar list [--days N] | calendar add <标题> --start <epochMs> [--minutes N]
@@ -204,7 +207,14 @@ dsh-native caps                          # 查当前哪些能力开着、能不�
 它们 `requestPermissions()` 永远拿不到，只能跳系统页，所以那三行提示的措辞也不同：说的是
 「点这里打开系统页」而不是「点这里授权」。
 
-`media get` / `camera photo` / `mic record` **都不回二进制**：字节落进容器的 `/tmp/dsh-native/`，
+`tts` 是这批能力里唯一**刻意不要求前台**的一项。相机在后台只能拿到黑帧、剪贴板在后台恒返回 null，
+所以那些能力后台一律回 `409 not_foreground`；而朗读恰恰相反 —— 手机在口袋里、用户没看屏幕的时候，
+「让 agent 说一声」才有意义。它调的是系统自带的引擎（国行多是讯飞或小米的，海外是 Google 的），
+不打包任何合成模型；设备上没装引擎时 `caps` 会如实报 `available:false` + `no_tts_engine`。
+`tts voices` 存在的理由是**能不能读中文取决于设备**：海外精简 ROM 经常没有中文音库，agent 只能问，
+猜不出来。朗读是同步等到读完才返回的 —— 否则 agent 紧接着再调一次，两句话会互相打断。
+
+`media get` / `camera photo` / `mic record` / `tts file` **都不回二进制**：字节落进容器的 `/tmp/dsh-native/`，
 回一个容器内路径，agent 用普通文件工具读，只保留最新 32 个。容器 rootfs 是本应用私有目录，写它
 不需要任何存储权限，也少一次 base64 膨胀。
 

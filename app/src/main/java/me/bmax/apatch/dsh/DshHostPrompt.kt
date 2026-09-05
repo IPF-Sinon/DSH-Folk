@@ -69,7 +69,7 @@ object DshHostPrompt {
      * 读一遍 assets 再全量覆盖。版本号存在 prefs 里，与 rootfs 无关 —— 重装运行时后
      * 文件没了但版本号还在，所以 [ensureInstalled] 另外检查文件是否真的存在。
      */
-    private const val PLUGIN_REV = 3
+    private const val PLUGIN_REV = 4
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =

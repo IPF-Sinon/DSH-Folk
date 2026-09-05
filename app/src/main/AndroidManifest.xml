@@ -122,6 +122,17 @@
     <uses-feature android:name="android.hardware.sensor.heartrate" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
 
+    <!-- 包可见性（Android 11+）。
+         targetSdk 30 起应用默认看不到其它应用，而 TextToSpeech 内部要 bind 一个由**别的
+         应用**提供的引擎服务 —— 不声明这条查询，`TextToSpeech` 找不到任何引擎，
+         OnInitListener 直接回 ERROR，语音合成永远不可用。这不是权限问题，加了也不会多
+         获得任何能力：它只让我们能解析到 TTS 引擎这一类服务。 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".APApplication"
         android:allowBackup="true"

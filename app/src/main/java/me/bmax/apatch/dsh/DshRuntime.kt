@@ -337,6 +337,9 @@ object DshRuntime {
           '  media get <id> [--type image|video|audio]   # lands in /tmp; JSON carries path',
           '  mic record [--ms N]                         # 30000 max; lands in /tmp',
           '  camera photo [--facing back|front] [--max N]  # no preview; lands in /tmp',
+          '  tts say <text> [--lang zh-CN] [--rate 0.1..3] [--pitch 0.5..2]',
+          '  tts file <text> [--lang L] [--rate R] [--pitch P]   # wav lands in /tmp',
+          '  tts voices                                 # which languages this device can read',
           '  calendar list [--days N] [--limit N]',
           '  calendar add <title> --start <epochMs> [--minutes N] [--end <epochMs>]',
           '                [--location L] [--description D]',
@@ -413,6 +416,18 @@ object DshRuntime {
                 say(await req('POST', '/native/camera/photo' + q({
                   facing: opt.facing, max: opt.max
                 })));
+              } else { console.error(USAGE); process.exitCode = 1; }
+            } else if (cmd === 'tts') {
+              if (a[0] === 'say' && a[1]) {
+                say(await req('POST', '/native/tts/speak' + q({
+                  text: a[1], lang: opt.lang, rate: opt.rate, pitch: opt.pitch
+                })));
+              } else if (a[0] === 'file' && a[1]) {
+                say(await req('POST', '/native/tts/file' + q({
+                  text: a[1], lang: opt.lang, rate: opt.rate, pitch: opt.pitch
+                })));
+              } else if (a[0] === 'voices') {
+                say(await req('GET', '/native/tts/voices'));
               } else { console.error(USAGE); process.exitCode = 1; }
             } else if (cmd === 'calendar') {
               if (a[0] === 'list') {

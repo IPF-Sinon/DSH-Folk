@@ -92,6 +92,13 @@ object DshNativeBridge {
         MIC("mic"),
         /** 无预览拍照。 */
         CAMERA("camera"),
+        /**
+         * 语音合成：把文字交给系统 TTS 引擎读出来，或合成成文件。
+         *
+         * 不需要任何权限 —— 它调的是系统引擎，而放声音不是受管控的操作。也是少见的
+         * **不要求前台**的能力：手机在口袋里时让 agent 说一声，正是这项能力的用处。
+         */
+        TTS("tts"),
         /** 日历：读事件 + 新建事件。 */
         CALENDAR("calendar"),
         /** 通讯录：只读。 */
@@ -268,6 +275,10 @@ object DshNativeBridge {
             if (!PermissionUtils.hasCameraPermission(ctx)) false to "no_camera_permission"
             else if (!DshCamera.hasCamera(ctx)) false to "no_camera"
             else true to ""
+        // 设备上没装 TTS 引擎时这一项做不了任何事。海外精简 ROM 和一些定制系统真的
+        // 不带引擎，那时该让 agent 知道「去装一个」而不是反复撞 500。
+        Cap.TTS ->
+            if (DshTts.hasEngine(ctx)) true to "" else false to "no_tts_engine"
         // 读能力只要读权限：写日历缺权限时由 /native/calendar/create 自己回 403，
         // 不能因为不能写就把「看日程」也判成不可用
         Cap.CALENDAR ->
@@ -361,6 +372,9 @@ object DshNativeBridge {
             method == "GET" && path == "/native/media/read" -> mediaRead(ctx, params)
             method == "POST" && path == "/native/mic/record" -> micRecord(ctx, params)
             method == "POST" && path == "/native/camera/photo" -> DshCamera.photo(ctx, params)
+            method == "POST" && path == "/native/tts/speak" -> DshTts.speak(ctx, params)
+            method == "POST" && path == "/native/tts/file" -> DshTts.toFile(ctx, params)
+            method == "GET" && path == "/native/tts/voices" -> DshTts.voices(ctx)
             method == "GET" && path == "/native/calendar/list" ->
                 DshPersonalData.calendarList(ctx, params)
             method == "POST" && path == "/native/calendar/create" ->
@@ -432,6 +446,7 @@ object DshNativeBridge {
         "/native/media/list", "/native/media/read" -> Cap.MEDIA
         "/native/mic/record" -> Cap.MIC
         "/native/camera/photo" -> Cap.CAMERA
+        "/native/tts/speak", "/native/tts/file", "/native/tts/voices" -> Cap.TTS
         "/native/calendar/list", "/native/calendar/create" -> Cap.CALENDAR
         "/native/contacts/list" -> Cap.CONTACTS
         "/native/location" -> Cap.LOCATION

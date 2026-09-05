@@ -1326,6 +1326,7 @@ internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.MEDIA -> R.string.dsh_native_cap_media
     DshNativeBridge.Cap.MIC -> R.string.dsh_native_cap_mic
     DshNativeBridge.Cap.CAMERA -> R.string.dsh_native_cap_camera
+    DshNativeBridge.Cap.TTS -> R.string.dsh_native_cap_tts
     DshNativeBridge.Cap.CALENDAR -> R.string.dsh_native_cap_calendar
     DshNativeBridge.Cap.CONTACTS -> R.string.dsh_native_cap_contacts
     DshNativeBridge.Cap.LOCATION -> R.string.dsh_native_cap_location
@@ -1348,6 +1349,7 @@ internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.MEDIA -> R.string.dsh_native_cap_media_desc
     DshNativeBridge.Cap.MIC -> R.string.dsh_native_cap_mic_desc
     DshNativeBridge.Cap.CAMERA -> R.string.dsh_native_cap_camera_desc
+    DshNativeBridge.Cap.TTS -> R.string.dsh_native_cap_tts_desc
     DshNativeBridge.Cap.CALENDAR -> R.string.dsh_native_cap_calendar_desc
     DshNativeBridge.Cap.CONTACTS -> R.string.dsh_native_cap_contacts_desc
     DshNativeBridge.Cap.LOCATION -> R.string.dsh_native_cap_location_desc
@@ -1407,6 +1409,10 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
             DshNativeBridge.Cap.VIBRATE,
             DshNativeBridge.Cap.CLIPBOARD,
             DshNativeBridge.Cap.INTENT,
+            // TTS 放这一组：它做的是「对着这台设备发声」，和 toast / 振动同类 ——
+            // 即时表现、不读也不改任何持久状态。放在「个人内容」组会让人误以为它
+            // 要读什么东西。
+            DshNativeBridge.Cap.TTS,
         ),
     ),
 

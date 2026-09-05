@@ -62,6 +62,11 @@ const CAP_USAGE = {
   camera: [
     'dsh-native camera photo [--facing back|front] [--max N]  # no preview; copies a JPEG into /tmp',
   ],
+  tts: [
+    'dsh-native tts say <text> [--lang zh-CN] [--rate 0.1..3] [--pitch 0.5..2]  # read aloud, waits until done',
+    'dsh-native tts file <text> [--lang L]                  # synthesise a wav into /tmp, returns its path',
+    'dsh-native tts voices                                  # which languages/voices this device can actually read',
+  ],
   calendar: [
     'dsh-native calendar list [--days N] [--limit N]        # upcoming events, repeats expanded',
     'dsh-native calendar add <title> --start <epochMs> [--minutes N] [--location L]',
@@ -103,6 +108,11 @@ const CAP_CAVEAT = {
   notify:
     'A notification interrupts the user. Post one when the task is genuinely done or genuinely ' +
     'needs a human, never to report progress.',
+  vibrate:
+    'Tablets and emulators often have no vibrator at all, in which case this reports ' +
+    'available:false with reason no_vibrator — that is a property of the device, not a transient ' +
+    'error, so do not retry. Vibration is silent feedback: it only reaches the user if the phone is ' +
+    'on them.',
   clipboard:
     'Clipboard reads are subject to Android background limits: 409 not_foreground when the app is ' +
     'not in the foreground. That is a state, not an error — do not retry.',
@@ -122,6 +132,15 @@ const CAP_CAVEAT = {
     'Like mic, the camera needs the app in the foreground (a background app gets a black frame) and ' +
     'the photo lands in /tmp as a path, not as bytes. Taking a picture is physically intrusive — ' +
     'only when the user asked in this turn.',
+  tts:
+    'The one capability that works in the background — that is its purpose: when the phone is in a ' +
+    'pocket, saying something out loud is the only way to reach the user. It uses whatever engine the ' +
+    'device has, so whether it can read a given language is a property of the device, not of the text: ' +
+    'check tts voices before assuming Chinese or any non-English language will be spoken correctly, ' +
+    'because setting an unsupported language silently falls back to the default voice and produces ' +
+    'gibberish. say waits until the utterance finishes, so do not fire two in a row expecting both to ' +
+    'be heard. Speaking is audible to everyone nearby, so keep it short and do not read out private ' +
+    'content unless the user asked for exactly that.',
   calendar:
     'Times are epoch MILLISECONDS in the device timezone. calendar add creates a real event the ' +
     'user will see and get reminders for, so confirm the details before writing rather than ' +
@@ -295,7 +314,8 @@ function render(f) {
     lines.push(
       '`dsh-native` can borrow the host to post notifications, show a toast, vibrate, use the ' +
         'clipboard, open a share sheet or link, read device info and network state, read sensors, ' +
-        'read the media library, take a photo, record audio, read location, calendar and contacts, ' +
+        'read the media library, take a photo, record audio, speak text aloud, read location, ' +
+        'calendar and contacts, ' +
         'and change volume or system settings — but it is currently **off** (' +
         (bridgeOn ? 'the master switch is on, but no capability is ticked' : 'the master switch is off') +
         '), so every call returns 403.'

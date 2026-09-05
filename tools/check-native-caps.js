@@ -17,11 +17,13 @@ const BRIDGE = "app/src/main/java/me/bmax/apatch/dsh/DshNativeBridge.kt";
 const UI = "app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt";
 const MANIFEST = "app/src/main/AndroidManifest.xml";
 const STRINGS = "app/src/main/res/values/dsh_strings.xml";
+const PROMPT = "app/src/main/assets/dsh-folk-host.mjs";
 
 const bridge = fs.readFileSync(BRIDGE, "utf8");
 const ui = fs.readFileSync(UI, "utf8");
 const manifest = fs.readFileSync(MANIFEST, "utf8");
 const strings = fs.readFileSync(STRINGS, "utf8");
+const prompt = fs.readFileSync(PROMPT, "utf8");
 
 let fail = 0;
 function ok(cond, msg) {
@@ -38,6 +40,31 @@ function parseCaps() {
 }
 
 const caps = parseCaps();
+
+/**
+ * 需要权限（运行时的或特殊的）的能力名。
+ *
+ * 从 bridge 自己的两张表里推，不手写清单：手写的迟早跟代码脱节，而这个判据的用处
+ * 恰恰是「加了新能力却忘了告诉 agent 它会 403」。
+ */
+const permGated = (() => {
+  const rt = bridge.slice(bridge.indexOf("fun runtimePermissions(cap: Cap)"), bridge.indexOf("fun specialPermissionOf(cap: Cap)"));
+  const sp = bridge.slice(bridge.indexOf("fun specialPermissionOf(cap: Cap)"), bridge.indexOf("enum class Special("));
+  const names = new Set();
+  for (const b of [rt, sp]) {
+    for (const m of b.matchAll(/Cap\.([A-Z_]+)\s*->/g)) names.add(m[1]);
+  }
+  // 「设备上没这个硬件/引擎」和「缺权限」对 agent 是同一件事：调用会失败，而它需要
+  // 知道那不是暂时性错误、不该重试。所以 availability 里任何能返回 false 的能力也算。
+  const av = bridge.slice(bridge.indexOf("private fun availability(ctx: Context, cap: Cap)"), bridge.indexOf("private fun hasMicrophone"));
+  for (const seg of av.split(/\n {8}(?=Cap\.)/)) {
+    const m = seg.match(/^Cap\.([A-Z_,\s.]+?)\s*->/);
+    if (!m) continue;
+    if (!/false to "/.test(seg)) continue;
+    for (const one of m[1].split(",")) names.add(one.trim().replace("Cap.", ""));
+  }
+  return [...names];
+})();
 console.log(`── Cap 共 ${caps.length} 项：${caps.map((c) => c.id).join(", ")} ──\n`);
 ok(caps.length > 0, "解析到 Cap 列表");
 
@@ -209,6 +236,47 @@ ok(hardFeature.length === 0,
   `全部 ${[...manifest.matchAll(/<uses-feature[^>]*>/g)].length} 条 uses-feature 都不是必需` +
     (hardFeature.length ? " → " + hardFeature.length + " 条是必需" : ""));
 
+
+// ── 提示词插件 ──
+//
+// 每项能力都必须在注入 dsh 的提示词里有用法与注意事项。漏掉一项的后果很隐蔽：
+// 那项能力开着、端点也通，但 agent 压根不知道它存在 —— 与没做等价。
+console.log("\n── 提示词插件 ──");
+{
+  function block(name) {
+    const at = prompt.indexOf(`const ${name} = {`);
+    if (at < 0) return null;
+    // 到下一个顶层 `};` 为止
+    const end = prompt.indexOf("\n};", at);
+    return end < 0 ? null : prompt.slice(at, end);
+  }
+  const usage = block("CAP_USAGE");
+  const caveat = block("CAP_CAVEAT");
+  ok(usage !== null && caveat !== null, "能找到 CAP_USAGE 与 CAP_CAVEAT 两张表");
+  if (usage && caveat) {
+    // 只认顶层的 `  id:` 行（两空格缩进），否则 usage 字符串里的冒号也会被算进去
+    const keys = (b) => [...b.matchAll(/^ {2}([a-zA-Z]+):/gm)].map((m) => m[1]);
+    const uk = keys(usage);
+    const ck = keys(caveat);
+    const missU = caps.filter((c) => !uk.includes(c.id)).map((c) => c.id);
+    ok(missU.length === 0, `CAP_USAGE 覆盖每个 Cap（${caps.length} 项）` + (missU.length ? " → 缺 " + missU.join(",") : ""));
+    // 注意事项**不**要求每项都有：toast / device 就是「调了就成、没有陷阱」
+    // 的那种，硬凑一条注意事项只会稀释真正重要的几条。但**需要权限**的能力必须有 ——
+    // 「它可能失败，那时该怎么办」正是 agent 必须被告知的事 —— 缺权限与缺硬件同理。
+    const needsPerm = caps.filter((c) => permGated.includes(c.name)).map((c) => c.id);
+    const missC = needsPerm.filter((id) => !ck.includes(id));
+    ok(missC.length === 0,
+      `会失败的 ${needsPerm.length} 项能力都有注意事项（缺权限或缺硬件）` + (missC.length ? " → 缺 " + missC.join(",") : ""));
+    const strayU = uk.filter((k) => !caps.some((c) => c.id === k));
+    ok(strayU.length === 0, "CAP_USAGE 里没有已不存在的能力" + (strayU.length ? " → " + strayU.join(",") : ""));
+    const strayC = ck.filter((k) => !caps.some((c) => c.id === k));
+    ok(strayC.length === 0, "CAP_CAVEAT 里没有已不存在的能力" + (strayC.length ? " → " + strayC.join(",") : ""));
+  }
+  // 插件内容改了就必须 +1，否则装过的机器上不会被覆盖（落盘按版本号判断）
+  const kt = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshHostPrompt.kt", "utf8");
+  const rev = kt.match(/PLUGIN_REV = (\d+)/);
+  ok(rev !== null, "DshHostPrompt 里有 PLUGIN_REV" + (rev ? ` = ${rev[1]}` : ""));
+}
 
 console.log(fail === 0 ? "\n全部通过" : `\n${fail} 项失败`);
 process.exit(fail === 0 ? 0 : 1);

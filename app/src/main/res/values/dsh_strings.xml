@@ -607,6 +607,15 @@
     <!-- ── 新增能力的报错（会出现在 dsh-native 的输出里）── -->
     <string name="dsh_native_err_camera_background">Taking a photo needs the app in the foreground — Android hands background apps a black frame</string>
     <string name="dsh_native_err_camera_busy">Another capture is already in progress</string>
+    <string name="dsh_native_cap_tts">Text to speech</string>
+    <string name="dsh_native_cap_tts_desc">Read text aloud through the system speech engine, or synthesise it into a file in the container temp dir. Works in the background — that is the point.</string>
+    <string name="dsh_native_err_tts_busy">Already speaking; wait for it to finish</string>
+    <string name="dsh_native_err_tts_init">Could not start the speech engine</string>
+    <string name="dsh_native_err_tts_no_engine">No speech engine on this device — install one, then enable it under Settings › Accessibility › Text-to-speech</string>
+    <string name="dsh_native_err_tts_speak">The speech engine rejected the request</string>
+    <string name="dsh_native_err_tts_synth">Speech synthesis failed: %1$s</string>
+    <string name="dsh_native_err_tts_timeout">The speech engine did not answer in time</string>
+    <string name="dsh_native_err_tts_empty">The engine produced an empty file — its voice data is probably not installed</string>
     <string name="dsh_native_err_camera_none">This device has no usable camera</string>
     <string name="dsh_native_err_camera_open">Could not open camera %1$s</string>
     <string name="dsh_native_err_camera_no_size">The camera reported no usable JPEG size</string>

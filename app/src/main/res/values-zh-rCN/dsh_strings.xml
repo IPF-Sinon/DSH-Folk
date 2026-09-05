@@ -589,6 +589,15 @@
     <!-- ── 新增能力的报错（会出现在 dsh-native 的输出里）── -->
     <string name="dsh_native_err_camera_background">拍照需要应用处于前台 —— 后台时 Android 只会给一张黑图</string>
     <string name="dsh_native_err_camera_busy">已经有一次拍照在进行中</string>
+    <string name="dsh_native_cap_tts">语音合成</string>
+    <string name="dsh_native_cap_tts_desc">用系统语音引擎把文字读出来，或者合成成文件放进容器临时目录。可以在后台朗读 —— 这正是它的用处。</string>
+    <string name="dsh_native_err_tts_busy">正在朗读，等这一句读完再试</string>
+    <string name="dsh_native_err_tts_init">语音引擎启动失败</string>
+    <string name="dsh_native_err_tts_no_engine">这台设备上没有语音引擎 —— 先装一个，再到「设置 › 无障碍 › 文字转语音」里启用</string>
+    <string name="dsh_native_err_tts_speak">语音引擎拒绝了这次请求</string>
+    <string name="dsh_native_err_tts_synth">语音合成失败：%1$s</string>
+    <string name="dsh_native_err_tts_timeout">语音引擎没有在时限内响应</string>
+    <string name="dsh_native_err_tts_empty">引擎写出了一个空文件，多半是没装对应的语音数据</string>
     <string name="dsh_native_err_camera_none">这台设备没有可用的摄像头</string>
     <string name="dsh_native_err_camera_open">打不开摄像头 %1$s</string>
     <string name="dsh_native_err_camera_no_size">摄像头没有报告可用的 JPEG 尺寸</string>
