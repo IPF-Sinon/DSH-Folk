@@ -239,7 +239,8 @@
     <string name="dsh_source_speedtest">Run speed test</string>
     <string name="dsh_source_testing">Testing…</string>
     <string name="dsh_source_result">%1$s: %2$d ms · %3$s</string>
-    <string name="dsh_source_no_speed">unreachable</string>
+    <string name="dsh_source_result_unreachable">%1$s: unreachable</string>
+    <string name="dsh_source_no_speed">not measured</string>
     <string name="dsh_plugin_install">Install</string>
     <string name="dsh_plugin_installed">Installed</string>
     <string name="dsh_plugin_no_npm">Not on npm — tap to open the repository and follow its install steps</string>
@@ -725,6 +726,7 @@
     <string name="dsh_log_bridge_failed">Bridge failed to start: %1$s</string>
     <string name="dsh_log_speedtest_start">Measuring download sources…</string>
     <string name="dsh_log_speedtest_row">Measured %1$s: %2$dms latency · %3$s</string>
+    <string name="dsh_log_speedtest_unreachable">Measured %1$s: unreachable</string>
     <string name="dsh_log_speedtest_untested">not measured</string>
     <string name="dsh_log_source_chosen">Download source chosen: %1$s</string>
     <string name="dsh_log_fetching_meta">Fetching runtime information…</string>

@@ -1359,9 +1359,16 @@ object DshRuntime {
             logInfo(R.string.dsh_log_speedtest_start)
             val results = DshSource.speedTest()
             for (r in results.sortedBy { it.estimatedMs }) {
+                val latency = r.latencyMs
+                if (latency == null) {
+                    // 不可达就说不可达：老实现把哨兵值 Long.MAX_VALUE/4 当延迟打出来，
+                    // 用户看到的是「延迟 2305843009213693951ms」。
+                    logInfo(R.string.dsh_log_speedtest_unreachable, sourceName(r.source))
+                    continue
+                }
                 val speed = if (r.speedKBps > 0.0) String.format("%.1f MB/s", r.speedKBps / 1024.0)
                 else str(R.string.dsh_log_speedtest_untested)
-                logInfo(R.string.dsh_log_speedtest_row, sourceName(r.source), r.latencyMs, speed)
+                logInfo(R.string.dsh_log_speedtest_row, sourceName(r.source), latency, speed)
             }
             logInfo(R.string.dsh_log_source_chosen, sourceName(DshSource.pickBest(results, appContext)))
         }
@@ -1488,6 +1495,11 @@ object DshRuntime {
      *
      * metadata 的 mirrors 本身就是加了代理前缀的 URL，再给它们叠一次前缀只会产生
      * 重复项 —— 去重前实测 6 个候选里有 3 个是重的，等于同一个失败的 URL 连试两次。
+     *
+     * 顺序按 [DshSource.downloadRank]（= 刚才的测速结论）排，**不是** metadata 里
+     * mirrors 的书写顺序：实测过 AxisNow 在测速阶段就 SSL 握手失败，却因为在
+     * mirrors 里排第二而抢在 GitHub 直连前面被试一遍，白等一次超时。
+     * `sortedBy` 是稳定排序，所以同权重（含未参与测速的自定义源）保持原相对顺序。
      */
     private fun downloadWithFallback(meta: DshMeta, target: File): Boolean {
         val prefix = DshSource.proxyPrefix(DshSource.resolve(appContext))
@@ -1495,7 +1507,7 @@ object DshRuntime {
         val candidates = (
             if (prefix.isEmpty()) raw
             else raw.map { if (it.startsWith("https://github.com/")) prefix + it else it } + raw
-            ).distinct()
+            ).distinct().sortedBy { DshSource.downloadRank(it) }
         for ((i, url) in candidates.withIndex()) {
             logInfo(R.string.dsh_log_source_try, i + 1, candidates.size, url)
             _state.update {
