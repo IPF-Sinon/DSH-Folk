@@ -113,7 +113,6 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var scriptOutdated by remember { mutableStateOf(false) }
     var scriptBusy by remember { mutableStateOf(false) }
     var a11yEnabled by remember { mutableStateOf(DshAutostart.a11yEnabled(context)) }
-    var runtimeInstalled by remember { mutableStateOf(DshEnv.isRuntimeInstalled(context)) }
     var port by rememberSaveable { mutableStateOf(DshRuntime.port()) }
     var lanEnabled by rememberSaveable { mutableStateOf(DshRuntime.lanEnabled()) }
     var verifyAfterInstall by rememberSaveable {
@@ -296,7 +295,9 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
         }
     }
 
-    val runtimeInstalled = DshEnv.isRuntimeInstalled(context)
+    // 安装状态得是个 state 而不是每次重组现算：重组不一定发生，而它会在别处变化 ——
+    // 用户可能刚从首页装完运行时回来（见下面的 LifecycleResumeEffect）。
+    var runtimeInstalled by remember { mutableStateOf(DshEnv.isRuntimeInstalled(context)) }
     // 已装版本从运行时状态读（同一份 prefs，下载成功时写入）
     val runtimeState by DshRuntime.state.collectAsStateWithLifecycle()
 
@@ -500,7 +501,6 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                             )
                         }
                     },
-                    runtimeInstalled = runtimeInstalled,
                     port = port,
                     onPortChange = { p ->
                         port = p

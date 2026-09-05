@@ -99,8 +99,6 @@ fun FunctionSettingsContent(
     /** 无障碍服务当前是否被用户启用了。 */
     autostartA11yEnabled: Boolean,
     onOpenA11ySettings: () -> Unit,
-    /** 运行时是否已安装：没装的话自启没有意义，要说出来。 */
-    runtimeInstalled: Boolean,
     /** Web 服务监听端口。 */
     port: Int,
     onPortChange: (Int) -> Unit,
@@ -156,7 +154,12 @@ fun FunctionSettingsContent(
     /** 是否把宿主能力说明注入 dsh 的系统提示词。 */
     hostPromptEnabled: Boolean,
     onHostPromptEnabledChange: (Boolean) -> Unit,
-    /** 运行时是否已安装（无线 ADB 需要容器内的 python）。 */
+    /**
+     * 运行时是否已安装。
+     *
+     * 两处用到：无线 ADB 需要容器内的 python；开机自启在运行时没装时不会启动任何东西，
+     * 那句提示也得跟着出现。
+     */
     runtimeInstalled: Boolean,
     /** 已安装的运行时版本；未安装时为空。 */
     runtimeVersion: String,
