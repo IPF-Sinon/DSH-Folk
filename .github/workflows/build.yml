@@ -15,6 +15,12 @@ on:
         default: 'debug'
         type: choice
         options: [ debug, release, both ]
+      abi:
+        description: 'ABI filter (release only; debug always builds both)'
+        required: false
+        default: 'both'
+        type: choice
+        options: [ both, arm64-v8a, x86_64 ]
 
 # 同一分支的新推送取消上一次仍在跑的构建（Gradle 构建很吃 runner 时间）
 concurrency:
@@ -137,8 +143,14 @@ jobs:
       - name: Collect APKs
         run: |
           SHORT="${GITHUB_SHA::7}"
+          case "${{ inputs.abi }}" in
+            arm64-v8a) ABIS="arm64-v8a" ;;
+            x86_64)    ABIS="x86_64" ;;
+            *)         ABIS="arm64-v8a x86_64" ;;
+          esac
+          EXPECTED=$(echo "$ABIS" | wc -w)
           found=0
-          for abi in arm64-v8a x86_64; do
+          for abi in $ABIS; do
             APK=$(find app/build/outputs/apk/release -name "*${abi}*.apk" -type f | head -1)
             if [ -z "$APK" ]; then
               echo "::error::release APK for ${abi} not produced"
@@ -150,8 +162,8 @@ jobs:
             echo "  $OUT  $(stat -c %s "$OUT") bytes"
             found=$((found + 1))
           done
-          if [ "$found" -ne 2 ]; then
-            echo "::error::expected 2 release APKs (one per ABI), got $found"
+          if [ "$found" -ne "$EXPECTED" ]; then
+            echo "::error::expected $EXPECTED release APK(s), got $found"
             find app/build/outputs -type f -name "*.apk" || true
             exit 1
           fi
@@ -164,6 +176,11 @@ jobs:
       # 拆包后**每个** APK 都要验：只验一个等于给另一个架构留了后门。
       - name: Verify signer
         run: |
+          case "${{ inputs.abi }}" in
+            arm64-v8a) EXPECTED=1 ;;
+            x86_64)    EXPECTED=1 ;;
+            *)         EXPECTED=2 ;;
+          esac
           checked=0
           for apk in DSH-Folk-Release-*.apk; do
             [ -f "$apk" ] || continue
@@ -178,8 +195,8 @@ jobs:
             rm -f signer.txt
             checked=$((checked + 1))
           done
-          if [ "$checked" -ne 2 ]; then
-            echo "::error::expected to verify 2 release APKs, verified $checked"
+          if [ "$checked" -ne "$EXPECTED" ]; then
+            echo "::error::expected to verify $EXPECTED release APK(s), verified $checked"
             exit 1
           fi
 

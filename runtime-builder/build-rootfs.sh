@@ -23,10 +23,12 @@ TARGET_ARCH="${TARGET_ARCH:-arm64}"                # arm64 | amd64
 # 判据就永远判不出来，存量用户收不到修复。
 #   r1 = 初版（含 python3 + git，但 git 的 libcurl 依赖不全）
 #   r2 = 补齐 git-remote-https 的传递依赖（libnghttp2 / libssh / krb5 / ldap …）
+#   r3 = 内容与 r2 相同，仅 bump 版本号：App 侧把 $DSH_HOME 移出了 rootfs
+#        （见 DshEnv.dshHome），需要一次「有新运行时」来触发更新流程实测数据保留。
 #
 # 加 amd64 支持时**不递增**：arm64 的 rootfs 内容一个字节都没变，递增只会让所有
 # 存量用户收到一次「有新运行时」的无意义提示。amd64 是全新资产，自带独立 metadata。
-ROOTFS_REV="${ROOTFS_REV:-2}"
+ROOTFS_REV="${ROOTFS_REV:-3}"
 WORK="${WORK:-/tmp/dsh-runtime}"
 OUT="${OUT:-$PWD/out}"
 
