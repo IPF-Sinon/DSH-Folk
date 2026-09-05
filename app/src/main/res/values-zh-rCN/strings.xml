@@ -309,6 +309,17 @@
     <string name="welcome_skip">跳过</string>
     <string name="welcome_got_it">开始使用</string>
 
+    <!-- 本次更新（每次升级后弹一次，见 util/Changelog.kt） -->
+    <string name="changelog_title">%1$s 更新了什么</string>
+    <string name="changelog_got_it">知道了</string>
+    <string-array name="changelog_items">
+        <item>语音合成：agent 可以用系统语音引擎把文字读出来，或者合成成文件。在「设置 › 功能 › 原生能力」里开启。</item>
+        <item>自启动分成三种方式 —— 开机广播、无障碍服务、以及给 root 用户的开机脚本，并单独给了「是否同时拉起容器」的开关。</item>
+        <item>新增十项原生能力，共 19 项：相机、日历、联系人、定位、通话状态、传感器、网络状态、音量、系统设置与安装权限。</item>
+        <item>这个对话框本身也是新的：每次更新后它会离线列出改动。</item>
+        <item>设置里可以接受 GitHub Actions 构建的测试版。默认关闭；打开后测试版会像普通更新一样提示，并且可以直接覆盖安装。</item>
+    </string-array>
+
     
 
     <!-- Module Backup/Restore Strings -->
@@ -430,6 +441,10 @@
     <!-- Update Check Strings -->
     <string name="settings_auto_update_check">自动检查更新</string>
     <string name="settings_auto_update_check_summary">应用启动时自动检查更新</string>
+    <string name="settings_beta_update">接受测试版更新</string>
+    <string name="settings_beta_update_summary">连 GitHub Actions 构建的预发布版一起提示。它用正式版的签名，可以直接覆盖安装，之后的正式版也能装回来 —— 代价只是它「新」得多于「稳」。</string>
+    <string name="update_beta_badge">测试版</string>
+    <string name="update_beta_warning">这是一个预发布版本：比上一个正式版新，也比它测试得少。它可以直接覆盖当前版本，之后的正式版也能装回来。</string>
     <string name="settings_check_update">检查更新</string>
     <string name="update_available_title">有可用更新</string>
     <string name="update_available_message">检测到您的版本过低，是否要下载新版本？</string>

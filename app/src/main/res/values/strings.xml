@@ -337,6 +337,17 @@
     <string name="welcome_skip">Skip</string>
     <string name="welcome_got_it">Get Started</string>
 
+    <!-- What's new (shown once after each update; see util/Changelog.kt) -->
+    <string name="changelog_title">What\u2019s new in %1$s</string>
+    <string name="changelog_got_it">Got it</string>
+    <string-array name="changelog_items">
+        <item>Text to speech: the agent can read text aloud through the system speech engine, or synthesise it into a file. Turn it on under Settings › Features › Native capabilities.</item>
+        <item>Autostart now has three mechanisms — boot receiver, an accessibility service, and a boot script for rooted devices — with a separate switch for starting the container along with the app.</item>
+        <item>Ten more native capabilities, 19 in total: camera, calendar, contacts, location, phone status, sensors, network state, volume, system settings and install permission.</item>
+        <item>This dialog is new too: after every update it lists what changed, offline.</item>
+        <item>Settings can now accept beta builds from GitHub Actions. Off by default; when on, betas are offered like any update and install in place.</item>
+    </string-array>
+
     
 
 
@@ -464,6 +475,10 @@
     <!-- Update Check Strings -->
     <string name="settings_auto_update_check">Automatic Update Check</string>
     <string name="settings_auto_update_check_summary">Automatically check for updates on app startup</string>
+    <string name="settings_beta_update">Accept beta updates</string>
+    <string name="settings_beta_update_summary">Also offer pre-release builds from GitHub Actions. They are signed with the release key, so they upgrade in place and a later release installs back over them — but they are newer than they are tested.</string>
+    <string name="update_beta_badge">BETA</string>
+    <string name="update_beta_warning">This is a pre-release build: newer than the last release, and less tested. It installs over your current build, and a later release will install back over it.</string>
     <string name="settings_check_update">Check for Updates</string>
     <string name="update_available_title">Update Available</string>
     <string name="update_available_message">Detected that your version is too low, do you want to download the new version?</string>

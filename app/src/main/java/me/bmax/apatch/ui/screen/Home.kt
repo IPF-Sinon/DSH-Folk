@@ -69,16 +69,19 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.AboutScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
+import androidx.compose.ui.platform.LocalContext
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.component.WallpaperAwareDropdownMenu
 import me.bmax.apatch.ui.component.WallpaperAwareDropdownMenuItem
+import me.bmax.apatch.ui.component.ChangelogDialog
 import me.bmax.apatch.ui.component.WelcomeGuideDialog
 import me.bmax.apatch.ui.component.rememberConfirmDialog
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.ui.theme.MusicConfig
 import me.bmax.apatch.ui.theme.refreshTheme
+import me.bmax.apatch.util.Changelog
 import me.bmax.apatch.util.MusicManager
 import me.bmax.apatch.util.reboot
 import me.bmax.apatch.util.ui.HomeBottomSpacer
@@ -112,13 +115,43 @@ fun HomeScreen(navigator: DestinationsNavigator) {
     var showWelcomeGuide by remember {
         mutableStateOf(!APApplication.sharedPreferences.getBoolean("welcome_guide_shown", false))
     }
+
+    // 升级之后第一次打开：说清这一版改了什么。
+    //
+    // 与首启引导**互斥**：全新安装的人先看「这是什么应用」，那时弹「本次更新」既没有
+    // 参照也会和引导叠在一起。所以 shouldShow 要求 welcome 已经看过，而下面这个分支
+    // 也只在引导不显示时才走。
+    val homeContext = LocalContext.current
+    var showChangelog by remember {
+        mutableStateOf(
+            Changelog.shouldShow(
+                context = homeContext,
+                welcomeShown = APApplication.sharedPreferences.getBoolean("welcome_guide_shown", false),
+                shownFor = APApplication.sharedPreferences.getString(Changelog.KEY_SHOWN_FOR, null),
+            )
+        )
+    }
+
     if (showWelcomeGuide) {
         WelcomeGuideDialog(
             onDismiss = {
                 APApplication.sharedPreferences.edit()
                     .putBoolean("welcome_guide_shown", true)
+                    // 引导看完就把当前版本的更新说明记成「已弹过」：刚装上的人不需要
+                    // 在关掉引导的下一秒又看到「本次更新」。
+                    .putString(Changelog.KEY_SHOWN_FOR, Changelog.VERSION)
                     .apply()
                 showWelcomeGuide = false
+                showChangelog = false
+            }
+        )
+    } else if (showChangelog) {
+        ChangelogDialog(
+            onDismiss = {
+                APApplication.sharedPreferences.edit()
+                    .putString(Changelog.KEY_SHOWN_FOR, Changelog.VERSION)
+                    .apply()
+                showChangelog = false
             }
         )
     }
@@ -294,7 +327,7 @@ private fun TopBar(
     navigator: DestinationsNavigator
 ) {
     val uriHandler = LocalUriHandler.current
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     var showDropdownMoreOptions by remember { mutableStateOf(false) }
     var showDropdownReboot by remember { mutableStateOf(false) }
     val prefs = APApplication.sharedPreferences

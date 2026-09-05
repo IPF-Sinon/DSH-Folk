@@ -89,6 +89,30 @@ bugreport 里的 dmesg/tombstones 段、以及首页的重启菜单需要它。�
 也可以到 [Actions](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml) 取开发构建：
 选一次成功的运行，下载 `dsh-folk-debug-*` 或 `dsh-folk-release-*` 工件。
 
+### 测试版通道
+
+**设置 → 通用 → 接受测试版更新** 打开之后，检查更新会连预发布版一起看，界面上会给它打一个
+「测试版」标记。默认关闭。
+
+测试版由 **Build DSH-Folk beta** 工作流发布（`workflow_dispatch`，填一个目标版本号如 `1.8.1`），
+tag 形如 `v1.8.1-beta.7`，标了 GitHub 的 prerelease。几个刻意的选择：
+
+- **测试版用 release 变体 + 正式版的签名**，不是 debug 包。debug 变体的包名是
+  `top.funcun.folkpatch.debug`（一个能与正式版共存的独立应用），装上它不是「升级」而是多一个
+  图标；debug 签名也压根覆盖不了正式版。测试版必须能原地替换正式版，否则这条通道毫无意义。
+- **versionCode 用目标正式版的号**（`1.8.1` → `10801`），不加 beta 偏移。它必须大于当前正式版
+  （否则 `compareVersions` 判成不更新，用户永远收不到提示），又不能大于将来那个正式版（否则正式版
+  发出来时装不回去）。AOSP 的 `PackageManagerServiceUtils.checkDowngrade` 只在 `after < before`
+  时拒绝安装，相等是允许的 —— 「与目标正式版同号」正好落在两个约束的交集里。区分先后靠版本**名**
+  里的 `-beta.N`，`compareVersions` 认它，且正式版 > 预发布版。
+- **不用 Actions 的 artifact**。artifact 的下载地址需要认证（匿名 `GET .../artifacts/<id>/zip`
+  返回 401，而列表接口 200），产物还是 zip 包、30 天后过期。要让应用能匿名下载、断点续传、按
+  sha256 校验，只有 release 资产这一条路。
+- 关掉开关时按**两道**判断排除测试版：`prerelease` 标记，以及 tag 里的预发布后缀。漏一道的代价是
+  所有人都被推上测试通道，而那正是这个开关要防的事。
+- 开着开关时**先查列表再查 `releases/latest`**。后者定义上跳过 prerelease，先问它会拿到正式版、
+  判定「已是最新」直接返回，列表根本没机会被看一眼 —— 开关看起来毫无作用。
+
 APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出包：在 Actions 里手动触发 **Build DSH-Folk**
 （`workflow_dispatch`，可选 debug / release / both）。release 需要在仓库 secrets 里配置
 `KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PRIVATE_PASSWORD`；
@@ -99,6 +123,23 @@ APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出
 产物发布到滚动 tag `runtime-latest`：arm64 是 `rootfs.tar.gz` + `metadata.json`，
 x86_64 是 `rootfs-x86_64.tar.gz` + `metadata-x86_64.json`（arm64 沿用无后缀的旧名以兼容存量版本）。
 应用按本机架构读取对应的 `metadata*.json` 决定下载什么。
+
+## 更新说明
+
+升级之后第一次打开会弹一次「本次更新」，列出这一版改了什么。它和首启引导**共用同一个对话框壳**
+（`PagedInfoDialog`）：两者要的东西完全一样，两套壳会立刻开始各自漂移。
+
+内容是**本地资源**（`R.array.changelog_items`）而不是 GitHub release 正文：release 正文说的是
+「有一个新版本，它讲了这些」，而这里要说的是「你现在跑的这一版改了什么」—— 用户此刻可能在飞机上，
+所以必须离线可用。
+
+两个对话框互斥，且首启引导会顺手把当前版本记成「更新说明已弹过」：刚装上的人要的是「这是什么应用」，
+不是「本次更新」，而两个对话框叠在一起会互相盖住按钮。
+
+版本号写在三处（`build.gradle.kts` 的基准、`util/Changelog.kt` 的 `VERSION`、那份条目文案），
+`tools/check-changelog.js` 把它们钉在一起。运行时另有兜底：版本不符就不弹 —— 拿上一版的内容配上
+新版本号是一句自信的假话，比什么都不显示糟得多。但那个兜底意味着**新版本的用户什么都看不到**，
+而没人会发现，所以真正的防线是那个检查器。
 
 ## 开机自启
 

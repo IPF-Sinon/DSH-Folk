@@ -73,6 +73,9 @@ fun GeneralSettingsContent(
     val autoUpdateTitle = stringResource(id = R.string.settings_auto_update_check)
     val autoUpdateSummary = stringResource(id = R.string.settings_auto_update_check_summary)
 
+    val betaUpdateTitle = stringResource(id = R.string.settings_beta_update)
+    val betaUpdateSummary = stringResource(id = R.string.settings_beta_update_summary)
+
     val launcherIconTitle = stringResource(id = R.string.settings_alt_icon)
     val launcherIconSummary = stringResource(id = R.string.alt_icon_summary)
 
@@ -136,6 +139,7 @@ fun GeneralSettingsContent(
 
     val useAltIcon = remember { mutableStateOf(prefs.getBoolean("use_alt_icon", false)) }
     var autoUpdateCheck by remember { mutableStateOf(prefs.getBoolean("auto_update_check", true)) }
+    var betaUpdate by remember { mutableStateOf(prefs.getBoolean(UpdateChecker.KEY_ACCEPT_BETA, false)) }
     var folkXEngineEnabled by remember { mutableStateOf(prefs.getBoolean("folkx_engine_enabled", true)) }
     var currentType by remember { mutableStateOf(prefs.getString("folkx_animation_type", "linear") ?: "linear") }
     var currentSpeed by remember { mutableStateOf(prefs.getFloat("folkx_animation_speed", 1.0f)) }
@@ -200,7 +204,7 @@ fun GeneralSettingsContent(
             ExpressiveCard(flat = flat, onClick = {
                 scope.launch {
                     loadingDialog.show()
-                    val status = UpdateChecker.check()
+                    val status = UpdateChecker.check(acceptBeta = betaUpdate)
                     loadingDialog.hide()
                     when {
                         status.hasUpdate -> {
@@ -242,6 +246,20 @@ fun GeneralSettingsContent(
                 prefs.edit { putBoolean("auto_update_check", it) }
             }
         )
+        }
+
+        item(key = "general_beta_update") {
+            ToggleSettingCard(
+                flat = flat,
+                icon = Icons.Filled.Science,
+                title = betaUpdateTitle,
+                description = betaUpdateSummary,
+                checked = betaUpdate,
+                onCheckedChange = {
+                    betaUpdate = it
+                    prefs.edit { putBoolean(UpdateChecker.KEY_ACCEPT_BETA, it) }
+                },
+            )
         }
 
         item(key = "general_folkx_engine") {

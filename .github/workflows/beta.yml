@@ -1,0 +1,188 @@
+name: Build DSH-Folk beta
+
+# 测试版通道。
+#
+# 为什么不直接让 App 去下 Actions 的 artifact：**artifact 的下载地址需要认证**
+# （实测匿名 GET .../actions/artifacts/<id>/zip 返回 401，而列表接口 200），
+# artifact 还是 zip 包、30 天后过期。要让 App 能匿名下载、能续传、能按 sha256 校验，
+# 只有 release 资产这一条路。所以这个工作流把构建产物发成一个 **prerelease**，
+# App 端的「接受测试版更新」开关就是在读它。
+#
+# 为什么用 release 变体而不是 debug：
+#  - debug 变体的包名是 top.funcun.folkpatch.debug（与正式版共存的独立应用），
+#    装上它根本不是「升级」，而是多一个图标；
+#  - debug 签名与正式版不同，即使包名一样也无法覆盖安装。
+# 测试版必须能原地替换正式版，所以它走 release 变体 + 同一个 keystore，
+# 只有版本名带 -beta.N 和 prerelease 标记与正式版不同。
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: 'Version this beta leads to (e.g. 1.8.1)'
+        required: true
+        type: string
+      notes:
+        description: 'Extra release notes (optional)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beta-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  beta:
+    name: Build and publish beta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # 版本号规则必须与 build.gradle.kts 的基准一致：1.8.0 → 10800。
+      #
+      # versionCode 用**目标版本**的号（1.8.1 → 10801），而不是再加一个 beta 偏移：
+      #  - 它必须大于当前正式版，否则装了正式版的人收不到测试版（compareVersions 判不更新）；
+      #  - 它又不能大于将来那个正式版，否则正式版发出来时装不回去（系统拒绝降级）。
+      # 相同 versionCode 的覆盖安装是允许的（AOSP PackageManagerServiceUtils.checkDowngrade
+      # 只在 after < before 时抛 INSTALL_FAILED_VERSION_DOWNGRADE，相等时只比 revisionCode，
+      # 而我们不设它），所以「beta 与目标正式版同号」正好落在两个约束的交集里。版本**名**
+      # 里的 -beta.N 才是区分先后的那一位，App 侧的 compareVersions 认它（正式版 > 预发布版）。
+      - name: Derive version
+        id: v
+        run: |
+          TARGET="${{ inputs.target_version }}"
+          if ! printf '%s' "$TARGET" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::target_version must look like 1.8.1, got '$TARGET'"
+            exit 1
+          fi
+          MAJOR=${TARGET%%.*}
+          REST=${TARGET#*.}
+          MINOR=${REST%%.*}
+          PATCH=${REST#*.}
+          CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          NAME="${TARGET}-beta.${GITHUB_RUN_NUMBER}"
+          echo "name=$NAME"   >> "$GITHUB_OUTPUT"
+          echo "code=$CODE"   >> "$GITHUB_OUTPUT"
+          echo "tag=v$NAME"   >> "$GITHUB_OUTPUT"
+          echo "beta $NAME (versionCode $CODE)"
+
+      - uses: ./.github/actions/setup-build-env
+
+      # 与 build.yml 的 release job 同一套校验：缺任何一项就硬失败。
+      # 用 debug key 悄悄签出一个「测试版」的后果更隐蔽 —— 用户装不上，
+      # 而错误信息只会说「应用未安装」。
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PRIVATE_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$KEYSTORE_BASE64" ]   || missing="$missing KEYSTORE_BASE64"
+          [ -n "$KEYSTORE_PASSWORD" ] || missing="$missing KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ]         || missing="$missing KEY_ALIAS"
+          [ -n "$KEY_PASSWORD" ]      || missing="$missing KEY_PRIVATE_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::missing release signing secrets:$missing"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > dsh-folk.jks
+          {
+            printf 'KEYSTORE_FILE=../dsh-folk.jks\n'
+            printf 'KEYSTORE_PASSWORD=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'KEY_ALIAS=%s\n' "$KEY_ALIAS"
+            printf 'KEY_PASSWORD=%s\n' "$KEY_PASSWORD"
+          } > keystore.properties
+
+      - name: Build
+        run: |
+          ./gradlew assembleRelease --no-daemon --stacktrace \
+            -PdshVersionName='${{ steps.v.outputs.name }}' \
+            -PdshVersionCode='${{ steps.v.outputs.code }}'
+
+      # 命名必须带 ABI：App 端 pickApkAsset 按文件名里的 arm64-v8a / x86_64
+      # 挑本机架构的包，名字里没有 ABI 会被当成旧的单包 release 而发错架构。
+      - name: Collect APKs
+        run: |
+          NAME="${{ steps.v.outputs.name }}"
+          found=0
+          for abi in arm64-v8a x86_64; do
+            APK=$(find app/build/outputs/apk/release -name "*${abi}*.apk" -type f | head -1)
+            if [ -z "$APK" ]; then
+              echo "::error::beta APK for ${abi} not produced"
+              continue
+            fi
+            OUT="DSH-Folk-${NAME}-${abi}.apk"
+            mv "$APK" "$OUT"
+            sha256sum "$OUT" > "$OUT.sha256"
+            echo "  $OUT  $(stat -c %s "$OUT") bytes"
+            found=$((found + 1))
+          done
+          if [ "$found" -ne 2 ]; then
+            echo "::error::expected 2 beta APKs (one per ABI), got $found"
+            exit 1
+          fi
+
+      - name: Verify signer
+        run: |
+          checked=0
+          for apk in DSH-Folk-*.apk; do
+            [ -f "$apk" ] || continue
+            keytool -printcert -jarfile "$apk" > signer.txt
+            grep -E "Owner" signer.txt || true
+            if grep -q "CN=Android Debug" signer.txt; then
+              echo "::error::$apk is signed with the Android debug key"
+              rm -f signer.txt
+              exit 1
+            fi
+            rm -f signer.txt
+            checked=$((checked + 1))
+          done
+          if [ "$checked" -ne 2 ]; then
+            echo "::error::expected to verify 2 beta APKs, verified $checked"
+            exit 1
+          fi
+
+      - name: Remove signing material
+        if: always()
+        run: rm -f dsh-folk.jks keystore.properties
+
+      # tag 必须是**版本形**的（v1.8.1-beta.7）：App 的 UpdateChecker 用
+      # ^[vV]?\d+(\.\d+)+([-+].*)?$ 过滤 tag，一个滚动的 `beta-latest` 会被直接忽略，
+      # 开关就成了摆设。每个 beta 一个 tag，所以列表接口取 30 条而不是 10 条。
+      #
+      # --prerelease 是这条通道的开关本体：App 侧「不接受测试版」时按 prerelease
+      # 标记与 tag 后缀两道判断把它排除掉。漏了这个标记，所有人都会被推上测试版。
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.v.outputs.tag }}"
+          {
+            printf 'Beta build from `%s` (run #%s).\n\n' "${GITHUB_SHA:0:7}" "$GITHUB_RUN_NUMBER"
+            printf 'Signed with the release key, so it upgrades a release install in place.\n'
+            printf 'Less tested than a release — report anything odd.\n'
+            if [ -n "${{ inputs.notes }}" ]; then
+              printf '\n%s\n' "${{ inputs.notes }}"
+            fi
+          } > notes.md
+          gh release create "$TAG" \
+            --title "DSH-Folk ${{ steps.v.outputs.name }}" \
+            --notes-file notes.md \
+            --prerelease \
+            --latest=false \
+            DSH-Folk-*.apk DSH-Folk-*.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-folk-beta-${{ github.sha }}
+          path: |
+            DSH-Folk-*.apk
+            DSH-Folk-*.apk.sha256
+          retention-days: 30

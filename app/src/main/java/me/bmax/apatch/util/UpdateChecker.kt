@@ -33,7 +33,15 @@ import org.json.JSONObject
 object UpdateChecker {
     private const val TAG = "UpdateChecker"
     private const val LATEST_PATH = "/repos/IPF-Sinon/DSH-Folk/releases/latest"
-    private const val LIST_PATH = "/repos/IPF-Sinon/DSH-Folk/releases?per_page=10"
+    /**
+     * 列表路径。
+     *
+     * 取 30 条而不是 10：开了测试版通道之后，每次 Actions 构建都会多一个 prerelease，
+     * 十条很快就全是测试版 —— 那时**关着**测试版的用户在这一页里找不到任何正式版。
+     * （`releases/latest` 本身会跳过 prerelease，所以正式版通道主要靠它；这一条是它
+     * 拿不到时的退路，退路也必须管用。）
+     */
+    private const val LIST_PATH = "/repos/IPF-Sinon/DSH-Folk/releases?per_page=30"
     private const val API_BASE = "https://api.github.com"
     private const val RELEASES_URL = "https://github.com/IPF-Sinon/DSH-Folk/releases"
 
@@ -47,6 +55,14 @@ object UpdateChecker {
         "https://v6.gh-proxy.org/https://api.github.com",
         "https://gh-proxy.com/https://api.github.com",
     )
+
+    /**
+     * 「接受测试版更新」的 prefs 键。
+     *
+     * 键放在这里而不是设置页：检查逻辑和界面都要用它，而字面量各写一份是这类 bug 的
+     * 经典来源 —— 开关写进一个键、检查读另一个键，界面看起来完全正常。
+     */
+    const val KEY_ACCEPT_BETA = "accept_beta_update"
 
     /** 版本 tag：可选 v 前缀 + 至少两段数字 + 可选预发布后缀。 */
     private val VERSION_TAG = Regex("""^[vV]?\d+(\.\d+)+([-+].*)?$""")
@@ -63,19 +79,35 @@ object UpdateChecker {
         val sha256: String = "",
         /** release 正文，给对话框显示更新内容。 */
         val notes: String = "",
+        /**
+         * 这次找到的是不是测试版。
+         *
+         * 必须让界面知道：测试版和正式版的更新提示长得一样，而用户按下「更新」之后装上的
+         * 东西风险完全不同。不标出来就等于偷偷把人推上测试通道。
+         */
+        val isPrerelease: Boolean = false,
         val failure: String? = null,
     ) {
         /** 能不能走应用内更新：要有包，也要有校验值 —— 不校验就装是不可接受的。 */
         val canInstallInApp: Boolean get() = apkUrl.isNotEmpty() && sha256.isNotEmpty()
     }
 
-    suspend fun check(): Status = withContext(Dispatchers.IO) {
+    /**
+     * @param acceptBeta 是否接受测试版（GitHub 的 prerelease）。默认 false ——
+     *   这条通道必须由用户明确打开，见设置里那个开关。
+     */
+    suspend fun check(acceptBeta: Boolean = false): Status = withContext(Dispatchers.IO) {
         var lastError: String? = null
+
+        // 顺序取决于通道，这不是小事：`releases/latest` **定义上**跳过 prerelease，
+        // 所以开着测试版时先问它，会拿到正式版、判定「已是最新」然后直接返回，
+        // 列表根本没机会被看一眼 —— 开关看起来毫无作用。
+        val paths = if (acceptBeta) listOf(LIST_PATH, LATEST_PATH) else listOf(LATEST_PATH, LIST_PATH)
 
         for (base in listOf(API_BASE) + API_MIRRORS) {
             // latest 拿不到版本形 tag 时退到列表：latest 只认「最近发布的那个」，
             // 若它恰好是 runtime-latest（滚动 tag），列表里仍能挑出真正的版本
-            for (path in listOf(LATEST_PATH, LIST_PATH)) {
+            for (path in paths) {
                 val body = FolkApiClient.fetchJson(
                     base + path,
                     ttlMs = 30 * 60 * 1000L,
@@ -87,7 +119,7 @@ object UpdateChecker {
                     null
                 } ?: continue
 
-                val release = runCatching { newestVersionRelease(body) }.getOrNull()
+                val release = runCatching { newestVersionRelease(body, acceptBeta) }.getOrNull()
                 val tag = release?.optString("tag_name")?.trim().orEmpty()
                 if (tag.isEmpty()) {
                     Log.i(TAG, "no version-shaped tag from $base$path")
@@ -109,6 +141,7 @@ object UpdateChecker {
                     apkSize = asset?.size ?: 0L,
                     sha256 = asset?.let { fetchSha256(it.shaUrl) }.orEmpty(),
                     notes = release.optString("body").trim(),
+                    isPrerelease = release.optBoolean("prerelease"),
                 )
             }
         }
@@ -219,8 +252,14 @@ object UpdateChecker {
      * 从 latest 对象或 releases 数组里挑出最新的**版本形** release。
      *
      * 数组按发布时间倒序，但不能只取第一个：`runtime-latest` 也在同一个列表里。
+     *
+     * [acceptBeta] 为 false 时把测试版整个排除掉，**两道判断都要**：
+     *  - `prerelease` 标记 —— 正常发布流程会设它；
+     *  - tag 里的预发布后缀（`1.8.1-beta.3` 的 `-beta.3`）—— 万一发布时忘了勾那个
+     *    复选框，仍然不会把测试版推给正式版通道的用户。漏一道的代价是所有人都被
+     *    推上测试版，而那正是这个开关要防的事。
      */
-    private fun newestVersionRelease(body: String): JSONObject? {
+    private fun newestVersionRelease(body: String, acceptBeta: Boolean): JSONObject? {
         val trimmed = body.trimStart()
         if (trimmed.startsWith("[")) {
             val arr = JSONArray(trimmed)
@@ -231,6 +270,7 @@ object UpdateChecker {
                 if (o.optBoolean("draft")) continue
                 val tag = o.optString("tag_name").trim()
                 if (!VERSION_TAG.matches(tag)) continue
+                if (!acceptBeta && isBeta(o, tag)) continue
                 if (bestTag.isEmpty() || me.bmax.apatch.dsh.compareVersions(tag, bestTag) > 0) {
                     best = o
                     bestTag = tag
@@ -239,8 +279,15 @@ object UpdateChecker {
             return best
         }
         val o = JSONObject(trimmed)
-        return if (VERSION_TAG.matches(o.optString("tag_name").trim())) o else null
+        val tag = o.optString("tag_name").trim()
+        if (!VERSION_TAG.matches(tag)) return null
+        if (!acceptBeta && isBeta(o, tag)) return null
+        return o
     }
+
+    /** 这个 release 是不是测试版：`prerelease` 标记，或 tag 带预发布后缀。 */
+    private fun isBeta(release: JSONObject, tag: String): Boolean =
+        release.optBoolean("prerelease") || tag.substringAfter('-', "").isNotEmpty()
 
     fun openUpdateUrl(context: Context) {
         try {

@@ -52,6 +52,7 @@ object SettingsRegistry {
             add(SettingEntry("general_language", R.string.settings_app_language, category = SettingCategory.GENERAL))
             add(SettingEntry("general_check_update", R.string.settings_check_update, category = SettingCategory.GENERAL))
             add(SettingEntry("general_auto_update", R.string.settings_auto_update_check, R.string.settings_auto_update_check_summary, SettingCategory.GENERAL))
+            add(SettingEntry("general_beta_update", R.string.settings_beta_update, R.string.settings_beta_update_summary, SettingCategory.GENERAL))
             add(SettingEntry("general_folkx_engine", R.string.settings_folkx_engine_title, R.string.settings_folkx_engine_summary, SettingCategory.GENERAL))
             add(SettingEntry("general_folkx_animation_type", R.string.settings_folkx_animation_type, category = SettingCategory.GENERAL))
             add(SettingEntry("general_folkx_animation_speed", R.string.settings_folkx_animation_speed, category = SettingCategory.GENERAL))
