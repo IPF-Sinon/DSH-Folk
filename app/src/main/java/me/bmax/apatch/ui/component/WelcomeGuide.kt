@@ -4,8 +4,10 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -226,6 +228,11 @@ internal fun PagedInfoDialog(
                             Column(
                                 horizontalAlignment = Alignment.Start,
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
+                                // 更新说明可能很长：限高 + 滚动，别让对话框长得顶穿屏幕
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 260.dp)
+                                    .verticalScroll(rememberScrollState()),
                             ) {
                                 for (line in page.bullets) {
                                     Row {
@@ -240,6 +247,7 @@ internal fun PagedInfoDialog(
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             lineHeight = 20.sp,
+                                            modifier = Modifier.weight(1f),
                                         )
                                     }
                                 }
