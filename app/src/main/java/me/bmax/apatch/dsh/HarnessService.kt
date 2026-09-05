@@ -44,7 +44,14 @@ class HarnessService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (DshRuntime.state.value.phase != DshPhase.RUNNING) {
+        // 自启那一路可以只「占住位置」不拉容器：通知栏出现、进程预热、点一下就能开始，
+        // 但不烧开机那几秒 CPU、也不常驻一份 Node 内存。见 [DshAutostart.startContainer]。
+        //
+        // 注意判的是 intent 的 action 而不是「进程是不是刚起来」：系统按 START_STICKY
+        // 重建服务时给的 intent 是 null，那种情况应当照常拉起 —— 容器本来在跑，是被杀的。
+        val fromAutostart = intent?.action == ACTION_AUTOSTART
+        val wantContainer = !fromAutostart || DshAutostart.startContainer(applicationContext)
+        if (wantContainer && DshRuntime.state.value.phase != DshPhase.RUNNING) {
             DshRuntime.bootstrap()
         }
         notifyNow()
@@ -132,8 +139,24 @@ class HarnessService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_STOP = "top.funcun.dshfolk.action.STOP_HARNESS"
 
+        /**
+         * 自启动专用的 action。
+         *
+         * 存在的理由只有一个：让 [onStartCommand] 分得清「用户点了启动」和「开机自动起来」，
+         * 后者才受「是否同时拉起容器」那个开关约束。字面量同时写在
+         * `assets/dsh-folk-autostart.sh` 里（root 脚本用 `am -a` 传它），改这里要一起改。
+         */
+        const val ACTION_AUTOSTART = "top.funcun.dshfolk.action.AUTOSTART"
+
         fun start(context: Context) {
             context.startForegroundService(Intent(context, HarnessService::class.java))
+        }
+
+        /** 自启动路径专用入口（广播 / 无障碍两条都走它；root 脚本走 `am` 直接指同一个 action）。 */
+        fun autostart(context: Context) {
+            context.startForegroundService(
+                Intent(context, HarnessService::class.java).apply { action = ACTION_AUTOSTART }
+            )
         }
 
         fun stop(context: Context) {

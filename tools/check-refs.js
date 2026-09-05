@@ -17,6 +17,10 @@ const TARGETS = [
   "dsh/DshDeviceSense.kt",
   "dsh/DshNativeBridge.kt",
   "util/PermissionUtils.kt",
+  "dsh/DshAutostart.kt",
+  "dsh/DshAutostartService.kt",
+  "dsh/HarnessService.kt",
+  "receiver/BootCompletedReceiver.kt",
 ];
 
 let fail = 0;
@@ -54,6 +58,8 @@ const OBJECTS = {
   DshSystemCtl: "dsh/DshSystemCtl.kt",
   DshDeviceSense: "dsh/DshDeviceSense.kt",
   PermissionUtils: "util/PermissionUtils.kt",
+  DshAutostart: "dsh/DshAutostart.kt",
+  DshEnv: "dsh/DshEnv.kt",
 };
 const cache = {};
 for (const [obj, rel] of Object.entries(OBJECTS)) {
@@ -140,6 +146,13 @@ const KNOWN = {
   ContextCompat: "androidx.core.content.ContextCompat",
   File: "java.io.File",
   PermissionUtils: "me.bmax.apatch.util.PermissionUtils",
+  ComponentName: "android.content.ComponentName",
+  Intent: "android.content.Intent",
+  AccessibilityEvent: "android.view.accessibility.AccessibilityEvent",
+  AccessibilityService: "android.accessibilityservice.AccessibilityService",
+  BroadcastReceiver: "android.content.BroadcastReceiver",
+  NotificationCompat: "androidx.core.app.NotificationCompat",
+  PendingIntent: "android.app.PendingIntent",
 };
 for (const rel of TARGETS) {
   const file = path.join(ROOT, rel);

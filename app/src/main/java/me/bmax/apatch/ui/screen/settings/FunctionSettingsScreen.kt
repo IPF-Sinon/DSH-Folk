@@ -102,7 +102,17 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var webCompatMode by rememberSaveable { mutableStateOf(DshWebCompat.mode(context)) }
     // WebView 内核版本只用于显示；读包信息不会触发 WebView 加载，但也没必要每次重组都读
     val webviewVersion = remember { DshWebCompat.kernel(context).display }
-    var autostart by rememberSaveable { mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_AUTOSTART, false)) }
+    // 自启动：方式 + 是否同时拉容器。Mode 不是 Parcelable，用 remember 就够
+    // （返回本页会重读 prefs，那才是权威值）。
+    var autostartMode by remember { mutableStateOf(DshAutostart.mode(context)) }
+    var autostartContainer by remember { mutableStateOf(DshAutostart.startContainer(context)) }
+    // 脚本状态要走 root shell 读（/data/adb 对普通应用连 exists() 都是 false），
+    // 所以只在 IO 线程查，初值按「没装」显示 —— 宁可少说也不要假称装好了。
+    var scriptInstalled by remember { mutableStateOf(false) }
+    var scriptOutdated by remember { mutableStateOf(false) }
+    var scriptBusy by remember { mutableStateOf(false) }
+    var a11yEnabled by remember { mutableStateOf(DshAutostart.a11yEnabled(context)) }
+    var runtimeInstalled by remember { mutableStateOf(DshEnv.isRuntimeInstalled(context)) }
     var port by rememberSaveable { mutableStateOf(DshRuntime.port()) }
     var lanEnabled by rememberSaveable { mutableStateOf(DshRuntime.lanEnabled()) }
     var verifyAfterInstall by rememberSaveable {
@@ -401,11 +411,90 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     },
                     prorootAvailable = prorootAvailable,
                     prorootUnavailableReason = prorootReason,
-                    autostart = autostart,
-                    onAutostartChange = { on ->
-                        autostart = on
-                        dshPrefs.edit().putBoolean(DshEnv.KEY_AUTOSTART, on).apply()
+                    autostartMode = autostartMode,
+                    onAutostartModeChange = { m ->
+                        val prev = autostartMode
+                        autostartMode = m
+                        DshAutostart.setMode(context, m)
+                        // 从脚本模式切走时把脚本删掉。不删的话它下次开机还会跑 ——
+                        // trigger() 会因为模式不符而拒绝启动，但一个明明「已关掉」的开机
+                        // 脚本继续存在于 service.d 里，本身就是件不该发生的事。
+                        if (prev == DshAutostart.Mode.SCRIPT && m != DshAutostart.Mode.SCRIPT) {
+                            scope.launch(Dispatchers.IO) {
+                                val r = DshAutostart.removeScript(context)
+                                val installed = DshAutostart.scriptInstalled(context)
+                                withContext(Dispatchers.Main) {
+                                    scriptInstalled = installed
+                                    scriptOutdated = false
+                                    // 只在删失败时打扰用户：成功是他刚才那一下的预期结果。
+                                    if (!r.ok) {
+                                        snackBarHost.showSnackbar(
+                                            context.getString(r.messageRes, DshAutostart.scriptPath())
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (m == DshAutostart.Mode.SCRIPT || m == DshAutostart.Mode.ACCESSIBILITY) {
+                            scope.launch(Dispatchers.IO) {
+                                val installed = DshAutostart.scriptInstalled(context)
+                                val outdated = installed && DshAutostart.scriptNeedsUpdate(context)
+                                withContext(Dispatchers.Main) {
+                                    scriptInstalled = installed
+                                    scriptOutdated = outdated
+                                }
+                            }
+                        }
                     },
+                    autostartContainer = autostartContainer,
+                    onAutostartContainerChange = { on ->
+                        autostartContainer = on
+                        DshAutostart.setStartContainer(context, on)
+                    },
+                    autostartScriptInstalled = scriptInstalled,
+                    autostartScriptOutdated = scriptOutdated,
+                    autostartScriptBusy = scriptBusy,
+                    onInstallAutostartScript = {
+                        scriptBusy = true
+                        scope.launch(Dispatchers.IO) {
+                            val r = DshAutostart.installScript(context)
+                            val installed = DshAutostart.scriptInstalled(context)
+                            val outdated = installed && DshAutostart.scriptNeedsUpdate(context)
+                            withContext(Dispatchers.Main) {
+                                scriptBusy = false
+                                scriptInstalled = installed
+                                scriptOutdated = outdated
+                                snackBarHost.showSnackbar(
+                                    context.getString(r.messageRes, DshAutostart.scriptPath())
+                                )
+                            }
+                        }
+                    },
+                    onRemoveAutostartScript = {
+                        scriptBusy = true
+                        scope.launch(Dispatchers.IO) {
+                            val r = DshAutostart.removeScript(context)
+                            val installed = DshAutostart.scriptInstalled(context)
+                            withContext(Dispatchers.Main) {
+                                scriptBusy = false
+                                scriptInstalled = installed
+                                scriptOutdated = false
+                                snackBarHost.showSnackbar(
+                                    context.getString(r.messageRes, DshAutostart.scriptPath())
+                                )
+                            }
+                        }
+                    },
+                    autostartA11yEnabled = a11yEnabled,
+                    onOpenA11ySettings = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    },
+                    runtimeInstalled = runtimeInstalled,
                     port = port,
                     onPortChange = { p ->
                         port = p

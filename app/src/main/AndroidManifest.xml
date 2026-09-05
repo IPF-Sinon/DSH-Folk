@@ -285,6 +285,10 @@
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
+        <!-- 自启动方式之一：开机广播。
+             directBootAware 保持 false，且**不**注册 LOCKED_BOOT_COMPLETED —— 后者在用户
+             解锁前就送到，此时应用的 CE 存储（filesDir / SharedPreferences）还没挂载，
+             读到的会是空配置，等于按「未开启自启」处理。 -->
         <receiver
             android:name=".receiver.BootCompletedReceiver"
             android:enabled="true"
@@ -312,6 +316,29 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Runs a local DeepSeek Harness (Node.js) server inside a proot container for as long as the user keeps it enabled; the server is the app's primary function and must stay alive while the UI is in the background." />
+        </service>
+
+        <!-- 自启动方式之三：无障碍服务（见 DshAutostartService 的 KDoc）。
+             这个服务什么都不做，存在的唯一理由是系统会在开机后主动 bind 无障碍服务、
+             且被杀之后还会重新 bind —— 那是唯一一条既不要 root、又不受国产 ROM
+             「自启动管理」白名单约束的启动路径。
+
+             exported 必须为 true：bind 它的是 system_server，不是本应用。权限门由
+             BIND_ACCESSIBILITY_SERVICE 把守（只有系统持有它），所以对外仍然是关着的。
+
+             这里刻意**没有** canRetrieveWindowContent（配置在 dsh_autostart_a11y.xml 里），
+             那一位才是「能读取屏幕内容」的来源。 -->
+        <service
+            android:name=".dsh.DshAutostartService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/dsh_autostart_a11y" />
         </service>
 
     </application>

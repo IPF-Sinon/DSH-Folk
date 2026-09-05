@@ -57,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DshAutostart
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
@@ -83,9 +84,23 @@ fun FunctionSettingsContent(
     /** proroot 是否在本机可用（不可用时禁选并说明原因）。 */
     prorootAvailable: Boolean,
     prorootUnavailableReason: String,
-    /** 开机自启（BootCompletedReceiver 会读同一个 pref）。 */
-    autostart: Boolean,
-    onAutostartChange: (Boolean) -> Unit,
+    /** 自启动方式（三条路径，见 [DshAutostart.Mode]）。 */
+    autostartMode: DshAutostart.Mode,
+    onAutostartModeChange: (DshAutostart.Mode) -> Unit,
+    /** 自启时是否连容器一起拉起。 */
+    autostartContainer: Boolean,
+    onAutostartContainerChange: (Boolean) -> Unit,
+    /** 开机脚本在设备上的状态（root 读，可能读不到）。 */
+    autostartScriptInstalled: Boolean,
+    autostartScriptOutdated: Boolean,
+    autostartScriptBusy: Boolean,
+    onInstallAutostartScript: () -> Unit,
+    onRemoveAutostartScript: () -> Unit,
+    /** 无障碍服务当前是否被用户启用了。 */
+    autostartA11yEnabled: Boolean,
+    onOpenA11ySettings: () -> Unit,
+    /** 运行时是否已安装：没装的话自启没有意义，要说出来。 */
+    runtimeInstalled: Boolean,
     /** Web 服务监听端口。 */
     port: Int,
     onPortChange: (Int) -> Unit,
@@ -213,15 +228,172 @@ fun FunctionSettingsContent(
         }
 
         // ───────── 开机自启 ─────────
+        //
+        // 三条路径按「代价从小到大」排：广播（零成本、但可能不生效）→ 无障碍（要开一个
+        // 吓人的开关）→ 脚本（要 root）。不按可靠性排：把「需要 root」放在第一条会让
+        // 没 root 的人以为这功能与自己无关。
         item(key = "function_autostart") {
-            ToggleSettingCard(
-                flat = flat,
-                icon = Icons.Filled.PowerSettingsNew,
-                title = stringResource(R.string.dsh_autostart),
-                description = stringResource(R.string.dsh_autostart_summary),
-                checked = autostart,
-                onCheckedChange = onAutostartChange,
-            )
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    SectionHeader(
+                        icon = { Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(20.dp)) },
+                        title = stringResource(R.string.dsh_autostart),
+                        summary = stringResource(R.string.dsh_autostart_summary),
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    RuntimeOption(
+                        selected = autostartMode == DshAutostart.Mode.OFF,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_autostart_mode_off),
+                        summary = stringResource(R.string.dsh_autostart_mode_off_desc),
+                        onSelect = { onAutostartModeChange(DshAutostart.Mode.OFF) },
+                    )
+                    RuntimeOption(
+                        selected = autostartMode == DshAutostart.Mode.RECEIVER,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_autostart_mode_receiver),
+                        summary = stringResource(R.string.dsh_autostart_mode_receiver_desc),
+                        onSelect = { onAutostartModeChange(DshAutostart.Mode.RECEIVER) },
+                    )
+                    RuntimeOption(
+                        selected = autostartMode == DshAutostart.Mode.ACCESSIBILITY,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_autostart_mode_a11y),
+                        summary = stringResource(R.string.dsh_autostart_mode_a11y_desc),
+                        onSelect = { onAutostartModeChange(DshAutostart.Mode.ACCESSIBILITY) },
+                    )
+                    RuntimeOption(
+                        selected = autostartMode == DshAutostart.Mode.SCRIPT,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_autostart_mode_script),
+                        summary = stringResource(R.string.dsh_autostart_mode_script_desc),
+                        onSelect = { onAutostartModeChange(DshAutostart.Mode.SCRIPT) },
+                    )
+
+                    // 选中的那条路径各自的后续动作。只显示当前选中的那一组：三组同时铺开
+                    // 会让人以为要全部做完。
+                    when (autostartMode) {
+                        DshAutostart.Mode.SCRIPT -> {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = when {
+                                    autostartScriptOutdated ->
+                                        stringResource(R.string.dsh_autostart_script_state_outdated)
+                                    autostartScriptInstalled -> stringResource(
+                                        R.string.dsh_autostart_script_state_installed,
+                                        DshAutostart.scriptPath(),
+                                    )
+                                    else -> stringResource(R.string.dsh_autostart_script_state_missing)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (autostartScriptInstalled && !autostartScriptOutdated) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.tertiary
+                                },
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = onInstallAutostartScript,
+                                    enabled = !autostartScriptBusy,
+                                ) {
+                                    Text(
+                                        stringResource(
+                                            if (autostartScriptInstalled) {
+                                                R.string.dsh_autostart_script_reinstall
+                                            } else {
+                                                R.string.dsh_autostart_script_install
+                                            }
+                                        )
+                                    )
+                                }
+                                if (autostartScriptInstalled) {
+                                    OutlinedButton(
+                                        onClick = onRemoveAutostartScript,
+                                        enabled = !autostartScriptBusy,
+                                    ) {
+                                        Text(stringResource(R.string.dsh_autostart_script_remove))
+                                    }
+                                }
+                            }
+                        }
+
+                        DshAutostart.Mode.ACCESSIBILITY -> {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = if (autostartA11yEnabled) {
+                                    stringResource(R.string.dsh_autostart_a11y_state_on)
+                                } else {
+                                    stringResource(
+                                        R.string.dsh_autostart_a11y_state_off,
+                                        stringResource(R.string.app_name),
+                                    )
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (autostartA11yEnabled) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.tertiary
+                                },
+                            )
+                            if (!autostartA11yEnabled) {
+                                // 旁加载安装的应用会被 Android 13+ 挡在「受限设置」后面，
+                                // 那时无障碍开关是灰的、点了没反应 —— 不说清楚的话用户只会
+                                // 以为我们写坏了。
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = stringResource(R.string.dsh_autostart_a11y_restricted),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = onOpenA11ySettings) {
+                                Text(stringResource(R.string.dsh_autostart_a11y_open))
+                            }
+                        }
+
+                        DshAutostart.Mode.OFF, DshAutostart.Mode.RECEIVER -> Unit
+                    }
+
+                    if (autostartMode != DshAutostart.Mode.OFF) {
+                        if (!runtimeInstalled) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(R.string.dsh_autostart_not_installed),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.tertiary,
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        HorizontalDivider()
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.dsh_autostart_container),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    text = stringResource(R.string.dsh_autostart_container_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            ExpressiveSwitch(
+                                checked = autostartContainer,
+                                onCheckedChange = onAutostartContainerChange,
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         // ───────── 端口 ─────────

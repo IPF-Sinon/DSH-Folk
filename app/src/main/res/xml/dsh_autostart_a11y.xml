@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DshAutostartService 的配置。
+
+  这个无障碍服务只用来「被系统 bind」（见 DshAutostartService 的 KDoc），所以每一位都取
+  最小值：
+
+  - accessibilityEventTypes 不能为空 —— 部分 ROM 会把不订阅任何事件的服务判为无效而不
+    在列表里显示。typeWindowStateChanged 是最低频的那一类，且我们的回调是空实现。
+  - 刻意**没有** canRetrieveWindowContent：那一位才是「读取你屏幕上的内容」的来源。
+  - 刻意**没有** packageNames 限制：留空表示监听全部，但既然回调是空的，这里写什么都
+    不影响行为；写死一个包名反而会让人误以为我们在盯着那个应用。
+  - notificationTimeout 给一个大值，进一步降低系统推事件的频率。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:description="@string/dsh_autostart_a11y_desc"
+    android:notificationTimeout="1000"
+    android:summary="@string/dsh_autostart_a11y_summary" />

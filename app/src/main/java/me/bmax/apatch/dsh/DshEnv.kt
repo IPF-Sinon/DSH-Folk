@@ -67,7 +67,20 @@ object DshEnv {
      */
     const val KEY_ROOTFS_SIZE = "rootfs_size_bytes"
     const val KEY_PROROOT_FAIL = "proroot_fail_streak"
-    const val KEY_AUTOSTART = "dsh_autostart"     // 开机自启（BootCompletedReceiver 读取）
+
+    /**
+     * 开机自启的**旧**布尔开关（1.8.0 及以前）。
+     *
+     * 现在的权威值是 [KEY_AUTOSTART_MODE]。这一项由 [DshAutostart.setMode] 跟着同步写，
+     * 只为让降级回旧版本的用户不至于突然失去自启 —— 新代码不要读它。
+     */
+    const val KEY_AUTOSTART = "dsh_autostart"
+
+    /** 自启动方式：off | receiver | script | a11y（见 [DshAutostart.Mode]）。 */
+    const val KEY_AUTOSTART_MODE = "dsh_autostart_mode"
+
+    /** 自启时是否连容器一起拉起（默认 true，与 1.8.0 的行为一致）。 */
+    const val KEY_AUTOSTART_CONTAINER = "dsh_autostart_container"
 
     /**
      * 权限通道首选：off | auto | root | shizuku | adb。
