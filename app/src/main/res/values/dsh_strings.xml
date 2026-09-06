@@ -755,6 +755,8 @@
     <string name="dsh_log_bundles_parked">%1$s could not be reinstalled and was disabled so the service can start; install it again from the plugin store to re-enable it</string>
     <string name="dsh_log_bundles_park_failed">Could not disable the unresolvable plugins (%1$s); the service may fail to start</string>
     <string name="dsh_log_bundle_heal_error">Plugin repair error: %1$s</string>
+    <string name="dsh_log_settings_quarantined">A disabled plugin left these model provider routes half-configured, which was breaking the whole Models page: %1$s — moved them aside under llm-pi-ai.dshfolkQuarantinedProviders (nothing was deleted; install the plugin again and move them back)</string>
+    <string name="dsh_log_settings_check_error">Orphaned-settings check error: %1$s</string>
     <string name="dsh_log_groups_added">Added the Android supplementary groups to the container: %1$s</string>
     <string name="dsh_log_seeding">Pre-installing plugin %1$s …</string>
     <string name="dsh_log_seed_builds_blocked">pnpm blocked build scripts (%1$s), allowing them and retrying…</string>

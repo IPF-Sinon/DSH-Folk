@@ -735,6 +735,8 @@
     <string name="dsh_log_bundles_parked">%1$s 装不回来，已先停用它让服务能启动；到插件商店重新装一次即可恢复</string>
     <string name="dsh_log_bundles_park_failed">停用解析不出来的插件失败（%1$s），服务可能仍起不来</string>
     <string name="dsh_log_bundle_heal_error">插件修复异常: %1$s</string>
+    <string name="dsh_log_settings_quarantined">被停用的插件留下了半截的模型提供方路由，整个模型设置页因此失效：%1$s —— 已挪到 llm-pi-ai.dshfolkQuarantinedProviders（配置没删，插件装回来后挪回即可）</string>
+    <string name="dsh_log_settings_check_error">孤立设置项体检异常: %1$s</string>
     <string name="dsh_log_groups_added">已给容器补上 Android 补充组: %1$s</string>
     <string name="dsh_log_seeding">预装插件 %1$s …</string>
     <string name="dsh_log_seed_builds_blocked">pnpm 拦下了构建脚本（%1$s），自动放行后重试…</string>

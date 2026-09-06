@@ -250,6 +250,18 @@ object DshEnv {
      */
     const val KEY_SEED_REPAIR_REV = "seed_repair_rev"
 
+    /**
+     * 上次做过「孤立设置项」体检时 profile manifest 的指纹。
+     *
+     * 只在指纹变了才体检（见 [DshRuntime.healOrphanSettings]）：插件装/卸、bundle 被
+     * 停用或摘掉都会改这个文件，而这些正是唯一可能留下孤立设置项的操作。健康设备
+     * 反复启动时指纹不变，一次容器调用都不会发生。
+     *
+     * 空值表示从没体检过 —— 那一次必查，好让升级到本版本的存量设备把历史留下的
+     * 孤立项修掉。
+     */
+    const val KEY_SETTINGS_CHECK_FP = "settings_check_fingerprint"
+
     /** 安装插件后是否用 `dsh web --port 0` 验证一次能否启动（默认开）。 */
     const val KEY_VERIFY_AFTER_INSTALL = "verify_after_install"
 

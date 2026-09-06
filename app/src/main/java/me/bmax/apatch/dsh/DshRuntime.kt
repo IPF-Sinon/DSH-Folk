@@ -1250,7 +1250,7 @@ object DshRuntime {
         if (!File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/package.json").isFile) return
         runCatching {
             val initial = DshPluginRepo.unresolvableBundles()
-            if (initial.isEmpty()) return
+            if (initial.isEmpty()) return@runCatching
             logWarn(R.string.dsh_log_bundles_unresolved, joinForLog(initial))
             _state.update {
                 it.copy(
@@ -1276,7 +1276,52 @@ object DshRuntime {
         }.onFailure {
             logWarn(R.string.dsh_log_bundle_heal_error, it.message ?: it.javaClass.simpleName)
         }
+        healOrphanSettings()
     }
+
+    /**
+     * 体检「组合层被摘掉、用户层还留着另一半」的设置项，并把它们隔离。
+     *
+     * 这是 [healProfileBundles] 的必要后半段：摘掉一个 bundle 换来了服务能启动，
+     * 但那个 bundle 在组合层给别人提供过的配置也一起没了。用户层 settings.yaml 里
+     * 留下的半截配置会让**整个命名空间注册失败**，而 dsh 对这种失败既不报错也不
+     * 记日志（发生在 `installSettingsSection` 的 `ctx.inject` 子 fiber 里，
+     * `assertEntriesActivated` 只审 loader entry）—— 服务照常就绪，只有对应的设置页
+     * 悄悄坏掉。1.8.4-beta.4 上就是这样：模型设置页两个「添加提供方」按钮双双失效，
+     * 且用户那一段里所有路由一起不可用，模型分组从 22 组掉到 2 组。
+     *
+     * **靠指纹决定要不要查**：manifest（`profiles/web/package.json`）没变就直接返回。
+     * 插件装/卸、停用、park、prune 都会改它，而只有这些操作可能留下孤立项；健康设备
+     * 反复启动一次容器调用都不会发生。从没查过（升级到本版本的存量设备）时必查一次。
+     *
+     * 全过程失败只记日志，绝不阻断启动 —— 它和 [healProfileBundles] 一样是救援措施。
+     */
+    private suspend fun healOrphanSettings() {
+        if (!DshEnv.isRuntimeInstalled(appContext)) return
+        val manifest = File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/package.json")
+        if (!manifest.isFile) return
+        runCatching {
+            val fp = manifestFingerprint(manifest)
+            if (fp.isEmpty()) return@runCatching
+            if (prefs().getString(DshEnv.KEY_SETTINGS_CHECK_FP, "") == fp) return@runCatching
+            val quarantined = DshPluginRepo.quarantinePiAiOrphans()
+            if (quarantined.isNotEmpty()) {
+                logWarn(R.string.dsh_log_settings_quarantined, joinForLog(quarantined))
+            }
+            // 指纹在体检**之后**才写：中途被杀下次会重来，不会漏掉一次该做的体检
+            prefs().edit().putString(DshEnv.KEY_SETTINGS_CHECK_FP, fp).apply()
+        }.onFailure {
+            logWarn(R.string.dsh_log_settings_check_error, it.message ?: it.javaClass.simpleName)
+        }
+    }
+
+    /** profile manifest 的内容指纹（长度 + SHA-256 前 16 字节，够用且便宜）。 */
+    private fun manifestFingerprint(manifest: File): String = runCatching {
+        val bytes = manifest.readBytes()
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+        // 显式 & 0xFF：Byte 带符号，直接 %02x 会把负值格式化成 8 位扩展
+        bytes.size.toString() + ":" + digest.take(16).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+    }.getOrDefault("")
 
     /**
      * 启动并等待就绪；如果这一轮触发了 proroot → proot 回退，就用 proot
