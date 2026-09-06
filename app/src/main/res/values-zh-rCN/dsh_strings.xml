@@ -589,11 +589,7 @@
     <string name="dsh_native_need_location_perm">未授予位置权限 —— 点这里授权</string>
     <string name="dsh_native_need_phone_perm">未授予电话状态权限 —— 点这里授权</string>
     <string name="dsh_native_need_sensors_perm">心率与计步还需要身体传感器权限 —— 点这里授权</string>
-    <string name="dsh_native_need_write_settings">未获得「修改系统设置」—— 点这里打开系统页</string>
-    <string name="dsh_native_need_dnd_access">要设置静音或勿扰期间改音量，需要「勿扰访问」—— 点这里打开系统页</string>
-    <string name="dsh_native_need_install_perm">「允许安装未知应用」未开启 —— 点这里打开系统页</string>
     <string name="dsh_native_need_usage_perm">未获得「应用使用统计」—— 点这里打开系统页</string>
-    <string name="dsh_native_need_sensors_perm">心率与计步还需要身体传感器权限 —— 点这里授权</string>
     <string name="dsh_native_need_write_settings">未获得「修改系统设置」—— 点这里打开系统页</string>
     <string name="dsh_native_need_dnd_access">设为静音、或在勿扰开启时改音量需要勿扰访问权 —— 点这里打开系统页</string>
     <string name="dsh_native_need_install_perm">未允许安装未知应用 —— 点这里打开系统页</string>
