@@ -122,6 +122,10 @@ object DshNativeBridge {
          * 给它一项开关是因为「这台机器允不允许侧载」本身就是设备指纹的一部分。
          */
         INSTALL("install"),
+        /** 应用使用统计（Usage Access）。 */
+        USAGE("usage"),
+        /** 短信。 */
+        SMS("sms"),
     }
 
     /**
@@ -147,6 +151,12 @@ object DshNativeBridge {
         // 绝大多数传感器不需要权限；这两个只影响心率与计步两项，
         // 缺了它们这项能力**依然可用**（见 availability）
         Cap.SENSORS -> PermissionUtils.sensorPermissions()
+        Cap.SMS ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                arrayOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.SEND_SMS)
+            } else {
+                arrayOf(android.Manifest.permission.READ_SMS)
+            }
         else -> emptyArray()
     }
 
@@ -160,6 +170,7 @@ object DshNativeBridge {
         Cap.SETTINGS -> Special.WRITE_SETTINGS
         Cap.VOLUME -> Special.NOTIFICATION_POLICY
         Cap.INSTALL -> Special.REQUEST_INSTALL
+        Cap.USAGE -> Special.USAGE_STATS
         else -> null
     }
 
@@ -183,6 +194,13 @@ object DshNativeBridge {
 
         /** 安装未知应用。 */
         REQUEST_INSTALL(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, true),
+
+        /**
+         * 应用使用统计访问权（Usage Access）。
+         *
+         * 这个页面**不接受** package: uri，只能列出所有应用让用户自己找到本应用。
+         */
+        USAGE_STATS(Settings.ACTION_USAGE_ACCESS_SETTINGS, false),
     }
 
     /** 这项特殊权限现在是否已经授予。 */
@@ -190,6 +208,7 @@ object DshNativeBridge {
         Special.WRITE_SETTINGS -> PermissionUtils.canWriteSystemSettings(ctx)
         Special.NOTIFICATION_POLICY -> PermissionUtils.hasNotificationPolicyAccess(ctx)
         Special.REQUEST_INSTALL -> PermissionUtils.canRequestPackageInstalls(ctx)
+        Special.USAGE_STATS -> PermissionUtils.hasUsageStatsPermission(ctx)
     }
 
     /**
@@ -306,6 +325,12 @@ object DshNativeBridge {
         // —— 所以这一项恒可用，权限不足时由具体的写操作回 403
         Cap.VOLUME -> true to ""
         Cap.INSTALL -> true to ""
+        Cap.USAGE ->
+            if (PermissionUtils.hasUsageStatsPermission(ctx)) true to ""
+            else false to "no_usage_permission"
+        Cap.SMS ->
+            if (PermissionUtils.hasSmsPermission(ctx)) true to ""
+            else false to "no_sms_permission"
         else -> true to ""
     }
 

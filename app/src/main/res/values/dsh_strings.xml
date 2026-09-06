@@ -406,6 +406,8 @@
     <!-- 安装后验证 / 首启预装 -->
     <string name="dsh_verify_after_install">Verify after installing</string>
     <string name="dsh_verify_after_install_summary">After installing a plugin, start dsh once on a temporary port to check the plugin tree loads; on failure the plugin is uninstalled automatically. Adds 30s–3min per install.</string>
+    <string name="dsh_runtime_beta">Runtime test channel</string>
+    <string name="dsh_runtime_beta_summary">Off by default. When on, the app checks for updates against the runtime-beta release instead of the stable runtime-latest release — for testing new container runtimes only.</string>
     <string name="dsh_plugin_verify_failed">Verification failed: %1$s. The plugin is still installed — remove it from the Installed page if the service will not start.</string>
     <string name="dsh_plugin_rolled_back">Verification failed: %2$s. %1$s has been uninstalled automatically; nothing was changed.</string>
     <string name="dsh_plugin_seeding">Installing bundled plugins…</string>
@@ -594,6 +596,13 @@
     <string name="dsh_native_cap_settings_desc">Brightness, screen timeout and auto-rotate. Android requires this to be granted on a system settings page.</string>
     <string name="dsh_native_cap_install">Install permission status</string>
     <string name="dsh_native_cap_install_desc">Read whether installing unknown apps is allowed. It never installs anything by itself.</string>
+    <string name="dsh_native_cap_usage">App usage stats</string>
+    <string name="dsh_native_cap_usage_desc">Read which apps are in use and for how long. Android requires this to be granted on a system settings page.</string>
+    <string name="dsh_native_cap_sms">SMS</string>
+    <string name="dsh_native_cap_sms_desc">Read and send SMS messages. On Android 13 and above the system prompts for both read and send permissions.</string>
+
+    <string name="dsh_native_need_usage_perm">Usage access not granted — tap to open system settings</string>
+    <string name="dsh_native_need_sms_perm">SMS permission not granted — tap to grant</string>
 
     <string name="dsh_native_need_camera_perm">Camera permission not granted — tap to grant</string>
     <string name="dsh_native_need_calendar_perm">Calendar permission not granted — tap to grant</string>
@@ -765,6 +774,7 @@
     <string name="dsh_log_seed_failed">Could not pre-install %1$s (you can install it later from the plugin store)</string>
     <string name="dsh_log_seed_exception">Pre-install error: %1$s</string>
     <string name="dsh_log_seed_retry_exception">Pre-install retry error: %1$s</string>
+    <string name="dsh_log_seed_skip">Pre-install skipped (already recorded or installed): %1$s</string>
     <string name="dsh_log_dsh_missing_in_container">Could not find dsh inside the container; please reinstall the runtime in Settings</string>
     <!-- ── 容器内插件操作的日志（DshPluginRepo） ────────────────
          都带 [DSH-Folk] 前缀，与 pnpm/dsh 自己的输出区分开。 -->

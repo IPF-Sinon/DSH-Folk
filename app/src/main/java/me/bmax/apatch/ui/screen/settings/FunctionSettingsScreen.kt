@@ -118,6 +118,7 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var verifyAfterInstall by rememberSaveable {
         mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, true))
     }
+    var runtimeBeta by rememberSaveable { mutableStateOf(DshSource.betaEnabled(context)) }
     var downloadSource by rememberSaveable { mutableStateOf(DshSource.setting(context)) }
     var customMetaUrl by rememberSaveable { mutableStateOf(DshSource.customMetaUrl(context)) }
     // 生效源：auto 时是缓存/测速结果。解析要走网络，所以只在 IO 线程算，初值用设置值兜底。
@@ -651,6 +652,11 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     onVerifyAfterInstallChange = { on ->
                         verifyAfterInstall = on
                         dshPrefs.edit().putBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, on).apply()
+                    },
+                    runtimeBeta = runtimeBeta,
+                    onRuntimeBetaChange = { on ->
+                        runtimeBeta = on
+                        DshSource.setBetaEnabled(context.applicationContext, on)
                     },
                     adbPairCode = adbPairCode,
                     onAdbPairCodeChange = { adbPairCode = it.filter { c -> c.isDigit() }.take(6) },

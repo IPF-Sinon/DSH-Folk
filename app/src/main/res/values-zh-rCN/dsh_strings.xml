@@ -388,6 +388,8 @@
     <!-- 安装后验证 / 首启预装 -->
     <string name="dsh_verify_after_install">安装后验证</string>
     <string name="dsh_verify_after_install_summary">装完插件后用临时端口启动一次 dsh，确认插件树能加载；不通过就自动卸载。每次安装会多花 30 秒到 3 分钟。</string>
+    <string name="dsh_runtime_beta">运行时测试版通道</string>
+    <string name="dsh_runtime_beta_summary">默认关闭。开启后，应用改从 runtime-beta 发布检查更新，而不是稳定的 runtime-latest —— 仅用于测试新的容器运行时。</string>
     <string name="dsh_plugin_verify_failed">验证未通过：%1$s。插件仍在，若服务起不来请到「已安装」页卸载它。</string>
     <string name="dsh_plugin_rolled_back">验证未通过：%2$s。已自动卸载 %1$s，未对现有环境造成改动。</string>
     <string name="dsh_plugin_seeding">正在预装内置插件…</string>
@@ -576,12 +578,21 @@
     <string name="dsh_native_cap_settings_desc">亮度、熄屏时间与自动旋转。Android 要求这一项在系统设置页里授予。</string>
     <string name="dsh_native_cap_install">安装权限状态</string>
     <string name="dsh_native_cap_install_desc">读取「允许安装未知应用」是否已开启。它自己不会安装任何东西。</string>
+    <string name="dsh_native_cap_usage">应用使用统计</string>
+    <string name="dsh_native_cap_usage_desc">读取各应用的使用时长与前台状态。Android 要求这一项在系统设置页里授予。</string>
+    <string name="dsh_native_cap_sms">短信</string>
+    <string name="dsh_native_cap_sms_desc">读取和发送短信。Android 13 及以上版本会分别申请读取和发送权限。</string>
 
     <string name="dsh_native_need_camera_perm">未授予相机权限 —— 点这里授权</string>
     <string name="dsh_native_need_calendar_perm">未授予日历权限 —— 点这里授权</string>
     <string name="dsh_native_need_contacts_perm">未授予通讯录权限 —— 点这里授权</string>
     <string name="dsh_native_need_location_perm">未授予位置权限 —— 点这里授权</string>
     <string name="dsh_native_need_phone_perm">未授予电话状态权限 —— 点这里授权</string>
+    <string name="dsh_native_need_sensors_perm">心率与计步还需要身体传感器权限 —— 点这里授权</string>
+    <string name="dsh_native_need_write_settings">未获得「修改系统设置」—— 点这里打开系统页</string>
+    <string name="dsh_native_need_dnd_access">要设置静音或勿扰期间改音量，需要「勿扰访问」—— 点这里打开系统页</string>
+    <string name="dsh_native_need_install_perm">「允许安装未知应用」未开启 —— 点这里打开系统页</string>
+    <string name="dsh_native_need_usage_perm">未获得「应用使用统计」—— 点这里打开系统页</string>
     <string name="dsh_native_need_sensors_perm">心率与计步还需要身体传感器权限 —— 点这里授权</string>
     <string name="dsh_native_need_write_settings">未获得「修改系统设置」—— 点这里打开系统页</string>
     <string name="dsh_native_need_dnd_access">设为静音、或在勿扰开启时改音量需要勿扰访问权 —— 点这里打开系统页</string>
@@ -745,6 +756,7 @@
     <string name="dsh_log_seed_failed">预装失败 %1$s（可稍后在插件商店手动安装）</string>
     <string name="dsh_log_seed_exception">预装异常: %1$s</string>
     <string name="dsh_log_seed_retry_exception">预装重试异常: %1$s</string>
+    <string name="dsh_log_seed_skip">预装跳过（已记录或已安装）: %1$s</string>
     <string name="dsh_log_dsh_missing_in_container">容器内找不到 dsh，请在设置中重装运行时</string>
     <!-- ── 容器内插件操作的日志（DshPluginRepo） ──────────────── -->
     <string name="dsh_plug_log_no_pkg_toggle">包名为空，无法切换</string>

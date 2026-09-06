@@ -95,6 +95,13 @@
     <!-- 应用内更新：下载并校验 APK 后唤起系统安装器。
          不做静默安装（需要 device owner 或系统签名）；sha256 校验不通过一律不装。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 短信：/native/sms。 -->
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- 应用使用统计：/native/usage。protectionLevel 含 appop，必须跳系统页授权。 -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- 上面那些权限会**隐式**声明硬件要求，必须逐条改成 required=false。
          Android 的规则：申请 CAMERA 等于要求 android.hardware.camera 与

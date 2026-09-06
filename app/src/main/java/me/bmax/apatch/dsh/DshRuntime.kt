@@ -56,8 +56,13 @@ data class DshState(
      * 里选择换端口 / 手动指定 / 强制启动。
      */
     val portConflict: Boolean = false,
+    /** dsh web 的认证 token；有值时 [webUrl] 带 `?token=...`。 */
+    val webToken: String? = null,
 ) {
-    val webUrl: String get() = "http://127.0.0.1:$port/"
+    val webUrl: String get() {
+        val base = "http://127.0.0.1:$port/"
+        return if (webToken.isNullOrBlank()) base else base + "?token=$webToken"
+    }
 }
 
 /** 运行时下载元数据（由 CI 生成的 metadata.json 提供）。 */
@@ -101,6 +106,9 @@ object DshRuntime {
      * 设备不会有不同结果，让用户白等第二、三次没有意义。
      */
     private const val PROROOT_FAIL_LIMIT = 1
+
+    /** 从 dsh 打印的 `dsh web: http://…?token=…` 里提取 token。 */
+    private val DSH_WEB_TOKEN_RE = Regex("\\?token=([A-Za-z0-9+/=-]+)")
 
     /** ELF `e_machine`：183 = AArch64，62 = x86-64（见 [rootfsArchMismatch]）。 */
     private const val ELF_MACHINE_AARCH64 = 183
@@ -598,6 +606,9 @@ object DshRuntime {
             if (it in 1..65535) it else DshEnv.DEFAULT_PORT
         }
     }
+
+    /** 当前 WebUI 地址（带认证 token，若已从 dsh 输出里捕获到）。 */
+    fun webUrl(): String = _state.value.webUrl
 
     fun setPort(p: Int) {
         if (!ready || p !in 1..65535) return
@@ -1136,10 +1147,14 @@ object DshRuntime {
         applySeedRepair(p, attempted, installed)
 
         val todo = SEED_PLUGINS.filter { it !in attempted }
-        if (todo.isEmpty()) return
+        if (todo.isEmpty()) {
+            logInfo(R.string.dsh_log_seed_skip, joinForLog(SEED_PLUGINS))
+            return
+        }
 
         val missing = todo.filter { it !in installed }
         if (missing.isEmpty()) {
+            logInfo(R.string.dsh_log_seed_skip, joinForLog(todo))
             persistSeeded(attempted + todo)
             return
         }
@@ -2121,6 +2136,8 @@ object DshRuntime {
         DshHostPrompt.ensureInstalled(appContext)
         clearLog()
 
+        if (lanEnabled()) patchLanHost()
+
         val port = port()
         val lan = lanEnabled()
         val opts = buildString {
@@ -2190,13 +2207,49 @@ object DshRuntime {
         scope.launch {
             val reader = proc.inputStream.bufferedReader()
             try {
-                for (line in reader.lineSequence()) log.append(line)
+                for (line in reader.lineSequence()) {
+                    log.append(line)
+                    // dsh 打印带 token 的 URL 后，把 token 捞出来写进 state，
+                    // 这样 webUrl 就能带 ?token=...，WebView 才不会撞认证墙。
+                    if (_state.value.webToken == null) {
+                        val m = DSH_WEB_TOKEN_RE.find(line)
+                        if (m != null) {
+                            _state.update { s -> s.copy(webToken = m.groupValues[1]) }
+                        }
+                    }
+                }
             } catch (_: Exception) {
                 // 进程被销毁时读流中断，属预期
             } finally {
                 log.flushForExit()
                 runCatching { reader.close() }
             }
+        }
+    }
+
+    /**
+     * 从代码层强行开启 `--host 0.0.0.0`：注释掉 dsh-web-app 的 `0.0.0.0` 检查。
+     *
+     * dsh 0.1.1-rc.2 在 startup.js 里硬编码拒绝 `0.0.0.0`，App 只要开了「局域网访问」
+     * 就传这个参数，导致 dsh 以 usage error 退出。这里在每次启动前幂等地 patch 掉那
+     * 一行检查，让 dsh 接受 `0.0.0.0`。
+     */
+    private fun patchLanHost() {
+        val target = File(
+            DshEnv.rootfs(appContext),
+            "usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-web-app/lib/startup.js",
+        )
+        if (!target.isFile) return
+        val src = target.readText(StandardCharsets.UTF_8)
+        val marker = "/* patched by DSH-Folk: lan force-enable */"
+        if (src.contains(marker)) return
+        val patched = src.replace(
+            oldValue = """if (options.host === "0.0.0.0") program.error("error: --host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead");""",
+            newValue = marker,
+        )
+        if (patched != src) {
+            target.writeText(patched, StandardCharsets.UTF_8)
+            logInfo(R.string.dsh_log_lan_patched)
         }
     }
 
