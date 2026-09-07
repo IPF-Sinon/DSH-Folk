@@ -44,8 +44,13 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- 电话状态：运营商、网络制式、SIM 与通话状态（/native/phone/info）。
          没有 CALL_PHONE —— 拨号走 ACTION_DIAL 只把号码填进拨号盘，由用户按下通话键。
-         也没有 READ_CALL_LOG / READ_SMS：通话记录与短信不在本次范围内。 -->
+         通话记录不在本次范围内；短信能力单独由 READ_SMS 控制。 -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- 短信与应用使用统计：分别供 Cap.SMS 与 Cap.USAGE；后者仍需用户在特殊权限页开启。 -->
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
     <!-- 传感器：普通传感器（加速度/陀螺/光/气压…）不需要权限，这两项是例外 ——
          心率属于人体传感器，计步器在 Android 10 起归入身体活动。 -->
     <uses-permission android:name="android.permission.BODY_SENSORS" />

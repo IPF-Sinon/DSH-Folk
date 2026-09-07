@@ -593,6 +593,10 @@
     <string name="dsh_native_cap_settings_desc">Brightness, screen timeout and auto-rotate. Android requires this to be granted on a system settings page.</string>
     <string name="dsh_native_cap_install">Install permission status</string>
     <string name="dsh_native_cap_install_desc">Read whether installing unknown apps is allowed. It never installs anything by itself.</string>
+    <string name="dsh_native_cap_usage">App usage stats</string>
+    <string name="dsh_native_cap_usage_desc">Read app usage statistics. Android requires Usage Access on a system settings page.</string>
+    <string name="dsh_native_cap_sms">SMS</string>
+    <string name="dsh_native_cap_sms_desc">Allow the native bridge to read SMS after Android grants READ_SMS.</string>
 
     <string name="dsh_native_need_camera_perm">Camera permission not granted — tap to grant</string>
     <string name="dsh_native_need_calendar_perm">Calendar permission not granted — tap to grant</string>
@@ -603,6 +607,8 @@
     <string name="dsh_native_need_write_settings">Modify system settings not granted — tap to open system settings</string>
     <string name="dsh_native_need_dnd_access">Do Not Disturb access is needed to set silent or to change volume while DND is on — tap to open system settings</string>
     <string name="dsh_native_need_install_perm">Installing unknown apps is not allowed — tap to open system settings</string>
+    <string name="dsh_native_need_usage_perm">Usage Access not granted — tap to open system settings</string>
+    <string name="dsh_native_need_sms_perm">SMS permission not granted — tap to grant</string>
     <string name="dsh_native_precise_location">Only approximate location granted; coordinates are blurred to a few kilometres</string>
 
     <!-- ── 新增能力的报错（会出现在 dsh-native 的输出里）── -->
@@ -711,6 +717,7 @@
     <string name="dsh_log_starting_web">Starting dsh web on port %1$d</string>
     <string name="dsh_log_lan_on">LAN access is ON: http://%1$s:%2$d — reachable from the whole network, make sure you trust it</string>
     <string name="dsh_log_lan_on_no_ip">LAN access is ON, but the local IP could not be determined</string>
+    <string name="dsh_log_lan_patched">LAN access was force-enabled for this runtime</string>
     <string name="dsh_log_lan_off">LAN access is OFF, listening on 127.0.0.1 only</string>
     <string name="dsh_log_ready">Service is ready: http://127.0.0.1:%1$d/</string>
     <string name="dsh_log_switched_to_proot">Switched back to proot — please start the service again</string>

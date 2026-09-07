@@ -14,6 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +47,7 @@ fun UpdateDialog(
     status: UpdateChecker.Status? = null,
 ) {
     val context = LocalContext.current
+    val maxDialogHeight = (LocalConfiguration.current.screenHeightDp.dp - 48.dp).coerceAtLeast(320.dp)
     val scope = rememberCoroutineScope()
 
     var phase by remember { mutableStateOf<AppUpdater.Phase>(AppUpdater.Phase.Idle) }
@@ -65,7 +67,7 @@ fun UpdateDialog(
         ),
     ) {
         Surface(
-            modifier = Modifier.width(340.dp).wrapContentHeight(),
+            modifier = Modifier.width(340.dp).heightIn(max = maxDialogHeight),
             shape = RoundedCornerShape(20.dp),
             tonalElevation = AlertDialogDefaults.TonalElevation,
             color = AlertDialogDefaults.containerColor,
@@ -102,39 +104,46 @@ fun UpdateDialog(
                         }
                     }
                 }
-                if (status?.isPrerelease == true) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.update_beta_warning),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = stringResource(R.string.update_available_message),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
 
-                // 更新内容（release body）。限高可滚动：notes 可能很长。
-                if (status != null && status.notes.isNotEmpty()) {
+                // 对话框整体限高；标题留在顶部、按钮留在底部，中间内容统一滚动。
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    if (status?.isPrerelease == true) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.update_beta_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = stringResource(R.string.update_notes_title),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = stringResource(R.string.update_available_message),
+                        style = MaterialTheme.typography.bodyMedium,
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = status.notes,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 160.dp)
-                            .verticalScroll(rememberScrollState()),
-                    )
-                }
+
+                    // 更新内容（release body）。主体统一滚动，notes 自身只限制占用高度。
+                    if (status != null && status.notes.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.update_notes_title),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = status.notes,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 160.dp),
+                        )
+                    }
 
                 // ── 测速结果 ──
                 if (results.isNotEmpty()) {
@@ -233,6 +242,7 @@ fun UpdateDialog(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
+                }
                 }
 
                 Spacer(Modifier.height(16.dp))

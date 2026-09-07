@@ -2015,6 +2015,8 @@ object DshRuntime {
         // dsh 每次启动都会生成新 token，不能沿用上一个进程的认证地址。
         _state.update { it.copy(webToken = null) }
 
+        if (lanEnabled()) patchLanHost()
+
         val port = port()
         val lan = lanEnabled()
         val opts = buildString {
@@ -2101,6 +2103,31 @@ object DshRuntime {
                 log.flushForExit()
                 runCatching { reader.close() }
             }
+        }
+    }
+
+    /**
+     * 从代码层强行开启 `--host 0.0.0.0`：注释掉 dsh-web-app 的安全检查。
+     *
+     * 当前 dsh-web-app 会硬编码拒绝 `0.0.0.0`，App 打开「局域网访问」后因此以
+     * usage error 退出。每次启动前幂等 patch 掉那一行，让 dsh 接受该地址。
+     */
+    private fun patchLanHost() {
+        val target = File(
+            DshEnv.rootfs(appContext),
+            "usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-web-app/lib/startup.js",
+        )
+        if (!target.isFile) return
+        val src = target.readText(StandardCharsets.UTF_8)
+        val marker = "/* patched by DSH-Folk: lan force-enable */"
+        if (src.contains(marker)) return
+        val patched = src.replace(
+            oldValue = """if (options.host === "0.0.0.0") program.error("error: --host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead");""",
+            newValue = marker,
+        )
+        if (patched != src) {
+            target.writeText(patched, StandardCharsets.UTF_8)
+            logInfo(R.string.dsh_log_lan_patched)
         }
     }
 

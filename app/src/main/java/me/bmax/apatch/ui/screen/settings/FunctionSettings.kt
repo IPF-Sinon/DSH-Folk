@@ -1336,6 +1336,8 @@ internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.VOLUME -> R.string.dsh_native_cap_volume
     DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_cap_settings
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_cap_install
+    DshNativeBridge.Cap.USAGE -> R.string.dsh_native_cap_usage
+    DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms
 }
 
 /** 原生能力 → 说明串。 */
@@ -1359,6 +1361,8 @@ internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.VOLUME -> R.string.dsh_native_cap_volume_desc
     DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_cap_settings_desc
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_cap_install_desc
+    DshNativeBridge.Cap.USAGE -> R.string.dsh_native_cap_usage_desc
+    DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms_desc
 }
 
 /**
@@ -1384,6 +1388,8 @@ internal fun capPermissionHintRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_need_write_settings
     DshNativeBridge.Cap.VOLUME -> R.string.dsh_native_need_dnd_access
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_need_install_perm
+    DshNativeBridge.Cap.USAGE -> R.string.dsh_native_need_usage_perm
+    DshNativeBridge.Cap.SMS -> R.string.dsh_native_need_sms_perm
     // 剩下的（toast/振动/剪贴板/分享/设备信息/网络）不需要任何权限。
     // 界面只在 cap !in capsWithPermission 时才取这一行，而这些项恒在集合里，
     // 所以这个分支实际不会被显示；给一个中性串而不是抛，免得将来加了新能力就崩。
@@ -1437,6 +1443,8 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
             DshNativeBridge.Cap.LOCATION,
             DshNativeBridge.Cap.CALENDAR,
             DshNativeBridge.Cap.CONTACTS,
+            DshNativeBridge.Cap.USAGE,
+            DshNativeBridge.Cap.SMS,
         ),
     ),
 

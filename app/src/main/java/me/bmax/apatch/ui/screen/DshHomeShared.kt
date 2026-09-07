@@ -177,7 +177,7 @@ fun ProvideDshHomeState(content: @Composable () -> Unit) {
             onPick = { mode, remember ->
                 askWebUi = false
                 if (remember) DshWebUi.setMode(appContext, mode)
-                val url = "http://127.0.0.1:${runtime.port}/"
+                val url = runtime.webUrl
                 if (mode == DshWebUi.MODE_BROWSER) DshWebUi.openExternal(appContext, url)
                 else DshWebUi.openInApp(appContext, url)
             },
