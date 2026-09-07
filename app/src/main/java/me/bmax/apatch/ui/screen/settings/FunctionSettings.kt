@@ -17,7 +17,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Extension
@@ -173,9 +172,6 @@ fun FunctionSettingsContent(
     /** 安装插件后是否验证一次能否启动。 */
     verifyAfterInstall: Boolean,
     onVerifyAfterInstallChange: (Boolean) -> Unit,
-    /** 是否走运行时测试版通道（runtime-beta，默认关）。 */
-    runtimeBeta: Boolean,
-    onRuntimeBetaChange: (Boolean) -> Unit,
     adbPairCode: String,
     onAdbPairCodeChange: (String) -> Unit,
     adbPairPort: String,
@@ -753,18 +749,6 @@ fun FunctionSettingsContent(
                 description = stringResource(R.string.dsh_verify_after_install_summary),
                 checked = verifyAfterInstall,
                 onCheckedChange = onVerifyAfterInstallChange,
-            )
-        }
-
-        // ───────── 运行时测试版通道 ─────────
-        item(key = "function_runtime_beta") {
-            ToggleSettingCard(
-                flat = flat,
-                icon = Icons.Filled.BugReport,
-                title = stringResource(R.string.dsh_runtime_beta),
-                description = stringResource(R.string.dsh_runtime_beta_summary),
-                checked = runtimeBeta,
-                onCheckedChange = onRuntimeBetaChange,
             )
         }
 
@@ -1352,8 +1336,6 @@ internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.VOLUME -> R.string.dsh_native_cap_volume
     DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_cap_settings
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_cap_install
-    DshNativeBridge.Cap.USAGE -> R.string.dsh_native_cap_usage
-    DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms
 }
 
 /** 原生能力 → 说明串。 */
@@ -1377,8 +1359,6 @@ internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.VOLUME -> R.string.dsh_native_cap_volume_desc
     DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_cap_settings_desc
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_cap_install_desc
-    DshNativeBridge.Cap.USAGE -> R.string.dsh_native_cap_usage_desc
-    DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms_desc
 }
 
 /**
@@ -1404,8 +1384,6 @@ internal fun capPermissionHintRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_need_write_settings
     DshNativeBridge.Cap.VOLUME -> R.string.dsh_native_need_dnd_access
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_need_install_perm
-    DshNativeBridge.Cap.USAGE -> R.string.dsh_native_need_usage_perm
-    DshNativeBridge.Cap.SMS -> R.string.dsh_native_need_sms_perm
     // 剩下的（toast/振动/剪贴板/分享/设备信息/网络）不需要任何权限。
     // 界面只在 cap !in capsWithPermission 时才取这一行，而这些项恒在集合里，
     // 所以这个分支实际不会被显示；给一个中性串而不是抛，免得将来加了新能力就崩。

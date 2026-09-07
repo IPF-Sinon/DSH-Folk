@@ -14,95 +14,8 @@ object DshEnv {
     /** rootfs 解压根目录（Ubuntu base + node + dsh）。 */
     fun rootfs(ctx: Context): File = File(ctx.filesDir, "rootfs")
 
-    /**
-     * 容器内 dsh 的 $DSH_HOME 对应宿主路径（rootfs/root/.dsh）。
-     *
-     * 数据必须留在 rootfs 内：proroot/proot 的 `--link2symlink` 只覆盖 rootfs 树，
-     * 不覆盖 bind 挂载路径。dsh 会话落盘靠 `link()` 硬链接原子提交，一旦 .dsh 被
-     * bind 到 rootfs 之外，raw `link()` 会直达内核并被 SELinux 拒掉（会话报错）。
-     * 所以这里保持原位，靠 [DshRuntime.extractRootfs] 里 rename 暂存/恢复来跨更新。
-     */
+    /** 容器内 dsh 的 $DSH_HOME 对应宿主路径（rootfs/root/.dsh）。 */
     fun dshHome(ctx: Context): File = File(rootfs(ctx), "root/.dsh")
-
-    /**
-     * 更新运行时时必须跨越 rootfs 替换的子树（rootfs 内相对路径）。
-     *
-     * 只保 `root/.dsh` 是不够的 —— 那正是 1.8.4-beta.3 更新完起不来的原因
-     * （`cannot resolve profile bundle "dsh-llm-agentrouter"`）。`.dsh` 里的文件
-     * **内容不一定在 `.dsh` 里**，它可以指到两个外部位置：
-     *
-     * - `.l2s`（[l2sDir]）：无硬链接时 proot 的 `--link2symlink` 把 `link(a,b)`
-     *   实现成「把真实文件挪进 l2s 目录，a 和 b 都变成指向它的符号链接」。所以
-     *   凡是经 `link()` 落盘的文件（dsh 会话的原子提交、pnpm 的部分导入路径），
-     *   真身都在 `.l2s` 里。删掉它 = `.dsh` 里那些文件全变悬空链接。
-     * - `root/.local`：pnpm 的内容存储默认在 `$HOME/.local/share/pnpm/store`
-     *   （容器里 HOME=/root，代码里没有任何 store-dir 覆盖）。历史上以硬链接方式
-     *   导入的依赖，在 l2s 下就是指向存储的符号链接（[DshPluginRepo.storeLinkageBroken]
-     *   正是在查这个）。删掉存储 = 那些依赖同样变悬空链接。
-     *
-     * 两种情况下 node 的 `existsSync(node_modules/<pkg>/package.json)` 都会因为
-     * 跟随悬空链接而返回 false，而 `dsh.profile.bundles` 里还列着这个包 ——
-     * dsh 于是在启动第一步就抛错退出。
-     *
-     * 顺序无关：每一项都独立 rename 出去再 rename 回来。
-     */
-    val PRESERVED_PATHS = listOf("root/.dsh", "root/.local", ".l2s")
-
-    /** 运行时替换期间暂存上述子树的目录（rootfs 之外；rename 原子搬移，零拷贝）。 */
-    fun dshPreserve(ctx: Context): File = File(ctx.filesDir, ".dsh-preserve")
-
-    /**
-     * 把上一次中断留在暂存目录里的子树认领回 rootfs。
-     *
-     * 为什么必须有：解压期间进程被杀（OOM、用户强杀）会让数据停在
-     * [dshPreserve] 里。此时 rootfs 是残缺的，下次启动会重新走一遍
-     * [DshRuntime.extractRootfs] —— 如果那里直接把暂存目录删掉重来，
-     * 删掉的正是用户的会话和插件。
-     *
-     * 幂等且保守：rootfs 里已经有**非空**的同名目录就不动。那种情况下没法判断
-     * 哪份更新（rename 是原子的，两边同时有内容只可能来自更早的一轮），而
-     * rootfs 里那份正在用 —— 删暂存那份就有丢数据的风险，留着只是占空间，
-     * 下一次更新运行时会顺手清掉。
-     *
-     * 只在每一项都认领干净后才删暂存目录本身，且判据是「[PRESERVED_PATHS]
-     * 里还有没有条目」而不是递归数文件：pnpm 存储动辄几万个文件，
-     * 每次冷启动都走一遍 walk 太贵。
-     */
-    fun recoverPreserved(ctx: Context) {
-        val stash = dshPreserve(ctx)
-        if (!stash.isDirectory) return
-        val root = rootfs(ctx)
-        for (rel in PRESERVED_PATHS) {
-            val src = File(stash, rel)
-            if (!src.isDirectory) continue
-            val dst = File(root, rel)
-            if (dst.isDirectory && dst.list()?.isNotEmpty() == true) continue
-            dst.parentFile?.mkdirs()
-            if (dst.exists()) dst.deleteRecursively()
-            src.renameTo(dst)
-        }
-        if (PRESERVED_PATHS.none { File(stash, it).exists() }) {
-            runCatching { stash.deleteRecursively() }
-        }
-    }
-
-    /**
-     * 把 1.8.3-beta.1 移出去的 dsh 数据搬回 rootfs。
-     *
-     * 那次 bind-mount 方案把 /root/.dsh 挪到了 filesDir/dsh-home，但 proroot 的
-     * link2symlink 不覆盖 bind 挂载路径，会话写入的硬链接被 SELinux 拒了。这里把
-     * 数据 rename 回 rootfs/root/.dsh。幂等：rootfs 里已有数据就不动，绝不覆盖。
-     */
-    fun migrateDshHomeBack(ctx: Context) {
-        val moved = File(ctx.filesDir, "dsh-home")
-        if (!moved.isDirectory) return
-        val home = dshHome(ctx)
-        // 目标已有数据就不搬（说明已回迁过，或这是新装 + 遗留的孤儿目录）
-        if (home.isDirectory && home.list()?.isNotEmpty() == true) return
-        home.parentFile?.mkdirs()
-        if (home.exists()) home.deleteRecursively()
-        moved.renameTo(home)
-    }
 
     /** proot 的 l2s 中间文件目录（无硬链接时启用），固定在 rootfs 内避免随 tmp 被清。 */
     fun l2sDir(ctx: Context): File = File(rootfs(ctx), ".l2s")
@@ -249,18 +162,6 @@ object DshEnv {
      * 预装包从账本里摘掉，让它们再试一次。只补真正没生效的，不会重跑已生效的。
      */
     const val KEY_SEED_REPAIR_REV = "seed_repair_rev"
-
-    /**
-     * 上次做过「孤立设置项」体检时 profile manifest 的指纹。
-     *
-     * 只在指纹变了才体检（见 [DshRuntime.healOrphanSettings]）：插件装/卸、bundle 被
-     * 停用或摘掉都会改这个文件，而这些正是唯一可能留下孤立设置项的操作。健康设备
-     * 反复启动时指纹不变，一次容器调用都不会发生。
-     *
-     * 空值表示从没体检过 —— 那一次必查，好让升级到本版本的存量设备把历史留下的
-     * 孤立项修掉。
-     */
-    const val KEY_SETTINGS_CHECK_FP = "settings_check_fingerprint"
 
     /** 安装插件后是否用 `dsh web --port 0` 验证一次能否启动（默认开）。 */
     const val KEY_VERIFY_AFTER_INSTALL = "verify_after_install"

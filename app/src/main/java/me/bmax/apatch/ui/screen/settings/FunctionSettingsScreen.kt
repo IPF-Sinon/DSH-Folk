@@ -118,7 +118,6 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var verifyAfterInstall by rememberSaveable {
         mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, true))
     }
-    var runtimeBeta by rememberSaveable { mutableStateOf(DshSource.betaEnabled(context)) }
     var downloadSource by rememberSaveable { mutableStateOf(DshSource.setting(context)) }
     var customMetaUrl by rememberSaveable { mutableStateOf(DshSource.customMetaUrl(context)) }
     // 生效源：auto 时是缓存/测速结果。解析要走网络，所以只在 IO 线程算，初值用设置值兜底。
@@ -304,7 +303,6 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
 
     val noSpeedText = stringResource(R.string.dsh_source_no_speed)
     val resultFmt = stringResource(R.string.dsh_source_result)
-    val unreachableFmt = stringResource(R.string.dsh_source_result_unreachable)
     val sourceNames = DshSource.let {
         mapOf(
             DshSource.SOURCE_AUTO to stringResource(R.string.dsh_source_auto),
@@ -539,24 +537,19 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                             val lines = results
                                 .sortedBy { it.estimatedMs }
                                 .map { r ->
-                                    val latency = r.latencyMs
-                                    if (latency == null) {
-                                        // 不可达：不拼延迟数字，直接一句话（老实现用 -1 占位，
-                                        // 渲染成「延迟 -1 ms · 不可达」，读起来像出了别的错）
-                                        String.format(unreachableFmt, sourceNames[r.source] ?: r.source)
+                                    val speed = if (r.speedKBps > 0.0) {
+                                        String.format("%.0f KB/s", r.speedKBps)
                                     } else {
-                                        val speed = if (r.speedKBps > 0.0) {
-                                            String.format("%.0f KB/s", r.speedKBps)
-                                        } else {
-                                            noSpeedText
-                                        }
-                                        String.format(
-                                            resultFmt,
-                                            sourceNames[r.source] ?: r.source,
-                                            latency.toInt(),
-                                            speed,
-                                        )
+                                        noSpeedText
                                     }
+                                    val latency = if (r.latencyMs >= Long.MAX_VALUE / 4) -1
+                                    else r.latencyMs.toInt()
+                                    String.format(
+                                        resultFmt,
+                                        sourceNames[r.source] ?: r.source,
+                                        latency,
+                                        speed,
+                                    )
                                 }
                             val picked = runCatching {
                                 DshSource.pickBest(results, context.applicationContext)
@@ -652,11 +645,6 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     onVerifyAfterInstallChange = { on ->
                         verifyAfterInstall = on
                         dshPrefs.edit().putBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, on).apply()
-                    },
-                    runtimeBeta = runtimeBeta,
-                    onRuntimeBetaChange = { on ->
-                        runtimeBeta = on
-                        DshSource.setBetaEnabled(context.applicationContext, on)
                     },
                     adbPairCode = adbPairCode,
                     onAdbPairCodeChange = { adbPairCode = it.filter { c -> c.isDigit() }.take(6) },

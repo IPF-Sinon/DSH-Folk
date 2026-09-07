@@ -239,8 +239,7 @@
     <string name="dsh_source_speedtest">Run speed test</string>
     <string name="dsh_source_testing">Testing…</string>
     <string name="dsh_source_result">%1$s: %2$d ms · %3$s</string>
-    <string name="dsh_source_result_unreachable">%1$s: unreachable</string>
-    <string name="dsh_source_no_speed">not measured</string>
+    <string name="dsh_source_no_speed">unreachable</string>
     <string name="dsh_plugin_install">Install</string>
     <string name="dsh_plugin_installed">Installed</string>
     <string name="dsh_plugin_no_npm">Not on npm — tap to open the repository and follow its install steps</string>
@@ -278,7 +277,6 @@
     <string name="dsh_msg_service_ready">Service ready · %1$s</string>
     <string name="dsh_msg_stopped">Service stopped</string>
     <string name="dsh_msg_not_installed">Runtime is not installed</string>
-    <string name="dsh_msg_healing_plugins">Repairing plugin dependencies…</string>
     <string name="dsh_err_meta_failed">Could not fetch runtime info. Check the network or switch mirror.</string>
     <string name="dsh_err_arch_mismatch">Runtime architecture mismatch: package is %1$s, this app build needs %2$s</string>
     <string name="dsh_err_no_space">Not enough storage (%1$d MB free, about %2$d MB needed). Free some space and retry.</string>
@@ -349,7 +347,7 @@
     <string name="dsh_runtime_update_available">Update available: %1$s</string>
     <string name="dsh_runtime_update_go">Update runtime</string>
     <string name="dsh_runtime_reinstall_confirm_title">Reinstall the runtime?</string>
-    <string name="dsh_runtime_reinstall_confirm_text">This downloads the runtime again (about 140 MB) and replaces the container. Your data — sessions, installed plugins, DSH configuration and ADB keys — is kept. The service stops first.</string>
+    <string name="dsh_runtime_reinstall_confirm_text">This downloads the runtime again (about 140 MB) and overwrites the container. Files under /root/.dsh — installed plugins, ADB keys and your DSH configuration — are inside that container and will be lost. The service stops first.</string>
     <string name="dsh_runtime_reinstall_go">Reinstall</string>
 
     <!-- 插件商店：全量目录 + 本地检索 -->
@@ -406,8 +404,6 @@
     <!-- 安装后验证 / 首启预装 -->
     <string name="dsh_verify_after_install">Verify after installing</string>
     <string name="dsh_verify_after_install_summary">After installing a plugin, start dsh once on a temporary port to check the plugin tree loads; on failure the plugin is uninstalled automatically. Adds 30s–3min per install.</string>
-    <string name="dsh_runtime_beta">Runtime test channel</string>
-    <string name="dsh_runtime_beta_summary">Off by default. When on, the app checks for updates against the runtime-beta release instead of the stable runtime-latest release — for testing new container runtimes only.</string>
     <string name="dsh_plugin_verify_failed">Verification failed: %1$s. The plugin is still installed — remove it from the Installed page if the service will not start.</string>
     <string name="dsh_plugin_rolled_back">Verification failed: %2$s. %1$s has been uninstalled automatically; nothing was changed.</string>
     <string name="dsh_plugin_seeding">Installing bundled plugins…</string>
@@ -596,13 +592,6 @@
     <string name="dsh_native_cap_settings_desc">Brightness, screen timeout and auto-rotate. Android requires this to be granted on a system settings page.</string>
     <string name="dsh_native_cap_install">Install permission status</string>
     <string name="dsh_native_cap_install_desc">Read whether installing unknown apps is allowed. It never installs anything by itself.</string>
-    <string name="dsh_native_cap_usage">App usage stats</string>
-    <string name="dsh_native_cap_usage_desc">Read which apps are in use and for how long. Android requires this to be granted on a system settings page.</string>
-    <string name="dsh_native_cap_sms">SMS</string>
-    <string name="dsh_native_cap_sms_desc">Read and send SMS messages. On Android 13 and above the system prompts for both read and send permissions.</string>
-
-    <string name="dsh_native_need_usage_perm">Usage access not granted — tap to open system settings</string>
-    <string name="dsh_native_need_sms_perm">SMS permission not granted — tap to grant</string>
 
     <string name="dsh_native_need_camera_perm">Camera permission not granted — tap to grant</string>
     <string name="dsh_native_need_calendar_perm">Calendar permission not granted — tap to grant</string>
@@ -720,7 +709,6 @@
     <string name="dsh_log_pnpm_from_profile">%1$s (from the profile pnpm-workspace.yaml)</string>
     <string name="dsh_log_starting_web">Starting dsh web on port %1$d</string>
     <string name="dsh_log_lan_on">LAN access is ON: http://%1$s:%2$d — reachable from the whole network, make sure you trust it</string>
-    <string name="dsh_log_lan_patched">Patched startup.js to allow --host 0.0.0.0</string>
     <string name="dsh_log_lan_on_no_ip">LAN access is ON, but the local IP could not be determined</string>
     <string name="dsh_log_lan_off">LAN access is OFF, listening on 127.0.0.1 only</string>
     <string name="dsh_log_ready">Service is ready: http://127.0.0.1:%1$d/</string>
@@ -737,7 +725,6 @@
     <string name="dsh_log_bridge_failed">Bridge failed to start: %1$s</string>
     <string name="dsh_log_speedtest_start">Measuring download sources…</string>
     <string name="dsh_log_speedtest_row">Measured %1$s: %2$dms latency · %3$s</string>
-    <string name="dsh_log_speedtest_unreachable">Measured %1$s: unreachable</string>
     <string name="dsh_log_speedtest_untested">not measured</string>
     <string name="dsh_log_source_chosen">Download source chosen: %1$s</string>
     <string name="dsh_log_fetching_meta">Fetching runtime information…</string>
@@ -758,15 +745,6 @@
     <string name="dsh_log_missing_python">The runtime has no python3, wireless ADB pairing is unavailable</string>
     <string name="dsh_log_missing_pnpm">The runtime has no pnpm, plugin installation is unavailable</string>
     <string name="dsh_log_extract_failed">Extraction failed: %1$s</string>
-    <string name="dsh_log_preserve_failed">Could not move %1$s aside before replacing the runtime; aborting so no data is lost</string>
-    <string name="dsh_log_restore_failed">Could not restore %1$s after the update (the data is still in %2$s and will be picked up on the next start)</string>
-    <string name="dsh_log_bundles_unresolved">These plugins cannot be resolved and would keep the service from starting: %1$s — repairing…</string>
-    <string name="dsh_log_bundles_healed">Plugins repaired: %1$s</string>
-    <string name="dsh_log_bundles_parked">%1$s could not be reinstalled and was disabled so the service can start; install it again from the plugin store to re-enable it</string>
-    <string name="dsh_log_bundles_park_failed">Could not disable the unresolvable plugins (%1$s); the service may fail to start</string>
-    <string name="dsh_log_bundle_heal_error">Plugin repair error: %1$s</string>
-    <string name="dsh_log_settings_quarantined">A disabled plugin left these model provider routes half-configured, which was breaking the whole Models page: %1$s — moved them aside under llm-pi-ai.dshfolkQuarantinedProviders (nothing was deleted; install the plugin again and move them back)</string>
-    <string name="dsh_log_settings_check_error">Orphaned-settings check error: %1$s</string>
     <string name="dsh_log_groups_added">Added the Android supplementary groups to the container: %1$s</string>
     <string name="dsh_log_seeding">Pre-installing plugin %1$s …</string>
     <string name="dsh_log_seed_builds_blocked">pnpm blocked build scripts (%1$s), allowing them and retrying…</string>
@@ -775,7 +753,6 @@
     <string name="dsh_log_seed_failed">Could not pre-install %1$s (you can install it later from the plugin store)</string>
     <string name="dsh_log_seed_exception">Pre-install error: %1$s</string>
     <string name="dsh_log_seed_retry_exception">Pre-install retry error: %1$s</string>
-    <string name="dsh_log_seed_skip">Pre-install skipped (already recorded or installed): %1$s</string>
     <string name="dsh_log_dsh_missing_in_container">Could not find dsh inside the container; please reinstall the runtime in Settings</string>
     <!-- ── 容器内插件操作的日志（DshPluginRepo） ────────────────
          都带 [DSH-Folk] 前缀，与 pnpm/dsh 自己的输出区分开。 -->
@@ -790,7 +767,6 @@
     <string name="dsh_plug_log_profile_missing">The profile is not initialized (no %1$s/package.json), skipping the rebuild</string>
     <string name="dsh_plug_log_profile_missing_short">The profile is not initialized, skipping the rebuild</string>
     <string name="dsh_plug_log_clearing_modules">Clearing node_modules (keeping pnpm-lock.yaml)…</string>
-    <string name="dsh_plug_log_dep_pruned">Removed the dependency entry for %1$s as well: its local source no longer exists, so it can never be installed again</string>
     <string name="dsh_plug_log_installing_rescue_cli">Installing the dsh-config-manager CLI (global, independent of the DSH runtime)…</string>
     <string name="dsh_plug_log_verifying">Verifying that the plugin can start (on a temporary port, the running service is untouched)…</string>
     <string name="dsh_plug_log_rollback">Verification failed, uninstalling %1$s …</string>

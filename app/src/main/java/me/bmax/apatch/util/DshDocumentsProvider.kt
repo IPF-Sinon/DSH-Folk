@@ -68,8 +68,7 @@ import java.io.FileNotFoundException
  * ## 排除项
  *
  * `cache/`、`code_cache/`、`no_backup/` 不列出：噪音大且随时被系统回收。
- * `rootfs/` 正常列出 —— 这是容器运行时；用户数据（sessions、profiles）在
- * `rootfs/root/.dsh/` 里，更新运行时由 extractRootfs 暂存/恢复，不会丢。
+ * `rootfs/` 正常列出 —— 这正是用户要浏览的东西（`rootfs/root/.dsh` 含 sessions、profiles）。
  *
  * ## documentId 不能是空串
  *

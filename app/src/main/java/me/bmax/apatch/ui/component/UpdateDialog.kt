@@ -141,8 +141,7 @@ fun UpdateDialog(
                     Spacer(Modifier.height(12.dp))
                     for ((i, r) in results.withIndex()) {
                         val label = stringResource(sourceLabelRes(r.source))
-                        val latency = r.latencyMs
-                        val unreachable = latency == null
+                        val unreachable = r.latencyMs >= Long.MAX_VALUE / 4
                         Row(
                             Modifier.fillMaxWidth(),
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
@@ -167,7 +166,7 @@ fun UpdateDialog(
                                     } else {
                                         stringResource(
                                             R.string.update_channel_result,
-                                            latency!!,
+                                            r.latencyMs,
                                             if (r.speedKBps > 0) {
                                                 DshDownloader.formatSpeed((r.speedKBps * 1024).toLong())
                                             } else {
@@ -260,7 +259,7 @@ fun UpdateDialog(
                                     phase = AppUpdater.Phase.Testing
                                     val r = AppUpdater.speedTest()
                                     results = r
-                                    chosen = r.firstOrNull { it.reachable }?.source
+                                    chosen = r.firstOrNull { it.latencyMs < Long.MAX_VALUE / 4 }?.source
                                     phase = if (chosen == null) {
                                         AppUpdater.Phase.Failed(
                                             context.getString(R.string.update_all_channels_down)

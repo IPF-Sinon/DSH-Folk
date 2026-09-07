@@ -187,9 +187,6 @@ object DshPluginRepo {
     private const val PROFILE = "web"
     private const val PROFILE_DIR = "/root/.dsh/profiles/web"
 
-    /** 同一个 profile 目录的**宿主侧相对路径**（相对 [DshEnv.dshHome]）。 */
-    private const val PROFILE_REL = "profiles/web"
-
     /**
      * git **能力**已验证过的标记（不只是「git 这个文件在」）。
      *
@@ -227,8 +224,6 @@ object DshPluginRepo {
         "plugin tree failed to load",
         "client bundles not found",
         "failed to apply loader entry modules",
-        "cannot resolve profile bundle",
-        "declares no dsh.bundle",
         "ERR_PNPM",
     )
 
@@ -1092,275 +1087,6 @@ object DshPluginRepo {
         )
     }
 
-    /**
-     * `dsh.profile.bundles` 里**解析不出来**的条目（不含 dsh 自带的 in-box bundle）。
-     *
-     * 判据与 dsh 自己的 `resolveBundleDir` 逐字一致（dsh-app-boot 的
-     * `packageDirFromAnchor`）：按 Node 的 node_modules 查找顺序，从「dsh 安装目录」
-     * 和「profile 目录」两个 anchor 找 `<包名>/package.json`，`existsSync` 跟随符号
-     * 链接。所以这里报出来的每一个名字，都会让 `dsh web` 在启动第一步抛
-     * `cannot resolve profile bundle` 然后退出。
-     *
-     * anchor 取 `dirname(readlink -f dsh)/../package.json` —— dsh 里
-     * `INSTALL_ANCHOR` 就是 `new URL("../package.json", import.meta.url)`，
-     * 而 bin 是 `lib/bin.js`，两者指向同一个 package.json。
-     *
-     * **anchor 必须先验证**（`name === "@deepseek-ai/dsh"`），否则整个判断反过来了：
-     * anchor 指错时连 `@deepseek-ai/dsh-base` 都会被报成「解析不出来」，
-     * 而调用方 [parkBundles] 照单摘掉就等于把服务彻底拆了。验不过就当作
-     * 「没有可诊断的问题」返回空 —— 少一次自愈远好过误伤。
-     *
-     * 同理**跳过 `@deepseek-ai/` 前缀**：那些由 dsh 安装目录提供，不是用户装的插件。
-     * 它们真缺了是运行时坏了（解压不完整），该走重装运行时，不是改 profile。
-     *
-     * 每个名字带 `UNRESOLVED ` 前缀输出，宿主侧只认这个前缀：proot 自己的
-     * `proot warning: …` 是由容器进程写的，`2>/dev/null` 拦不住它（那是 bash 内部
-     * 的重定向），而 execRootfs 又把 stderr 并进了同一个流 —— 不打标记就会把
-     * 一句警告当成包名摘掉。
-     *
-     * 只读，不改任何东西；一次 node 调用，healthy 情况下输出为空。
-     */
-    suspend fun unresolvableBundles(): List<String> = withContext(Dispatchers.IO) {
-        val script = "const fs=require('fs'),path=require('path'),mod=require('module');" +
-            "const dir=process.argv[1],anchor=process.argv[2];" +
-            // anchor 自证：不是 dsh 的 manifest 就什么都不说（见 KDoc）
-            "try{if(JSON.parse(fs.readFileSync(anchor,'utf8')).name!=='@deepseek-ai/dsh')process.exit(0)}" +
-            "catch(e){process.exit(0)}" +
-            "let j;try{j=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){process.exit(0)}" +
-            "const ok=(a,n)=>{try{for(const p of mod.createRequire(a).resolve.paths(n)||[])" +
-            "if(fs.existsSync(path.join(p,n,'package.json')))return true}catch(e){}return false};" +
-            "for(const b of (j.dsh&&j.dsh.profile&&j.dsh.profile.bundles)||[]){" +
-            "if(b.startsWith('@deepseek-ai/'))continue;" +
-            "if(!ok(anchor,b)&&!ok(path.join(dir,'package.json'),b))console.log('UNRESOLVED '+b)}"
-        DshRuntime.execRootfsForOutput(
-            "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); " +
-                "test -n \"\$DSH_REAL\" || exit 0; " +
-                "node -e \"$script\" $PROFILE_DIR \"\$(dirname \"\$DSH_REAL\")/../package.json\" 2>/dev/null",
-            120_000,
-        ).lines().mapNotNull { l ->
-            l.trim().takeIf { it.startsWith("UNRESOLVED ") }?.removePrefix("UNRESOLVED ")?.trim()
-        }.filter { it.isNotEmpty() }
-    }
-
-    /**
-     * 摘掉**来源已经消失的本地依赖**（`file:`/`link:`/绝对路径，且目标不存在）。
-     *
-     * 为什么要单独一步：这种 spec 会让 pnpm 在**解析阶段**就整体失败
-     * （ERR_PNPM_FETCH / linking 前就退出），于是同一个 profile 里别的缺包也一起装不上。
-     * 只有把它从 `dependencies` 里摘掉，后面的 `pnpm install` 才轮得到剩下的包。
-     * 它同时从 `dsh.profile.bundles` 里摘掉 —— 来源都没了，永远装不回来。
-     *
-     * **只碰被点名、且确实已死的条目**：npm 版本号 spec（`^1.2.0`）一律不动，
-     * 那种只是没装上，重装就能回来。
-     *
-     * @return 真正摘掉的包名
-     */
-    suspend fun pruneDeadLocalBundles(names: List<String>, onLine: (String) -> Unit = {}): List<String> =
-        withContext(Dispatchers.IO) {
-            if (names.isEmpty()) return@withContext emptyList()
-            val script = "const fs=require('fs'),path=require('path');" +
-                "const dir=process.argv[1],drop=new Set(process.argv.slice(2));" +
-                "const f=path.join(dir,'package.json');" +
-                "const j=JSON.parse(fs.readFileSync(f,'utf8'));" +
-                "const deps=j.dependencies||{};const dead=[];" +
-                // 不用正则：整段脚本要穿过 bash 双引号，$ 与反斜杠在那里都是雷
-                "for(const n of drop){let s=deps[n];if(typeof s!=='string')continue;" +
-                "if(s.startsWith('file:')||s.startsWith('link:'))s=s.slice(5);" +
-                "if(!(s.startsWith('/')||s.startsWith('.')))continue;" +
-                "if(!fs.existsSync(path.resolve(dir,s))){delete deps[n];dead.push(n)}}" +
-                "if(dead.length===0){console.log('NOCHANGE');process.exit(0)}" +
-                "const prof=(j.dsh||{}).profile;" +
-                "if(prof&&prof.bundles)prof.bundles=prof.bundles.filter(x=>!dead.includes(x));" +
-                "fs.writeFileSync(f+'.dshfolk-tmp',JSON.stringify(j,null,2)+String.fromCharCode(10));" +
-                "fs.renameSync(f+'.dshfolk-tmp',f);" +
-                "console.log('PRUNED '+dead.join(' '));"
-            val pruned = markedNames(
-                DshRuntime.execRootfsForOutput(
-                    "node -e \"$script\" $PROFILE_DIR " +
-                        names.joinToString(" ") { shellQuoted(it) } + " 2>&1",
-                    120_000,
-                ),
-                "PRUNED ",
-            )
-            if (pruned.isNotEmpty()) line(onLine, R.string.dsh_plug_log_dep_pruned, pruned.joinToString(", "))
-            pruned
-        }
-
-    /**
-     * 把解析不出来的 bundle 从 `dsh.profile.bundles` 里摘掉，让服务能起来。
-     *
-     * 最后一道兜底：一个装不回来的插件会让 `dsh web` 每次启动都在第一步退出
-     * （`cannot resolve profile bundle`），而用户在手机上没有编辑
-     * `profiles/web/package.json` 的现实路径 —— 整个应用就此变砖。摘掉它换来的是
-     * 「少一个插件」，而不是「打不开」。
-     *
-     * **保留 `dependencies` 里的记录**：dsh 的 reconcilePlugins 会在下一次
-     * `dsh plugin` 成功后，把重新装上、且声明了 `dsh.bundle` 的依赖自动加回
-     * bundles —— 用户去插件商店装一次就自动复原，不需要我们记账。来源彻底消失的
-     * 那种由 [pruneDeadLocalBundles] 先摘掉，不会走到这里。
-     *
-     * 写法是 JSON 原地改写 + rename，不碰其它字段（dependencies、pnpm 配置、
-     * dsh.profile 下别的键都原样保留）。
-     *
-     * @return 真正摘掉的包名；空表示没改动（或改写失败）
-     */
-    suspend fun parkBundles(names: List<String>): List<String> = withContext(Dispatchers.IO) {
-        if (names.isEmpty()) return@withContext emptyList()
-        val script = "const fs=require('fs'),path=require('path');" +
-            "const dir=process.argv[1],drop=new Set(process.argv.slice(2));" +
-            "const f=path.join(dir,'package.json');" +
-            "const j=JSON.parse(fs.readFileSync(f,'utf8'));" +
-            "const prof=(j.dsh||{}).profile;const b=(prof&&prof.bundles)||[];" +
-            "const gone=b.filter(x=>drop.has(x));" +
-            "if(gone.length===0){console.log('NOCHANGE');process.exit(0)}" +
-            "prof.bundles=b.filter(x=>!drop.has(x));" +
-            "fs.writeFileSync(f+'.dshfolk-tmp',JSON.stringify(j,null,2)+String.fromCharCode(10));" +
-            "fs.renameSync(f+'.dshfolk-tmp',f);" +
-            "console.log('PARKED '+gone.join(' '));"
-        markedNames(
-            DshRuntime.execRootfsForOutput(
-                "node -e \"$script\" $PROFILE_DIR " +
-                    names.joinToString(" ") { shellQuoted(it) } + " 2>&1",
-                120_000,
-            ),
-            "PARKED ",
-        )
-    }
-
-    /** 从容器输出里取 `<MARK> a b c` 那一行的名字列表。 */
-    private fun markedNames(out: String, mark: String): List<String> =
-        out.lines().firstOrNull { it.startsWith(mark) }
-            ?.removePrefix(mark)?.split(' ')?.map { it.trim() }?.filter { it.isNotEmpty() }
-            ?: emptyList()
-
-    /**
-     * 按 `package.json` 重新装齐 profile 依赖（不清 node_modules）。
-     *
-     * 与 [repairStore] 的区别：那个是「装法不对，全删重装」（几分钟、全量复制），
-     * 这个是「缺东西，补齐」——已经在位的包 pnpm 会跳过。运行时更新后的自愈走这条，
-     * 一般设备上就是补几个包的事。
-     */
-    suspend fun rehydrate(onLine: (String) -> Unit = {}): String = withContext(Dispatchers.IO) {
-        dshPlugin("install ${importFlag()}".trimEnd(), 900_000, onLine)
-    }
-
-    /** [quarantinePiAiOrphans] 的探测脚本在容器里的落点（宿主侧同一个文件）。 */
-    private const val PIAI_PROBE_REL = "dshfolk-piai-probe.js"
-    private const val PIAI_PROBE_GUEST = "/root/.dsh/$PIAI_PROBE_REL"
-
-    /**
-     * 把 `settings.yaml` 里**失去组合层另一半**的 pi-ai 路由挪进隔离键。
-     *
-     * ## 为什么需要它
-     * 一个 bundle 被摘掉（[pruneDeadLocalBundles] / [parkBundles]）时，它在组合层
-     * 为别的命名空间提供的配置也一起没了。典型形态：某个中转站插件在组合层声明
-     * `llm-pi-ai.providers.<路由>` 的 `api`/`baseURL`，而用户在模型设置页改过这条
-     * 路由的模型列表 —— 于是 `settings.yaml` 用户层只存着 `models` 那一半。
-     *
-     * pi-ai 的 `assertServiceable` 是**整段**校验：一条路由缺 `api` 就抛，
-     * `settings.register("llm-pi-ai")` 随之失败，整个命名空间不存在。而这个失败
-     * 发生在 `installSettingsSection` 的 `ctx.inject` 子 fiber 里，dsh 的
-     * `assertEntriesActivated` 只审 loader entry，**既不报错也不写日志**：服务照常
-     * 就绪，只有模型设置页悄悄坏掉 —— 「添加提供方」点了没反应（展开卡片要
-     * `namespaces.get(settingsNs)`，取不到）、「添加自定义提供方」变灰
-     * （协议表来自该命名空间的 schema）。同时用户层那一段里**所有**路由一起失效，
-     * 不只缺了半截的那条。1.8.4-beta.4 实测：模型分组从 22 组掉到 2 组。
-     *
-     * ## 判据（三重保险，宁可不修也不误伤）
-     * 1. 先用 dsh 自己的组合结果（`dsh web --dump-config` 里 `llm-pi-ai` 那一行的
-     *    `config`）加上用户层，跑一遍 pi-ai 的 `Config` + `apply` —— 能过就什么都不做。
-     * 2. 候选只取「用户层自己没写 `api`、组合层也不提供」的路由。
-     * 3. 逐条放回去复验：放回去仍然能过的不算罪魁（例如 pi-ai 内置目录里的路由，
-     *    `api` 来自自带目录）。只有放回去就再次失败的才被隔离。
-     *
-     * ## 处置
-     * 挪到同一段的 `dshfolkQuarantinedProviders`，**不删配置**：插件装回来后
-     * 手工挪回即可。已验证这个未知键能活过 schema 解析、`settings.mutate` 路径写
-     * 与 settings-file 的 YAML 叶级 diff，且不会出现在模型设置页上。
-     *
-     * 写盘用 `parseDocument` + rename，保注释、原子替换。只在服务还没起来时调用。
-     *
-     * @return 被隔离的路由名；空表示无需处理（或探测失败——一律当作无需处理）
-     */
-    suspend fun quarantinePiAiOrphans(): List<String> = withContext(Dispatchers.IO) {
-        val probe = File(DshEnv.dshHome(me.bmax.apatch.apApp), PIAI_PROBE_REL)
-        runCatching { probe.writeText(PIAI_PROBE_JS) }.getOrElse { return@withContext emptyList() }
-        val out = DshRuntime.execRootfsForOutput(
-            "export DSH_HOME=/root/.dsh; " + dshRealPrefix() +
-                "test -n \"\$DSH_REAL\" || exit 0; " +
-                "DUMP=\$(mktemp) || exit 0; " +
-                "node --expose-internals \"\$DSH_REAL\" web --dump-config >\"\$DUMP\" 2>/dev/null || { rm -f \"\$DUMP\"; exit 0; }; " +
-                "node $PIAI_PROBE_GUEST \"\$DSH_REAL\" /root/.dsh/settings.yaml \"\$DUMP\" 2>/dev/null; " +
-                "rm -f \"\$DUMP\"",
-            180_000,
-        )
-        runCatching { probe.delete() }
-        markedNames(out, "PIAI-QUARANTINED ")
-    }
-
-    /**
-     * 探测/隔离脚本本体（见 [quarantinePiAiOrphans] 的说明）。
-     *
-     * 单独成文件而不是拼进 bash 命令：它带引号、反斜杠与 `$`，穿一层 bash 双引号
-     * 极易出错。宿主写文件 + 容器里 `node <文件>` 没有任何转义面。
-     */
-    private val PIAI_PROBE_JS = """
-const fs=require('fs'),mod=require('module');
-const bin=process.argv[2],doc=process.argv[3],dump=process.argv[4];
-const NS='llm-pi-ai';
-let Y,piUrl;
-try{const r=mod.createRequire(bin);Y=r('yaml');piUrl=r.resolve('@deepseek-ai/dsh-llm-pi-ai')}catch(e){process.exit(0)}
-if(!fs.existsSync(doc)||!fs.existsSync(dump))process.exit(0);
-const rd=f=>Y.parse(fs.readFileSync(f,'utf8'),{logLevel:'silent'});
-let sec,base;
-try{
-  sec=(rd(doc)||{})[NS];
-  const rows=rd(dump)||[];
-  const row=Array.isArray(rows)?rows.find(r=>r&&r.id===NS):null;
-  base=(row&&row.config)||{};
-}catch(e){process.exit(0)}
-if(!sec||!sec.providers||Object.keys(sec.providers).length===0)process.exit(0);
-const pl=v=>typeof v==='object'&&v!==null&&!Array.isArray(v);
-const mg=(u,o)=>{if(o===undefined)return u;if(!pl(u)||!pl(o))return o;const m=Object.assign({},u);for(const k of Object.keys(o))m[k]=k in m?mg(m[k],o[k]):o[k];return m};
-const nop=()=>()=>{},hd=()=>{const h=()=>{};h.replace=()=>{};return h};
-import(piUrl).then(pi=>{
-  const test=s=>{
-    let v;
-    try{v=pi.Config(mg(pi.Config(base),s))}catch(e){return String(e&&e.message||e).split('\n')[0]}
-    const c={logger:{warn(){},error(){},info(){}},fiber:{state:0},events:{dispatch:()=>[]},get:()=>undefined,on:nop,inject:()=>nop,
-      llm:{registerConfigurableProviders:hd,registerAdapter:hd,registerModelDiscovery:nop}};
-    c.effect=f=>{try{f.call(c)}catch(e){}return nop};
-    try{pi.apply(c,v);return null}catch(e){return String(e&&e.message||e).split('\n')[0]}
-  };
-  const bad=test(sec);
-  if(bad===null){console.log('PIAI-OK');return}
-  const baseRoutes=new Set(Object.keys(base.providers||{}));
-  const cand=Object.keys(sec.providers).filter(k=>{
-    const v=sec.providers[k];
-    return pl(v)&&v.api===undefined&&!baseRoutes.has(k);
-  });
-  if(cand.length===0){console.log('PIAI-BROKEN '+bad);return}
-  const cut=JSON.parse(JSON.stringify(sec));
-  for(const k of cand)delete cut.providers[k];
-  if(test(cut)!==null){console.log('PIAI-BROKEN '+bad);return}
-  const guilty=[];
-  for(const k of cand){
-    const trial=JSON.parse(JSON.stringify(cut));
-    trial.providers[k]=sec.providers[k];
-    if(test(trial)===null){cut.providers[k]=sec.providers[k]}else{guilty.push(k)}
-  }
-  if(guilty.length===0){console.log('PIAI-BROKEN '+bad);return}
-  const d=Y.parseDocument(fs.readFileSync(doc,'utf8'));
-  for(const k of guilty){
-    d.setIn([NS,'dshfolkQuarantinedProviders',k],d.getIn([NS,'providers',k]));
-    d.deleteIn([NS,'providers',k]);
-  }
-  fs.writeFileSync(doc+'.dshfolk-tmp',d.toString());
-  fs.renameSync(doc+'.dshfolk-tmp',doc);
-  console.log('PIAI-QUARANTINED '+guilty.join(' '));
-}).catch(e=>{process.exit(0)});
-""".trimIndent()
-
     // ────────────────────────── 安装后验证 / 回滚 ──────────────────────────
 
     /** profile `dsh.profile.bundles` 当前列表（判定安装带来了哪个新包）。 */
@@ -1460,29 +1186,14 @@ import(piUrl).then(pi=>{
      * 而 `?.use {}` 在 null 时整块跳过且不抛异常 —— 原来两处调用点因此会把一个不存在
      * 或 0 字节的路径交给 `dsh plugin add`，用户看到的是 pnpm 的一句 ENOENT。
      *
-     * 清理暂存文件时**只删 profile 已经不引用的那些**。
-     *
-     * 原来这里无条件清空整个目录，那是一个会静默毁掉用户插件的 bug：pnpm 把本地
-     * 安装记成 `file:/root/.dsh/incoming/local-plugin-<ts>.tgz`（实测如此），
-     * 这个 spec 是该插件**唯一的来源**。装第二个本地插件就把第一个的 tgz 删了，
-     * spec 随即悬空 —— 平时看不出来（node_modules 里已有副本），可一旦需要重装
-     * （运行时更新丢了 pnpm 内容存储、或用户点「重建插件依赖」），pnpm 解析不到
-     * 来源，`pruneDeadLocalBundles` 就把它从 dependencies 与 dsh.profile.bundles
-     * 里一起摘掉，插件永久消失且装不回来。
-     *
-     * 更糟的是连带影响：被摘掉的插件如果在组合层给别的命名空间提供过配置
-     * （例如给 `llm-pi-ai` 声明一条 provider 路由的 api/baseURL），而用户层
-     * settings.yaml 里还留着那条路由的另一半，整个命名空间就会注册失败 ——
-     * 模型设置页的两个「添加提供方」按钮双双失效（1.8.4-beta.4 实测）。
-     * 见 [DshRuntime.healProfileBundles] 里的孤立路由隔离。
-     *
-     * `incoming` 在 `DshEnv.PRESERVED_PATHS`（`root/.dsh`）里，跨运行时更新存活，
-     * 所以留着的 tgz 长期有效。
+     * 顺带清掉上次留下的暂存文件：每次本地安装都写一个带时间戳的新文件，
+     * 装完谁也不删，rootfs 里会一直堆着。
      */
     fun stageTarball(ctx: Context, uri: Uri): String? {
         val dir = File(DshEnv.dshHome(ctx), "incoming")
         if (!dir.isDirectory && !dir.mkdirs()) return null
-        pruneUnreferencedTarballs(ctx, dir)
+        // 只留这一次的文件：tgz 动辄几 MB，堆在 rootfs 里没人清
+        runCatching { dir.listFiles()?.forEach { it.delete() } }
         val dst = File(dir, "local-plugin-${System.currentTimeMillis()}.tgz")
         val ok = runCatching {
             val input = ctx.contentResolver.openInputStream(uri) ?: return@runCatching false
@@ -1494,34 +1205,6 @@ import(piUrl).then(pi=>{
             return null
         }
         return "$INCOMING_GUEST/${dst.name}"
-    }
-
-    /**
-     * 删掉 `incoming` 里 profile 依赖已经不再引用的 tgz。
-     *
-     * 判据取 `profiles/web/package.json` 的 `dependencies`：值里出现的
-     * `$INCOMING_GUEST/<名字>` 就是还在用的来源，其余可以删。读不到 manifest
-     * （首次安装、文件损坏）时**一个都不删** —— 宁可占点空间，也不要再把用户
-     * 插件的唯一来源清掉（见 [stageTarball] 的注释）。
-     *
-     * 纯宿主侧文件操作：容器可能还没起来，这一步不该依赖它。
-     */
-    private fun pruneUnreferencedTarballs(ctx: Context, dir: File) {
-        runCatching {
-            val manifest = File(DshEnv.dshHome(ctx), "$PROFILE_REL/package.json")
-            if (!manifest.isFile) return
-            val deps = JSONObject(manifest.readText()).optJSONObject("dependencies") ?: return
-            val referenced = buildSet {
-                for (name in deps.keys()) {
-                    val spec = deps.optString(name)
-                    if (!spec.contains("$INCOMING_GUEST/")) continue
-                    add(spec.substringAfterLast('/').trim())
-                }
-            }
-            dir.listFiles()?.forEach { f ->
-                if (f.isFile && f.name.endsWith(".tgz") && f.name !in referenced) f.delete()
-            }
-        }
     }
 
     /**

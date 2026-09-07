@@ -10,10 +10,8 @@ import me.bmax.apatch.R
  *
  * 逻辑：
  * - 用户固定源 → 原样返回；
- * - auto → 逐个测延迟（metadata.json 小文件），对最优的做 Range 吞吐测速（跳过慢启动
- *   热身段），按「估算下载 100MB 耗时」评分（速度为主、延迟兜底），结果缓存 24h。
- *
- * 不可达用 `SpeedResult.latencyMs == null` 表达，不用哨兵大数 —— 见 [SpeedResult]。
+ * - auto → 并行测延迟（metadata.json 小文件），对最优的做 1MB Range 吞吐测速，
+ *   按「估算下载 100MB 耗时」评分（速度为主、延迟兜底），结果缓存 24h。
  */
 object DshSource {
     const val SOURCE_AUTO = "auto"
@@ -25,59 +23,17 @@ object DshSource {
     private const val CACHE_TTL_MS = 24 * 60 * 60 * 1000L
     private const val CONNECT_TIMEOUT_MS = 3_000
     private const val READ_TIMEOUT_MS = 3_000
-
-    // ── 吞吐测速窗口 ──
-    /** Range 请求的上限：够跑完热身 + 计时窗口，多要的服务端也不会真发完。 */
-    private const val SPEED_PROBE_BYTES = 4L * 1024 * 1024
-
-    /** 热身字节数：这段只读不计时，避开 TCP 慢启动。 */
-    private const val SPEED_WARMUP_BYTES = 512L * 1024
-
-    /** 热身时长上限：慢链路上热身不完 512KB 也要起表，否则单源就能耗掉十几秒。 */
-    private const val SPEED_WARMUP_MAX_MS = 1_500L
-
-    /** 计时窗口字节上限：快链路上取够样本就停。 */
-    private const val SPEED_TIMED_BYTES = 2L * 1024 * 1024
-
-    /** 计时窗口时长上限：慢链路上到点就停，单源开销钉在这个量级。 */
-    private const val SPEED_TIMED_MAX_MS = 2_500L
-
-    /** 计时窗口最少字节：不到这个量的样本噪声太大，当测速失败。 */
-    private const val SPEED_TIMED_MIN_BYTES = 128L * 1024
-
-    /** 吞吐测速的 read 超时：比延迟探测宽松，但不能让单源挂太久。 */
-    private const val SPEED_READ_TIMEOUT_MS = 6_000
-
+    private const val SPEED_PROBE_BYTES = 1L * 1024 * 1024
     private const val SCORE_REF_BYTES = 100L * 1024 * 1024
-
-    /** 未参与测速的候选（自定义源／第三方镜像）在下载排序里的权重：排在实测可达的源之后、不可达之前。 */
-    private const val UNRANKED_WEIGHT = Long.MAX_VALUE / 2
 
     private const val KEY_SOURCE = "download_source"
     private const val KEY_CUSTOM_URL = "custom_meta_url"
     private const val KEY_AUTO_SOURCE = "auto_source"
     private const val KEY_AUTO_SOURCE_AT = "auto_source_at"
-    private const val KEY_RUNTIME_BETA = "runtime_beta"
 
-    /** 正式运行时发布位置（滚动 tag runtime-latest；资产名按架构区分）。 */
+    /** 运行时发布位置（滚动 tag runtime-latest；资产名按架构区分）。 */
     private const val RUNTIME_BASE =
         "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-latest/"
-
-    /** 测试版运行时发布位置（滚动 tag runtime-beta；默认关，见 [betaEnabled]）。 */
-    private const val RUNTIME_BETA_BASE =
-        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-beta/"
-
-    /** 是否走测试版运行时通道。默认关。 */
-    fun betaEnabled(ctx: Context): Boolean =
-        prefs(ctx).getBoolean(KEY_RUNTIME_BETA, false)
-
-    fun setBetaEnabled(ctx: Context, on: Boolean) {
-        prefs(ctx).edit().putBoolean(KEY_RUNTIME_BETA, on).apply()
-    }
-
-    /** 当前通道的发布基地址（beta 开则走 runtime-beta，否则 runtime-latest）。 */
-    private fun runtimeBase(ctx: Context): String =
-        if (betaEnabled(ctx)) RUNTIME_BETA_BASE else RUNTIME_BASE
 
     /**
      * 本机要用的运行时架构。
@@ -167,10 +123,10 @@ object DshSource {
     private fun assetSuffix(): String = if (runtimeArch() == "arm64-v8a") "" else "-x86_64"
 
     /** 本机架构对应的 metadata.json 地址（不含镜像前缀）。 */
-    fun metaUrl(ctx: Context): String = runtimeBase(ctx) + "metadata" + assetSuffix() + ".json"
+    fun metaUrl(): String = RUNTIME_BASE + "metadata" + assetSuffix() + ".json"
 
     /** 吞吐测速目标（Range 拉前 1MB）：打本机真正会下载的那个 rootfs。 */
-    private fun speedProbeUrl(ctx: Context): String = runtimeBase(ctx) + "rootfs" + assetSuffix() + ".tar.gz"
+    private fun speedProbeUrl(): String = RUNTIME_BASE + "rootfs" + assetSuffix() + ".tar.gz"
 
     fun proxyPrefix(source: String): String = when (source) {
         SOURCE_GHPROXY_CF -> "https://v6.gh-proxy.org/"
@@ -198,34 +154,18 @@ object DshSource {
         else -> R.string.dsh_source_auto
     }
 
-    /**
-     * 单个源的测速结果。
-     *
-     * `latencyMs == null` 表示**不可达**（连不上／非 2xx／超时）。这里用 null 而不是
-     * 一个「极大的哨兵值」：老实现返回 `Long.MAX_VALUE / 4` 参与排序，三个渲染处各自
-     * 用 `>= Long.MAX_VALUE / 4` 判断，漏判一处就把 `2305843009213693951ms` 原样打给
-     * 用户看（启动日志就漏了）。让类型系统强制调用方处理这个分支，那类 bug 就不存在。
-     */
-    data class SpeedResult(val source: String, val latencyMs: Long?, val speedKBps: Double = 0.0) {
-        val reachable: Boolean get() = latencyMs != null
-
-        /** 估算下载 100MB 的耗时（毫秒）；不可达排最后，速度未测得时仅按延迟粗排。 */
+    data class SpeedResult(val source: String, val latencyMs: Long, val speedKBps: Double = 0.0) {
+        /** 估算下载 100MB 的耗时（毫秒）；速度未测得时仅按延迟粗排。 */
         val estimatedMs: Long
-            get() {
-                val latency = latencyMs ?: return Long.MAX_VALUE
-                return if (speedKBps > 0.0) {
-                    latency + (SCORE_REF_BYTES / 1024.0 / speedKBps * 1000.0).toLong()
-                } else {
-                    latency + SCORE_REF_BYTES / 1024 / 1024 * 60_000L
-                }
+            get() = if (speedKBps > 0.0) {
+                latencyMs + (SCORE_REF_BYTES / 1024.0 / speedKBps * 1000.0).toLong()
+            } else {
+                latencyMs + SCORE_REF_BYTES / 1024 / 1024 * 60_000L
             }
     }
 
     @Volatile private var memCache: String? = null
     @Volatile private var memCachedAt: Long = 0L
-
-    /** 最近一次 [speedTest] 的结果，供下载 fallback 排序用（见 [downloadRank]）。 */
-    @Volatile private var lastResults: List<SpeedResult> = emptyList()
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
 
@@ -256,7 +196,7 @@ object DshSource {
             val custom = customMetaUrl(ctx)
             if (custom.isNotEmpty()) return custom
         }
-        return proxyPrefix(resolved) + metaUrl(ctx)
+        return proxyPrefix(resolved) + metaUrl()
     }
 
     private fun cachedAuto(ctx: Context): String? {
@@ -274,11 +214,7 @@ object DshSource {
     }
 
     fun pickBest(results: List<SpeedResult>, ctx: Context): String {
-        // 全部不可达时不要记缓存：那是「当时没网」，不是「这个源最好」。记下来会让
-        // 之后 24h 内都用这个随便挑的源，即使网络已经恢复。
-        val reachable = results.filter { it.reachable }
-        if (reachable.isEmpty()) return SOURCE_GHPROXY_CF
-        val picked = reachable.minByOrNull { it.estimatedMs }?.source ?: SOURCE_GHPROXY_CF
+        val picked = results.minByOrNull { it.estimatedMs }?.source ?: SOURCE_GHPROXY_AXISNOW
         val now = System.currentTimeMillis()
         memCache = picked
         memCachedAt = now
@@ -289,56 +225,25 @@ object DshSource {
         return picked
     }
 
-    /**
-     * 下载候选 URL 的排序权重：越小越先试。
-     *
-     * 测速已经知道哪个源不可达了，fallback 却按 metadata 里 mirrors 的**固定顺序**
-     * 试 —— 于是刚测出 SSL 握手失败的 AxisNow 仍然排在 GitHub 直连前面，用户白等
-     * 一次超时。这里把测速结论接进来：不可达的源沉底，其余按估算耗时升序。
-     *
-     * 认不出来的 URL（自定义源、metadata 里的第三方镜像）给一个中间值，保持原相对
-     * 顺序 —— 没测过不代表不好，但也不该抢在实测最快的源前面。
-     */
-    fun downloadRank(url: String): Long {
-        val src = when {
-            url.startsWith("https://v6.gh-proxy.org/") -> SOURCE_GHPROXY_CF
-            url.startsWith("https://axisnow.gh-proxy.org/") -> SOURCE_GHPROXY_AXISNOW
-            url.startsWith("https://github.com/") -> SOURCE_GITHUB
-            else -> return UNRANKED_WEIGHT
-        }
-        val r = lastResults.firstOrNull { it.source == src } ?: return UNRANKED_WEIGHT
-        return r.estimatedMs
-    }
-
     /** 三候选源全部测一遍（延迟 + 对最优两个测吞吐）。同步阻塞，调用方放 IO 线程。 */
     fun speedTest(): List<SpeedResult> {
-        val meta = metaUrl(me.bmax.apatch.apApp)
-        val probe = speedProbeUrl(me.bmax.apatch.apApp)
+        val meta = metaUrl()
+        val probe = speedProbeUrl()
         val candidates = listOf(
             SOURCE_GHPROXY_AXISNOW to "https://axisnow.gh-proxy.org/$meta",
             SOURCE_GHPROXY_CF to "https://v6.gh-proxy.org/$meta",
             SOURCE_GITHUB to meta,
         )
         val latency = candidates.map { (src, url) -> SpeedResult(src, probeLatency(url)) }
-        // 只在**可达**的源里挑最快的两个做吞吐测速：不可达的没有延迟可比，
-        // 把它塞进 top2 只会浪费一次注定失败的拉取。
-        val top = latency
-            .filter { it.reachable }
-            .sortedBy { it.latencyMs!! }
-            .take(2)
-            .map { it.source }
-            .toSet()
-        val results = latency.map { r ->
-            if (r.source !in top) r else r.copy(speedKBps = probeSpeed(proxyPrefix(r.source) + probe))
+        val top = latency.sortedBy { it.latencyMs }.take(2).map { it.source }.toSet()
+        return latency.map { r ->
+            if (r.source !in top || r.latencyMs >= Long.MAX_VALUE / 4) r
+            else r.copy(speedKBps = probeSpeed(proxyPrefix(r.source) + probe))
         }
-        lastResults = results
-        return results
     }
 
-    /**
-     * 延迟探测：拉 metadata.json 头部。**不可达返回 null**（不是哨兵大数）。
-     */
-    private fun probeLatency(url: String): Long? {
+    /** 延迟探测：拉 metadata.json 头部。不可达返回一个极大值参与排序。 */
+    private fun probeLatency(url: String): Long {
         val start = System.currentTimeMillis()
         var conn: HttpURLConnection? = null
         return try {
@@ -347,73 +252,41 @@ object DshSource {
             conn.readTimeout = READ_TIMEOUT_MS
             conn.instanceFollowRedirects = true
             conn.requestMethod = "GET"
-            if (conn.responseCode !in 200..299) return null
+            if (conn.responseCode !in 200..299) return Long.MAX_VALUE / 4
             conn.inputStream.use { it.read(ByteArray(512)) }
             System.currentTimeMillis() - start
         } catch (e: Exception) {
-            null
+            Long.MAX_VALUE / 4
         } finally {
             runCatching { conn?.disconnect() }
         }
     }
 
-    /**
-     * 吞吐探测：Range 拉一段，返回 KB/s（测不出返回 0）。
-     *
-     * 两个纪律，都是为了让测出来的数字跟真实下载对得上：
-     *
-     * 1. **跳过 TCP 慢启动**。前 [SPEED_WARMUP_BYTES] 只读不计时。拥塞窗口没涨起来时的
-     *    速率不代表稳态，算进去会系统性低估 —— 实测这条链路测出 0.7 MB/s，真正下载时
-     *    4.3 MB/s，差 6 倍，足以让评分选错源。
-     * 2. **计时窗口双限**（字节 [SPEED_TIMED_BYTES] 或时长 [SPEED_TIMED_MAX_MS]，先到先停）。
-     *    只限字节的老实现在慢链路上会拖很久：0.1 MB/s 拉满 1MB 要 10 秒，三个源轮下来
-     *    用户以为卡死了。限时长就把单源开销钉在 ~2.5s 上限，同时慢链路也拿得到真实速率。
-     *
-     * 提前断流（读到 EOF 却两个上限都没到）算测速失败：服务端只吐几十 KB 就关，
-     * 分子分母同时很小，相除会得出一个虚高的速度，让这个源赢下测速、再在真正下载
-     * 130MB 时暴露。
-     */
+    /** 吞吐探测：Range 拉前 1MB，返回 KB/s（失败 0）。 */
     private fun probeSpeed(url: String): Double {
         var conn: HttpURLConnection? = null
         return try {
             conn = URL(url).openConnection() as HttpURLConnection
             conn.connectTimeout = CONNECT_TIMEOUT_MS
-            conn.readTimeout = SPEED_READ_TIMEOUT_MS
+            conn.readTimeout = 8_000
             conn.instanceFollowRedirects = true
             conn.setRequestProperty("Range", "bytes=0-${SPEED_PROBE_BYTES - 1}")
             if (conn.responseCode !in 200..299) return 0.0
-            val opened = System.currentTimeMillis()
+            val start = System.currentTimeMillis()
             var total = 0L
-            var timedBytes = 0L
-            var timedFrom = 0L
-            var complete = false
             conn.inputStream.use { input ->
                 val buf = ByteArray(64 * 1024)
-                while (true) {
+                while (total < SPEED_PROBE_BYTES) {
                     val n = input.read(buf)
                     if (n < 0) break
                     total += n
-                    if (timedFrom == 0L) {
-                        // 热身段：字节数或时长任一到线就起表。慢链路上靠时长兜住，
-                        // 否则光热身 512KB 就要等半天。
-                        val warm = total >= SPEED_WARMUP_BYTES ||
-                            System.currentTimeMillis() - opened >= SPEED_WARMUP_MAX_MS
-                        if (warm) timedFrom = System.currentTimeMillis()
-                        continue
-                    }
-                    timedBytes += n
-                    if (timedBytes >= SPEED_TIMED_BYTES ||
-                        System.currentTimeMillis() - timedFrom >= SPEED_TIMED_MAX_MS
-                    ) {
-                        complete = true
-                        break
-                    }
                 }
             }
-            if (!complete) return 0.0
-            val dtSec = (System.currentTimeMillis() - timedFrom) / 1000.0
-            if (dtSec <= 0.0 || timedBytes < SPEED_TIMED_MIN_BYTES) 0.0
-            else timedBytes / 1024.0 / dtSec
+            val dtSec = (System.currentTimeMillis() - start) / 1000.0
+            // 必须拿满一整块才算：服务端提前断流时 total 很小、dtSec 也很小，
+            // 相除会得出一个虚高的速度（100KB / 0.05s = 2 MB/s），让这个源赢下测速
+            // 然后在真正下载 130MB 时暴露。拿不满就当测速失败（0 = 仅按延迟排序）。
+            if (dtSec <= 0.0 || total < SPEED_PROBE_BYTES) 0.0 else total / 1024.0 / dtSec
         } catch (e: Exception) {
             0.0
         } finally {

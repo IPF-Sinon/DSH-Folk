@@ -225,7 +225,7 @@ class DshWebUiActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         val url = intent?.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() }
-            ?: DshRuntime.webUrl()
+            ?: "http://127.0.0.1:${DshRuntime.port()}/"
 
         // 必须在 onCreate 里注册（Activity 还没 STARTED），不能等到点击时才注册
         fileChooser = registerForActivityResult(

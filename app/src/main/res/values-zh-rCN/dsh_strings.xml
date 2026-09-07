@@ -221,8 +221,7 @@
     <string name="dsh_source_speedtest">开始测速</string>
     <string name="dsh_source_testing">测速中…</string>
     <string name="dsh_source_result">%1$s：%2$d ms · %3$s</string>
-    <string name="dsh_source_result_unreachable">%1$s：不可达</string>
-    <string name="dsh_source_no_speed">未测速</string>
+    <string name="dsh_source_no_speed">不可达</string>
     <string name="dsh_plugin_install">安装</string>
     <string name="dsh_plugin_installed">已安装</string>
     <string name="dsh_plugin_no_npm">未发布到 npm，点右侧按钮打开仓库按其说明安装</string>
@@ -260,7 +259,6 @@
     <string name="dsh_msg_service_ready">服务已就绪 · %1$s</string>
     <string name="dsh_msg_stopped">服务已停止</string>
     <string name="dsh_msg_not_installed">运行时未安装</string>
-    <string name="dsh_msg_healing_plugins">正在修复插件依赖…</string>
     <string name="dsh_err_meta_failed">获取运行时信息失败，请检查网络或切换镜像源</string>
     <string name="dsh_err_arch_mismatch">运行时架构不匹配：包是 %1$s，本应用需要 %2$s</string>
     <string name="dsh_err_no_space">存储空间不足（可用 %1$d MB，需约 %2$d MB），请清理后重试</string>
@@ -331,7 +329,7 @@
     <string name="dsh_runtime_update_available">可更新到 %1$s</string>
     <string name="dsh_runtime_update_go">更新运行时</string>
     <string name="dsh_runtime_reinstall_confirm_title">重装运行时？</string>
-    <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并替换容器。你的数据 —— 会话记录、已装插件、DSH 配置、ADB 密钥 —— 会保留，不会丢失。开始前会先停止服务。</string>
+    <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并覆盖容器。/root/.dsh 下的东西 —— 已装的插件、ADB 密钥、你的 DSH 配置 —— 都在这个容器里，会一并丢失。开始前会先停止服务。</string>
     <string name="dsh_runtime_reinstall_go">重装</string>
 
     <!-- 插件商店：全量目录 + 本地检索 -->
@@ -388,8 +386,6 @@
     <!-- 安装后验证 / 首启预装 -->
     <string name="dsh_verify_after_install">安装后验证</string>
     <string name="dsh_verify_after_install_summary">装完插件后用临时端口启动一次 dsh，确认插件树能加载；不通过就自动卸载。每次安装会多花 30 秒到 3 分钟。</string>
-    <string name="dsh_runtime_beta">运行时测试版通道</string>
-    <string name="dsh_runtime_beta_summary">默认关闭。开启后，应用改从 runtime-beta 发布检查更新，而不是稳定的 runtime-latest —— 仅用于测试新的容器运行时。</string>
     <string name="dsh_plugin_verify_failed">验证未通过：%1$s。插件仍在，若服务起不来请到「已安装」页卸载它。</string>
     <string name="dsh_plugin_rolled_back">验证未通过：%2$s。已自动卸载 %1$s，未对现有环境造成改动。</string>
     <string name="dsh_plugin_seeding">正在预装内置插件…</string>
@@ -578,10 +574,6 @@
     <string name="dsh_native_cap_settings_desc">亮度、熄屏时间与自动旋转。Android 要求这一项在系统设置页里授予。</string>
     <string name="dsh_native_cap_install">安装权限状态</string>
     <string name="dsh_native_cap_install_desc">读取「允许安装未知应用」是否已开启。它自己不会安装任何东西。</string>
-    <string name="dsh_native_cap_usage">应用使用统计</string>
-    <string name="dsh_native_cap_usage_desc">读取各应用的使用时长与前台状态。Android 要求这一项在系统设置页里授予。</string>
-    <string name="dsh_native_cap_sms">短信</string>
-    <string name="dsh_native_cap_sms_desc">读取和发送短信。Android 13 及以上版本会分别申请读取和发送权限。</string>
 
     <string name="dsh_native_need_camera_perm">未授予相机权限 —— 点这里授权</string>
     <string name="dsh_native_need_calendar_perm">未授予日历权限 —— 点这里授权</string>
@@ -589,7 +581,6 @@
     <string name="dsh_native_need_location_perm">未授予位置权限 —— 点这里授权</string>
     <string name="dsh_native_need_phone_perm">未授予电话状态权限 —— 点这里授权</string>
     <string name="dsh_native_need_sensors_perm">心率与计步还需要身体传感器权限 —— 点这里授权</string>
-    <string name="dsh_native_need_usage_perm">未获得「应用使用统计」—— 点这里打开系统页</string>
     <string name="dsh_native_need_write_settings">未获得「修改系统设置」—— 点这里打开系统页</string>
     <string name="dsh_native_need_dnd_access">设为静音、或在勿扰开启时改音量需要勿扰访问权 —— 点这里打开系统页</string>
     <string name="dsh_native_need_install_perm">未允许安装未知应用 —— 点这里打开系统页</string>
@@ -698,7 +689,6 @@
     <string name="dsh_log_pnpm_from_profile">%1$s（profile pnpm-workspace.yaml）</string>
     <string name="dsh_log_starting_web">启动 dsh web，端口 %1$d</string>
     <string name="dsh_log_lan_on">局域网访问已开启: http://%1$s:%2$d（局域网内均可访问，请确认网络可信）</string>
-    <string name="dsh_log_lan_patched">已 patch startup.js，允许 --host 0.0.0.0</string>
     <string name="dsh_log_lan_on_no_ip">局域网访问已开启，但未能获取本机局域网 IP</string>
     <string name="dsh_log_lan_off">局域网访问已关闭，仅监听 127.0.0.1</string>
     <string name="dsh_log_ready">服务已就绪: http://127.0.0.1:%1$d/</string>
@@ -715,7 +705,6 @@
     <string name="dsh_log_bridge_failed">文件桥启动失败: %1$s</string>
     <string name="dsh_log_speedtest_start">自动测速选择下载源…</string>
     <string name="dsh_log_speedtest_row">测速 %1$s: 延迟 %2$dms · %3$s</string>
-    <string name="dsh_log_speedtest_unreachable">测速 %1$s: 不可达</string>
     <string name="dsh_log_speedtest_untested">未测速</string>
     <string name="dsh_log_source_chosen">已选择下载源: %1$s</string>
     <string name="dsh_log_fetching_meta">获取运行时信息…</string>
@@ -736,15 +725,6 @@
     <string name="dsh_log_missing_python">运行时缺少 python3，无线 ADB 配对不可用</string>
     <string name="dsh_log_missing_pnpm">运行时缺少 pnpm，插件安装不可用</string>
     <string name="dsh_log_extract_failed">解压失败: %1$s</string>
-    <string name="dsh_log_preserve_failed">替换运行时前挪不动 %1$s，已中止以避免丢数据</string>
-    <string name="dsh_log_restore_failed">更新后恢复 %1$s 失败（数据仍在 %2$s，下次启动会自动认领回来）</string>
-    <string name="dsh_log_bundles_unresolved">这些插件解析不出来、会导致服务起不来：%1$s —— 正在修复…</string>
-    <string name="dsh_log_bundles_healed">插件已修复：%1$s</string>
-    <string name="dsh_log_bundles_parked">%1$s 装不回来，已先停用它让服务能启动；到插件商店重新装一次即可恢复</string>
-    <string name="dsh_log_bundles_park_failed">停用解析不出来的插件失败（%1$s），服务可能仍起不来</string>
-    <string name="dsh_log_bundle_heal_error">插件修复异常: %1$s</string>
-    <string name="dsh_log_settings_quarantined">被停用的插件留下了半截的模型提供方路由，整个模型设置页因此失效：%1$s —— 已挪到 llm-pi-ai.dshfolkQuarantinedProviders（配置没删，插件装回来后挪回即可）</string>
-    <string name="dsh_log_settings_check_error">孤立设置项体检异常: %1$s</string>
     <string name="dsh_log_groups_added">已给容器补上 Android 补充组: %1$s</string>
     <string name="dsh_log_seeding">预装插件 %1$s …</string>
     <string name="dsh_log_seed_builds_blocked">pnpm 拦下了构建脚本（%1$s），自动放行后重试…</string>
@@ -753,7 +733,6 @@
     <string name="dsh_log_seed_failed">预装失败 %1$s（可稍后在插件商店手动安装）</string>
     <string name="dsh_log_seed_exception">预装异常: %1$s</string>
     <string name="dsh_log_seed_retry_exception">预装重试异常: %1$s</string>
-    <string name="dsh_log_seed_skip">预装跳过（已记录或已安装）: %1$s</string>
     <string name="dsh_log_dsh_missing_in_container">容器内找不到 dsh，请在设置中重装运行时</string>
     <!-- ── 容器内插件操作的日志（DshPluginRepo） ──────────────── -->
     <string name="dsh_plug_log_no_pkg_toggle">包名为空，无法切换</string>
@@ -767,7 +746,6 @@
     <string name="dsh_plug_log_profile_missing">profile 尚未初始化（找不到 %1$s/package.json），跳过重建</string>
     <string name="dsh_plug_log_profile_missing_short">profile 尚未初始化，跳过重建</string>
     <string name="dsh_plug_log_clearing_modules">清空 node_modules（保留 pnpm-lock.yaml）…</string>
-    <string name="dsh_plug_log_dep_pruned">连 %1$s 的依赖记录一并摘掉：它的本地来源已不存在，永远装不回来了</string>
     <string name="dsh_plug_log_installing_rescue_cli">正在安装 dsh-config-manager CLI（全局，独立于 DSH 运行时）…</string>
     <string name="dsh_plug_log_verifying">正在验证插件能否启动（临时端口，不影响当前服务）…</string>
     <string name="dsh_plug_log_rollback">验证未通过，正在自动卸载 %1$s …</string>

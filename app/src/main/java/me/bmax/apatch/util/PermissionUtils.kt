@@ -2,7 +2,6 @@ package me.bmax.apatch.util
 
 import android.Manifest
 import android.app.NotificationManager
-import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -255,42 +254,6 @@ object PermissionUtils {
         } else {
             true
         }
-
-    /**
-     * 有没有「应用使用统计」访问权（Usage Access）。
-     *
-     * Android 5 起加 `PACKAGE_USAGE_STATS` 后用户仍可在设置页单项关闭，所以 manifest
-     * 声明不是真相。这里通过 `AppOpsManager` 查 `android:appUsageCategory` 的实际状态。
-     */
-    fun hasUsageStatsPermission(context: Context): Boolean = runCatching {
-        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            appOps.unsafeCheckOpNoThrow(
-                android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
-                android.os.Process.myUid(),
-                context.packageName,
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            appOps.checkOpNoThrow(
-                android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
-                android.os.Process.myUid(),
-                context.packageName,
-            )
-        }
-        mode == android.app.AppOpsManager.MODE_ALLOWED
-    }.getOrDefault(false)
-
-    /**
-     * 有没有短信读取权限（READ_SMS）。
-     *
-     * Android 13 起 SEND_SMS 独立成另一条权限，发短信比读短信更敏感 ——
-     * 这里只把「能读短信」当成该能力的门槛，具体要不要发由端点自行决定。
-     */
-    fun hasSmsPermission(context: Context): Boolean = runCatching {
-        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) ==
-            PackageManager.PERMISSION_GRANTED
-    }.getOrDefault(false)
 }
 
 /**

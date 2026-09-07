@@ -56,13 +56,8 @@ data class DshState(
      * 里选择换端口 / 手动指定 / 强制启动。
      */
     val portConflict: Boolean = false,
-    /** dsh web 的认证 token；有值时 [webUrl] 带 `?token=...`。 */
-    val webToken: String? = null,
 ) {
-    val webUrl: String get() {
-        val base = "http://127.0.0.1:$port/"
-        return if (webToken.isNullOrBlank()) base else base + "?token=$webToken"
-    }
+    val webUrl: String get() = "http://127.0.0.1:$port/"
 }
 
 /** 运行时下载元数据（由 CI 生成的 metadata.json 提供）。 */
@@ -107,9 +102,6 @@ object DshRuntime {
      */
     private const val PROROOT_FAIL_LIMIT = 1
 
-    /** 从 dsh 打印的 `dsh web: http://…?token=…` 里提取 token。 */
-    private val DSH_WEB_TOKEN_RE = Regex("\\?token=([A-Za-z0-9+/=-]+)")
-
     /** ELF `e_machine`：183 = AArch64，62 = x86-64（见 [rootfsArchMismatch]）。 */
     private const val ELF_MACHINE_AARCH64 = 183
     private const val ELF_MACHINE_X86_64 = 62
@@ -124,8 +116,8 @@ object DshRuntime {
     /** v1.3 写进 /root/.npmrc 的无效行，只为清理它而保留。 */
     private const val NPMRC_LEGACY_LINE = "package-import-method=copy"
 
-    /** web profile 相对 [DshEnv.dshHome] 的路径（guest 侧是 /root/.dsh/profiles/web）。 */
-    private const val PROFILE_WEB_REL = "profiles/web"
+    /** web profile 在 rootfs 内的相对路径（guest 侧是 /root/.dsh/profiles/web）。 */
+    private const val PROFILE_GUEST_REL = "root/.dsh/profiles/web"
 
     /**
      * 首启预装的插件（npm 包名，已人工验证可装）。
@@ -515,10 +507,6 @@ object DshRuntime {
         "plugin tree failed to load",
         "client bundles not found",
         "failed to apply loader entry modules",
-        // dsh 在 loadProfile 里对 dsh.profile.bundles 逐项 resolveBundleDir，
-        // 解析不出来就抛这句并退出。同样与容器运行时无关（换 proot 一样失败）。
-        "cannot resolve profile bundle",
-        "declares no dsh.bundle",
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -552,11 +540,6 @@ object DshRuntime {
     fun init(context: Context) {
         if (!::appContext.isInitialized) {
             appContext = context.applicationContext
-            // 把 1.8.3-beta.1 移出去的 dsh 数据搬回 rootfs（见 DshEnv.migrateDshHomeBack）。
-            // 必须在任何 dshHome 访问之前做。rename 是原子的，放这里不会卡启动。
-            DshEnv.migrateDshHomeBack(appContext)
-            // 上一次运行时替换如果被强杀打断，数据还停在暂存目录里 —— 认领回来。
-            DshEnv.recoverPreserved(appContext)
             // 进程重启后旧日志不该残留：清一次，让启动日志按「本次运行」呈现。
             // startServer() 里还会再清一次，这里主要覆盖「只开 App 不启动服务」的情况。
             clearLog()
@@ -606,9 +589,6 @@ object DshRuntime {
             if (it in 1..65535) it else DshEnv.DEFAULT_PORT
         }
     }
-
-    /** 当前 WebUI 地址（带认证 token，若已从 dsh 输出里捕获到）。 */
-    fun webUrl(): String = _state.value.webUrl
 
     fun setPort(p: Int) {
         if (!ready || p !in 1..65535) return
@@ -1063,13 +1043,10 @@ object DshRuntime {
                     if (_state.value.phase == DshPhase.ERROR) return@withLock
                 }
                 setupResolvConf()
-                // 必须在 seedPlugins 之前：profile 里留着一条来源已消失的依赖时，
-                // pnpm 在解析阶段就整体失败，预装那几个包一个都装不上。
-                healProfileBundles()
                 seedPlugins()
                 ensureFsBridgeCli()
                 if (checkPortConflict()) return@withLock
-                startAndAwait(alreadyHealed = true)
+                startAndAwait()
             }
         }
     }
@@ -1147,14 +1124,10 @@ object DshRuntime {
         applySeedRepair(p, attempted, installed)
 
         val todo = SEED_PLUGINS.filter { it !in attempted }
-        if (todo.isEmpty()) {
-            logInfo(R.string.dsh_log_seed_skip, joinForLog(SEED_PLUGINS))
-            return
-        }
+        if (todo.isEmpty()) return
 
         val missing = todo.filter { it !in installed }
         if (missing.isEmpty()) {
-            logInfo(R.string.dsh_log_seed_skip, joinForLog(todo))
             persistSeeded(attempted + todo)
             return
         }
@@ -1238,115 +1211,10 @@ object DshRuntime {
     }
 
     /**
-     * 启动前自愈 profile：把解析不出来的 bundle 补装回来，补不回来的摘掉。
-     *
-     * 存在的理由是 1.8.4-beta.3 的真机故障：更新运行时后 `dsh web` 在启动第一步
-     * 抛 `cannot resolve profile bundle "dsh-llm-agentrouter"` 直接退出，用户在
-     * 手机上没有编辑 `profiles/web/package.json` 的现实路径，应用等于变砖。
-     * 根因（rootfs 替换连带删掉 l2s 与 pnpm 存储）已由 [DshEnv.PRESERVED_PATHS]
-     * 修掉，这里是**兜底**：存量已经坏掉的设备升上来必须能自己爬出坑，
-     * 别的原因造成的同类失衡（用户手动删过 node_modules、装插件中途断电）也一并救。
-     *
-     * 顺序是「先清障、再补装、最后才停用」：
-     * 1. 探测。healthy 就直接返回（正常路径只多一次 node 调用，不碰 pnpm）。
-     * 2. 摘掉**来源已消失的本地依赖**。这种 spec 会让 pnpm 在解析阶段整体失败，
-     *    连能装的包一起装不上，所以必须先清掉才有下一步。
-     * 3. `pnpm install` 按 package.json 补齐（不清 node_modules，已在位的会跳过）。
-     *    装回来的 bundle 由 dsh 自己的 reconcile 自动加回 `dsh.profile.bundles`。
-     * 4. 还是解析不出来的（下架的包、装到一半坏掉的）从 bundles 里停用，
-     *    只保留 dependencies 记录 —— 宁可少一个插件也要让服务起来，
-     *    用户去插件商店重装一次就自动复原。
-     *
-     * 只在 [DshEnv.isRuntimeInstalled] 且 profile 已初始化时有事可做，
-     * 全过程失败都只记日志不阻断启动 —— 它是救援措施，不该自己变成新的失败点。
-     */
-    private suspend fun healProfileBundles() {
-        if (!DshEnv.isRuntimeInstalled(appContext)) return
-        if (!File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/package.json").isFile) return
-        runCatching {
-            val initial = DshPluginRepo.unresolvableBundles()
-            if (initial.isEmpty()) return@runCatching
-            logWarn(R.string.dsh_log_bundles_unresolved, joinForLog(initial))
-            _state.update {
-                it.copy(
-                    phase = DshPhase.EXTRACTING,
-                    progress = 0f,
-                    message = str(R.string.dsh_msg_healing_plugins),
-                )
-            }
-            DshPluginRepo.pruneDeadLocalBundles(initial) { line -> appendLog(line) }
-            DshPluginRepo.rehydrate { line -> appendLog(line) }
-            val still = DshPluginRepo.unresolvableBundles()
-            if (still.isNotEmpty() && DshPluginRepo.parkBundles(still).isEmpty()) {
-                logWarn(R.string.dsh_log_bundles_park_failed, joinForLog(still))
-            }
-            // 修好/停用以 profile 的最终状态为准，而不是拿中间动作反推
-            val current = runCatching { DshPluginRepo.bundles() }.getOrDefault(emptyList()).toSet()
-            val healed = initial.filter { it in current }
-            val gone = initial.filterNot { it in current }
-            if (healed.isNotEmpty()) logInfo(R.string.dsh_log_bundles_healed, joinForLog(healed))
-            if (gone.isNotEmpty()) logWarn(R.string.dsh_log_bundles_parked, joinForLog(gone))
-            refreshRootfsSize()
-            _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
-        }.onFailure {
-            logWarn(R.string.dsh_log_bundle_heal_error, it.message ?: it.javaClass.simpleName)
-        }
-        healOrphanSettings()
-    }
-
-    /**
-     * 体检「组合层被摘掉、用户层还留着另一半」的设置项，并把它们隔离。
-     *
-     * 这是 [healProfileBundles] 的必要后半段：摘掉一个 bundle 换来了服务能启动，
-     * 但那个 bundle 在组合层给别人提供过的配置也一起没了。用户层 settings.yaml 里
-     * 留下的半截配置会让**整个命名空间注册失败**，而 dsh 对这种失败既不报错也不
-     * 记日志（发生在 `installSettingsSection` 的 `ctx.inject` 子 fiber 里，
-     * `assertEntriesActivated` 只审 loader entry）—— 服务照常就绪，只有对应的设置页
-     * 悄悄坏掉。1.8.4-beta.4 上就是这样：模型设置页两个「添加提供方」按钮双双失效，
-     * 且用户那一段里所有路由一起不可用，模型分组从 22 组掉到 2 组。
-     *
-     * **靠指纹决定要不要查**：manifest（`profiles/web/package.json`）没变就直接返回。
-     * 插件装/卸、停用、park、prune 都会改它，而只有这些操作可能留下孤立项；健康设备
-     * 反复启动一次容器调用都不会发生。从没查过（升级到本版本的存量设备）时必查一次。
-     *
-     * 全过程失败只记日志，绝不阻断启动 —— 它和 [healProfileBundles] 一样是救援措施。
-     */
-    private suspend fun healOrphanSettings() {
-        if (!DshEnv.isRuntimeInstalled(appContext)) return
-        val manifest = File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/package.json")
-        if (!manifest.isFile) return
-        runCatching {
-            val fp = manifestFingerprint(manifest)
-            if (fp.isEmpty()) return@runCatching
-            if (prefs().getString(DshEnv.KEY_SETTINGS_CHECK_FP, "") == fp) return@runCatching
-            val quarantined = DshPluginRepo.quarantinePiAiOrphans()
-            if (quarantined.isNotEmpty()) {
-                logWarn(R.string.dsh_log_settings_quarantined, joinForLog(quarantined))
-            }
-            // 指纹在体检**之后**才写：中途被杀下次会重来，不会漏掉一次该做的体检
-            prefs().edit().putString(DshEnv.KEY_SETTINGS_CHECK_FP, fp).apply()
-        }.onFailure {
-            logWarn(R.string.dsh_log_settings_check_error, it.message ?: it.javaClass.simpleName)
-        }
-    }
-
-    /** profile manifest 的内容指纹（长度 + SHA-256 前 16 字节，够用且便宜）。 */
-    private fun manifestFingerprint(manifest: File): String = runCatching {
-        val bytes = manifest.readBytes()
-        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
-        // 显式 & 0xFF：Byte 带符号，直接 %02x 会把负值格式化成 8 位扩展
-        bytes.size.toString() + ":" + digest.take(16).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-    }.getOrDefault("")
-
-    /**
      * 启动并等待就绪；如果这一轮触发了 proroot → proot 回退，就用 proot
      * 再试一次（只重试一次：proot 也起不来就是真错了，再试无意义）。
-     *
-     * @param alreadyHealed 本轮已经跑过 [healProfileBundles]（安装路径会在预装之前先跑，
-     *   见 [bootstrap]），跳过重复探测；重启/强制启动这类不带安装的路径用默认值。
      */
-    private suspend fun startAndAwait(alreadyHealed: Boolean = false) {
-        if (!alreadyHealed) healProfileBundles()
+    private suspend fun startAndAwait() {
         prorootFellBack = false
         startServer()
         awaitReady()
@@ -1455,9 +1323,7 @@ object DshRuntime {
         scope.launch {
             bootMutex.withLock {
                 stopServer()
-                // 重装只换 rootfs（运行时层）；dsh 数据在 rootfs/root/.dsh 里，由
-                // extractRootfs 暂存/恢复不会丢。这里仍重置预装记账：让内置插件再走
-                // 一遍 install，确保它们还在（用户删掉的会补回）。
+                // 重装等于换了一套全新 rootfs，容器里的插件确实没了，该重新预装
                 prefs().edit()
                     .remove(DshEnv.KEY_SEEDED_PLUGINS)
                     .remove(@Suppress("DEPRECATION") DshEnv.KEY_SEED_PLUGINS_DONE)
@@ -1465,12 +1331,10 @@ object DshRuntime {
                 downloadAndInstall()
                 if (_state.value.phase != DshPhase.ERROR) {
                     setupResolvConf()
-                    // 与 bootstrap 同理：先自愈 profile 依赖，预装才装得动
-                    healProfileBundles()
                     seedPlugins()
                     ensureFsBridgeCli()
                     if (checkPortConflict()) return@withLock
-                    startAndAwait(alreadyHealed = true)
+                    startAndAwait()
                 }
             }
         }
@@ -1490,16 +1354,9 @@ object DshRuntime {
             logInfo(R.string.dsh_log_speedtest_start)
             val results = DshSource.speedTest()
             for (r in results.sortedBy { it.estimatedMs }) {
-                val latency = r.latencyMs
-                if (latency == null) {
-                    // 不可达就说不可达：老实现把哨兵值 Long.MAX_VALUE/4 当延迟打出来，
-                    // 用户看到的是「延迟 2305843009213693951ms」。
-                    logInfo(R.string.dsh_log_speedtest_unreachable, sourceName(r.source))
-                    continue
-                }
                 val speed = if (r.speedKBps > 0.0) String.format("%.1f MB/s", r.speedKBps / 1024.0)
                 else str(R.string.dsh_log_speedtest_untested)
-                logInfo(R.string.dsh_log_speedtest_row, sourceName(r.source), latency, speed)
+                logInfo(R.string.dsh_log_speedtest_row, sourceName(r.source), r.latencyMs, speed)
             }
             logInfo(R.string.dsh_log_source_chosen, sourceName(DshSource.pickBest(results, appContext)))
         }
@@ -1626,11 +1483,6 @@ object DshRuntime {
      *
      * metadata 的 mirrors 本身就是加了代理前缀的 URL，再给它们叠一次前缀只会产生
      * 重复项 —— 去重前实测 6 个候选里有 3 个是重的，等于同一个失败的 URL 连试两次。
-     *
-     * 顺序按 [DshSource.downloadRank]（= 刚才的测速结论）排，**不是** metadata 里
-     * mirrors 的书写顺序：实测过 AxisNow 在测速阶段就 SSL 握手失败，却因为在
-     * mirrors 里排第二而抢在 GitHub 直连前面被试一遍，白等一次超时。
-     * `sortedBy` 是稳定排序，所以同权重（含未参与测速的自定义源）保持原相对顺序。
      */
     private fun downloadWithFallback(meta: DshMeta, target: File): Boolean {
         val prefix = DshSource.proxyPrefix(DshSource.resolve(appContext))
@@ -1638,7 +1490,7 @@ object DshRuntime {
         val candidates = (
             if (prefix.isEmpty()) raw
             else raw.map { if (it.startsWith("https://github.com/")) prefix + it else it } + raw
-            ).distinct().sortedBy { DshSource.downloadRank(it) }
+            ).distinct()
         for ((i, url) in candidates.withIndex()) {
             logInfo(R.string.dsh_log_source_try, i + 1, candidates.size, url)
             _state.update {
@@ -1688,49 +1540,9 @@ object DshRuntime {
     /** 解压 rootfs.tar.gz 到 filesDir/rootfs（整体替换）。 */
     private fun extractRootfs(tarball: File): Boolean = runCatching {
         val dest = DshEnv.rootfs(appContext)
-        val stash = DshEnv.dshPreserve(appContext)
-        // 要跨越这次替换的子树（见 DshEnv.PRESERVED_PATHS）：整体删 rootfs 之前逐个
-        // rename 到 rootfs 之外的暂存目录（同一 filesDir，原子零拷贝），解压完再 rename
-        // 回去顶掉新 rootfs 自带的空目录。
-        //
-        // 集合里不只有 root/.dsh：l2s 中间文件与 pnpm 内容存储都在 .dsh 之外，而
-        // .dsh 里不少文件只是指向它们的符号链接。只保 .dsh 会留下一堆悬空链接，
-        // 启动时 dsh 解析不出 profile bundle 就直接退出（1.8.4-beta.3 的故障）。
-        //
-        // 先认领再清：上一次更新失败（解压抛异常、恢复那步没成）会把数据留在暂存
-        // 目录里，直接 delete 就是把用户的会话删了。recoverPreserved 之后还剩东西，
-        // 说明 rootfs 里已有在用的同名目录，那份残留才是被顶掉的旧副本，可以清。
-        DshEnv.recoverPreserved(appContext)
-        if (stash.exists()) stash.deleteRecursively()
-        for (rel in DshEnv.PRESERVED_PATHS) {
-            val src = File(dest, rel)
-            if (!src.isDirectory) continue
-            val dst = File(stash, rel)
-            dst.parentFile?.mkdirs()
-            if (!src.renameTo(dst)) {
-                logWarn(R.string.dsh_log_preserve_failed, rel)
-                // 已经搬出去的搬回来，保持「要么全成要么原样」
-                DshEnv.recoverPreserved(appContext)
-                return@runCatching false
-            }
-        }
         if (dest.exists()) dest.deleteRecursively()
         dest.mkdirs()
         TarGzipExtractor.extractRootfs(tarball, dest)
-        // 解压出的 rootfs 带一份空的 /root/.dsh，删掉，用暂存的数据顶替。
-        for (rel in DshEnv.PRESERVED_PATHS) {
-            val src = File(stash, rel)
-            if (!src.isDirectory) continue
-            val dst = File(dest, rel)
-            dst.parentFile?.mkdirs()
-            if (dst.exists()) dst.deleteRecursively()
-            if (!src.renameTo(dst)) {
-                // 数据还在暂存目录里，下次启动 recoverPreserved 会认领回来
-                logWarn(R.string.dsh_log_restore_failed, rel, stash.name)
-                return@runCatching false
-            }
-        }
-        runCatching { if (stash.exists()) stash.deleteRecursively() }
         // 关键文件自检：解压不完整（断流 / 空间耗尽）时越早发现越好，
         // 否则要等到启动 dsh web 才报一句看不懂的错。
         // File.exists() 跟随符号链接，所以 python3 -> python3.12 这类条目也一并验证了。
@@ -1969,7 +1781,7 @@ object DshRuntime {
         runCatching { removeLegacyNpmrcImportLine() }
         if (!linkBecomesSymlink()) return
         runCatching {
-            val ws = File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/pnpm-workspace.yaml")
+            val ws = File(DshEnv.rootfs(appContext), "$PROFILE_GUEST_REL/pnpm-workspace.yaml")
             // 不存在就不建：见 KDoc，抢在 dsh initProfile 之前会弄丢它的模板
             if (!ws.isFile) return@runCatching
             val old = ws.readText(StandardCharsets.UTF_8)
@@ -2007,7 +1819,7 @@ object DshRuntime {
      * 读文件而不是回答「我们写过没有」：v1.3 的教训正是日志宣称了一件没生效的事。
      */
     private fun pnpmImportMethodLine(): String {
-        val ws = File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/pnpm-workspace.yaml")
+        val ws = File(DshEnv.rootfs(appContext), "$PROFILE_GUEST_REL/pnpm-workspace.yaml")
         if (!ws.isFile) return str(R.string.dsh_log_pnpm_unconfigured)
         val line = runCatching {
             ws.readLines().firstOrNull { it.trimStart().startsWith(PNPM_IMPORT_KEY) }
@@ -2043,9 +1855,9 @@ object DshRuntime {
      */
     fun allowProfileBuilds(packages: List<String>, onLine: (String) -> Unit = {}): List<String> {
         if (packages.isEmpty()) return emptyList()
-        val ws = File(DshEnv.dshHome(appContext), "$PROFILE_WEB_REL/pnpm-workspace.yaml")
+        val ws = File(DshEnv.rootfs(appContext), "$PROFILE_GUEST_REL/pnpm-workspace.yaml")
         if (!ws.isFile) {
-            onLine("[DSH-Folk] 找不到 $PROFILE_WEB_REL/pnpm-workspace.yaml，无法放行构建脚本")
+            onLine("[DSH-Folk] 找不到 $PROFILE_GUEST_REL/pnpm-workspace.yaml，无法放行构建脚本")
             return emptyList()
         }
         return runCatching {
@@ -2136,8 +1948,6 @@ object DshRuntime {
         DshHostPrompt.ensureInstalled(appContext)
         clearLog()
 
-        if (lanEnabled()) patchLanHost()
-
         val port = port()
         val lan = lanEnabled()
         val opts = buildString {
@@ -2207,49 +2017,13 @@ object DshRuntime {
         scope.launch {
             val reader = proc.inputStream.bufferedReader()
             try {
-                for (line in reader.lineSequence()) {
-                    log.append(line)
-                    // dsh 打印带 token 的 URL 后，把 token 捞出来写进 state，
-                    // 这样 webUrl 就能带 ?token=...，WebView 才不会撞认证墙。
-                    if (_state.value.webToken == null) {
-                        val m = DSH_WEB_TOKEN_RE.find(line)
-                        if (m != null) {
-                            _state.update { s -> s.copy(webToken = m.groupValues[1]) }
-                        }
-                    }
-                }
+                for (line in reader.lineSequence()) log.append(line)
             } catch (_: Exception) {
                 // 进程被销毁时读流中断，属预期
             } finally {
                 log.flushForExit()
                 runCatching { reader.close() }
             }
-        }
-    }
-
-    /**
-     * 从代码层强行开启 `--host 0.0.0.0`：注释掉 dsh-web-app 的 `0.0.0.0` 检查。
-     *
-     * dsh 0.1.1-rc.2 在 startup.js 里硬编码拒绝 `0.0.0.0`，App 只要开了「局域网访问」
-     * 就传这个参数，导致 dsh 以 usage error 退出。这里在每次启动前幂等地 patch 掉那
-     * 一行检查，让 dsh 接受 `0.0.0.0`。
-     */
-    private fun patchLanHost() {
-        val target = File(
-            DshEnv.rootfs(appContext),
-            "usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-web-app/lib/startup.js",
-        )
-        if (!target.isFile) return
-        val src = target.readText(StandardCharsets.UTF_8)
-        val marker = "/* patched by DSH-Folk: lan force-enable */"
-        if (src.contains(marker)) return
-        val patched = src.replace(
-            oldValue = """if (options.host === "0.0.0.0") program.error("error: --host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead");""",
-            newValue = marker,
-        )
-        if (patched != src) {
-            target.writeText(patched, StandardCharsets.UTF_8)
-            logInfo(R.string.dsh_log_lan_patched)
         }
     }
 
