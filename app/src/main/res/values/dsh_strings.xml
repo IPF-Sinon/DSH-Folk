@@ -720,6 +720,7 @@
     <string name="dsh_log_pnpm_from_profile">%1$s (from the profile pnpm-workspace.yaml)</string>
     <string name="dsh_log_starting_web">Starting dsh web on port %1$d</string>
     <string name="dsh_log_lan_on">LAN access is ON: http://%1$s:%2$d — reachable from the whole network, make sure you trust it</string>
+    <string name="dsh_log_lan_patched">Patched startup.js to allow --host 0.0.0.0</string>
     <string name="dsh_log_lan_on_no_ip">LAN access is ON, but the local IP could not be determined</string>
     <string name="dsh_log_lan_off">LAN access is OFF, listening on 127.0.0.1 only</string>
     <string name="dsh_log_ready">Service is ready: http://127.0.0.1:%1$d/</string>

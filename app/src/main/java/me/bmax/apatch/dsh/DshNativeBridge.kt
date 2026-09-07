@@ -459,6 +459,8 @@ object DshNativeBridge {
             Cap.VOLUME -> R.string.dsh_native_cap_volume
             Cap.SETTINGS -> R.string.dsh_native_cap_settings
             Cap.INSTALL -> R.string.dsh_native_cap_install
+            Cap.USAGE -> R.string.dsh_native_cap_usage
+            Cap.SMS -> R.string.dsh_native_cap_sms
         },
     )
 
