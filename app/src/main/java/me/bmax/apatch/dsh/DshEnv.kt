@@ -17,6 +17,66 @@ object DshEnv {
     /** 容器内 dsh 的 $DSH_HOME 对应宿主路径（rootfs/root/.dsh）。 */
     fun dshHome(ctx: Context): File = File(rootfs(ctx), "root/.dsh")
 
+    /**
+     * 更新运行时时必须跨越 rootfs 替换的子树（rootfs 内相对路径）。
+     *
+     * 只保 `root/.dsh` 是不够的 —— `.dsh` 里的文件**内容不一定在 `.dsh` 里**，
+     * 它可以指到两个外部位置：
+     *
+     * - `.l2s`（[l2sDir]）：无硬链接时 proot 的 `--link2symlink` 把 `link(a,b)`
+     *   实现成「把真实文件挪进 l2s 目录，a 和 b 都变成指向它的符号链接」。所以
+     *   凡是经 `link()` 落盘的文件（dsh 会话的原子提交、pnpm 的部分导入路径），
+     *   真身都在 `.l2s` 里。删掉它 = `.dsh` 里那些文件全变悬空链接。
+     * - `root/.local`：pnpm 的内容存储默认在 `$HOME/.local/share/pnpm/store`
+     *   （容器里 HOME=/root，代码里没有任何 store-dir 覆盖）。历史上以硬链接方式
+     *   导入的依赖指向它。删掉存储 = 那些依赖同样变悬空链接。
+     *
+     * 两种情况下 node 的 `existsSync(node_modules/<pkg>/package.json)` 都会因为
+     * 跟随悬空链接而返回 false，而 `dsh.profile.bundles` 里还列着这个包 ——
+     * dsh 于是在启动第一步就抛 `cannot resolve profile bundle` 退出。
+     *
+     * 顺序无关：每一项都独立 rename 出去再 rename 回来。
+     */
+    val PRESERVED_PATHS = listOf("root/.dsh", "root/.local", ".l2s")
+
+    /** 运行时替换期间暂存上述子树的目录（rootfs 之外；rename 原子搬移，零拷贝）。 */
+    fun dshPreserve(ctx: Context): File = File(ctx.filesDir, ".dsh-preserve")
+
+    /**
+     * 把上一次中断留在暂存目录里的子树认领回 rootfs。
+     *
+     * 为什么必须有：解压期间进程被杀（OOM、用户强杀）会让数据停在
+     * [dshPreserve] 里。此时 rootfs 是残缺的，下次启动会重新走一遍
+     * [DshRuntime.extractRootfs] —— 如果那里直接把暂存目录删掉重来，
+     * 删掉的正是用户的会话和插件。
+     *
+     * 幂等且保守：rootfs 里已经有**非空**的同名目录就不动。那种情况下没法判断
+     * 哪份更新（rename 是原子的，两边同时有内容只可能来自更早的一轮），而
+     * rootfs 里那份正在用 —— 删暂存那份就有丢数据的风险，留着只是占空间，
+     * 下一次更新运行时会顺手清掉。
+     *
+     * 只在每一项都认领干净后才删暂存目录本身，且判据是「[PRESERVED_PATHS]
+     * 里还有没有条目」而不是递归数文件：pnpm 存储动辄几万个文件，
+     * 每次冷启动都走一遍 walk 太贵。
+     */
+    fun recoverPreserved(ctx: Context) {
+        val stash = dshPreserve(ctx)
+        if (!stash.isDirectory) return
+        val root = rootfs(ctx)
+        for (rel in PRESERVED_PATHS) {
+            val src = File(stash, rel)
+            if (!src.isDirectory) continue
+            val dst = File(root, rel)
+            if (dst.isDirectory && dst.list()?.isNotEmpty() == true) continue
+            dst.parentFile?.mkdirs()
+            if (dst.exists()) dst.deleteRecursively()
+            src.renameTo(dst)
+        }
+        if (PRESERVED_PATHS.none { File(stash, it).exists() }) {
+            runCatching { stash.deleteRecursively() }
+        }
+    }
+
     /** proot 的 l2s 中间文件目录（无硬链接时启用），固定在 rootfs 内避免随 tmp 被清。 */
     fun l2sDir(ctx: Context): File = File(rootfs(ctx), ".l2s")
 

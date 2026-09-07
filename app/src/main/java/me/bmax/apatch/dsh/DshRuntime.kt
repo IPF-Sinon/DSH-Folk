@@ -56,8 +56,13 @@ data class DshState(
      * 里选择换端口 / 手动指定 / 强制启动。
      */
     val portConflict: Boolean = false,
+    /** dsh web 的认证 token；有值时 [webUrl] 带 `?token=...`。 */
+    val webToken: String? = null,
 ) {
-    val webUrl: String get() = "http://127.0.0.1:$port/"
+    val webUrl: String get() {
+        val base = "http://127.0.0.1:$port/"
+        return if (webToken.isNullOrBlank()) base else base + "?token=$webToken"
+    }
 }
 
 /** 运行时下载元数据（由 CI 生成的 metadata.json 提供）。 */
@@ -101,6 +106,9 @@ object DshRuntime {
      * 设备不会有不同结果，让用户白等第二、三次没有意义。
      */
     private const val PROROOT_FAIL_LIMIT = 1
+
+    /** 从 dsh 打印的 `dsh web: http://…?token=…` 里提取认证 token。 */
+    private val DSH_WEB_TOKEN_RE = Regex("\\?token=([A-Za-z0-9+/=-]+)")
 
     /** ELF `e_machine`：183 = AArch64，62 = x86-64（见 [rootfsArchMismatch]）。 */
     private const val ELF_MACHINE_AARCH64 = 183
@@ -540,6 +548,8 @@ object DshRuntime {
     fun init(context: Context) {
         if (!::appContext.isInitialized) {
             appContext = context.applicationContext
+            // 上一次运行时替换如果被强杀打断，数据还停在暂存目录里 —— 认领回来。
+            DshEnv.recoverPreserved(appContext)
             // 进程重启后旧日志不该残留：清一次，让启动日志按「本次运行」呈现。
             // startServer() 里还会再清一次，这里主要覆盖「只开 App 不启动服务」的情况。
             clearLog()
@@ -589,6 +599,9 @@ object DshRuntime {
             if (it in 1..65535) it else DshEnv.DEFAULT_PORT
         }
     }
+
+    /** 当前 WebUI 地址（带认证 token，若已从 dsh 输出里捕获到）。 */
+    fun webUrl(): String = _state.value.webUrl
 
     fun setPort(p: Int) {
         if (!ready || p !in 1..65535) return
@@ -1354,9 +1367,16 @@ object DshRuntime {
             logInfo(R.string.dsh_log_speedtest_start)
             val results = DshSource.speedTest()
             for (r in results.sortedBy { it.estimatedMs }) {
+                val latency = r.latencyMs
+                if (latency == null) {
+                    // 不可达就说不可达：老实现把哨兵值 Long.MAX_VALUE/4 当延迟打出来，
+                    // 用户看到的是「延迟 2305843009213693951ms」。
+                    logInfo(R.string.dsh_log_speedtest_unreachable, sourceName(r.source))
+                    continue
+                }
                 val speed = if (r.speedKBps > 0.0) String.format("%.1f MB/s", r.speedKBps / 1024.0)
                 else str(R.string.dsh_log_speedtest_untested)
-                logInfo(R.string.dsh_log_speedtest_row, sourceName(r.source), r.latencyMs, speed)
+                logInfo(R.string.dsh_log_speedtest_row, sourceName(r.source), latency, speed)
             }
             logInfo(R.string.dsh_log_source_chosen, sourceName(DshSource.pickBest(results, appContext)))
         }
@@ -1483,6 +1503,11 @@ object DshRuntime {
      *
      * metadata 的 mirrors 本身就是加了代理前缀的 URL，再给它们叠一次前缀只会产生
      * 重复项 —— 去重前实测 6 个候选里有 3 个是重的，等于同一个失败的 URL 连试两次。
+     *
+     * 顺序按 [DshSource.downloadRank]（= 刚才的测速结论）排，**不是** metadata 里
+     * mirrors 的书写顺序：实测过 AxisNow 在测速阶段就 SSL 握手失败，却因为在
+     * mirrors 里排第二而抢在 GitHub 直连前面被试一遍，白等一次超时。
+     * `sortedBy` 是稳定排序，所以同权重（含未参与测速的自定义源）保持原相对顺序。
      */
     private fun downloadWithFallback(meta: DshMeta, target: File): Boolean {
         val prefix = DshSource.proxyPrefix(DshSource.resolve(appContext))
@@ -1490,7 +1515,7 @@ object DshRuntime {
         val candidates = (
             if (prefix.isEmpty()) raw
             else raw.map { if (it.startsWith("https://github.com/")) prefix + it else it } + raw
-            ).distinct()
+            ).distinct().sortedBy { DshSource.downloadRank(it) }
         for ((i, url) in candidates.withIndex()) {
             logInfo(R.string.dsh_log_source_try, i + 1, candidates.size, url)
             _state.update {
@@ -1537,12 +1562,52 @@ object DshRuntime {
         )
     }
 
-    /** 解压 rootfs.tar.gz 到 filesDir/rootfs（整体替换）。 */
+    /** 解压 rootfs.tar.gz 到 filesDir/rootfs（整体替换，但保留用户数据）。 */
     private fun extractRootfs(tarball: File): Boolean = runCatching {
         val dest = DshEnv.rootfs(appContext)
+        val stash = DshEnv.dshPreserve(appContext)
+        // 要跨越这次替换的子树（见 DshEnv.PRESERVED_PATHS）：整体删 rootfs 之前逐个
+        // rename 到 rootfs 之外的暂存目录（同一 filesDir，原子零拷贝），解压完再 rename
+        // 回去顶掉新 rootfs 自带的空目录。
+        //
+        // 集合里不只有 root/.dsh：l2s 中间文件与 pnpm 内容存储都在 .dsh 之外，而
+        // .dsh 里不少文件只是指向它们的符号链接。只保 .dsh 会留下一堆悬空链接，
+        // 启动时 dsh 解析不出 profile bundle 就直接退出。
+        //
+        // 先认领再清：上一次更新失败（解压抛异常、恢复那步没成）会把数据留在暂存
+        // 目录里，直接 delete 就是把用户的会话删了。recoverPreserved 之后还剩东西，
+        // 说明 rootfs 里已有在用的同名目录，那份残留才是被顶掉的旧副本，可以清。
+        DshEnv.recoverPreserved(appContext)
+        if (stash.exists()) stash.deleteRecursively()
+        for (rel in DshEnv.PRESERVED_PATHS) {
+            val src = File(dest, rel)
+            if (!src.isDirectory) continue
+            val dst = File(stash, rel)
+            dst.parentFile?.mkdirs()
+            if (!src.renameTo(dst)) {
+                logWarn(R.string.dsh_log_preserve_failed, rel)
+                // 已经搬出去的搬回来，保持「要么全成要么原样」
+                DshEnv.recoverPreserved(appContext)
+                return@runCatching false
+            }
+        }
         if (dest.exists()) dest.deleteRecursively()
         dest.mkdirs()
         TarGzipExtractor.extractRootfs(tarball, dest)
+        // 解压出的 rootfs 带一份空的 /root/.dsh，删掉，用暂存的数据顶替。
+        for (rel in DshEnv.PRESERVED_PATHS) {
+            val src = File(stash, rel)
+            if (!src.isDirectory) continue
+            val dst = File(dest, rel)
+            dst.parentFile?.mkdirs()
+            if (dst.exists()) dst.deleteRecursively()
+            if (!src.renameTo(dst)) {
+                // 数据还在暂存目录里，下次启动 recoverPreserved 会认领回来
+                logWarn(R.string.dsh_log_restore_failed, rel, stash.name)
+                return@runCatching false
+            }
+        }
+        runCatching { if (stash.exists()) stash.deleteRecursively() }
         // 关键文件自检：解压不完整（断流 / 空间耗尽）时越早发现越好，
         // 否则要等到启动 dsh web 才报一句看不懂的错。
         // File.exists() 跟随符号链接，所以 python3 -> python3.12 这类条目也一并验证了。
@@ -1947,6 +2012,8 @@ object DshRuntime {
         // entry 加载失败而整棵树起不来，而 restart() 不走 bootstrap，否则没人修。
         DshHostPrompt.ensureInstalled(appContext)
         clearLog()
+        // dsh 每次启动都会生成新 token，不能沿用上一个进程的认证地址。
+        _state.update { it.copy(webToken = null) }
 
         val port = port()
         val lan = lanEnabled()
@@ -2017,7 +2084,17 @@ object DshRuntime {
         scope.launch {
             val reader = proc.inputStream.bufferedReader()
             try {
-                for (line in reader.lineSequence()) log.append(line)
+                for (line in reader.lineSequence()) {
+                    log.append(line)
+                    // dsh 打印带 token 的 URL 后，把 token 捞出来写进 state，
+                    // 这样 webUrl 就能带 ?token=...，WebView 才不会撞认证墙。
+                    if (_state.value.webToken == null) {
+                        val m = DSH_WEB_TOKEN_RE.find(line)
+                        if (m != null) {
+                            _state.update { s -> s.copy(webToken = m.groupValues[1]) }
+                        }
+                    }
+                }
             } catch (_: Exception) {
                 // 进程被销毁时读流中断，属预期
             } finally {

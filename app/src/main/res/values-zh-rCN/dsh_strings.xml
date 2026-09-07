@@ -221,7 +221,8 @@
     <string name="dsh_source_speedtest">开始测速</string>
     <string name="dsh_source_testing">测速中…</string>
     <string name="dsh_source_result">%1$s：%2$d ms · %3$s</string>
-    <string name="dsh_source_no_speed">不可达</string>
+    <string name="dsh_source_result_unreachable">%1$s：不可达</string>
+    <string name="dsh_source_no_speed">未测速</string>
     <string name="dsh_plugin_install">安装</string>
     <string name="dsh_plugin_installed">已安装</string>
     <string name="dsh_plugin_no_npm">未发布到 npm，点右侧按钮打开仓库按其说明安装</string>
@@ -705,6 +706,7 @@
     <string name="dsh_log_bridge_failed">文件桥启动失败: %1$s</string>
     <string name="dsh_log_speedtest_start">自动测速选择下载源…</string>
     <string name="dsh_log_speedtest_row">测速 %1$s: 延迟 %2$dms · %3$s</string>
+    <string name="dsh_log_speedtest_unreachable">测速 %1$s: 不可达</string>
     <string name="dsh_log_speedtest_untested">未测速</string>
     <string name="dsh_log_source_chosen">已选择下载源: %1$s</string>
     <string name="dsh_log_fetching_meta">获取运行时信息…</string>
@@ -724,6 +726,8 @@
     <string name="dsh_log_missing_after_extract">解压后 rootfs 缺少: %1$s</string>
     <string name="dsh_log_missing_python">运行时缺少 python3，无线 ADB 配对不可用</string>
     <string name="dsh_log_missing_pnpm">运行时缺少 pnpm，插件安装不可用</string>
+    <string name="dsh_log_preserve_failed">替换运行时前挪不动 %1$s，已中止以避免丢数据</string>
+    <string name="dsh_log_restore_failed">更新后恢复 %1$s 失败（数据仍在 %2$s，下次启动会自动认领回来）</string>
     <string name="dsh_log_extract_failed">解压失败: %1$s</string>
     <string name="dsh_log_groups_added">已给容器补上 Android 补充组: %1$s</string>
     <string name="dsh_log_seeding">预装插件 %1$s …</string>
