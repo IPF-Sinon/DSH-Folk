@@ -62,7 +62,7 @@ fun getVersionCode(): Int =
     dshVersionOverride("dshVersionCode")?.toIntOrNull() ?: baseVersionCode()
 
 fun getbranch(): String {
-    return exec("git rev-parse --abbrev-ref HEAD", "unknown")
+    return exec("git rev-parse --abbrev-ref HEAD", "unknown").replace('/', '-')
 }
 
 fun getVersionName(): String =
