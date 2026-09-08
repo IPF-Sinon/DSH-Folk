@@ -578,8 +578,10 @@
     <string name="dsh_section_expand">展开选项</string>
     <string name="dsh_section_collapse">收起选项</string>
     <string name="dsh_native_access_off">关</string>
+    <string name="dsh_native_access_write">写</string>
     <string name="dsh_native_access_read">读</string>
     <string name="dsh_native_access_read_write">读+写</string>
+    <string name="dsh_native_err_read_disabled">%1$s 的读权限未启用</string>
     <string name="dsh_native_err_write_disabled">%1$s 的写权限未启用</string>
     <string name="dsh_native_cap_usage">应用使用统计</string>
     <string name="dsh_native_cap_usage_desc">读取应用使用统计。Android 要求在系统设置页授予「使用情况访问权限」。</string>
@@ -646,6 +648,9 @@
     <string name="dsh_native_err_usage_query">应用使用统计查询失败：%1$s</string>
     <string name="dsh_native_err_sms_denied">未授予读取短信的权限</string>
     <string name="dsh_native_err_sms_query">短信查询失败：%1$s</string>
+    <string name="dsh_native_err_notification_access">未获得通知使用权，或通知监听服务尚未连接</string>
+    <string name="dsh_native_err_sms_send_denied">未授予发送短信的权限</string>
+    <string name="dsh_native_err_sms_send">短信发送失败：%1$s</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">尚未授予「所有文件访问」，请在 设置 → 功能 → 共享存储 里开启</string>

@@ -227,16 +227,12 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     val requestCapPermission: (DshNativeBridge.Cap) -> Unit = { cap ->
         // 特殊权限（改系统设置 / 勿扰访问 / 安装未知应用）不走 requestPermissions ——
         // 那对它们永远返回拒绝，launch 一下界面毫无反应。它们各有一个专门的系统页。
-        val special = DshNativeBridge.specialPermissionOf(cap)
-        val needed = if (special != null) {
-            emptyList()
-        } else {
-            DshNativeBridge.runtimePermissions(cap).filter {
-                ContextCompat.checkSelfPermission(context, it) !=
-                    PackageManager.PERMISSION_GRANTED
-            }
+        val currentAccess = DshNativeBridge.access(context, cap)
+        val special = DshNativeBridge.specialPermissionOf(cap, currentAccess)
+        val needed = DshNativeBridge.runtimePermissions(context, cap, currentAccess).filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (special != null) {
+        if (special != null && !DshNativeBridge.specialGranted(context, special)) {
             openSpecialSettings(special)
         } else if (needed.isNotEmpty()) {
             val activity = context as? Activity

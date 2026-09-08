@@ -335,6 +335,7 @@ object DshRuntime {
           'usage: dsh-native <command> [args] [options]',
           '  notify <title> [body] [--id N] [--ongoing]',
           '  notify-cancel [--id N]',
+          '  notify-list [--limit N]',
           '  toast <text>',
           '  vibrate [--ms N] [--amplitude 1..255]',
           '  clip get | clip set <text> [--label L]',
@@ -367,6 +368,7 @@ object DshRuntime {
           '  install                                    # may this device install unknown apps?',
           '  usage list [--days N] [--limit N]           # recent app foreground usage',
           '  sms list [--limit N]                        # recent SMS, read only',
+          '  sms send <number> <text>                    # requires send access',
           '  caps',
           'Settings > Features > Native capabilities: enable the master switch and the item first.'
         ].join('\n');
@@ -383,6 +385,8 @@ object DshRuntime {
               })));
             } else if (cmd === 'notify-cancel') {
               say(await req('DELETE', '/native/notify' + q({ id: opt.id })));
+            } else if (cmd === 'notify-list') {
+              say(await req('GET', '/native/notify/list' + q({ limit: opt.limit })));
             } else if (cmd === 'toast') {
               if (!a[0]) { console.error(USAGE); process.exit(1); }
               say(await req('POST', '/native/toast' + q({ text: a[0] })));
@@ -502,6 +506,8 @@ object DshRuntime {
             } else if (cmd === 'sms') {
               if (a[0] === 'list') {
                 say(await req('GET', '/native/sms/list' + q({ limit: opt.limit })));
+              } else if (a[0] === 'send' && a[1] && a[2]) {
+                say(await req('POST', '/native/sms/send' + q({ to: a[1], body: a[2] })));
               } else { console.error(USAGE); process.exitCode = 1; }
             } else {
               console.error(USAGE);

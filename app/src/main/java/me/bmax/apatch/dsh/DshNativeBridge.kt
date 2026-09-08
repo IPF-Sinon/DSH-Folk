@@ -21,6 +21,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.MediaStore
 import android.provider.Settings
+import android.telephony.SmsManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -80,6 +81,7 @@ object DshNativeBridge {
      */
     enum class Access(val id: String) {
         OFF("off"),
+        WRITE("write"),
         READ("read"),
         READ_WRITE("read_write"),
     }
@@ -157,7 +159,10 @@ object DshNativeBridge {
         // 绝大多数传感器不需要权限；这两个只影响心率与计步两项，
         // 缺了它们这项能力**依然可用**（见 availability）
         Cap.SENSORS -> PermissionUtils.sensorPermissions()
-        Cap.SMS -> arrayOf(android.Manifest.permission.READ_SMS)
+        Cap.SMS -> arrayOf(
+            android.Manifest.permission.READ_SMS,
+            android.Manifest.permission.SEND_SMS,
+        )
         else -> emptyArray()
     }
 
@@ -196,6 +201,9 @@ object DshNativeBridge {
         /** 安装未知应用。 */
         REQUEST_INSTALL(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, true),
 
+        /** 通知读取访问权；系统只提供应用列表页。 */
+        NOTIFICATION_ACCESS("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS", false),
+
         /** 应用使用统计访问权；系统只提供应用列表页。 */
         USAGE_STATS(Settings.ACTION_USAGE_ACCESS_SETTINGS, false),
     }
@@ -205,8 +213,30 @@ object DshNativeBridge {
         Special.WRITE_SETTINGS -> PermissionUtils.canWriteSystemSettings(ctx)
         Special.NOTIFICATION_POLICY -> PermissionUtils.hasNotificationPolicyAccess(ctx)
         Special.REQUEST_INSTALL -> PermissionUtils.canRequestPackageInstalls(ctx)
+        Special.NOTIFICATION_ACCESS -> DshNotificationListener.connected()
         Special.USAGE_STATS -> PermissionUtils.hasUsageStatsPermission(ctx)
     }
+
+    fun runtimePermissions(ctx: Context, cap: Cap, access: Access): Array<String> = when (cap) {
+        Cap.NOTIFY -> if (accessNeedsWrite(access) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else emptyArray()
+        Cap.SMS -> buildList {
+            if (accessNeedsRead(access)) add(android.Manifest.permission.READ_SMS)
+            if (accessNeedsWrite(access)) add(android.Manifest.permission.SEND_SMS)
+        }.toTypedArray()
+        else -> runtimePermissions(cap)
+    }
+
+    fun specialPermissionOf(cap: Cap, access: Access): Special? =
+        if (cap == Cap.NOTIFY && accessNeedsRead(access)) Special.NOTIFICATION_ACCESS
+        else specialPermissionOf(cap)
+
+    private fun accessNeedsRead(access: Access): Boolean =
+        access == Access.READ || access == Access.READ_WRITE
+
+    private fun accessNeedsWrite(access: Access): Boolean =
+        access == Access.WRITE || access == Access.READ_WRITE
 
     /**
      * 这项能力的权限是否已经齐了（运行时的与特殊的一并判断）。
@@ -218,8 +248,9 @@ object DshNativeBridge {
      * 而不是逼用户去追求精确位置。传感器同理 —— 缺 BODY_SENSORS 只是少两个传感器。
      */
     fun permissionSatisfied(ctx: Context, cap: Cap): Boolean {
-        specialPermissionOf(cap)?.let { return specialGranted(ctx, it) }
-        val needed = runtimePermissions(cap)
+        val access = access(ctx, cap)
+        specialPermissionOf(cap, access)?.let { if (!specialGranted(ctx, it)) return false }
+        val needed = runtimePermissions(ctx, cap, access)
         if (needed.isEmpty()) return true
         return when (cap) {
             // 三类媒体给一类就够（用户可能只想给照片）
@@ -254,8 +285,21 @@ object DshNativeBridge {
     /** 只有同时存在安全可用的读、写操作时才显示第三档。 */
     fun supportsWrite(cap: Cap): Boolean = when (cap) {
         Cap.NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.CLIPBOARD, Cap.INTENT,
-        Cap.MIC, Cap.CAMERA, Cap.TTS, Cap.CALENDAR, Cap.VOLUME, Cap.SETTINGS -> true
+        Cap.MIC, Cap.CAMERA, Cap.TTS, Cap.CALENDAR, Cap.VOLUME, Cap.SETTINGS,
+        Cap.SMS -> true
         else -> false
+    }
+
+    fun supportsRead(cap: Cap): Boolean = when (cap) {
+        Cap.TOAST, Cap.VIBRATE, Cap.INTENT, Cap.MIC, Cap.CAMERA -> false
+        else -> true
+    }
+
+    fun accessOptions(cap: Cap): List<Access> = when {
+        cap == Cap.NOTIFY -> listOf(Access.OFF, Access.WRITE, Access.READ_WRITE)
+        !supportsRead(cap) -> listOf(Access.OFF, Access.WRITE)
+        supportsWrite(cap) -> listOf(Access.OFF, Access.READ, Access.READ_WRITE)
+        else -> listOf(Access.OFF, Access.READ)
     }
 
     fun access(ctx: Context, cap: Cap): Access {
@@ -269,7 +313,7 @@ object DshNativeBridge {
     }
 
     fun setAccess(ctx: Context, cap: Cap, access: Access) {
-        val normalized = if (!supportsWrite(cap) && access == Access.READ_WRITE) Access.READ else access
+        val normalized = if (access in accessOptions(cap)) access else accessOptions(cap).last()
         prefs(ctx).edit { putString(ACCESS_PREFIX + cap.id, normalized.id) }
         // 同步旧集合，兼容同一 prefs 的旧代码/降级安装。
         setCapEnabled(ctx, cap, normalized != Access.OFF)
@@ -279,7 +323,9 @@ object DshNativeBridge {
 
     fun capEnabled(ctx: Context, cap: Cap): Boolean = access(ctx, cap) != Access.OFF
 
-    private fun canWrite(ctx: Context, cap: Cap): Boolean = access(ctx, cap) == Access.READ_WRITE
+    private fun canWrite(ctx: Context, cap: Cap): Boolean = accessNeedsWrite(access(ctx, cap))
+
+    private fun canRead(ctx: Context, cap: Cap): Boolean = accessNeedsRead(access(ctx, cap))
 
     /** 已启用的能力集合。默认空 —— 开了总开关也还要逐项勾。 */
     fun enabledCaps(ctx: Context): Set<Cap> {
@@ -408,6 +454,12 @@ object DshNativeBridge {
                 "write_disabled",
             )
         }
+        if (!isWriteRequest(method, path) && !canRead(ctx, cap)) {
+            return 403 to err(
+                str(ctx, R.string.dsh_native_err_read_disabled, capName(ctx, cap)),
+                "read_disabled",
+            )
+        }
         val (ok, why) = availability(ctx, cap)
         if (!ok) {
             return 409 to err(
@@ -419,6 +471,7 @@ object DshNativeBridge {
         return when {
             method == "POST" && path == "/native/notify" -> notify(ctx, params)
             method == "DELETE" && path == "/native/notify" -> cancelNotify(ctx, params)
+            method == "GET" && path == "/native/notify/list" -> notificationList(ctx, params)
             method == "POST" && path == "/native/toast" -> toast(ctx, params)
             method == "POST" && path == "/native/vibrate" -> vibrate(ctx, params)
             method == "POST" && path == "/native/clipboard" -> clipboardSet(ctx, params)
@@ -464,6 +517,7 @@ object DshNativeBridge {
                 DshPersonalData.usageList(ctx, params)
             method == "GET" && path == "/native/sms/list" ->
                 DshPersonalData.smsList(ctx, params)
+            method == "POST" && path == "/native/sms/send" -> smsSend(ctx, params)
             else -> methodNotAllowed(ctx, method, path)
         }
     }
@@ -503,6 +557,7 @@ object DshNativeBridge {
 
     private fun isWriteRequest(method: String, path: String): Boolean = when {
         path == "/native/notify" -> true
+        path == "/native/sms/send" -> true
         path == "/native/toast" || path == "/native/vibrate" -> true
         path == "/native/share" || path == "/native/open" -> true
         path == "/native/mic/record" || path == "/native/camera/photo" -> true
@@ -516,7 +571,7 @@ object DshNativeBridge {
     }
 
     private fun capOf(path: String): Cap? = when (path) {
-        "/native/notify" -> Cap.NOTIFY
+        "/native/notify", "/native/notify/list" -> Cap.NOTIFY
         "/native/toast" -> Cap.TOAST
         "/native/vibrate" -> Cap.VIBRATE
         "/native/clipboard" -> Cap.CLIPBOARD
@@ -539,7 +594,7 @@ object DshNativeBridge {
         "/native/settings/rotation" -> Cap.SETTINGS
         "/native/install" -> Cap.INSTALL
         "/native/usage/list" -> Cap.USAGE
-        "/native/sms/list" -> Cap.SMS
+        "/native/sms/list", "/native/sms/send" -> Cap.SMS
         else -> null
     }
 
@@ -570,6 +625,41 @@ object DshNativeBridge {
     }
 
     // ────────────────────────── 能力实现 ──────────────────────────
+
+    private fun notificationList(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        if (!DshNotificationListener.connected()) {
+            return 409 to err(str(ctx, R.string.dsh_native_err_notification_access), "no_notification_access")
+        }
+        val limit = (params["limit"]?.toIntOrNull() ?: 50).coerceIn(1, 200)
+        return 200 to JSONObject()
+            .put("ok", true)
+            .put("notifications", DshNotificationListener.snapshot(limit))
+            .toString()
+    }
+
+    private fun smsSend(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        if (!PermissionUtils.hasSmsSendPermission(ctx)) {
+            return 403 to err(str(ctx, R.string.dsh_native_err_sms_send_denied), "no_sms_send_permission")
+        }
+        val to = text(params["to"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "to"), "missing_to")
+        val body = text(params["body"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "body"), "missing_body")
+        return runCatching {
+            val manager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                ctx.getSystemService(SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION") SmsManager.getDefault()
+            } ?: error("SmsManager unavailable")
+            val parts = manager.divideMessage(body)
+            if (parts.size > 1) manager.sendMultipartTextMessage(to, null, parts, null, null)
+            else manager.sendTextMessage(to, null, body, null, null)
+            200 to JSONObject().put("ok", true).put("to", to).put("parts", parts.size).toString()
+        }.getOrElse { e ->
+            Log.w(TAG, "发送短信失败: ${e.message}")
+            500 to err(str(ctx, R.string.dsh_native_err_sms_send, e.message ?: ""), "send_failed")
+        }
+    }
 
     private fun notify(ctx: Context, params: Map<String, String>): Pair<Int, String> {
         val title = text(params["title"]) ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "title"), "missing_title")

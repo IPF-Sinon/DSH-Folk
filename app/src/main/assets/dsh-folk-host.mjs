@@ -42,6 +42,7 @@ const CAP_USAGE = {
   notify: [
     'dsh-native notify <title> [body] [--id N] [--ongoing]  # post a notification; --id 0..999 to update/cancel later',
     'dsh-native notify-cancel [--id N]                      # cancel one you posted',
+    'dsh-native notify-list [--limit N]                     # read active system notifications',
   ],
   toast: ['dsh-native toast <text>                                # brief on-screen message'],
   vibrate: ['dsh-native vibrate [--ms N] [--amplitude 1..255]      # vibrate, 3000ms max'],
@@ -106,6 +107,7 @@ const CAP_USAGE = {
   ],
   sms: [
     'dsh-native sms list [--limit N]                        # recent SMS, read only',
+    'dsh-native sms send <number> <text>                    # send an SMS',
   ],
 };
 
@@ -350,8 +352,10 @@ function render(f) {
     for (const cap of usable) {
       const access = capAccess[cap];
       for (const line of CAP_USAGE[cap]) {
-        const writeCommand = / notify |notify-cancel| clip set | calendar add | volume set | ringer | settings (brightness|timeout|rotation)/.test(' ' + line);
-        if (access === 'read_write' || !writeCommand) lines.push(line);
+        const writeCommand = / notify |notify-cancel| clip set | calendar add | volume set | ringer | settings (brightness|timeout|rotation)| sms send | toast | vibrate | share | open | mic record | camera photo | tts (say|file)/.test(' ' + line);
+        const readCommand = /notify-list| clip get | calendar list | sms list | tts voices/.test(line);
+        if ((access === 'read_write') || (access === 'write' && writeCommand) ||
+            (access === 'read' && !writeCommand) || (!readCommand && !writeCommand)) lines.push(line);
       }
     }
     lines.push('dsh-native caps                                        # current off/read/read+write access');

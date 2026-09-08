@@ -275,8 +275,13 @@ object PermissionUtils {
         mode == android.app.AppOpsManager.MODE_ALLOWED
     }.getOrDefault(false)
 
-    fun hasSmsPermission(context: Context): Boolean =
+    fun hasSmsReadPermission(context: Context): Boolean =
         granted(context, Manifest.permission.READ_SMS)
+
+    fun hasSmsSendPermission(context: Context): Boolean =
+        granted(context, Manifest.permission.SEND_SMS)
+
+    fun hasSmsPermission(context: Context): Boolean = hasSmsReadPermission(context)
 }
 
 /**

@@ -46,8 +46,9 @@
          没有 CALL_PHONE —— 拨号走 ACTION_DIAL 只把号码填进拨号盘，由用户按下通话键。
          通话记录不在本次范围内；短信能力单独由 READ_SMS 控制。 -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <!-- 短信与应用使用统计：分别供 Cap.SMS 与 Cap.USAGE；后者仍需用户在特殊权限页开启。 -->
+    <!-- 短信：读取与发送分开授权；发送端点不提供删除或修改能力。 -->
     <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
@@ -322,6 +323,16 @@
             <meta-data
                 android:name="autoStoreLocales"
                 android:value="true" />
+        </service>
+
+        <!-- 通知读取依赖系统的 Notification Access 特殊授权。 -->
+        <service
+            android:name=".dsh.DshNotificationListener"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
 
         <!-- DSH 运行时前台服务 -->

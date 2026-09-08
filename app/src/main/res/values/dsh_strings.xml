@@ -596,8 +596,10 @@
     <string name="dsh_section_expand">Show options</string>
     <string name="dsh_section_collapse">Hide options</string>
     <string name="dsh_native_access_off">Off</string>
+    <string name="dsh_native_access_write">Write</string>
     <string name="dsh_native_access_read">Read</string>
     <string name="dsh_native_access_read_write">Read + write</string>
+    <string name="dsh_native_err_read_disabled">Read access for %1$s is disabled</string>
     <string name="dsh_native_err_write_disabled">Write access for %1$s is disabled</string>
     <string name="dsh_native_cap_usage">App usage stats</string>
     <string name="dsh_native_cap_usage_desc">Read app usage statistics. Android requires Usage Access on a system settings page.</string>
@@ -664,6 +666,9 @@
     <string name="dsh_native_err_usage_query">App usage query failed: %1$s</string>
     <string name="dsh_native_err_sms_denied">Permission to read SMS is not granted</string>
     <string name="dsh_native_err_sms_query">SMS query failed: %1$s</string>
+    <string name="dsh_native_err_notification_access">Notification Access is not granted or the listener is not connected</string>
+    <string name="dsh_native_err_sms_send_denied">Permission to send SMS is not granted</string>
+    <string name="dsh_native_err_sms_send">Could not send SMS: %1$s</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">All files access is not granted — enable it in Settings › Features › Shared storage</string>

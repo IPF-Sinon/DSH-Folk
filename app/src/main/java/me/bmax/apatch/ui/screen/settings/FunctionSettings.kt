@@ -980,11 +980,7 @@ fun FunctionSettingsContent(
                                 }
                                 Spacer(Modifier.width(8.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    val modes = if (DshNativeBridge.supportsWrite(cap)) {
-                                        DshNativeBridge.Access.entries
-                                    } else {
-                                        listOf(DshNativeBridge.Access.OFF, DshNativeBridge.Access.READ)
-                                    }
+                                    val modes = DshNativeBridge.accessOptions(cap)
                                     for (mode in modes) {
                                         OutlinedButton(
                                             onClick = { onNativeAccessChange(cap, mode) },
@@ -995,6 +991,7 @@ fun FunctionSettingsContent(
                                                 stringResource(
                                                     when (mode) {
                                                         DshNativeBridge.Access.OFF -> R.string.dsh_native_access_off
+                                                        DshNativeBridge.Access.WRITE -> R.string.dsh_native_access_write
                                                         DshNativeBridge.Access.READ -> R.string.dsh_native_access_read
                                                         DshNativeBridge.Access.READ_WRITE -> R.string.dsh_native_access_read_write
                                                     }
