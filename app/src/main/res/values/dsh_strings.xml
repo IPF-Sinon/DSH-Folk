@@ -593,6 +593,8 @@
     <string name="dsh_native_cap_settings_desc">Brightness, screen timeout and auto-rotate. Android requires this to be granted on a system settings page.</string>
     <string name="dsh_native_cap_install">Install permission status</string>
     <string name="dsh_native_cap_install_desc">Read whether installing unknown apps is allowed. It never installs anything by itself.</string>
+    <string name="dsh_section_expand">Show options</string>
+    <string name="dsh_section_collapse">Hide options</string>
     <string name="dsh_native_cap_usage">App usage stats</string>
     <string name="dsh_native_cap_usage_desc">Read app usage statistics. Android requires Usage Access on a system settings page.</string>
     <string name="dsh_native_cap_sms">SMS</string>

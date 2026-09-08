@@ -18,6 +18,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Layers
@@ -243,6 +245,17 @@ fun FunctionSettingsContent(
                         title = stringResource(R.string.dsh_autostart),
                         summary = stringResource(R.string.dsh_autostart_summary),
                     )
+                    var autostartExpanded by remember { mutableStateOf(false) }
+                    TextButton(onClick = { autostartExpanded = !autostartExpanded }) {
+                        Icon(
+                            if (autostartExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = null,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(if (autostartExpanded) R.string.dsh_section_collapse else R.string.dsh_section_expand))
+                    }
+                    AnimatedVisibility(visible = autostartExpanded) {
+                        Column {
                     Spacer(Modifier.height(12.dp))
 
                     RuntimeOption(
@@ -393,6 +406,8 @@ fun FunctionSettingsContent(
                                 checked = autostartContainer,
                                 onCheckedChange = onAutostartContainerChange,
                             )
+                        }
+                    }
                         }
                     }
                 }
@@ -917,8 +932,18 @@ fun FunctionSettingsContent(
                         )
                     }
 
-                    // 总开关关着时分项没有意义，但仍然显示（灰掉），
-                    // 否则用户开总开关后会看到一堆凭空出现的开关
+                    // 总开关关着时分项没有意义；折叠后仍保留总开关，方便快速查看页面。
+                    var capsExpanded by remember { mutableStateOf(false) }
+                    TextButton(onClick = { capsExpanded = !capsExpanded }) {
+                        Icon(
+                            if (capsExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = null,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(if (capsExpanded) R.string.dsh_section_collapse else R.string.dsh_section_expand))
+                    }
+                    AnimatedVisibility(visible = capsExpanded) {
+                        Column {
                     Spacer(Modifier.height(12.dp))
                     Text(
                         text = stringResource(R.string.dsh_native_caps),
@@ -1032,6 +1057,8 @@ fun FunctionSettingsContent(
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                        }
                     }
                 }
             }

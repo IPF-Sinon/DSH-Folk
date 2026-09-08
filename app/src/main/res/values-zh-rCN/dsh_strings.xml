@@ -575,6 +575,8 @@
     <string name="dsh_native_cap_settings_desc">亮度、熄屏时间与自动旋转。Android 要求这一项在系统设置页里授予。</string>
     <string name="dsh_native_cap_install">安装权限状态</string>
     <string name="dsh_native_cap_install_desc">读取「允许安装未知应用」是否已开启。它自己不会安装任何东西。</string>
+    <string name="dsh_section_expand">展开选项</string>
+    <string name="dsh_section_collapse">收起选项</string>
     <string name="dsh_native_cap_usage">应用使用统计</string>
     <string name="dsh_native_cap_usage_desc">读取应用使用统计。Android 要求在系统设置页授予「使用情况访问权限」。</string>
     <string name="dsh_native_cap_sms">短信</string>

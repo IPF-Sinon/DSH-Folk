@@ -204,7 +204,7 @@ fun GeneralSettingsContent(
             ExpressiveCard(flat = flat, onClick = {
                 scope.launch {
                     loadingDialog.show()
-                    val status = UpdateChecker.check(acceptBeta = betaUpdate)
+                    val status = UpdateChecker.checkManually(acceptBeta = betaUpdate)
                     loadingDialog.hide()
                     when {
                         status.hasUpdate -> {

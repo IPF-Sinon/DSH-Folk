@@ -1,6 +1,7 @@
 package me.bmax.apatch.util
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +58,8 @@ object FolkApiClient {
             Log.d(TAG, "Deduplicating in-flight request: $url")
             return try {
                 Result.success(existing.await())
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Result.failure(e)
             }
@@ -72,6 +75,8 @@ object FolkApiClient {
             val result = deferred.await()
             memoryCache[url] = CacheEntry(result, System.currentTimeMillis())
             Result.success(result)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         } finally {
@@ -111,6 +116,10 @@ object FolkApiClient {
             }
         }
         throw lastException ?: IOException("Unknown error")
+    }
+
+    fun cancelInFlightRequests() {
+        inFlightRequests.values.forEach { it.cancel() }
     }
 
     fun clearCache() {

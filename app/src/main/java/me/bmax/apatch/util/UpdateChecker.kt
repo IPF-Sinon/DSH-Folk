@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.BuildConfig
@@ -92,6 +93,12 @@ object UpdateChecker {
         val canInstallInApp: Boolean get() = apkUrl.isNotEmpty() && sha256.isNotEmpty()
     }
 
+    /** 用户主动检查前取消自动检查遗留的网络请求，再从头发起一次。 */
+    suspend fun checkManually(acceptBeta: Boolean = false): Status {
+        FolkApiClient.cancelInFlightRequests()
+        return check(acceptBeta)
+    }
+
     /**
      * @param acceptBeta 是否接受测试版（GitHub 的 prerelease）。默认 false ——
      *   这条通道必须由用户明确打开，见设置里那个开关。
@@ -114,6 +121,7 @@ object UpdateChecker {
                     maxRetries = 1,
                     forceRefresh = true,
                 ).getOrElse { e ->
+                    if (e is CancellationException) throw e
                     lastError = e.message ?: e.javaClass.simpleName
                     Log.w(TAG, "fetch failed: $base$path — $lastError")
                     null
