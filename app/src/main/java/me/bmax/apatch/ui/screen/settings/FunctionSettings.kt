@@ -710,7 +710,7 @@ fun FunctionSettingsContent(
                             )
                         )
                     }
-                    // 重装会连带删掉容器内的插件与 ADB 密钥，必须确认
+                    // 替换运行时会先暂存并恢复用户数据；确认框说明下载量与停服影响。
                     if (confirming) {
                         AlertDialog(
                             onDismissRequest = { confirming = false },
