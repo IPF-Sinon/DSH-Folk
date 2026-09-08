@@ -78,6 +78,12 @@ object DshNativeBridge {
      *
      * [id] 会出现在设置项、prefs 与 `/native/capabilities` 的响应里，不要改。
      */
+    enum class Access(val id: String) {
+        OFF("off"),
+        READ("read"),
+        READ_WRITE("read_write"),
+    }
+
     enum class Cap(val id: String) {
         NOTIFY("notify"),
         TOAST("toast"),
@@ -243,6 +249,38 @@ object DshNativeBridge {
         prefs(ctx).edit { putBoolean(DshEnv.KEY_NATIVE_BRIDGE, on) }
     }
 
+    private const val ACCESS_PREFIX = "native_bridge_access_"
+
+    /** 只有同时存在安全可用的读、写操作时才显示第三档。 */
+    fun supportsWrite(cap: Cap): Boolean = when (cap) {
+        Cap.NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.CLIPBOARD, Cap.INTENT,
+        Cap.MIC, Cap.CAMERA, Cap.TTS, Cap.CALENDAR, Cap.VOLUME, Cap.SETTINGS -> true
+        else -> false
+    }
+
+    fun access(ctx: Context, cap: Cap): Access {
+        val saved = prefs(ctx).getString(ACCESS_PREFIX + cap.id, null)
+        return Access.entries.firstOrNull { it.id == saved }
+            ?: if (cap in enabledCaps(ctx)) {
+                if (supportsWrite(cap)) Access.READ_WRITE else Access.READ
+            } else {
+                Access.OFF
+            }
+    }
+
+    fun setAccess(ctx: Context, cap: Cap, access: Access) {
+        val normalized = if (!supportsWrite(cap) && access == Access.READ_WRITE) Access.READ else access
+        prefs(ctx).edit { putString(ACCESS_PREFIX + cap.id, normalized.id) }
+        // 同步旧集合，兼容同一 prefs 的旧代码/降级安装。
+        setCapEnabled(ctx, cap, normalized != Access.OFF)
+    }
+
+    fun accessMap(ctx: Context): Map<Cap, Access> = Cap.entries.associateWith { access(ctx, it) }
+
+    fun capEnabled(ctx: Context, cap: Cap): Boolean = access(ctx, cap) != Access.OFF
+
+    private fun canWrite(ctx: Context, cap: Cap): Boolean = access(ctx, cap) == Access.READ_WRITE
+
     /** 已启用的能力集合。默认空 —— 开了总开关也还要逐项勾。 */
     fun enabledCaps(ctx: Context): Set<Cap> {
         val raw = prefs(ctx).getString(DshEnv.KEY_NATIVE_CAPS, "") ?: ""
@@ -258,8 +296,6 @@ object DshNativeBridge {
             putString(DshEnv.KEY_NATIVE_CAPS, next.joinToString(",") { it.id })
         }
     }
-
-    fun capEnabled(ctx: Context, cap: Cap): Boolean = cap in enabledCaps(ctx)
 
     /**
      * 这项能力当前是否真的能用（权限、系统能力层面），以及不能用的原因 id。
@@ -366,6 +402,12 @@ object DshNativeBridge {
                 "cap_disabled",
             )
         }
+        if (isWriteRequest(method, path) && !canWrite(ctx, cap)) {
+            return 403 to err(
+                str(ctx, R.string.dsh_native_err_write_disabled, capName(ctx, cap)),
+                "write_disabled",
+            )
+        }
         val (ok, why) = availability(ctx, cap)
         if (!ok) {
             return 409 to err(
@@ -459,6 +501,20 @@ object DshNativeBridge {
         },
     )
 
+    private fun isWriteRequest(method: String, path: String): Boolean = when {
+        path == "/native/notify" -> true
+        path == "/native/toast" || path == "/native/vibrate" -> true
+        path == "/native/share" || path == "/native/open" -> true
+        path == "/native/mic/record" || path == "/native/camera/photo" -> true
+        path.startsWith("/native/tts/") && path != "/native/tts/voices" -> true
+        path == "/native/clipboard" && method == "POST" -> true
+        path == "/native/calendar/create" -> true
+        path == "/native/volume" && method == "POST" -> true
+        path == "/native/ringer" -> true
+        path.startsWith("/native/settings/") && method == "POST" -> true
+        else -> false
+    }
+
     private fun capOf(path: String): Cap? = when (path) {
         "/native/notify" -> Cap.NOTIFY
         "/native/toast" -> Cap.TOAST
@@ -496,6 +552,8 @@ object DshNativeBridge {
                 cap.id,
                 JSONObject()
                     .put("enabled", on && capEnabled(ctx, cap))
+                    .put("access", if (on) access(ctx, cap).id else Access.OFF.id)
+                    .put("supportsWrite", supportsWrite(cap))
                     .put("available", available)
                     .put("reason", why),
             )

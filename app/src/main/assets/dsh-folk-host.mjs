@@ -318,7 +318,10 @@ function render(f) {
   lines.push('## Native capabilities (dsh-native)');
   lines.push('');
   const bridgeOn = f.nativeBridge === true;
-  const caps = Array.isArray(f.nativeCaps) ? f.nativeCaps.filter((c) => typeof c === 'string') : [];
+  const capAccess = f.nativeCaps && typeof f.nativeCaps === 'object' && !Array.isArray(f.nativeCaps)
+    ? f.nativeCaps
+    : Object.fromEntries((Array.isArray(f.nativeCaps) ? f.nativeCaps : []).map((c) => [c, 'read_write']));
+  const caps = Object.keys(capAccess);
   const usable = caps.filter((c) => Object.prototype.hasOwnProperty.call(CAP_USAGE, c));
 
   if (!bridgeOn || usable.length === 0) {
@@ -344,8 +347,14 @@ function render(f) {
     );
     lines.push('');
     lines.push('```');
-    for (const cap of usable) for (const line of CAP_USAGE[cap]) lines.push(line);
-    lines.push('dsh-native caps                                        # which capabilities are on / available now');
+    for (const cap of usable) {
+      const access = capAccess[cap];
+      for (const line of CAP_USAGE[cap]) {
+        const writeCommand = / notify |notify-cancel| clip set | calendar add | volume set | ringer | settings (brightness|timeout|rotation)/.test(' ' + line);
+        if (access === 'read_write' || !writeCommand) lines.push(line);
+      }
+    }
+    lines.push('dsh-native caps                                        # current off/read/read+write access');
     lines.push('```');
     const caveats = usable.map((c) => CAP_CAVEAT[c]).filter((x) => typeof x === 'string');
     if (caveats.length > 0) {

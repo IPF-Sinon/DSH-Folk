@@ -135,9 +135,9 @@ fun FunctionSettingsContent(
     /** 原生能力桥总开关。 */
     nativeBridgeEnabled: Boolean,
     onNativeBridgeEnabledChange: (Boolean) -> Unit,
-    /** 已启用的原生能力分项。 */
-    nativeCaps: Set<DshNativeBridge.Cap>,
-    onNativeCapChange: (DshNativeBridge.Cap, Boolean) -> Unit,
+    /** 每项原生能力的访问级别。 */
+    nativeAccess: Map<DshNativeBridge.Cap, DshNativeBridge.Access>,
+    onNativeAccessChange: (DshNativeBridge.Cap, DshNativeBridge.Access) -> Unit,
     /**
      * 权限已经齐了的能力集合。
      *
@@ -979,15 +979,34 @@ fun FunctionSettingsContent(
                                     )
                                 }
                                 Spacer(Modifier.width(8.dp))
-                                ExpressiveSwitch(
-                                    checked = cap in nativeCaps,
-                                    onCheckedChange = { on -> onNativeCapChange(cap, on) },
-                                    enabled = nativeBridgeEnabled,
-                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    val modes = if (DshNativeBridge.supportsWrite(cap)) {
+                                        DshNativeBridge.Access.entries
+                                    } else {
+                                        listOf(DshNativeBridge.Access.OFF, DshNativeBridge.Access.READ)
+                                    }
+                                    for (mode in modes) {
+                                        OutlinedButton(
+                                            onClick = { onNativeAccessChange(cap, mode) },
+                                            enabled = nativeBridgeEnabled,
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                                        ) {
+                                            Text(
+                                                stringResource(
+                                                    when (mode) {
+                                                        DshNativeBridge.Access.OFF -> R.string.dsh_native_access_off
+                                                        DshNativeBridge.Access.READ -> R.string.dsh_native_access_read
+                                                        DshNativeBridge.Access.READ_WRITE -> R.string.dsh_native_access_read_write
+                                                    }
+                                                ),
+                                                color = if (nativeAccess[cap] == mode) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                            // 勾上了但权限没给：开关是亮的，调用却一定失败。每项自己紧跟一行
-                            // 提示，而不是攒到卡片末尾 —— 用户要知道是**哪一项**缺权限。
-                            val on = nativeBridgeEnabled && cap in nativeCaps
+                            val on = nativeBridgeEnabled && nativeAccess[cap] != DshNativeBridge.Access.OFF
                             if (on && cap !in capsWithPermission) {
                                 TextButton(onClick = { onRequestCapPermission(cap) }) {
                                     Text(stringResource(capPermissionHintRes(cap)))

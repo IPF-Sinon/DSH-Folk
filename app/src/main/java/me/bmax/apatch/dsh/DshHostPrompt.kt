@@ -150,10 +150,12 @@ object DshHostPrompt {
      */
     fun writeFacts(ctx: Context) {
         runCatching {
-            val caps = JSONArray()
+            val caps = JSONObject()
             val nativeOn = DshNativeBridge.enabled(ctx)
             if (nativeOn) {
-                for (c in DshNativeBridge.enabledCaps(ctx)) caps.put(c.id)
+                for ((cap, access) in DshNativeBridge.accessMap(ctx)) {
+                    if (access != DshNativeBridge.Access.OFF) caps.put(cap.id, access.id)
+                }
             }
             val json = JSONObject()
                 .put("promptEnabled", enabled(ctx))

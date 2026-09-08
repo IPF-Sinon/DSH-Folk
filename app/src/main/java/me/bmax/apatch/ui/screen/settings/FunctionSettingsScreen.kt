@@ -142,7 +142,7 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
     var nativeBridgeEnabled by remember {
         mutableStateOf(DshNativeBridge.enabled(context))
     }
-    var nativeCaps by remember { mutableStateOf(DshNativeBridge.enabledCaps(context)) }
+    var nativeAccess by remember { mutableStateOf(DshNativeBridge.accessMap(context)) }
     // 宿主能力提示词注入
     var hostPromptEnabled by rememberSaveable {
         mutableStateOf(DshHostPrompt.enabled(context))
@@ -354,7 +354,7 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
             !PermissionUtils.hasPreciseLocationPermission(context)
         allFilesGranted = PermissionUtils.hasAllFilesAccess(context)
         nativeBridgeEnabled = DshNativeBridge.enabled(context)
-        nativeCaps = DshNativeBridge.enabledCaps(context)
+        nativeAccess = DshNativeBridge.accessMap(context)
         // 无障碍开关同样只能在系统设置里改。少了这一行，用户点「打开无障碍设置」、开好、
         // 返回，看到的还是「服务尚未启用」—— 他会以为没生效，再去开一遍。
         a11yEnabled = DshAutostart.a11yEnabled(context)
@@ -619,14 +619,12 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                         // 提示词里写着「哪些能力开着」，开关一变就得让容器侧看到新事实
                         DshHostPrompt.writeFacts(context.applicationContext)
                     },
-                    nativeCaps = nativeCaps,
-                    onNativeCapChange = { cap, on ->
-                        DshNativeBridge.setCapEnabled(context.applicationContext, cap, on)
-                        nativeCaps = DshNativeBridge.enabledCaps(context.applicationContext)
+                    nativeAccess = nativeAccess,
+                    onNativeAccessChange = { cap, access ->
+                        DshNativeBridge.setAccess(context.applicationContext, cap, access)
+                        nativeAccess = DshNativeBridge.accessMap(context.applicationContext)
                         DshHostPrompt.writeFacts(context.applicationContext)
-                        // 刚打开一项能力就顺手把它缺的系统权限要了：不这么做用户要先勾开关、
-                        // 再点一行提示、再点系统弹窗，三步里前两步都不产生任何可见效果。
-                        if (on) requestCapPermission(cap)
+                        if (access != DshNativeBridge.Access.OFF) requestCapPermission(cap)
                     },
                     hostPromptEnabled = hostPromptEnabled,
                     onHostPromptEnabledChange = { on ->
