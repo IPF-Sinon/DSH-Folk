@@ -58,9 +58,9 @@ object DshSource {
     private const val KEY_AUTO_SOURCE = "auto_source"
     private const val KEY_AUTO_SOURCE_AT = "auto_source_at"
 
-    /** 运行时发布位置（滚动 tag runtime-latest；资产名按架构区分）。 */
+    /** 1.8.2.1 补丁版固定使用 DSH 0.1.1-rc.2 的独立运行时发布位。 */
     private const val RUNTIME_BASE =
-        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-latest/"
+        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-0.1.1-rc.2/"
 
     /**
      * 本机要用的运行时架构。
