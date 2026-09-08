@@ -519,7 +519,7 @@
     <string name="dsh_native_cap_device">Device info</string>
     <string name="dsh_native_cap_device_desc">Model, Android version, ABI, battery level and charging state</string>
     <string name="dsh_native_need_notif_perm">Notification permission not granted — tap to grant</string>
-    <string name="dsh_native_cli_hint">Inside the container: dsh-native notify &lt;title&gt; [body] / toast / vibrate / clip / share / open / device / media / mic / camera / calendar / contacts / location / phone / sensors / network / volume / ringer / settings / caps</string>
+    <string name="dsh_native_cli_hint">Inside the container: dsh-native notify &lt;title&gt; [body] / toast / vibrate / clip / share / open / device / media / mic / camera / calendar / contacts / location / phone / sensors / network / volume / ringer / settings / usage / sms / caps</string>
     <string name="dsh_native_notif_channel_name">Agent notifications</string>
     <string name="dsh_native_notif_channel_desc">Notifications posted by the agent running inside the container</string>
     <string name="dsh_host_prompt_title">Tell the agent about these</string>
@@ -656,6 +656,10 @@
     <string name="dsh_native_err_volume_set">Could not set the volume</string>
     <string name="dsh_native_err_bad_ringer">mode must be one of: %1$s</string>
     <string name="dsh_native_err_ringer_set">Could not set the ringer mode</string>
+    <string name="dsh_native_err_usage_denied">Usage Access is not granted</string>
+    <string name="dsh_native_err_usage_query">App usage query failed: %1$s</string>
+    <string name="dsh_native_err_sms_denied">Permission to read SMS is not granted</string>
+    <string name="dsh_native_err_sms_query">SMS query failed: %1$s</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">All files access is not granted — enable it in Settings › Features › Shared storage</string>

@@ -501,7 +501,7 @@
     <string name="dsh_native_cap_device">设备信息</string>
     <string name="dsh_native_cap_device_desc">型号、Android 版本、ABI、电量与充电状态</string>
     <string name="dsh_native_need_notif_perm">尚未授予通知权限，点这里授予</string>
-    <string name="dsh_native_cli_hint">容器内：dsh-native notify &lt;标题&gt; [正文] / toast / vibrate / clip / share / open / device / media / mic / camera / calendar / contacts / location / phone / sensors / network / volume / ringer / settings / caps</string>
+    <string name="dsh_native_cli_hint">容器内：dsh-native notify &lt;标题&gt; [正文] / toast / vibrate / clip / share / open / device / media / mic / camera / calendar / contacts / location / phone / sensors / network / volume / ringer / settings / usage / sms / caps</string>
     <string name="dsh_native_notif_channel_name">Agent 通知</string>
     <string name="dsh_native_notif_channel_desc">容器内 agent 主动发出的通知</string>
     <string name="dsh_host_prompt_title">让 agent 知道这些能力</string>
@@ -638,6 +638,10 @@
     <string name="dsh_native_err_volume_set">音量设置失败</string>
     <string name="dsh_native_err_bad_ringer">mode 必须是其中之一：%1$s</string>
     <string name="dsh_native_err_ringer_set">响铃模式设置失败</string>
+    <string name="dsh_native_err_usage_denied">未获得「应用使用统计」权限</string>
+    <string name="dsh_native_err_usage_query">应用使用统计查询失败：%1$s</string>
+    <string name="dsh_native_err_sms_denied">未授予读取短信的权限</string>
+    <string name="dsh_native_err_sms_query">短信查询失败：%1$s</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">尚未授予「所有文件访问」，请在 设置 → 功能 → 共享存储 里开启</string>

@@ -5,11 +5,13 @@ import android.content.ContentValues
 import android.content.Context
 import android.location.Location
 import android.location.LocationListener
+import android.app.usage.UsageStatsManager
 import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
 import android.provider.CalendarContract
 import android.provider.ContactsContract
+import android.provider.Telephony
 import android.util.Log
 import me.bmax.apatch.R
 import me.bmax.apatch.util.PermissionUtils
@@ -40,6 +42,8 @@ internal object DshPersonalData {
 
     private const val DEFAULT_LIMIT = 50
     private const val MAX_LIMIT = 500
+    private const val DEFAULT_USAGE_DAYS = 1
+    private const val MAX_USAGE_DAYS = 30
 
     /** 日历默认往后看的天数。 */
     private const val DEFAULT_DAYS = 7
@@ -295,6 +299,96 @@ internal object DshPersonalData {
         ContactsContract.CommonDataKinds.Phone.TYPE_FAX_WORK -> "fax_work"
         ContactsContract.CommonDataKinds.Phone.TYPE_PAGER -> "pager"
         else -> "other"
+    }
+
+    // ────────────────────────── 使用统计与短信 ──────────────────────────
+
+    fun usageList(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        if (!PermissionUtils.hasUsageStatsPermission(ctx)) {
+            return 403 to DshNativeBridge.err(
+                DshNativeBridge.str(ctx, R.string.dsh_native_err_usage_denied),
+                "no_usage_permission",
+            )
+        }
+        val days = (params["days"]?.toIntOrNull() ?: DEFAULT_USAGE_DAYS).coerceIn(1, MAX_USAGE_DAYS)
+        val limit = limitOf(params["limit"])
+        val end = System.currentTimeMillis()
+        val start = end - days * 24L * 60 * 60 * 1000
+        val manager = ctx.getSystemService(UsageStatsManager::class.java)
+            ?: return 500 to DshNativeBridge.err(
+                DshNativeBridge.str(ctx, R.string.dsh_native_err_no_service, "UsageStatsManager"),
+                "no_service",
+            )
+        val out = JSONArray()
+        runCatching {
+            manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
+                .asSequence()
+                .filter { it.totalTimeInForeground > 0L || it.lastTimeUsed >= start }
+                .sortedByDescending { it.lastTimeUsed }
+                .take(limit)
+                .forEach {
+                    out.put(
+                        JSONObject()
+                            .put("package", it.packageName)
+                            .put("lastTimeUsed", it.lastTimeUsed)
+                            .put("foregroundMs", it.totalTimeInForeground),
+                    )
+                }
+        }.onFailure { e ->
+            Log.w(TAG, "使用统计查询失败: ${e.message}")
+            return 500 to DshNativeBridge.err(
+                DshNativeBridge.str(ctx, R.string.dsh_native_err_usage_query, e.message ?: ""),
+                "query_failed",
+            )
+        }
+        return 200 to JSONObject().put("ok", true).put("days", days).put("apps", out).toString()
+    }
+
+    fun smsList(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        if (!PermissionUtils.hasSmsPermission(ctx)) {
+            return 403 to DshNativeBridge.err(
+                DshNativeBridge.str(ctx, R.string.dsh_native_err_sms_denied),
+                "no_sms_permission",
+            )
+        }
+        val limit = limitOf(params["limit"])
+        val cols = arrayOf(
+            Telephony.TextBasedSmsColumns._ID,
+            Telephony.TextBasedSmsColumns.ADDRESS,
+            Telephony.TextBasedSmsColumns.BODY,
+            Telephony.TextBasedSmsColumns.DATE,
+            Telephony.TextBasedSmsColumns.TYPE,
+            Telephony.TextBasedSmsColumns.READ,
+        )
+        val out = JSONArray()
+        runCatching {
+            ctx.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                cols,
+                null,
+                null,
+                "${Telephony.TextBasedSmsColumns.DATE} DESC",
+            )?.use { c ->
+                while (c.moveToNext() && out.length() < limit) {
+                    out.put(
+                        JSONObject()
+                            .put("id", c.getLong(0))
+                            .put("address", c.getString(1) ?: "")
+                            .put("body", c.getString(2) ?: "")
+                            .put("date", c.getLong(3))
+                            .put("type", c.getInt(4))
+                            .put("read", c.getInt(5) != 0),
+                    )
+                }
+            }
+        }.onFailure { e ->
+            Log.w(TAG, "短信查询失败: ${e.message}")
+            return 500 to DshNativeBridge.err(
+                DshNativeBridge.str(ctx, R.string.dsh_native_err_sms_query, e.message ?: ""),
+                "query_failed",
+            )
+        }
+        return 200 to JSONObject().put("ok", true).put("messages", out).toString()
     }
 
     // ────────────────────────── 位置 ──────────────────────────

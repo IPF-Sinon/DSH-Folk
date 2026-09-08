@@ -418,6 +418,10 @@ object DshNativeBridge {
             method == "POST" && path == "/native/settings/rotation" ->
                 DshSystemCtl.rotationSet(ctx, params)
             method == "GET" && path == "/native/install" -> DshSystemCtl.installStatus(ctx)
+            method == "GET" && path == "/native/usage/list" ->
+                DshPersonalData.usageList(ctx, params)
+            method == "GET" && path == "/native/sms/list" ->
+                DshPersonalData.smsList(ctx, params)
             else -> methodNotAllowed(ctx, method, path)
         }
     }
@@ -478,6 +482,8 @@ object DshNativeBridge {
         "/native/settings/timeout",
         "/native/settings/rotation" -> Cap.SETTINGS
         "/native/install" -> Cap.INSTALL
+        "/native/usage/list" -> Cap.USAGE
+        "/native/sms/list" -> Cap.SMS
         else -> null
     }
 

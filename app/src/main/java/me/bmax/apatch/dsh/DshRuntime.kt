@@ -365,6 +365,8 @@ object DshRuntime {
           '  settings timeout <ms>',
           '  settings rotation <0|1>',
           '  install                                    # may this device install unknown apps?',
+          '  usage list [--days N] [--limit N]           # recent app foreground usage',
+          '  sms list [--limit N]                        # recent SMS, read only',
           '  caps',
           'Settings > Features > Native capabilities: enable the master switch and the item first.'
         ].join('\n');
@@ -493,6 +495,14 @@ object DshRuntime {
               } else { console.error(USAGE); process.exitCode = 1; }
             } else if (cmd === 'install') {
               say(await req('GET', '/native/install'));
+            } else if (cmd === 'usage') {
+              if (a[0] === 'list') {
+                say(await req('GET', '/native/usage/list' + q({ days: opt.days, limit: opt.limit })));
+              } else { console.error(USAGE); process.exitCode = 1; }
+            } else if (cmd === 'sms') {
+              if (a[0] === 'list') {
+                say(await req('GET', '/native/sms/list' + q({ limit: opt.limit })));
+              } else { console.error(USAGE); process.exitCode = 1; }
             } else {
               console.error(USAGE);
               process.exitCode = 1;

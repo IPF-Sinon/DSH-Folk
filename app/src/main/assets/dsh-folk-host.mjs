@@ -101,6 +101,12 @@ const CAP_USAGE = {
   install: [
     'dsh-native install                                     # may this device install unknown apps?',
   ],
+  usage: [
+    'dsh-native usage list [--days N] [--limit N]           # recent app foreground usage',
+  ],
+  sms: [
+    'dsh-native sms list [--limit N]                        # recent SMS, read only',
+  ],
 };
 
 /** Per-capability caveats; only worth tokens while that capability is on. */
@@ -179,6 +185,11 @@ const CAP_CAVEAT = {
   install:
     'Status only — it installs nothing. Use it before suggesting the in-app update: when ' +
     'canRequestInstall is false the download will succeed and the install will not.',
+  usage:
+    'Read only. Use --days and --limit to request the smallest useful window; foregroundMs is an ' +
+    'Android aggregate, not a live process timer.',
+  sms:
+    'Read only. SMS bodies are private: use a small --limit and do not repeat unrelated messages.',
 };
 
 let cached = null;
