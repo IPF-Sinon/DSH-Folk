@@ -16,6 +16,9 @@ on:
         type: choice
         options: [ debug, release, both ]
 
+permissions:
+  contents: write
+
 # 同一分支的新推送取消上一次仍在跑的构建（Gradle 构建很吃 runner 时间）
 concurrency:
   group: build-${{ github.ref }}
@@ -194,3 +197,17 @@ jobs:
             DSH-Folk-Release-*.apk
             DSH-Folk-Release-*.apk.sha256
           retention-days: 30
+
+      - name: Publish patch release
+        if: startsWith(github.ref_name, 'release/1.8.2.1-')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v1.8.2.1"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title 'DSH-Folk 1.8.2.1' \
+              --notes 'Patch release based on v1.8.2. This build is pinned to the independent DSH 0.1.1-rc.2 runtime channel (runtime-0.1.1-rc.2).' \
+              --latest=false
+          fi
+          gh release upload "$TAG" DSH-Folk-Release-*.apk DSH-Folk-Release-*.apk.sha256 --clobber
