@@ -353,7 +353,7 @@ internal object DshPersonalData {
         }
         val limit = limitOf(params["limit"])
         val cols = arrayOf(
-            Telephony.TextBasedSmsColumns._ID,
+            Telephony.Sms._ID,
             Telephony.TextBasedSmsColumns.ADDRESS,
             Telephony.TextBasedSmsColumns.BODY,
             Telephony.TextBasedSmsColumns.DATE,
