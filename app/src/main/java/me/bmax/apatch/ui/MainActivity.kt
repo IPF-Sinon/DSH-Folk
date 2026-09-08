@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -120,6 +121,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -151,6 +153,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlin.system.exitProcess
 import me.bmax.apatch.util.UpdateChecker
 import me.bmax.apatch.ui.component.UpdateDialog
+import me.bmax.apatch.dsh.DshElevationRequests
+import me.bmax.apatch.dsh.DshHostPrompt
+import me.bmax.apatch.dsh.DshNativeBridge
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalContext
@@ -475,6 +480,42 @@ class MainActivity : AppCompatActivity() {
                 val autoUpdateStatus =
                     remember { mutableStateOf<me.bmax.apatch.util.UpdateChecker.Status?>(null) }
                 val context = LocalContext.current
+                val elevationRequest by DshElevationRequests.pending.collectAsStateWithLifecycle()
+                elevationRequest?.let { request ->
+                    AlertDialog(
+                        onDismissRequest = { DshElevationRequests.clear(request.id) },
+                        title = { Text(stringResource(R.string.dsh_native_elevate_title)) },
+                        text = {
+                            Text(stringResource(
+                                R.string.dsh_native_elevate_message,
+                                request.cap.id,
+                                request.access.id,
+                                request.reason.ifBlank { "-" },
+                            ))
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                DshNativeBridge.setAccess(context.applicationContext, request.cap, request.access)
+                                DshHostPrompt.writeFacts(context.applicationContext)
+                                DshElevationRequests.clear(request.id)
+                                val special = DshNativeBridge.specialPermissionOf(request.cap, request.access)
+                                if (special != null && !DshNativeBridge.specialGranted(context, special)) {
+                                    runCatching { context.startActivity(Intent(special.action)) }
+                                } else {
+                                    val permissions = DshNativeBridge.runtimePermissions(context, request.cap, request.access)
+                                    if (permissions.isNotEmpty()) {
+                                        ActivityCompat.requestPermissions(this@MainActivity, permissions, 7301)
+                                    }
+                                }
+                            }) { Text(stringResource(R.string.dsh_native_elevate_allow)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { DshElevationRequests.clear(request.id) }) {
+                                Text(stringResource(R.string.dsh_native_elevate_deny))
+                            }
+                        },
+                    )
+                }
 
                 val loadingDialog = rememberLoadingDialog()
                 val showThemeImportDialog = remember { mutableStateOf(false) }

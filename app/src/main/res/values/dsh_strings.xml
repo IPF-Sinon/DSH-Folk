@@ -669,6 +669,14 @@
     <string name="dsh_native_err_notification_access">Notification Access is not granted or the listener is not connected</string>
     <string name="dsh_native_err_sms_send_denied">Permission to send SMS is not granted</string>
     <string name="dsh_native_err_sms_send">Could not send SMS: %1$s</string>
+    <string name="dsh_native_err_elevate_foreground">Permission requests can only be shown while DSH-Folk is in the foreground</string>
+    <string name="dsh_native_err_bad_cap">Unknown native capability</string>
+    <string name="dsh_native_err_bad_access">Unsupported access level for this capability</string>
+    <string name="dsh_native_err_elevate_busy">Another permission request is already awaiting the user</string>
+    <string name="dsh_native_elevate_title">AI requests higher access</string>
+    <string name="dsh_native_elevate_message">Capability: %1$s\nRequested access: %2$s\nReason: %3$s</string>
+    <string name="dsh_native_elevate_allow">Allow</string>
+    <string name="dsh_native_elevate_deny">Deny</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">All files access is not granted — enable it in Settings › Features › Shared storage</string>

@@ -433,6 +433,9 @@ object DshNativeBridge {
         if (path == "/native/capabilities") {
             return if (method == "GET") capabilitiesJson(ctx) else methodNotAllowed(ctx, method, path)
         }
+        if (path == "/native/elevate") {
+            return if (method == "POST") requestElevation(ctx, params) else methodNotAllowed(ctx, method, path)
+        }
         if (!enabled(ctx)) {
             return 403 to err(str(ctx, R.string.dsh_native_err_disabled), "disabled")
         }
@@ -625,6 +628,32 @@ object DshNativeBridge {
     }
 
     // ────────────────────────── 能力实现 ──────────────────────────
+
+    private fun requestElevation(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        if (!enabled(ctx)) return 403 to err(str(ctx, R.string.dsh_native_err_disabled), "disabled")
+        if (!isForeground(ctx)) {
+            return 409 to err(str(ctx, R.string.dsh_native_err_elevate_foreground), "not_foreground")
+        }
+        val cap = Cap.entries.firstOrNull { it.id == params["cap"] }
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_bad_cap), "bad_cap")
+        val requested = Access.entries.firstOrNull { it.id == params["access"] }
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_bad_access), "bad_access")
+        if (requested !in accessOptions(cap) || requested == Access.OFF) {
+            return 400 to err(str(ctx, R.string.dsh_native_err_bad_access), "bad_access")
+        }
+        val current = access(ctx, cap)
+        if (accessOptions(cap).indexOf(requested) <= accessOptions(cap).indexOf(current)) {
+            return 200 to JSONObject().put("ok", true).put("unchanged", true).toString()
+        }
+        val reason = text(params["reason"]) ?: ""
+        val request = DshElevationRequests.submit(cap, requested, reason)
+            ?: return 409 to err(str(ctx, R.string.dsh_native_err_elevate_busy), "request_pending")
+        return 202 to JSONObject()
+            .put("ok", true)
+            .put("pending", true)
+            .put("requestId", request.id)
+            .toString()
+    }
 
     private fun notificationList(ctx: Context, params: Map<String, String>): Pair<Int, String> {
         if (!DshNotificationListener.connected()) {

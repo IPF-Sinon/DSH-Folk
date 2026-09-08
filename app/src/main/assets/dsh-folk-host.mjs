@@ -358,7 +358,8 @@ function render(f) {
             (access === 'read' && !writeCommand) || (!readCommand && !writeCommand)) lines.push(line);
       }
     }
-    lines.push('dsh-native caps                                        # current off/read/read+write access');
+    lines.push('dsh-native caps                                        # current off/read/write/read+write access');
+    lines.push('dsh-native elevate <cap> <read|write|read_write> --reason <why>  # opens a user confirmation');
     lines.push('```');
     const caveats = usable.map((c) => CAP_CAVEAT[c]).filter((x) => typeof x === 'string');
     if (caveats.length > 0) {
@@ -372,7 +373,9 @@ function render(f) {
         'Not ticked (calls return 403; if you need one, ask the user to tick it in Settings › Features ' +
           '› Native capabilities and do not retry): ' +
           off.join(', ') +
-          '.'
+          '. You may make one `dsh-native elevate` request when the current task truly needs a higher ' +
+          'level; it only opens a user confirmation and never grants automatically. Do not retry or ' +
+          'pressure the user.'
       );
     }
 

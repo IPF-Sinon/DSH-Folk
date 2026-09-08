@@ -327,7 +327,7 @@ object DshRuntime {
         }
         function say(r) {
           const text = r.body.toString();
-          if (r.status === 200) { process.stdout.write(text + '\n'); return; }
+          if (r.status >= 200 && r.status < 300) { process.stdout.write(text + '\n'); return; }
           process.stderr.write(text + '\n');
           process.exitCode = 1;
         }
@@ -370,12 +370,16 @@ object DshRuntime {
           '  sms list [--limit N]                        # recent SMS, read only',
           '  sms send <number> <text>                    # requires send access',
           '  caps',
+          '  elevate <cap> <read|write|read_write> [--reason text]  # asks the user; never auto-grants',
           'Settings > Features > Native capabilities: enable the master switch and the item first.'
         ].join('\n');
         (async function () {
           try {
             if (cmd === 'caps') {
               say(await req('GET', '/native/capabilities'));
+            } else if (cmd === 'elevate') {
+              if (!a[0] || !a[1]) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/native/elevate' + q({ cap: a[0], access: a[1], reason: opt.reason })));
             } else if (cmd === 'device') {
               say(await req('GET', '/native/device'));
             } else if (cmd === 'notify') {

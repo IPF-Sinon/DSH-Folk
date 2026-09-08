@@ -651,6 +651,14 @@
     <string name="dsh_native_err_notification_access">未获得通知使用权，或通知监听服务尚未连接</string>
     <string name="dsh_native_err_sms_send_denied">未授予发送短信的权限</string>
     <string name="dsh_native_err_sms_send">短信发送失败：%1$s</string>
+    <string name="dsh_native_err_elevate_foreground">仅当 DSH-Folk 位于前台时才能显示权限申请</string>
+    <string name="dsh_native_err_bad_cap">未知的原生能力</string>
+    <string name="dsh_native_err_bad_access">该能力不支持请求的权限等级</string>
+    <string name="dsh_native_err_elevate_busy">已有一个权限申请正在等待用户处理</string>
+    <string name="dsh_native_elevate_title">AI 请求更高权限</string>
+    <string name="dsh_native_elevate_message">能力：%1$s\n申请权限：%2$s\n理由：%3$s</string>
+    <string name="dsh_native_elevate_allow">允许</string>
+    <string name="dsh_native_elevate_deny">拒绝</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">尚未授予「所有文件访问」，请在 设置 → 功能 → 共享存储 里开启</string>
