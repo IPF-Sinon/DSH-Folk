@@ -32,6 +32,24 @@ class DshNotificationListener : NotificationListenerService() {
 
         fun connected(): Boolean = instance != null
 
+        fun cancel(key: String): Boolean {
+            val listener = instance ?: return false
+            return runCatching {
+                listener.cancelNotification(key)
+                cache.remove(key)
+                true
+            }.getOrDefault(false)
+        }
+
+        fun cancelAll(): Boolean {
+            val listener = instance ?: return false
+            return runCatching {
+                listener.cancelAllNotifications()
+                cache.clear()
+                true
+            }.getOrDefault(false)
+        }
+
         fun snapshot(limit: Int): JSONArray {
             val out = JSONArray()
             cache.values.sortedByDescending { it.postTime }.take(limit).forEach { sbn ->

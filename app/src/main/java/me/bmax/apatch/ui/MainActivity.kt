@@ -486,12 +486,20 @@ class MainActivity : AppCompatActivity() {
                         onDismissRequest = { DshElevationRequests.clear(request.id) },
                         title = { Text(stringResource(R.string.dsh_native_elevate_title)) },
                         text = {
-                            Text(stringResource(
-                                R.string.dsh_native_elevate_message,
-                                request.cap.id,
-                                request.access.id,
-                                request.reason.ifBlank { "-" },
-                            ))
+                            Column {
+                                Text(stringResource(
+                                    R.string.dsh_native_elevate_message,
+                                    request.cap.id,
+                                    request.access.id,
+                                    request.reason,
+                                ))
+                                if (request.cap == DshNativeBridge.Cap.NOTIFY &&
+                                    request.access == DshNativeBridge.Access.CONTROL
+                                ) {
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(stringResource(R.string.dsh_native_full_control_warning_message))
+                                }
+                            }
                         },
                         confirmButton = {
                             TextButton(onClick = {

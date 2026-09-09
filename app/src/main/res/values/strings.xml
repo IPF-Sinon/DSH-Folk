@@ -74,9 +74,9 @@
 
 
     <string name="send_log">Send logs</string>
-    <string name="settings_clean_storage">Clean app data</string>
-    <string name="settings_clean_storage_summary">Fix download or apply failures caused by residual files</string>
-    <string name="settings_clean_storage_confirm">This will delete downloaded themes, imported music, sound effects and all cache files, then rebuild the directories. Your settings will be kept. Continue?</string>
+    <string name="settings_clean_storage">Clean resources and cache</string>
+    <string name="settings_clean_storage_summary">Delete downloaded themes, imported media, sound effects, and cache</string>
+    <string name="settings_clean_storage_confirm">The following content will be deleted:\n\n• Downloaded themes\n• Imported music\n• Imported sound effects\n• All temporary cache files\n\nApp settings, DSH runtime, sessions, plugins, model configuration, and wireless ADB keys will be kept. The resource directories will then be rebuilt. Continue?</string>
     <string name="settings_clean_storage_done">Cleanup complete</string>
 
 

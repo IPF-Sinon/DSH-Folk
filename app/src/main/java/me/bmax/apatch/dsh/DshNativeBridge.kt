@@ -33,6 +33,8 @@ import me.bmax.apatch.util.PermissionUtils
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileWriter
+import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -61,6 +63,7 @@ object DshNativeBridge {
 
     /** agent 通知的独立渠道。和前台服务的 dsh_harness 分开：那条是 LOW，压根不会提醒。 */
     private const val CHANNEL_ID = "dsh_agent"
+    private const val FULL_SCREEN_CHANNEL_ID = "dsh_agent_urgent"
 
     /** agent 通知 id 的基址。1001 是 [HarnessService] 的前台通知，绝不能被覆盖。 */
     private const val NOTIFICATION_ID_BASE = 2000
@@ -84,10 +87,13 @@ object DshNativeBridge {
         WRITE("write"),
         READ("read"),
         READ_WRITE("read_write"),
+        CONTROL("control"),
     }
 
     enum class Cap(val id: String) {
         NOTIFY("notify"),
+        /** 全屏通知：Android 14+ 需要用户在特殊权限页明确允许。 */
+        FULL_SCREEN_NOTIFY("full_screen_notify"),
         TOAST("toast"),
         VIBRATE("vibrate"),
         CLIPBOARD("clipboard"),
@@ -149,6 +155,10 @@ object DshNativeBridge {
             } else {
                 emptyArray()
             }
+        Cap.FULL_SCREEN_NOTIFY ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS)
+            } else emptyArray()
         Cap.MEDIA -> PermissionUtils.mediaPermissions()
         Cap.MIC -> arrayOf(android.Manifest.permission.RECORD_AUDIO)
         Cap.CAMERA -> arrayOf(android.Manifest.permission.CAMERA)
@@ -177,6 +187,9 @@ object DshNativeBridge {
         Cap.VOLUME -> Special.NOTIFICATION_POLICY
         Cap.INSTALL -> Special.REQUEST_INSTALL
         Cap.USAGE -> Special.USAGE_STATS
+        Cap.FULL_SCREEN_NOTIFY -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            Special.FULL_SCREEN_INTENT
+        } else null
         else -> null
     }
 
@@ -201,8 +214,11 @@ object DshNativeBridge {
         /** 安装未知应用。 */
         REQUEST_INSTALL(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, true),
 
+        /** 全屏通知权限；Android 14+ 支持按应用跳转。 */
+        FULL_SCREEN_INTENT(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, true),
+
         /** 通知读取访问权；系统只提供应用列表页。 */
-        NOTIFICATION_ACCESS("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS", false),
+        NOTIFICATION_ACCESS(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS, false),
 
         /** 应用使用统计访问权；系统只提供应用列表页。 */
         USAGE_STATS(Settings.ACTION_USAGE_ACCESS_SETTINGS, false),
@@ -213,6 +229,9 @@ object DshNativeBridge {
         Special.WRITE_SETTINGS -> PermissionUtils.canWriteSystemSettings(ctx)
         Special.NOTIFICATION_POLICY -> PermissionUtils.hasNotificationPolicyAccess(ctx)
         Special.REQUEST_INSTALL -> PermissionUtils.canRequestPackageInstalls(ctx)
+        Special.FULL_SCREEN_INTENT -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            ctx.getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() == true
+        } else true
         Special.NOTIFICATION_ACCESS -> DshNotificationListener.connected()
         Special.USAGE_STATS -> PermissionUtils.hasUsageStatsPermission(ctx)
     }
@@ -229,14 +248,14 @@ object DshNativeBridge {
     }
 
     fun specialPermissionOf(cap: Cap, access: Access): Special? =
-        if (cap == Cap.NOTIFY && accessNeedsRead(access)) Special.NOTIFICATION_ACCESS
+        if (cap == Cap.NOTIFY && (accessNeedsRead(access) || access == Access.CONTROL)) Special.NOTIFICATION_ACCESS
         else specialPermissionOf(cap)
 
     private fun accessNeedsRead(access: Access): Boolean =
-        access == Access.READ || access == Access.READ_WRITE
+        access == Access.READ || access == Access.READ_WRITE || access == Access.CONTROL
 
     private fun accessNeedsWrite(access: Access): Boolean =
-        access == Access.WRITE || access == Access.READ_WRITE
+        access == Access.WRITE || access == Access.READ_WRITE || access == Access.CONTROL
 
     /**
      * 这项能力的权限是否已经齐了（运行时的与特殊的一并判断）。
@@ -284,19 +303,21 @@ object DshNativeBridge {
 
     /** 只有同时存在安全可用的读、写操作时才显示第三档。 */
     fun supportsWrite(cap: Cap): Boolean = when (cap) {
-        Cap.NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.CLIPBOARD, Cap.INTENT,
+        Cap.NOTIFY, Cap.FULL_SCREEN_NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.CLIPBOARD, Cap.INTENT,
         Cap.MIC, Cap.CAMERA, Cap.TTS, Cap.CALENDAR, Cap.VOLUME, Cap.SETTINGS,
         Cap.SMS -> true
         else -> false
     }
 
     fun supportsRead(cap: Cap): Boolean = when (cap) {
-        Cap.TOAST, Cap.VIBRATE, Cap.INTENT, Cap.MIC, Cap.CAMERA -> false
+        Cap.TOAST, Cap.VIBRATE, Cap.FULL_SCREEN_NOTIFY, Cap.INTENT, Cap.MIC, Cap.CAMERA -> false
         else -> true
     }
 
     fun accessOptions(cap: Cap): List<Access> = when {
-        cap == Cap.NOTIFY -> listOf(Access.OFF, Access.WRITE, Access.READ_WRITE)
+        cap == Cap.NOTIFY -> listOf(Access.OFF, Access.WRITE, Access.READ, Access.READ_WRITE, Access.CONTROL)
+        cap == Cap.SMS -> listOf(Access.OFF, Access.WRITE, Access.READ, Access.READ_WRITE)
+        cap == Cap.FULL_SCREEN_NOTIFY -> listOf(Access.OFF, Access.WRITE)
         !supportsRead(cap) -> listOf(Access.OFF, Access.WRITE)
         supportsWrite(cap) -> listOf(Access.OFF, Access.READ, Access.READ_WRITE)
         else -> listOf(Access.OFF, Access.READ)
@@ -352,6 +373,11 @@ object DshNativeBridge {
         Cap.NOTIFY ->
             if (PermissionUtils.hasNotificationPermission(ctx)) true to ""
             else false to "no_notification_permission"
+        Cap.FULL_SCREEN_NOTIFY ->
+            if (!PermissionUtils.hasNotificationPermission(ctx)) false to "no_notification_permission"
+            else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+                !specialGranted(ctx, Special.FULL_SCREEN_INTENT)) false to "no_full_screen_permission"
+            else true to ""
         Cap.VIBRATE ->
             if (vibrator(ctx)?.hasVibrator() == true) true to "" else false to "no_vibrator"
         // 只要有一类媒体可读就算可用：用户可能只给了照片。具体缺哪一类由
@@ -440,41 +466,58 @@ object DshNativeBridge {
             return 403 to err(str(ctx, R.string.dsh_native_err_disabled), "disabled")
         }
 
+        val reason = text(params["reason"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_reason_required), "reason_required")
         val cap = capOf(path)
             ?: return 404 to err(
                 str(ctx, R.string.dsh_native_err_unknown_endpoint, method, path),
                 "unknown_endpoint",
             )
         if (!capEnabled(ctx, cap)) {
-            return 403 to err(
+            val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_cap_disabled, capName(ctx, cap)),
                 "cap_disabled",
             )
+            audit(ctx, method, path, cap, reason, result.first)
+            return result
+        }
+        if (path == "/native/notify/system" && access(ctx, cap) != Access.CONTROL) {
+            val result = 403 to err(str(ctx, R.string.dsh_native_err_control_disabled, capName(ctx, cap)), "control_disabled")
+            audit(ctx, method, path, cap, reason, result.first)
+            return result
         }
         if (isWriteRequest(method, path) && !canWrite(ctx, cap)) {
-            return 403 to err(
+            val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_write_disabled, capName(ctx, cap)),
                 "write_disabled",
             )
+            audit(ctx, method, path, cap, reason, result.first)
+            return result
         }
         if (!isWriteRequest(method, path) && !canRead(ctx, cap)) {
-            return 403 to err(
+            val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_read_disabled, capName(ctx, cap)),
                 "read_disabled",
             )
+            audit(ctx, method, path, cap, reason, result.first)
+            return result
         }
         val (ok, why) = availability(ctx, cap)
         if (!ok) {
-            return 409 to err(
+            val result = 409 to err(
                 str(ctx, R.string.dsh_native_err_cap_unavailable, capName(ctx, cap)),
                 why,
             )
+            audit(ctx, method, path, cap, reason, result.first)
+            return result
         }
 
-        return when {
+        val result = when {
             method == "POST" && path == "/native/notify" -> notify(ctx, params)
             method == "DELETE" && path == "/native/notify" -> cancelNotify(ctx, params)
             method == "GET" && path == "/native/notify/list" -> notificationList(ctx, params)
+            method == "DELETE" && path == "/native/notify/system" -> cancelSystemNotification(ctx, params)
+            method == "POST" && path == "/native/notify/full-screen" -> fullScreenNotify(ctx, params)
             method == "POST" && path == "/native/toast" -> toast(ctx, params)
             method == "POST" && path == "/native/vibrate" -> vibrate(ctx, params)
             method == "POST" && path == "/native/clipboard" -> clipboardSet(ctx, params)
@@ -523,6 +566,8 @@ object DshNativeBridge {
             method == "POST" && path == "/native/sms/send" -> smsSend(ctx, params)
             else -> methodNotAllowed(ctx, method, path)
         }
+        audit(ctx, method, path, cap, reason, result.first)
+        return result
     }
 
     /**
@@ -535,6 +580,7 @@ object DshNativeBridge {
         ctx,
         when (cap) {
             Cap.NOTIFY -> R.string.dsh_native_cap_notify
+            Cap.FULL_SCREEN_NOTIFY -> R.string.dsh_native_cap_full_screen_notify
             Cap.TOAST -> R.string.dsh_native_cap_toast
             Cap.VIBRATE -> R.string.dsh_native_cap_vibrate
             Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard
@@ -559,7 +605,7 @@ object DshNativeBridge {
     )
 
     private fun isWriteRequest(method: String, path: String): Boolean = when {
-        path == "/native/notify" -> true
+        path == "/native/notify" || path == "/native/notify/system" || path == "/native/notify/full-screen" -> true
         path == "/native/sms/send" -> true
         path == "/native/toast" || path == "/native/vibrate" -> true
         path == "/native/share" || path == "/native/open" -> true
@@ -574,7 +620,8 @@ object DshNativeBridge {
     }
 
     private fun capOf(path: String): Cap? = when (path) {
-        "/native/notify", "/native/notify/list" -> Cap.NOTIFY
+        "/native/notify", "/native/notify/list", "/native/notify/system" -> Cap.NOTIFY
+        "/native/notify/full-screen" -> Cap.FULL_SCREEN_NOTIFY
         "/native/toast" -> Cap.TOAST
         "/native/vibrate" -> Cap.VIBRATE
         "/native/clipboard" -> Cap.CLIPBOARD
@@ -612,6 +659,7 @@ object DshNativeBridge {
                     .put("enabled", on && capEnabled(ctx, cap))
                     .put("access", if (on) access(ctx, cap).id else Access.OFF.id)
                     .put("supportsWrite", supportsWrite(cap))
+                    .put("accessOptions", org.json.JSONArray(accessOptions(cap).map { it.id }))
                     .put("available", available)
                     .put("reason", why),
             )
@@ -645,14 +693,79 @@ object DshNativeBridge {
         if (accessOptions(cap).indexOf(requested) <= accessOptions(cap).indexOf(current)) {
             return 200 to JSONObject().put("ok", true).put("unchanged", true).toString()
         }
-        val reason = text(params["reason"]) ?: ""
+        val reason = text(params["reason"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_reason_required), "reason_required")
         val request = DshElevationRequests.submit(cap, requested, reason)
             ?: return 409 to err(str(ctx, R.string.dsh_native_err_elevate_busy), "request_pending")
+        audit(ctx, "POST", "/native/elevate", cap, reason, 202)
         return 202 to JSONObject()
             .put("ok", true)
             .put("pending", true)
             .put("requestId", request.id)
             .toString()
+    }
+
+    private fun audit(ctx: Context, method: String, path: String, cap: Cap, reason: String, status: Int) {
+        runCatching {
+            val dir = File(ctx.filesDir, "audit").apply { mkdirs() }
+            val file = File(dir, "native-capability.jsonl")
+            if (file.exists() && file.length() > 1_048_576L) {
+                File(dir, "native-capability.previous.jsonl").also { if (it.exists()) it.delete() }
+                file.renameTo(File(dir, "native-capability.previous.jsonl"))
+            }
+            val entry = JSONObject()
+                .put("time", Instant.now().toString())
+                .put("method", method)
+                .put("path", path)
+                .put("capability", cap.id)
+                .put("access", access(ctx, cap).id)
+                .put("reason", reason)
+                .put("status", status)
+            FileWriter(file, true).use { it.append(entry.toString()).append('\n') }
+        }.onFailure { Log.w(TAG, "记录能力调用失败: ${it.message}") }
+    }
+
+    private fun cancelSystemNotification(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        if (!DshNotificationListener.connected()) {
+            return 409 to err(str(ctx, R.string.dsh_native_err_notification_access), "no_notification_access")
+        }
+        val key = text(params["key"])
+        val ok = if (key == null && params["all"] == "1") DshNotificationListener.cancelAll()
+        else key?.let(DshNotificationListener::cancel) ?: false
+        return if (ok) 200 to JSONObject().put("ok", true).toString()
+        else 400 to err(str(ctx, R.string.dsh_native_err_notification_cancel), "cancel_failed")
+    }
+
+    private fun fullScreenNotify(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val title = text(params["title"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "title"), "missing_title")
+        val body = text(params["body"]) ?: ""
+        val open = PendingIntent.getActivity(
+            ctx,
+            NOTIFICATION_ID_BASE + MAX_NOTIFICATION_SLOT + 1,
+            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+            ?: return 500 to err(str(ctx, R.string.dsh_native_err_no_service, "NotificationManager"), "no_service")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            nm.createNotificationChannel(
+                NotificationChannel(FULL_SCREEN_CHANNEL_ID, str(ctx, R.string.dsh_native_cap_full_screen_notify), NotificationManager.IMPORTANCE_HIGH),
+            )
+        }
+        val notification = NotificationCompat.Builder(ctx, FULL_SCREEN_CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setContentIntent(open)
+            .setFullScreenIntent(open, true)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(NOTIFICATION_ID_BASE + MAX_NOTIFICATION_SLOT + 1, notification)
+        return 200 to JSONObject().put("ok", true).toString()
     }
 
     private fun notificationList(ctx: Context, params: Map<String, String>): Pair<Int, String> {

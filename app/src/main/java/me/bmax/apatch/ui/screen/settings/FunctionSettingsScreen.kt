@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -382,6 +384,8 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
         }
     }
 
+    var pendingFullControl by remember { mutableStateOf<DshNativeBridge.Cap?>(null) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -402,6 +406,28 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackBarHost) },
     ) { paddingValues ->
+        if (pendingFullControl != null) {
+            AlertDialog(
+                onDismissRequest = { pendingFullControl = null },
+                title = { Text(stringResource(R.string.dsh_native_full_control_warning_title)) },
+                text = { Text(stringResource(R.string.dsh_native_full_control_warning_message)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val cap = pendingFullControl ?: return@TextButton
+                        DshNativeBridge.setAccess(context.applicationContext, cap, DshNativeBridge.Access.CONTROL)
+                        nativeAccess = DshNativeBridge.accessMap(context.applicationContext)
+                        DshHostPrompt.writeFacts(context.applicationContext)
+                        pendingFullControl = null
+                        requestCapPermission(cap)
+                    }) { Text(stringResource(R.string.dsh_native_full_control_continue)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingFullControl = null }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
+                },
+            )
+        }
         LazyColumn(
             modifier = Modifier.padding(paddingValues),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -617,10 +643,14 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                     },
                     nativeAccess = nativeAccess,
                     onNativeAccessChange = { cap, access ->
-                        DshNativeBridge.setAccess(context.applicationContext, cap, access)
-                        nativeAccess = DshNativeBridge.accessMap(context.applicationContext)
-                        DshHostPrompt.writeFacts(context.applicationContext)
-                        if (access != DshNativeBridge.Access.OFF) requestCapPermission(cap)
+                        if (cap == DshNativeBridge.Cap.NOTIFY && access == DshNativeBridge.Access.CONTROL) {
+                            pendingFullControl = cap
+                        } else {
+                            DshNativeBridge.setAccess(context.applicationContext, cap, access)
+                            nativeAccess = DshNativeBridge.accessMap(context.applicationContext)
+                            DshHostPrompt.writeFacts(context.applicationContext)
+                            if (access != DshNativeBridge.Access.OFF) requestCapPermission(cap)
+                        }
                     },
                     hostPromptEnabled = hostPromptEnabled,
                     onHostPromptEnabledChange = { on ->

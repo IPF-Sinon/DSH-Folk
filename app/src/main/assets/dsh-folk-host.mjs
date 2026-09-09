@@ -43,6 +43,10 @@ const CAP_USAGE = {
     'dsh-native notify <title> [body] [--id N] [--ongoing]  # post a notification; --id 0..999 to update/cancel later',
     'dsh-native notify-cancel [--id N]                      # cancel one you posted',
     'dsh-native notify-list [--limit N]                     # read active system notifications',
+    'dsh-native notify-dismiss <key>|--all                  # dismiss system notifications; full control',
+  ],
+  full_screen_notify: [
+    'dsh-native notify-full-screen <title> [body]            # urgent full-screen alert',
   ],
   toast: ['dsh-native toast <text>                                # brief on-screen message'],
   vibrate: ['dsh-native vibrate [--ms N] [--amplitude 1..255]      # vibrate, 3000ms max'],
@@ -352,14 +356,15 @@ function render(f) {
     for (const cap of usable) {
       const access = capAccess[cap];
       for (const line of CAP_USAGE[cap]) {
-        const writeCommand = / notify |notify-cancel| clip set | calendar add | volume set | ringer | settings (brightness|timeout|rotation)| sms send | toast | vibrate | share | open | mic record | camera photo | tts (say|file)/.test(' ' + line);
+        const writeCommand = / notify |notify-cancel|notify-dismiss|notify-full-screen| clip set | calendar add | volume set | ringer | settings (brightness|timeout|rotation)| sms send | toast | vibrate | share | open | mic record | camera photo | tts (say|file)/.test(' ' + line);
         const readCommand = /notify-list| clip get | calendar list | sms list | tts voices/.test(line);
-        if ((access === 'read_write') || (access === 'write' && writeCommand) ||
+        if ((access === 'read_write') || (access === 'control') || (access === 'write' && writeCommand) ||
             (access === 'read' && !writeCommand) || (!readCommand && !writeCommand)) lines.push(line);
       }
     }
-    lines.push('dsh-native caps                                        # current off/read/write/read+write access');
-    lines.push('dsh-native elevate <cap> <read|write|read_write> --reason <why>  # opens a user confirmation');
+    lines.push('Every dsh-native capability call must include --reason <concrete purpose>; calls are audited.');
+    lines.push('dsh-native caps                                        # current access; caps itself needs no reason');
+    lines.push('dsh-native elevate <cap> <read|write|read_write|control> --reason <why>  # user confirmation');
     lines.push('```');
     const caveats = usable.map((c) => CAP_CAVEAT[c]).filter((x) => typeof x === 'string');
     if (caveats.length > 0) {

@@ -599,12 +599,19 @@
     <string name="dsh_native_access_write">Write</string>
     <string name="dsh_native_access_read">Read</string>
     <string name="dsh_native_access_read_write">Read + write</string>
+    <string name="dsh_native_access_control">Full control</string>
+    <string name="dsh_native_access_send_only">Send only</string>
+    <string name="dsh_native_access_view_only">View only</string>
+    <string name="dsh_native_access_view_send">View and send</string>
+    <string name="dsh_native_access_allow">Allow</string>
     <string name="dsh_native_err_read_disabled">Read access for %1$s is disabled</string>
     <string name="dsh_native_err_write_disabled">Write access for %1$s is disabled</string>
     <string name="dsh_native_cap_usage">App usage stats</string>
     <string name="dsh_native_cap_usage_desc">Read app usage statistics. Android requires Usage Access on a system settings page.</string>
     <string name="dsh_native_cap_sms">SMS</string>
-    <string name="dsh_native_cap_sms_desc">Allow the native bridge to read SMS after Android grants READ_SMS.</string>
+    <string name="dsh_native_cap_sms_desc">View and send SMS only at the selected access level. It cannot delete or modify stored messages.</string>
+    <string name="dsh_native_cap_full_screen_notify">Full-screen alerts</string>
+    <string name="dsh_native_cap_full_screen_notify_desc">Allow urgent notifications to open a full-screen alert. Android 14+ requires a separate system permission. Every use still requires a reason and is audited.</string>
 
     <string name="dsh_native_need_camera_perm">Camera permission not granted — tap to grant</string>
     <string name="dsh_native_need_calendar_perm">Calendar permission not granted — tap to grant</string>
@@ -617,6 +624,7 @@
     <string name="dsh_native_need_install_perm">Installing unknown apps is not allowed — tap to open system settings</string>
     <string name="dsh_native_need_usage_perm">Usage Access not granted — tap to open system settings</string>
     <string name="dsh_native_need_sms_perm">SMS permission not granted — tap to grant</string>
+    <string name="dsh_native_need_full_screen_perm">Full-screen alert permission not granted — tap to open system settings</string>
     <string name="dsh_native_precise_location">Only approximate location granted; coordinates are blurred to a few kilometres</string>
 
     <!-- ── 新增能力的报错（会出现在 dsh-native 的输出里）── -->
@@ -677,6 +685,12 @@
     <string name="dsh_native_elevate_message">Capability: %1$s\nRequested access: %2$s\nReason: %3$s</string>
     <string name="dsh_native_elevate_allow">Allow</string>
     <string name="dsh_native_elevate_deny">Deny</string>
+    <string name="dsh_native_err_reason_required">Every native capability call requires a concrete reason</string>
+    <string name="dsh_native_err_control_disabled">Full control for %1$s is disabled</string>
+    <string name="dsh_native_err_notification_cancel">Could not dismiss the requested system notification</string>
+    <string name="dsh_native_full_control_warning_title">Allow full notification control?</string>
+    <string name="dsh_native_full_control_warning_message">Full control lets AI view notifications from other apps and dismiss individual or all notifications through the notification listener service. This can hide security alerts, messages, calls, and other important notices. Continue to Android Notification Access only if you accept this risk.</string>
+    <string name="dsh_native_full_control_continue">I understand, continue</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">All files access is not granted — enable it in Settings › Features › Shared storage</string>

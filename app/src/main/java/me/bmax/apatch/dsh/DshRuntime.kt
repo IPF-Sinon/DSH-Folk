@@ -321,6 +321,7 @@ object DshRuntime {
           } else { a.push(t); }
         }
         function q(pairs) {
+          if (cmd !== 'caps' && pairs.reason === undefined) pairs.reason = opt.reason;
           const out = [];
           for (const k in pairs) { if (pairs[k] !== undefined) out.push(k + '=' + enc(String(pairs[k]))); }
           return out.length ? '?' + out.join('&') : '';
@@ -332,10 +333,13 @@ object DshRuntime {
           process.exitCode = 1;
         }
         const USAGE = [
-          'usage: dsh-native <command> [args] [options]',
+          'usage: dsh-native <command> [args] --reason <why> [options]',
+          '  Every capability call requires a concrete --reason for the audit log.',
           '  notify <title> [body] [--id N] [--ongoing]',
           '  notify-cancel [--id N]',
           '  notify-list [--limit N]',
+          '  notify-dismiss <key>|--all                 # needs notification full control',
+          '  notify-full-screen <title> [body]            # urgent full-screen alert',
           '  toast <text>',
           '  vibrate [--ms N] [--amplitude 1..255]',
           '  clip get | clip set <text> [--label L]',
@@ -370,11 +374,15 @@ object DshRuntime {
           '  sms list [--limit N]                        # recent SMS, read only',
           '  sms send <number> <text>                    # requires send access',
           '  caps',
-          '  elevate <cap> <read|write|read_write> [--reason text]  # asks the user; never auto-grants',
+          '  elevate <cap> <read|write|read_write|control> --reason <why>  # asks the user; never auto-grants',
           'Settings > Features > Native capabilities: enable the master switch and the item first.'
         ].join('\n');
         (async function () {
           try {
+            if (cmd !== 'caps' && !opt.reason) {
+              console.error('dsh-native: --reason is required for every capability call');
+              process.exit(1);
+            }
             if (cmd === 'caps') {
               say(await req('GET', '/native/capabilities'));
             } else if (cmd === 'elevate') {
@@ -391,6 +399,12 @@ object DshRuntime {
               say(await req('DELETE', '/native/notify' + q({ id: opt.id })));
             } else if (cmd === 'notify-list') {
               say(await req('GET', '/native/notify/list' + q({ limit: opt.limit })));
+            } else if (cmd === 'notify-dismiss') {
+              if (!a[0] && !opt.all) { console.error(USAGE); process.exit(1); }
+              say(await req('DELETE', '/native/notify/system' + q({ key: a[0], all: opt.all })));
+            } else if (cmd === 'notify-full-screen') {
+              if (!a[0]) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/native/notify/full-screen' + q({ title: a[0], body: a[1] })));
             } else if (cmd === 'toast') {
               if (!a[0]) { console.error(USAGE); process.exit(1); }
               say(await req('POST', '/native/toast' + q({ text: a[0] })));

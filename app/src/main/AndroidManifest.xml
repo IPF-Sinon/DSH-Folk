@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Android 10 及以下靠这两条读写共享存储；11 起被 MANAGE_EXTERNAL_STORAGE 取代，
          所以加 maxSdkVersion，免得在新系统上出现一对永远拿不到、又出现在权限列表里的条目。
          PermissionUtils.hasAllFilesAccess 按同一条界线分支。 -->

@@ -581,12 +581,19 @@
     <string name="dsh_native_access_write">写</string>
     <string name="dsh_native_access_read">读</string>
     <string name="dsh_native_access_read_write">读+写</string>
+    <string name="dsh_native_access_control">完全控制</string>
+    <string name="dsh_native_access_send_only">仅发送</string>
+    <string name="dsh_native_access_view_only">仅查看</string>
+    <string name="dsh_native_access_view_send">查看和发送</string>
+    <string name="dsh_native_access_allow">允许</string>
     <string name="dsh_native_err_read_disabled">%1$s 的读权限未启用</string>
     <string name="dsh_native_err_write_disabled">%1$s 的写权限未启用</string>
     <string name="dsh_native_cap_usage">应用使用统计</string>
     <string name="dsh_native_cap_usage_desc">读取应用使用统计。Android 要求在系统设置页授予「使用情况访问权限」。</string>
     <string name="dsh_native_cap_sms">短信</string>
-    <string name="dsh_native_cap_sms_desc">Android 授予 READ_SMS 后，允许原生权限桥读取短信。</string>
+    <string name="dsh_native_cap_sms_desc">按所选档位查看或发送短信；不能删除或修改已存短信。</string>
+    <string name="dsh_native_cap_full_screen_notify">全屏提醒</string>
+    <string name="dsh_native_cap_full_screen_notify_desc">允许紧急通知打开全屏界面。Android 14 及以上还需单独系统授权；每次调用仍须说明理由并记入审计日志。</string>
 
     <string name="dsh_native_need_camera_perm">未授予相机权限 —— 点这里授权</string>
     <string name="dsh_native_need_calendar_perm">未授予日历权限 —— 点这里授权</string>
@@ -599,6 +606,7 @@
     <string name="dsh_native_need_install_perm">未允许安装未知应用 —— 点这里打开系统页</string>
     <string name="dsh_native_need_usage_perm">未获得「应用使用统计」—— 点这里打开系统页</string>
     <string name="dsh_native_need_sms_perm">未授予短信权限 —— 点这里授权</string>
+    <string name="dsh_native_need_full_screen_perm">未允许全屏提醒 —— 点这里打开系统页</string>
     <string name="dsh_native_precise_location">只授予了大致位置，坐标被模糊到公里级</string>
 
     <!-- ── 新增能力的报错（会出现在 dsh-native 的输出里）── -->
@@ -659,6 +667,12 @@
     <string name="dsh_native_elevate_message">能力：%1$s\n申请权限：%2$s\n理由：%3$s</string>
     <string name="dsh_native_elevate_allow">允许</string>
     <string name="dsh_native_elevate_deny">拒绝</string>
+    <string name="dsh_native_err_reason_required">每次原生能力调用都必须提供具体理由</string>
+    <string name="dsh_native_err_control_disabled">未启用 %1$s 的完全控制</string>
+    <string name="dsh_native_err_notification_cancel">无法移除指定的系统通知</string>
+    <string name="dsh_native_full_control_warning_title">允许完全控制通知？</string>
+    <string name="dsh_native_full_control_warning_message">完全控制允许 AI 通过通知监听服务查看其他应用的通知，并移除单条或全部通知。这可能隐藏安全警报、消息、来电及其他重要提醒。仅在接受此风险时继续前往 Android「通知使用权」页面。</string>
+    <string name="dsh_native_full_control_continue">我已了解，继续</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">尚未授予「所有文件访问」，请在 设置 → 功能 → 共享存储 里开启</string>

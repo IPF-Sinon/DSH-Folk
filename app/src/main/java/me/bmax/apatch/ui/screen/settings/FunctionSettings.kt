@@ -991,9 +991,10 @@ fun FunctionSettingsContent(
                                                 stringResource(
                                                     when (mode) {
                                                         DshNativeBridge.Access.OFF -> R.string.dsh_native_access_off
-                                                        DshNativeBridge.Access.WRITE -> R.string.dsh_native_access_write
-                                                        DshNativeBridge.Access.READ -> R.string.dsh_native_access_read
-                                                        DshNativeBridge.Access.READ_WRITE -> R.string.dsh_native_access_read_write
+                                                        DshNativeBridge.Access.WRITE -> accessLabelRes(cap, mode)
+                                                        DshNativeBridge.Access.READ -> accessLabelRes(cap, mode)
+                                                        DshNativeBridge.Access.CONTROL -> R.string.dsh_native_access_control
+                                                        DshNativeBridge.Access.READ_WRITE -> accessLabelRes(cap, mode)
                                                     }
                                                 ),
                                                 color = if (nativeAccess[cap] == mode) MaterialTheme.colorScheme.primary
@@ -1361,6 +1362,7 @@ private fun RuntimeOption(
 /** 原生能力 → 标题串。 */
 internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.NOTIFY -> R.string.dsh_native_cap_notify
+    DshNativeBridge.Cap.FULL_SCREEN_NOTIFY -> R.string.dsh_native_cap_full_screen_notify
     DshNativeBridge.Cap.TOAST -> R.string.dsh_native_cap_toast
     DshNativeBridge.Cap.VIBRATE -> R.string.dsh_native_cap_vibrate
     DshNativeBridge.Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard
@@ -1383,9 +1385,22 @@ internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms
 }
 
+internal fun accessLabelRes(cap: DshNativeBridge.Cap, access: DshNativeBridge.Access): Int = when {
+    cap == DshNativeBridge.Cap.NOTIFY && access == DshNativeBridge.Access.WRITE -> R.string.dsh_native_access_send_only
+    cap == DshNativeBridge.Cap.NOTIFY && access == DshNativeBridge.Access.READ -> R.string.dsh_native_access_view_only
+    cap == DshNativeBridge.Cap.NOTIFY && access == DshNativeBridge.Access.READ_WRITE -> R.string.dsh_native_access_view_send
+    cap == DshNativeBridge.Cap.SMS && access == DshNativeBridge.Access.WRITE -> R.string.dsh_native_access_send_only
+    cap == DshNativeBridge.Cap.SMS && access == DshNativeBridge.Access.READ -> R.string.dsh_native_access_view_only
+    cap == DshNativeBridge.Cap.SMS && access == DshNativeBridge.Access.READ_WRITE -> R.string.dsh_native_access_view_send
+    access == DshNativeBridge.Access.WRITE -> R.string.dsh_native_access_allow
+    access == DshNativeBridge.Access.READ -> R.string.dsh_native_access_read
+    else -> R.string.dsh_native_access_read_write
+}
+
 /** 原生能力 → 说明串。 */
 internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
-    DshNativeBridge.Cap.NOTIFY -> R.string.dsh_native_cap_notify_desc
+    DshNativeBridge.Cap.NOTIFY -> R.string.dsh_native_cap_notify
+    DshNativeBridge.Cap.FULL_SCREEN_NOTIFY -> R.string.dsh_native_cap_full_screen_notify_desc
     DshNativeBridge.Cap.TOAST -> R.string.dsh_native_cap_toast_desc
     DshNativeBridge.Cap.VIBRATE -> R.string.dsh_native_cap_vibrate_desc
     DshNativeBridge.Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard_desc
@@ -1419,6 +1434,7 @@ internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
  */
 internal fun capPermissionHintRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.NOTIFY -> R.string.dsh_native_need_notif_perm
+    DshNativeBridge.Cap.FULL_SCREEN_NOTIFY -> R.string.dsh_native_need_full_screen_perm
     DshNativeBridge.Cap.MEDIA -> R.string.dsh_native_need_media_perm
     DshNativeBridge.Cap.MIC -> R.string.dsh_native_need_mic_perm
     DshNativeBridge.Cap.CAMERA -> R.string.dsh_native_need_camera_perm
@@ -1454,6 +1470,7 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
         R.string.dsh_native_group_interact,
         listOf(
             DshNativeBridge.Cap.NOTIFY,
+            DshNativeBridge.Cap.FULL_SCREEN_NOTIFY,
             DshNativeBridge.Cap.TOAST,
             DshNativeBridge.Cap.VIBRATE,
             DshNativeBridge.Cap.CLIPBOARD,
