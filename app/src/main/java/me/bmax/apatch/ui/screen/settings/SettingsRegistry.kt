@@ -16,6 +16,7 @@ enum class SettingCategory(
     MODULE("module", R.string.dsh_plugins),
     MULTIMEDIA("multimedia", R.string.settings_category_multimedia),
     FUNCTION("function", R.string.settings_category_function),
+    PERMISSIONS("permissions", R.string.settings_category_permissions),
 }
 
 /**
@@ -63,9 +64,6 @@ object SettingsRegistry {
             add(SettingEntry("general_desktop_app_name", R.string.desktop_app_name, category = SettingCategory.GENERAL))
             add(SettingEntry("general_dpi", R.string.settings_app_dpi, category = SettingCategory.GENERAL))
             add(SettingEntry("general_send_log", R.string.send_log, category = SettingCategory.GENERAL))
-            add(SettingEntry("general_open_data_dir", R.string.dsh_docs_open_title, R.string.dsh_docs_open_summary, SettingCategory.GENERAL))
-            add(SettingEntry("general_grant_docs_mt", R.string.dsh_docs_grant_title, R.string.dsh_docs_grant_summary, SettingCategory.GENERAL))
-            add(SettingEntry("general_clean_storage", R.string.settings_clean_storage, R.string.settings_clean_storage_summary, SettingCategory.GENERAL))
 
             // === Appearance ===
             add(SettingEntry("appearance_amoled_theme", R.string.settings_amoled_theme, R.string.settings_amoled_theme_desc, SettingCategory.APPEARANCE))
@@ -148,10 +146,15 @@ object SettingsRegistry {
             add(SettingEntry("function_runtime", R.string.dsh_runtime_section, R.string.dsh_runtime_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_repair_plugins", R.string.dsh_plugin_repair, R.string.dsh_plugin_repair_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_verify_install", R.string.dsh_verify_after_install, R.string.dsh_verify_after_install_summary, SettingCategory.FUNCTION))
-            add(SettingEntry("function_permission", R.string.dsh_perm_section, R.string.dsh_perm_summary, SettingCategory.FUNCTION))
-            add(SettingEntry("function_native_bridge", R.string.dsh_native_section, R.string.dsh_native_summary, SettingCategory.FUNCTION))
-            add(SettingEntry("function_host_prompt", R.string.dsh_host_prompt_title, R.string.dsh_host_prompt_summary, SettingCategory.FUNCTION))
-            add(SettingEntry("function_wireless_adb", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_open_data_dir", R.string.dsh_docs_open_title, R.string.dsh_docs_open_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_grant_docs_mt", R.string.dsh_docs_grant_title, R.string.dsh_docs_grant_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_clean_storage", R.string.settings_clean_storage, R.string.settings_clean_storage_summary, SettingCategory.FUNCTION))
+
+            // === Permissions ===
+            add(SettingEntry("function_permission", R.string.dsh_perm_section, R.string.dsh_perm_summary, SettingCategory.PERMISSIONS))
+            add(SettingEntry("function_native_bridge", R.string.dsh_native_section, R.string.dsh_native_summary, SettingCategory.PERMISSIONS))
+            add(SettingEntry("function_host_prompt", R.string.dsh_host_prompt_title, R.string.dsh_host_prompt_summary, SettingCategory.PERMISSIONS))
+            add(SettingEntry("function_wireless_adb", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.PERMISSIONS))
         }
     }
 

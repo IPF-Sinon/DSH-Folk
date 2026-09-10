@@ -548,6 +548,7 @@
     <string name="settings_discrete_slider_desc">Show tick marks on slider tracks</string>
     <string name="settings_category_security">Security</string>
     <string name="settings_category_function">Function</string>
+    <string name="settings_category_permissions">Permissions</string>
     
     <!-- Background Music Strings -->
     <string name="settings_background_music">Background Music</string>
@@ -572,7 +573,8 @@
     <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
     <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
     <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
-    <string name="settings_category_function_summary">Container runtime, permission channel, wireless ADB</string>
+    <string name="settings_category_function_summary">Container runtime, startup, network, runtime files and data directory</string>
+    <string name="settings_category_permissions_summary">Permission channel, native capabilities, storage access and wireless ADB</string>
     <string name="settings_category_multimedia_summary">Background music, sounds, vibration</string>
     <string name="settings_music_playback_control">Playback Control</string>
 

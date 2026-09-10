@@ -1,5 +1,7 @@
 package me.bmax.apatch.ui.screen.settings
 
+import android.content.Intent
+import android.provider.DocumentsContract
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,6 +19,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -58,8 +63,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshAutostart
+import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
@@ -69,7 +76,10 @@ import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.ExpressiveSwitch
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 import me.bmax.apatch.ui.component.ToggleSettingCard
+import me.bmax.apatch.util.DshDocsAccess
 import me.bmax.apatch.util.DshWebCompat
+import me.bmax.apatch.util.ui.showToast
+import me.bmax.apatch.ui.screen.settings.general.CleanStorageDialog
 
 /**
  * 功能设置内容：**运行方式** 与 **权限通道**（含无线 ADB 配对）。
@@ -191,12 +201,18 @@ fun FunctionSettingsContent(
     onPair: () -> Unit,
     onDisconnectAdb: () -> Unit,
     onOpenDevSettings: () -> Unit,
+    permissionOnly: Boolean = false,
     flat: Boolean = false,
     highlightKey: String? = null,
 ) {
+    val context = LocalContext.current
+    val showCleanStorageDialog = remember { mutableStateOf(false) }
+    val showGrantDocsDialog = remember { mutableStateOf(false) }
+    val mtCandidates = remember { DshDocsAccess.installedCandidates(context) }
+
     SplicedColumnGroup(flat = flat, highlightKey = highlightKey) {
         // ───────── 运行方式 ─────────
-        item(key = "function_run_mode") {
+        item(key = "function_run_mode", visible = !permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -237,7 +253,7 @@ fun FunctionSettingsContent(
         // 三条路径按「代价从小到大」排：广播（零成本、但可能不生效）→ 无障碍（要开一个
         // 吓人的开关）→ 脚本（要 root）。不按可靠性排：把「需要 root」放在第一条会让
         // 没 root 的人以为这功能与自己无关。
-        item(key = "function_autostart") {
+        item(key = "function_autostart", visible = !permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -415,7 +431,7 @@ fun FunctionSettingsContent(
         }
 
         // ───────── 端口 ─────────
-        item(key = "function_port") {
+        item(key = "function_port", visible = !permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -481,7 +497,7 @@ fun FunctionSettingsContent(
         }
 
         // ───────── 局域网访问 ─────────
-        item(key = "function_lan") {
+        item(key = "function_lan", visible = !permissionOnly) {
             ToggleSettingCard(
                 flat = flat,
                 icon = Icons.Filled.Public,
@@ -493,7 +509,7 @@ fun FunctionSettingsContent(
         }
 
         // ───────── Web 界面打开方式 ─────────
-        item(key = "function_webui_mode") {
+        item(key = "function_webui_mode", visible = !permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -530,7 +546,7 @@ fun FunctionSettingsContent(
 
         // ───────── 旧内核 JS 兼容垫片 ─────────
         // 只对应用内 WebUI 生效。默认「自动」= 不注入，除非检测到旧内核并经用户同意。
-        item(key = "function_webui_compat") {
+        item(key = "function_webui_compat", visible = !permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -569,7 +585,7 @@ fun FunctionSettingsContent(
         }
 
         // ───────── 运行时下载源 ─────────
-        item(key = "function_download_source") {
+        item(key = "function_download_source", visible = !permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -657,7 +673,7 @@ fun FunctionSettingsContent(
         // ───────── 运行时重装 ─────────
         // DshRuntime.reinstallRuntime() 早就存在，但之前 UI 里没有任何入口，
         // 而好几处报错文案（缺 pnpm / 缺 dsh）都写着「请在设置中重装运行时」。
-        item(key = "function_runtime") {
+        item(key = "function_runtime", visible = !permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -736,7 +752,7 @@ fun FunctionSettingsContent(
         }
 
         // ───────── 插件依赖修复 ─────────
-        item(key = "function_repair_plugins") {
+        item(key = "function_repair_plugins", visible = !permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -756,7 +772,7 @@ fun FunctionSettingsContent(
         }
 
         // ───────── 安装后验证 ─────────
-        item(key = "function_verify_install") {
+        item(key = "function_verify_install", visible = !permissionOnly) {
             ToggleSettingCard(
                 flat = flat,
                 icon = Icons.Filled.VerifiedUser,
@@ -767,8 +783,67 @@ fun FunctionSettingsContent(
             )
         }
 
+        // ───────── 数据目录 ─────────
+        item(key = "function_open_data_dir", visible = !permissionOnly) {
+            ExpressiveCard(flat = flat, onClick = {
+                val authority = "${BuildConfig.APPLICATION_ID}.documents"
+                val dshHome = DshEnv.dshHome(context)
+                val base = context.dataDir.canonicalFile.path
+                val initialDocId = runCatching {
+                    val p = dshHome.absolutePath
+                    if (dshHome.isDirectory && p.startsWith("$base/")) "/" + p.removePrefix("$base/") else "/"
+                }.getOrDefault("/")
+                val target = DocumentsContract.buildDocumentUri(authority, initialDocId)
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                    .putExtra(DocumentsContract.EXTRA_INITIAL_URI, target)
+                    .addFlags(
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                    )
+                if (!runCatching { context.startActivity(intent) }.isSuccess) {
+                    showToast(context, R.string.dsh_docs_open_failed)
+                }
+            }) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(stringResource(R.string.dsh_docs_open_title), style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        Text(stringResource(R.string.dsh_docs_open_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+        item(key = "function_grant_docs_mt", visible = !permissionOnly && mtCandidates.isNotEmpty()) {
+            ExpressiveCard(flat = flat, onClick = { showGrantDocsDialog.value = true }) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Key, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(stringResource(R.string.dsh_docs_grant_title), style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        Text(stringResource(R.string.dsh_docs_grant_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+        item(key = "function_clean_storage", visible = !permissionOnly) {
+            ExpressiveCard(flat = flat, onClick = { showCleanStorageDialog.value = true }) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.CleaningServices, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(stringResource(R.string.settings_clean_storage), style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.height(4.dp))
+                        Text(stringResource(R.string.settings_clean_storage_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+
         // ───────── 权限通道 ─────────
-        item(key = "function_permission") {
+        item(key = "function_permission", visible = permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -776,6 +851,17 @@ fun FunctionSettingsContent(
                         title = stringResource(R.string.dsh_perm_section),
                         summary = stringResource(R.string.dsh_perm_summary),
                     )
+                    var permissionExpanded by remember { mutableStateOf(false) }
+                    TextButton(onClick = { permissionExpanded = !permissionExpanded }) {
+                        Icon(
+                            if (permissionExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = null,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(if (permissionExpanded) R.string.dsh_section_collapse else R.string.dsh_section_expand))
+                    }
+                    AnimatedVisibility(visible = permissionExpanded) {
+                        Column {
                     Spacer(Modifier.height(12.dp))
 
                     Text(
@@ -895,12 +981,14 @@ fun FunctionSettingsContent(
                             }
                         }
                     }
+                    }
                 }
             }
         }
+        }
 
         // ───────── 原生能力桥 ─────────
-        item(key = "function_native_bridge") {
+        item(key = "function_native_bridge", visible = permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -1085,7 +1173,7 @@ fun FunctionSettingsContent(
         // 独立成一张卡而不是塞进上面那张：它说明的不只是原生能力（还有共享存储、
         // dsh-fs、提权状态），而且搜索高亮认的是 item key —— 挂在别人的 key 下面
         // 会让「搜到了却什么也没高亮」。
-        item(key = "function_host_prompt") {
+        item(key = "function_host_prompt", visible = permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     Row(
@@ -1110,7 +1198,7 @@ fun FunctionSettingsContent(
         }
 
         // ───────── 无线 ADB 配对 ─────────
-        item(key = "function_wireless_adb") {
+        item(key = "function_wireless_adb", visible = permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
@@ -1299,6 +1387,35 @@ fun FunctionSettingsContent(
                 }
             }
         }
+    }
+
+    if (showCleanStorageDialog.value) CleanStorageDialog(showCleanStorageDialog)
+    if (showGrantDocsDialog.value) {
+        val names = mtCandidates.joinToString("、") { it.label }
+        AlertDialog(
+            onDismissRequest = { showGrantDocsDialog.value = false },
+            title = { Text(stringResource(R.string.dsh_docs_grant_title)) },
+            text = { Text(stringResource(R.string.dsh_docs_grant_message, names)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showGrantDocsDialog.value = false
+                    val granted = mtCandidates.count { DshDocsAccess.grant(context, it.packageName) }
+                    showToast(context, if (granted > 0) R.string.dsh_docs_grant_done else R.string.dsh_docs_grant_failed)
+                }) { Text(stringResource(R.string.dsh_docs_grant_confirm)) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        showGrantDocsDialog.value = false
+                        DshDocsAccess.revokeAll(context)
+                        showToast(context, R.string.dsh_docs_grant_revoked)
+                    }) { Text(stringResource(R.string.dsh_docs_grant_revoke)) }
+                    TextButton(onClick = { showGrantDocsDialog.value = false }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
+                }
+            },
+        )
     }
 }
 

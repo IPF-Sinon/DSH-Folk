@@ -77,10 +77,25 @@ import rikka.shizuku.Shizuku
  * 权限通道是**探测**出来的，不是这里开出来的 —— root / Shizuku 由设备上已有的实现提供，
  * 这一页只做三件事：显示探测结果、代为申请 Shizuku 授权、驱动无线 ADB 配对。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>
 @Composable
 fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: String? = null) {
+    DshSettingsScreen(navigator, highlightKey, permissionOnly = false)
+}
+
+@Destination<RootGraph>
+@Composable
+fun PermissionSettingsScreen(navigator: DestinationsNavigator, highlightKey: String? = null) {
+    DshSettingsScreen(navigator, highlightKey, permissionOnly = true)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DshSettingsScreen(
+    navigator: DestinationsNavigator,
+    highlightKey: String?,
+    permissionOnly: Boolean,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackBarHost = LocalSnackbarHost.current
@@ -391,7 +406,10 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
             TopAppBar(
                 title = {
                     Text(
-                        stringResource(R.string.settings_category_function),
+                        stringResource(
+                            if (permissionOnly) R.string.settings_category_permissions
+                            else R.string.settings_category_function
+                        ),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -737,6 +755,7 @@ fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: Strin
                             )
                         }
                     },
+                    permissionOnly = permissionOnly,
                     highlightKey = highlightKey,
                 )
             }

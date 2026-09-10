@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
@@ -74,6 +75,7 @@ import com.ramcosta.composedestinations.generated.destinations.SecuritySettingsS
 import com.ramcosta.composedestinations.generated.destinations.BackupSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ModuleSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.PermissionSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.MultimediaSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.SettingsSearchScreenDestination
 
@@ -153,6 +155,14 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             title = stringResource(R.string.settings_category_function),
                             summary = stringResource(R.string.settings_category_function_summary),
                             onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },
+                        )
+                    }
+                    item {
+                        SplicedSettingsItem(
+                            icon = Icons.Filled.AdminPanelSettings,
+                            title = stringResource(R.string.settings_category_permissions),
+                            summary = stringResource(R.string.settings_category_permissions_summary),
+                            onClick = { navigator.navigate(PermissionSettingsScreenDestination(null)) },
                         )
                     }
                     item(visible = canAuthenticate) {

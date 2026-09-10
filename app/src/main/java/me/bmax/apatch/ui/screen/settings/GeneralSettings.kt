@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.provider.DocumentsContract
 import me.bmax.apatch.util.ui.showToast
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.*
@@ -27,7 +26,6 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.R
-import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 import me.bmax.apatch.ui.component.ToggleSettingCard
@@ -110,9 +108,6 @@ fun GeneralSettingsContent(
 
     val logTitle = stringResource(id = R.string.send_log)
 
-    val cleanStorageTitle = stringResource(id = R.string.settings_clean_storage)
-    val cleanStorageSummary = stringResource(id = R.string.settings_clean_storage_summary)
-
     val folkXEngineTitle = stringResource(id = R.string.settings_folkx_engine_title)
     val folkXEngineSummary = stringResource(id = R.string.settings_folkx_engine_summary)
 
@@ -122,7 +117,6 @@ fun GeneralSettingsContent(
     val showUpdateDialog = remember { mutableStateOf(false) }
     // 检查结果带到对话框：应用内更新要用它的 apkUrl / sha256 / notes
     val updateStatus = remember { mutableStateOf<UpdateChecker.Status?>(null) }
-    val showCleanStorageDialog = remember { mutableStateOf(false) }
     val showAppTitleDialog = remember { mutableStateOf(false) }
     val showCustomAppTitleDialog = remember { mutableStateOf(false) }
     val showDesktopAppNameDialog = remember { mutableStateOf(false) }
@@ -132,10 +126,6 @@ fun GeneralSettingsContent(
     val showLogTrimDialog = remember { mutableStateOf(false) }
     val showLogWindowDialog = remember { mutableStateOf(false) }
     var logWindowIndex by remember { mutableStateOf(0f) }
-
-    val showGrantDocsDialog = remember { mutableStateOf(false) }
-    // 装了哪些可授权的文件管理器；没装就整条设置项都不出现
-    val mtCandidates = remember { DshDocsAccess.installedCandidates(context) }
 
     val useAltIcon = remember { mutableStateOf(prefs.getBoolean("use_alt_icon", false)) }
     var autoUpdateCheck by remember { mutableStateOf(prefs.getBoolean("auto_update_check", true)) }
@@ -482,107 +472,6 @@ fun GeneralSettingsContent(
             }
         }
 
-        item(key = "general_open_data_dir") {
-            ExpressiveCard(flat = flat, onClick = {
-                val authority = "${BuildConfig.APPLICATION_ID}.documents"
-                // documentId 绝不能是空串：空路径段会被 Uri.getPathSegments() 丢掉，
-                // DocumentsProvider 的 UriMatcher 随之全部错位（详见 DshDocumentsProvider 的 KDoc）。
-                // 直接深链到 .dsh，用户少点四五级；.dsh 还没建（运行时未安装）时落在数据目录根。
-                val dshHome = DshEnv.dshHome(context)
-                val base = context.dataDir.canonicalFile.path
-                val initialDocId = runCatching {
-                    val p = dshHome.absolutePath
-                    if (dshHome.isDirectory && p.startsWith("$base/")) "/" + p.removePrefix("$base/") else "/"
-                }.getOrDefault("/")
-                val target = DocumentsContract.buildDocumentUri(authority, initialDocId)
-                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                    .putExtra(DocumentsContract.EXTRA_INITIAL_URI, target)
-                    .addFlags(
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
-                            Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
-                    )
-                val opened = runCatching { context.startActivity(intent) }.isSuccess
-                if (!opened) showToast(context, R.string.dsh_docs_open_failed)
-            }) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(imageVector = Icons.Filled.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = stringResource(R.string.dsh_docs_open_title),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_docs_open_summary),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
-        // 直接把数据目录授权给 MT 管理器：某些 ROM（documentsui 与系统共享 uid 1000）
-        // 上，走系统选择器拿到的授权会被 UriGrantsManagerService 静默丢弃，
-        // MT 随后 takePersistableUriPermission 报 SecurityException。详见 DshDocsAccess。
-        if (mtCandidates.isNotEmpty()) {
-            item(key = "general_grant_docs_mt") {
-                ExpressiveCard(flat = flat, onClick = { showGrantDocsDialog.value = true }) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(imageVector = Icons.Filled.Key, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                        Spacer(Modifier.width(16.dp))
-                        Column {
-                            Text(
-                                text = stringResource(R.string.dsh_docs_grant_title),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(R.string.dsh_docs_grant_summary),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        item(key = "general_clean_storage") {
-            ExpressiveCard(flat = flat, onClick = { showCleanStorageDialog.value = true }) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(imageVector = Icons.Filled.CleaningServices, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = cleanStorageTitle,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = cleanStorageSummary,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
     }
 
     if (showUpdateDialog.value) {
@@ -594,10 +483,6 @@ fun GeneralSettingsContent(
             },
             status = updateStatus.value,
         )
-    }
-
-    if (showCleanStorageDialog.value) {
-        CleanStorageDialog(showCleanStorageDialog)
     }
 
     if (showAppTitleDialog.value) {
@@ -690,44 +575,6 @@ fun GeneralSettingsContent(
             dismissButton = {
                 TextButton(onClick = { showLogWindowDialog.value = false }) {
                     Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
-    }
-
-    if (showGrantDocsDialog.value) {
-        val names = mtCandidates.joinToString("、") { it.label }
-        AlertDialog(
-            onDismissRequest = { showGrantDocsDialog.value = false },
-            title = { Text(stringResource(R.string.dsh_docs_grant_title)) },
-            text = { Text(stringResource(R.string.dsh_docs_grant_message, names)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showGrantDocsDialog.value = false
-                    val granted = mtCandidates.count { DshDocsAccess.grant(context, it.packageName) }
-                    showToast(
-                        context,
-                        if (granted > 0) R.string.dsh_docs_grant_done
-                        else R.string.dsh_docs_grant_failed,
-                    )
-                }) {
-                    Text(stringResource(R.string.dsh_docs_grant_confirm))
-                }
-            },
-            dismissButton = {
-                // 「撤销」和「取消」都放这一格：AlertDialog 只有两个按钮位，
-                // 而这里需要三种动作（授权 / 撤销 / 什么都不做）
-                Row {
-                    TextButton(onClick = {
-                        showGrantDocsDialog.value = false
-                        DshDocsAccess.revokeAll(context)
-                        showToast(context, R.string.dsh_docs_grant_revoked)
-                    }) {
-                        Text(stringResource(R.string.dsh_docs_grant_revoke))
-                    }
-                    TextButton(onClick = { showGrantDocsDialog.value = false }) {
-                        Text(stringResource(android.R.string.cancel))
-                    }
                 }
             },
         )

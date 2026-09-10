@@ -517,6 +517,7 @@
     <string name="settings_discrete_slider_desc">在滑块轨道上显示刻度标记</string>
     <string name="settings_category_security">安全</string>
     <string name="settings_category_function">功能</string>
+    <string name="settings_category_permissions">权限</string>
 
     <!-- 背景音乐字符串 -->
     <string name="settings_background_music">背景音乐</string>
@@ -541,7 +542,8 @@
     <string name="settings_category_behavior_summary">Web 调试、信息复制、首页卡片、插件角标</string>
     <string name="settings_category_security_summary">打开应用时的生物识别认证</string>
     <string name="settings_category_backup_summary">DSH 配置导出导入、WebDAV 同步</string>
-    <string name="settings_category_function_summary">运行方式、权限通道、无线 ADB 配对</string>
+    <string name="settings_category_function_summary">容器运行、自启动、网络、运行时文件与数据目录</string>
+    <string name="settings_category_permissions_summary">权限通道、原生能力、存储访问与无线 ADB</string>
     <string name="settings_category_multimedia_summary">背景音乐、音效、振动</string>
     <string name="settings_music_playback_control">播放控制</string>
 
