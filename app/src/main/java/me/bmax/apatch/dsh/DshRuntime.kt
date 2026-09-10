@@ -1395,7 +1395,7 @@ object DshRuntime {
             bootMutex.withLock {
                 stopServer()
                 clearLog()
-                _state.update { it.copy(phase = DshPhase.INSTALLING, message = str(R.string.dsh_msg_installing)) }
+                _state.update { it.copy(phase = DshPhase.EXTRACTING, message = str(R.string.dsh_msg_installing)) }
                 val ok = withContext(Dispatchers.IO) { extractRootfs(tarball, preserveData) }
                 tarball.delete()
                 if (!ok) {
