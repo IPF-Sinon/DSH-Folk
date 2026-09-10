@@ -60,6 +60,7 @@ import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.SecuritySettingsScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.launch
 import me.bmax.apatch.R
@@ -129,7 +130,7 @@ fun HomeScreenV2(
                     title = stringResource(R.string.dsh_permission),
                     value = state.permLabel,
                     icon = Icons.Outlined.Security,
-                    onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) }
+                    onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) }
                 )
             }
         }

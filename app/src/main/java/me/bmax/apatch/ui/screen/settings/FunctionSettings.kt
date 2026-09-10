@@ -176,7 +176,10 @@ fun FunctionSettingsContent(
     /** 已安装的运行时版本；未安装时为空。 */
     runtimeVersion: String,
     /** 重新下载并覆盖容器。 */
-    onReinstallRuntime: () -> Unit,
+    onReinstallRuntime: (Boolean) -> Unit,
+    onImportRuntime: () -> Unit,
+    runtimeBeta: Boolean,
+    onRuntimeBetaChange: (Boolean) -> Unit,
     /** 重建 profile 插件依赖（清空 node_modules 后重装）。 */
     onRepairPlugins: () -> Unit,
     /** 重建正在进行中（与安装共用同一把锁）。 */
@@ -715,34 +718,42 @@ fun FunctionSettingsContent(
 
                     Spacer(Modifier.height(8.dp))
                     var confirming by remember { mutableStateOf(false) }
-                    OutlinedButton(
-                        onClick = { confirming = true },
-                        enabled = runtimeInstalled,
-                    ) {
-                        Text(
-                            stringResource(
-                                if (latest != null) R.string.dsh_runtime_update_go
-                                else R.string.dsh_runtime_reinstall
-                            )
-                        )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { confirming = true }, enabled = runtimeInstalled) {
+                            Text(stringResource(R.string.dsh_runtime_update_action))
+                        }
+                        OutlinedButton(onClick = onImportRuntime) {
+                            Text(stringResource(R.string.dsh_runtime_import))
+                        }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    ToggleSettingCard(
+                        flat = true,
+                        icon = Icons.Filled.Warning,
+                        title = stringResource(R.string.dsh_runtime_beta),
+                        description = stringResource(R.string.dsh_runtime_beta_summary),
+                        checked = runtimeBeta,
+                        onCheckedChange = onRuntimeBetaChange,
+                    )
                     // 替换运行时会先暂存并恢复用户数据；确认框说明下载量与停服影响。
                     if (confirming) {
                         AlertDialog(
                             onDismissRequest = { confirming = false },
                             title = { Text(stringResource(R.string.dsh_runtime_reinstall_confirm_title)) },
-                            text = { Text(stringResource(R.string.dsh_runtime_reinstall_confirm_text)) },
+                            text = { Text(stringResource(R.string.dsh_runtime_preserve_question)) },
                             confirmButton = {
                                 TextButton(onClick = {
                                     confirming = false
-                                    onReinstallRuntime()
-                                }) {
-                                    Text(stringResource(R.string.dsh_runtime_reinstall_go))
-                                }
+                                    onReinstallRuntime(true)
+                                }) { Text(stringResource(R.string.dsh_runtime_preserve)) }
                             },
                             dismissButton = {
-                                TextButton(onClick = { confirming = false }) {
-                                    Text(stringResource(android.R.string.cancel))
+                                Row {
+                                    TextButton(onClick = {
+                                        confirming = false
+                                        onReinstallRuntime(false)
+                                    }) { Text(stringResource(R.string.dsh_runtime_clean)) }
+                                    TextButton(onClick = { confirming = false }) { Text(stringResource(android.R.string.cancel)) }
                                 }
                             },
                         )
@@ -1173,7 +1184,7 @@ fun FunctionSettingsContent(
         // 独立成一张卡而不是塞进上面那张：它说明的不只是原生能力（还有共享存储、
         // dsh-fs、提权状态），而且搜索高亮认的是 item key —— 挂在别人的 key 下面
         // 会让「搜到了却什么也没高亮」。
-        item(key = "function_host_prompt", visible = permissionOnly) {
+        item(key = "function_host_prompt", visible = false) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     Row(

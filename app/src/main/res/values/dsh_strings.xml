@@ -350,6 +350,24 @@
     <string name="dsh_runtime_reinstall_confirm_title">Reinstall the runtime?</string>
     <string name="dsh_runtime_reinstall_confirm_text">This downloads the runtime again (about 140 MB) and replaces the container system files. Existing sessions, installed plugins, ADB keys, DSH configuration, and plugin dependency data are preserved; if replacement is interrupted, the staged data is restored on the next launch. The service stops first.</string>
     <string name="dsh_runtime_reinstall_go">Reinstall</string>
+    <string name="dsh_runtime_current">Current version</string>
+    <string name="dsh_runtime_update_action">Check and update</string>
+    <string name="dsh_runtime_import">Import runtime</string>
+    <string name="dsh_runtime_import_warning">Only import a runtime archive downloaded from a source you trust. A malicious runtime can execute arbitrary code and access DSH data.</string>
+    <string name="dsh_runtime_import_confirm">I trust this source</string>
+    <string name="dsh_runtime_beta">Accept beta runtime updates</string>
+    <string name="dsh_runtime_beta_summary">Use the runtime-beta rolling channel. Beta builds may be unstable.</string>
+    <string name="dsh_runtime_preserve_question">Preserve sessions, plugins, configuration and dependency data?</string>
+    <string name="dsh_runtime_preserve">Preserve data</string>
+    <string name="dsh_runtime_clean">Clean reinstall</string>
+    <string name="dsh_plugin_builtin_label">Built-in</string>
+    <string name="dsh_host_plugin_name">Android native capability bridge prompt</string>
+    <string name="dsh_host_plugin_version">Built into DSH-Folk · cannot be uninstalled</string>
+    <string name="dsh_host_plugin_description">Tells agents which Android host capabilities and dsh-fs / dsh-native commands are available. Disable it to stop injecting this information.</string>
+    <string name="dsh_permission_log_title">Permission records</string>
+    <string name="dsh_permission_log_empty">No permission calls have been recorded.</string>
+    <string name="dsh_permission_log_reason">Reason: %1$s</string>
+    <string name="dsh_permission_log_status">Result: HTTP %1$d</string>
 
     <!-- 插件商店：全量目录 + 本地检索 -->
     <string name="dsh_plugin_category_all">All</string>

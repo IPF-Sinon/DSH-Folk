@@ -59,8 +59,22 @@ object DshSource {
     private const val KEY_AUTO_SOURCE_AT = "auto_source_at"
 
     /** 运行时发布位置（滚动 tag runtime-latest；资产名按架构区分）。 */
-    private const val RUNTIME_BASE =
-        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-latest/"
+    private const val RUNTIME_STABLE_TAG = "runtime-latest"
+    private const val RUNTIME_BETA_TAG = "runtime-beta"
+    private const val KEY_RUNTIME_BETA = "runtime_accept_beta"
+
+    private fun runtimeBase(): String {
+        val prefs = me.bmax.apatch.apApp.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
+        val tag = if (prefs.getBoolean(KEY_RUNTIME_BETA, false)) RUNTIME_BETA_TAG else RUNTIME_STABLE_TAG
+        return "https://github.com/IPF-Sinon/DSH-Folk/releases/download/$tag/"
+    }
+
+    fun acceptRuntimeBeta(ctx: Context): Boolean =
+        ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE).getBoolean(KEY_RUNTIME_BETA, false)
+
+    fun setAcceptRuntimeBeta(ctx: Context, on: Boolean) {
+        ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE).edit().putBoolean(KEY_RUNTIME_BETA, on).apply()
+    }
 
     /**
      * 本机要用的运行时架构。
@@ -150,10 +164,10 @@ object DshSource {
     private fun assetSuffix(): String = if (runtimeArch() == "arm64-v8a") "" else "-x86_64"
 
     /** 本机架构对应的 metadata.json 地址（不含镜像前缀）。 */
-    fun metaUrl(): String = RUNTIME_BASE + "metadata" + assetSuffix() + ".json"
+    fun metaUrl(): String = runtimeBase() + "metadata" + assetSuffix() + ".json"
 
     /** 吞吐测速目标（Range 拉前 1MB）：打本机真正会下载的那个 rootfs。 */
-    private fun speedProbeUrl(): String = RUNTIME_BASE + "rootfs" + assetSuffix() + ".tar.gz"
+    private fun speedProbeUrl(): String = runtimeBase() + "rootfs" + assetSuffix() + ".tar.gz"
 
     fun proxyPrefix(source: String): String = when (source) {
         SOURCE_GHPROXY_CF -> "https://v6.gh-proxy.org/"

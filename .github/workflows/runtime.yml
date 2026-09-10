@@ -17,8 +17,14 @@ on:
         default: 'both'
         type: choice
         options: [ both, arm64, amd64 ]
+      channel:
+        description: 'Release channel'
+        required: false
+        default: 'stable'
+        type: choice
+        options: [ stable, beta ]
       publish:
-        description: 'Publish to the runtime-latest release'
+        description: 'Publish to the selected runtime release'
         required: false
         default: true
         type: boolean
@@ -66,7 +72,7 @@ jobs:
           NODE_VER: ${{ inputs.node_version }}
           TARGET_ARCH: ${{ matrix.arch }}
           OUT: ${{ github.workspace }}/out
-          RELEASE_TAG: runtime-latest
+          RELEASE_TAG: ${{ inputs.channel == 'beta' && 'runtime-beta' || 'runtime-latest' }}
         run: bash runtime-builder/build-rootfs.sh
 
       - name: Summarize
@@ -94,16 +100,17 @@ jobs:
       # 每个架构只上传**自己的**资产（arm64 用无后缀的旧名，amd64 带 -x86_64）：
       # 用通配符一把梭在两条并行时会互相覆盖，而 arm64 的旧名一旦被 amd64 的内容
       # 顶掉，所有存量用户下一次检查更新就会拿到跑不了的 rootfs。
-      - name: Publish to runtime-latest release
+      - name: Publish selected runtime release
         if: inputs.publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARCH: ${{ matrix.arch }}
+          RELEASE_TAG: ${{ inputs.channel == 'beta' && 'runtime-beta' || 'runtime-latest' }}
         run: |
-          if ! gh release view runtime-latest >/dev/null 2>&1; then
-            gh release create runtime-latest \
-              --title 'DSH runtime (rolling)' \
-              --notes 'Rolling container runtime for DSH-Folk. Assets are replaced in place; each metadata*.json describes the matching rootfs*.tar.gz. arm64-v8a keeps the unsuffixed names for backward compatibility.' \
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --title "DSH runtime (${{ inputs.channel }})" \
+              --notes "Rolling ${{ inputs.channel }} container runtime for DSH-Folk. Assets are replaced in place; each metadata*.json describes the matching rootfs*.tar.gz." \
               --latest=false
           fi
           if [ "$ARCH" = "arm64" ]; then
@@ -113,5 +120,5 @@ jobs:
           fi
           test -f "out/rootfs${SUFFIX}.tar.gz"
           test -f "out/metadata${SUFFIX}.json"
-          gh release upload runtime-latest \
+          gh release upload "$RELEASE_TAG" \
             "out/rootfs${SUFFIX}.tar.gz" "out/metadata${SUFFIX}.json" --clobber

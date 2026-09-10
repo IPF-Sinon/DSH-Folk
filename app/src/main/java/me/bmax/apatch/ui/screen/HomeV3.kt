@@ -41,6 +41,7 @@ import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.SecuritySettingsScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
@@ -194,7 +195,7 @@ private fun PermissionCard(
         actionText = stringResource(R.string.settings),
         showAction = true,
         isWallpaperMode = isWallpaperMode,
-        onActionClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },
+        onActionClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) },
         modifier = modifier,
         cardId = BackgroundConfig.FOCUS_CARD_APP
     ) {

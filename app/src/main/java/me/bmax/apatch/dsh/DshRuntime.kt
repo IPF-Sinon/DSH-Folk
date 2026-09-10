@@ -1365,8 +1365,8 @@ object DshRuntime {
         }
     }
 
-    /** 重新下载并安装运行时（覆盖 rootfs）。 */
-    fun reinstallRuntime() {
+    /** 重新下载并安装运行时。 */
+    fun reinstallRuntime(preserveData: Boolean = true) {
         scope.launch {
             bootMutex.withLock {
                 stopServer()
@@ -1375,7 +1375,10 @@ object DshRuntime {
                     .remove(DshEnv.KEY_SEEDED_PLUGINS)
                     .remove(@Suppress("DEPRECATION") DshEnv.KEY_SEED_PLUGINS_DONE)
                     .apply()
-                downloadAndInstall()
+                if (!preserveData) {
+                    DshEnv.PRESERVED_PATHS.forEach { File(DshEnv.rootfs(appContext), it).deleteRecursively() }
+                }
+                downloadAndInstall(preserveData)
                 if (_state.value.phase != DshPhase.ERROR) {
                     setupResolvConf()
                     seedPlugins()
@@ -1387,7 +1390,28 @@ object DshRuntime {
         }
     }
 
-    private suspend fun downloadAndInstall() {
+    fun importRuntime(tarball: File, preserveData: Boolean = true) {
+        scope.launch {
+            bootMutex.withLock {
+                stopServer()
+                clearLog()
+                _state.update { it.copy(phase = DshPhase.INSTALLING, message = str(R.string.dsh_msg_installing)) }
+                val ok = withContext(Dispatchers.IO) { extractRootfs(tarball, preserveData) }
+                tarball.delete()
+                if (!ok) {
+                    fail(str(R.string.dsh_err_extract_failed))
+                    return@withLock
+                }
+                prefs().edit().putString(DshEnv.KEY_RUNTIME_VERSION, "imported").apply()
+                setupResolvConf()
+                seedPlugins()
+                ensureFsBridgeCli()
+                if (!checkPortConflict()) startAndAwait()
+            }
+        }
+    }
+
+    private suspend fun downloadAndInstall(preserveData: Boolean = true) {
         clearLog()
         _state.update {
             it.copy(
@@ -1467,7 +1491,7 @@ object DshRuntime {
         _state.update {
             it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_msg_installing))
         }
-        val ok = withContext(Dispatchers.IO) { extractRootfs(tarball) }
+        val ok = withContext(Dispatchers.IO) { extractRootfs(tarball, preserveData) }
         tarball.delete()
         if (!ok) {
             fail(str(R.string.dsh_err_extract_failed))
@@ -1597,7 +1621,7 @@ object DshRuntime {
     }
 
     /** 解压 rootfs.tar.gz 到 filesDir/rootfs（整体替换，但保留用户数据）。 */
-    private fun extractRootfs(tarball: File): Boolean = runCatching {
+    private fun extractRootfs(tarball: File, preserveData: Boolean = true): Boolean = runCatching {
         val dest = DshEnv.rootfs(appContext)
         val stash = DshEnv.dshPreserve(appContext)
         // 要跨越这次替换的子树（见 DshEnv.PRESERVED_PATHS）：整体删 rootfs 之前逐个
@@ -1613,7 +1637,7 @@ object DshRuntime {
         // 说明 rootfs 里已有在用的同名目录，那份残留才是被顶掉的旧副本，可以清。
         DshEnv.recoverPreserved(appContext)
         if (stash.exists()) stash.deleteRecursively()
-        for (rel in DshEnv.PRESERVED_PATHS) {
+        if (preserveData) for (rel in DshEnv.PRESERVED_PATHS) {
             val src = File(dest, rel)
             if (!src.isDirectory) continue
             val dst = File(stash, rel)
@@ -1629,7 +1653,7 @@ object DshRuntime {
         dest.mkdirs()
         TarGzipExtractor.extractRootfs(tarball, dest)
         // 解压出的 rootfs 带一份空的 /root/.dsh，删掉，用暂存的数据顶替。
-        for (rel in DshEnv.PRESERVED_PATHS) {
+        if (preserveData) for (rel in DshEnv.PRESERVED_PATHS) {
             val src = File(stash, rel)
             if (!src.isDirectory) continue
             val dst = File(dest, rel)

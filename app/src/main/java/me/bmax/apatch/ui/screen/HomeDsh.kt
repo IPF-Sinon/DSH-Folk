@@ -65,6 +65,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.SecuritySettingsScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -148,7 +149,7 @@ fun HomeScreenDsh(
                 title = stringResource(R.string.dsh_permission),
                 value = perm.label(context),
                 subtitle = permHint(perm),
-                onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },
+                onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) },
             )
         }
 

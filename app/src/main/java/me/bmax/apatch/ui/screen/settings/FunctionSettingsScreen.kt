@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -48,7 +49,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -100,6 +103,16 @@ internal fun DshSettingsScreen(
 
     val dshPrefs = context.getSharedPreferences(DshEnv.PREF, android.content.Context.MODE_PRIVATE)
 
+    var runtimeBeta by rememberSaveable { mutableStateOf(DshSource.acceptRuntimeBeta(context)) }
+    var importTrusted by rememberSaveable { mutableStateOf(false) }
+    val runtimeImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch(Dispatchers.IO) {
+            val file = File(context.cacheDir, "runtime-import.tar.gz")
+            runCatching { context.contentResolver.openInputStream(uri)!!.use { input -> file.outputStream().use { input.copyTo(it) } } }
+                .onSuccess { DshRuntime.importRuntime(file, preserveData = true) }
+        }
+    }
     var runtimeId by rememberSaveable { mutableStateOf(DshRuntime.runtimeId()) }
     // 存的是字符串，rememberSaveable 不能直接存 enum?
     // 缺省 PREF_OFF：默认不提权，老用户由 PermissionManager.migratePreference 迁移。
@@ -409,6 +422,13 @@ internal fun DshSettingsScreen(
                         fontWeight = FontWeight.SemiBold,
                     )
                 },
+                actions = {
+                    if (securityMode) {
+                        IconButton(onClick = { navigator.navigate(PermissionLogScreenDestination) }) {
+                            Icon(Icons.Outlined.ReceiptLong, contentDescription = stringResource(R.string.dsh_permission_log_title))
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = { navigator.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
@@ -677,10 +697,12 @@ internal fun DshSettingsScreen(
                     onOpenAllFilesSettings = { openAllFilesSettings() },
                     runtimeInstalled = runtimeInstalled,
                     runtimeVersion = runtimeState.runtimeVersion ?: "",
-                    onReinstallRuntime = {
-                        // 重装是长任务，DshRuntime 自己起协程并把进度打进启动日志；
-                        // 回首页就能看到进度，这里不再阻塞设置页
-                        DshRuntime.reinstallRuntime()
+                    onReinstallRuntime = { preserve -> DshRuntime.reinstallRuntime(preserve) },
+                    onImportRuntime = { importTrusted = true },
+                    runtimeBeta = runtimeBeta,
+                    onRuntimeBetaChange = { on ->
+                        runtimeBeta = on
+                        DshSource.setAcceptRuntimeBeta(context, on)
                     },
                     onRepairPlugins = { pluginViewModel.repairStore() },
                     repairBusy = pluginViewModel.installing,
@@ -765,6 +787,21 @@ internal fun DshSettingsScreen(
             item { Spacer(Modifier.height(8.dp)) }
             item { NavigationBarsSpacer() }
         }
+    }
+
+    if (importTrusted) {
+        AlertDialog(
+            onDismissRequest = { importTrusted = false },
+            title = { Text(stringResource(R.string.dsh_runtime_import)) },
+            text = { Text(stringResource(R.string.dsh_runtime_import_warning)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    importTrusted = false
+                    runtimeImportLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "application/octet-stream"))
+                }) { Text(stringResource(R.string.dsh_runtime_import_confirm)) }
+            },
+            dismissButton = { TextButton(onClick = { importTrusted = false }) { Text(stringResource(android.R.string.cancel)) } },
+        )
     }
 
     // 重建插件依赖的实时日志（与插件页共用同一套对话框）

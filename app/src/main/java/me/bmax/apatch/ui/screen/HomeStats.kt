@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.SecuritySettingsScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
@@ -646,7 +647,7 @@ private fun StatsGridTopSection(navigator: DestinationsNavigator) {
                 title = stringResource(R.string.dsh_permission),
                 value = state.permLabel,
                 icon = Icons.Outlined.Security,
-                onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) }
+                onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) }
             )
         }
     }

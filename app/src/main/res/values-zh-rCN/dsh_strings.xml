@@ -332,6 +332,24 @@
     <string name="dsh_runtime_reinstall_confirm_title">重装运行时？</string>
     <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并替换容器系统文件。现有会话、已装插件、ADB 密钥、DSH 配置及插件依赖数据都会保留；即使替换过程被中断，下次启动也会自动恢复暂存数据。开始前会先停止服务。</string>
     <string name="dsh_runtime_reinstall_go">重装</string>
+    <string name="dsh_runtime_current">当前版本</string>
+    <string name="dsh_runtime_update_action">检查并更新</string>
+    <string name="dsh_runtime_import">导入运行时</string>
+    <string name="dsh_runtime_import_warning">仅导入从可信来源下载的运行时压缩包。恶意运行时可以执行任意代码并访问 DSH 数据。</string>
+    <string name="dsh_runtime_import_confirm">我信任此来源</string>
+    <string name="dsh_runtime_beta">接受测试版运行时更新</string>
+    <string name="dsh_runtime_beta_summary">使用 runtime-beta 滚动通道，测试版可能不稳定。</string>
+    <string name="dsh_runtime_preserve_question">是否保留会话、插件、配置及依赖数据？</string>
+    <string name="dsh_runtime_preserve">保留数据</string>
+    <string name="dsh_runtime_clean">全新重装</string>
+    <string name="dsh_plugin_builtin_label">内置</string>
+    <string name="dsh_host_plugin_name">安卓原生权限桥提示词</string>
+    <string name="dsh_host_plugin_version">DSH-Folk 内置 · 不可卸载</string>
+    <string name="dsh_host_plugin_description">让 Agent 知道当前可用的安卓宿主能力和 dsh-fs / dsh-native 命令；关闭后停止注入这些信息。</string>
+    <string name="dsh_permission_log_title">权限记录</string>
+    <string name="dsh_permission_log_empty">暂无权限调用记录。</string>
+    <string name="dsh_permission_log_reason">理由：%1$s</string>
+    <string name="dsh_permission_log_status">结果：HTTP %1$d</string>
 
     <!-- 插件商店：全量目录 + 本地检索 -->
     <string name="dsh_plugin_category_all">全部</string>

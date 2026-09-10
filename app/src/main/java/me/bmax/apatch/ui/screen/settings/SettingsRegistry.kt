@@ -152,7 +152,6 @@ object SettingsRegistry {
             // === Permissions ===
             add(SettingEntry("function_permission", R.string.dsh_perm_section, R.string.dsh_perm_summary, SettingCategory.SECURITY))
             add(SettingEntry("function_native_bridge", R.string.dsh_native_section, R.string.dsh_native_summary, SettingCategory.SECURITY))
-            add(SettingEntry("function_host_prompt", R.string.dsh_host_prompt_title, R.string.dsh_host_prompt_summary, SettingCategory.SECURITY))
             add(SettingEntry("function_wireless_adb", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.SECURITY))
         }
     }

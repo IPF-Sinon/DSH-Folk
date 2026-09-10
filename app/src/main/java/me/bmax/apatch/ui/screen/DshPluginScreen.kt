@@ -64,6 +64,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
+import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
 import me.bmax.apatch.dsh.DshRuntime
@@ -286,6 +287,8 @@ private fun DshPluginList(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val list = viewModel.filtered
+    val builtInVisible = viewModel.search.isBlank() ||
+        context.getString(R.string.dsh_host_plugin_name).contains(viewModel.search, ignoreCase = true)
     var detail by remember { mutableStateOf<DshPlugin?>(null) }
 
     detail?.let { p ->
@@ -329,6 +332,11 @@ private fun DshPluginList(
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (builtInVisible) {
+            item(key = "builtin:dsh-folk-host") {
+                BuiltInHostPluginItem()
+            }
+        }
         items(list, key = { it.pkg.ifEmpty { it.id } }) { plugin ->
             DshPluginItem(
                 plugin = plugin,
@@ -340,6 +348,43 @@ private fun DshPluginList(
             )
         }
         item { HomeBottomSpacer() }
+    }
+}
+
+@Composable
+private fun BuiltInHostPluginItem() {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(DshHostPrompt.enabled(context)) }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f),
+        ),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            ModuleLabel(
+                text = stringResource(R.string.dsh_plugin_builtin_label),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.dsh_host_plugin_name), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.dsh_host_plugin_version), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = {
+                        enabled = it
+                        DshHostPrompt.setEnabled(context.applicationContext, it)
+                    },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.dsh_host_plugin_description), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
