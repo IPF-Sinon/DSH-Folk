@@ -89,7 +89,6 @@ import com.ramcosta.composedestinations.generated.destinations.BackupSettingsScr
 import com.ramcosta.composedestinations.generated.destinations.BehaviorSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.DshTerminalScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.PermissionSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.LanguagePickerScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ModuleSettingsScreenDestination
@@ -441,7 +440,6 @@ class MainActivity : AppCompatActivity() {
                     BackupSettingsScreenDestination.route,
                     ModuleSettingsScreenDestination.route,
                     FunctionSettingsScreenDestination.route,
-                    PermissionSettingsScreenDestination.route,
                     MultimediaSettingsScreenDestination.route,
                 )
             }

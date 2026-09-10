@@ -80,21 +80,16 @@ import rikka.shizuku.Shizuku
 @Destination<RootGraph>
 @Composable
 fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: String? = null) {
-    DshSettingsScreen(navigator, highlightKey, permissionOnly = false)
-}
-
-@Destination<RootGraph>
-@Composable
-fun PermissionSettingsScreen(navigator: DestinationsNavigator, highlightKey: String? = null) {
-    DshSettingsScreen(navigator, highlightKey, permissionOnly = true)
+    DshSettingsScreen(navigator, highlightKey, permissionOnly = false, securityMode = false)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DshSettingsScreen(
+internal fun DshSettingsScreen(
     navigator: DestinationsNavigator,
     highlightKey: String?,
     permissionOnly: Boolean,
+    securityMode: Boolean = true,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -407,7 +402,7 @@ private fun DshSettingsScreen(
                 title = {
                     Text(
                         stringResource(
-                            if (permissionOnly) R.string.settings_category_permissions
+                            if (permissionOnly) R.string.settings_category_security
                             else R.string.settings_category_function
                         ),
                         style = MaterialTheme.typography.titleLarge,
@@ -758,6 +753,14 @@ private fun DshSettingsScreen(
                     permissionOnly = permissionOnly,
                     highlightKey = highlightKey,
                 )
+            }
+            if (securityMode) {
+                item {
+                    SecuritySettingsContent(
+                        snackBarHost = snackBarHost,
+                        highlightKey = highlightKey,
+                    )
+                }
             }
             item { Spacer(Modifier.height(8.dp)) }
             item { NavigationBarsSpacer() }

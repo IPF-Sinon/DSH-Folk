@@ -4,8 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.dsh.DshSource
@@ -55,6 +57,8 @@ object UpdateChecker {
     private val API_MIRRORS = listOf(
         "https://v6.gh-proxy.org/https://api.github.com",
         "https://gh-proxy.com/https://api.github.com",
+        "https://ghproxy.net/https://api.github.com",
+        "https://github.moeyy.xyz/https://api.github.com",
     )
 
     /**
@@ -111,52 +115,65 @@ object UpdateChecker {
         // 列表根本没机会被看一眼 —— 开关看起来毫无作用。
         val paths = if (acceptBeta) listOf(LIST_PATH, LATEST_PATH) else listOf(LATEST_PATH, LIST_PATH)
 
-        for (base in listOf(API_BASE) + API_MIRRORS) {
-            // latest 拿不到版本形 tag 时退到列表：latest 只认「最近发布的那个」，
-            // 若它恰好是 runtime-latest（滚动 tag），列表里仍能挑出真正的版本
-            for (path in paths) {
-                val body = FolkApiClient.fetchJson(
-                    base + path,
-                    ttlMs = 30 * 60 * 1000L,
-                    maxRetries = 1,
-                    forceRefresh = true,
-                ).getOrElse { e ->
-                    if (e is CancellationException) throw e
-                    lastError = e.message ?: e.javaClass.simpleName
-                    Log.w(TAG, "fetch failed: $base$path — $lastError")
-                    null
-                } ?: continue
-
-                val release = runCatching { newestVersionRelease(body, acceptBeta) }.getOrNull()
-                val tag = release?.optString("tag_name")?.trim().orEmpty()
-                if (tag.isEmpty()) {
-                    Log.i(TAG, "no version-shaped tag from $base$path")
-                    continue
-                }
-
-                Log.d(TAG, "remote=$tag local=${BuildConfig.VERSION_NAME} via $base")
-                // 用 DshPluginRepo 那套 semver 比较：预发布标识必须参与，否则装着
-                // v1.6-rc.1 的用户看不到 v1.6 正式版的更新
-                val newer = me.bmax.apatch.dsh.compareVersions(tag, BuildConfig.VERSION_NAME) > 0
-                if (!newer) return@withContext Status(hasUpdate = false, latestTag = tag)
-
-                val asset = pickApkAsset(release!!)
-                return@withContext Status(
-                    hasUpdate = true,
-                    latestTag = tag,
-                    apkUrl = asset?.url.orEmpty(),
-                    apkName = asset?.name.orEmpty(),
-                    apkSize = asset?.size ?: 0L,
-                    sha256 = asset?.let { fetchSha256(it.shaUrl) }.orEmpty(),
-                    notes = release.optString("body").trim(),
-                    isPrerelease = release.optBoolean("prerelease"),
-                )
+        for (path in paths) {
+            val fetched = fetchFirstRelease(path, acceptBeta)
+            if (fetched == null) {
+                lastError = "all update sources failed for $path"
+                continue
             }
+            val (base, release) = fetched
+            val tag = release.optString("tag_name").trim()
+            Log.d(TAG, "remote=$tag local=${BuildConfig.VERSION_NAME} via $base")
+            val newer = me.bmax.apatch.dsh.compareVersions(tag, BuildConfig.VERSION_NAME) > 0
+            if (!newer) return@withContext Status(hasUpdate = false, latestTag = tag)
+
+            val asset = pickApkAsset(release)
+            return@withContext Status(
+                hasUpdate = true,
+                latestTag = tag,
+                apkUrl = asset?.url.orEmpty(),
+                apkName = asset?.name.orEmpty(),
+                apkSize = asset?.size ?: 0L,
+                sha256 = asset?.let { fetchSha256(it.shaUrl) }.orEmpty(),
+                notes = release.optString("body").trim(),
+                isPrerelease = release.optBoolean("prerelease"),
+            )
         }
 
         // 走到这里 = 每条路都没拿到可用的版本 tag
         Status(hasUpdate = false, failure = lastError ?: "no release found")
     }
+
+    private suspend fun fetchFirstRelease(path: String, acceptBeta: Boolean): Pair<String, JSONObject>? =
+        supervisorScope {
+            val pending = (listOf(API_BASE) + API_MIRRORS).map { base ->
+                base to async {
+                    FolkApiClient.fetchJson(
+                        base + path,
+                        ttlMs = 30 * 60 * 1000L,
+                        maxRetries = 1,
+                        forceRefresh = true,
+                    ).getOrNull()?.let { body ->
+                        runCatching { newestVersionRelease(body, acceptBeta) }.getOrNull()
+                    }
+                }
+            }.toMutableList()
+
+            while (pending.isNotEmpty()) {
+                val completed = select<Pair<Pair<String, kotlinx.coroutines.Deferred<JSONObject?>>, JSONObject?>> {
+                    pending.forEach { candidate ->
+                        candidate.second.onAwait { candidate to it }
+                    }
+                }
+                pending.remove(completed.first)
+                val release = completed.second
+                if (release != null && release.optString("tag_name").isNotBlank()) {
+                    pending.forEach { it.second.cancel() }
+                    return@supervisorScope completed.first.first to release
+                }
+            }
+            null
+        }
 
     private data class ApkAsset(
         val name: String,

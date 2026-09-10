@@ -571,7 +571,7 @@
     <string name="settings_category_general_summary">Language, updates, animations, icon and name, DPI</string>
     <string name="settings_category_appearance_summary">Theme, colors, layout, background, fonts</string>
     <string name="settings_category_behavior_summary">Web debugging, info copy, home cards, plugin badge</string>
-    <string name="settings_category_security_summary">Biometric authentication for opening the app</string>
+    <string name="settings_category_security_summary">Permissions, native capabilities, wireless ADB, and biometric authentication</string>
     <string name="settings_category_backup_summary">DSH config export/import, WebDAV sync</string>
     <string name="settings_category_function_summary">Container runtime, startup, network, runtime files and data directory</string>
     <string name="settings_category_permissions_summary">Permission channel, native capabilities, storage access and wireless ADB</string>

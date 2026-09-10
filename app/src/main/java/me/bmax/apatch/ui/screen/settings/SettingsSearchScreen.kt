@@ -44,7 +44,6 @@ import com.ramcosta.composedestinations.generated.destinations.BackupSettingsScr
 import com.ramcosta.composedestinations.generated.destinations.ModuleSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.MultimediaSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.PermissionSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ThemeStoreScreenDestination
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.SearchAppBar
@@ -147,7 +146,6 @@ fun SettingsSearchScreen(navigator: DestinationsNavigator) {
                                     SettingCategory.MODULE -> navigator.navigate(ModuleSettingsScreenDestination(highlightKey))
                                     SettingCategory.MULTIMEDIA -> navigator.navigate(MultimediaSettingsScreenDestination(highlightKey))
                                     SettingCategory.FUNCTION -> navigator.navigate(FunctionSettingsScreenDestination(highlightKey))
-                                    SettingCategory.PERMISSIONS -> navigator.navigate(PermissionSettingsScreenDestination(highlightKey))
                                 }
                             }
                         },

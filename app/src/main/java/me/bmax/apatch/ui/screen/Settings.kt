@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
@@ -51,8 +50,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import me.bmax.apatch.util.BiometricUtils
 import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -75,7 +72,6 @@ import com.ramcosta.composedestinations.generated.destinations.SecuritySettingsS
 import com.ramcosta.composedestinations.generated.destinations.BackupSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ModuleSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.PermissionSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.MultimediaSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.SettingsSearchScreenDestination
 
@@ -83,9 +79,6 @@ import com.ramcosta.composedestinations.generated.destinations.SettingsSearchScr
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun SettingScreen(navigator: DestinationsNavigator) {
-    val context = LocalContext.current
-    val canAuthenticate = remember { BiometricUtils.isBiometricAvailable(context) }
-
     var showDevDialog by rememberSaveable { mutableStateOf(false) }
     DeveloperInfo(
         showDialog = showDevDialog
@@ -158,14 +151,6 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                         )
                     }
                     item {
-                        SplicedSettingsItem(
-                            icon = Icons.Filled.AdminPanelSettings,
-                            title = stringResource(R.string.settings_category_permissions),
-                            summary = stringResource(R.string.settings_category_permissions_summary),
-                            onClick = { navigator.navigate(PermissionSettingsScreenDestination(null)) },
-                        )
-                    }
-                    item(visible = canAuthenticate) {
                         SplicedSettingsItem(
                             icon = Icons.Filled.Security,
                             title = stringResource(R.string.settings_category_security),
