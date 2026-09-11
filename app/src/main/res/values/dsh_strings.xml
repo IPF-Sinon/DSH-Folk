@@ -374,7 +374,9 @@
     <string name="dsh_permission_log_empty">No permission calls have been recorded.</string>
     <string name="dsh_permission_log_reason">Reason: %1$s</string>
     <string name="dsh_permission_log_details">Capability: %1$s · Access: %2$s · HTTP %3$d</string>
-    <string name="dsh_permission_log_copy">Copy command</string>
+    <string name="dsh_permission_log_copy">Copy displayed command</string>
+    <string name="dsh_permission_log_show_sensitive">Show sensitive arguments</string>
+    <string name="dsh_permission_log_hide_sensitive">Hide sensitive arguments</string>
 
     <!-- 插件商店：全量目录 + 本地检索 -->
     <string name="dsh_plugin_category_all">All</string>

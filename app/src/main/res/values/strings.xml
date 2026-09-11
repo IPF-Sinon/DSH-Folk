@@ -341,11 +341,11 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Text to speech: the agent can read text aloud through the system speech engine, or synthesise it into a file. Turn it on under Settings › Features › Native capabilities.</item>
-        <item>Autostart now has three mechanisms — boot receiver, an accessibility service, and a boot script for rooted devices — with a separate switch for starting the container along with the app.</item>
-        <item>Ten more native capabilities, 19 in total: camera, calendar, contacts, location, phone status, sensors, network state, volume, system settings and install permission.</item>
-        <item>This dialog is new too: after every update it lists what changed, offline.</item>
-        <item>Settings can now accept beta builds from GitHub Actions. Off by default; when on, betas are offered like any update and install in place.</item>
+        <item>Settings reorganized: permission channels, native capabilities, and wireless ADB now live under Security; data-directory and runtime management are grouped under Features.</item>
+        <item>The Android native capability bridge prompt is now a pinned built-in plugin. It can be disabled but not uninstalled.</item>
+        <item>Permission-call records now show newest-first commands, reasons, access levels, and results; sensitive arguments are masked by default.</item>
+        <item>Runtime management now supports update checks, preserved or clean reinstall, trusted local import, and an opt-in beta runtime channel that is off by default.</item>
+        <item>App update checks race GitHub direct access and several mirrors concurrently to obtain a valid result faster.</item>
     </string-array>
 
     

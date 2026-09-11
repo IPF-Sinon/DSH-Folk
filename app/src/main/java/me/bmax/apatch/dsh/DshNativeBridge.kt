@@ -725,7 +725,8 @@ object DshNativeBridge {
                 .put("time", Instant.now().toString())
                 .put("method", method)
                 .put("path", path)
-                .put("command", auditCommand(method, path, params, reason))
+                .put("command", auditCommand(method, path, params, reason, maskSensitive = true))
+                .put("fullCommand", auditCommand(method, path, params, reason, maskSensitive = false))
                 .put("capability", cap.id)
                 .put("access", access(ctx, cap).id)
                 .put("reason", reason)
@@ -734,65 +735,89 @@ object DshNativeBridge {
         }.onFailure { Log.w(TAG, "记录能力调用失败: ${it.message}") }
     }
 
-    private fun auditCommand(method: String, path: String, params: Map<String, String>, reason: String): String {
+    private fun auditCommand(
+        method: String,
+        path: String,
+        params: Map<String, String>,
+        reason: String,
+        maskSensitive: Boolean,
+    ): String {
+        fun masked(value: String): String = value.map { char ->
+            if (char.isWhitespace()) char else '•'
+        }.joinToString("")
+        fun value(key: String, sensitive: Boolean = false): String = params[key].orEmpty().let {
+            shellArg(if (sensitive && maskSensitive) masked(it) else it)
+        }
+        fun option(key: String, sensitive: Boolean = false): String? =
+            params[key]?.let { "--$key ${value(key, sensitive)}" }
+
         val base = when (path) {
-            "/native/elevate" -> "elevate ${params["cap"].orEmpty()} ${params["access"].orEmpty()}"
-            "/native/notify" -> if (method == "DELETE") "notify-cancel" else "notify <redacted>"
+            "/native/elevate" -> "elevate ${value("cap")} ${value("access")}"
+            "/native/notify" -> if (method == "DELETE") "notify-cancel" else listOfNotNull(
+                "notify", value("title", true), params["body"]?.let { value("body", true) }
+            ).joinToString(" ")
             "/native/notify/list" -> "notify-list"
-            "/native/notify/system" -> "notify-dismiss"
-            "/native/notify/full-screen" -> "notify-full-screen <redacted>"
-            "/native/toast" -> "toast <redacted>"
+            "/native/notify/system" -> listOfNotNull("notify-dismiss", params["key"]?.let { value("key", true) }).joinToString(" ")
+            "/native/notify/full-screen" -> listOfNotNull(
+                "notify-full-screen", value("title", true), params["body"]?.let { value("body", true) }
+            ).joinToString(" ")
+            "/native/toast" -> "toast ${value("text", true)}"
             "/native/vibrate" -> "vibrate"
-            "/native/clipboard" -> if (method == "GET") "clip get" else "clip set <redacted>"
-            "/native/share" -> "share <redacted>"
-            "/native/open" -> "open <redacted>"
+            "/native/clipboard" -> if (method == "GET") "clip get" else "clip set ${value("text", true)}"
+            "/native/share" -> "share ${value("text", true)}"
+            "/native/open" -> "open ${value("url", true)}"
             "/native/device" -> "device"
             "/native/media/list" -> "media list"
-            "/native/media/read" -> "media get ${params["id"].orEmpty()}"
+            "/native/media/read" -> "media get ${value("id")}"
             "/native/mic/record" -> "mic record"
             "/native/camera/photo" -> "camera photo"
-            "/native/tts/speak" -> "tts say <redacted>"
-            "/native/tts/file" -> "tts file <redacted>"
+            "/native/tts/speak" -> "tts say ${value("text", true)}"
+            "/native/tts/file" -> "tts file ${value("text", true)}"
             "/native/tts/voices" -> "tts voices"
             "/native/calendar/list" -> "calendar list"
-            "/native/calendar/create" -> "calendar add <redacted>"
+            "/native/calendar/create" -> "calendar add ${value("title", true)}"
             "/native/contacts/list" -> "contacts list"
             "/native/location" -> "location"
             "/native/phone/info" -> "phone"
             "/native/sensors/list" -> "sensors list"
-            "/native/sensors/read" -> "sensors read ${params["id"] ?: params["sensor"].orEmpty()}"
+            "/native/sensors/read" -> "sensors read ${shellArg(params["id"] ?: params["sensor"].orEmpty())}"
             "/native/network" -> "network"
-            "/native/volume" -> if (method == "GET") "volume" else "volume set ${params["percent"].orEmpty()}"
-            "/native/ringer" -> "ringer ${params["mode"].orEmpty()}"
+            "/native/volume" -> if (method == "GET") "volume" else "volume set ${value("percent")}"
+            "/native/ringer" -> "ringer ${value("mode")}"
             "/native/settings" -> "settings"
-            "/native/settings/brightness" -> "settings brightness ${params["percent"].orEmpty()}"
-            "/native/settings/timeout" -> "settings timeout ${params["ms"].orEmpty()}"
-            "/native/settings/rotation" -> "settings rotation ${params["on"].orEmpty()}"
+            "/native/settings/brightness" -> "settings brightness ${value("percent")}"
+            "/native/settings/timeout" -> "settings timeout ${value("ms")}"
+            "/native/settings/rotation" -> "settings rotation ${value("on")}"
             "/native/install" -> "install"
             "/native/usage/list" -> "usage list"
             "/native/sms/list" -> "sms list"
-            "/native/sms/send" -> "sms send ${params["to"].orEmpty()} <redacted>"
+            "/native/sms/send" -> "sms send ${value("to", true)} ${value("body", true)}"
             else -> "$method $path"
         }
         val options = when (path) {
-            "/native/notify" -> listOf("id", "ongoing")
-            "/native/notify/list", "/native/sms/list" -> listOf("limit")
-            "/native/notify/system" -> listOf("all")
-            "/native/vibrate" -> listOf("ms", "amplitude")
-            "/native/media/list" -> listOf("type", "limit")
-            "/native/media/read" -> listOf("type")
-            "/native/mic/record" -> listOf("ms")
-            "/native/camera/photo" -> listOf("facing", "max")
-            "/native/tts/speak", "/native/tts/file" -> listOf("lang", "rate", "pitch")
-            "/native/calendar/list" -> listOf("days", "limit")
-            "/native/calendar/create" -> listOf("start", "end", "minutes")
-            "/native/contacts/list" -> listOf("limit")
-            "/native/location" -> listOf("maxAge", "wait")
-            "/native/volume" -> listOf("stream")
-            "/native/settings/brightness" -> listOf("auto")
-            "/native/usage/list" -> listOf("days", "limit")
+            "/native/notify" -> listOf(option("id"), option("ongoing"))
+            "/native/notify/list", "/native/sms/list" -> listOf(option("limit"))
+            "/native/notify/system" -> listOf(option("all"))
+            "/native/vibrate" -> listOf(option("ms"), option("amplitude"))
+            "/native/clipboard" -> listOf(option("label", true))
+            "/native/share" -> listOf(option("title", true))
+            "/native/media/list" -> listOf(option("type"), option("q", true), option("limit"))
+            "/native/media/read" -> listOf(option("type"))
+            "/native/mic/record" -> listOf(option("ms"))
+            "/native/camera/photo" -> listOf(option("facing"), option("max"))
+            "/native/tts/speak", "/native/tts/file" -> listOf(option("lang"), option("rate"), option("pitch"))
+            "/native/calendar/list" -> listOf(option("days"), option("limit"))
+            "/native/calendar/create" -> listOf(
+                option("start"), option("end"), option("minutes"),
+                option("location", true), option("description", true),
+            )
+            "/native/contacts/list" -> listOf(option("q", true), option("limit"))
+            "/native/location" -> listOf(option("maxAge"), option("wait"))
+            "/native/volume" -> listOf(option("stream"))
+            "/native/settings/brightness" -> listOf(option("auto"))
+            "/native/usage/list" -> listOf(option("days"), option("limit"))
             else -> emptyList()
-        }.mapNotNull { key -> params[key]?.let { "--$key ${shellArg(it)}" } }
+        }.filterNotNull()
         return (listOf("dsh-native", base.trim()) + options + listOf("--reason ${shellArg(reason)}")).joinToString(" ")
     }
 

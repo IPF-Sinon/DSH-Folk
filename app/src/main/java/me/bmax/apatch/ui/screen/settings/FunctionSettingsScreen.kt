@@ -51,6 +51,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.NavGraphs
+import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import java.io.File
@@ -705,7 +707,13 @@ internal fun DshSettingsScreen(
                     onOpenAllFilesSettings = { openAllFilesSettings() },
                     runtimeInstalled = runtimeInstalled,
                     runtimeVersion = runtimeState.runtimeVersion ?: "",
-                    onReinstallRuntime = { preserve -> DshRuntime.reinstallRuntime(preserve) },
+                    onReinstallRuntime = { preserve ->
+                        DshRuntime.reinstallRuntime(preserve)
+                        navigator.navigate(HomeScreenDestination) {
+                            popUpTo(NavGraphs.root)
+                            launchSingleTop = true
+                        }
+                    },
                     runtimeCheckRevision = runtimeCheckRevision,
                     onCheckRuntimeUpdateRequested = { runtimeCheckRevision++ },
                     onCheckRuntimeUpdate = { DshRuntime.checkRuntimeUpdate() },
