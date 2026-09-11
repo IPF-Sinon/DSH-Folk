@@ -24,6 +24,10 @@ on:
         default: 'stable'
         type: choice
         options: [ stable, beta ]
+      release_tag:
+        description: 'Override the release tag to publish to (default: runtime-latest / runtime-beta-latest from channel). Used to republish historical runtime tags.'
+        required: false
+        default: ''
       min_app_version:
         description: 'Minimum DSH-Folk app version required by this runtime (empty = take baseVersionName() from build.gradle.kts; none = no requirement)'
         required: false
@@ -96,7 +100,7 @@ jobs:
           NODE_VER: ${{ inputs.node_version }}
           TARGET_ARCH: ${{ matrix.arch }}
           OUT: ${{ github.workspace }}/out
-          RELEASE_TAG: ${{ inputs.channel == 'beta' && 'runtime-beta-latest' || 'runtime-latest' }}
+          RELEASE_TAG: ${{ inputs.release_tag != '' && inputs.release_tag || (inputs.channel == 'beta' && 'runtime-beta-latest' || 'runtime-latest') }}
           RELEASE_CHANNEL: ${{ inputs.channel }}
           MIN_APP_VERSION: ${{ needs.plan.outputs.min_app }}
         run: bash runtime-builder/build-rootfs.sh
@@ -130,7 +134,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARCH: ${{ matrix.arch }}
-          RELEASE_TAG: ${{ inputs.channel == 'beta' && 'runtime-beta-latest' || 'runtime-latest' }}
+          RELEASE_TAG: ${{ inputs.release_tag != '' && inputs.release_tag || (inputs.channel == 'beta' && 'runtime-beta-latest' || 'runtime-latest') }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" \

@@ -804,7 +804,7 @@
     <string name="dsh_log_speedtest_untested">not measured</string>
     <string name="dsh_log_source_chosen">Download source chosen: %1$s</string>
     <string name="dsh_log_fetching_meta">Fetching runtime information…</string>
-    <string name="dsh_log_download_start">Downloading runtime v%1$s (node %2$s · dsh %3$s)</string>
+    <string name="dsh_log_download_start">Downloading runtime %1$s (node %2$s · dsh %3$s)</string>
     <string name="dsh_log_download_done">Download complete (%1$d MB), verifying sha256…</string>
     <string name="dsh_log_sha_ok">sha256 verified, extracting…</string>
     <string name="dsh_log_install_done">Runtime installed</string>

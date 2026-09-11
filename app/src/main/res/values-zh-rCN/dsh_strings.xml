@@ -784,7 +784,7 @@
     <string name="dsh_log_speedtest_untested">未测速</string>
     <string name="dsh_log_source_chosen">已选择下载源: %1$s</string>
     <string name="dsh_log_fetching_meta">获取运行时信息…</string>
-    <string name="dsh_log_download_start">开始下载运行时 v%1$s（node %2$s · dsh %3$s）</string>
+    <string name="dsh_log_download_start">开始下载运行时 %1$s（node %2$s · dsh %3$s）</string>
     <string name="dsh_log_download_done">下载完成（%1$d MB），校验 sha256…</string>
     <string name="dsh_log_sha_ok">sha256 校验通过，开始解压安装…</string>
     <string name="dsh_log_install_done">运行时安装完成</string>

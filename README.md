@@ -115,6 +115,17 @@ bugreport 里的 dmesg/tombstones 段、以及首页的重启菜单需要它。�
   或应用更新弹窗已经弹出，运行时的提示会压后，等前者结束（已最新 / 失败）或用户关掉弹窗后再弹，
   避免两个「有更新」的弹窗叠在一起。
 
+预装插件时 pnpm 会刷一屏 `missing peer …` 警告，这是**预期的**：`@deepseek-ai/dsh-*`、`react`
+这些 peer 由 dsh 自己解析，从不装进 profile 的 `node_modules`（装进去反而会与宿主版本打架）。
+判断预装成没成看每个插件末尾的「预装完成 <包名>」与 `[DSH-Folk-exit] 0`，不是看这些警告。
+
+日志里 `dsh web: http://127.0.0.1:3080/?token=…` 那行是给 App 打开 WebUI 用的令牌，等同于这个实例
+的密码（局域网访问默认关闭，所以只在本机可达）—— 贴日志求助前记得把它删掉。
+
+容器里的 pnpm 固定 10.x，运行时构建时就把 `update-notifier=false` 写进 npmrc：pnpm 自己那句
+「Update available! 10.x → 12.x」会把用户引向 `pnpm add -g pnpm`，而 12.x 正是因为没有可执行的
+启动器而被撤掉的那个版本。
+
 应用测试版由 **Build DSH-Folk beta** 工作流发布（`workflow_dispatch`，填一个目标版本号如 `1.8.1`），
 tag 形如 `v1.8.1-beta.7`，标了 GitHub 的 prerelease。几个刻意的选择：
 
@@ -144,6 +155,11 @@ APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出
 产物发布到滚动 tag `runtime-latest`：arm64 是 `rootfs.tar.gz` + `metadata.json`，
 x86_64 是 `rootfs-x86_64.tar.gz` + `metadata-x86_64.json`（arm64 沿用无后缀的旧名以兼容存量版本）。
 应用按本机架构读取对应的 `metadata*.json` 决定下载什么。
+
+这个工作流还有一个 `release_tag` 输入（留空则按通道推导）：版本列表里那两个只在历史里存在的老 tag
+（`runtime-beta`、`runtime-0.1.1-rc.2`）就是用它**原地重发**的 —— 同一个 tag 换内容对已装用户不可检测，
+但「列表里点进去装出来的是当年那个坏掉的运行时」显然比什么都不做更糟。重发后版本串的 r 号会变，
+装过旧内容的用户因此至少能看到一次更新提示。
 
 运行时可以在 `metadata.json` 里声明 `minAppVersion`（构建时从 `build.gradle.kts` 的基准版本自动取，
 `workflow_dispatch` 也可手动覆盖）：低于该版本的应用会先被要求更新软件，而不是下载一个装不上的运行时。

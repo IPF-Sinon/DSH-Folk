@@ -248,6 +248,29 @@ PNPM_REAL_VERSION="$(node -p "require('$PNPM_PKG/package.json').version")"
 [ "$PNPM_REAL_VERSION" = "$PNPM_VERSION" ]
 echo "    pnpm = $PNPM_REAL_VERSION · 入口 = $PNPM_BIN_REL"
 
+# 关掉 pnpm 的「Update available! 10.x → 12.x」提示。
+#
+# 它不只是噪音：它明确写着 `pnpm add -g pnpm`，而 12.x 正是我们因为
+# 「postinstall 下载本机原生二进制 + 无 shebang 的启动器」而撤掉的那个包 ——
+# 用户照着它做会把容器里的插件安装能力弄坏。日志里出现一句把人引向已知坏
+# 版本的提示，比没有提示更糟。
+#
+# 两处都写：$PREFIX/etc/npmrc 是 npm 的全局配置（pnpm 按 npm 的 prefix 推导它），
+# /root/.npmrc 是容器里 HOME=/root 的用户配置 —— 前者覆盖任何调用，后者覆盖
+# 不继承 npm 前缀环境的调用。构建末尾会真的问一次 pnpm 自己读到了什么。
+for rc in "$ROOTFS/usr/local/etc/npmrc" "$ROOTFS/root/.npmrc"; do
+  mkdir -p "$(dirname "$rc")"
+  if [ -f "$rc" ] && grep -q '^[[:space:]]*update-notifier[[:space:]]*=' "$rc"; then
+    continue
+  fi
+  printf 'update-notifier=false\n' >> "$rc"
+done
+# 断言而不是假定：拿 runner 的 Node 跑 rootfs 里的 pnpm，让它自己回答配置值
+# （HOME 指到 rootfs 的 /root）。「以为配了、其实没读」正是 pnpm 11 迁移时的教训。
+NOTIFIER="$(cd "$ROOTFS" && HOME="$ROOTFS/root" node "$PNPM_PKG/$PNPM_BIN_REL" config get update-notifier 2>/dev/null | tr -d '\r')"
+[ "$NOTIFIER" = "false" ] || { echo "!! pnpm 没有读到 update-notifier=false（读到 ${NOTIFIER}）" >&2; exit 1; }
+echo "    pnpm 升级提示已关闭（update-notifier=false，由 pnpm 自己确认）"
+
 echo "==> [4/9] 安装 python3（无线 ADB 配对依赖）"
 # 无线 ADB 配对（AdbBridge / adb-pair.py）需要容器内的 python3，
 # 而 ubuntu-base 里没有它。手机上第一次配对才 apt install 的话：
