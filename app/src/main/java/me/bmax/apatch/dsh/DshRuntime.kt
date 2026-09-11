@@ -42,6 +42,15 @@ data class DshState(
     val port: Int = DshEnv.DEFAULT_PORT,
     val pid: Long? = null,
     val runtimeVersion: String? = null,
+    /**
+     * 已装运行时要求的最低 App 版本，当前 App 不满足（见 [DshRuntime.appSatisfies]）。
+     *
+     * 置位时首页与设置页的「启动 / 更新 / 重装」入口都要变成「请先更新应用」，
+     * 而不是让用户撞一串 node 堆栈。App 升级后 [DshRuntime.attach] 重算，自动清除。
+     */
+    val appUpdateRequired: Boolean = false,
+    /** [appUpdateRequired] 为 true 时，这份运行时要求的最低 App 版本（给人看）。 */
+    val requiredAppVersion: String? = null,
     val installed: Boolean = false,
     /**
      * 容器体积（字节），0 表示还没算过。
@@ -76,6 +85,19 @@ data class DshMeta(
     val dsh: String = "",
     val nodeVersion: String = "",
     val builtAt: String = "",
+    /** 这份运行时要求的最低 DSH-Folk App 版本；空 = 无要求（旧 metadata 兼容）。 */
+    val minAppVersion: String = "",
+)
+
+/**
+ * 运行时更新检查的结果。
+ *
+ * [version] 非空 = 远端有不同版本；[minAppVersion] 非空 = 那份新运行时还要求一个
+ * 比当前 App 更高的版本 —— 用户得**先更新应用**，而不是直接点「更新运行时」。
+ */
+data class RuntimeCheckResult(
+    val version: String? = null,
+    val minAppVersion: String = "",
 )
 
 /**
@@ -142,6 +164,33 @@ object DshRuntime {
      */
     val SEED_PLUGINS =
         listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager", "dsh-file-upload")
+
+    /**
+     * 预装包会往 loader 树里插入的 entry id（快速路径，用于「上游已内置同名能力就别装」）。
+     *
+     * 只列**确定**的映射；不在表里的包仍会装，装后由 [seedPlugins] 的重复 id 兜底检查
+     * 兜住 —— 那条路径按实际读到的 entry id 判断，不依赖这张表，所以表漏了也不会坏。
+     *
+     * dsh 0.1.5 起 `dsh-web-app` 自带 `file-upload` loader entry：再预装三方
+     * `dsh-file-upload` 会让整棵插件树报 `duplicate loader entry id` 而启动失败
+     * （1.8.3 真机升级运行时后启动报错的根因，见上游 deepseek-harness#3263）。
+     */
+    private val SEED_ENTRY_IDS = mapOf("dsh-file-upload" to "file-upload")
+
+    /** 启动日志里「重复 loader entry id」的行（0.1.5 内置能力与三方插件重名时出现）。 */
+    private val DUP_ENTRY_RE = Regex("duplicate loader entry id[: ]+([A-Za-z0-9_.@/-]+)", RegexOption.IGNORE_CASE)
+
+    /**
+     * 当前 App 的 semver 核心段（去掉 `-beta.N` 这类预发布后缀）。
+     *
+     * 最低版本比较只看核心段：`1.8.3-beta.20` 与 `1.8.3` 在功能上同代，按完整
+     * semver 比会把所有测试版用户误拦在 `minAppVersion = 1.8.3` 之外。
+     */
+    private fun appCoreVersion(): String = me.bmax.apatch.BuildConfig.VERSION_NAME.substringBefore('-')
+
+    /** App 是否满足运行时的最低版本要求；空要求恒为满足（旧 metadata）。 */
+    private fun appSatisfies(minAppVersion: String): Boolean =
+        minAppVersion.isBlank() || compareVersions(appCoreVersion(), minAppVersion) >= 0
 
     /**
      * 「预装补修」轮次（见 [applySeedRepair]）。
@@ -597,11 +646,16 @@ object DshRuntime {
         init(context)
         val installed = DshEnv.isRuntimeInstalled(appContext)
         val cachedSize = prefs().getLong(DshEnv.KEY_ROOTFS_SIZE, 0L)
+        // 已装运行时的最低 App 版本要求是**持久化**的：App 升级/降级后（prefs 保留）
+        // 或离线时都要能判断「这份运行时还能不能用」，不能依赖现查 metadata。
+        val minApp = prefs().getString(DshEnv.KEY_RUNTIME_MIN_APP, null).orEmpty()
         _state.update {
             it.copy(
                 installed = installed,
                 port = port(),
                 runtimeVersion = prefs().getString(DshEnv.KEY_RUNTIME_VERSION, null),
+                appUpdateRequired = installed && !appSatisfies(minApp),
+                requiredAppVersion = minApp.ifEmpty { null },
                 rootfsSizeBytes = if (installed) cachedSize else 0L,
                 phase = if (installed) it.phase else DshPhase.NOT_READY,
             )
@@ -1170,54 +1224,84 @@ object DshRuntime {
         // 修好根因后补修历史失败（见 KEY_SEED_REPAIR_REV）
         applySeedRepair(p, attempted, installed)
 
+        // 上游已内置同名 entry id 的预装包直接跳过：dsh 0.1.5 起 dsh-web-app 自带
+        // file-upload loader entry，再预装 dsh-file-upload 会让整棵插件树报
+        // duplicate loader entry id 而启动失败（1.8.3 真机故障的根因）。
+        // 判据是**实际读到的 entry id**（含核心包），不是碰运气 —— 表里的映射只是
+        // 快速路径，漏了也由下面的重复 id 兜底检查兜住。
+        val occupied = runCatching { DshPluginRepo.pluginEntries(includeCore = true) }
+            .getOrElse { emptyMap() }.values.flatten().toSet()
+        val builtInSkip = SEED_ENTRY_IDS.filterValues { it in occupied }.keys
+        if (builtInSkip.isNotEmpty()) {
+            attempted.addAll(builtInSkip)
+            persistSeeded(attempted)
+            logInfo(R.string.dsh_log_seed_skip_builtin, joinForLog(builtInSkip))
+        }
+
         val todo = SEED_PLUGINS.filter { it !in attempted }
-        if (todo.isEmpty()) return
-
         val missing = todo.filter { it !in installed }
-        if (missing.isEmpty()) {
+        if (todo.isNotEmpty() && missing.isEmpty()) {
             persistSeeded(attempted + todo)
-            return
+        } else if (missing.isNotEmpty()) {
+            _state.update {
+                it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_plugin_seeding))
+            }
+            for (pkg in missing) {
+                logInfo(R.string.dsh_log_seeding, pkg)
+                var out = runCatching {
+                    DshPluginRepo.install(pkg, onLine = { line -> appendLog(line) })
+                }.getOrElse { str(R.string.dsh_log_seed_exception, it.message ?: it.javaClass.simpleName) }
+                var code = exitCodeOf(out)
+
+                // pnpm 拦下依赖的构建脚本时 **不是**「装不上」，而是「等人点头」：
+                // 它以退出码 1 结束，于是 dsh 不 reconcile bundles，插件躺在 node_modules 里
+                // 却进不了 profile 的 bundles —— 界面上就是「预装了但未生效」（1.7.6 的
+                // dsh-file-upload 正是这样：它的传递依赖 sharp / tesseract.js 带 install 脚本）。
+                //
+                // 交互式 `pnpm approve-builds` 在容器里跑不了，而预装发生在启动路径上、
+                // 根本没有人可问，所以这里自动放行**这一次预装自己拉进来的**构建脚本并重试。
+                // 放行范围仅限 pnpm 点名的那几个包，不是全局开关。
+                if (code != 0) {
+                    val pending = DshPluginRepo.pendingBuildApproval(out)
+                    if (pending.isNotEmpty()) {
+                        logInfo(R.string.dsh_log_seed_builds_blocked, joinForLog(pending))
+                        out = runCatching {
+                            DshPluginRepo.install(
+                                pkg,
+                                onLine = { line -> appendLog(line) },
+                                allowBuilds = pending,
+                            )
+                        }.getOrElse { str(R.string.dsh_log_seed_retry_exception, it.message ?: it.javaClass.simpleName) }
+                        code = exitCodeOf(out)
+                    }
+                }
+                if (code == 0) logInfo(R.string.dsh_log_seed_done, pkg)
+                else logWarn(R.string.dsh_log_seed_failed, pkg)
+            }
+            persistSeeded(attempted + todo)
+            // 预装会大幅改变 node_modules 体积，顺手重算一次缓存
+            refreshRootfsSize()
+            _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
         }
 
-        _state.update {
-            it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_plugin_seeding))
-        }
-        for (pkg in missing) {
-            logInfo(R.string.dsh_log_seeding, pkg)
-            var out = runCatching {
-                DshPluginRepo.install(pkg, onLine = { line -> appendLog(line) })
-            }.getOrElse { str(R.string.dsh_log_seed_exception, it.message ?: it.javaClass.simpleName) }
-            var code = exitCodeOf(out)
-
-            // pnpm 拦下依赖的构建脚本时 **不是**「装不上」，而是「等人点头」：
-            // 它以退出码 1 结束，于是 dsh 不 reconcile bundles，插件躺在 node_modules 里
-            // 却进不了 profile 的 bundles —— 界面上就是「预装了但未生效」（1.7.6 的
-            // dsh-file-upload 正是这样：它的传递依赖 sharp / tesseract.js 带 install 脚本）。
-            //
-            // 交互式 `pnpm approve-builds` 在容器里跑不了，而预装发生在启动路径上、
-            // 根本没有人可问，所以这里自动放行**这一次预装自己拉进来的**构建脚本并重试。
-            // 放行范围仅限 pnpm 点名的那几个包，不是全局开关。
-            if (code != 0) {
-                val pending = DshPluginRepo.pendingBuildApproval(out)
-                if (pending.isNotEmpty()) {
-                    logInfo(R.string.dsh_log_seed_builds_blocked, joinForLog(pending))
-                    out = runCatching {
-                        DshPluginRepo.install(
-                            pkg,
-                            onLine = { line -> appendLog(line) },
-                            allowBuilds = pending,
-                        )
-                    }.getOrElse { str(R.string.dsh_log_seed_retry_exception, it.message ?: it.javaClass.simpleName) }
-                    code = exitCodeOf(out)
+        // 装后兜底（每次预装路径都跑，包括 todo 为空时 —— 运行时升级把上游内置能力
+        // 带进来后，历史预装包也可能变成冲突源）：按实际读到的 entry id 找重复，
+        // 卸载其中的预装包，保住插件树能启动。核心包与用户自装包绝不自动动。
+        runCatching {
+            val after = DshPluginRepo.pluginEntries(includeCore = true)
+            val byId = after.entries
+                .flatMap { (pkg, ids) -> ids.map { id -> id to pkg } }
+                .groupBy({ it.first }, { it.second })
+            for ((id, pkgs) in byId) {
+                if (pkgs.size < 2) continue
+                val conflicts = pkgs.distinct().filter { it in SEED_PLUGINS }
+                if (conflicts.isEmpty()) continue
+                for (pkg in conflicts) {
+                    logWarn(R.string.dsh_log_dup_entry_removed, pkg, id)
+                    DshPluginRepo.uninstall(pkg, onLine = { line -> appendLog(line) })
                 }
             }
-            if (code == 0) logInfo(R.string.dsh_log_seed_done, pkg)
-            else logWarn(R.string.dsh_log_seed_failed, pkg)
         }
-        persistSeeded(attempted + todo)
-        // 预装会大幅改变 node_modules 体积，顺手重算一次缓存
-        refreshRootfsSize()
-        _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
     }
 
     /** 从 dsh plugin 的输出里取真实退出码；没有标记行（超时/容器没起来）返回 null。 */
@@ -1258,13 +1342,23 @@ object DshRuntime {
     }
 
     /**
-     * 启动并等待就绪；如果这一轮触发了 proroot → proot 回退，就用 proot
-     * 再试一次（只重试一次：proot 也起不来就是真错了，再试无意义）。
+     * 启动并等待就绪；插件树冲突可自动修复时先卸载冲突包再重试一次，然后才是
+     * proroot → proot 回退（只重试一次：proot 也起不来就是真错了，再试无意义）。
      */
     private suspend fun startAndAwait() {
         prorootFellBack = false
         startServer()
         awaitReady()
+        // 上游内置的 entry id 与预装三方包重名（0.1.5 的 file-upload）会让整棵插件树
+        // 起不来。自动卸载冲突的预装包后重试一次 —— 不修的话用户只能看到一行
+        // duplicate loader entry id 的 node 堆栈，完全不知道下一步该干什么。
+        if (_state.value.phase == DshPhase.ERROR && repairDuplicateLoaderEntry()) {
+            logInfo(R.string.dsh_log_dup_entry_retry)
+            stopServer()
+            delay(500)
+            startServer()
+            awaitReady()
+        }
         if (!prorootFellBack) return
         prorootFellBack = false
         logInfo(R.string.dsh_log_retry_with_proot)
@@ -1272,6 +1366,33 @@ object DshRuntime {
         delay(500)
         startServer()
         awaitReady()
+    }
+
+    /**
+     * 尝试自愈「上游内置的 entry id 与预装三方包重名」导致的插件树加载失败。
+     *
+     * 判据是启动日志里的 `duplicate loader entry id: X`。只卸载**预装清单里**声明了
+     * 该 id 的包（核心 `@deepseek-ai/*` 包与用户自装的包绝不自动动 —— 冲突时保留
+     * 上游内置，因为旧 App 没有它对应的适配逻辑）。返回是否执行了卸载，调用方据此
+     * 决定是否重试一次启动。已修复过的不重复修（同一轮启动只重试一次）。
+     */
+    private suspend fun repairDuplicateLoaderEntry(): Boolean {
+        val tail = runCatching {
+            LogStore.named(DshEnv.serverLog(appContext)).tail(400)
+        }.getOrDefault("")
+        val id = DUP_ENTRY_RE.find(tail)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
+            ?: return false
+        val entries = runCatching { DshPluginRepo.pluginEntries() }.getOrElse { emptyMap() }
+        val culprits = entries.entries
+            .filter { (_, ids) -> id in ids }
+            .map { it.key }
+            .filter { it in SEED_PLUGINS }
+        if (culprits.isEmpty()) return false
+        for (pkg in culprits) {
+            logWarn(R.string.dsh_log_dup_entry_repair, pkg, id)
+            DshPluginRepo.uninstall(pkg, onLine = { line -> appendLog(line) })
+        }
+        return true
     }
 
     /** 下载/解压/启动中：不接受新的引导请求。 */
@@ -1467,6 +1588,15 @@ object DshRuntime {
             fail(str(R.string.dsh_err_arch_mismatch, meta.arch, want))
             return
         }
+        // 最低 App 版本闸门：在下载之前拦住（同 startServer 里那道闸门）。置位
+        // appUpdateRequired 让 UI 显示「请先更新应用」，而不是下 150MB 装完才炸。
+        if (meta.minAppVersion.isNotEmpty() && !appSatisfies(meta.minAppVersion)) {
+            _state.update {
+                it.copy(appUpdateRequired = true, requiredAppVersion = meta.minAppVersion)
+            }
+            fail(str(R.string.dsh_runtime_min_app_required, meta.minAppVersion))
+            return
+        }
         // 空间检查放在下载之前：rootfs 解压后约为压缩包的 3 倍，加上压缩包自身
         // 需要约 4 倍余量。等下载完再查等于白下 100 多 MB。
         if (meta.sizeBytes > 0) {
@@ -1509,7 +1639,12 @@ object DshRuntime {
             return
         }
         logInfo(R.string.dsh_log_install_done)
-        prefs().edit().putString(DshEnv.KEY_RUNTIME_VERSION, meta.version).apply()
+        // 要求与版本一起落盘：下一次 attach() 才能离线判断「这份运行时需不需要
+        // 更新的 App」。App 升级后 compareVersions 重算，满足即自动放行。
+        prefs().edit()
+            .putString(DshEnv.KEY_RUNTIME_VERSION, meta.version)
+            .putString(DshEnv.KEY_RUNTIME_MIN_APP, meta.minAppVersion)
+            .apply()
         // phase 必须回 NOT_READY，不能直接置 STARTING：[bootstrap] 下一步就调
         // [startServer]，而它的防重入守卫会把 STARTING 当成「已经在启动了」直接
         // return——首次安装后服务永远起不来就是这个自我拦截造成的。
@@ -1545,6 +1680,7 @@ object DshRuntime {
             dsh = json.optString("dsh", ""),
             nodeVersion = json.optString("nodeVersion", ""),
             builtAt = json.optString("builtAt", ""),
+            minAppVersion = json.optString("minAppVersion", ""),
         )
     }.getOrNull()
 
@@ -1555,16 +1691,22 @@ object DshRuntime {
      * dsh 版本、ubuntu 代号和 rootfs 修订号，semver 比较对它没有意义；而任何一段
      * 变了都值得重装。r2 就是这么来的 —— 内容修了但 dsh 版本没动。
      *
-     * @return 远端版本串（有更新时），null = 已是最新或查不到
+     * @return 远端有不同版本时带 [RuntimeCheckResult.version]；若那份新运行时还要求
+     * 更高的 App 版本，[RuntimeCheckResult.minAppVersion] 一并带上（UI 据此改提示
+     * 「先更新应用」而不是给「更新运行时」按钮）。查不到 / 已最新 = 空结果。
      */
-    suspend fun checkRuntimeUpdate(): String? = withContext(Dispatchers.IO) {
-        if (!DshEnv.isRuntimeInstalled(appContext)) return@withContext null
-        val meta = fetchMeta() ?: return@withContext null
+    suspend fun checkRuntimeUpdate(): RuntimeCheckResult = withContext(Dispatchers.IO) {
+        if (!DshEnv.isRuntimeInstalled(appContext)) return@withContext RuntimeCheckResult()
+        val meta = fetchMeta() ?: return@withContext RuntimeCheckResult()
         val local = prefs().getString(DshEnv.KEY_RUNTIME_VERSION, null).orEmpty()
         // 本地版本未知（早期版本装的，没记过）时不谎报有更新：重装要重下 150MB，
         // 不能靠猜就让用户付这个代价
-        if (local.isEmpty()) return@withContext null
-        if (meta.version == local) null else meta.version
+        if (local.isEmpty()) return@withContext RuntimeCheckResult()
+        if (meta.version == local) RuntimeCheckResult()
+        else RuntimeCheckResult(
+            version = meta.version,
+            minAppVersion = if (appSatisfies(meta.minAppVersion)) "" else meta.minAppVersion,
+        )
     }
 
     /**
@@ -2146,6 +2288,16 @@ object DshRuntime {
         if (serverProcess?.isAlive == true) return
         if (!DshEnv.isRuntimeInstalled(appContext)) {
             _state.update { it.copy(phase = DshPhase.NOT_READY, message = str(R.string.dsh_msg_not_installed)) }
+            return
+        }
+        // 最低 App 版本闸门：运行时要求比当前 App 更高的版本时，直接拦下并指路去
+        // 更新应用，而不是 exec 一个注定起不来的 dsh —— 0.1.5 起上游内置的 entry id
+        // 会与旧 App 预装的三方插件冲突，而旧 App 既没有预装跳过、也没有自愈逻辑。
+        val minApp = _state.value.requiredAppVersion
+        if (_state.value.appUpdateRequired && minApp != null) {
+            val detail = str(R.string.dsh_runtime_min_app_required, minApp)
+            appendLog("! $detail")
+            _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
             return
         }
         DshEnv.dshHome(appContext).mkdirs()

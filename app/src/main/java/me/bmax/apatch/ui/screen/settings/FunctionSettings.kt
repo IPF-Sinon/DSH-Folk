@@ -68,6 +68,7 @@ import me.bmax.apatch.dsh.DshAutostart
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.dsh.RuntimeCheckResult
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.DshWebUi
@@ -171,11 +172,22 @@ fun FunctionSettingsContent(
     runtimeInstalled: Boolean,
     /** 已安装的运行时版本；未安装时为空。 */
     runtimeVersion: String,
+    /**
+     * 已装运行时要求的最低 App 版本，当前 App 不满足。
+     *
+     * 置位时整张运行时卡（启动/更新/重装入口）变成「请先更新应用」，否则旧 App 会
+     * 撞上一串 node 堆栈（0.1.5 起上游内置的 entry id 与旧 App 预装插件冲突）。
+     */
+    appUpdateRequired: Boolean,
+    /** [appUpdateRequired] 为 true 时这份运行时要求的最低版本（给人看）。 */
+    requiredAppVersion: String?,
+    /** 跳去 设置 → 常规 → 检查更新（App 自身的更新）。 */
+    onGoUpdateApp: () -> Unit,
     /** 重新下载并覆盖容器。 */
     onReinstallRuntime: (Boolean) -> Unit,
     runtimeCheckRevision: Int,
     onCheckRuntimeUpdateRequested: () -> Unit,
-    onCheckRuntimeUpdate: suspend () -> String?,
+    onCheckRuntimeUpdate: suspend () -> RuntimeCheckResult,
     onImportRuntime: () -> Unit,
     runtimeBeta: Boolean,
     onRuntimeBetaChange: (Boolean) -> Unit,
@@ -698,7 +710,7 @@ fun FunctionSettingsContent(
 
                     // 有新运行时可用时明确说出来。之前完全没有这个检测：
                     // r1 的 git 依赖不全，修好了也没人告诉用户该更新。
-                    var latest by remember { mutableStateOf<String?>(null) }
+                    var latest by remember { mutableStateOf<RuntimeCheckResult?>(null) }
                     var checking by remember { mutableStateOf(false) }
                     LaunchedEffect(runtimeInstalled, runtimeVersion, runtimeBeta, runtimeCheckRevision) {
                         if (!runtimeInstalled) return@LaunchedEffect
@@ -707,36 +719,75 @@ fun FunctionSettingsContent(
                         latest = runCatching { onCheckRuntimeUpdate() }.getOrNull()
                         checking = false
                     }
-                    latest?.let {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_runtime_update_available, it),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
 
-                    Spacer(Modifier.height(8.dp))
+                    // 重装确认/全新重装确认：声明在卡片层而不是下面的分支里 ——
+                    // 两个 AlertDialog 在分支外渲染，变量必须在同一层可见。
                     var reinstallChoice by remember { mutableStateOf(false) }
                     var cleanConfirming by remember { mutableStateOf(false) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { onCheckRuntimeUpdateRequested() },
-                            enabled = runtimeInstalled && !checking,
-                        ) {
-                            if (checking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                            else Text(stringResource(R.string.dsh_runtime_update_action))
-                        }
-                        latest?.let {
-                            OutlinedButton(onClick = { onReinstallRuntime(true) }) {
-                                Text(stringResource(R.string.dsh_runtime_update_go))
+
+                    // 已装运行时要求更高的 App 版本：整张卡先变成「请先更新应用」。
+                    // 继续给「更新/重装」按钮没有意义 —— 那两条路会立刻被闸门拦下。
+                    if (appUpdateRequired) {
+                        requiredAppVersion?.let { req ->
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = stringResource(R.string.dsh_runtime_min_app_required, req),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            OutlinedButton(onClick = onGoUpdateApp) {
+                                Text(stringResource(R.string.dsh_runtime_min_app_go_update))
                             }
                         }
-                        OutlinedButton(onClick = { reinstallChoice = true }, enabled = runtimeInstalled) {
-                            Text(stringResource(R.string.dsh_runtime_reinstall))
+                    } else {
+                        latest?.let { result ->
+                            if (result.minAppVersion.isNotEmpty()) {
+                                // 有新运行时，但它要求更新的 App：同样先更新应用
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = stringResource(R.string.dsh_runtime_update_requires_app, result.minAppVersion),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            } else {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = stringResource(R.string.dsh_runtime_update_available, result.version.orEmpty()),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                         }
-                        OutlinedButton(onClick = onImportRuntime) {
-                            Text(stringResource(R.string.dsh_runtime_import))
+
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { onCheckRuntimeUpdateRequested() },
+                                enabled = runtimeInstalled && !checking,
+                            ) {
+                                if (checking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                else Text(stringResource(R.string.dsh_runtime_update_action))
+                            }
+                            latest?.let { result ->
+                                // 新运行时要求更高 App 版本时不给「更新运行时」按钮：
+                                // 点了也是被闸门拦下，不如直接指路去更新应用
+                                if (result.minAppVersion.isEmpty()) {
+                                    OutlinedButton(onClick = { onReinstallRuntime(true) }) {
+                                        Text(stringResource(R.string.dsh_runtime_update_go))
+                                    }
+                                } else {
+                                    OutlinedButton(onClick = onGoUpdateApp) {
+                                        Text(stringResource(R.string.dsh_runtime_min_app_go_update))
+                                    }
+                                }
+                            }
+                            OutlinedButton(onClick = { reinstallChoice = true }, enabled = runtimeInstalled) {
+                                Text(stringResource(R.string.dsh_runtime_reinstall))
+                            }
+                            OutlinedButton(onClick = onImportRuntime) {
+                                Text(stringResource(R.string.dsh_runtime_import))
+                            }
                         }
                     }
                     Spacer(Modifier.height(8.dp))

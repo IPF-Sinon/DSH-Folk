@@ -129,6 +129,9 @@ and its artifacts are published to the rolling tag `runtime-latest`: arm64 uses 
 while x86_64 uses `rootfs-x86_64.tar.gz` + `metadata-x86_64.json` (arm64 retains the legacy unsuffixed names for compatibility with existing versions).
 The app reads the corresponding `metadata*.json` for the local architecture to decide what to download.
 
+A runtime can declare `minAppVersion` in its `metadata.json` (auto-detected from the base version in `build.gradle.kts` at build time, manually overridable via the `workflow_dispatch` input): if the app is older than that requirement, it is asked to update the software first instead of downloading a runtime it cannot run.
+The requirement of an installed runtime is persisted and released automatically after the app is upgraded; an empty field means no requirement, keeping old metadata compatible.
+
 ## What's New
 
 The first launch after an upgrade shows a one-time “What's New” dialog listing what changed in that version. It and the first-launch guide **share the same dialog shell**

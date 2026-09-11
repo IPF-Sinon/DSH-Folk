@@ -24,6 +24,10 @@ on:
         default: 'stable'
         type: choice
         options: [ stable, beta ]
+      min_app_version:
+        description: 'Minimum DSH-Folk app version required by this runtime (empty = take baseVersionName() from build.gradle.kts)'
+        required: false
+        default: ''
       publish:
         description: 'Publish to the selected runtime release'
         required: false
@@ -40,7 +44,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       arches: ${{ steps.set.outputs.arches }}
+      min_app: ${{ steps.minapp.outputs.min_app_version }}
     steps:
+      - uses: actions/checkout@v5
+
+      # 运行时要求的最低 App 版本：输入优先，留空则取仓库 build.gradle.kts 的
+      # baseVersionName() —— 运行时与 App 同源发布时要求自动对齐，不会漂移。
+      - id: minapp
+        env:
+          REQUESTED: ${{ inputs.min_app_version }}
+        run: |
+          V="$REQUESTED"
+          if [ -z "$V" ]; then
+            V=$(grep -oP 'fun baseVersionName\(\): String = "\K[^"]+' build.gradle.kts | head -1 || true)
+          fi
+          echo "min_app_version=$V" >> "$GITHUB_OUTPUT"
+          echo "minimum app version: ${V:-(none)}"
+
       - id: set
         run: |
           case "${{ inputs.arch }}" in
@@ -75,6 +95,7 @@ jobs:
           OUT: ${{ github.workspace }}/out
           RELEASE_TAG: ${{ inputs.channel == 'beta' && 'runtime-beta-latest' || 'runtime-latest' }}
           RELEASE_CHANNEL: ${{ inputs.channel }}
+          MIN_APP_VERSION: ${{ needs.plan.outputs.min_app }}
         run: bash runtime-builder/build-rootfs.sh
 
       - name: Summarize

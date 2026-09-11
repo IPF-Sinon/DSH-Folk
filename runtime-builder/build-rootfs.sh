@@ -31,6 +31,18 @@ ROOTFS_REV="${ROOTFS_REV:-2}"
 WORK="${WORK:-/tmp/dsh-runtime}"
 OUT="${OUT:-$PWD/out}"
 
+# 这份运行时**要求的最低 DSH-Folk App 版本**，写进 metadata.json 的 minAppVersion。
+#
+# 为什么要有这个字段：rootfs 里的 dsh 会随上游升级而改变行为，而 App 侧的适配
+# （预装哪些插件、怎么修上游内置能力与三方插件的冲突、怎么 patch web app）都写在
+# App 里。App 太旧时，用户拿到一个"能装但起不来"的运行时，看到的是一串 node
+# 堆栈 —— 而不是"请先更新应用"。声明了这条要求，旧 App 会在下载之前就被拦住。
+#
+# 空串 = 不声明（metadata 里不出现该字段），旧 App 照样能用这份运行时。
+# CI 默认取仓库 build.gradle.kts 的 baseVersionName()，即"构建这份运行时的那个 App 版本"，
+# 所以只要运行时与 App 同源，要求就自动对齐，不需要人工维护一个会漂移的常量。
+MIN_APP_VERSION="${MIN_APP_VERSION:-}"
+
 case "$RELEASE_CHANNEL" in
   stable)
     VERSION_CHANNEL_SUFFIX=""
@@ -393,6 +405,13 @@ echo "==> [9/9] 生成 metadata${ASSET_SUFFIX}.json"
 REPO="${GITHUB_REPOSITORY:-IPF-Sinon/DSH-Folk}"
 TAG="${RELEASE_TAG:-$CHANNEL_RELEASE_TAG}"
 ASSET="https://github.com/${REPO}/releases/download/${TAG}/rootfs${ASSET_SUFFIX}.tar.gz"
+# 条件字段：用「前置逗号 + 换行」拼进上一行末尾，未声明时连空行都不留（JSON 里
+# 多一个空行没问题，但生成的 metadata 是要被人工读的，不该有噪声）。
+if [ -n "$MIN_APP_VERSION" ]; then
+  MIN_APP_LINE=$'\n'"  \"minAppVersion\": \"${MIN_APP_VERSION}\","
+else
+  MIN_APP_LINE=""
+fi
 cat > "$OUT/metadata${ASSET_SUFFIX}.json" <<EOF
 {
   "version": "${DSH_REAL_VERSION}-ubuntu${UBUNTU_RELEASE}-r${ROOTFS_REV}${VERSION_CHANNEL_SUFFIX}",
@@ -405,7 +424,7 @@ cat > "$OUT/metadata${ASSET_SUFFIX}.json" <<EOF
   ],
   "arch": "${ANDROID_ABI}",
   "dsh": "${DSH_REAL_VERSION}",
-  "nodeVersion": "${NODE_VER}",
+  "nodeVersion": "${NODE_VER}",${MIN_APP_LINE}
   "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF

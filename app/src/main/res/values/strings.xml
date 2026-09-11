@@ -346,6 +346,8 @@
         <item>Permission-call records now show newest-first commands, reasons, access levels, and results; sensitive arguments are masked by default.</item>
         <item>Runtime management now supports update checks, preserved or clean reinstall, trusted local import, and an opt-in beta runtime channel that is off by default.</item>
         <item>App update checks race GitHub direct access and several mirrors concurrently to obtain a valid result faster.</item>
+        <item>Runtimes can now declare a minimum app version. If the installed runtime needs a newer app, start, update, and reinstall actions point you to the app update instead of failing.</item>
+        <item>Fixed startup failure after upgrading to dsh 0.1.5: upstream now bundles the file-upload capability that conflicts with the preinstalled plugin. The app detects the conflict, skips or removes the preinstall, and repairs broken installs automatically.</item>
     </string-array>
 
     

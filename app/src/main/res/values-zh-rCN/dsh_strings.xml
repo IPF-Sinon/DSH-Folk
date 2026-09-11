@@ -329,6 +329,9 @@
     <string name="dsh_runtime_not_installed">尚未安装 —— 在首页启动服务即会下载</string>
     <string name="dsh_runtime_reinstall">重装运行时</string>
     <string name="dsh_runtime_update_available">可更新到 %1$s</string>
+    <string name="dsh_runtime_update_requires_app">新运行时要求 DSH-Folk %1$s 或更高版本，请先更新应用。</string>
+    <string name="dsh_runtime_min_app_required">此运行时要求 DSH-Folk %1$s 或更高版本，请先更新应用。</string>
+    <string name="dsh_runtime_min_app_go_update">去检查更新</string>
     <string name="dsh_runtime_update_go">更新运行时</string>
     <string name="dsh_runtime_reinstall_confirm_title">重装运行时？</string>
     <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并替换容器系统文件。现有会话、已装插件、ADB 密钥、DSH 配置及插件依赖数据都会保留；即使替换过程被中断，下次启动也会自动恢复暂存数据。开始前会先停止服务。</string>
@@ -808,6 +811,10 @@
     <string name="dsh_log_seed_failed">预装失败 %1$s（可稍后在插件商店手动安装）</string>
     <string name="dsh_log_seed_exception">预装异常: %1$s</string>
     <string name="dsh_log_seed_retry_exception">预装重试异常: %1$s</string>
+    <string name="dsh_log_seed_skip_builtin">上游已内置以下预装插件的同名能力，跳过安装：%1$s</string>
+    <string name="dsh_log_dup_entry_removed">检测到重复的插件入口 id %2$s，已卸载冲突的预装插件 %1$s</string>
+    <string name="dsh_log_dup_entry_repair">检测到重复的插件入口 id %2$s（上游已内置），卸载预装插件 %1$s 后重试启动</string>
+    <string name="dsh_log_dup_entry_retry">插件入口冲突已修复，正在重试启动</string>
     <string name="dsh_log_dsh_missing_in_container">容器内找不到 dsh，请在设置中重装运行时</string>
     <!-- ── 容器内插件操作的日志（DshPluginRepo） ──────────────── -->
     <string name="dsh_plug_log_no_pkg_toggle">包名为空，无法切换</string>

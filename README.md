@@ -129,6 +129,10 @@ APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出
 x86_64 是 `rootfs-x86_64.tar.gz` + `metadata-x86_64.json`（arm64 沿用无后缀的旧名以兼容存量版本）。
 应用按本机架构读取对应的 `metadata*.json` 决定下载什么。
 
+运行时可以在 `metadata.json` 里声明 `minAppVersion`（构建时从 `build.gradle.kts` 的基准版本自动取，
+`workflow_dispatch` 也可手动覆盖）：低于该版本的应用会先被要求更新软件，而不是下载一个装不上的运行时。
+已装运行时的要求会持久化，App 升级后自动放行；空字段 = 无要求，兼容旧 metadata。
+
 ## 更新说明
 
 升级之后第一次打开会弹一次「本次更新」，列出这一版改了什么。它和首启引导**共用同一个对话框壳**

@@ -347,6 +347,9 @@
     <string name="dsh_runtime_not_installed">Not installed yet — start the service on the home page to download it</string>
     <string name="dsh_runtime_reinstall">Reinstall runtime</string>
     <string name="dsh_runtime_update_available">Update available: %1$s</string>
+    <string name="dsh_runtime_update_requires_app">The new runtime requires DSH-Folk %1$s or newer. Update the app first.</string>
+    <string name="dsh_runtime_min_app_required">This runtime requires DSH-Folk %1$s or newer. Please update the app first.</string>
+    <string name="dsh_runtime_min_app_go_update">Check for app update</string>
     <string name="dsh_runtime_update_go">Update runtime</string>
     <string name="dsh_runtime_reinstall_confirm_title">Reinstall the runtime?</string>
     <string name="dsh_runtime_reinstall_confirm_text">This downloads the runtime again (about 140 MB) and replaces the container system files. Existing sessions, installed plugins, ADB keys, DSH configuration, and plugin dependency data are preserved; if replacement is interrupted, the staged data is restored on the next launch. The service stops first.</string>
@@ -828,6 +831,10 @@
     <string name="dsh_log_seed_failed">Could not pre-install %1$s (you can install it later from the plugin store)</string>
     <string name="dsh_log_seed_exception">Pre-install error: %1$s</string>
     <string name="dsh_log_seed_retry_exception">Pre-install retry error: %1$s</string>
+    <string name="dsh_log_seed_skip_builtin">Upstream already provides the same capability for these preinstall plugins; skipping: %1$s</string>
+    <string name="dsh_log_dup_entry_removed">Duplicate plugin entry id %2$s detected; uninstalled conflicting preinstall plugin %1$s</string>
+    <string name="dsh_log_dup_entry_repair">Duplicate plugin entry id %2$s (built into upstream); uninstalling preinstall plugin %1$s and retrying</string>
+    <string name="dsh_log_dup_entry_retry">Plugin entry conflict repaired; retrying start</string>
     <string name="dsh_log_dsh_missing_in_container">Could not find dsh inside the container; please reinstall the runtime in Settings</string>
     <!-- ── 容器内插件操作的日志（DshPluginRepo） ────────────────
          都带 [DSH-Folk] 前缀，与 pnpm/dsh 自己的输出区分开。 -->

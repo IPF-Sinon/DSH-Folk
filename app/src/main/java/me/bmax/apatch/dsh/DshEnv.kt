@@ -109,6 +109,14 @@ object DshEnv {
     const val KEY_PORT = "dsh_port"
     const val KEY_RUNTIME_VERSION = "runtime_version"
 
+    /**
+     * 已装运行时要求的最低 App 版本（安装成功时从 metadata 落盘）。
+     *
+     * 必须持久化而不是每次现查：App 升级/降级后、或离线环境下，启动服务前要知道
+     * 「这份已装的运行时是否需要更新的 App」。为空 = 安装时元数据没声明要求。
+     */
+    const val KEY_RUNTIME_MIN_APP = "runtime_min_app_version"
+
     /** 局域网访问开关（默认关；开则 dsh web 绑 0.0.0.0）。 */
     const val KEY_LAN = "dsh_lan"
 

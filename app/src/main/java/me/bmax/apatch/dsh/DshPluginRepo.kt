@@ -676,8 +676,15 @@ object DshPluginRepo {
      * 而 id 只能从插件自己的 `dsh.bundle.patch`（`insert[].id`）里读 —— 那是它向
      * loader 插行的声明。用容器里 dsh 自带的 yaml 库解析（createRequire(dsh 入口)），
      * 避免我们再引入 YAML 依赖。解析失败的包输出空 id，不影响其余。
+     *
+     * @param includeCore 为 true 时**不跳过 `@deepseek-ai/*` 核心包**。默认 false 是给
+     * 插件页用的：核心包不能被用户停用，也不需要出现在「谁的 entry id 能关」里。
+     * 判断「上游是否已内置某个 entry id」（比如 dsh 0.1.5 内置了 file-upload）时必须
+     * 传 true，否则会漏掉上游声明的 id，把三方包又预装一遍，制造 duplicate entry id。
      */
-    suspend fun pluginEntries(): Map<String, List<String>> = withContext(Dispatchers.IO) {
+    suspend fun pluginEntries(includeCore: Boolean = false): Map<String, List<String>> =
+        withContext(Dispatchers.IO) {
+        val skipCore = if (includeCore) "" else "if(n.startsWith('@deepseek-ai/'))continue;"
         val script = "const fs=require('fs'),path=require('path');" +
             YAML_REQUIRE_JS + ";" +
             "const dir=process.argv[2];" +
@@ -686,7 +693,7 @@ object DshPluginRepo {
             "let m;try{m=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){process.exit(0)}" +
             "const b=(m.dsh&&m.dsh.profile&&m.dsh.profile.bundles)||[];" +
             "for(const n of b){" +
-            "if(n.startsWith('@deepseek-ai/'))continue;" +
+            skipCore +
             "let ids=[];" +
             "try{const pkgDir=path.join(dir,'node_modules',n);" +
             "const q=JSON.parse(fs.readFileSync(path.join(pkgDir,'package.json'),'utf8'));" +

@@ -52,6 +52,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.NavGraphs
+import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
@@ -707,6 +708,11 @@ internal fun DshSettingsScreen(
                     onOpenAllFilesSettings = { openAllFilesSettings() },
                     runtimeInstalled = runtimeInstalled,
                     runtimeVersion = runtimeState.runtimeVersion ?: "",
+                    appUpdateRequired = runtimeState.appUpdateRequired,
+                    requiredAppVersion = runtimeState.requiredAppVersion,
+                    onGoUpdateApp = {
+                        navigator.navigate(GeneralSettingsScreenDestination("general_check_update"))
+                    },
                     onReinstallRuntime = { preserve ->
                         DshRuntime.reinstallRuntime(preserve)
                         navigator.navigate(HomeScreenDestination) {

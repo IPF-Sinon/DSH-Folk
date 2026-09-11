@@ -102,6 +102,14 @@ class DshHomeUiState internal constructor(
     val webUrl: String,
     val installed: Boolean,
     val runtimeId: String,
+    /**
+     * 已装运行时要求的最低 App 版本，当前 App 不满足。
+     *
+     * 置位时主操作（启动）改为提示「请先更新应用」，而不是拉起一个注定起不来的 dsh。
+     */
+    val appUpdateRequired: Boolean,
+    /** [appUpdateRequired] 为 true 时这份运行时要求的最低版本（给人看）。 */
+    val requiredAppVersion: String?,
     /** 容器体积（字节），0 = 还没量过（显示为「—」）。来自 prefs 缓存，不在组合期扫盘。 */
     val rootfsSizeBytes: Long,
     val perm: PermissionManager.Status,
@@ -119,7 +127,17 @@ class DshHomeUiState internal constructor(
     /** 权限通道显示名（已本地化）。 */
     val permLabel: String get() = perm.label(context)
 
-    fun start() = HarnessService.start(context)
+    fun start() {
+        // 最低 App 版本闸门：运行时要求更高的 App 时，主操作直接变成「请先更新应用」，
+        // 不拉起服务（startServer 里还有第二道闸门兜底，这里是为了不白启动一遍）。
+        if (appUpdateRequired) {
+            requiredAppVersion?.let {
+                showToast(context, me.bmax.apatch.R.string.dsh_runtime_min_app_required, it)
+            }
+            return
+        }
+        HarnessService.start(context)
+    }
 
     fun stop() = HarnessService.stop(context)
 
@@ -196,6 +214,8 @@ fun ProvideDshHomeState(content: @Composable () -> Unit) {
             webUrl = runtime.webUrl,
             installed = runtime.installed,
             runtimeId = DshRuntime.runtimeId(),
+            appUpdateRequired = runtime.appUpdateRequired,
+            requiredAppVersion = runtime.requiredAppVersion,
             rootfsSizeBytes = runtime.rootfsSizeBytes,
             perm = perm,
             onAskWebUi = { askWebUi = true },
