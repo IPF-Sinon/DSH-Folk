@@ -799,7 +799,8 @@
     <string name="dsh_log_download_error">下载异常: %1$s</string>
     <string name="dsh_log_missing_after_extract">解压后 rootfs 缺少: %1$s</string>
     <string name="dsh_log_missing_python">运行时缺少 python3，无线 ADB 配对不可用</string>
-    <string name="dsh_log_missing_pnpm">运行时缺少 pnpm，插件安装不可用</string>
+    <string name="dsh_log_missing_pnpm">运行时缺少 pnpm，无法安装插件。请更新或重装运行时。</string>
+    <string name="dsh_log_pnpm_repaired">已修复此运行时的 pnpm 命令（%1$s）</string>
     <string name="dsh_log_preserve_failed">替换运行时前挪不动 %1$s，已中止以避免丢数据</string>
     <string name="dsh_log_restore_failed">更新后恢复 %1$s 失败（数据仍在 %2$s，下次启动会自动认领回来）</string>
     <string name="dsh_log_extract_failed">解压失败: %1$s</string>

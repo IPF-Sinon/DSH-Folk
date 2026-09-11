@@ -334,6 +334,12 @@ DSH-Folk (Android app)                      ← 按 ABI 拆包：arm64-v8a / x86
   Node 的 `require.resolve` 做 realpath 就会解析进内容存储的扁平哈希目录，插件声明的 `./lib/client.cjs` 再也拼不出来
   （表现是装完插件 `dsh web` 报 `MissingClientBundleError`）。所以这种环境下会给 profile 的 `pnpm-workspace.yaml`
   写上 `packageImportMethod: copy`，让 pnpm 复制真实文件。代价是内容存储的去重失效，容器体积会大一些。
+- `dsh plugin` 只负责调 pnpm，PATH 上没有 pnpm 就直接 exit 127。运行时因此固定带自包含的
+  `pnpm@10.34.5`（不跟 `latest`：pnpm 12 的 npm 包改成了依赖 postinstall 下载原生二进制的启动器，
+  与异架构构建必须使用的 `--ignore-scripts` 冲突），并在构建末尾验证 JS CLI 的 `--version`。
+  App 启动时还会按 `package.json.bin` 重建 `/usr/local/bin/pnpm` 与执行位，让旧 rootfs 里「包在、bin 链接丢了」
+  的安装不用重下约 170 MB 运行时就能自愈；如果包目录本身也没有，日志只报一次并要求更新/重装运行时，
+  不再把四个预装插件逐个失败四遍。
 - 插件目录里超过一半的条目是 `github:owner/name` 安装规格，pnpm 解析它要 `git ls-remote`，所以 git 也预装进了 rootfs。
   注意 rootfs 是用 `dpkg-deb -x` 纯解包装出来的（不跑 maintainer script —— 它们要在目标架构上执行），
   **dpkg 的依赖关系没人替我们解** —— 包列表写漏一个传递依赖，构建期一切正常，到设备上 exec 那一刻才报

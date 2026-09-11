@@ -14,6 +14,11 @@ set -euo pipefail
 UBUNTU_RELEASE="${UBUNTU_RELEASE:-noble}"          # 24.04 LTS
 NODE_VER="${NODE_VER:-v24.19.0}"
 DSH_VERSION="${DSH_VERSION:-latest}"
+# 锁在 pnpm 10：10.x 是自包含的纯 JS CLI（bin/pnpm.cjs），能跨架构直接随 rootfs
+# 搬运；pnpm 12 的 npm 包换成了「postinstall 下载本机原生二进制」的启动器，配合
+# 我们必须使用的 --ignore-scripts 会留下一个缺原生二进制的壳，在手机上既不可靠也
+# 没必要。不要写 latest —— 上一次这样无意间拿到了 12.3.4。
+PNPM_VERSION="${PNPM_VERSION:-10.34.5}"
 TARGET_ARCH="${TARGET_ARCH:-arm64}"                # arm64 | amd64
 RELEASE_CHANNEL="${RELEASE_CHANNEL:-stable}"       # stable | beta
 
@@ -24,10 +29,11 @@ RELEASE_CHANNEL="${RELEASE_CHANNEL:-stable}"       # stable | beta
 # 判据就永远判不出来，存量用户收不到修复。
 #   r1 = 初版（含 python3 + git，但 git 的 libcurl 依赖不全）
 #   r2 = 补齐 git-remote-https 的传递依赖（libnghttp2 / libssh / krb5 / ldap …）
+#   r3 = 修 pnpm：固定自包含的 10.x，并把 pnpm/每个 bin 链接都设为可执行
 #
 # 加 amd64 支持时**不递增**：arm64 的 rootfs 内容一个字节都没变，递增只会让所有
 # 存量用户收到一次「有新运行时」的无意义提示。amd64 是全新资产，自带独立 metadata。
-ROOTFS_REV="${ROOTFS_REV:-2}"
+ROOTFS_REV="${ROOTFS_REV:-3}"
 WORK="${WORK:-/tmp/dsh-runtime}"
 OUT="${OUT:-$PWD/out}"
 
@@ -208,14 +214,39 @@ echo "    原生模块 ${NATIVE_COUNT} 个，未发现异架构产物"
 # 就直接返回 127「pnpm not found on PATH」。rootfs 里只有 corepack 的 shim，
 # 而 corepack 首次运行要联网下载 —— 用户在手机上装插件时才发现没网就太晚了。
 # pnpm 是纯 JS、零 runtime 依赖，异架构安装完全安全（不像 sharp/koffi 要挑预编译产物）。
-echo "    附带安装 pnpm（dsh plugin 内部转发它）"
+# 固定版本见顶部 PNPM_VERSION：不能用 latest，pnpm 12 的包是 postinstall 下载原生
+# 二进制的启动器，而这里为了异架构构建必须 --ignore-scripts；10.x 的 bin/pnpm.cjs
+# 才是我们要的自包含 JS CLI。
+echo "    附带安装 pnpm@${PNPM_VERSION}（dsh plugin 内部转发它）"
 npm install --global \
   --prefix "$ROOTFS/usr/local" \
   --ignore-scripts --no-audit --no-fund \
-  pnpm
-test -f "$ROOTFS/usr/local/bin/pnpm"
-PNPM_VERSION="$(node -p "require('$ROOTFS/usr/local/lib/node_modules/pnpm/package.json').version")"
-echo "    pnpm = $PNPM_VERSION"
+  "pnpm@${PNPM_VERSION}"
+PNPM_PKG="$ROOTFS/usr/local/lib/node_modules/pnpm"
+test -f "$PNPM_PKG/package.json"
+PNPM_BIN_REL="$(node -p "
+  const b = require('$PNPM_PKG/package.json').bin;
+  typeof b === 'string' ? b : b.pnpm
+")"
+test -f "$PNPM_PKG/$PNPM_BIN_REL"
+# npm 通常会建链接，但不要把运行时正确性押在它的实现细节上：按 package.json.bin
+# 重建相对链接，并显式修可执行位。Java 解压器会保留 tar mode；即便以后它回归，
+# App 侧还有 ensurePnpmReady() 的自愈兜底。
+for name in $(node -p "Object.keys(require('$PNPM_PKG/package.json').bin).join(' ')"); do
+  rel="$(node -p "require('$PNPM_PKG/package.json').bin['$name']")"
+  chmod 0755 "$PNPM_PKG/$rel"
+  rm -f "$ROOTFS/usr/local/bin/$name"
+  ln -s "../lib/node_modules/pnpm/$rel" "$ROOTFS/usr/local/bin/$name"
+done
+test -L "$ROOTFS/usr/local/bin/pnpm"
+test -x "$PNPM_PKG/$PNPM_BIN_REL"
+# rootfs 打包前用 runner 的 Node 跑目标目录里的纯 JS CLI --version：不能直接执行
+# rootfs 的 node（二架构 job 都不应把正确性依赖在 runner 架构上），但 10.x CLI 是
+# 架构无关 JS，这正好同时验证包内容完整、入口可加载、版本正确。
+node "$PNPM_PKG/$PNPM_BIN_REL" --version | grep -Fx "$PNPM_VERSION"
+PNPM_REAL_VERSION="$(node -p "require('$PNPM_PKG/package.json').version")"
+[ "$PNPM_REAL_VERSION" = "$PNPM_VERSION" ]
+echo "    pnpm = $PNPM_REAL_VERSION · 入口 = $PNPM_BIN_REL"
 
 echo "==> [4/9] 安装 python3（无线 ADB 配对依赖）"
 # 无线 ADB 配对（AdbBridge / adb-pair.py）需要容器内的 python3，
