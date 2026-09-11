@@ -25,3 +25,6 @@ private
 
 # 运行时构建产物（rootfs.tar.gz 等，只经 Release 分发）
 runtime-builder/out/
+
+# 本地临时验证材料（下载的运行时包、探针脚本等），不进仓库
+.scratch/
