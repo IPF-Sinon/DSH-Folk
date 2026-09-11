@@ -103,6 +103,7 @@ fun ChangelogDialog(onDismiss: () -> Unit) {
             InfoPage(
                 icon = Icons.Filled.NewReleases,
                 title = stringResource(R.string.changelog_title, BuildConfig.VERSION_NAME),
+                warning = stringResource(R.string.changelog_warning),
                 bullets = items,
             ),
         ),
@@ -119,6 +120,13 @@ internal data class InfoPage(
     val icon: ImageVector,
     val title: String,
     val body: String = "",
+    /**
+     * 正文最前面的警示句，用错误色显示。
+     *
+     * 与 [bullets] 分开而不是塞成第一条：它要的是「先说清风险，再列改动」的层次，而不是
+     * 一堆并列条目里恰好排在最前面的那一条；空串表示这一页没有警示。
+     */
+    val warning: String = "",
     val bullets: List<String> = emptyList(),
 )
 
@@ -221,7 +229,7 @@ internal fun PagedInfoDialog(
                             )
                         }
 
-                        if (page.bullets.isNotEmpty()) {
+                        if (page.warning.isNotBlank() || page.bullets.isNotEmpty()) {
                             Spacer(Modifier.height(16.dp))
                             // 条目**左对齐**：更新说明是要逐条读的，居中的多行列表读起来
                             // 每一行的起点都在动
@@ -234,6 +242,18 @@ internal fun PagedInfoDialog(
                                     .heightIn(max = 260.dp)
                                     .verticalScroll(rememberScrollState()),
                             ) {
+                                // 警示句放在可滚动区的第一段：它和条目是一个整体，不能被
+                                // 滚出视野之外，也不该把条目挤出屏幕
+                                if (page.warning.isNotBlank()) {
+                                    Text(
+                                        text = page.warning,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.error,
+                                        lineHeight = 20.sp,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
                                 for (line in page.bullets) {
                                     Row {
                                         Text(

@@ -413,6 +413,11 @@ Several parts have to work this way:
   when it reports `cannot find libxxx.so.N`. The build therefore ends with `check-elf-closure.js`: starting from git-core / Perl extensions / python3,
   it recursively resolves ELF `DT_NEEDED` entries, fails the build if any SONAME has no provider, and asserts that the entry points target the correct architecture.
 - `dsh web` binds only to the loopback address by default; configuration backup uses the same loopback HTTP API. LAN access is a disabled-by-default toggle in Settings.
+- **1.9.0 promotes dsh 0.1.5 to the stable channel** (`runtime-latest` = `0.1.5-rc.1-ubuntunoble-r4`, requires app ≥ 1.9.0).
+  The beta channel ran the same rootfs through a full beta cycle, but **too few people tested it**: upgrading dsh rewrites
+  session and plugin data, and the paths the app preserves (`root/.dsh`, `root/.local`, `.l2s`) keep the files but cannot keep
+  up with an upstream format change. Back up before updating the runtime — that is the warning shown in the error colour at
+  the top of the update dialog.
 
 ## Project Structure
 

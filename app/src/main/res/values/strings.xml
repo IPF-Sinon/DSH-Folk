@@ -338,24 +338,20 @@
     <string name="welcome_got_it">Get Started</string>
 
     <!-- What's new (shown once after each update; see util/Changelog.kt) -->
+    <string name="changelog_warning">Not enough people tested this release, so this runtime update cannot promise that your data survives — back up before updating the runtime!</string>
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Settings reorganized: permission channels, native capabilities, and wireless ADB now live under Security; data-directory and runtime management are grouped under Features.</item>
-        <item>The Android native capability bridge prompt is now a pinned built-in plugin. It can be disabled but not uninstalled.</item>
-        <item>Permission-call records now show newest-first commands, reasons, access levels, and results; sensitive arguments are masked by default.</item>
-        <item>Runtime management now supports update checks, preserved or clean reinstall, trusted local import, and an opt-in beta runtime channel that is off by default.</item>
-        <item>App update checks race GitHub direct access and several mirrors concurrently to obtain a valid result faster.</item>
-        <item>Runtimes can now declare a minimum app version. If the installed runtime needs a newer app, start, update, and reinstall actions point you to the app update instead of failing.</item>
-        <item>Fixed startup failure after upgrading to dsh 0.1.5: upstream now bundles the file-upload capability that conflicts with the preinstalled plugin. The app detects the conflict, skips or removes the preinstall, and repairs broken installs automatically.</item>
-        <item>Fixed preinstalled plugins failing with "pnpm not found on PATH": the runtime now ships a pinned, self-contained pnpm. Both runtime channels were rebuilt, so an older runtime can be updated in place instead of reinstalled.</item>
-        <item>Runtime management reworked: one Update button checks and then confirms; long press it to list every published runtime version and switch between them, downgrades included. Automatic update checks are now a separate switch, on by default, run right after launch, and wait for the app update check to finish or its dialog to be dismissed before prompting, so two update dialogs never stack.</item>
-        <item>Runtime revision bumped to r4: pnpm no longer prints an “Update available!” banner pointing at a withdrawn version. Both channels (stable and beta) were rebuilt, so an older runtime can be updated in place instead of reinstalled.</item>
-        <item>The capability-request dialog now shows the command the AI intends to run: the agent attaches it verbatim with dsh-native elevate --command, and the dialog renders it in a selectable monospace block that scrolls when long. Without one it falls back to the elevation call itself, so the user at least sees who is asking.</item>
-        <item>The AI capability-request dialog is fixed: it used to be mounted only on the main screen, so a request filed while you were looking at the WebUI was invisible until you navigated back. It now appears in both places, offers “Allow once” (exactly one call, then it reverts, without touching the setting), and counts down 60 seconds before treating silence as a deny — a hanging request used to hold the single slot and fail everything after it. The agent can now query the request state and any one-shot grant instead of guessing whether to ask again.</item>
-        <item>When access is missing, the AI\'s capability call is itself the request: the bridge holds that call open, asks the user in a dialog, and then either runs the command and hands back the real result, or fails that one call (deny, or 60 seconds of silence). Previously a request and a second call were needed, which could end in the half-state of “request granted, call still failed”.</item>
-        <item>The permission dialog gained a second stage: when the user allowed it in the app but Android itself still lacks the permission (camera, microphone, notifications, modify system settings, ...), a second dialog names what is missing, offers a jump into system settings when that is the only way, and re-checks automatically when the user comes back. "Got it", or that stage timing out, returns “Android has not granted it” truthfully instead of pretending the call worked.</item>
-        <item>Fixed the minimum-app-version gate: a requirement written as a prerelease (e.g. 1.8.4-beta.32) is now actually enforced. It used to compare core versions only, so a release build\'s missing prerelease suffix made the comparison always succeed and the requirement meaningless. Plain requirements (1.8.4) behave as before, so beta users are still not blocked by them.</item>
+        <item>Runtime updated to dsh 0.1.5 and now ships its own self-contained pnpm (no more pnpm not found on PATH). Updating keeps sessions, plugins, config and dependencies, resumes after an interruption, and a clean reinstall is also available.</item>
+        <item>Fixed startup failures after upgrading to dsh 0.1.5: upstream now bundles a file-upload capability that clashed with a preinstalled plugin. The clash is detected and the seed plugin is skipped or removed automatically.</item>
+        <item>Native capabilities grew from 19 to over 30 (camera, microphone, text-to-speech, calendar, contacts, location, phone, sensors, network, volume, ringer, system settings, install, usage stats, SMS, clipboard, share and open-link, and more), with per-capability levels: off / write / read / read+write / full control.</item>
+        <item>New permission call log: newest first, with the command, the reason, the level and the outcome; sensitive values are masked by default.</item>
+        <item>The AI no longer has to ask and then call again: the call itself is held open while you answer, and if you allow it the app runs it right there and hands the real result back. Allow once, a 60-second auto-deny countdown, and the exact command shown verbatim are all part of that dialog.</item>
+        <item>If you allowed it in the app but Android itself still lacks the permission, a second dialog names what is missing and can jump straight into system settings; the app re-checks when you come back.</item>
+        <item>Runtime management: one button for check-and-update, long-press to switch to any runtime version in the repository (downgrades included), trusted local import, a beta channel that stays off by default, and runtimes may declare a minimum app version.</item>
+        <item>Settings reorganized: permission channels, native capabilities and wireless ADB live under Security; data directories and runtime management under Features.</item>
+        <item>App update checks now race the direct GitHub connection against several mirrors for a faster result.</item>
+        <item>Text-to-speech (system TTS) is in, and autostart now has three routes: boot broadcast, accessibility service and a root boot script.</item>
     </string-array>
 
     

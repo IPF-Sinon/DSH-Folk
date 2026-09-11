@@ -409,6 +409,10 @@ DSH-Folk (Android app)                      ← 按 ABI 拆包：arm64-v8a / x86
   `cannot find libxxx.so.N`。所以构建末尾有一步 `check-elf-closure.js`：从 git-core / perl 扩展 / python3
   出发递归解析 ELF 的 `DT_NEEDED`，任何 SONAME 找不到提供者就让构建失败（并断言入口是目标架构）。
 - `dsh web` 默认只绑定回环地址；配置备份走的也是同一个回环 HTTP 接口。局域网访问是设置里一个默认关闭的开关。
+- **1.9.0 把 dsh 0.1.5 推上正式通道**（`runtime-latest` = `0.1.5-rc.1-ubuntunoble-r4`，要求 App ≥ 1.9.0）。
+  测试通道此前已经在同一份 rootfs 上跑了一整轮 beta，但**测试人数不足**：升级 dsh 会改写会话与插件数据，
+  而 App 侧保留的那几条路径（`root/.dsh`、`root/.local`、`.l2s`）只保得住文件、保不住上游格式变化。
+  所以更新运行时前请先备份 —— 更新说明弹窗的第一句就是这句警示，用错误色显示。
 
 ## 项目结构
 
