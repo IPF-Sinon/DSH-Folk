@@ -48,8 +48,10 @@ const fsScript = extract("FS_BRIDGE_CLI_SCRIPT");
 
 console.log("── 不变量 ──");
 for (const [name, body] of [["dsh-native", script], ["dsh-fs", fsScript]]) {
-  const dollars = (body.match(/\$/g) || []).length;
-  ok(dollars === 0, `${name}: 零个 $（实际 ${dollars}）`);
+  // Kotlin 的 `${...}` 是**有意的**插值（会渲染成数字，最终脚本里没有 $），先摘掉再数；
+  // 剩下的 $ 才是会被误当成模板插值的那种，必须为零。
+  const dollars = (body.replace(/\$\{[^}]*\}/g, "").match(/\$/g) || []).length;
+  ok(dollars === 0, `${name}: 零个裸 $（实际 ${dollars}，已排除 Kotlin 插值）`);
   // 注释里的中文无所谓，代码里的不行
   const code = stripComments(body);
   const cjk = code.match(/[\u4e00-\u9fff]/g) || [];

@@ -294,21 +294,30 @@ dsh-native caps                          # which capabilities are enabled and av
 dsh-native elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]
 ```
 
-`elevate` is the agent's only self-service escalation path, and the only part of this permission model that the AI initiates: when the agent finds a capability
-switched off it can file one request with a reason, and the app dialog gives the user three answers — **Allow** (the level sticks), **Allow once** (exactly the next
-call of that capability goes through and then reverts; the switch in settings is untouched) and **Deny** (closing the dialog counts as deny). Several deliberate constraints:
+**When access is missing, the capability call itself is the request**: the bridge does not answer it with a bare 403 — it **holds
+that call open**, shows the dialog in the app, and then either runs the command and hands the real result back, or fails that one call (deny, or no answer within
+60 seconds). The agent never has to file a request and then call again, so "the request succeeded but the call still failed" cannot happen.
+
+The dialog gives the user three answers — **Allow** (the level sticks), **Allow once** (exactly the next call of that capability goes through and then reverts; the
+switch in settings is untouched) and **Deny** (closing the dialog counts as deny). Its body shows **the command that is about to run** verbatim in a monospace,
+selectable block — what the user is judging is never "camera=write, yes or no" but "what is it about to do". The bridge rebuilds that command from the call
+itself, so an ordinary call needs no extra flag; only an explicit `dsh-native elevate` takes `--command` to say what it intends to do. Several deliberate constraints:
 
 - **An unanswered request is denied after 60 seconds.** A dialog left hanging would otherwise hold the single “one request at a time” slot forever, turning every later
   request into a 409; with a deadline the worst case degrades to “this one did not go through”.
 - Because of that deadline the dialog has to be genuinely visible, so it is mounted on the main screen **and on the WebUI Activity**. With only the main screen, a user
   looking at the WebUI would never see the request — it just looks like the AI asked and nothing happened, and then the timeout quietly counts as their refusal.
-- A request can **attach the command it is about** (`--command`, multi-line is fine). The dialog shows it verbatim in a
-  monospace, selectable block — what the user is judging is never “camera=write, yes or no” but “what is it about to do”.
-  When no command is attached the dialog falls back to showing the `dsh-native elevate` call that filed the request, so the
-  user at least sees who is asking.
-- “Allow once” buys exactly one call and expires after three minutes: chaining several writes onto it is not what the user agreed to.
-- Request state is queryable (`pending` / `once` / `lastElevation` in `dsh-native caps`), so the injected prompt can tell the agent “one request is already waiting, do not
-  file another” and “after a deny or an expiry, do not ask again” instead of leaving it to guess whether a 403 means the user refused or has not looked yet.
+- **A second dialog when Android itself is missing the permission.** The user saying “Allow” only settles the app layer; camera,
+  microphone, notifications and “Modify system settings” are Android's own permissions, and the call cannot run without them. That
+  dialog names what is missing, offers a jump into system settings when that is the only way to enable it, and **re-checks
+  automatically when the user comes back** to the app. “Got it”, or that dialog timing out, ends the call with
+  `no_android_permission` instead of pretending it worked. This stage gets a generous five minutes — the user is off hunting
+  for a switch in system settings.
+- “Allow once” buys exactly one call and expires after three minutes, and only a call that actually reaches the device spends it: a
+  failure caused by a missing system permission leaves the grant armed, so the user does not have to answer the same question twice.
+- Request state is still queryable (`pending` / `once` / `lastElevation` in `dsh-native caps`). While a call is blocked the agent is
+  waiting on it anyway, so those fields are mainly for plugins and for troubleshooting; the prompt tells the agent not to re-ask
+  after a deny, an expiry or a missing Android permission.
 
 ```
 ```

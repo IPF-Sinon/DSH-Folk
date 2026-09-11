@@ -339,64 +339,73 @@ function render(f) {
   const onceMinutes =
     typeof f.onceTtlMs === 'number' ? Math.max(1, Math.round(f.onceTtlMs / 60000)) : 3;
 
-  // 提权申请的唯一入口是弹窗，且只有一份能被挂起：这段话在两个分支里都要说，
-  // 否则「能力没勾」那支会把 agent 赶去设置页，而它其实可以直接申请。
+  // 权限不够时不再是「先申请、再调用」：**能力调用本身就会阻塞着问用户**，用户批准后由 App 直接
+  // 执行这次调用并把真实结果还给 agent。这段话在三个分支里都要说，否则「能力没勾」那支会把 agent
+  // 赶去设置页，而它其实直接调那一次就行。
   const elevateLines = () => {
     const out = [];
     out.push(
-      'You can ask the host to raise one capability with `dsh-native elevate <cap> <read|write|' +
-        'read_write|control> --reason <why> --command <cmd>` (valid levels for a capability are in ' +
-        '`dsh-native caps` → `accessOptions`). It does NOT change anything by itself: it opens a ' +
-        'confirmation dialog **in the DSH-Folk app**, and only the user can answer it.'
-    );
-    out.push('');
-    out.push(
-      '**Always pass --command.** The dialog shows that command to the user verbatim, and it is the ' +
-        'only thing that turns "may I have the camera?" into a decision they can actually make — they ' +
-        'are judging what you are about to do, not the access level. Put the exact command you will ' +
-        'run once granted (multi-line is fine, up to about 2000 characters), not a summary of it; do ' +
-        'not strip the flags. If you leave it out the user only sees this elevation call itself, ' +
-        'which tells them nothing new.'
-    );
-    out.push('');
-    out.push(
-      'What happens next, precisely:'
-    );
-    out.push(
-      '- The dialog offers **Allow** (level sticks), **Allow once** (exactly the next call of that ' +
-        'capability goes through, then it reverts) and **Deny** (or the user just closes it).'
-    );
-    out.push(
-      '- Only ONE request may be waiting at a time (a second one answers 409 `request_pending`), and ' +
-        'it expires after about ' +
+      '**No access yet? Make the call anyway.** Such a call is not answered with a plain 403: the ' +
+        'host holds it open while a confirmation dialog appears **in the DSH-Folk app** and the user ' +
+        'decides — Allow (level sticks), Allow once (that one call only), Deny, or nothing at all for ' +
+        'about ' +
         elevateSeconds +
-        ' seconds with no answer — an expiry counts as a deny.'
+        ' seconds, which counts as a deny. Then it either **runs your command and returns the real ' +
+        'result**, or fails with `reason: "denied_by_user"` / `"request_expired"`. There is no second ' +
+        'call to make: do not file a request first, and do not repeat the call to "confirm".'
+    );
+    out.push('');
+    out.push(
+      'The dialog shows the command you are running, built from the call itself, so the user is judging ' +
+        'what you are about to do rather than an access level. Keep the flags in and the command ' +
+        'readable — that text is what they are reading.'
+    );
+    out.push('');
+    out.push('Two endings mean "the user said yes in the app, but the phone said no":');
+    out.push(
+      '- `no_android_permission` — Android itself still lacks the system permission. The user gets a ' +
+        'second dialog with a jump into system settings; the message names what is missing. Tell them ' +
+        'which permission it is and stop — do not retry in a loop, the next attempt asks again.'
     );
     out.push(
-      '- Filing returns 202 with `status: "pending_user"` — `ok: true` there means "the request was ' +
-        'recorded", NOT "you were granted". A 200 with `status: "already_granted"` (or ' +
-        '`already_granted_once`) means nothing new was asked, just make the call.'
+      '- `not_foreground` (409) — nobody can see a dialog right now, so the call was refused instead of ' +
+        'hanging on a dialog that will never appear. Ask the user to bring the DSH-Folk app to the ' +
+        'front, then retry once.'
+    );
+    out.push('');
+    out.push(
+      'A blocked call is not a hung call: it can take up to about ' +
+        elevateSeconds +
+        ' seconds, and several minutes more if the user has to go grant an Android permission. Do not ' +
+        'fire the same call again meanwhile — only one request can wait at a time (409 ' +
+        '`request_pending`).'
+    );
+    out.push('');
+    out.push(
+      '`dsh-native elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]` still ' +
+        'exists for wanting a level raised **without running anything** (valid levels: `dsh-native caps` ' +
+        '→ `accessOptions`). It blocks the same way and answers with the decision itself: 200 with ' +
+        '`status: "allowed"` or `"once"`, or 403 `denied_by_user` / `request_expired`. A bare request ' +
+        'has no command to show, so pass `--command` — the exact command you will run afterwards, ' +
+        'multi-line fine, ~2000 characters max — or the user sees only this elevation call itself.'
     );
     out.push(
-      '- After filing, re-check `dsh-native caps`: `pending` tells you it is still waiting (with ' +
-        '`msLeft`), `caps.<cap>.once` that a one-shot grant is armed, and `lastElevation` what ' +
-        'happened to the most recent request (`allowed` / `once` / `denied` / `expired`).'
+      'A 200 with `status: "already_granted"` (or `"already_granted_once"`) means the level was already ' +
+        'there and nothing was asked: just make the call.'
     );
     out.push(
-      '- So: file at most one request per genuinely-needed operation, then wait for the answer ' +
-        'instead of re-asking. Never file a second request while one is pending, and after a deny ' +
-        'or an expiry do not ask again for the same thing — say what you were blocked on and move on.'
-    );
-    out.push(
-      '- An **Allow once** grant is deliberately short lived (about ' +
+      'After an **Allow once**, `dsh-native caps` shows `caps.<cap>.once`. It covers exactly one call, ' +
+        'is valid for about ' +
         onceMinutes +
-        ' minutes) and buys one call: make that one call and do not chain several writes onto it. ' +
-        'Only a call that actually reaches the device spends it — if the call fails because the ' +
-        'system permission is missing, fix that first and retry, the grant is still armed.'
+        ' minutes, and only a call that actually reaches the device spends it — a failure caused by a ' +
+        'missing system permission leaves it armed.'
+    );
+    out.push(
+      'Never file a second request while one is being answered, and after a deny or an expiry do not ask ' +
+        'again for the same thing — say what you were blocked on and move on.'
     );
     return out;
   };
-
   if (!bridgeOn) {
     lines.push(
       '`dsh-native` can borrow the host to post notifications, show a toast, vibrate, use the ' +
@@ -409,19 +418,19 @@ function render(f) {
     lines.push('');
     lines.push(
       'If you need it, tell the user ONCE to open **Settings › Features › Native capabilities** and ' +
-        'turn on the master switch, then carry on with something else. Once it is on you can raise ' +
-        'an individual capability yourself with `dsh-native elevate` (see below) instead of sending ' +
-        'them back to settings. Do not retry, and do not keep asking.'
+        'turn on the master switch, then carry on with something else. Do not retry, and do not keep ' +
+        'asking. Once the master switch is on, a capability that is not ticked yet is still reachable: ' +
+        'call it and the host asks the user for you (see below).'
     );
     lines.push('');
     lines.push(...elevateLines());
   } else if (usable.length === 0) {
     lines.push(
-      'The `dsh-native` master switch is **on**, but no individual capability is enabled yet: every ' +
-        'capability call returns 403 `cap_disabled`. Two ways forward — either tell the user ONCE to ' +
-        'tick the specific capability in **Settings › Features › Native capabilities**, or file a ' +
-        'single `dsh-native elevate` request for it and let them decide (see below). Do not retry in ' +
-        'a loop.'
+      'The `dsh-native` master switch is **on**, but no individual capability is enabled yet. That is ' +
+        'not a dead end: call the capability you need and the host holds the call while the user is ' +
+        'asked (see below) — they can allow that one call without touching settings. Send them to ' +
+        '**Settings › Features › Native capabilities** only if they would rather enable it themselves. ' +
+        'Do not retry in a loop.'
     );
     lines.push('');
     lines.push(...elevateLines());
@@ -429,6 +438,7 @@ function render(f) {
     lines.push('```');
     lines.push('dsh-native caps                                        # access, accessOptions, pending, once');
     lines.push('dsh-native elevate <cap> <read|write|read_write|control> --reason <why> --command <cmd>');
+    lines.push('        # only to raise a level without running anything; a normal call asks by itself');
     lines.push('```');
   } else {
     lines.push(
@@ -449,6 +459,7 @@ function render(f) {
     lines.push('Every dsh-native capability call must include --reason <concrete purpose>; calls are audited.');
     lines.push('dsh-native caps                                        # access, accessOptions, once, pending, lastElevation');
     lines.push('dsh-native elevate <cap> <read|write|read_write|control> --reason <why> --command <cmd>');
+    lines.push('        # only to raise a level without running anything; a normal call asks by itself');
     lines.push('```');
 
     // 「仅本次」配额：只在真的存在时出现，且必须说清它是一次而不是一项。
@@ -474,11 +485,11 @@ function render(f) {
     if (off.length > 0) {
       lines.push('');
       lines.push(
-        'Not ticked (calls return 403 `cap_disabled`): ' +
+        'Not ticked yet: ' +
           off.join(', ') +
-          '. For one of those you have two options: send the user to Settings › Features › Native ' +
-          'capabilities, or file a single elevation request yourself (below). Do not retry, and do ' +
-          'not pressure the user.'
+          '. Calling one of those is fine — the host will hold that call and ask the user (below). Send ' +
+          'them to Settings › Features › Native capabilities only if they would rather enable it there ' +
+          'themselves. Do not retry, and do not pressure the user.'
       );
     }
     lines.push('');

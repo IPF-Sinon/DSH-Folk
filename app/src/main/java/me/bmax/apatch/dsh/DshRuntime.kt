@@ -254,9 +254,24 @@ object DshRuntime {
      */
     private fun appCoreVersion(): String = me.bmax.apatch.BuildConfig.VERSION_NAME.substringBefore('-')
 
-    /** App 是否满足运行时的最低版本要求；空要求恒为满足（旧 metadata）。 */
-    private fun appSatisfies(minAppVersion: String): Boolean =
-        minAppVersion.isBlank() || compareVersions(appCoreVersion(), minAppVersion) >= 0
+    /**
+     * App 是否满足运行时的最低版本要求；空要求恒为满足（旧 metadata）。
+     *
+     * 两种门槛分开处理，因为它们的意图不同：
+     *
+     * - 要求**不带**预发布后缀（`1.8.4`）时只比核心段：`1.8.4-beta.32` 与 `1.8.4` 功能同代，
+     *   门槛是按「这一代 App 有没有那些适配」写的，按完整 semver 比会把所有测试版用户挡在
+     *   门外 —— 包括运行时测试通道自己（它的要求正是 `1.8.4`）。
+     * - 要求**带**预发布后缀（`1.8.4-beta.32`）时按完整版本比。这种写法是在说「至少到这个
+     *   测试版」，而只比核心段会让它永远成立：正式版 App 的预发布段被丢掉后比较恒为「满足」，
+     *   于是这条要求等于没写。
+     */
+    private fun appSatisfies(minAppVersion: String): Boolean {
+        if (minAppVersion.isBlank()) return true
+        val exact = minAppVersion.substringBefore('+').contains('-')
+        val installed = if (exact) me.bmax.apatch.BuildConfig.VERSION_NAME else appCoreVersion()
+        return compareVersions(installed, minAppVersion) >= 0
+    }
 
     /**
      * 「预装补修」轮次（见 [applySeedRepair]）。
@@ -499,12 +514,17 @@ object DshRuntime {
           '  sms send <number> <text>                    # requires send access',
           '  caps                                       # access, accessOptions, once, pending, lastElevation',
           '  elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]',
-          '      Asks the user; never auto-grants. --command is what the user reads in the dialog:',
-          '      pass the exact command you will run once the request is granted (multi-line is fine,',
-          '      up to ~2000 chars). Without it the user only sees this elevation call itself.',
-          'An elevation request is answered in the DSH-Folk app (Allow / Allow once / Deny) and expires',
-          'after ${DshElevationRequests.TTL_MS / 1000}s with no answer, which counts as a deny. Only one',
-          'request may be pending at a time. "Allow once" buys exactly one call of that capability.',
+          '      Only if you want the level raised without running anything. Never auto-grants.',
+          '      Handy when you know you will need it later; for a single call just make that call.',
+          'No access yet? Do NOT file a request first: just make the capability call. It BLOCKS while',
+          'the user is asked in the DSH-Folk app (Allow / Allow once / Deny; ${DshElevationRequests.TTL_MS / 1000}s to',
+          'answer, silence counts as a deny), then either RUNS and returns the real result, or fails with',
+          'reason denied_by_user / request_expired. If the user allowed it but Android itself has not',
+          'granted the permission, you get no_android_permission after the user is told how to fix it:',
+          'say which permission is missing and stop, do not retry in a loop.',
+          '"Allow once" buys exactly one call of that capability, valid for ${DshNativeBridge.ONCE_TTL_MS / 1000}s.',
+          'Only one request may be pending at a time (409 request_pending). A capability call only asks',
+          'while the app is in the foreground; otherwise it fails with 409 not_foreground.',
           'Settings > Features > Native capabilities: enable the master switch and the item first.'
         ].join('\n');
         (async function () {
@@ -524,11 +544,11 @@ object DshRuntime {
                 command: opt.command, invocation: 'dsh-native ' + argv.join(' ')
               }));
               say(res);
-              // 202 = 已提交、等用户在 App 里答复，不是「已经批了」。stdout 上的 JSON 里有
-              // status/note，stderr 这句是给读终端的人（和只会看退出码的调用方）的。
-              if (res.status === 202) {
-                console.error('elevate: waiting for the user to answer in the DSH-Folk app. ' +
-                  'Do not file another request; run "dsh-native caps" to see pending / lastElevation.');
+              // 这条命令会一直等到用户在 App 里答复（允许 / 仅本次 / 拒绝 / 超时），stdout 上的
+              // JSON 就是结论本身。下面两句是给读终端的人（和只会看退出码的调用方）的。
+              if (res.status === 403) {
+                console.error('elevate: the user did not grant it (status in the JSON: ' +
+                  'denied_by_user or request_expired). Do not file another request for the same thing.');
               } else if (res.status === 409) {
                 console.error('elevate: refused (a request is already pending, or the app is not in ' +
                   'the foreground). Run "dsh-native caps" and read "pending" / "foreground" instead ' +

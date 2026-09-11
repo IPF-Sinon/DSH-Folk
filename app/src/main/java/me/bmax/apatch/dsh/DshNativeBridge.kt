@@ -267,8 +267,16 @@ object DshNativeBridge {
      * 位置这一项只要求拿到任一档：只给了「大致位置」也算齐，精度差异由界面单独一行说明，
      * 而不是逼用户去追求精确位置。传感器同理 —— 缺 BODY_SENSORS 只是少两个传感器。
      */
-    fun permissionSatisfied(ctx: Context, cap: Cap): Boolean {
-        val access = access(ctx, cap)
+    fun permissionSatisfied(ctx: Context, cap: Cap): Boolean =
+        permissionSatisfied(ctx, cap, access(ctx, cap))
+
+    /**
+     * 同上，但按指定的档位判断。
+     *
+     * 需要它是因为「仅本次」：那一刻持久档位可能还是 off，而这次调用要用的档位是用户刚点的
+     * 那一档 —— 按持久档位算会得出「什么都不缺」，于是该弹的 Android 权限提示不会弹。
+     */
+    fun permissionSatisfied(ctx: Context, cap: Cap, access: Access): Boolean {
         specialPermissionOf(cap, access)?.let { if (!specialGranted(ctx, it)) return false }
         val needed = runtimePermissions(ctx, cap, access)
         if (needed.isEmpty()) return true
@@ -571,6 +579,57 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_unknown_endpoint, method, path),
                 "unknown_endpoint",
             )
+        // 档位不够时**不**直接 403，而是阻塞着问用户。用户同意就把这次调用就地执行掉并返回真实
+        // 结果 —— agent 不需要「申请 → 再调一次」，也就不会看到「申请成功了但调用还是失败」。
+        val need = insufficient(ctx, cap, method, path)
+        if (need != null) {
+            // 弹窗只有在前台才看得见；不在前台就别把这条连接挂在这里等一个永远不会出现的弹窗
+            if (!isForeground(ctx)) {
+                val result = 409 to err(
+                    str(ctx, R.string.dsh_native_err_elevate_foreground),
+                    "not_foreground",
+                )
+                audit(ctx, method, path, params, cap, reason, result.first)
+                return result
+            }
+            // 弹窗上显示的就是这条命令本身（与审计同款重建），用户看到的即是将要执行的
+            val command = auditCommand(method, path, params, reason, maskSensitive = false)
+            val request = DshElevationRequests.submit(cap, need, reason, command, null)
+            if (request == null) {
+                val result = 409 to err(
+                    str(ctx, R.string.dsh_native_err_elevate_busy),
+                    "request_pending",
+                )
+                audit(ctx, method, path, params, cap, reason, result.first)
+                return result
+            }
+            runCatching { DshHostPrompt.writeFacts(ctx.applicationContext) }
+            when (DshElevationRequests.awaitDecision(request.id)) {   // 阻塞在这里等用户
+                DshElevationRequests.Decision.ALLOWED,
+                DshElevationRequests.Decision.ONCE,
+                -> Unit
+
+                DshElevationRequests.Decision.DENIED -> {
+                    val result = 403 to err(
+                        str(ctx, R.string.dsh_native_err_denied, capName(ctx, cap)),
+                        "denied_by_user",
+                    )
+                    audit(ctx, method, path, params, cap, reason, result.first)
+                    return result
+                }
+
+                DshElevationRequests.Decision.EXPIRED -> {
+                    val result = 403 to err(
+                        str(ctx, R.string.dsh_native_err_request_expired, capName(ctx, cap)),
+                        "request_expired",
+                    )
+                    audit(ctx, method, path, params, cap, reason, result.first)
+                    return result
+                }
+            }
+        }
+        // 兜底：走到这里档位仍不够（例如申请期间用户在别处把开关关掉了）。维持原来的 403，
+        // 而不是假装放行。
         if (!capCallable(ctx, cap)) {
             val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_cap_disabled, capName(ctx, cap)),
@@ -596,6 +655,17 @@ object DshNativeBridge {
             val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_read_disabled, capName(ctx, cap)),
                 "read_disabled",
+            )
+            audit(ctx, method, path, params, cap, reason, result.first)
+            return result
+        }
+        // Android 自己的权限没给：App 层允许了也执行不了。这一段单独弹（可能要把用户送去系统
+        // 设置页，回来再复查），用户确认后把「Android 层没授权」作为结果返回。
+        val gap = osGap(ctx, cap, need ?: effectiveAccess(ctx, cap))
+        if (gap != null && !awaitOsGap(ctx, cap, need ?: effectiveAccess(ctx, cap), gap)) {
+            val result = 409 to err(
+                str(ctx, R.string.dsh_native_err_no_android_permission, gap.labels.joinToString(", ")),
+                "no_android_permission",
             )
             audit(ctx, method, path, params, cap, reason, result.first)
             return result
@@ -811,6 +881,120 @@ object DshNativeBridge {
 
     // ────────────────────────── 能力实现 ──────────────────────────
 
+    /**
+     * 这次调用至少需要哪一档。
+     *
+     * 取**够用的最低档**：多要一档就等于多问用户一次，而用户对「读通知」和「全权控制通知」的
+     * 感受完全不同。档位从 [accessOptions] 里挑，所以只会给出这台设备上合法的那几档。
+     */
+    private fun neededAccess(cap: Cap, method: String, path: String): Access {
+        val options = accessOptions(cap)
+        val fits: (Access) -> Boolean = when {
+            path == "/native/notify/system" -> { a -> a == Access.CONTROL }
+            isWriteRequest(method, path) -> { a -> accessNeedsWrite(a) }
+            else -> { a -> accessNeedsRead(a) }
+        }
+        return options.firstOrNull { it != Access.OFF && fits(it) } ?: options.last()
+    }
+
+    /**
+     * [have] 这一档能不能覆盖 [need] 那一档要做的动作。
+     *
+     * **不能**用 [accessOptions] 里的下标比大小：那张表是按「侵入性」排的，不是按能力包含关系 ——
+     * 通知那一项是 OFF < write < read < read_write < control，而 read 并不包含 write。按下标比会
+     * 得出「已经有 read 了，write 就不用问」的结论，然后被后面的写闸门 403 掉，用户连被问一句的
+     * 机会都没有。这里比的是动作：控制权要 control，写要 write 系，读要 read 系。
+     */
+    private fun levelCovers(have: Access, need: Access): Boolean = when {
+        need == Access.CONTROL -> have == Access.CONTROL
+        accessNeedsWrite(need) -> accessNeedsWrite(have)
+        else -> accessNeedsRead(have)
+    }
+
+    /** 档位够不够：够了返回 null，不够返回需要的那一档。 */
+    private fun insufficient(ctx: Context, cap: Cap, method: String, path: String): Access? {
+        val need = neededAccess(cap, method, path)
+        return if (levelCovers(effectiveAccess(ctx, cap), need)) null else need
+    }
+
+    /** Android 层缺的东西：给人看的名字 + 需要跳系统页时的动作。 */
+    private data class OsGap(val labels: List<String>, val settingsAction: String?)
+
+    /**
+     * Android 层还缺哪些权限。
+     *
+     * 判据用 [permissionSatisfied]（它知道「媒体给一类就够」「大致位置也算」这些例外），所以
+     * 不会因为可选权限而反复弹窗；返回 null 表示不缺。
+     */
+    private fun osGap(ctx: Context, cap: Cap, access: Access): OsGap? {
+        if (permissionSatisfied(ctx, cap, access)) return null
+        val labels = mutableListOf<String>()
+        val special = specialPermissionOf(cap, access)
+        if (special != null && !specialGranted(ctx, special)) labels += specialLabel(ctx, special)
+        for (permission in runtimePermissions(ctx, cap, access)) {
+            val granted = ContextCompat.checkSelfPermission(ctx, permission) ==
+                PackageManager.PERMISSION_GRANTED
+            if (!granted) labels += permissionLabel(ctx, permission)
+        }
+        if (labels.isEmpty()) return null
+        return OsGap(labels.distinct(), special?.action)
+    }
+
+    /**
+     * 弹第二段并阻塞等结果；返回 true 表示复查通过、可以执行了。
+     *
+     * 不在前台时直接返回 false：这一段需要用户看着屏幕操作（可能还要去系统设置页）。
+     */
+    private fun awaitOsGap(ctx: Context, cap: Cap, access: Access, gap: OsGap): Boolean {
+        if (!isForeground(ctx)) return false
+        val request = DshElevationRequests.askOs(cap, access, gap.labels, gap.settingsAction)
+            ?: return false
+        return DshElevationRequests.awaitOs(request.id) == DshElevationRequests.OsOutcome.GRANTED
+    }
+
+    /** 特殊权限的短名。 */
+    private fun specialLabel(ctx: Context, special: Special): String = str(
+        ctx,
+        when (special) {
+            Special.WRITE_SETTINGS -> R.string.dsh_native_perm_label_write_settings
+            Special.NOTIFICATION_POLICY -> R.string.dsh_native_perm_label_dnd
+            Special.REQUEST_INSTALL -> R.string.dsh_native_perm_label_install
+            Special.FULL_SCREEN_INTENT -> R.string.dsh_native_perm_label_full_screen
+            Special.NOTIFICATION_ACCESS -> R.string.dsh_native_perm_label_notification_access
+        },
+    )
+
+    /** 运行时权限的短名；不认识的就用权限名的最后一段，别把整串包名塞给用户。 */
+    private fun permissionLabel(ctx: Context, permission: String): String {
+        val known = when (permission) {
+            android.Manifest.permission.POST_NOTIFICATIONS -> R.string.dsh_native_perm_label_notifications
+            android.Manifest.permission.CAMERA -> R.string.dsh_native_perm_label_camera
+            android.Manifest.permission.RECORD_AUDIO -> R.string.dsh_native_perm_label_microphone
+            android.Manifest.permission.READ_CONTACTS,
+            android.Manifest.permission.WRITE_CONTACTS,
+            -> R.string.dsh_native_perm_label_contacts
+            android.Manifest.permission.READ_CALENDAR,
+            android.Manifest.permission.WRITE_CALENDAR,
+            -> R.string.dsh_native_perm_label_calendar
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            -> R.string.dsh_native_perm_label_location
+            android.Manifest.permission.READ_PHONE_STATE -> R.string.dsh_native_perm_label_phone
+            android.Manifest.permission.BODY_SENSORS -> R.string.dsh_native_perm_label_sensors
+            android.Manifest.permission.READ_SMS,
+            android.Manifest.permission.SEND_SMS,
+            android.Manifest.permission.RECEIVE_SMS,
+            -> R.string.dsh_native_perm_label_sms
+            android.Manifest.permission.READ_MEDIA_IMAGES,
+            android.Manifest.permission.READ_MEDIA_VIDEO,
+            android.Manifest.permission.READ_MEDIA_AUDIO,
+            android.Manifest.permission.READ_EXTERNAL_STORAGE,
+            -> R.string.dsh_native_perm_label_media
+            else -> null
+        }
+        return known?.let { str(ctx, it) } ?: permission.substringAfterLast('.')
+    }
+
     /** 取一个可选的长文本参数：去空白、限长、空串按「没给」处理。 */
     private fun bounded(raw: String?): String? =
         text(raw)?.trim()?.take(MAX_COMMAND_CHARS)?.takeIf { it.isNotBlank() }
@@ -828,7 +1012,7 @@ object DshNativeBridge {
             return 400 to err(str(ctx, R.string.dsh_native_err_bad_access), "bad_access")
         }
         val current = access(ctx, cap)
-        if (accessOptions(cap).indexOf(requested) <= accessOptions(cap).indexOf(current)) {
+        if (levelCovers(current, requested)) {
             return 200 to JSONObject()
                 .put("ok", true)
                 .put("status", "already_granted")
@@ -839,7 +1023,7 @@ object DshNativeBridge {
         // 已经有一个还没用掉的「仅本次」配额能覆盖这次申请：说明用户刚同意过同一件事，
         // 别再弹一次窗问他 —— 让他重跑那条命令即可。
         val onceNow = onceAccess(cap)
-        if (onceNow != null && accessOptions(cap).indexOf(onceNow) >= accessOptions(cap).indexOf(requested)) {
+        if (onceNow != null && levelCovers(onceNow, requested)) {
             return 200 to JSONObject()
                 .put("ok", true)
                 .put("status", "already_granted_once")
@@ -858,21 +1042,52 @@ object DshNativeBridge {
             ?: return 409 to err(str(ctx, R.string.dsh_native_err_elevate_busy), "request_pending")
         // 事实文件跟着变：提示词知道「已经有一份申请在等用户」，agent 就不会再提一份
         runCatching { DshHostPrompt.writeFacts(ctx.applicationContext) }
-        audit(ctx, "POST", "/native/elevate", params, cap, reason, 202)
-        // 202 的含义是「已提交、等用户」，不是「已经给了」：把语义写进 JSON，模型不必从
-        // 状态码推断（容器侧的 CLI 也会在 stderr 上再说一遍）。
-        return 202 to JSONObject()
-            .put("ok", true)
-            .put("status", "pending_user")
-            .put("pending", true)
-            .put("requestId", request.id)
-            .put("expiresInMs", DshElevationRequests.TTL_MS)
-            .put(
-                "note",
-                "Waiting for the user to answer in the DSH-Folk app. Do not file another request; " +
-                    "check dsh-native caps (pending / lastElevation) for the outcome.",
+        // 阻塞等用户答复。以前这里立刻回 202，让 agent 自己过一会儿再查 pending —— 那等于把
+        // 一次问答拆成三次往返，中间还要 agent 记得回来问。现在这就是一次普通的阻塞调用。
+        val decision = DshElevationRequests.awaitDecision(request.id)
+        audit(ctx, "POST", "/native/elevate", params, cap, reason, decisionStatus(decision))
+        val base = JSONObject()
+            .put("ok", decision == DshElevationRequests.Decision.ALLOWED ||
+                decision == DshElevationRequests.Decision.ONCE)
+            .put("status", decision.id)
+            .put("cap", cap.id)
+            .put("access", requested.id)
+            .put("expiresInMs", 0)
+        return when (decision) {
+            DshElevationRequests.Decision.ALLOWED -> 200 to base
+                .put("note", "The user allowed it. The level is saved; call the capability now.")
+                .toString()
+
+            DshElevationRequests.Decision.ONCE -> 200 to base
+                .put("once", true)
+                .put("onceTtlMs", ONCE_TTL_MS)
+                .put(
+                    "note",
+                    "The user allowed this once. It covers exactly one call within " +
+                        "${ONCE_TTL_MS / 1000}s; make that call now.",
+                )
+                .toString()
+
+            DshElevationRequests.Decision.DENIED -> 403 to err(
+                str(ctx, R.string.dsh_native_err_denied, capName(ctx, cap)),
+                "denied_by_user",
             )
-            .toString()
+
+            DshElevationRequests.Decision.EXPIRED -> 403 to err(
+                str(ctx, R.string.dsh_native_err_request_expired, capName(ctx, cap)),
+                "request_expired",
+            )
+        }
+    }
+
+    /** 申请结论对应的审计状态码（记录里也要能看出「用户拒绝」和「超时」的区别）。 */
+    private fun decisionStatus(decision: DshElevationRequests.Decision): Int = when (decision) {
+        DshElevationRequests.Decision.ALLOWED,
+        DshElevationRequests.Decision.ONCE,
+        -> 200
+
+        DshElevationRequests.Decision.DENIED -> 403
+        DshElevationRequests.Decision.EXPIRED -> 408
     }
 
     private fun audit(
