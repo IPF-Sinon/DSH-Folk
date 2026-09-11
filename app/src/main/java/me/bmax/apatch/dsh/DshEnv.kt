@@ -231,6 +231,25 @@ object DshEnv {
      */
     const val KEY_SEED_REPAIR_REV = "seed_repair_rev"
 
+    /**
+     * 上一次预装时容器里跑的是哪个运行时版本（见 [DshRuntime.seedPlugins]）。
+     *
+     * 换运行时等于换了一个环境：profile 可能被重建、rootfs 里的 dsh 版本变了、
+     * 上一次失败的原因（网络、pnpm 拦构建脚本、dsh 版本不兼容）多半已经不存在。
+     * 所以版本一变就允许把「记过账但没生效」的预装包重新试一遍。
+     *
+     * 键不存在（任何在引入它之前就装好的 App）按「环境变了」处理：先补一次。
+     */
+    const val KEY_SEED_RUNTIME = "seed_runtime_version"
+
+    /**
+     * 当前运行时版本下已经重试过几轮预装（见 [DshRuntime.SEED_MAX_PASSES]）。
+     *
+     * 只有**真的重试过**才 +1：否则仅仅因为开机次数多就把配额用光，等于又回到
+     * 「一次失败就永远不试」。配额用尽后要等运行时版本变化才会重新获得机会。
+     */
+    const val KEY_SEED_PASSES = "seed_passes"
+
     /** 安装插件后是否用 `dsh web --port 0` 验证一次能否启动（默认开）。 */
     const val KEY_VERIFY_AFTER_INSTALL = "verify_after_install"
 

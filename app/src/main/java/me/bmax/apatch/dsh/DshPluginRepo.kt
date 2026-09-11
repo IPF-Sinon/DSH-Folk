@@ -1097,13 +1097,42 @@ object DshPluginRepo {
     // ────────────────────────── 安装后验证 / 回滚 ──────────────────────────
 
     /** profile `dsh.profile.bundles` 当前列表（判定安装带来了哪个新包）。 */
-    suspend fun bundles(): List<String> = withContext(Dispatchers.IO) {
+    /**
+     * profile 声明的 bundle 清单，以及每个包在 `node_modules` 里**是否真的存在**。
+     *
+     * 为什么要两者：`bundles` 只是 profile package.json 里的一行声明，`dsh plugin remove`
+     * 之外的路径（换运行时、profile 被重建、pnpm 装了一半）都可能让声明留着而包已经不在
+     * 磁盘上。只按声明判断「装上了」，就会把坏掉的安装当成好的，永远不再补装
+     * （预装插件「失败后再也不重试」的死胡同就是这么形成的）。
+     *
+     * 一次 exec 同时拿两件事：进容器跑 node 是秒级开销，分成两次调用会翻倍。
+     */
+    suspend fun bundleState(): BundleState = withContext(Dispatchers.IO) {
         val script = "const fs=require('fs'),path=require('path');" +
-            "try{const m=JSON.parse(fs.readFileSync(path.join(process.argv[1],'package.json'),'utf8'));" +
-            "for(const b of (m.dsh&&m.dsh.profile&&m.dsh.profile.bundles)||[])console.log(b)}catch(e){}"
-        DshRuntime.execRootfsForOutput("node -e \"$script\" $PROFILE_DIR 2>/dev/null", 60_000)
-            .lines().map { it.trim() }.filter { it.isNotEmpty() }
+            "const dir=process.argv[1];" +
+            "try{const m=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'));" +
+            "for(const b of (m.dsh&&m.dsh.profile&&m.dsh.profile.bundles)||[]){" +
+            "let ok='0';" +
+            "try{ok=fs.existsSync(path.join(dir,'node_modules',b,'package.json'))?'1':'0'}catch(e){}" +
+            "console.log(b+'\\t'+ok)}}catch(e){}"
+        val out = DshRuntime.execRootfsForOutput("node -e \"$script\" $PROFILE_DIR 2>/dev/null", 60_000)
+        val declared = mutableListOf<String>()
+        val present = mutableSetOf<String>()
+        for (line in out.lines()) {
+            val i = line.indexOf('\t')
+            val pkg = (if (i < 0) line else line.substring(0, i)).trim()
+            if (pkg.isEmpty()) continue
+            declared += pkg
+            if (i >= 0 && line.substring(i + 1).trim() == "1") present += pkg
+        }
+        BundleState(declared = declared, present = present)
     }
+
+    /** [bundleState] 的结果：声明的清单 + 其中在 node_modules 里真实存在的那部分。 */
+    data class BundleState(val declared: List<String>, val present: Set<String>)
+
+    /** profile 声明的 bundle 清单（不校验磁盘上是否还在，见 [bundleState]）。 */
+    suspend fun bundles(): List<String> = bundleState().declared
 
     /**
      * 用 `dsh web --port 0` 就地验证插件树能不能结算。

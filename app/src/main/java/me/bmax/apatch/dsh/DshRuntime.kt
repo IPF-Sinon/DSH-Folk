@@ -200,6 +200,15 @@ object DshRuntime {
      */
     private const val SEED_REPAIR_REV = 1
 
+    /**
+     * 同一个运行时版本下，最多允许几轮「补装没生效的预装包」。
+     *
+     * 给的是**瞬时故障**的余地（网络抽风、pnpm 首次拉包超时）：第一次失败后下次开机
+     * 还能再试一次；两次都不行就认定这个环境下装不上，不再每次开机重跑 pnpm。
+     * 换运行时版本会重置这个计数（见 [applySeedEnvRetry]）。
+     */
+    private const val SEED_MAX_PASSES = 2
+
     /** 预装插件集合（供插件列表/商店渲染「预装」标签）。 */
     fun isSeedPlugin(pkg: String): Boolean = pkg in SEED_PLUGINS
 
@@ -1219,10 +1228,16 @@ object DshRuntime {
             }
 
         // 已经装上的（含用户手动装的）。放在补修之前取：补修要靠它判断「记过账但没生效」。
-        val installed = runCatching { DshPluginRepo.bundles() }.getOrElse { emptyList() }.toSet()
+        // 判据是「声明在 profile 的 bundles 里**且** node_modules 里真的有包」——
+        // 只看声明会把「换运行时后 profile 重建、包却没了」的坏安装当成好的。
+        val bundleState = runCatching { DshPluginRepo.bundleState() }
+            .getOrElse { DshPluginRepo.BundleState(emptyList(), emptySet()) }
+        val installed = bundleState.declared.filter { it in bundleState.present }.toSet()
 
         // 修好根因后补修历史失败（见 KEY_SEED_REPAIR_REV）
         applySeedRepair(p, attempted, installed)
+        // 换运行时（或本键还不存在）时再给一次机会：见 KEY_SEED_RUNTIME 的说明
+        applySeedEnvRetry(p, attempted, installed)
 
         // 上游已内置同名 entry id 的预装包直接跳过：dsh 0.1.5 起 dsh-web-app 自带
         // file-upload loader entry，再预装 dsh-file-upload 会让整棵插件树报
@@ -1339,6 +1354,46 @@ object DshRuntime {
             logInfo(R.string.dsh_log_seed_repair, joinForLog(retry))
         }
         p.edit().putInt(DshEnv.KEY_SEED_REPAIR_REV, SEED_REPAIR_REV).apply()
+    }
+
+    /**
+     * 换运行时后重新给预装一次机会：把「记过账但没生效」的预装包从账本里摘掉。
+     *
+     * [applySeedRepair] 靠人工抬轮次号，只能救一次；用完后再遇到同一类问题
+     * —— 预装失败 → 账本照样记账 → 之后永远不再尝试 —— 就是死胡同：
+     * 用户的预装插件一直缺着，界面上不会有任何提示，日志里连一行都不会有
+     * （账本提前返回，预装流程整个被跳过）。这里改成跟着**运行时版本**自动复位：
+     * 换运行时等于换了环境，旧失败的原因（网络、pnpm 拦构建脚本、dsh 版本不兼容、
+     * profile 被重建）多半已经不成立。
+     *
+     * 配额 [SEED_MAX_PASSES] 防止「根因没修好 → 每次开机都重跑一遍 pnpm」：
+     * 只有真的重试过才计数，用尽后要等运行时版本变化才重新获得机会。
+     */
+    private fun applySeedEnvRetry(
+        p: android.content.SharedPreferences,
+        attempted: MutableSet<String>,
+        installed: Set<String>,
+    ) {
+        val runtimeNow = p.getString(DshEnv.KEY_RUNTIME_VERSION, "").orEmpty()
+        val lastRuntime = p.getString(DshEnv.KEY_SEED_RUNTIME, null)
+        val passes = p.getInt(DshEnv.KEY_SEED_PASSES, 0)
+        // 版本没变且配额已用尽：不再重试（否则每次冷启动都要多等一轮 pnpm）
+        if (lastRuntime == runtimeNow && passes >= SEED_MAX_PASSES) return
+        val retry = attempted.filter { it in SEED_PLUGINS && it !in installed }
+        if (retry.isEmpty()) {
+            // 没有要补的：只记下「这个版本已经检查过」，不消耗配额
+            if (lastRuntime != runtimeNow) {
+                p.edit().putString(DshEnv.KEY_SEED_RUNTIME, runtimeNow).apply()
+            }
+            return
+        }
+        attempted.removeAll(retry.toSet())
+        persistSeeded(attempted)
+        logInfo(R.string.dsh_log_seed_retry_missing, joinForLog(retry))
+        p.edit()
+            .putString(DshEnv.KEY_SEED_RUNTIME, runtimeNow)
+            .putInt(DshEnv.KEY_SEED_PASSES, if (lastRuntime == runtimeNow) passes + 1 else 1)
+            .apply()
     }
 
     /**

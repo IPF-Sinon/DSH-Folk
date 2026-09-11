@@ -827,6 +827,7 @@
     <string name="dsh_log_seeding">Pre-installing plugin %1$s …</string>
     <string name="dsh_log_seed_builds_blocked">pnpm blocked build scripts (%1$s), allowing them and retrying…</string>
     <string name="dsh_log_seed_repair">Repairing pre-install: %1$s did not take effect, retrying once</string>
+    <string name="dsh_log_seed_retry_missing">Pre-install retry: %1$s is missing from the container, installing again</string>
     <string name="dsh_log_seed_done">Pre-installed %1$s</string>
     <string name="dsh_log_seed_failed">Could not pre-install %1$s (you can install it later from the plugin store)</string>
     <string name="dsh_log_seed_exception">Pre-install error: %1$s</string>

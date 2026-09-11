@@ -807,6 +807,7 @@
     <string name="dsh_log_seeding">预装插件 %1$s …</string>
     <string name="dsh_log_seed_builds_blocked">pnpm 拦下了构建脚本（%1$s），自动放行后重试…</string>
     <string name="dsh_log_seed_repair">补修预装：%1$s 之前没生效，重试一次</string>
+    <string name="dsh_log_seed_retry_missing">补装预装插件：容器里缺 %1$s，重新安装</string>
     <string name="dsh_log_seed_done">预装完成 %1$s</string>
     <string name="dsh_log_seed_failed">预装失败 %1$s（可稍后在插件商店手动安装）</string>
     <string name="dsh_log_seed_exception">预装异常: %1$s</string>
