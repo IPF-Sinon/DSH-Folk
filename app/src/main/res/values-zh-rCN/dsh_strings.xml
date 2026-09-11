@@ -324,6 +324,7 @@
     <string name="dsh_bk_snapshot">；回滚快照 %1$s</string>
     <string name="dsh_runtime_section">运行时</string>
     <string name="dsh_runtime_summary">运行时损坏或想换新版本时重装容器</string>
+    <string name="dsh_runtime_management_summary">查看当前版本、检查或执行更新、重装、导入本地包并选择测试版通道</string>
     <string name="dsh_runtime_installed_version">已安装：%1$s</string>
     <string name="dsh_runtime_not_installed">尚未安装 —— 在首页启动服务即会下载</string>
     <string name="dsh_runtime_reinstall">重装运行时</string>
@@ -335,13 +336,18 @@
     <string name="dsh_runtime_current">当前版本</string>
     <string name="dsh_runtime_update_action">检查并更新</string>
     <string name="dsh_runtime_import">导入运行时</string>
-    <string name="dsh_runtime_import_warning">仅导入从可信来源下载的运行时压缩包。恶意运行时可以执行任意代码并访问 DSH 数据。</string>
-    <string name="dsh_runtime_import_confirm">我信任此来源</string>
+    <string name="dsh_runtime_import_confirm_title">确认导入此运行时？</string>
+    <string name="dsh_runtime_import_confirm_text">文件：%1$s\n大小：%2$s\n\n仅在信任文件来源时继续。恶意运行时可以执行任意代码并访问 DSH 数据。</string>
+    <string name="dsh_runtime_import_size_unknown">未知</string>
+    <string name="dsh_runtime_import_confirm">我信任此来源并安装</string>
     <string name="dsh_runtime_beta">接受测试版运行时更新</string>
-    <string name="dsh_runtime_beta_summary">使用 runtime-beta 滚动通道，测试版可能不稳定。</string>
+    <string name="dsh_runtime_beta_summary">使用独立的 runtime-beta-latest 滚动通道，测试版可能不稳定；默认关闭。</string>
     <string name="dsh_runtime_preserve_question">是否保留会话、插件、配置及依赖数据？</string>
     <string name="dsh_runtime_preserve">保留数据</string>
-    <string name="dsh_runtime_clean">全新重装</string>
+    <string name="dsh_runtime_clean">不保留数据</string>
+    <string name="dsh_runtime_clean_confirm_title">确认删除运行时数据？</string>
+    <string name="dsh_runtime_clean_confirm_text">这会删除现有会话、已装插件、DSH 配置及插件依赖数据，然后安装全新运行时。此操作无法撤销。</string>
+    <string name="dsh_runtime_clean_confirm_go">删除数据并重装</string>
     <string name="dsh_plugin_builtin_label">内置</string>
     <string name="dsh_host_plugin_name">安卓原生权限桥提示词</string>
     <string name="dsh_host_plugin_version">DSH-Folk 内置 · 不可卸载</string>
@@ -349,7 +355,8 @@
     <string name="dsh_permission_log_title">权限记录</string>
     <string name="dsh_permission_log_empty">暂无权限调用记录。</string>
     <string name="dsh_permission_log_reason">理由：%1$s</string>
-    <string name="dsh_permission_log_status">结果：HTTP %1$d</string>
+    <string name="dsh_permission_log_details">能力：%1$s · 访问：%2$s · HTTP %3$d</string>
+    <string name="dsh_permission_log_copy">复制命令</string>
 
     <!-- 插件商店：全量目录 + 本地检索 -->
     <string name="dsh_plugin_category_all">全部</string>

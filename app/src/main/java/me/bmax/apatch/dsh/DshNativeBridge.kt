@@ -478,12 +478,12 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_cap_disabled, capName(ctx, cap)),
                 "cap_disabled",
             )
-            audit(ctx, method, path, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result.first)
             return result
         }
         if (path == "/native/notify/system" && access(ctx, cap) != Access.CONTROL) {
             val result = 403 to err(str(ctx, R.string.dsh_native_err_control_disabled, capName(ctx, cap)), "control_disabled")
-            audit(ctx, method, path, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result.first)
             return result
         }
         if (isWriteRequest(method, path) && !canWrite(ctx, cap)) {
@@ -491,7 +491,7 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_write_disabled, capName(ctx, cap)),
                 "write_disabled",
             )
-            audit(ctx, method, path, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result.first)
             return result
         }
         if (!isWriteRequest(method, path) && !canRead(ctx, cap)) {
@@ -499,7 +499,7 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_read_disabled, capName(ctx, cap)),
                 "read_disabled",
             )
-            audit(ctx, method, path, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result.first)
             return result
         }
         val (ok, why) = availability(ctx, cap)
@@ -508,7 +508,7 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_cap_unavailable, capName(ctx, cap)),
                 why,
             )
-            audit(ctx, method, path, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result.first)
             return result
         }
 
@@ -566,7 +566,7 @@ object DshNativeBridge {
             method == "POST" && path == "/native/sms/send" -> smsSend(ctx, params)
             else -> methodNotAllowed(ctx, method, path)
         }
-        audit(ctx, method, path, cap, reason, result.first)
+        audit(ctx, method, path, params, cap, reason, result.first)
         return result
     }
 
@@ -697,7 +697,7 @@ object DshNativeBridge {
             ?: return 400 to err(str(ctx, R.string.dsh_native_err_reason_required), "reason_required")
         val request = DshElevationRequests.submit(cap, requested, reason)
             ?: return 409 to err(str(ctx, R.string.dsh_native_err_elevate_busy), "request_pending")
-        audit(ctx, "POST", "/native/elevate", cap, reason, 202)
+        audit(ctx, "POST", "/native/elevate", params, cap, reason, 202)
         return 202 to JSONObject()
             .put("ok", true)
             .put("pending", true)
@@ -705,7 +705,15 @@ object DshNativeBridge {
             .toString()
     }
 
-    private fun audit(ctx: Context, method: String, path: String, cap: Cap, reason: String, status: Int) {
+    private fun audit(
+        ctx: Context,
+        method: String,
+        path: String,
+        params: Map<String, String>,
+        cap: Cap,
+        reason: String,
+        status: Int,
+    ) {
         runCatching {
             val dir = File(ctx.filesDir, "audit").apply { mkdirs() }
             val file = File(dir, "native-capability.jsonl")
@@ -717,6 +725,7 @@ object DshNativeBridge {
                 .put("time", Instant.now().toString())
                 .put("method", method)
                 .put("path", path)
+                .put("command", auditCommand(method, path, params, reason))
                 .put("capability", cap.id)
                 .put("access", access(ctx, cap).id)
                 .put("reason", reason)
@@ -724,6 +733,72 @@ object DshNativeBridge {
             FileWriter(file, true).use { it.append(entry.toString()).append('\n') }
         }.onFailure { Log.w(TAG, "记录能力调用失败: ${it.message}") }
     }
+
+    private fun auditCommand(method: String, path: String, params: Map<String, String>, reason: String): String {
+        val base = when (path) {
+            "/native/elevate" -> "elevate ${params["cap"].orEmpty()} ${params["access"].orEmpty()}"
+            "/native/notify" -> if (method == "DELETE") "notify-cancel" else "notify <redacted>"
+            "/native/notify/list" -> "notify-list"
+            "/native/notify/system" -> "notify-dismiss"
+            "/native/notify/full-screen" -> "notify-full-screen <redacted>"
+            "/native/toast" -> "toast <redacted>"
+            "/native/vibrate" -> "vibrate"
+            "/native/clipboard" -> if (method == "GET") "clip get" else "clip set <redacted>"
+            "/native/share" -> "share <redacted>"
+            "/native/open" -> "open <redacted>"
+            "/native/device" -> "device"
+            "/native/media/list" -> "media list"
+            "/native/media/read" -> "media get ${params["id"].orEmpty()}"
+            "/native/mic/record" -> "mic record"
+            "/native/camera/photo" -> "camera photo"
+            "/native/tts/speak" -> "tts say <redacted>"
+            "/native/tts/file" -> "tts file <redacted>"
+            "/native/tts/voices" -> "tts voices"
+            "/native/calendar/list" -> "calendar list"
+            "/native/calendar/create" -> "calendar add <redacted>"
+            "/native/contacts/list" -> "contacts list"
+            "/native/location" -> "location"
+            "/native/phone/info" -> "phone"
+            "/native/sensors/list" -> "sensors list"
+            "/native/sensors/read" -> "sensors read ${params["id"] ?: params["sensor"].orEmpty()}"
+            "/native/network" -> "network"
+            "/native/volume" -> if (method == "GET") "volume" else "volume set ${params["percent"].orEmpty()}"
+            "/native/ringer" -> "ringer ${params["mode"].orEmpty()}"
+            "/native/settings" -> "settings"
+            "/native/settings/brightness" -> "settings brightness ${params["percent"].orEmpty()}"
+            "/native/settings/timeout" -> "settings timeout ${params["ms"].orEmpty()}"
+            "/native/settings/rotation" -> "settings rotation ${params["on"].orEmpty()}"
+            "/native/install" -> "install"
+            "/native/usage/list" -> "usage list"
+            "/native/sms/list" -> "sms list"
+            "/native/sms/send" -> "sms send ${params["to"].orEmpty()} <redacted>"
+            else -> "$method $path"
+        }
+        val options = when (path) {
+            "/native/notify" -> listOf("id", "ongoing")
+            "/native/notify/list", "/native/sms/list" -> listOf("limit")
+            "/native/notify/system" -> listOf("all")
+            "/native/vibrate" -> listOf("ms", "amplitude")
+            "/native/media/list" -> listOf("type", "limit")
+            "/native/media/read" -> listOf("type")
+            "/native/mic/record" -> listOf("ms")
+            "/native/camera/photo" -> listOf("facing", "max")
+            "/native/tts/speak", "/native/tts/file" -> listOf("lang", "rate", "pitch")
+            "/native/calendar/list" -> listOf("days", "limit")
+            "/native/calendar/create" -> listOf("start", "end", "minutes")
+            "/native/contacts/list" -> listOf("limit")
+            "/native/location" -> listOf("maxAge", "wait")
+            "/native/volume" -> listOf("stream")
+            "/native/settings/brightness" -> listOf("auto")
+            "/native/usage/list" -> listOf("days", "limit")
+            else -> emptyList()
+        }.mapNotNull { key -> params[key]?.let { "--$key ${shellArg(it)}" } }
+        return (listOf("dsh-native", base.trim()) + options + listOf("--reason ${shellArg(reason)}")).joinToString(" ")
+    }
+
+    private fun shellArg(value: String): String =
+        if (value.matches(Regex("[A-Za-z0-9._:/+-]+"))) value
+        else "'${value.replace("'", "'\\''")}'"
 
     private fun cancelSystemNotification(ctx: Context, params: Map<String, String>): Pair<Int, String> {
         if (!DshNotificationListener.connected()) {

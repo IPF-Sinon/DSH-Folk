@@ -58,22 +58,28 @@ object DshSource {
     private const val KEY_AUTO_SOURCE = "auto_source"
     private const val KEY_AUTO_SOURCE_AT = "auto_source_at"
 
-    /** 运行时发布位置（滚动 tag runtime-latest；资产名按架构区分）。 */
-    private const val RUNTIME_STABLE_TAG = "runtime-latest"
-    private const val RUNTIME_BETA_TAG = "runtime-beta"
+    /** 稳定版与测试版是两个互不复用 metadata / rootfs 的滚动发布位置。 */
+    private const val RUNTIME_STABLE_BASE =
+        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-latest/"
+    private const val RUNTIME_BETA_BASE =
+        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-beta-latest/"
     private const val KEY_RUNTIME_BETA = "runtime_accept_beta"
 
-    private fun runtimeBase(): String {
-        val prefs = me.bmax.apatch.apApp.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
-        val tag = if (prefs.getBoolean(KEY_RUNTIME_BETA, false)) RUNTIME_BETA_TAG else RUNTIME_STABLE_TAG
-        return "https://github.com/IPF-Sinon/DSH-Folk/releases/download/$tag/"
-    }
+    private fun runtimeBase(): String =
+        if (acceptRuntimeBeta(me.bmax.apatch.apApp)) RUNTIME_BETA_BASE else RUNTIME_STABLE_BASE
 
     fun acceptRuntimeBeta(ctx: Context): Boolean =
         ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE).getBoolean(KEY_RUNTIME_BETA, false)
 
     fun setAcceptRuntimeBeta(ctx: Context, on: Boolean) {
-        ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE).edit().putBoolean(KEY_RUNTIME_BETA, on).apply()
+        prefs(ctx).edit()
+            .putBoolean(KEY_RUNTIME_BETA, on)
+            .remove(KEY_AUTO_SOURCE)
+            .remove(KEY_AUTO_SOURCE_AT)
+            .apply()
+        memCache = null
+        memCachedAt = 0L
+        lastResults = emptyList()
     }
 
     /**

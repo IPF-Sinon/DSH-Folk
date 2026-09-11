@@ -5,7 +5,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import android.provider.Settings
+import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -83,7 +85,7 @@ import rikka.shizuku.Shizuku
 @Destination<RootGraph>
 @Composable
 fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: String? = null) {
-    DshSettingsScreen(navigator, highlightKey, permissionOnly = false, securityMode = false)
+    DshSettingsScreen(navigator, highlightKey, permissionOnly = false)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,7 +94,6 @@ internal fun DshSettingsScreen(
     navigator: DestinationsNavigator,
     highlightKey: String?,
     permissionOnly: Boolean,
-    securityMode: Boolean = true,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -104,13 +105,29 @@ internal fun DshSettingsScreen(
     val dshPrefs = context.getSharedPreferences(DshEnv.PREF, android.content.Context.MODE_PRIVATE)
 
     var runtimeBeta by rememberSaveable { mutableStateOf(DshSource.acceptRuntimeBeta(context)) }
-    var importTrusted by rememberSaveable { mutableStateOf(false) }
+    var runtimeCheckRevision by rememberSaveable { mutableStateOf(0) }
+    var importCandidate by remember { mutableStateOf<RuntimeImportCandidate?>(null) }
     val runtimeImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch(Dispatchers.IO) {
-            val file = File(context.cacheDir, "runtime-import.tar.gz")
-            runCatching { context.contentResolver.openInputStream(uri)!!.use { input -> file.outputStream().use { input.copyTo(it) } } }
-                .onSuccess { DshRuntime.importRuntime(file, preserveData = true) }
+            val metadata = context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) null else {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    val name = if (nameIndex >= 0) cursor.getString(nameIndex) else null
+                    val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else -1L
+                    (name ?: uri.lastPathSegment ?: "runtime.tar.gz") to size
+                }
+            } ?: ((uri.lastPathSegment ?: "runtime.tar.gz") to -1L)
+            withContext(Dispatchers.Main) {
+                importCandidate = RuntimeImportCandidate(uri, metadata.first, metadata.second)
+            }
         }
     }
     var runtimeId by rememberSaveable { mutableStateOf(DshRuntime.runtimeId()) }
@@ -168,10 +185,6 @@ internal fun DshSettingsScreen(
         mutableStateOf(DshNativeBridge.enabled(context))
     }
     var nativeAccess by remember { mutableStateOf(DshNativeBridge.accessMap(context)) }
-    // 宿主能力提示词注入
-    var hostPromptEnabled by rememberSaveable {
-        mutableStateOf(DshHostPrompt.enabled(context))
-    }
     // 每一项能力的权限是否齐了。任何一项都可能在系统设置里被撤销，而撤销之后开关
     // 还是亮的 —— 所以必须每次回到本页重读（见下面的 LifecycleResumeEffect），
     // 不能只在首次组合时读一次。
@@ -423,7 +436,7 @@ internal fun DshSettingsScreen(
                     )
                 },
                 actions = {
-                    if (securityMode) {
+                    if (permissionOnly) {
                         IconButton(onClick = { navigator.navigate(PermissionLogScreenDestination) }) {
                             Icon(Icons.Outlined.ReceiptLong, contentDescription = stringResource(R.string.dsh_permission_log_title))
                         }
@@ -685,11 +698,6 @@ internal fun DshSettingsScreen(
                             if (access != DshNativeBridge.Access.OFF) requestCapPermission(cap)
                         }
                     },
-                    hostPromptEnabled = hostPromptEnabled,
-                    onHostPromptEnabledChange = { on ->
-                        hostPromptEnabled = on
-                        DshHostPrompt.setEnabled(context.applicationContext, on)
-                    },
                     capsWithPermission = capsWithPermission,
                     coarseLocationOnly = coarseLocationOnly,
                     allFilesGranted = allFilesGranted,
@@ -698,7 +706,12 @@ internal fun DshSettingsScreen(
                     runtimeInstalled = runtimeInstalled,
                     runtimeVersion = runtimeState.runtimeVersion ?: "",
                     onReinstallRuntime = { preserve -> DshRuntime.reinstallRuntime(preserve) },
-                    onImportRuntime = { importTrusted = true },
+                    runtimeCheckRevision = runtimeCheckRevision,
+                    onCheckRuntimeUpdateRequested = { runtimeCheckRevision++ },
+                    onCheckRuntimeUpdate = { DshRuntime.checkRuntimeUpdate() },
+                    onImportRuntime = {
+                        runtimeImportLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "application/x-tar", "application/octet-stream"))
+                    },
                     runtimeBeta = runtimeBeta,
                     onRuntimeBetaChange = { on ->
                         runtimeBeta = on
@@ -776,7 +789,7 @@ internal fun DshSettingsScreen(
                     highlightKey = highlightKey,
                 )
             }
-            if (securityMode) {
+            if (permissionOnly) {
                 item {
                     SecuritySettingsContent(
                         snackBarHost = snackBarHost,
@@ -789,24 +802,45 @@ internal fun DshSettingsScreen(
         }
     }
 
-    if (importTrusted) {
+    importCandidate?.let { candidate ->
         AlertDialog(
-            onDismissRequest = { importTrusted = false },
-            title = { Text(stringResource(R.string.dsh_runtime_import)) },
-            text = { Text(stringResource(R.string.dsh_runtime_import_warning)) },
+            onDismissRequest = { importCandidate = null },
+            title = { Text(stringResource(R.string.dsh_runtime_import_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.dsh_runtime_import_confirm_text,
+                        candidate.name,
+                        if (candidate.size >= 0) Formatter.formatFileSize(context, candidate.size)
+                        else stringResource(R.string.dsh_runtime_import_size_unknown),
+                    )
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    importTrusted = false
-                    runtimeImportLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "application/octet-stream"))
+                    importCandidate = null
+                    scope.launch(Dispatchers.IO) {
+                        val file = File(context.cacheDir, "runtime-import-${System.currentTimeMillis()}.tar.gz")
+                        runCatching {
+                            context.contentResolver.openInputStream(candidate.uri)!!.use { input ->
+                                file.outputStream().use { input.copyTo(it) }
+                            }
+                        }.onSuccess { DshRuntime.importRuntime(file, preserveData = true) }
+                            .onFailure { file.delete() }
+                    }
                 }) { Text(stringResource(R.string.dsh_runtime_import_confirm)) }
             },
-            dismissButton = { TextButton(onClick = { importTrusted = false }) { Text(stringResource(android.R.string.cancel)) } },
+            dismissButton = {
+                TextButton(onClick = { importCandidate = null }) { Text(stringResource(android.R.string.cancel)) }
+            },
         )
     }
 
     // 重建插件依赖的实时日志（与插件页共用同一套对话框）
     PluginProgressHost(pluginViewModel)
 }
+
+private data class RuntimeImportCandidate(val uri: Uri, val name: String, val size: Long)
 
 private const val SHIZUKU_REQ_CODE = 4210
 

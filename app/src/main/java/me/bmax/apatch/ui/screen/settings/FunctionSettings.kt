@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Public
@@ -163,9 +162,6 @@ fun FunctionSettingsContent(
     onRequestCapPermission: (DshNativeBridge.Cap) -> Unit,
     /** 跳「所有文件访问」的系统设置页。 */
     onOpenAllFilesSettings: () -> Unit,
-    /** 是否把宿主能力说明注入 dsh 的系统提示词。 */
-    hostPromptEnabled: Boolean,
-    onHostPromptEnabledChange: (Boolean) -> Unit,
     /**
      * 运行时是否已安装。
      *
@@ -177,6 +173,9 @@ fun FunctionSettingsContent(
     runtimeVersion: String,
     /** 重新下载并覆盖容器。 */
     onReinstallRuntime: (Boolean) -> Unit,
+    runtimeCheckRevision: Int,
+    onCheckRuntimeUpdateRequested: () -> Unit,
+    onCheckRuntimeUpdate: suspend () -> String?,
     onImportRuntime: () -> Unit,
     runtimeBeta: Boolean,
     onRuntimeBetaChange: (Boolean) -> Unit,
@@ -701,10 +700,11 @@ fun FunctionSettingsContent(
                     // r1 的 git 依赖不全，修好了也没人告诉用户该更新。
                     var latest by remember { mutableStateOf<String?>(null) }
                     var checking by remember { mutableStateOf(false) }
-                    LaunchedEffect(runtimeInstalled, runtimeVersion) {
+                    LaunchedEffect(runtimeInstalled, runtimeVersion, runtimeBeta, runtimeCheckRevision) {
                         if (!runtimeInstalled) return@LaunchedEffect
+                        if (runtimeCheckRevision == 0) return@LaunchedEffect
                         checking = true
-                        latest = runCatching { DshRuntime.checkRuntimeUpdate() }.getOrNull()
+                        latest = runCatching { onCheckRuntimeUpdate() }.getOrNull()
                         checking = false
                     }
                     latest?.let {
@@ -717,10 +717,23 @@ fun FunctionSettingsContent(
                     }
 
                     Spacer(Modifier.height(8.dp))
-                    var confirming by remember { mutableStateOf(false) }
+                    var reinstallChoice by remember { mutableStateOf(false) }
+                    var cleanConfirming by remember { mutableStateOf(false) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { confirming = true }, enabled = runtimeInstalled) {
-                            Text(stringResource(R.string.dsh_runtime_update_action))
+                        OutlinedButton(
+                            onClick = { onCheckRuntimeUpdateRequested() },
+                            enabled = runtimeInstalled && !checking,
+                        ) {
+                            if (checking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            else Text(stringResource(R.string.dsh_runtime_update_action))
+                        }
+                        latest?.let {
+                            OutlinedButton(onClick = { onReinstallRuntime(true) }) {
+                                Text(stringResource(R.string.dsh_runtime_update_go))
+                            }
+                        }
+                        OutlinedButton(onClick = { reinstallChoice = true }, enabled = runtimeInstalled) {
+                            Text(stringResource(R.string.dsh_runtime_reinstall))
                         }
                         OutlinedButton(onClick = onImportRuntime) {
                             Text(stringResource(R.string.dsh_runtime_import))
@@ -735,25 +748,42 @@ fun FunctionSettingsContent(
                         checked = runtimeBeta,
                         onCheckedChange = onRuntimeBetaChange,
                     )
-                    // 替换运行时会先暂存并恢复用户数据；确认框说明下载量与停服影响。
-                    if (confirming) {
+                    if (reinstallChoice) {
                         AlertDialog(
-                            onDismissRequest = { confirming = false },
+                            onDismissRequest = { reinstallChoice = false },
                             title = { Text(stringResource(R.string.dsh_runtime_reinstall_confirm_title)) },
                             text = { Text(stringResource(R.string.dsh_runtime_preserve_question)) },
                             confirmButton = {
                                 TextButton(onClick = {
-                                    confirming = false
+                                    reinstallChoice = false
                                     onReinstallRuntime(true)
                                 }) { Text(stringResource(R.string.dsh_runtime_preserve)) }
                             },
                             dismissButton = {
                                 Row {
                                     TextButton(onClick = {
-                                        confirming = false
-                                        onReinstallRuntime(false)
+                                        reinstallChoice = false
+                                        cleanConfirming = true
                                     }) { Text(stringResource(R.string.dsh_runtime_clean)) }
-                                    TextButton(onClick = { confirming = false }) { Text(stringResource(android.R.string.cancel)) }
+                                    TextButton(onClick = { reinstallChoice = false }) { Text(stringResource(android.R.string.cancel)) }
+                                }
+                            },
+                        )
+                    }
+                    if (cleanConfirming) {
+                        AlertDialog(
+                            onDismissRequest = { cleanConfirming = false },
+                            title = { Text(stringResource(R.string.dsh_runtime_clean_confirm_title)) },
+                            text = { Text(stringResource(R.string.dsh_runtime_clean_confirm_text)) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    cleanConfirming = false
+                                    onReinstallRuntime(false)
+                                }) { Text(stringResource(R.string.dsh_runtime_clean_confirm_go)) }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { cleanConfirming = false }) {
+                                    Text(stringResource(android.R.string.cancel))
                                 }
                             },
                         )
@@ -1175,34 +1205,6 @@ fun FunctionSettingsContent(
                         )
                     }
                         }
-                    }
-                }
-            }
-        }
-
-        // ───────── 宿主能力提示词注入 ─────────
-        // 独立成一张卡而不是塞进上面那张：它说明的不只是原生能力（还有共享存储、
-        // dsh-fs、提权状态），而且搜索高亮认的是 item key —— 挂在别人的 key 下面
-        // 会让「搜到了却什么也没高亮」。
-        item(key = "function_host_prompt", visible = false) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            SectionHeader(
-                                icon = { Icon(Icons.Filled.Lightbulb, null, Modifier.size(20.dp)) },
-                                title = stringResource(R.string.dsh_host_prompt_title),
-                                summary = stringResource(R.string.dsh_host_prompt_summary),
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        ExpressiveSwitch(
-                            checked = hostPromptEnabled,
-                            onCheckedChange = onHostPromptEnabledChange,
-                        )
                     }
                 }
             }

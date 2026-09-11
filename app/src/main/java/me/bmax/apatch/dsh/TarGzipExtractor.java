@@ -219,6 +219,11 @@ public final class TarGzipExtractor {
                 throw new IOException("预构建包损坏（非法文件条目: " + safeName(name)
                         + "），请重新下载或改用「直连源码构建」");
             }
+            // 词法路径校验还不够：包可先创建一个符号链接目录，再把后续文件写到该链接
+            // 下面，FileOutputStream 会跟随它逃出 dest。每个条目落盘前同时校验真实父目录。
+            if (!outputPathSafe(dest, out)) {
+                throw new IOException("预构建包损坏（文件路径逃逸: " + safeName(name) + "）");
+            }
 
             switch (type) {
                 case '0':
@@ -274,6 +279,23 @@ public final class TarGzipExtractor {
                     skipPadding(in, size);
                     break;
             }
+        }
+    }
+
+    /** 条目自身及已存在父目录都必须留在 dest 内，防 tar 内链接把后续写入引到外部。 */
+    private static boolean outputPathSafe(File dest, File out) {
+        try {
+            java.nio.file.Path root = dest.toPath().toAbsolutePath().normalize();
+            java.nio.file.Path path = out.toPath().toAbsolutePath().normalize();
+            if (!path.startsWith(root)) return false;
+            File parent = out.getParentFile();
+            while (parent != null && !parent.equals(dest)) {
+                if (java.nio.file.Files.isSymbolicLink(parent.toPath())) return false;
+                parent = parent.getParentFile();
+            }
+            return parent != null;
+        } catch (Throwable e) {
+            return false;
         }
     }
 

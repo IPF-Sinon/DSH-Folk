@@ -142,7 +142,7 @@ object SettingsRegistry {
             add(SettingEntry("function_webui_mode", R.string.dsh_webui_mode, R.string.dsh_webui_mode_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_webui_compat", R.string.dsh_webui_compat_section, category = SettingCategory.FUNCTION))
             add(SettingEntry("function_download_source", R.string.dsh_source_section, R.string.dsh_source_summary, SettingCategory.FUNCTION))
-            add(SettingEntry("function_runtime", R.string.dsh_runtime_section, R.string.dsh_runtime_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_runtime", R.string.dsh_runtime_section, R.string.dsh_runtime_management_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_repair_plugins", R.string.dsh_plugin_repair, R.string.dsh_plugin_repair_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_verify_install", R.string.dsh_verify_after_install, R.string.dsh_verify_after_install_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_open_data_dir", R.string.dsh_docs_open_title, R.string.dsh_docs_open_summary, SettingCategory.FUNCTION))

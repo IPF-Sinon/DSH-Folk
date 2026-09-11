@@ -303,7 +303,7 @@ private fun DshPluginList(
         )
     }
 
-    if (list.isEmpty()) {
+    if (list.isEmpty() && !builtInVisible) {
         // 必须可滚动：否则底栏自动隐藏后无法下拉唤回（见 ScrollableEmptyState）
         ScrollableEmptyState(Modifier.padding(innerPadding)) {
             // 三态分开：正在读 / 一个都没装 / 装了但搜索没命中。

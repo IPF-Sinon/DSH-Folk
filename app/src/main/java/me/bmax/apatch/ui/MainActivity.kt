@@ -93,6 +93,7 @@ import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsSc
 import com.ramcosta.composedestinations.generated.destinations.LanguagePickerScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ModuleSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.MultimediaSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.SecuritySettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.SettingScreenDestination
 import com.ramcosta.composedestinations.DestinationsNavHost
@@ -437,6 +438,7 @@ class MainActivity : AppCompatActivity() {
                     AppearanceSettingsScreenDestination.route,
                     BehaviorSettingsScreenDestination.route,
                     SecuritySettingsScreenDestination.route,
+                    PermissionLogScreenDestination.route,
                     BackupSettingsScreenDestination.route,
                     ModuleSettingsScreenDestination.route,
                     FunctionSettingsScreenDestination.route,

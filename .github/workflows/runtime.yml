@@ -1,4 +1,5 @@
 name: Build DSH runtime rootfs
+run-name: Build DSH runtime (${{ inputs.channel }} / ${{ inputs.arch }})
 
 on:
   workflow_dispatch:
@@ -18,7 +19,7 @@ on:
         type: choice
         options: [ both, arm64, amd64 ]
       channel:
-        description: 'Release channel'
+        description: 'Release channel (stable → runtime-latest, beta → runtime-beta-latest)'
         required: false
         default: 'stable'
         type: choice
@@ -72,7 +73,8 @@ jobs:
           NODE_VER: ${{ inputs.node_version }}
           TARGET_ARCH: ${{ matrix.arch }}
           OUT: ${{ github.workspace }}/out
-          RELEASE_TAG: ${{ inputs.channel == 'beta' && 'runtime-beta' || 'runtime-latest' }}
+          RELEASE_TAG: ${{ inputs.channel == 'beta' && 'runtime-beta-latest' || 'runtime-latest' }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
         run: bash runtime-builder/build-rootfs.sh
 
       - name: Summarize
@@ -94,8 +96,7 @@ jobs:
             out/metadata*.json
           retention-days: 7
 
-      # runtime-latest 是一个滚动 tag：App 里的 DshSource 固定指向它，
-      # 所以这里必须覆盖同名资产而不是新建 tag。
+      # stable/runtime-latest 与 beta/runtime-beta-latest 都是滚动 tag；必须覆盖同名资产。
       #
       # 每个架构只上传**自己的**资产（arm64 用无后缀的旧名，amd64 带 -x86_64）：
       # 用通配符一把梭在两条并行时会互相覆盖，而 arm64 的旧名一旦被 amd64 的内容
@@ -105,7 +106,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARCH: ${{ matrix.arch }}
-          RELEASE_TAG: ${{ inputs.channel == 'beta' && 'runtime-beta' || 'runtime-latest' }}
+          RELEASE_TAG: ${{ inputs.channel == 'beta' && 'runtime-beta-latest' || 'runtime-latest' }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" \

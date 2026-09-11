@@ -15,6 +15,7 @@ UBUNTU_RELEASE="${UBUNTU_RELEASE:-noble}"          # 24.04 LTS
 NODE_VER="${NODE_VER:-v24.19.0}"
 DSH_VERSION="${DSH_VERSION:-latest}"
 TARGET_ARCH="${TARGET_ARCH:-arm64}"                # arm64 | amd64
+RELEASE_CHANNEL="${RELEASE_CHANNEL:-stable}"       # stable | beta
 
 # rootfs 自身的修订号，**改动 rootfs 内容时必须递增**。
 #
@@ -29,6 +30,21 @@ TARGET_ARCH="${TARGET_ARCH:-arm64}"                # arm64 | amd64
 ROOTFS_REV="${ROOTFS_REV:-2}"
 WORK="${WORK:-/tmp/dsh-runtime}"
 OUT="${OUT:-$PWD/out}"
+
+case "$RELEASE_CHANNEL" in
+  stable)
+    VERSION_CHANNEL_SUFFIX=""
+    CHANNEL_RELEASE_TAG="runtime-latest"
+    ;;
+  beta)
+    VERSION_CHANNEL_SUFFIX="-beta"
+    CHANNEL_RELEASE_TAG="runtime-beta-latest"
+    ;;
+  *)
+    echo "!! RELEASE_CHANNEL 只支持 stable / beta，收到 $RELEASE_CHANNEL" >&2
+    exit 2
+    ;;
+esac
 
 # ── 架构映射表 ──
 # 每加一项都要问「这个值在另一个架构上是什么」，别再往下面散落 if。
@@ -375,11 +391,11 @@ echo "    $TARBALL  $((SIZE / 1024 / 1024)) MB  sha256=$SHA"
 
 echo "==> [9/9] 生成 metadata${ASSET_SUFFIX}.json"
 REPO="${GITHUB_REPOSITORY:-IPF-Sinon/DSH-Folk}"
-TAG="${RELEASE_TAG:-runtime-latest}"
+TAG="${RELEASE_TAG:-$CHANNEL_RELEASE_TAG}"
 ASSET="https://github.com/${REPO}/releases/download/${TAG}/rootfs${ASSET_SUFFIX}.tar.gz"
 cat > "$OUT/metadata${ASSET_SUFFIX}.json" <<EOF
 {
-  "version": "${DSH_REAL_VERSION}-ubuntu${UBUNTU_RELEASE}-r${ROOTFS_REV}",
+  "version": "${DSH_REAL_VERSION}-ubuntu${UBUNTU_RELEASE}-r${ROOTFS_REV}${VERSION_CHANNEL_SUFFIX}",
   "url": "${ASSET}",
   "sha256": "${SHA}",
   "sizeBytes": ${SIZE},

@@ -342,6 +342,7 @@
     <string name="dsh_bk_snapshot">; rollback snapshot %1$s</string>
     <string name="dsh_runtime_section">Runtime</string>
     <string name="dsh_runtime_summary">Reinstall the container runtime when it is damaged or you want a newer build</string>
+    <string name="dsh_runtime_management_summary">View the current version, check or install updates, reinstall, import a local archive, and choose the beta channel</string>
     <string name="dsh_runtime_installed_version">Installed: %1$s</string>
     <string name="dsh_runtime_not_installed">Not installed yet — start the service on the home page to download it</string>
     <string name="dsh_runtime_reinstall">Reinstall runtime</string>
@@ -353,13 +354,18 @@
     <string name="dsh_runtime_current">Current version</string>
     <string name="dsh_runtime_update_action">Check and update</string>
     <string name="dsh_runtime_import">Import runtime</string>
-    <string name="dsh_runtime_import_warning">Only import a runtime archive downloaded from a source you trust. A malicious runtime can execute arbitrary code and access DSH data.</string>
-    <string name="dsh_runtime_import_confirm">I trust this source</string>
+    <string name="dsh_runtime_import_confirm_title">Import this runtime?</string>
+    <string name="dsh_runtime_import_confirm_text">File: %1$s\nSize: %2$s\n\nContinue only if you trust the file source. A malicious runtime can execute arbitrary code and access DSH data.</string>
+    <string name="dsh_runtime_import_size_unknown">Unknown</string>
+    <string name="dsh_runtime_import_confirm">Trust source and install</string>
     <string name="dsh_runtime_beta">Accept beta runtime updates</string>
-    <string name="dsh_runtime_beta_summary">Use the runtime-beta rolling channel. Beta builds may be unstable.</string>
+    <string name="dsh_runtime_beta_summary">Use the separate runtime-beta-latest rolling channel. Beta builds may be unstable; off by default.</string>
     <string name="dsh_runtime_preserve_question">Preserve sessions, plugins, configuration and dependency data?</string>
     <string name="dsh_runtime_preserve">Preserve data</string>
-    <string name="dsh_runtime_clean">Clean reinstall</string>
+    <string name="dsh_runtime_clean">Do not preserve data</string>
+    <string name="dsh_runtime_clean_confirm_title">Delete runtime data?</string>
+    <string name="dsh_runtime_clean_confirm_text">This deletes existing sessions, installed plugins, DSH configuration, and plugin dependency data before installing a fresh runtime. This cannot be undone.</string>
+    <string name="dsh_runtime_clean_confirm_go">Delete data and reinstall</string>
     <string name="dsh_plugin_builtin_label">Built-in</string>
     <string name="dsh_host_plugin_name">Android native capability bridge prompt</string>
     <string name="dsh_host_plugin_version">Built into DSH-Folk · cannot be uninstalled</string>
@@ -367,7 +373,8 @@
     <string name="dsh_permission_log_title">Permission records</string>
     <string name="dsh_permission_log_empty">No permission calls have been recorded.</string>
     <string name="dsh_permission_log_reason">Reason: %1$s</string>
-    <string name="dsh_permission_log_status">Result: HTTP %1$d</string>
+    <string name="dsh_permission_log_details">Capability: %1$s · Access: %2$s · HTTP %3$d</string>
+    <string name="dsh_permission_log_copy">Copy command</string>
 
     <!-- 插件商店：全量目录 + 本地检索 -->
     <string name="dsh_plugin_category_all">All</string>

@@ -582,8 +582,8 @@ object DshRuntime {
     fun init(context: Context) {
         if (!::appContext.isInitialized) {
             appContext = context.applicationContext
-            // 上一次运行时替换如果被强杀打断，数据还停在暂存目录里 —— 认领回来。
-            DshEnv.recoverPreserved(appContext)
+            // 上一次运行时替换如果被强杀打断，先恢复可启动的 rootfs，再认领暂存数据。
+            recoverInterruptedRuntimeInstall()
             // 进程重启后旧日志不该残留：清一次，让启动日志按「本次运行」呈现。
             // startServer() 里还会再清一次，这里主要覆盖「只开 App 不启动服务」的情况。
             clearLog()
@@ -1375,9 +1375,6 @@ object DshRuntime {
                     .remove(DshEnv.KEY_SEEDED_PLUGINS)
                     .remove(@Suppress("DEPRECATION") DshEnv.KEY_SEED_PLUGINS_DONE)
                     .apply()
-                if (!preserveData) {
-                    DshEnv.PRESERVED_PATHS.forEach { File(DshEnv.rootfs(appContext), it).deleteRecursively() }
-                }
                 downloadAndInstall(preserveData)
                 if (_state.value.phase != DshPhase.ERROR) {
                     setupResolvConf()
@@ -1396,13 +1393,27 @@ object DshRuntime {
                 stopServer()
                 clearLog()
                 _state.update { it.copy(phase = DshPhase.EXTRACTING, message = str(R.string.dsh_msg_installing)) }
-                val ok = withContext(Dispatchers.IO) { extractRootfs(tarball, preserveData) }
+                val ok = withContext(Dispatchers.IO) { installRuntimeArchive(tarball, preserveData) }
                 tarball.delete()
                 if (!ok) {
                     fail(str(R.string.dsh_err_extract_failed))
                     return@withLock
                 }
-                prefs().edit().putString(DshEnv.KEY_RUNTIME_VERSION, "imported").apply()
+                prefs().edit()
+                    .remove(DshEnv.KEY_SEEDED_PLUGINS)
+                    .remove(@Suppress("DEPRECATION") DshEnv.KEY_SEED_PLUGINS_DONE)
+                    .putString(DshEnv.KEY_RUNTIME_VERSION, "imported")
+                    .apply()
+                _state.update {
+                    it.copy(
+                        phase = DshPhase.NOT_READY,
+                        installed = true,
+                        runtimeVersion = "imported",
+                        progress = 1f,
+                        message = str(R.string.dsh_msg_runtime_ready),
+                    )
+                }
+                refreshRootfsSize()
                 setupResolvConf()
                 seedPlugins()
                 ensureFsBridgeCli()
@@ -1491,7 +1502,7 @@ object DshRuntime {
         _state.update {
             it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_msg_installing))
         }
-        val ok = withContext(Dispatchers.IO) { extractRootfs(tarball, preserveData) }
+        val ok = withContext(Dispatchers.IO) { installRuntimeArchive(tarball, preserveData) }
         tarball.delete()
         if (!ok) {
             fail(str(R.string.dsh_err_extract_failed))
@@ -1620,71 +1631,146 @@ object DshRuntime {
         )
     }
 
-    /** 解压 rootfs.tar.gz 到 filesDir/rootfs（整体替换，但保留用户数据）。 */
-    private fun extractRootfs(tarball: File, preserveData: Boolean = true): Boolean = runCatching {
+    /**
+     * 在线下载与本地导入共用的安全安装流程：先解压到旁路目录，完成关键文件和架构校验，
+     * 再用目录改名切换；切换失败或进程在中途被杀时，旧 rootfs 可恢复。
+     */
+    private fun installRuntimeArchive(tarball: File, preserveData: Boolean): Boolean = runCatching {
         val dest = DshEnv.rootfs(appContext)
+        val pending = File(appContext.filesDir, ".runtime-install")
+        val backup = File(appContext.filesDir, ".runtime-rollback")
+        recoverInterruptedRuntimeInstall()
+        if (pending.exists()) pending.deleteRecursively()
+        pending.mkdirs()
+        TarGzipExtractor.extractRootfs(tarball, pending)
+        if (!validateRuntimeRoot(pending)) {
+            pending.deleteRecursively()
+            return@runCatching false
+        }
+
+        if (preserveData && !stashPreservedData(dest)) {
+            pending.deleteRecursively()
+            return@runCatching false
+        }
+        if (backup.exists()) backup.deleteRecursively()
+        if (dest.exists()) {
+            if (!dest.renameTo(backup)) {
+                if (preserveData) DshEnv.recoverPreserved(appContext)
+                pending.deleteRecursively()
+                return@runCatching false
+            }
+        } else {
+            backup.mkdirs()
+        }
+        if (!pending.renameTo(dest)) {
+            if (backup.exists()) backup.renameTo(dest)
+            if (preserveData) DshEnv.recoverPreserved(appContext)
+            return@runCatching false
+        }
+        if (preserveData && !restorePreservedData(dest)) {
+            returnRestoredDataToStash(dest)
+            dest.deleteRecursively()
+            if (backup.exists()) backup.renameTo(dest)
+            DshEnv.recoverPreserved(appContext)
+            return@runCatching false
+        }
+        if (backup.exists()) backup.deleteRecursively()
+        true
+    }.getOrElse {
+        logWarn(R.string.dsh_log_extract_failed, "${it.javaClass.simpleName}: ${it.message}")
+        recoverInterruptedRuntimeInstall()
+        false
+    }
+
+    private fun stashPreservedData(root: File): Boolean {
         val stash = DshEnv.dshPreserve(appContext)
-        // 要跨越这次替换的子树（见 DshEnv.PRESERVED_PATHS）：整体删 rootfs 之前逐个
-        // rename 到 rootfs 之外的暂存目录（同一 filesDir，原子零拷贝），解压完再 rename
-        // 回去顶掉新 rootfs 自带的空目录。
-        //
-        // 集合里不只有 root/.dsh：l2s 中间文件与 pnpm 内容存储都在 .dsh 之外，而
-        // .dsh 里不少文件只是指向它们的符号链接。只保 .dsh 会留下一堆悬空链接，
-        // 启动时 dsh 解析不出 profile bundle 就直接退出。
-        //
-        // 先认领再清：上一次更新失败（解压抛异常、恢复那步没成）会把数据留在暂存
-        // 目录里，直接 delete 就是把用户的会话删了。recoverPreserved 之后还剩东西，
-        // 说明 rootfs 里已有在用的同名目录，那份残留才是被顶掉的旧副本，可以清。
         DshEnv.recoverPreserved(appContext)
         if (stash.exists()) stash.deleteRecursively()
-        if (preserveData) for (rel in DshEnv.PRESERVED_PATHS) {
-            val src = File(dest, rel)
-            if (!src.isDirectory) continue
+        for (rel in DshEnv.PRESERVED_PATHS) {
+            val src = File(root, rel)
+            if (!src.exists()) continue
             val dst = File(stash, rel)
             dst.parentFile?.mkdirs()
             if (!src.renameTo(dst)) {
                 logWarn(R.string.dsh_log_preserve_failed, rel)
-                // 已经搬出去的搬回来，保持「要么全成要么原样」
                 DshEnv.recoverPreserved(appContext)
-                return@runCatching false
+                return false
             }
         }
-        if (dest.exists()) dest.deleteRecursively()
-        dest.mkdirs()
-        TarGzipExtractor.extractRootfs(tarball, dest)
-        // 解压出的 rootfs 带一份空的 /root/.dsh，删掉，用暂存的数据顶替。
-        if (preserveData) for (rel in DshEnv.PRESERVED_PATHS) {
+        return true
+    }
+
+    private fun restorePreservedData(root: File): Boolean {
+        val stash = DshEnv.dshPreserve(appContext)
+        for (rel in DshEnv.PRESERVED_PATHS) {
             val src = File(stash, rel)
-            if (!src.isDirectory) continue
-            val dst = File(dest, rel)
+            if (!src.exists()) continue
+            val dst = File(root, rel)
             dst.parentFile?.mkdirs()
             if (dst.exists()) dst.deleteRecursively()
             if (!src.renameTo(dst)) {
-                // 数据还在暂存目录里，下次启动 recoverPreserved 会认领回来
                 logWarn(R.string.dsh_log_restore_failed, rel, stash.name)
-                return@runCatching false
+                return false
             }
         }
-        runCatching { if (stash.exists()) stash.deleteRecursively() }
-        // 关键文件自检：解压不完整（断流 / 空间耗尽）时越早发现越好，
-        // 否则要等到启动 dsh web 才报一句看不懂的错。
-        // File.exists() 跟随符号链接，所以 python3 -> python3.12 这类条目也一并验证了。
-        val missing = listOf(
+        if (stash.exists()) stash.deleteRecursively()
+        return true
+    }
+
+    private fun returnRestoredDataToStash(root: File) {
+        val stash = DshEnv.dshPreserve(appContext)
+        for (rel in DshEnv.PRESERVED_PATHS) {
+            val src = File(root, rel)
+            val dst = File(stash, rel)
+            if (!src.exists() || dst.exists()) continue
+            dst.parentFile?.mkdirs()
+            src.renameTo(dst)
+        }
+    }
+
+    private fun validateRuntimeRoot(root: File): Boolean {
+        val required = listOf(
             "usr/bin/bash" to "bash",
             "usr/local/bin/node" to "node",
             "usr/local/lib/node_modules/@deepseek-ai/dsh/package.json" to "dsh",
-        ).filterNot { File(dest, it.first).exists() }
+        )
+        val missing = required.filterNot { File(root, it.first).exists() }
         if (missing.isNotEmpty()) {
             logWarn(R.string.dsh_log_missing_after_extract, joinForLog(missing.map { it.second }))
-            return@runCatching false
+            return false
         }
-        // 下面两个缺了不致命（插件装不了 / 无线 ADB 配不了，但 DSH 本身能跑），只记一行
-        if (!File(dest, "usr/bin/python3").exists()) logWarn(R.string.dsh_log_missing_python)
-        if (!File(dest, "usr/local/bin/pnpm").exists()) logWarn(R.string.dsh_log_missing_pnpm)
-        true
-    }.getOrElse {
-        logWarn(R.string.dsh_log_extract_failed, "${it.javaClass.simpleName}: ${it.message}")
-        false
+        val machine = elfMachine(File(root, "usr/local/bin/node"))
+        val want = if (DshSource.runtimeArch() == "arm64-v8a") ELF_MACHINE_AARCH64 else ELF_MACHINE_X86_64
+        if (machine != null && machine != want) {
+            logWarn(R.string.dsh_log_node_machine, machine, want)
+            return false
+        }
+        if (!File(root, "usr/bin/python3").exists()) logWarn(R.string.dsh_log_missing_python)
+        if (!File(root, "usr/local/bin/pnpm").exists()) logWarn(R.string.dsh_log_missing_pnpm)
+        return true
+    }
+
+    private fun recoverInterruptedRuntimeInstall() {
+        val dest = DshEnv.rootfs(appContext)
+        val pending = File(appContext.filesDir, ".runtime-install")
+        val backup = File(appContext.filesDir, ".runtime-rollback")
+        if (!dest.exists() && backup.exists()) {
+            backup.renameTo(dest)
+            DshEnv.recoverPreserved(appContext)
+        } else if (dest.exists() && backup.exists()) {
+            val stash = DshEnv.dshPreserve(appContext)
+            if (!stash.exists() || restorePreservedData(dest)) {
+                backup.deleteRecursively()
+            } else {
+                returnRestoredDataToStash(dest)
+                dest.deleteRecursively()
+                backup.renameTo(dest)
+                DshEnv.recoverPreserved(appContext)
+            }
+        } else {
+            DshEnv.recoverPreserved(appContext)
+        }
+        if (pending.exists()) pending.deleteRecursively()
     }
 
     /** 写容器 DNS（国内解析优先，谷歌/CF 兜底）。 */
