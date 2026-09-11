@@ -965,6 +965,9 @@ object DshNativeBridge {
             else -> "$method $path"
         }
         val options = when (path) {
+            // 附带命令不打码：它是 agent 自己写的、也正是要用户复核的那串东西；打码等于把
+            // 「权限调用记录」里最该看的一栏藏掉（会被打码的是通知正文、联系人这类用户隐私）
+            "/native/elevate" -> listOf(option("command"))
             "/native/notify" -> listOf(option("id"), option("ongoing"))
             "/native/notify/list", "/native/sms/list" -> listOf(option("limit"))
             "/native/notify/system" -> listOf(option("all"))
