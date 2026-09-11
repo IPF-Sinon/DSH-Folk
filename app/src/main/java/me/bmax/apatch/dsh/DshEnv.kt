@@ -117,6 +117,15 @@ object DshEnv {
      */
     const val KEY_RUNTIME_MIN_APP = "runtime_min_app_version"
 
+    /**
+     * App 启动后是否自动检查运行时更新（设置里那个独立开关，默认**开**）。
+     *
+     * 默认开是有意的：不看版本号的用户（尤其是卡在不含 pnpm 的 0.1.2-r2 上的存量
+     * stable 用户）只有靠启动提示才知道该更新运行时。检查只是一次几 KB 的 metadata
+     * 请求；真正的 160MB 下载仍然要用户点确认。
+     */
+    const val KEY_RUNTIME_AUTO_CHECK = "runtime_auto_check"
+
     /** 局域网访问开关（默认关；开则 dsh web 绑 0.0.0.0）。 */
     const val KEY_LAN = "dsh_lan"
 

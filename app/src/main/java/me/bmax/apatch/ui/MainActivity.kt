@@ -157,6 +157,7 @@ import me.bmax.apatch.ui.component.UpdateDialog
 import me.bmax.apatch.dsh.DshElevationRequests
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
+import me.bmax.apatch.dsh.DshRuntime
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalContext
@@ -583,24 +584,60 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
                 
+                // 运行时自动检查的结果。它和「应用更新」检测在启动时并行跑，但**弹窗
+                // 要排队**：两个「有更新」的弹窗叠在一起，用户根本不知道该先点哪个。
+                val runtimePrompt = remember { mutableStateOf<DshRuntime.RuntimeCheckResult?>(null) }
+                val runtimePromptVersion = remember { mutableStateOf("") }
+                val showRuntimeDialog = remember { mutableStateOf(false) }
+                // 「应用更新检测正在进行中」——只有检测期间才知道，所以用状态变量传出来
+                val appCheckRunning = remember { mutableStateOf(false) }
+
                 LaunchedEffect(Unit) {
                     if (prefs.getBoolean("auto_update_check", true)) {
-                        withContext(Dispatchers.IO) {
-                             // Delay a bit to wait for network connection
-                             kotlinx.coroutines.delay(2000)
-                             // 自动检查是静默的：查不到就什么都不做，别在冷启动弹错误
-                             val st = me.bmax.apatch.util.UpdateChecker.check(
-                                 acceptBeta = prefs.getBoolean(
-                                     me.bmax.apatch.util.UpdateChecker.KEY_ACCEPT_BETA,
-                                     false,
-                                 ),
-                             )
-                             if (st.hasUpdate) {
-                                 autoUpdateStatus.value = st
-                                 showUpdateDialog.value = true
-                             }
+                        appCheckRunning.value = true
+                        try {
+                            withContext(Dispatchers.IO) {
+                                 // Delay a bit to wait for network connection
+                                 kotlinx.coroutines.delay(2000)
+                                 // 自动检查是静默的：查不到就什么都不做，别在冷启动弹错误
+                                 val st = me.bmax.apatch.util.UpdateChecker.check(
+                                     acceptBeta = prefs.getBoolean(
+                                         me.bmax.apatch.util.UpdateChecker.KEY_ACCEPT_BETA,
+                                         false,
+                                     ),
+                                 )
+                                 if (st.hasUpdate) {
+                                     autoUpdateStatus.value = st
+                                     showUpdateDialog.value = true
+                                 }
+                            }
+                        } finally {
+                            appCheckRunning.value = false
                         }
                     }
+                }
+
+                LaunchedEffect(Unit) {
+                    if (!DshRuntime.autoCheckEnabled(context)) return@LaunchedEffect
+                    withContext(Dispatchers.IO) {
+                        kotlinx.coroutines.delay(2500)
+                        val result = runCatching { DshRuntime.checkRuntimeUpdate() }.getOrNull()
+                        // 查不到 / 已最新：静默（同应用自动检查）。要求更高 App 版本的
+                        // 更新也不弹 —— 弹了也装不上，设置页那张运行时卡会说明该怎么办。
+                        if (result?.version != null && result.minAppVersion.isEmpty()) {
+                            runtimePrompt.value = result
+                        }
+                    }
+                }
+
+                // 弹窗闸门：应用更新检测还在跑、或应用更新弹窗已经弹出来了，就先压着；
+                // 等检测结束（最新 / 失败都算结束）或用户关掉那个弹窗，再弹运行时这个。
+                LaunchedEffect(runtimePrompt.value, appCheckRunning.value, showUpdateDialog.value) {
+                    val pending = runtimePrompt.value ?: return@LaunchedEffect
+                    if (appCheckRunning.value || showUpdateDialog.value) return@LaunchedEffect
+                    runtimePrompt.value = null
+                    runtimePromptVersion.value = pending.version.orEmpty()
+                    showRuntimeDialog.value = true
                 }
 
                 if (showUpdateDialog.value) {
@@ -611,6 +648,33 @@ class MainActivity : AppCompatActivity() {
                             UpdateChecker.openUpdateUrl(context)
                         },
                         status = autoUpdateStatus.value,
+                    )
+                }
+
+                if (showRuntimeDialog.value) {
+                    AlertDialog(
+                        onDismissRequest = { showRuntimeDialog.value = false },
+                        title = { Text(stringResource(R.string.dsh_runtime_prompt_title)) },
+                        text = {
+                            Text(
+                                stringResource(
+                                    R.string.dsh_runtime_prompt_text,
+                                    runtimePromptVersion.value,
+                                )
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showRuntimeDialog.value = false
+                                // 通道 metadata 就是刚查到的那个版本，重装即更新
+                                DshRuntime.reinstallRuntime(true)
+                            }) { Text(stringResource(R.string.dsh_runtime_update_go)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showRuntimeDialog.value = false }) {
+                                Text(stringResource(android.R.string.cancel))
+                            }
+                        },
                     )
                 }
 

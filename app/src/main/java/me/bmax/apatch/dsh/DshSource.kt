@@ -59,11 +59,19 @@ object DshSource {
     private const val KEY_AUTO_SOURCE_AT = "auto_source_at"
 
     /** 稳定版与测试版是两个互不复用 metadata / rootfs 的滚动发布位置。 */
-    private const val RUNTIME_STABLE_BASE =
-        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-latest/"
-    private const val RUNTIME_BETA_BASE =
-        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/runtime-beta-latest/"
+    private const val RELEASE_DOWNLOAD_BASE =
+        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/"
+    private const val RUNTIME_STABLE_BASE = RELEASE_DOWNLOAD_BASE + "runtime-latest/"
+    private const val RUNTIME_BETA_BASE = RELEASE_DOWNLOAD_BASE + "runtime-beta-latest/"
     private const val KEY_RUNTIME_BETA = "runtime_accept_beta"
+
+    /**
+     * 任意 runtime release tag 的资产前缀。
+     *
+     * 给版本列表用：历史版本只能按各自的 tag 去取（`runtime-0.1.1-rc.2` 这种），
+     * 滚动通道那两个地址永远只有最新一份。
+     */
+    fun releaseBase(tag: String): String = RELEASE_DOWNLOAD_BASE + tag + "/"
 
     private fun runtimeBase(): String =
         if (acceptRuntimeBeta(me.bmax.apatch.apApp)) RUNTIME_BETA_BASE else RUNTIME_STABLE_BASE

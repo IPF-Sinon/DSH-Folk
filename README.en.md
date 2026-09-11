@@ -98,6 +98,23 @@ After enabling **Settings → General → Accept beta updates**, update checks a
 
 The container runtime beta is a separate channel: after enabling **Settings → Features → Runtime → Accept beta runtime updates**, runtime checks switch to the
 `runtime-beta-latest` rolling channel; this is disabled by default, and beta versions may be unstable. It is independent of the app beta toggle above.
+Easier still: long press **Update** on the runtime card to list every published runtime version (stable channel, beta channel, archived
+versions) and tap one to switch — moving to a beta or back to a specific older version uses the same entry, with no need to flip the channel first.
+
+### Runtime management
+
+The **Settings → Features → Runtime** card:
+
+- **Update**: one button, three uses. With no update detected, tapping it checks for updates; with an update detected,
+  it first shows a confirmation dialog (target version and what is preserved) and only downloads after you confirm;
+  **long pressing** it lists every published runtime version so you can switch freely, downgrades included. A version that
+  requires a newer app is flagged in the list and points at the app update instead, because installing it would not even boot.
+- **Reinstall**: downloads the latest runtime from the current channel, optionally keeping or wiping sessions, plugins, configuration and dependency data.
+- **Import**: installs a local tar.gz from a source you trust, showing the file name and size for confirmation first.
+- **Check for runtime updates automatically**: a separate switch, on by default. When enabled the app checks for a runtime update
+  right after launch and only prompts when one is found; the download still needs manual confirmation. It runs in parallel with
+  the app update check, but the dialogs are queued: while the app update check is running, or while its dialog is up, the runtime
+  prompt waits until that check finishes (up to date or failed) or the dialog is dismissed, so two update dialogs never stack.
 
 App betas are published by the **Build DSH-Folk beta** workflow (`workflow_dispatch`, with a target version such as `1.8.1`),
 using tags such as `v1.8.1-beta.7` marked as GitHub prereleases. Several decisions here are intentional:

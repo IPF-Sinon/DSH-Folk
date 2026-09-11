@@ -144,6 +144,39 @@ object UpdateChecker {
         Status(hasUpdate = false, failure = lastError ?: "no release found")
     }
 
+    /**
+     * 竞速拉取一个 GitHub API 路径，返回第一个成功的响应体（都不行时 null）。
+     *
+     * 给运行时版本列表用：它要点名列出所有 release，而列表路径在 `check()` 里已被
+     * 解析成「最新的那一个」，拿不到全量。入口集合与 [fetchFirstRelease] 完全一致 ——
+     * 直连被匿名限流时 gh-proxy 那几条镜像接得上。
+     */
+    suspend fun fetchApiJson(path: String): String? = supervisorScope {
+        val pending = (listOf(API_BASE) + API_MIRRORS).map { base ->
+            async {
+                FolkApiClient.fetchJson(
+                    base + path,
+                    ttlMs = 10 * 60 * 1000L,
+                    maxRetries = 1,
+                    forceRefresh = true,
+                ).getOrNull()
+            }
+        }.toMutableList()
+
+        while (pending.isNotEmpty()) {
+            val completed = select<Pair<kotlinx.coroutines.Deferred<String?>, String?>> {
+                pending.forEach { candidate -> candidate.onAwait { candidate to it } }
+            }
+            pending.remove(completed.first)
+            val body = completed.second
+            if (!body.isNullOrBlank()) {
+                pending.forEach { it.cancel() }
+                return@supervisorScope body
+            }
+        }
+        null
+    }
+
     private suspend fun fetchFirstRelease(path: String, acceptBeta: Boolean): Pair<String, JSONObject>? =
         supervisorScope {
             val pending = (listOf(API_BASE) + API_MIRRORS).map { base ->

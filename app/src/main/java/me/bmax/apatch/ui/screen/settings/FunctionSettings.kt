@@ -3,6 +3,9 @@ package me.bmax.apatch.ui.screen.settings
 import android.content.Intent
 import android.provider.DocumentsContract
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,8 +16,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -42,6 +48,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -49,6 +56,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,11 +64,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.R
@@ -69,11 +79,14 @@ import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.RuntimeCheckResult
+import me.bmax.apatch.dsh.RuntimeVersion
+import me.bmax.apatch.dsh.compareVersions
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.ExpressiveSwitch
+import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 import me.bmax.apatch.ui.component.ToggleSettingCard
 import me.bmax.apatch.util.DshDocsAccess
@@ -188,7 +201,14 @@ fun FunctionSettingsContent(
     runtimeCheckRevision: Int,
     onCheckRuntimeUpdateRequested: () -> Unit,
     onCheckRuntimeUpdate: suspend () -> RuntimeCheckResult,
+    /** 列出仓库里所有运行时版本（长按「更新」唤出的版本列表）。 */
+    onListRuntimeVersions: suspend () -> List<RuntimeVersion>,
+    /** 安装版本列表里选中的那一份（升级 / 降级 / 换通道共用）。 */
+    onSwitchRuntimeVersion: (RuntimeVersion) -> Unit,
     onImportRuntime: () -> Unit,
+    /** App 启动后自动检查运行时更新（独立开关，默认开）。 */
+    runtimeAutoCheck: Boolean,
+    onRuntimeAutoCheckChange: (Boolean) -> Unit,
     runtimeBeta: Boolean,
     onRuntimeBetaChange: (Boolean) -> Unit,
     /** 重建 profile 插件依赖（清空 node_modules 后重装）。 */
@@ -712,12 +732,26 @@ fun FunctionSettingsContent(
                     // r1 的 git 依赖不全，修好了也没人告诉用户该更新。
                     var latest by remember { mutableStateOf<RuntimeCheckResult?>(null) }
                     var checking by remember { mutableStateOf(false) }
+                    // 点「更新」触发的那次检查：查完真有可装的更新就直接弹确认框，
+                    // 没有就只在卡片上报结果（已最新 / 失败）。
+                    var confirmAfterCheck by remember { mutableStateOf(false) }
+                    var updateConfirming by remember { mutableStateOf(false) }
+                    var versionListOpen by remember { mutableStateOf(false) }
                     LaunchedEffect(runtimeInstalled, runtimeVersion, runtimeBeta, runtimeCheckRevision) {
-                        if (!runtimeInstalled) return@LaunchedEffect
+                        if (!runtimeInstalled) {
+                            latest = null
+                            return@LaunchedEffect
+                        }
                         if (runtimeCheckRevision == 0) return@LaunchedEffect
                         checking = true
                         latest = runCatching { onCheckRuntimeUpdate() }.getOrNull()
                         checking = false
+                        val result = latest
+                        // 只有「确实装得上」才弹确认框：要求更高 App 版本的更新弹了也装不了
+                        if (confirmAfterCheck && result?.version != null && result.minAppVersion.isEmpty()) {
+                            updateConfirming = true
+                        }
+                        confirmAfterCheck = false
                     }
 
                     // 重装确认/全新重装确认：声明在卡片层而不是下面的分支里 ——
@@ -742,44 +776,51 @@ fun FunctionSettingsContent(
                         }
                     } else {
                         latest?.let { result ->
-                            if (result.minAppVersion.isNotEmpty()) {
-                                // 有新运行时，但它要求更新的 App：同样先更新应用
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = stringResource(R.string.dsh_runtime_update_requires_app, result.minAppVersion),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            } else {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = stringResource(R.string.dsh_runtime_update_available, result.version.orEmpty()),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
+                            val line = when {
+                                result.version != null && result.minAppVersion.isNotEmpty() ->
+                                    stringResource(R.string.dsh_runtime_update_requires_app, result.minAppVersion)
+                                result.version != null ->
+                                    stringResource(R.string.dsh_runtime_update_available, result.version)
+                                result.failure -> stringResource(R.string.dsh_runtime_check_failed)
+                                else -> stringResource(R.string.dsh_runtime_up_to_date)
                             }
+                            val color = when {
+                                result.version != null && result.minAppVersion.isNotEmpty() ->
+                                    MaterialTheme.colorScheme.error
+                                result.version != null -> MaterialTheme.colorScheme.primary
+                                result.failure -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(text = line, style = MaterialTheme.typography.bodySmall, color = color)
                         }
 
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
-                                onClick = { onCheckRuntimeUpdateRequested() },
+                            // 「更新」一个按钮承担三件事：没检测到更新时点它 = 检查更新；
+                            // 检测到更新时点它 = 弹窗确认更新；长按 = 版本列表（可切到
+                            // 任意历史版本，升降级都走这里）。
+                            OutlinedActionButton(
                                 enabled = runtimeInstalled && !checking,
+                                onClick = {
+                                    val result = latest
+                                    when {
+                                        result?.version != null && result.minAppVersion.isEmpty() ->
+                                            updateConfirming = true
+                                        // 新运行时要求更高 App 版本：点了也是被闸门拦下，直接指路
+                                        result?.version != null -> onGoUpdateApp()
+                                        else -> {
+                                            confirmAfterCheck = true
+                                            onCheckRuntimeUpdateRequested()
+                                        }
+                                    }
+                                },
+                                onLongClick = { if (runtimeInstalled) versionListOpen = true },
                             ) {
-                                if (checking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                                else Text(stringResource(R.string.dsh_runtime_update_action))
-                            }
-                            latest?.let { result ->
-                                // 新运行时要求更高 App 版本时不给「更新运行时」按钮：
-                                // 点了也是被闸门拦下，不如直接指路去更新应用
-                                if (result.minAppVersion.isEmpty()) {
-                                    OutlinedButton(onClick = { onReinstallRuntime(true) }) {
-                                        Text(stringResource(R.string.dsh_runtime_update_go))
-                                    }
+                                if (checking) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                 } else {
-                                    OutlinedButton(onClick = onGoUpdateApp) {
-                                        Text(stringResource(R.string.dsh_runtime_min_app_go_update))
-                                    }
+                                    Text(stringResource(R.string.dsh_runtime_update_action))
                                 }
                             }
                             OutlinedButton(onClick = { reinstallChoice = true }, enabled = runtimeInstalled) {
@@ -789,7 +830,24 @@ fun FunctionSettingsContent(
                                 Text(stringResource(R.string.dsh_runtime_import))
                             }
                         }
+                        if (runtimeInstalled) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.dsh_runtime_long_press_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    ToggleSettingCard(
+                        flat = true,
+                        icon = Icons.Filled.CloudDownload,
+                        title = stringResource(R.string.dsh_runtime_auto_check),
+                        description = stringResource(R.string.dsh_runtime_auto_check_summary),
+                        checked = runtimeAutoCheck,
+                        onCheckedChange = onRuntimeAutoCheckChange,
+                    )
                     Spacer(Modifier.height(8.dp))
                     ToggleSettingCard(
                         flat = true,
@@ -799,6 +857,46 @@ fun FunctionSettingsContent(
                         checked = runtimeBeta,
                         onCheckedChange = onRuntimeBetaChange,
                     )
+                    if (updateConfirming) {
+                        AlertDialog(
+                            onDismissRequest = { updateConfirming = false },
+                            title = { Text(stringResource(R.string.dsh_runtime_update_confirm_title)) },
+                            text = {
+                                Text(
+                                    stringResource(
+                                        R.string.dsh_runtime_switch_confirm_text,
+                                        latest?.version.orEmpty(),
+                                    )
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    updateConfirming = false
+                                    onReinstallRuntime(true)
+                                }) { Text(stringResource(R.string.dsh_runtime_update_go)) }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { updateConfirming = false }) {
+                                    Text(stringResource(android.R.string.cancel))
+                                }
+                            },
+                        )
+                    }
+                    if (versionListOpen) {
+                        RuntimeVersionDialog(
+                            currentVersion = runtimeVersion,
+                            onDismiss = { versionListOpen = false },
+                            onLoad = onListRuntimeVersions,
+                            onInstall = { entry ->
+                                versionListOpen = false
+                                onSwitchRuntimeVersion(entry)
+                            },
+                            onGoUpdateApp = {
+                                versionListOpen = false
+                                onGoUpdateApp()
+                            },
+                        )
+                    }
                     if (reinstallChoice) {
                         AlertDialog(
                             onDismissRequest = { reinstallChoice = false },
@@ -1720,4 +1818,188 @@ private fun yesNo(b: Boolean): String = if (b) "✓" else "✗"
 private fun permOptionSummary(baseRes: Int, available: Boolean): String {
     val base = stringResource(baseRes)
     return if (available) base else base + "\n" + stringResource(R.string.dsh_perm_prefer_unavailable)
+}
+
+/**
+ * 外观与 [OutlinedButton] 一致的按钮，但支持长按。
+ *
+ * 为什么不直接用 OutlinedButton 再叠一个 `pointerInput` 长按：Button 内部的 clickable
+ * 是另一个手势拥有者，抬手时它照样会触发一次 onClick —— 于是「长按唤出版本列表」会
+ * 顺带触发一次「检查更新」。自己画边框 + [combinedClickable]，手势只有一个拥有者，
+ * 行为是确定的。
+ */
+@Composable
+private fun OutlinedActionButton(
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    val shape = RoundedCornerShape(20.dp)
+    val borderColor =
+        if (enabled) MaterialTheme.colorScheme.outline
+        else MaterialTheme.colorScheme.outlineVariant
+    val contentColor =
+        if (enabled) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    Box(
+        modifier = Modifier
+            .height(40.dp)
+            .clip(shape)
+            .border(1.dp, borderColor, shape)
+            .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        CompositionLocalProvider(LocalContentColor provides contentColor) { content() }
+    }
+}
+
+/**
+ * 运行时版本列表：长按「更新」唤出。
+ *
+ * 列出仓库里所有 runtime release —— 滚动通道只有「最新一份」，历史版本只能按各自的
+ * tag 取，所以降级 / 回到某个具体版本必须靠这一页。要求比当前 App 更新的版本不给装，
+ * 点它只会指路去更新应用（否则装完连容器都起不来）。
+ */
+@Composable
+private fun RuntimeVersionDialog(
+    currentVersion: String,
+    onDismiss: () -> Unit,
+    onLoad: suspend () -> List<RuntimeVersion>,
+    onInstall: (RuntimeVersion) -> Unit,
+    onGoUpdateApp: () -> Unit,
+) {
+    var versions by remember { mutableStateOf<List<RuntimeVersion>?>(null) }
+    var failed by remember { mutableStateOf(false) }
+    var reloadKey by remember { mutableStateOf(0) }
+    LaunchedEffect(reloadKey) {
+        versions = null
+        failed = false
+        val loaded = runCatching { onLoad() }.getOrNull()
+        if (loaded.isNullOrEmpty()) failed = true else versions = loaded
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dsh_runtime_versions_title)) },
+        text = {
+            val list = versions
+            when {
+                failed -> Column {
+                    Text(stringResource(R.string.dsh_runtime_versions_failed))
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = { reloadKey++ }) {
+                        Text(stringResource(R.string.dsh_runtime_versions_retry))
+                    }
+                }
+                list == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(stringResource(R.string.dsh_runtime_versions_loading))
+                }
+                else -> Column {
+                    Text(
+                        text = stringResource(R.string.dsh_runtime_versions_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        items(list, key = { it.tag + "|" + it.version }) { entry ->
+                            RuntimeVersionRow(
+                                entry = entry,
+                                current = entry.version == currentVersion,
+                                onInstall = { onInstall(entry) },
+                                onGoUpdateApp = onGoUpdateApp,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+        },
+    )
+}
+
+/** 版本列表里的一行：版本号 + 通道标签 + dsh/node/体积，点了就切过去。 */
+@Composable
+private fun RuntimeVersionRow(
+    entry: RuntimeVersion,
+    current: Boolean,
+    onInstall: () -> Unit,
+    onGoUpdateApp: () -> Unit,
+) {
+    // 这份运行时要求比当前 App 更高的版本：装上也起不来，点它只能去更新应用
+    val tooOld = entry.minAppVersion.isNotEmpty() &&
+        compareVersions(entry.minAppVersion, BuildConfig.VERSION_NAME) > 0
+    val container =
+        if (current) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(container)
+            .combinedClickable(onClick = { if (tooOld) onGoUpdateApp() else onInstall() })
+            .padding(10.dp),
+    ) {
+        // 版本号单独占一行：`0.1.5-rc.1-ubuntunoble-r3-beta` 这种串在等宽字体下
+        // 已经接近对话框宽度，再和两个标签挤一行就会被压成两行断字
+        Text(
+            text = entry.version,
+            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ModuleLabel(
+                text = stringResource(channelLabelRes(entry.channel)),
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            if (current) {
+                ModuleLabel(
+                    text = stringResource(R.string.dsh_runtime_current),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = stringResource(
+                R.string.dsh_runtime_version_detail,
+                entry.dsh.ifEmpty { "?" },
+                entry.nodeVersion.ifEmpty { "?" },
+                entry.sizeBytes / 1024 / 1024,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (tooOld) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.dsh_runtime_min_app_required, entry.minAppVersion),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+/** 通道标签文案：正式通道 / 测试通道 / 历史版本。 */
+private fun channelLabelRes(channel: String): Int = when (channel) {
+    RuntimeVersion.CHANNEL_STABLE -> R.string.dsh_runtime_channel_stable
+    RuntimeVersion.CHANNEL_BETA -> R.string.dsh_runtime_channel_beta
+    else -> R.string.dsh_runtime_channel_archive
 }

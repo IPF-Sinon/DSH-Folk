@@ -12,6 +12,8 @@ import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +26,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.util.LocaleCtx
+import me.bmax.apatch.util.UpdateChecker
 import me.bmax.apatch.util.appString
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** 运行时阶段。 */
@@ -94,11 +98,73 @@ data class DshMeta(
  *
  * [version] 非空 = 远端有不同版本；[minAppVersion] 非空 = 那份新运行时还要求一个
  * 比当前 App 更高的版本 —— 用户得**先更新应用**，而不是直接点「更新运行时」。
+ *
+ * [failure] 专门区分「查不到」与「已是最新」：断网、GitHub 限流、本地没记过版本号
+ * 都会走到这里，界面若一律报「已是最新」就是在给用户一个肯定的错误结论。
  */
 data class RuntimeCheckResult(
     val version: String? = null,
     val minAppVersion: String = "",
+    val failure: Boolean = false,
 )
+
+/**
+ * 版本列表里的一项：某个 runtime release 的 metadata（本机架构那一份）。
+ *
+ * 存在的理由：滚动通道 tag 只有 `runtime-latest` / `runtime-beta-latest` 两个，
+ * 光靠它们既看不到历史版本，也没法降级。长按「更新」时列出仓库里**所有**运行时
+ * release，让用户自己挑版本（升级、降级、切通道）。
+ */
+data class RuntimeVersion(
+    val version: String,
+    val tag: String,
+    val channel: String = RuntimeVersion.CHANNEL_ARCHIVE,
+    val dsh: String = "",
+    val nodeVersion: String = "",
+    val builtAt: String = "",
+    val minAppVersion: String = "",
+    val sha256: String = "",
+    val sizeBytes: Long = 0L,
+    val arch: String = "",
+    val url: String = "",
+    val mirrors: List<String> = emptyList(),
+    /** release 的发布时间（ISO 串，字典序即时间序）；通道兜底项为空。 */
+    val publishedAt: String = "",
+) {
+    /** 交给安装流程时用的等价 metadata。 */
+    fun toMeta(): DshMeta = DshMeta(
+        version = version,
+        url = url,
+        sha256 = sha256,
+        sizeBytes = sizeBytes,
+        mirrors = mirrors,
+        arch = arch,
+        dsh = dsh,
+        nodeVersion = nodeVersion,
+        builtAt = builtAt,
+        minAppVersion = minAppVersion,
+    )
+
+    companion object {
+        const val CHANNEL_STABLE = "stable"
+        const val CHANNEL_BETA = "beta"
+        const val CHANNEL_ARCHIVE = "archive"
+
+        /** 列表排序权重：正式通道 → 测试通道 → 历史版本。 */
+        fun channelRank(channel: String): Int = when (channel) {
+            CHANNEL_STABLE -> 0
+            CHANNEL_BETA -> 1
+            else -> 2
+        }
+
+        /** tag → 通道。`runtime-latest` = 正式，其余 beta 前缀 = 测试，剩下的都是历史版本。 */
+        fun channelOf(tag: String): String = when {
+            tag == "runtime-latest" -> CHANNEL_STABLE
+            tag.startsWith("runtime-beta") -> CHANNEL_BETA
+            else -> CHANNEL_ARCHIVE
+        }
+    }
+}
 
 /**
  * DSH 运行时管理：在线下载 rootfs → 解压 → 用 proot/proroot 进容器起 `dsh web`。
@@ -1577,10 +1643,7 @@ object DshRuntime {
             bootMutex.withLock {
                 stopServer()
                 // 重装等于换了一套全新 rootfs，容器里的插件确实没了，该重新预装
-                prefs().edit()
-                    .remove(DshEnv.KEY_SEEDED_PLUGINS)
-                    .remove(@Suppress("DEPRECATION") DshEnv.KEY_SEED_PLUGINS_DONE)
-                    .apply()
+                clearSeedLedger()
                 downloadAndInstall(preserveData)
                 if (_state.value.phase != DshPhase.ERROR) {
                     setupResolvConf()
@@ -1591,6 +1654,66 @@ object DshRuntime {
                 }
             }
         }
+    }
+
+    /**
+     * 安装版本列表里选中的那一份运行时（升级 / 降级 / 换通道都走这里）。
+     *
+     * 与 [reinstallRuntime] 的唯一区别是 metadata 从哪来：这里用用户选中的那个
+     * release，而不是当前通道的最新版 —— 否则「切到 0.1.1-rc.2」会变成「又装了一遍
+     * 最新版」。其余流程完全一致：先停服务，装完重新预装插件并拉起服务。
+     */
+    fun switchRuntimeVersion(entry: RuntimeVersion, preserveData: Boolean = true) {
+        scope.launch {
+            bootMutex.withLock {
+                clearLog()
+                logInfo(R.string.dsh_log_switch_runtime, entry.version, entry.tag)
+                stopServer()
+                clearSeedLedger()
+                _state.update {
+                    it.copy(
+                        phase = DshPhase.DOWNLOADING,
+                        progress = 0f,
+                        speedBytesPerSec = 0L,
+                        message = str(R.string.dsh_msg_downloading, entry.version),
+                    )
+                }
+                installMeta(entry.toMeta(), preserveData)
+                if (_state.value.phase != DshPhase.ERROR) {
+                    setupResolvConf()
+                    seedPlugins()
+                    ensureFsBridgeCli()
+                    if (checkPortConflict()) return@withLock
+                    startAndAwait()
+                }
+            }
+        }
+    }
+
+    /**
+     * 换 rootfs = 容器里的预装插件没了：清掉预装记账，让下一轮 [seedPlugins] 重新来一遍。
+     */
+    private fun clearSeedLedger() {
+        prefs().edit()
+            .remove(DshEnv.KEY_SEEDED_PLUGINS)
+            .remove(@Suppress("DEPRECATION") DshEnv.KEY_SEED_PLUGINS_DONE)
+            .apply()
+    }
+
+    /**
+     * App 启动后是否自动检查运行时更新（设置里「自动检查更新」那个独立开关）。
+     *
+     * 默认**开**：不看版本的存量用户只有靠启动提示才知道自己卡在一份坏的 rootfs 上。
+     */
+    fun autoCheckEnabled(ctx: Context): Boolean =
+        ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
+            .getBoolean(DshEnv.KEY_RUNTIME_AUTO_CHECK, true)
+
+    fun setAutoCheckEnabled(ctx: Context, on: Boolean) {
+        ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(DshEnv.KEY_RUNTIME_AUTO_CHECK, on)
+            .apply()
     }
 
     fun importRuntime(tarball: File, preserveData: Boolean = true) {
@@ -1661,6 +1784,18 @@ object DshRuntime {
             fail(str(R.string.dsh_err_meta_failed))
             return
         }
+        installMeta(meta, preserveData)
+    }
+
+    /**
+     * 用一份**已知**的 metadata 走完安装：架构闸门 → 最低 App 闸门 → 空间 → 下载
+     * （多镜像竞速）→ sha256 → 解压 → 落盘版本。
+     *
+     * 从 [downloadAndInstall] 里拆出来是为了版本列表：那条路径的 metadata 来自用户
+     * 选中的那个 release，而不是当前通道 —— 否则「切换到历史版本」会变成「又装了一遍
+     * 最新版」。
+     */
+    private suspend fun installMeta(meta: DshMeta, preserveData: Boolean) {
         // 架构必须先对上：自定义源可以指向任何 metadata.json，下错架构的 rootfs 要到
         // 启动 node 时才报 "Exec format error"，白下 130 MB 还看不懂错在哪。
         //
@@ -1747,27 +1882,91 @@ object DshRuntime {
         refreshRootfsSize()
     }
 
-    private fun fetchMeta(): DshMeta? = runCatching {
-        val conn = URL(DshSource.effectiveMetaUrl(appContext)).openConnection() as HttpURLConnection
-        conn.connectTimeout = 15_000
-        conn.readTimeout = 15_000
-        conn.instanceFollowRedirects = true
-        val text = conn.inputStream.bufferedReader().use { it.readText() }
-        val json = JSONObject(text)
-        DshMeta(
-            version = json.optString("version", "unknown"),
-            url = json.getString("url"),
-            sha256 = json.optString("sha256", ""),
-            sizeBytes = json.optLong("sizeBytes", 0L),
-            mirrors = json.optJSONArray("mirrors")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } }
-                ?: emptyList(),
-            arch = json.optString("arch", ""),
-            dsh = json.optString("dsh", ""),
-            nodeVersion = json.optString("nodeVersion", ""),
-            builtAt = json.optString("builtAt", ""),
-            minAppVersion = json.optString("minAppVersion", ""),
-        )
-    }.getOrNull()
+    private fun fetchMeta(): DshMeta? = fetchMetaFrom(DshSource.effectiveMetaUrl(appContext))
+
+    /**
+     * 拉一份 metadata.json 并解析。失败（断网 / 404 / JSON 坏了）返回 null。
+     *
+     * 取文本走 [fetchJsonText]（直连优先，其次各代理前缀）：版本列表里每个 release 的
+     * metadata 都是固定的 GitHub 下载地址，用不上测速排序那一套。
+     */
+    private fun fetchMetaFrom(url: String): DshMeta? {
+        val text = fetchJsonText(url) ?: return null
+        return runCatching {
+            val json = JSONObject(text)
+            DshMeta(
+                version = json.optString("version", "unknown"),
+                url = json.getString("url"),
+                sha256 = json.optString("sha256", ""),
+                sizeBytes = json.optLong("sizeBytes", 0L),
+                mirrors = json.optJSONArray("mirrors")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } }
+                    ?: emptyList(),
+                arch = json.optString("arch", ""),
+                dsh = json.optString("dsh", ""),
+                nodeVersion = json.optString("nodeVersion", ""),
+                builtAt = json.optString("builtAt", ""),
+                minAppVersion = json.optString("minAppVersion", ""),
+            )
+        }.getOrNull()
+    }
+
+    /** 某个 release tag 在**本机架构**下的 metadata。 */
+    private fun fetchMetaOfTag(tag: String, suffix: String): DshMeta? =
+        fetchMetaFrom(DshSource.releaseBase(tag) + "metadata$suffix.json")
+
+    /**
+     * 拉一段文本：直连不行就套代理前缀再试。
+     *
+     * 这几个 metadata 只有几十 KB，代理前缀是白名单里的两个 gh-proxy 域名 ——
+     * 与下载 rootfs 用的是同一批入口，国内网络下直连 GitHub 经常直接超时。
+     */
+    private fun fetchJsonText(url: String): String? {
+        val candidates = listOf(
+            url,
+            DshSource.proxyPrefix(DshSource.SOURCE_GHPROXY_CF) + url,
+            DshSource.proxyPrefix(DshSource.SOURCE_GHPROXY_AXISNOW) + url,
+        ).distinct()
+        for (candidate in candidates) {
+            val text = runCatching {
+                val conn = URL(candidate).openConnection() as HttpURLConnection
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 15_000
+                conn.instanceFollowRedirects = true
+                conn.setRequestProperty("User-Agent", "DSH-Folk")
+                if (conn.responseCode !in 200..299) {
+                    conn.disconnect()
+                    return@runCatching null
+                }
+                conn.inputStream.bufferedReader().use { it.readText() }
+            }.getOrNull()
+            if (!text.isNullOrBlank()) return text
+        }
+        return null
+    }
+
+    /**
+     * 仓库里所有 runtime release 的 (tag, 发布时间)，按发布时间倒序。
+     *
+     * 用 API 而不是通道地址：只有 API 能一次列出历史版本。拿不到就返回空表，由
+     * [listRuntimeVersions] 退回两个通道。
+     */
+    private suspend fun fetchRuntimeReleases(): List<Pair<String, String>> {
+        val body = UpdateChecker.fetchApiJson("/repos/IPF-Sinon/DSH-Folk/releases?per_page=100")
+            ?: return emptyList()
+        val out = ArrayList<Pair<String, String>>()
+        runCatching {
+            val arr = JSONArray(body)
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                if (o.optBoolean("draft")) continue
+                val tag = o.optString("tag_name").trim()
+                // 仓库里还有 App 自己的 release（v1.8.4…）：只认运行时那批 tag
+                if (!tag.startsWith("runtime")) continue
+                out.add(tag to o.optString("published_at").trim())
+            }
+        }.onFailure { logWarn(R.string.dsh_log_version_list_failed) }
+        return out.sortedByDescending { it.second }
+    }
 
     /**
      * 有没有更新的运行时可用。
@@ -1782,15 +1981,97 @@ object DshRuntime {
      */
     suspend fun checkRuntimeUpdate(): RuntimeCheckResult = withContext(Dispatchers.IO) {
         if (!DshEnv.isRuntimeInstalled(appContext)) return@withContext RuntimeCheckResult()
-        val meta = fetchMeta() ?: return@withContext RuntimeCheckResult()
+        val meta = fetchMeta() ?: return@withContext RuntimeCheckResult(failure = true)
         val local = prefs().getString(DshEnv.KEY_RUNTIME_VERSION, null).orEmpty()
         // 本地版本未知（早期版本装的，没记过）时不谎报有更新：重装要重下 150MB，
-        // 不能靠猜就让用户付这个代价
-        if (local.isEmpty()) return@withContext RuntimeCheckResult()
+        // 不能靠猜就让用户付这个代价；也没法说「已是最新」——那同样是猜的
+        if (local.isEmpty()) return@withContext RuntimeCheckResult(failure = true)
         if (meta.version == local) RuntimeCheckResult()
         else RuntimeCheckResult(
             version = meta.version,
             minAppVersion = if (appSatisfies(meta.minAppVersion)) "" else meta.minAppVersion,
+        )
+    }
+
+    /**
+     * 列出仓库里**所有**可用的运行时版本（长按「更新」时用）。
+     *
+     * 光靠通道 tag 拿不到历史版本 —— 滚动通道永远只有 `runtime-latest` 与
+     * `runtime-beta-latest` 两个位置，它们的内容会被就地覆盖，所以「回到上一版」
+     * 只能靠带版本号的历史 release（`runtime-0.1.1-rc.2` 这种）。
+     *
+     * 数据来源是 Releases API（列 tag + 发布时间）加上每个 release 的 metadata
+     * （版本、dsh、node、体积、sha256、最低 App 版本都在里面）。API 走
+     * [UpdateChecker.fetchApiJson]，复用那里已经验证过的一批入口：直连被限流时
+     * gh-proxy 能代理 api.github.com。API 整个不可达时退回两个通道各一份，至少让
+     * 用户在正式版与测试版之间切换。
+     *
+     * 结果按「正式通道 → 测试通道 → 历史版本」排，同组内新的在前。
+     */
+    suspend fun listRuntimeVersions(): List<RuntimeVersion> = withContext(Dispatchers.IO) {
+        val want = DshSource.runtimeArch()
+        val suffix = if (want == "arm64-v8a") "" else "-x86_64"
+        // version 去重：正式通道与测试通道可能装着同一个版本串，先到的那份通道权重更高
+        val found = LinkedHashMap<String, RuntimeVersion>()
+
+        val releases = fetchRuntimeReleases()
+        if (releases.isNotEmpty()) {
+            logInfo(R.string.dsh_log_version_list_api, releases.size)
+            // 并发拉各 release 的 metadata：串行的话 6 个版本在慢网络上要等十几秒
+            val metas = coroutineScope {
+                releases.map { (tag, published) ->
+                    async { fetchMetaOfTag(tag, suffix)?.let { Triple(tag, published, it) } }
+                }.mapNotNull { it.await() }
+            }
+            for ((tag, published, meta) in metas) {
+                if (meta.arch.isNotEmpty() && meta.arch != want) continue
+                found.putIfAbsent(
+                    meta.version,
+                    RuntimeVersion(
+                        version = meta.version,
+                        tag = tag,
+                        channel = RuntimeVersion.channelOf(tag),
+                        dsh = meta.dsh,
+                        nodeVersion = meta.nodeVersion,
+                        builtAt = meta.builtAt,
+                        minAppVersion = meta.minAppVersion,
+                        sha256 = meta.sha256,
+                        sizeBytes = meta.sizeBytes,
+                        arch = meta.arch,
+                        url = meta.url,
+                        mirrors = meta.mirrors,
+                        publishedAt = published,
+                    ),
+                )
+            }
+        }
+
+        // 通道兜底：API 不可达 / 限流烧完时，至少给人看当前两个通道
+        if (found.isEmpty()) {
+            logWarn(R.string.dsh_log_version_list_fallback)
+            for (tag in listOf("runtime-latest", "runtime-beta-latest")) {
+                val meta = fetchMetaFrom(DshSource.releaseBase(tag) + "metadata$suffix.json") ?: continue
+                found[meta.version] = RuntimeVersion(
+                    version = meta.version,
+                    tag = tag,
+                    channel = RuntimeVersion.channelOf(tag),
+                    dsh = meta.dsh,
+                    nodeVersion = meta.nodeVersion,
+                    builtAt = meta.builtAt,
+                    minAppVersion = meta.minAppVersion,
+                    sha256 = meta.sha256,
+                    sizeBytes = meta.sizeBytes,
+                    arch = meta.arch,
+                    url = meta.url,
+                    mirrors = meta.mirrors,
+                )
+            }
+        }
+
+        found.values.sortedWith(
+            compareBy<RuntimeVersion> { RuntimeVersion.channelRank(it.channel) }
+                .thenByDescending { it.publishedAt }
+                .thenByDescending { it.version }
         )
     }
 

@@ -108,6 +108,8 @@ internal fun DshSettingsScreen(
     val dshPrefs = context.getSharedPreferences(DshEnv.PREF, android.content.Context.MODE_PRIVATE)
 
     var runtimeBeta by rememberSaveable { mutableStateOf(DshSource.acceptRuntimeBeta(context)) }
+    // 自动检查更新是运行时自己的开关（默认开），与 App 那个自动检查互不影响
+    var runtimeAutoCheck by rememberSaveable { mutableStateOf(DshRuntime.autoCheckEnabled(context)) }
     var runtimeCheckRevision by rememberSaveable { mutableStateOf(0) }
     var importCandidate by remember { mutableStateOf<RuntimeImportCandidate?>(null) }
     val runtimeImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -723,8 +725,22 @@ internal fun DshSettingsScreen(
                     runtimeCheckRevision = runtimeCheckRevision,
                     onCheckRuntimeUpdateRequested = { runtimeCheckRevision++ },
                     onCheckRuntimeUpdate = { DshRuntime.checkRuntimeUpdate() },
+                    onListRuntimeVersions = { DshRuntime.listRuntimeVersions() },
+                    onSwitchRuntimeVersion = { entry ->
+                        DshRuntime.switchRuntimeVersion(entry, true)
+                        // 与重装同理：下载/解压的进度在首页，切版本后立刻回首页看着它走
+                        navigator.navigate(HomeScreenDestination) {
+                            popUpTo(NavGraphs.root)
+                            launchSingleTop = true
+                        }
+                    },
                     onImportRuntime = {
                         runtimeImportLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "application/x-tar", "application/octet-stream"))
+                    },
+                    runtimeAutoCheck = runtimeAutoCheck,
+                    onRuntimeAutoCheckChange = { on ->
+                        runtimeAutoCheck = on
+                        DshRuntime.setAutoCheckEnabled(context, on)
                     },
                     runtimeBeta = runtimeBeta,
                     onRuntimeBetaChange = { on ->
