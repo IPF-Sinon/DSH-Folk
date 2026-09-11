@@ -514,7 +514,18 @@ object DshRuntime {
               say(await req('GET', '/native/capabilities'));
             } else if (cmd === 'elevate') {
               if (!a[0] || !a[1]) { console.error(USAGE); process.exit(1); }
-              say(await req('POST', '/native/elevate' + q({ cap: a[0], access: a[1], reason: opt.reason })));
+              const res = await req('POST', '/native/elevate' + q({ cap: a[0], access: a[1], reason: opt.reason }));
+              say(res);
+              // 202 = 已提交、等用户在 App 里答复，不是「已经批了」。stdout 上的 JSON 里有
+              // status/note，stderr 这句是给读终端的人（和只会看退出码的调用方）的。
+              if (res.status === 202) {
+                console.error('elevate: waiting for the user to answer in the DSH-Folk app. ' +
+                  'Do not file another request; run "dsh-native caps" to see pending / lastElevation.');
+              } else if (res.status === 409) {
+                console.error('elevate: refused (a request is already pending, or the app is not in ' +
+                  'the foreground). Run "dsh-native caps" and read "pending" / "foreground" instead ' +
+                  'of filing another.');
+              }
             } else if (cmd === 'device') {
               say(await req('GET', '/native/device'));
             } else if (cmd === 'notify') {

@@ -364,6 +364,11 @@ function render(f) {
         ' seconds with no answer — an expiry counts as a deny.'
     );
     out.push(
+      '- Filing returns 202 with `status: "pending_user"` — `ok: true` there means "the request was ' +
+        'recorded", NOT "you were granted". A 200 with `status: "already_granted"` (or ' +
+        '`already_granted_once`) means nothing new was asked, just make the call.'
+    );
+    out.push(
       '- After filing, re-check `dsh-native caps`: `pending` tells you it is still waiting (with ' +
         '`msLeft`), `caps.<cap>.once` that a one-shot grant is armed, and `lastElevation` what ' +
         'happened to the most recent request (`allowed` / `once` / `denied` / `expired`).'

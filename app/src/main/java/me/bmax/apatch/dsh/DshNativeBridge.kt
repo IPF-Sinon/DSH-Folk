@@ -816,13 +816,24 @@ object DshNativeBridge {
         }
         val current = access(ctx, cap)
         if (accessOptions(cap).indexOf(requested) <= accessOptions(cap).indexOf(current)) {
-            return 200 to JSONObject().put("ok", true).put("unchanged", true).toString()
+            return 200 to JSONObject()
+                .put("ok", true)
+                .put("status", "already_granted")
+                .put("access", current.id)
+                .put("note", "This level is already granted in settings; make the call directly.")
+                .toString()
         }
         // 已经有一个还没用掉的「仅本次」配额能覆盖这次申请：说明用户刚同意过同一件事，
         // 别再弹一次窗问他 —— 让他重跑那条命令即可。
         val onceNow = onceAccess(cap)
         if (onceNow != null && accessOptions(cap).indexOf(onceNow) >= accessOptions(cap).indexOf(requested)) {
-            return 200 to JSONObject().put("ok", true).put("once", true).toString()
+            return 200 to JSONObject()
+                .put("ok", true)
+                .put("status", "already_granted_once")
+                .put("access", onceNow.id)
+                .put("once", true)
+                .put("note", "The user already allowed this once; no new dialog was opened. Make that one call now.")
+                .toString()
         }
         val reason = text(params["reason"])
             ?: return 400 to err(str(ctx, R.string.dsh_native_err_reason_required), "reason_required")
@@ -831,10 +842,19 @@ object DshNativeBridge {
         // 事实文件跟着变：提示词知道「已经有一份申请在等用户」，agent 就不会再提一份
         runCatching { DshHostPrompt.writeFacts(ctx.applicationContext) }
         audit(ctx, "POST", "/native/elevate", params, cap, reason, 202)
+        // 202 的含义是「已提交、等用户」，不是「已经给了」：把语义写进 JSON，模型不必从
+        // 状态码推断（容器侧的 CLI 也会在 stderr 上再说一遍）。
         return 202 to JSONObject()
             .put("ok", true)
+            .put("status", "pending_user")
             .put("pending", true)
             .put("requestId", request.id)
+            .put("expiresInMs", DshElevationRequests.TTL_MS)
+            .put(
+                "note",
+                "Waiting for the user to answer in the DSH-Folk app. Do not file another request; " +
+                    "check dsh-native caps (pending / lastElevation) for the outcome.",
+            )
             .toString()
     }
 

@@ -18,7 +18,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -86,6 +85,14 @@ fun ElevationRequestDialogHost() {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(12.dp))
+                // 倒计时放在正文末尾而不是按钮行里：按钮行是三个并排的动作，塞一个会跳动
+                // 的秒数进去会让整行随秒数重排；这里它是一条稳定宽度的说明。
+                Text(
+                    text = stringResource(R.string.dsh_native_elevate_countdown, secondsLeft),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
         },
         confirmButton = {
@@ -99,15 +106,8 @@ fun ElevationRequestDialogHost() {
             }
         },
         dismissButton = {
-            Column(horizontalAlignment = Alignment.End) {
-                TextButton(onClick = { DshElevationRequests.clear(current.id) }) {
-                    Text(stringResource(R.string.dsh_native_elevate_deny))
-                }
-                Text(
-                    text = stringResource(R.string.dsh_native_elevate_countdown, secondsLeft),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            TextButton(onClick = { DshElevationRequests.clear(current.id) }) {
+                Text(stringResource(R.string.dsh_native_elevate_deny))
             }
         },
     )
