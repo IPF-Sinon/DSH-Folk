@@ -819,8 +819,7 @@
     <string name="dsh_log_download_error">Download error: %1$s</string>
     <string name="dsh_log_missing_after_extract">Missing from the extracted rootfs: %1$s</string>
     <string name="dsh_log_missing_python">The runtime has no python3, wireless ADB pairing is unavailable</string>
-    <string name="dsh_log_missing_pnpm">The runtime has no pnpm, plugin installation is unavailable. Update or reinstall the runtime.</string>
-    <string name="dsh_log_pnpm_repaired">Repaired the pnpm command in this runtime (%1$s)</string>
+    <string name="dsh_log_missing_pnpm">This runtime has no pnpm, so plugins cannot be installed. Update the runtime in Settings to get one that does.</string>
     <string name="dsh_log_preserve_failed">Could not move %1$s aside before replacing the runtime; aborting so no data is lost</string>
     <string name="dsh_log_restore_failed">Could not restore %1$s after the update (the data is still in %2$s and will be picked up on the next start)</string>
     <string name="dsh_log_extract_failed">Extraction failed: %1$s</string>
@@ -862,7 +861,7 @@
     <string name="dsh_plug_log_cli_ready">CLI ready: dsh-config-manager help</string>
     <string name="dsh_plug_log_cli_missing">The dsh-config-manager command was not found; the installation may have failed</string>
     <string name="dsh_plug_log_no_dsh">Could not find dsh inside the container</string>
-    <string name="dsh_plug_log_no_pnpm">Could not find pnpm inside the container; please reinstall the runtime in Settings</string>
+    <string name="dsh_plug_log_no_pnpm">Could not find pnpm inside the container; please update the runtime in Settings</string>
     <string name="dsh_plug_verify_timeout">Verification timed out or the process exited early (the ready line never appeared)</string>
     <string name="dsh_plug_no_output">No output (the command may have timed out, or the container is not running)</string>
     <string name="dsh_log_builds_allowed">Build scripts allowed: %1$s</string>

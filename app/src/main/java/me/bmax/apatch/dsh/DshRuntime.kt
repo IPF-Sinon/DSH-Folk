@@ -947,10 +947,6 @@ object DshRuntime {
     private fun ensureRuntimeFiles() {
         val libDir = File(appContext.filesDir, "lib").apply { mkdirs() }
         DshEnv.tmpDir(appContext).mkdirs()
-        // 老运行时（含用户报告的 0.1.2-r2）pnpm 包已经在 usr/local/lib/node_modules，
-        // 但 usr/local/bin/pnpm 可能没建出来/不可执行。先按 package.json.bin 自愈链接，
-        // 这样升级 APK 后**不用重下 170MB 运行时**就能继续装预装插件。
-        ensurePnpmReady()
         // 每条 exec 路径都要保证 DNS 在：冷启动直接进插件页 / 终端页时不会走 bootstrap，
         // 少了这一步容器里 pnpm、apt 全是 EAI_AGAIN。已存在则原样保留（用户可能改过）。
         ensureContainerDns()
@@ -1221,12 +1217,11 @@ object DshRuntime {
     private suspend fun seedPlugins() {
         if (!DshEnv.isRuntimeInstalled(appContext)) return
 
-        // 即便只补了链接，rootfs 仍然属于同一份安装；不要在这里动版本/最低版本键。
-        // 先修 pnpm，再读 bundle 状态：后面的 DshPluginRepo 调用本身会 execRootfs，
-        // 但这里提前做能让「完全缺包」时只报一次、而不是四个预装逐个 exit 127。
-        if (!ensurePnpmReady()) {
+        // 预装/补装全靠 `dsh plugin` → pnpm。运行时没带 pnpm 时（旧 rootfs）只报一次
+        // 并停止：四个预装包逐个 exit 127 只是刷屏，用户得不到任何可行动的信息。
+        // 恢复路径就是更新运行时 —— 不含 pnpm 的旧 rootfs 已从两个通道重新发布。
+        if (!pnpmInstalled()) {
             logWarn(R.string.dsh_log_missing_pnpm)
-            _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 0f) }
             return
         }
 
@@ -1303,8 +1298,15 @@ object DshRuntime {
                         code = exitCodeOf(out)
                     }
                 }
-                if (code == 0) logInfo(R.string.dsh_log_seed_done, pkg)
-                else logWarn(R.string.dsh_log_seed_failed, pkg)
+                if (code == 0) {
+                    logInfo(R.string.dsh_log_seed_done, pkg)
+                } else {
+                    logWarn(R.string.dsh_log_seed_failed, pkg)
+                    // 只补一句可行动的话，不在这里修 rootfs：pnpm 由运行时自带。
+                    // 旧运行时（0.1.2-r2 带的是 pnpm 12 那个无 shebang 的 shim）会让 dsh
+                    // 的 spawnSync 直接 ENOENT，报的就是这一行 —— 用户唯一的出路是更新运行时。
+                    if (out.contains(DshPluginRepo.NO_PNPM)) logWarn(R.string.dsh_log_missing_pnpm)
+                }
             }
             persistSeeded(attempted + todo)
             // 预装会大幅改变 node_modules 体积，顺手重算一次缓存
@@ -1509,53 +1511,19 @@ object DshRuntime {
     }
 
     /**
-     * 修复 rootfs 里「pnpm 包在、PATH 上却没有可执行 pnpm」的旧运行时。
+     * 运行时里有没有 pnpm。
      *
-     * 用户日志已经把根因钉死：`dsh: pnpm not found on PATH` / exit 127。0.1.2-r2
-     * 没有可靠地带出 `/usr/local/bin/pnpm`；而更新 App 后预装补装机制终于真的跑起来，
-     * 第一个包就被 dsh 的前置检查挡住。好消息是 npm 的包目录通常已经在
-     * `/usr/local/lib/node_modules/pnpm`，缺的只是 bin 链接或执行位。
+     * **只判定，不修 rootfs。** pnpm 是运行时的组成部分：runtime-builder 固定
+     * `pnpm@10.34.5`、按 `package.json.bin` 重建 `usr/local/bin` 下的链接，并在打包前
+     * 用 `node bin/pnpm.cjs --version` 自检。App 侧再打补丁只会把「运行时该负责的事」
+     * 藏起来 —— 真机日志里表现就是每次进容器都刷一行「已修复此运行时的 pnpm」，
+     * 而用户根本不知道自己的运行时其实是坏的。
      *
-     * 不能在这里走容器命令：正是容器里的 `command -v pnpm` 坏了；rootfs 在 App
-     * 私有目录，宿主 Kotlin 直接读 package.json、写链接即可。读不出来就返回 false，
-     * [seedPlugins] 会把清晰的「运行时缺 pnpm」写进日志并停止，不再拿四个预装包
-     * 逐个失败四遍。
+     * 判据只看 `usr/local/bin/pnpm` 在不在：执行位与入口正确性由运行时构建期自检保证，
+     * 容器内 `dsh plugin` 前还有一次 `command -v pnpm` 兜底（见 DshPluginRepo）。
      */
-    private fun ensurePnpmReady(): Boolean = runCatching {
-        val root = DshEnv.rootfs(appContext)
-        val binDir = File(root, "usr/local/bin").apply { mkdirs() }
-        val link = File(binDir, "pnpm")
-        // 真有一个入口（普通文件或 symlink）就先把最终目标的执行位修好。Android 的
-        // File.exists()/canExecute() 对 guest symlink 不够可靠，所以不能据此直接宣告成功。
-        if (link.exists()) {
-            runCatching { link.canonicalFile.setExecutable(true, false) }
-        }
-
-        val pkgDir = File(root, "usr/local/lib/node_modules/pnpm")
-        val pkg = File(pkgDir, "package.json")
-        if (!pkg.isFile) return@runCatching false
-        val binNode = JSONObject(pkg.readText()).opt("bin")
-        val rel = when (binNode) {
-            is String -> binNode
-            is JSONObject -> binNode.optString("pnpm", "")
-            else -> ""
-        }.trim().removePrefix("./")
-        if (rel.isEmpty() || rel.startsWith("/") || rel.split('/').any { it == ".." }) {
-            return@runCatching false
-        }
-        val target = File(pkgDir, rel).canonicalFile
-        if (!target.isFile || !target.path.startsWith(pkgDir.canonicalPath + File.separator)) {
-            return@runCatching false
-        }
-        target.setExecutable(true, false)
-        // delete() 对不存在文件是安全的，也能删掉 exists()==false 的悬空 symlink；
-        // 别先 lstat —— ENOENT 会抛异常，把本来能修的路径提前打断。
-        link.delete()
-        // 容器里的链接必须按 guest 路径解析，不能写宿主 /data/user/0/... 绝对路径。
-        android.system.Os.symlink("../lib/node_modules/pnpm/$rel", link.absolutePath)
-        logInfo(R.string.dsh_log_pnpm_repaired, rel)
-        true
-    }.getOrDefault(false)
+    private fun pnpmInstalled(): Boolean =
+        File(DshEnv.rootfs(appContext), "usr/local/bin/pnpm").exists()
 
     /**
      * 把 `dsh-fs` / `dsh-native` CLI 写进容器（rootfs 就在 App 私有目录，直接落盘，

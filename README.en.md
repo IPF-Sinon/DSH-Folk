@@ -335,10 +335,10 @@ Several parts have to work this way:
   `packageImportMethod: copy`, making pnpm copy real files. The cost is losing content-store deduplication and slightly increasing container size.
 - `dsh plugin` only delegates to pnpm and exits with code 127 if pnpm is absent from PATH. The runtime therefore pins the self-contained
   `pnpm@10.34.5` (not `latest`: pnpm 12's npm package became a launcher that relies on postinstall to fetch a native binary, conflicting with
-  the `--ignore-scripts` required for cross-architecture assembly), and the build verifies the JS CLI with `--version` before packaging.
-  At startup the app also rebuilds `/usr/local/bin/pnpm` and its executable bit from `package.json.bin`, allowing an old rootfs where the package
-  exists but its bin link was lost to self-repair without redownloading roughly 170 MB. If the package itself is absent, the log reports that once
-  and asks for a runtime update/reinstall instead of failing all four preinstalled plugins one by one.
+  the `--ignore-scripts` required for cross-architecture assembly), rebuilds the `/usr/local/bin` links from `package.json.bin`, and verifies the
+  JS CLI with `node bin/pnpm.cjs --version` before packaging. This layer belongs to the runtime alone: the app no longer patches the rootfs on
+  device, which would only hide the fact that the runtime is broken. The fixed revision ships as r3 on **both** channels, so existing users
+  (including stable users still on 0.1.2-r2) can update the runtime in place instead of reinstalling.
 - More than half of the entries in the plugin catalog use `github:owner/name` installation specifications, which pnpm resolves with `git ls-remote`, so git is also preinstalled in the rootfs.
   Note that the rootfs is built by extracting with `dpkg-deb -x` only (without running maintainer scripts, which would need to execute on the target architecture), so
   **no one resolves dpkg dependencies for us** — omit one transitive dependency from the package list, and everything looks fine during the build until the exact moment of exec on the device,

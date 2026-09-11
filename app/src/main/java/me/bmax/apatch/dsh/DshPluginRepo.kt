@@ -1253,6 +1253,17 @@ object DshPluginRepo {
     const val EXIT_MARKER = "[DSH-Folk-exit]"
 
     /**
+     * dsh 的 `plugin` 子命令找不到 pnpm 时打印的那行（随后以 127 退出）。
+     *
+     * 判据来自上游实现：`spawnSync("pnpm", …)` 返回 `error.code === "ENOENT"`。
+     * 真机上还有一种更隐蔽的成因：pnpm 12 的 npm 包把 bin 换成了**无 shebang** 的 sh
+     * 启动器（真正的二进制靠 postinstall 下载，而异架构构建必须 --ignore-scripts），
+     * 容器里执行它拿不到预期的 ENOEXEC 兜底，于是 dsh 直接看到 ENOENT。
+     * 也就是说这行输出几乎总意味着「运行时里的 pnpm 不可用」，而不是插件本身坏了。
+     */
+    const val NO_PNPM = "pnpm not found on PATH"
+
+    /**
      * 跑 `dsh plugin --profile web <args>` 并回读输出，逐行回调 onLine。
      *
      * 结尾必须带退出码：不带的话只能靠在输出里找 "pnpm failed" 之类的字样猜

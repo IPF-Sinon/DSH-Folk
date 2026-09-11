@@ -25,7 +25,7 @@ on:
         type: choice
         options: [ stable, beta ]
       min_app_version:
-        description: 'Minimum DSH-Folk app version required by this runtime (empty = take baseVersionName() from build.gradle.kts)'
+        description: 'Minimum DSH-Folk app version required by this runtime (empty = take baseVersionName() from build.gradle.kts; none = no requirement)'
         required: false
         default: ''
       publish:
@@ -50,6 +50,8 @@ jobs:
 
       # 运行时要求的最低 App 版本：输入优先，留空则取仓库 build.gradle.kts 的
       # baseVersionName() —— 运行时与 App 同源发布时要求自动对齐，不会漂移。
+      # 需要「明确不设要求」时填 none：留空等于自动取当前 App 版本，而存量用户
+      # 往往停在更旧的 App 上，那道门会让他们拿不到只修了 rootfs 的运行时。
       - id: minapp
         env:
           REQUESTED: ${{ inputs.min_app_version }}
@@ -58,6 +60,7 @@ jobs:
           if [ -z "$V" ]; then
             V=$(grep -oP 'fun baseVersionName\(\): String = "\K[^"]+' build.gradle.kts | head -1 || true)
           fi
+          case "$V" in none|None|NONE) V="" ;; esac
           echo "min_app_version=$V" >> "$GITHUB_OUTPUT"
           echo "minimum app version: ${V:-(none)}"
 

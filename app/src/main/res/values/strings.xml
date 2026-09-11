@@ -348,6 +348,7 @@
         <item>App update checks race GitHub direct access and several mirrors concurrently to obtain a valid result faster.</item>
         <item>Runtimes can now declare a minimum app version. If the installed runtime needs a newer app, start, update, and reinstall actions point you to the app update instead of failing.</item>
         <item>Fixed startup failure after upgrading to dsh 0.1.5: upstream now bundles the file-upload capability that conflicts with the preinstalled plugin. The app detects the conflict, skips or removes the preinstall, and repairs broken installs automatically.</item>
+        <item>Fixed preinstalled plugins failing with "pnpm not found on PATH": the runtime now ships a pinned, self-contained pnpm. Both runtime channels were rebuilt, so an older runtime can be updated in place instead of reinstalled.</item>
     </string-array>
 
     

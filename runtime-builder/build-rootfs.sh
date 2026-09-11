@@ -230,8 +230,8 @@ PNPM_BIN_REL="$(node -p "
 ")"
 test -f "$PNPM_PKG/$PNPM_BIN_REL"
 # npm 通常会建链接，但不要把运行时正确性押在它的实现细节上：按 package.json.bin
-# 重建相对链接，并显式修可执行位。Java 解压器会保留 tar mode；即便以后它回归，
-# App 侧还有 ensurePnpmReady() 的自愈兜底。
+# 重建相对链接，并显式修可执行位：不要把运行时正确性押在 npm 的实现细节上，
+# 也让「解压后 pnpm 一定在 PATH 上」成为可验证的事实。
 for name in $(node -p "Object.keys(require('$PNPM_PKG/package.json').bin).join(' ')"); do
   rel="$(node -p "require('$PNPM_PKG/package.json').bin['$name']")"
   chmod 0755 "$PNPM_PKG/$rel"

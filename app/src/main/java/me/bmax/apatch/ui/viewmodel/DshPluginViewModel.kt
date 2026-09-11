@@ -466,7 +466,7 @@ class DshPluginViewModel : ViewModel() {
             val code = marker.removePrefix(DshPluginRepo.EXIT_MARKER).trim().toIntOrNull()
             if (code != null) return code != 0
         }
-        return out.contains("pnpm failed") || out.contains("pnpm not found") ||
+        return out.contains("pnpm failed") || out.contains(DshPluginRepo.NO_PNPM) ||
             out.contains("[DSH-Folk]") || out.contains("ERR_PNPM")
     }
 
