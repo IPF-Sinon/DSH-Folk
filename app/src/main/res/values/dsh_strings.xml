@@ -676,7 +676,7 @@
     <string name="dsh_native_os_open_settings">System settings</string>
     <string name="dsh_native_os_recheck">Re-check</string>
     <string name="dsh_native_os_ack">Got it</string>
-    <string name="dsh_native_os_countdown">Returns to the AI as "no Android permission" in %1$d s</string>
+    <string name="dsh_native_os_countdown">Returns to the AI as “no Android permission” in %1$d s</string>
     <string name="dsh_native_err_denied">The user denied the %1$s permission request</string>
     <string name="dsh_native_err_request_expired">The %1$s permission request timed out and counts as denied</string>
     <string name="dsh_native_err_no_android_permission">The user agreed inside the app, but Android still lacks: %1$s</string>
