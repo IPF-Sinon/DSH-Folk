@@ -291,7 +291,7 @@ dsh-native settings | settings brightness <1..100> [--auto 0|1] | settings timeo
 dsh-native settings rotation <0|1>
 dsh-native install                       # whether this device allows installing unknown apps
 dsh-native caps                          # which capabilities are enabled and available
-dsh-native elevate <cap> <read|write|read_write|control> --reason <why>   # file one elevation request
+dsh-native elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]
 ```
 
 `elevate` is the agent's only self-service escalation path, and the only part of this permission model that the AI initiates: when the agent finds a capability
@@ -302,6 +302,10 @@ call of that capability goes through and then reverts; the switch in settings is
   request into a 409; with a deadline the worst case degrades to “this one did not go through”.
 - Because of that deadline the dialog has to be genuinely visible, so it is mounted on the main screen **and on the WebUI Activity**. With only the main screen, a user
   looking at the WebUI would never see the request — it just looks like the AI asked and nothing happened, and then the timeout quietly counts as their refusal.
+- A request can **attach the command it is about** (`--command`, multi-line is fine). The dialog shows it verbatim in a
+  monospace, selectable block — what the user is judging is never “camera=write, yes or no” but “what is it about to do”.
+  When no command is attached the dialog falls back to showing the `dsh-native elevate` call that filed the request, so the
+  user at least sees who is asking.
 - “Allow once” buys exactly one call and expires after three minutes: chaining several writes onto it is not what the user agreed to.
 - Request state is queryable (`pending` / `once` / `lastElevation` in `dsh-native caps`), so the injected prompt can tell the agent “one request is already waiting, do not
   file another” and “after a deny or an expiry, do not ask again” instead of leaving it to guess whether a 403 means the user refused or has not looked yet.

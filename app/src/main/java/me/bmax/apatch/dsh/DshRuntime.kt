@@ -498,7 +498,10 @@ object DshRuntime {
           '  sms list [--limit N]                        # recent SMS, read only',
           '  sms send <number> <text>                    # requires send access',
           '  caps                                       # access, accessOptions, once, pending, lastElevation',
-          '  elevate <cap> <read|write|read_write|control> --reason <why>  # asks the user; never auto-grants',
+          '  elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]',
+          '      Asks the user; never auto-grants. --command is what the user reads in the dialog:',
+          '      pass the exact command you will run once the request is granted (multi-line is fine,',
+          '      up to ~2000 chars). Without it the user only sees this elevation call itself.',
           'An elevation request is answered in the DSH-Folk app (Allow / Allow once / Deny) and expires',
           'after ${DshElevationRequests.TTL_MS / 1000}s with no answer, which counts as a deny. Only one',
           'request may be pending at a time. "Allow once" buys exactly one call of that capability.',
@@ -514,7 +517,12 @@ object DshRuntime {
               say(await req('GET', '/native/capabilities'));
             } else if (cmd === 'elevate') {
               if (!a[0] || !a[1]) { console.error(USAGE); process.exit(1); }
-              const res = await req('POST', '/native/elevate' + q({ cap: a[0], access: a[1], reason: opt.reason }));
+              // --command 是这条命令的全部意义所在：用户要判断的不是「camera=write 要不要给」，
+              // 而是「它接下来到底要做什么」。没给就退回自己的调用行，弹窗至少有东西可看。
+              const res = await req('POST', '/native/elevate' + q({
+                cap: a[0], access: a[1], reason: opt.reason,
+                command: opt.command, invocation: 'dsh-native ' + argv.join(' ')
+              }));
               say(res);
               // 202 = 已提交、等用户在 App 里答复，不是「已经批了」。stdout 上的 JSON 里有
               // status/note，stderr 这句是给读终端的人（和只会看退出码的调用方）的。

@@ -29,6 +29,15 @@ object DshElevationRequests {
         val cap: DshNativeBridge.Cap,
         val access: DshNativeBridge.Access,
         val reason: String,
+        /**
+         * agent 打算在获准后执行的那条命令（可多行），原文照显给用户。
+         *
+         * 这是这个弹窗最有说服力的一栏：用户要判断的不是「camera=write 要不要给」，而是
+         * 「它接下来到底要做什么」。为空表示 agent 没附（旧版 CLI 就是这样）。
+         */
+        val command: String? = null,
+        /** 发起这次申请的那条命令；command 缺失时用它兜底，让弹窗永远有东西可看。 */
+        val invocation: String? = null,
         val filedAtMs: Long,
         val expiresAtMs: Long,
     )
@@ -79,10 +88,21 @@ object DshElevationRequests {
         cap: DshNativeBridge.Cap,
         access: DshNativeBridge.Access,
         reason: String,
+        command: String? = null,
+        invocation: String? = null,
     ): Request? {
         if (mutable.value != null) return null
         val now = System.currentTimeMillis()
-        val request = Request(ids.incrementAndGet(), cap, access, reason, now, now + TTL_MS)
+        val request = Request(
+            ids.incrementAndGet(),
+            cap,
+            access,
+            reason,
+            command?.takeIf { it.isNotBlank() },
+            invocation?.takeIf { it.isNotBlank() },
+            now,
+            now + TTL_MS,
+        )
         mutable.value = request
         expiry?.cancel()
         expiry = scope.launch {

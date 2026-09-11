@@ -718,6 +718,8 @@
     <string name="dsh_native_elevate_once">Allow once</string>
     <string name="dsh_native_elevate_once_hint">“Allow once” lets exactly the next call through and then takes it back — it does not change the switch in settings. If the Android permission is missing you will still get the system dialog.</string>
     <string name="dsh_native_elevate_countdown">Auto-deny in %1$d s</string>
+    <string name="dsh_native_elevate_command_title">Command it will run</string>
+    <string name="dsh_native_elevate_invocation_title">Command that filed the request (no command was attached)</string>
     <string name="dsh_native_err_reason_required">Every native capability call requires a concrete reason</string>
     <string name="dsh_native_err_control_disabled">Full control for %1$s is disabled</string>
     <string name="dsh_native_err_notification_cancel">Could not dismiss the requested system notification</string>

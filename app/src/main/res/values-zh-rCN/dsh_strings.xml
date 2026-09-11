@@ -700,6 +700,8 @@
     <string name="dsh_native_elevate_once">仅本次</string>
     <string name="dsh_native_elevate_once_hint">「仅本次」只放行接下来的一次调用，用完自动收回，不会改动设置里的开关；系统权限不足时仍会再弹一次 Android 自己的授权框。</string>
     <string name="dsh_native_elevate_countdown">%1$d 秒内未处理将自动拒绝</string>
+    <string name="dsh_native_elevate_command_title">它将执行的命令</string>
+    <string name="dsh_native_elevate_invocation_title">发起申请的命令（它没附上具体命令）</string>
     <string name="dsh_native_err_reason_required">每次原生能力调用都必须提供具体理由</string>
     <string name="dsh_native_err_control_disabled">未启用 %1$s 的完全控制</string>
     <string name="dsh_native_err_notification_cancel">无法移除指定的系统通知</string>

@@ -3,13 +3,21 @@ package me.bmax.apatch.ui.component
 import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -20,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -79,6 +88,24 @@ fun ElevationRequestDialogHost() {
                     Spacer(Modifier.height(12.dp))
                     Text(stringResource(R.string.dsh_native_full_control_warning_message))
                 }
+                // agent 附上的命令：用户要判断的不是「camera=write 要不要给」，而是「它接下来
+                // 到底要做什么」。所以原文照显、等宽、可选中复制，不做任何润色。
+                val script = current.command ?: current.invocation
+                if (script != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(
+                            if (current.command != null) {
+                                R.string.dsh_native_elevate_command_title
+                            } else {
+                                R.string.dsh_native_elevate_invocation_title
+                            }
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    CommandBlock(script)
+                }
                 Spacer(Modifier.height(12.dp))
                 Text(
                     text = stringResource(R.string.dsh_native_elevate_once_hint),
@@ -113,8 +140,35 @@ fun ElevationRequestDialogHost() {
     )
 }
 
-/** 「允许」：级别落盘，长期有效。 */
-private fun allow(activity: Activity, request: DshElevationRequests.Request) {
+/**
+ * 命令块：等宽字体、可选中复制、超长可滚动。
+ *
+ * 垫一层 Surface 而不是直接排一行 Text —— 多行命令混在正文里时，用户分不清哪些字是要被执行的
+ * 东西。横向也允许滚动：一条长命令被硬折成一堆碎片，比横向滚动更难读。
+ */
+@Composable
+private fun CommandBlock(command: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        SelectionContainer {
+            Text(
+                text = command,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier
+                    .heightIn(max = 180.dp)
+                    .verticalScroll(rememberScrollState())
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            )
+        }
+    }
+}
+
+/** 「允许」：级别落盘，长期有效。 */private fun allow(activity: Activity, request: DshElevationRequests.Request) {
     DshNativeBridge.setAccess(activity.applicationContext, request.cap, request.access)
     DshHostPrompt.writeFacts(activity.applicationContext)
     DshElevationRequests.resolve(request.id, DshElevationRequests.Decision.ALLOWED)

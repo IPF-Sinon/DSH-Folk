@@ -310,6 +310,14 @@ object DshNativeBridge {
      */
     const val ONCE_TTL_MS = 180_000L
 
+    /**
+     * 提权申请里附带命令的长度上限。
+     *
+     * 请求参数走查询串（桥只在 query 里取参数），而读请求头有 16 KB 的上限；留足其余参数与
+     * 编码膨胀的余量，2000 个字符足够放下一条（哪怕是多行的）shell 命令。
+     */
+    private const val MAX_COMMAND_CHARS = 2000
+
     /** 只有同时存在安全可用的读、写操作时才显示第三档。 */
     fun supportsWrite(cap: Cap): Boolean = when (cap) {
         Cap.NOTIFY, Cap.FULL_SCREEN_NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.CLIPBOARD, Cap.INTENT,
@@ -784,6 +792,7 @@ object DshNativeBridge {
                         .put("access", it.access.id)
                         .put("reason", it.reason)
                         .put("msLeft", DshElevationRequests.remainingMs(it))
+                        .put("command", it.command ?: JSONObject.NULL)
                 } ?: JSONObject.NULL,
             )
             .put(
@@ -801,6 +810,10 @@ object DshNativeBridge {
     }
 
     // ────────────────────────── 能力实现 ──────────────────────────
+
+    /** 取一个可选的长文本参数：去空白、限长、空串按「没给」处理。 */
+    private fun bounded(raw: String?): String? =
+        text(raw)?.trim()?.take(MAX_COMMAND_CHARS)?.takeIf { it.isNotBlank() }
 
     private fun requestElevation(ctx: Context, params: Map<String, String>): Pair<Int, String> {
         if (!enabled(ctx)) return 403 to err(str(ctx, R.string.dsh_native_err_disabled), "disabled")
@@ -837,7 +850,11 @@ object DshNativeBridge {
         }
         val reason = text(params["reason"])
             ?: return 400 to err(str(ctx, R.string.dsh_native_err_reason_required), "reason_required")
-        val request = DshElevationRequests.submit(cap, requested, reason)
+        // agent 可以附上「获准后要跑的那条命令」，弹窗原文照显给用户看。命令过长就截断而不是
+        // 报错：看到一截命令，用户的判断力也远好过看到一个 400 后什么也没有。
+        val command = bounded(params["command"])
+        val invocation = bounded(params["invocation"])
+        val request = DshElevationRequests.submit(cap, requested, reason, command, invocation)
             ?: return 409 to err(str(ctx, R.string.dsh_native_err_elevate_busy), "request_pending")
         // 事实文件跟着变：提示词知道「已经有一份申请在等用户」，agent 就不会再提一份
         runCatching { DshHostPrompt.writeFacts(ctx.applicationContext) }

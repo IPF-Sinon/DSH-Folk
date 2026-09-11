@@ -288,7 +288,7 @@ dsh-native settings | settings brightness <1..100> [--auto 0|1] | settings timeo
 dsh-native settings rotation <0|1>
 dsh-native install                       # 这台机器允不允许安装未知应用
 dsh-native caps                          # 查当前哪些能力开着、能不能用
-dsh-native elevate <能力> <read|write|read_write|control> --reason <理由>   # 发起一次提权申请
+dsh-native elevate <能力> <read|write|read_write|control> --reason <理由> [--command <命令>]
 ```
 
 `elevate` 是 agent 唯一的「自助提权」入口，也是这套权限模型里唯一由 AI 发起的东西：容器里的 agent 发现
@@ -300,6 +300,9 @@ dsh-native elevate <能力> <read|write|read_write|control> --reason <理由>   
   409；有时限之后，最坏情况退化成「这次没成」，而不是「这条通道从此废了」。
 - 因为有时限，弹窗必须真的能被看见：它同时挂在主界面与 **WebUI 的 Activity** 上。只挂主界面的话，用户
   正看着 WebUI，申请被压在下面 —— 表现是「AI 申请完毫无反应」，然后静默超时算他拒绝。
+- 申请可以**附带将要执行的命令**（`--command`，多行也行）。弹窗会把它原文、等宽、可选中的显示出来 ——
+  用户要判断的从来不是「camera=write 要不要给」，而是「它接下来到底要做什么」。没附命令时弹窗退回显示
+  发起申请的那条 `dsh-native elevate` 调用，让用户至少知道是谁在申请。
 - 「仅本次」只买一次调用，且三分钟后自动失效：agent 拿它连着写好几次，那就不叫仅本次了。
 - 申请状态是可查的（`dsh-native caps` 的 `pending` / `once` / `lastElevation`），所以注入的提示词能直接
   告诉 agent「已经有一份在等用户，别再提一份」「被拒绝或被超时就不要重问」—— 而不是让它靠猜 403 到底是

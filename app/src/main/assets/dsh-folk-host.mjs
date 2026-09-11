@@ -345,9 +345,18 @@ function render(f) {
     const out = [];
     out.push(
       'You can ask the host to raise one capability with `dsh-native elevate <cap> <read|write|' +
-        'read_write|control> --reason <why>` (valid levels for a capability are in ' +
+        'read_write|control> --reason <why> --command <cmd>` (valid levels for a capability are in ' +
         '`dsh-native caps` → `accessOptions`). It does NOT change anything by itself: it opens a ' +
         'confirmation dialog **in the DSH-Folk app**, and only the user can answer it.'
+    );
+    out.push('');
+    out.push(
+      '**Always pass --command.** The dialog shows that command to the user verbatim, and it is the ' +
+        'only thing that turns "may I have the camera?" into a decision they can actually make — they ' +
+        'are judging what you are about to do, not the access level. Put the exact command you will ' +
+        'run once granted (multi-line is fine, up to about 2000 characters), not a summary of it; do ' +
+        'not strip the flags. If you leave it out the user only sees this elevation call itself, ' +
+        'which tells them nothing new.'
     );
     out.push('');
     out.push(
@@ -419,7 +428,7 @@ function render(f) {
     lines.push('');
     lines.push('```');
     lines.push('dsh-native caps                                        # access, accessOptions, pending, once');
-    lines.push('dsh-native elevate <cap> <read|write|read_write|control> --reason <why>');
+    lines.push('dsh-native elevate <cap> <read|write|read_write|control> --reason <why> --command <cmd>');
     lines.push('```');
   } else {
     lines.push(
@@ -439,7 +448,7 @@ function render(f) {
     }
     lines.push('Every dsh-native capability call must include --reason <concrete purpose>; calls are audited.');
     lines.push('dsh-native caps                                        # access, accessOptions, once, pending, lastElevation');
-    lines.push('dsh-native elevate <cap> <read|write|read_write|control> --reason <why>');
+    lines.push('dsh-native elevate <cap> <read|write|read_write|control> --reason <why> --command <cmd>');
     lines.push('```');
 
     // 「仅本次」配额：只在真的存在时出现，且必须说清它是一次而不是一项。
