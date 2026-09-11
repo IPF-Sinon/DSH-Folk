@@ -961,6 +961,7 @@ object DshNativeBridge {
             Special.REQUEST_INSTALL -> R.string.dsh_native_perm_label_install
             Special.FULL_SCREEN_INTENT -> R.string.dsh_native_perm_label_full_screen
             Special.NOTIFICATION_ACCESS -> R.string.dsh_native_perm_label_notification_access
+            Special.USAGE_STATS -> R.string.dsh_native_perm_label_usage
         },
     )
 

@@ -668,7 +668,8 @@
     <string name="dsh_native_perm_label_dnd">Do Not Disturb access</string>
     <string name="dsh_native_perm_label_install">Install unknown apps</string>
     <string name="dsh_native_perm_label_full_screen">Full-screen notifications</string>
-    <string name="dsh_native_perm_label_notification_access">Notification access</string>
+    <string name="dsh_native_perm_label_notification_access">Notification access</string>    <string name="dsh_native_perm_label_usage">App usage stats</string>
+
     <string name="dsh_native_os_title">Android permission still missing</string>
     <string name="dsh_native_os_message">Allowed inside the app, but Android has not granted: %1$s</string>
     <string name="dsh_native_os_hint">If this one can only be enabled in system settings, use the button below; the app re-checks when you come back.</string>

@@ -650,7 +650,8 @@
     <string name="dsh_native_perm_label_dnd">勿扰访问权</string>
     <string name="dsh_native_perm_label_install">安装未知应用</string>
     <string name="dsh_native_perm_label_full_screen">全屏通知</string>
-    <string name="dsh_native_perm_label_notification_access">通知使用权</string>
+    <string name="dsh_native_perm_label_notification_access">通知使用权</string>    <string name="dsh_native_perm_label_usage">应用使用统计</string>
+
     <string name="dsh_native_os_title">还差 Android 权限</string>
     <string name="dsh_native_os_message">应用内已经允许了，但 Android 层还没给：%1$s</string>
     <string name="dsh_native_os_hint">如果这一项只能在系统设置里打开，点下面的按钮过去开；回到应用会自动重新检测。</string>
