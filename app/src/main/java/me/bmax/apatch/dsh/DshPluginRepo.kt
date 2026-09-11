@@ -677,7 +677,7 @@ object DshPluginRepo {
      * loader 插行的声明。用容器里 dsh 自带的 yaml 库解析（createRequire(dsh 入口)），
      * 避免我们再引入 YAML 依赖。解析失败的包输出空 id，不影响其余。
      *
-     * @param includeCore 为 true 时**不跳过 `@deepseek-ai/*` 核心包**。默认 false 是给
+     * @param includeCore 为 true 时**不跳过 `@deepseek-ai/` 作用域的核心包**。默认 false 是给
      * 插件页用的：核心包不能被用户停用，也不需要出现在「谁的 entry id 能关」里。
      * 判断「上游是否已内置某个 entry id」（比如 dsh 0.1.5 内置了 file-upload）时必须
      * 传 true，否则会漏掉上游声明的 id，把三方包又预装一遍，制造 duplicate entry id。

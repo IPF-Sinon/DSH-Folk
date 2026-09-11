@@ -149,6 +149,13 @@ and `tools/check-changelog.js` keeps them in sync. There is also a runtime fallb
 content from the previous version under a new version number is a confident falsehood, worse than showing nothing. But that fallback means **users of the new version see nothing**,
 and no one would notice, so the checker is the real line of defense.
 
+The same batch of source checks includes `tools/check-kotlin-comments.js`: Kotlin block comments **can nest**,
+so writing a block-comment opener inside a KDoc (for example a scope wildcard) opens a nested comment, and that KDoc's own
+closing marker only closes the inner one — **the outer comment stays open and swallows every line of code after it**,
+while the compiler reports a flood of “unresolved reference” errors that point nowhere near the real line (this project hit it once and
+only a full CI build revealed it). The checker walks every Kotlin file character by character and confirms strings, templates, and
+comments all close correctly. Both run before compilation in `build.yml` and `beta.yml`.
+
 ## Start on Boot
 
 Choose one of three methods under **Settings → Features → Start on boot**. There are three not to pad out the list, but because Android's official broadcast method is largely

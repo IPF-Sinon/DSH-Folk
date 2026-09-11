@@ -102,6 +102,16 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
 
+      # 便宜的源码自检放在编译之前：两者都在毫秒级，而它们拦下的问题都要
+      # 一次完整构建（8 分钟）才暴露，且编译器的报错完全指不到真正的那一行。
+      # 版本说明那条：VERSION / baseVersionName / 条目文案三处不一致时宁可不发版；
+      # Kotlin 注释那条：块注释在 Kotlin 里可嵌套，注释体里一个多余的起始标记
+      # 会吞掉整个文件后半段，报出来的是一片「unresolved reference」（本项目踩过一次）。
+      - name: Static source checks
+        run: |
+          node tools/check-changelog.js
+          node tools/check-kotlin-comments.js
+
       # release 包必须真签名。缺任何一项就硬失败 —— 悄悄用 debug key 签出一个
       # 「release」比构建失败危险得多：它装得上、看着正常，但和正式包签名不同，
       # 之后无法覆盖升级，用户还得卸载重装。

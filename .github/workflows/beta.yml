@@ -73,6 +73,14 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
 
+      # 与 build.yml 的 release job 同一套源码自检：版本说明三处一致、Kotlin 词法闭合。
+      # 放在编译之前是因为这两类问题的报错都指不到真正的那一行，而测试版每次都要
+      # 走一遍完整构建 + 发布，让它们在上面拦下来代价最低。
+      - name: Static source checks
+        run: |
+          node tools/check-changelog.js
+          node tools/check-kotlin-comments.js
+
       # 与 build.yml 的 release job 同一套校验：缺任何一项就硬失败。
       # 用 debug key 悄悄签出一个「测试版」的后果更隐蔽 —— 用户装不上，
       # 而错误信息只会说「应用未安装」。
