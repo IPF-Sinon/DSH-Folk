@@ -158,6 +158,7 @@ import me.bmax.apatch.dsh.DshElevationRequests
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.dsh.RuntimeCheckResult
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalContext
@@ -586,7 +587,7 @@ class MainActivity : AppCompatActivity() {
                 
                 // 运行时自动检查的结果。它和「应用更新」检测在启动时并行跑，但**弹窗
                 // 要排队**：两个「有更新」的弹窗叠在一起，用户根本不知道该先点哪个。
-                val runtimePrompt = remember { mutableStateOf<DshRuntime.RuntimeCheckResult?>(null) }
+                val runtimePrompt = remember { mutableStateOf<RuntimeCheckResult?>(null) }
                 val runtimePromptVersion = remember { mutableStateOf("") }
                 val showRuntimeDialog = remember { mutableStateOf(false) }
                 // 「应用更新检测正在进行中」——只有检测期间才知道，所以用状态变量传出来
