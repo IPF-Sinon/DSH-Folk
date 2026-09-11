@@ -516,7 +516,7 @@
     <string name="dsh_native_section">原生能力</string>
     <string name="dsh_native_summary">让容器里的 agent 借用本应用：通知、剪贴板与分享，设备、网络与传感器读数，相册、摄像头与麦克风，位置、日历与通讯录，音量与系统设置</string>
     <string name="dsh_native_enable">启用原生能力桥</string>
-    <string name="dsh_native_enable_summary">默认关闭。容器里同时跑着第三方插件，它们共用同一个回环 token，所以只勾你真的需要的那几项。</string>
+    <string name="dsh_native_enable_summary">默认关闭。容器里同时跑着第三方插件，它们共用同一个回环 token，所以只勾你真的需要的那几项。agent 遇到没开的能力可以自己发起申请：弹窗里选「允许」（长期生效）或「仅本次」（只放行一次调用），60 秒不处理按拒绝算，不会自动放行。</string>
     <string name="dsh_native_caps">能力分项</string>
     <string name="dsh_native_cap_notify">通知</string>
     <string name="dsh_native_cap_notify_desc">发送与撤销通知，使用与服务通知分开的渠道</string>
@@ -531,7 +531,7 @@
     <string name="dsh_native_cap_device">设备信息</string>
     <string name="dsh_native_cap_device_desc">型号、Android 版本、ABI、电量与充电状态</string>
     <string name="dsh_native_need_notif_perm">尚未授予通知权限，点这里授予</string>
-    <string name="dsh_native_cli_hint">容器内：dsh-native notify &lt;标题&gt; [正文] / toast / vibrate / clip / share / open / device / media / mic / camera / calendar / contacts / location / phone / sensors / network / volume / ringer / settings / usage / sms / caps</string>
+    <string name="dsh_native_cli_hint">容器内：dsh-native notify &lt;标题&gt; [正文] / toast / vibrate / clip / share / open / device / media / mic / camera / calendar / contacts / location / phone / sensors / network / volume / ringer / settings / usage / sms / caps / elevate</string>
     <string name="dsh_native_notif_channel_name">Agent 通知</string>
     <string name="dsh_native_notif_channel_desc">容器内 agent 主动发出的通知</string>
     <string name="dsh_host_prompt_title">让 agent 知道这些能力</string>
@@ -697,6 +697,9 @@
     <string name="dsh_native_elevate_message">能力：%1$s\n申请权限：%2$s\n理由：%3$s</string>
     <string name="dsh_native_elevate_allow">允许</string>
     <string name="dsh_native_elevate_deny">拒绝</string>
+    <string name="dsh_native_elevate_once">仅本次</string>
+    <string name="dsh_native_elevate_once_hint">「仅本次」只放行接下来的一次调用，用完自动收回，不会改动设置里的开关；系统权限不足时仍会再弹一次 Android 自己的授权框。</string>
+    <string name="dsh_native_elevate_countdown">%1$d 秒内未处理将自动拒绝</string>
     <string name="dsh_native_err_reason_required">每次原生能力调用都必须提供具体理由</string>
     <string name="dsh_native_err_control_disabled">未启用 %1$s 的完全控制</string>
     <string name="dsh_native_err_notification_cancel">无法移除指定的系统通知</string>

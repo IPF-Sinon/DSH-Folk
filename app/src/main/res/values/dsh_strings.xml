@@ -534,7 +534,7 @@
     <string name="dsh_native_section">Native capabilities</string>
     <string name="dsh_native_summary">Let the agent inside the container borrow the app: notifications, clipboard and sharing, device, network and sensor readings, the media library, camera and microphone, location, calendar and contacts, volume and system settings</string>
     <string name="dsh_native_enable">Enable native bridge</string>
-    <string name="dsh_native_enable_summary">Off by default. The container also runs third-party plugins, and they share the same loopback token — turn on only the capabilities you actually want.</string>
+    <string name="dsh_native_enable_summary">Off by default. The container also runs third-party plugins, and they share the same loopback token — turn on only the capabilities you actually want. When the agent needs something that is off it can file a request itself: the dialog offers Allow (sticks) or Allow once (one call only), and an unanswered request is denied after 60 seconds — nothing is ever granted automatically.</string>
     <string name="dsh_native_caps">Capabilities</string>
     <string name="dsh_native_cap_notify">Notifications</string>
     <string name="dsh_native_cap_notify_desc">Post and cancel notifications in a channel separate from the service one</string>
@@ -549,7 +549,7 @@
     <string name="dsh_native_cap_device">Device info</string>
     <string name="dsh_native_cap_device_desc">Model, Android version, ABI, battery level and charging state</string>
     <string name="dsh_native_need_notif_perm">Notification permission not granted — tap to grant</string>
-    <string name="dsh_native_cli_hint">Inside the container: dsh-native notify &lt;title&gt; [body] / toast / vibrate / clip / share / open / device / media / mic / camera / calendar / contacts / location / phone / sensors / network / volume / ringer / settings / usage / sms / caps</string>
+    <string name="dsh_native_cli_hint">Inside the container: dsh-native notify &lt;title&gt; [body] / toast / vibrate / clip / share / open / device / media / mic / camera / calendar / contacts / location / phone / sensors / network / volume / ringer / settings / usage / sms / caps / elevate</string>
     <string name="dsh_native_notif_channel_name">Agent notifications</string>
     <string name="dsh_native_notif_channel_desc">Notifications posted by the agent running inside the container</string>
     <string name="dsh_host_prompt_title">Tell the agent about these</string>
@@ -715,6 +715,9 @@
     <string name="dsh_native_elevate_message">Capability: %1$s\nRequested access: %2$s\nReason: %3$s</string>
     <string name="dsh_native_elevate_allow">Allow</string>
     <string name="dsh_native_elevate_deny">Deny</string>
+    <string name="dsh_native_elevate_once">Allow once</string>
+    <string name="dsh_native_elevate_once_hint">“Allow once” lets exactly the next call through and then takes it back — it does not change the switch in settings. If the Android permission is missing you will still get the system dialog.</string>
+    <string name="dsh_native_elevate_countdown">Auto-deny in %1$d s</string>
     <string name="dsh_native_err_reason_required">Every native capability call requires a concrete reason</string>
     <string name="dsh_native_err_control_disabled">Full control for %1$s is disabled</string>
     <string name="dsh_native_err_notification_cancel">Could not dismiss the requested system notification</string>

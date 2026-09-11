@@ -291,6 +291,22 @@ dsh-native settings | settings brightness <1..100> [--auto 0|1] | settings timeo
 dsh-native settings rotation <0|1>
 dsh-native install                       # whether this device allows installing unknown apps
 dsh-native caps                          # which capabilities are enabled and available
+dsh-native elevate <cap> <read|write|read_write|control> --reason <why>   # file one elevation request
+```
+
+`elevate` is the agent's only self-service escalation path, and the only part of this permission model that the AI initiates: when the agent finds a capability
+switched off it can file one request with a reason, and the app dialog gives the user three answers — **Allow** (the level sticks), **Allow once** (exactly the next
+call of that capability goes through and then reverts; the switch in settings is untouched) and **Deny** (closing the dialog counts as deny). Several deliberate constraints:
+
+- **An unanswered request is denied after 60 seconds.** A dialog left hanging would otherwise hold the single “one request at a time” slot forever, turning every later
+  request into a 409; with a deadline the worst case degrades to “this one did not go through”.
+- Because of that deadline the dialog has to be genuinely visible, so it is mounted on the main screen **and on the WebUI Activity**. With only the main screen, a user
+  looking at the WebUI would never see the request — it just looks like the AI asked and nothing happened, and then the timeout quietly counts as their refusal.
+- “Allow once” buys exactly one call and expires after three minutes: chaining several writes onto it is not what the user agreed to.
+- Request state is queryable (`pending` / `once` / `lastElevation` in `dsh-native caps`), so the injected prompt can tell the agent “one request is already waiting, do not
+  file another” and “after a deny or an expiry, do not ask again” instead of leaving it to guess whether a 403 means the user refused or has not looked yet.
+
+```
 ```
 
 Selecting a capability immediately requests any permission it lacks; after a permission is permanently denied, the app no longer opens an empty prompt but goes directly to the system Settings page — in that situation,
@@ -344,6 +360,9 @@ If a capability is deselected, it disappears from the prompt in the next convers
 Each capability also includes one sentence about its easiest-to-miss detail — calendar timestamps are milliseconds, location may be obscured to kilometer-level precision, bandwidth is estimated rather than measured,
 and automatic brightness will overwrite a newly written brightness value.
 That section itself is in English (matching dsh's built-in sections and avoiding biasing the model's output language); the device language is given only as a **fact**.
+The section also spells out the self-service escalation flow: how to file a request, what the three dialog answers mean, that only one request may be pending at a time,
+how long an unanswered request waits before counting as a deny, and which `dsh-native caps` fields tell the agent what happened (`pending` / `once` / `lastElevation`).
+Without that, the model only receives a 403 `reason` and has to guess whether to wait or to try something else.
 To keep the agent from knowing about these capabilities, disable the pinned **Plugins → Android native capability bridge prompt** built-in plugin. It cannot be uninstalled; disabling it makes the prompt section render as empty.
 
 ## How It Runs

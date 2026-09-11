@@ -36,6 +36,7 @@ import java.io.File
 import java.io.FileWriter
 import java.time.Instant
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -301,6 +302,14 @@ object DshNativeBridge {
 
     private const val ACCESS_PREFIX = "native_bridge_access_"
 
+    /**
+     * 「仅本次」授权的寿命。
+     *
+     * 用户点下按钮时脑子里想的是「这件事」，agent 重试那次调用是几秒内的事；三分钟足够
+     * 覆盖一次慢的工具往返，又不至于让一次点击在很久以后仍然有效。
+     */
+    const val ONCE_TTL_MS = 180_000L
+
     /** 只有同时存在安全可用的读、写操作时才显示第三档。 */
     fun supportsWrite(cap: Cap): Boolean = when (cap) {
         Cap.NOTIFY, Cap.FULL_SCREEN_NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.CLIPBOARD, Cap.INTENT,
@@ -333,6 +342,77 @@ object DshNativeBridge {
             }
     }
 
+    /**
+     * 「仅本次」的一次性授权。
+     *
+     * 用户在提权弹窗里选「仅本次」时写在这里：**不上盘**（进程重启即消失），而且只有
+     * [ONCE_TTL_MS] 这么久的寿命 —— 用户当场同意的是「你正要做的这件事」，不是
+     * 「往后随便用」。落到磁盘上就变成了一次点击永久提权，那正是这个选项要避免的。
+     */
+    private class Once(val access: Access, val expiresAtMs: Long)
+
+    private val onceStore = ConcurrentHashMap<Cap, Once>()
+
+    /** 未过期的一次性授权级别；顺手清掉过期的。 */
+    fun onceAccess(cap: Cap): Access? {
+        val once = onceStore[cap] ?: return null
+        if (once.expiresAtMs <= System.currentTimeMillis()) {
+            onceStore.remove(cap, once)
+            return null
+        }
+        return once.access
+    }
+
+    /** 全部未过期的一次性授权，供 /native/capabilities 与提示词事实使用。 */
+    fun onceGrants(): Map<Cap, Access> =
+        Cap.entries.mapNotNull { cap -> onceAccess(cap)?.let { cap to it } }.toMap()
+
+    /** 用户在弹窗里选了「仅本次」。 */
+    fun grantOnce(ctx: Context, cap: Cap, access: Access) {
+        val normalized = if (access in accessOptions(cap)) access else accessOptions(cap).last()
+        onceStore[cap] = Once(normalized, System.currentTimeMillis() + ONCE_TTL_MS)
+        // 立刻改事实：提示词得说清「只有一次」，否则 agent 会拿它当普通授权连着调
+        runCatching { DshHostPrompt.writeFacts(ctx.applicationContext) }
+    }
+
+    /**
+     * 计入一次性授权后的实际级别。
+     *
+     * 取两者中更高的一档（按 [accessOptions] 的档位顺序比较），所以「仅本次」只能加不能减。
+     */
+    private fun effectiveAccess(ctx: Context, cap: Cap): Access {
+        val persisted = access(ctx, cap)
+        val once = onceAccess(cap) ?: return persisted
+        val options = accessOptions(cap)
+        return if (options.indexOf(once) > options.indexOf(persisted)) once else persisted
+    }
+
+    /**
+     * 这次调用如果真的用了「仅本次」配额就把它收回。
+     *
+     * 判据是「持久级别本来通不过这次调用的闸门」—— 一次读操作不该顺手烧掉写配额，已经持久
+     * 授权的项也不会因为一次调用丢掉一次性授权。判据必须复刻 [handle] 里那三道闸门（control /
+     * write / read）：只看读写的版本会漏掉 `notify/system` 的 CONTROL 档，那一档的一次性授权
+     * 就能被反复使用。
+     */
+    private fun spendOnce(ctx: Context, cap: Cap, method: String, path: String) {
+        val once = onceStore[cap] ?: return
+        if (once.expiresAtMs <= System.currentTimeMillis()) {
+            onceStore.remove(cap, once)
+            return
+        }
+        val persisted = access(ctx, cap)
+        val authorizedBefore = when {
+            path == "/native/notify/system" -> persisted == Access.CONTROL
+            isWriteRequest(method, path) -> accessNeedsWrite(persisted)
+            else -> accessNeedsRead(persisted)
+        }
+        if (authorizedBefore) return
+        if (onceStore.remove(cap, once)) {
+            runCatching { DshHostPrompt.writeFacts(ctx.applicationContext) }
+        }
+    }
+
     fun setAccess(ctx: Context, cap: Cap, access: Access) {
         val normalized = if (access in accessOptions(cap)) access else accessOptions(cap).last()
         prefs(ctx).edit { putString(ACCESS_PREFIX + cap.id, normalized.id) }
@@ -344,9 +424,19 @@ object DshNativeBridge {
 
     fun capEnabled(ctx: Context, cap: Cap): Boolean = access(ctx, cap) != Access.OFF
 
-    private fun canWrite(ctx: Context, cap: Cap): Boolean = accessNeedsWrite(access(ctx, cap))
+    /**
+     * 这项能力这次调用能不能过闸门：设置里勾着，或者用户刚给过一次性的「仅本次」。
+     *
+     * 必须与 [capEnabled] 分开：[capEnabled] 回答的是「设置里开着吗」，界面与提示词事实都用它；
+     * 这里回答的是「这次调用放行吗」。合成一个的话，「仅本次」会在它最该起作用的场景 —— 能力
+     * 本来就没勾 —— 被 `cap_disabled` 挡死，用户点了同意却什么也没发生。
+     */
+    private fun capCallable(ctx: Context, cap: Cap): Boolean =
+        capEnabled(ctx, cap) || onceAccess(cap) != null
 
-    private fun canRead(ctx: Context, cap: Cap): Boolean = accessNeedsRead(access(ctx, cap))
+    private fun canWrite(ctx: Context, cap: Cap): Boolean = accessNeedsWrite(effectiveAccess(ctx, cap))
+
+    private fun canRead(ctx: Context, cap: Cap): Boolean = accessNeedsRead(effectiveAccess(ctx, cap))
 
     /** 已启用的能力集合。默认空 —— 开了总开关也还要逐项勾。 */
     fun enabledCaps(ctx: Context): Set<Cap> {
@@ -473,7 +563,7 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_unknown_endpoint, method, path),
                 "unknown_endpoint",
             )
-        if (!capEnabled(ctx, cap)) {
+        if (!capCallable(ctx, cap)) {
             val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_cap_disabled, capName(ctx, cap)),
                 "cap_disabled",
@@ -481,7 +571,7 @@ object DshNativeBridge {
             audit(ctx, method, path, params, cap, reason, result.first)
             return result
         }
-        if (path == "/native/notify/system" && access(ctx, cap) != Access.CONTROL) {
+        if (path == "/native/notify/system" && effectiveAccess(ctx, cap) != Access.CONTROL) {
             val result = 403 to err(str(ctx, R.string.dsh_native_err_control_disabled, capName(ctx, cap)), "control_disabled")
             audit(ctx, method, path, params, cap, reason, result.first)
             return result
@@ -511,6 +601,11 @@ object DshNativeBridge {
             audit(ctx, method, path, params, cap, reason, result.first)
             return result
         }
+        // 到这里这次调用真的会被执行，「仅本次」配额到此为止 —— 一次授权换一次调用。
+        // 放在设备可用性检查**之后**：用户点了「仅本次」，接着在 Android 自己的权限框上
+        // 点了拒绝（或者干脆没给），这次调用什么也做不成；那种情况烧掉配额等于让他为同一件
+        // 事回答两次。配额本身有三分钟寿命，所以留着也不会变成长期授权。
+        spendOnce(ctx, cap, method, path)
 
         val result = when {
             method == "POST" && path == "/native/notify" -> notify(ctx, params)
@@ -651,19 +746,27 @@ object DshNativeBridge {
     private fun capabilitiesJson(ctx: Context): Pair<Int, String> {
         val on = enabled(ctx)
         val caps = JSONObject()
+        // 这一趟顺手清掉的过期配额要反映到提示词事实里，否则提示词会一直宣称「有一份仅本次
+        // 授权」直到下一次状态变化 —— 而 agent 查 caps 恰恰就是在确认这件事。
+        val onceBefore = onceStore.size
+        val once = onceGrants()
+        if (once.size != onceBefore) runCatching { DshHostPrompt.writeFacts(ctx.applicationContext) }
         for (cap in Cap.entries) {
             val (available, why) = availability(ctx, cap)
-            caps.put(
-                cap.id,
-                JSONObject()
-                    .put("enabled", on && capEnabled(ctx, cap))
-                    .put("access", if (on) access(ctx, cap).id else Access.OFF.id)
-                    .put("supportsWrite", supportsWrite(cap))
-                    .put("accessOptions", org.json.JSONArray(accessOptions(cap).map { it.id }))
-                    .put("available", available)
-                    .put("reason", why),
-            )
+            val entry = JSONObject()
+                .put("enabled", on && capEnabled(ctx, cap))
+                .put("access", if (on) access(ctx, cap).id else Access.OFF.id)
+                .put("supportsWrite", supportsWrite(cap))
+                .put("accessOptions", org.json.JSONArray(accessOptions(cap).map { it.id }))
+                .put("available", available)
+                .put("reason", why)
+            // 「仅本次」单独一个字段而不是并进 access：它是**一次**调用，不是当前级别。
+            // 并进去 agent 会以为这项已经开了，然后连着调第二次撞 403。
+            once[cap]?.let { entry.put("once", it.id) }
+            caps.put(cap.id, entry)
         }
+        val pending = DshElevationRequests.pending.value
+        val last = DshElevationRequests.last.value
         return 200 to JSONObject()
             .put("ok", true)
             .put("bridgeEnabled", on)
@@ -671,6 +774,28 @@ object DshNativeBridge {
             // 特殊权限单独一段：它们申请不到，agent 该做的是提示用户去系统页开，
             // 而不是反复撞 403
             .put("special", DshSystemCtl.specialPermissions(ctx))
+            // 提权申请的状态：agent 靠这三个字段判断「该等、该重试、还是该换个办法」，
+            // 不用靠猜 403 到底是「用户拒绝」还是「还没看见」。
+            .put(
+                "pending",
+                pending?.let {
+                    JSONObject()
+                        .put("cap", it.cap.id)
+                        .put("access", it.access.id)
+                        .put("reason", it.reason)
+                        .put("msLeft", DshElevationRequests.remainingMs(it))
+                } ?: JSONObject.NULL,
+            )
+            .put(
+                "lastElevation",
+                last?.let {
+                    JSONObject()
+                        .put("cap", it.cap.id)
+                        .put("access", it.access.id)
+                        .put("decision", it.decision.id)
+                        .put("agoMs", (System.currentTimeMillis() - it.atMs).coerceAtLeast(0L))
+                } ?: JSONObject.NULL,
+            )
             .put("caps", caps)
             .toString()
     }
@@ -693,10 +818,18 @@ object DshNativeBridge {
         if (accessOptions(cap).indexOf(requested) <= accessOptions(cap).indexOf(current)) {
             return 200 to JSONObject().put("ok", true).put("unchanged", true).toString()
         }
+        // 已经有一个还没用掉的「仅本次」配额能覆盖这次申请：说明用户刚同意过同一件事，
+        // 别再弹一次窗问他 —— 让他重跑那条命令即可。
+        val onceNow = onceAccess(cap)
+        if (onceNow != null && accessOptions(cap).indexOf(onceNow) >= accessOptions(cap).indexOf(requested)) {
+            return 200 to JSONObject().put("ok", true).put("once", true).toString()
+        }
         val reason = text(params["reason"])
             ?: return 400 to err(str(ctx, R.string.dsh_native_err_reason_required), "reason_required")
         val request = DshElevationRequests.submit(cap, requested, reason)
             ?: return 409 to err(str(ctx, R.string.dsh_native_err_elevate_busy), "request_pending")
+        // 事实文件跟着变：提示词知道「已经有一份申请在等用户」，agent 就不会再提一份
+        runCatching { DshHostPrompt.writeFacts(ctx.applicationContext) }
         audit(ctx, "POST", "/native/elevate", params, cap, reason, 202)
         return 202 to JSONObject()
             .put("ok", true)

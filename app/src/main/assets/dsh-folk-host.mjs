@@ -330,22 +330,92 @@ function render(f) {
   const caps = Object.keys(capAccess);
   const usable = caps.filter((c) => Object.prototype.hasOwnProperty.call(CAP_USAGE, c));
 
-  if (!bridgeOn || usable.length === 0) {
+  // 「仅本次」配额：一次调用，不是一项能力。单独渲染，且必须说明它会被用掉/过期。
+  const onceGrants =
+    f.nativeOnce && typeof f.nativeOnce === 'object' && !Array.isArray(f.nativeOnce)
+      ? Object.entries(f.nativeOnce).filter(([c, a]) => typeof a === 'string')
+      : [];
+  const elevateSeconds = typeof f.elevateTtlMs === 'number' ? Math.round(f.elevateTtlMs / 1000) : 60;
+  const onceMinutes =
+    typeof f.onceTtlMs === 'number' ? Math.max(1, Math.round(f.onceTtlMs / 60000)) : 3;
+
+  // 提权申请的唯一入口是弹窗，且只有一份能被挂起：这段话在两个分支里都要说，
+  // 否则「能力没勾」那支会把 agent 赶去设置页，而它其实可以直接申请。
+  const elevateLines = () => {
+    const out = [];
+    out.push(
+      'You can ask the host to raise one capability with `dsh-native elevate <cap> <read|write|' +
+        'read_write|control> --reason <why>` (valid levels for a capability are in ' +
+        '`dsh-native caps` → `accessOptions`). It does NOT change anything by itself: it opens a ' +
+        'confirmation dialog **in the DSH-Folk app**, and only the user can answer it.'
+    );
+    out.push('');
+    out.push(
+      'What happens next, precisely:'
+    );
+    out.push(
+      '- The dialog offers **Allow** (level sticks), **Allow once** (exactly the next call of that ' +
+        'capability goes through, then it reverts) and **Deny** (or the user just closes it).'
+    );
+    out.push(
+      '- Only ONE request may be waiting at a time (a second one answers 409 `request_pending`), and ' +
+        'it expires after about ' +
+        elevateSeconds +
+        ' seconds with no answer — an expiry counts as a deny.'
+    );
+    out.push(
+      '- After filing, re-check `dsh-native caps`: `pending` tells you it is still waiting (with ' +
+        '`msLeft`), `caps.<cap>.once` that a one-shot grant is armed, and `lastElevation` what ' +
+        'happened to the most recent request (`allowed` / `once` / `denied` / `expired`).'
+    );
+    out.push(
+      '- So: file at most one request per genuinely-needed operation, then wait for the answer ' +
+        'instead of re-asking. Never file a second request while one is pending, and after a deny ' +
+        'or an expiry do not ask again for the same thing — say what you were blocked on and move on.'
+    );
+    out.push(
+      '- An **Allow once** grant is deliberately short lived (about ' +
+        onceMinutes +
+        ' minutes) and buys one call: make that one call and do not chain several writes onto it. ' +
+        'Only a call that actually reaches the device spends it — if the call fails because the ' +
+        'system permission is missing, fix that first and retry, the grant is still armed.'
+    );
+    return out;
+  };
+
+  if (!bridgeOn) {
     lines.push(
       '`dsh-native` can borrow the host to post notifications, show a toast, vibrate, use the ' +
         'clipboard, open a share sheet or link, read device info and network state, read sensors, ' +
         'read the media library, take a photo, record audio, speak text aloud, read location, ' +
         'calendar and contacts, ' +
-        'and change volume or system settings — but it is currently **off** (' +
-        (bridgeOn ? 'the master switch is on, but no capability is ticked' : 'the master switch is off') +
-        '), so every call returns 403.'
+        'and change volume or system settings — but the master switch is currently **off**, so ' +
+        'every call (including `elevate`) returns 403 `disabled`.'
     );
     lines.push('');
     lines.push(
-      'If you need it, tell the user ONCE to open **Settings › Features › Native capabilities**, turn ' +
-        'on the master switch and tick the specific capability, then carry on with something else. Do ' +
-        'not retry, and do not keep asking.'
+      'If you need it, tell the user ONCE to open **Settings › Features › Native capabilities** and ' +
+        'turn on the master switch, then carry on with something else. Once it is on you can raise ' +
+        'an individual capability yourself with `dsh-native elevate` (see below) instead of sending ' +
+        'them back to settings. Do not retry, and do not keep asking.'
     );
+    lines.push('');
+    lines.push(...elevateLines());
+  } else if (usable.length === 0) {
+    lines.push(
+      'The `dsh-native` master switch is **on**, but no individual capability is enabled yet: every ' +
+        'capability call returns 403 `cap_disabled`. Two ways forward — either tell the user ONCE to ' +
+        'tick the specific capability in **Settings › Features › Native capabilities**, or file a ' +
+        'single `dsh-native elevate` request for it and let them decide (see below). Do not retry in ' +
+        'a loop.'
+    );
+    lines.push('');
+    lines.push(...elevateLines());
+    lines.push('');
+    lines.push('```');
+    lines.push('dsh-native caps                                        # access, accessOptions, pending, once');
+    lines.push('dsh-native elevate <cap> <read|write|read_write|control> --reason <why>');
+    lines.push('```');
   } else {
     lines.push(
       'These capabilities are **on** and can be called directly. On failure stderr carries a JSON ' +
@@ -363,9 +433,24 @@ function render(f) {
       }
     }
     lines.push('Every dsh-native capability call must include --reason <concrete purpose>; calls are audited.');
-    lines.push('dsh-native caps                                        # current access; caps itself needs no reason');
-    lines.push('dsh-native elevate <cap> <read|write|read_write|control> --reason <why>  # user confirmation');
+    lines.push('dsh-native caps                                        # access, accessOptions, once, pending, lastElevation');
+    lines.push('dsh-native elevate <cap> <read|write|read_write|control> --reason <why>');
     lines.push('```');
+
+    // 「仅本次」配额：只在真的存在时出现，且必须说清它是一次而不是一项。
+    if (onceGrants.length > 0) {
+      lines.push('');
+      lines.push(
+        'One-shot grant(s) currently armed — the user chose **Allow once**: ' +
+          onceGrants.map(([c, a]) => '`' + c + '` at `' + a + '`').join(', ') +
+          '. Exactly the next call of that capability goes through and then it reverts (the grant also dies ' +
+          'after about ' +
+          onceMinutes +
+          ' minutes). Make that one call now, and do not turn it into several writes. A call that fails ' +
+          'for a device reason — a missing system permission — does not spend the grant.'
+      );
+    }
+
     const caveats = usable.map((c) => CAP_CAVEAT[c]).filter((x) => typeof x === 'string');
     if (caveats.length > 0) {
       lines.push('');
@@ -375,14 +460,15 @@ function render(f) {
     if (off.length > 0) {
       lines.push('');
       lines.push(
-        'Not ticked (calls return 403; if you need one, ask the user to tick it in Settings › Features ' +
-          '› Native capabilities and do not retry): ' +
+        'Not ticked (calls return 403 `cap_disabled`): ' +
           off.join(', ') +
-          '. You may make one `dsh-native elevate` request when the current task truly needs a higher ' +
-          'level; it only opens a user confirmation and never grants automatically. Do not retry or ' +
-          'pressure the user.'
+          '. For one of those you have two options: send the user to Settings › Features › Native ' +
+          'capabilities, or file a single elevation request yourself (below). Do not retry, and do ' +
+          'not pressure the user.'
       );
     }
+    lines.push('');
+    lines.push(...elevateLines());
 
     // Ticked but the OS permission is missing: the call fails, or worse, silently does nothing.
     // Only the counter-intuitive ones get their own line — an ordinary 403 with a reason is

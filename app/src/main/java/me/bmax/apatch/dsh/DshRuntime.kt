@@ -497,8 +497,11 @@ object DshRuntime {
           '  usage list [--days N] [--limit N]           # recent app foreground usage',
           '  sms list [--limit N]                        # recent SMS, read only',
           '  sms send <number> <text>                    # requires send access',
-          '  caps',
+          '  caps                                       # access, accessOptions, once, pending, lastElevation',
           '  elevate <cap> <read|write|read_write|control> --reason <why>  # asks the user; never auto-grants',
+          'An elevation request is answered in the DSH-Folk app (Allow / Allow once / Deny) and expires',
+          'after ${DshElevationRequests.TTL_MS / 1000}s with no answer, which counts as a deny. Only one',
+          'request may be pending at a time. "Allow once" buys exactly one call of that capability.',
           'Settings > Features > Native capabilities: enable the master switch and the item first.'
         ].join('\n');
         (async function () {

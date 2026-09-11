@@ -83,6 +83,7 @@ import java.io.File
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.ui.component.ElevationRequestDialogHost
 import me.bmax.apatch.ui.theme.APatchTheme
 import me.bmax.apatch.util.DshWebCompat
 import me.bmax.apatch.util.ui.showToast
@@ -255,6 +256,10 @@ class DshWebUiActivity : AppCompatActivity() {
             // 背后垫一张自定义壁纸只会让内容看不清
             APatchTheme(allowCustomBackground = false) {
                 var progress by remember { mutableIntStateOf(0) }
+
+                // 提权申请弹窗：用户此刻正看着 WebUI，只挂在 MainActivity 上的话
+                // 这份申请他永远看不到（60 秒后静默超时算拒绝）
+                ElevationRequestDialogHost()
 
                 // 首次遇到旧内核时问一次要不要装兼容垫片。
                 // 在这里问而不是在设置页：只有真正打开 WebUI 才知道内核是哪个，

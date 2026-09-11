@@ -69,7 +69,7 @@ object DshHostPrompt {
      * 读一遍 assets 再全量覆盖。版本号存在 prefs 里，与 rootfs 无关 —— 重装运行时后
      * 文件没了但版本号还在，所以 [ensureInstalled] 另外检查文件是否真的存在。
      */
-    private const val PLUGIN_REV = 4
+    private const val PLUGIN_REV = 5
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =
@@ -157,6 +157,12 @@ object DshHostPrompt {
                     if (access != DshNativeBridge.Access.OFF) caps.put(cap.id, access.id)
                 }
             }
+            // 「仅本次」的配额单独一项：它是**一次**调用，不是一项已开启的能力。
+            // 混进 nativeCaps 会让 agent 以为可以连着调好几次。
+            val once = JSONObject()
+            if (nativeOn) {
+                for ((cap, access) in DshNativeBridge.onceGrants()) once.put(cap.id, access.id)
+            }
             val json = JSONObject()
                 .put("promptEnabled", enabled(ctx))
                 .put("appVersion", BuildConfig.VERSION_NAME)
@@ -174,6 +180,11 @@ object DshHostPrompt {
                 .put("fsBridge", PermissionUtils.hasAllFilesAccess(ctx))
                 .put("nativeBridge", nativeOn)
                 .put("nativeCaps", caps)
+                .put("nativeOnce", once)
+                // 两个时限写进事实，而不是在提示词里硬写一遍：改一个常量不该还要
+                // 记得去改容器里那段文字（两处写死的版本号迟早会漂移）
+                .put("elevateTtlMs", DshElevationRequests.TTL_MS)
+                .put("onceTtlMs", DshNativeBridge.ONCE_TTL_MS)
                 .put("notificationPermission", PermissionUtils.hasNotificationPermission(ctx))
                 // 媒体是逐类授权的（Android 13 起）：只给了照片时 agent 该知道音频读不了，
                 // 而不是以为设备上没有音频文件。
