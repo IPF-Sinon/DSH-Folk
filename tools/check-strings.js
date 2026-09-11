@@ -33,6 +33,36 @@ const en = parse(EN);
 const zh = parse(ZH);
 let fail = 0;
 
+// ── 0. 四个资源文件里的 xml 转义 ──
+//
+// 上面 parse() 只看 dsh_strings.xml 的 <string>；但 strings.xml 的 <string-array> 条目
+// 同样会被 aapt2 编译，而它在**裸撇号**上的失败完全没有提示：栈停在
+// parseStringArray → flattenXmlSubTree 的 NPE 上，只说 values.xml 编译失败，不说是哪一条
+// （2026-09-11 的一次 beta 构建就是这么连废两轮的）。所以把四个文件、两种元素一起扫。
+const XML_FILES = [
+  "app/src/main/res/values/strings.xml",
+  "app/src/main/res/values/dsh_strings.xml",
+  "app/src/main/res/values-zh-rCN/strings.xml",
+  "app/src/main/res/values-zh-rCN/dsh_strings.xml",
+];
+let xmlEscBad = 0;
+for (const rel of XML_FILES) {
+  const raw = fs.readFileSync(path.join(ROOT, rel), "utf8");
+  for (const m of raw.matchAll(/<(string|item)\b[^>]*>([\s\S]*?)<\/\1>/g)) {
+    const value = m[2];
+    const body = value.replace(/\\'/g, "").replace(/\\"/g, "").replace(/\\\\/g, "");
+    if (/'/.test(body)) {
+      console.log(`✗ ${rel}: 未转义的撇号 → ${JSON.stringify(value.trim().slice(0, 70))}`);
+      xmlEscBad++;
+    }
+    if (/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/.test(value)) {
+      console.log(`✗ ${rel}: 未转义的 & → ${JSON.stringify(value.trim().slice(0, 70))}`);
+      xmlEscBad++;
+    }
+  }
+}
+if (xmlEscBad) fail += xmlEscBad;
+
 // ── 1. 键集 ──
 const enOnly = [...en.map.keys()].filter((k) => !zh.map.has(k) && !en.untranslatable.has(k));
 const zhOnly = [...zh.map.keys()].filter((k) => !en.map.has(k));
