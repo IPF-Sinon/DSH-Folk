@@ -1128,6 +1128,66 @@ object DshPluginRepo {
         BundleState(declared = declared, present = present)
     }
 
+    /**
+     * 把**解析不到**的包从 profile 的 `bundles` 与 `dependencies` 里摘掉，返回被摘掉的包名。
+     *
+     * ## 为什么 App 必须自己摘
+     *
+     * `dsh plugin remove` 的 reconcile 只在「这个包**当时**还是依赖」时才摘 bundles 条目
+     * （上游条件 `wasDependency && !stillBundle`）。一旦包先被别的路径删掉 —— pnpm 半途
+     * 失败、进程被杀、上一次修复只做了一半 —— 那条声明就永远留在 `dsh.profile.bundles` 里，
+     * 而 dsh 启动时解析不到它就直接退出：
+     * `dsh: cannot resolve profile bundle "X" from the dsh installation or <profile>`，
+     * 用户看到的是「服务进程已退出」+ 自动切回 proot，重启多少次都一样。
+     * 1.9.0 升级运行时后先撞「duplicate loader entry id」、再撞这个，就是这一串。
+     *
+     * ## 判据必须与 dsh 一致
+     *
+     * dsh 用的是 `createRequire(anchor).resolve.paths(pkg)` + `existsSync(<searchPath>/<pkg>/package.json)`，
+     * 锚点顺序是「dsh 安装目录 → profile 目录」，且**不要求包在 exports 里暴露 package.json**。
+     * 所以这里也用同一套，绝不能用 `require.resolve(pkg + '/package.json')`：那要求包导出
+     * package.json，会把健康的新式包误判成「解析不到」进而摘掉声明。
+     *
+     * @param candidates 只处理这些包名；调用方传预装清单，保证用户自装的插件不被自动改动。
+     */
+    suspend fun pruneUnresolvableBundles(candidates: Set<String>): Set<String> =
+        withContext(Dispatchers.IO) {
+            if (candidates.isEmpty()) return@withContext emptySet()
+            val script = "const fs=require('fs'),path=require('path');" +
+                "const {createRequire}=require('module');" +
+                "const installAnchor=process.argv[1],dir=process.argv[2];" +
+                "const want=new Set(process.argv.slice(3));" +
+                "let m;try{m=JSON.parse(fs.readFileSync(path.join(dir,'package.json'),'utf8'))}catch(e){process.exit(0)}" +
+                "const anchors=[installAnchor,path.join(dir,'package.json')];" +
+                "function resolves(pkg){for(const a of anchors){let ps=[];" +
+                "try{ps=createRequire(a).resolve.paths(pkg)||[]}catch(e){}" +
+                "for(const sp of ps){if(fs.existsSync(path.join(sp,pkg,'package.json')))return true}}return false}" +
+                "const bundles=(m.dsh&&m.dsh.profile&&m.dsh.profile.bundles)||[];" +
+                "const deps=Object.keys(m.dependencies||{});" +
+                "const drop=new Set();" +
+                "for(const b of bundles)if(want.has(b)&&!resolves(b))drop.add(b);" +
+                "for(const d of deps)if(want.has(d)&&!resolves(d))drop.add(d);" +
+                "if(drop.size===0)process.exit(0);" +
+                "// 两个地方都要摘：留着 dependencies 的话下次 pnpm install 会把它装回来，" +
+                "// 而 reconcile 又会把 bundles 条目加回去，等于没修。\n" +
+                "m.dsh=Object.assign({},m.dsh);m.dsh.profile=Object.assign({},m.dsh.profile);" +
+                "m.dsh.profile.bundles=bundles.filter((b)=>!drop.has(b));" +
+                "for(const d of drop)delete m.dependencies[d];" +
+                "if(Object.keys(m.dependencies).length===0)delete m.dependencies;" +
+                "try{fs.writeFileSync(path.join(dir,'package.json'),JSON.stringify(m,void 0,2)+'\\n')}catch(e){}" +
+                "console.log(Array.from(drop).join(','))"
+            val args = candidates.joinToString(" ") { "'$it'" }
+            val out = DshRuntime.execRootfsForOutput(
+                dshRealPrefix() + "node -e \"$script\" \"\$DSH_REAL\" " + PROFILE_DIR + " $args 2>/dev/null",
+                60_000,
+            )
+            out.lines()
+                .flatMap { it.split(',') }
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+        }
+
     /** [bundleState] 的结果：声明的清单 + 其中在 node_modules 里真实存在的那部分。 */
     data class BundleState(val declared: List<String>, val present: Set<String>)
 

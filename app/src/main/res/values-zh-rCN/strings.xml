@@ -314,8 +314,9 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>修复升级运行时后「预装插件与上游内置能力撞车」导致的启动失败，以及随之而来的反复卸载/重装死循环（dsh-file-upload 与 dsh 0.1.5 内置的 file-upload）。现在冲突在启动之前就处理掉，不会再出现那一轮 duplicate loader entry id 的启动失败。</item>
-        <item>预装账本现在把「上游已内置、不需要装」和「试过了但没生效」分开记：前者不会被当成失败项重装；该记录跟随运行时版本，换回没有内置该能力的运行时仍会重新预装。</item>
+        <item>修复「预装插件声明残留」导致的服务起不来：profile 里留着已经不存在的插件声明时，dsh 会直接报 cannot resolve profile bundle 退出（界面表现是「服务进程已退出」并自动切回 proot，重启多少次都一样）。现在启动前会自动清理这类声明，不再先失败一轮。</item>
+        <item>清理同时摘掉 profile 的 bundles 与 dependencies 两处，并且只动预装清单里的包 —— 用户自装的插件缺包时只提示去插件页重装，不会被自动改动。</item>
+        <item>连同上一版：预装账本把「上游已内置、不需要装」与「试过了但没生效」分开记，升级运行时后不再反复卸载/重装 dsh-file-upload。</item>
         <item>── 以下是 1.9.0 的主要内容，装过 1.9.0 可以跳过 ──</item>
         <item>运行时升级到 dsh 0.1.5 并自带自包含 pnpm；更新运行时保留会话、插件、配置与依赖，支持中断续传，也可全新重装。</item>
         <item>原生能力扩到 30 余项，权限细化为关 / 写 / 读 / 读+写 / 完全控制，并新增权限调用记录（敏感参数遮罩）。</item>

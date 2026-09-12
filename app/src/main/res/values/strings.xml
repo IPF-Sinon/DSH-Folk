@@ -342,8 +342,9 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed startup failures caused by a seeded plugin colliding with a capability the runtime now bundles, plus the uninstall/reinstall loop that followed (dsh-file-upload versus the file-upload entry built into dsh 0.1.5). The collision is now resolved before startup, so that duplicate loader entry id failure no longer happens.</item>
-        <item>The seeding ledger now keeps “upstream already provides this, do not install” separate from “we tried and it did not take”, so the former is never reinstalled as if it had failed. That record follows the runtime version: an older runtime without the built-in capability seeds it again.</item>
+        <item>Fixed service startup failures caused by a stale seeded-plugin declaration: when the profile still declares a plugin whose package is gone, dsh exits with “cannot resolve profile bundle” (the app only showed “the service process exited” and fell back to proot, no matter how often you restarted). Such declarations are now pruned before startup, so the failed round no longer happens.</item>
+        <item>The repair removes the entry from both the profile bundles list and its dependencies, and only ever touches packages from the seeding list — a user-installed plugin that lost its package is reported, never modified.</item>
+        <item>Together with the previous release: the seeding ledger keeps “upstream already provides this” separate from “we tried and it did not take”, so upgrading the runtime no longer reinstalls dsh-file-upload over and over.</item>
         <item>── The rest is what 1.9.0 brought; skip if you already run 1.9.0 ──</item>
         <item>Runtime updated to dsh 0.1.5 with its own self-contained pnpm; updating keeps sessions, plugins, config and dependencies, resumes after an interruption, and a clean reinstall is available.</item>
         <item>Native capabilities grew to over 30 with per-capability levels (off / write / read / read+write / full control) and a new permission call log that masks sensitive values.</item>

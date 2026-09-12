@@ -249,6 +249,10 @@ object DshRuntime {
      */
     private val SEED_ENTRY_IDS = mapOf("dsh-file-upload" to "file-upload")
 
+    /** 启动日志里「profile 声明了 bundles 但包解析不到」的行（声明残留时出现）。 */
+    private val PROFILE_BUNDLE_RE =
+        Regex("cannot resolve profile bundle [\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+
     /** 启动日志里「重复 loader entry id」的行（0.1.5 内置能力与三方插件重名时出现）。 */
     private val DUP_ENTRY_RE = Regex("duplicate loader entry id[: ]+([A-Za-z0-9_.@/-]+)", RegexOption.IGNORE_CASE)
 
@@ -1339,6 +1343,15 @@ object DshRuntime {
             return
         }
 
+        // profile 的 bundles 里留着「解析不到的包」会让 dsh 直接拒绝启动
+        // （见 DshPluginRepo.pruneUnresolvableBundles 的说明）。启动前先清掉，
+        // 别让用户先看一轮「服务进程已退出」再自动切回 proot。
+        val prunedStale = runCatching { DshPluginRepo.pruneUnresolvableBundles(SEED_PLUGINS.toSet()) }
+            .getOrElse { emptySet() }
+        if (prunedStale.isNotEmpty()) {
+            logInfo(R.string.dsh_log_bundle_pruned, joinForLog(prunedStale))
+        }
+
         val p = prefs()
         val attempted = p.getString(DshEnv.KEY_SEEDED_PLUGINS, null)
             ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toMutableSet()
@@ -1382,6 +1395,9 @@ object DshRuntime {
             emptySet()
         }
         val shadowed = mappedShadowed + recordedShadowed
+        // 刚被清掉的声明如果本来就属于「上游已内置」那一类，落盘记住它：
+        // 实时判定已经会跳过它，这里只是让判定结果跨启动稳定。
+        rememberShadowed(prunedStale.filter { it in mappedShadowed })
 
         // 已经装着的冲突包**在启动之前**就摘掉：否则这次启动照样先以 duplicate entry id
         // 失败一次，再走「失败后自愈」重试 —— 用户白等一轮，日志里多一段 node 堆栈。
@@ -1595,7 +1611,12 @@ object DshRuntime {
         // 上游内置的 entry id 与预装三方包重名（0.1.5 的 file-upload）会让整棵插件树
         // 起不来。自动卸载冲突的预装包后重试一次 —— 不修的话用户只能看到一行
         // duplicate loader entry id 的 node 堆栈，完全不知道下一步该干什么。
-        if (_state.value.phase == DshPhase.ERROR && repairDuplicateLoaderEntry()) {
+        // 两个自愈各查各的：入口 id 撞车与「声明残留」是两种不同的坏状态，
+        // 同时存在时要一次都修掉，否则用户要重启两轮。
+        var repaired = false
+        if (repairDuplicateLoaderEntry()) repaired = true
+        if (repairUnresolvableBundles()) repaired = true
+        if (_state.value.phase == DshPhase.ERROR && repaired) {
             logInfo(R.string.dsh_log_dup_entry_retry)
             stopServer()
             delay(500)
@@ -1609,6 +1630,35 @@ object DshRuntime {
         delay(500)
         startServer()
         awaitReady()
+    }
+
+    /**
+     * 尝试自愈「profile 声明了 bundles，但包已经不在」导致的服务起不来。
+     *
+     * 这种残留 `dsh plugin` 自己修不了（reconcile 要求这个包**当时**还在 dependencies 里），
+     * 所以由 App 摘掉声明 —— 与 duplicate entry id 一样，用户从日志里看不出下一步该干什么，
+     * 只会看到「服务进程已退出」。只动预装清单里的包；如果是用户自装的插件缺了包，
+     * 就只说清是哪个、让他去插件页重装，绝不擅自改用户的东西。
+     */
+    private suspend fun repairUnresolvableBundles(): Boolean {
+        val tail = runCatching {
+            LogStore.named(DshEnv.serverLog(appContext)).tail(400)
+        }.getOrDefault("")
+        val names = PROFILE_BUNDLE_RE.findAll(tail)
+            .map { it.groupValues[1].trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        if (names.isEmpty()) return false
+        val seedNames = names.filter { it in SEED_PLUGINS }.toSet()
+        if (seedNames.isEmpty()) {
+            logWarn(R.string.dsh_log_bundle_unresolvable_user, joinForLog(names))
+            return false
+        }
+        val pruned = runCatching { DshPluginRepo.pruneUnresolvableBundles(seedNames) }
+            .getOrElse { emptySet() }
+        if (pruned.isEmpty()) return false
+        logWarn(R.string.dsh_log_bundle_repair, joinForLog(pruned))
+        return true
     }
 
     /**

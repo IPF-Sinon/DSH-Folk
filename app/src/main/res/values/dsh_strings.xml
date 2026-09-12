@@ -864,10 +864,13 @@
     <string name="dsh_log_seed_failed">Could not pre-install %1$s (you can install it later from the plugin store)</string>
     <string name="dsh_log_seed_exception">Pre-install error: %1$s</string>
     <string name="dsh_log_seed_retry_exception">Pre-install retry error: %1$s</string>
+    <string name="dsh_log_bundle_pruned">Pruned seeded plugins that the profile still declares but whose packages are gone: %1$s</string>
     <string name="dsh_log_seed_shadow_uninstall">Upstream already provides %2$s; removing the seeded plugin %1$s before startup</string>
     <string name="dsh_log_seed_skip_builtin">Upstream already provides the same capability for these preinstall plugins; skipping: %1$s</string>
     <string name="dsh_log_dup_entry_removed">Duplicate plugin entry id %2$s detected; uninstalled conflicting preinstall plugin %1$s</string>
     <string name="dsh_log_dup_entry_repair">Duplicate plugin entry id %2$s (built into upstream); uninstalling preinstall plugin %1$s and retrying</string>
+    <string name="dsh_log_bundle_repair">The profile declared plugins that no longer exist; pruned them and retrying startup: %1$s</string>
+    <string name="dsh_log_bundle_unresolvable_user">These plugins are declared in the profile but their packages are missing, which makes dsh refuse to start; reinstall them from the Plugins page: %1$s</string>
     <string name="dsh_log_dup_entry_retry">Plugin entry conflict repaired; retrying start</string>
     <string name="dsh_log_dsh_missing_in_container">Could not find dsh inside the container; please reinstall the runtime in Settings</string>
     <!-- ── 容器内插件操作的日志（DshPluginRepo） ────────────────

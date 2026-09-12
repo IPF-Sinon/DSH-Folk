@@ -844,10 +844,13 @@
     <string name="dsh_log_seed_failed">预装失败 %1$s（可稍后在插件商店手动安装）</string>
     <string name="dsh_log_seed_exception">预装异常: %1$s</string>
     <string name="dsh_log_seed_retry_exception">预装重试异常: %1$s</string>
+    <string name="dsh_log_bundle_pruned">profile 里声明了、但包已经不存在的预装插件已清理：%1$s</string>
     <string name="dsh_log_seed_shadow_uninstall">上游已内置 %2$s，启动前先卸载预装插件 %1$s</string>
     <string name="dsh_log_seed_skip_builtin">上游已内置以下预装插件的同名能力，跳过安装：%1$s</string>
     <string name="dsh_log_dup_entry_removed">检测到重复的插件入口 id %2$s，已卸载冲突的预装插件 %1$s</string>
     <string name="dsh_log_dup_entry_repair">检测到重复的插件入口 id %2$s（上游已内置），卸载预装插件 %1$s 后重试启动</string>
+    <string name="dsh_log_bundle_repair">profile 声明了已不存在的插件，清理后重试启动：%1$s</string>
+    <string name="dsh_log_bundle_unresolvable_user">以下插件在 profile 里有声明但包找不到，dsh 会因此拒绝启动，请在插件页重新安装：%1$s</string>
     <string name="dsh_log_dup_entry_retry">插件入口冲突已修复，正在重试启动</string>
     <string name="dsh_log_dsh_missing_in_container">容器内找不到 dsh，请在设置中重装运行时</string>
     <!-- ── 容器内插件操作的日志（DshPluginRepo） ──────────────── -->

@@ -293,5 +293,80 @@ ok(dupRepair.includes("rememberShadowed(culprits)"),
   "启动失败后的兜底修复要把卸掉的包落盘（映射表没覆盖的冲突靠它避免下轮重装）");
 ok(/\.putString\(DshEnv\.KEY_SEED_SHADOWED_RUNTIME, runtime\)/.test(SRC.rt), "shadowed 记录跟随运行时版本（换回旧运行时即作废）");
 
+// ───────────────── profile 声明残留：拼接出来的 JS 必须真能跑 ─────────────────
+//
+// 1.9.0 升级运行时后连着踩了两个坑：先「duplicate loader entry id」反复卸载重装，
+// 再「cannot resolve profile bundle」（bundles 里留着已删掉的包，dsh 直接拒绝启动）。
+// 后者的自愈要在 App 侧改 profile 的 package.json，脚本是 Kotlin 字符串拼出来的 ——
+// 而**拼接本身也会错**：行注释和后面的语句粘在同一行时，`//` 会把整段逻辑注释掉，
+// 脚本静默无输出、看起来「什么都没发生」。所以这里把脚本抠出来，在临时目录里真跑。
+console.log("\n── profile 声明自愈：拼接的 JS 真跑一遍 ──");
+const os = require("os");
+const path = require("path");
+const cp = require("child_process");
+const repo = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshPluginRepo.kt", "utf8");
+/** 把 Kotlin 源码里一段「A + B + C」的字符串字面量按 Kotlin 规则反转义后拼回原文。 */
+function kotlinJs(from, to) {
+  const seg = repo.slice(repo.indexOf(from), repo.indexOf(to));
+  let out = "";
+  for (let i = 0; i < seg.length; i++) {
+    if (seg[i] !== '"') continue;
+    let j = i + 1;
+    while (j < seg.length && seg[j] !== '"') {
+      if (seg[j] === "\\") {
+        const c = seg[j + 1];
+        out += c === "n" ? "\n" : c === '"' ? '"' : c === "$" ? "$" : c;
+        j += 2;
+      } else { out += seg[j]; j++; }
+    }
+    i = j;
+  }
+  return out;
+}
+const pruneJs = kotlinJs("suspend fun pruneUnresolvableBundles", "val args =");
+ok(pruneJs.length > 500, `脚本还原成功（${pruneJs.length} 字节）`);
+ok(!/\/\/[^\n]*console\.log/.test(pruneJs), "没有语句被行注释吞掉（拼接时注释后面必须有真换行）");
+ok(!/require\.resolve\([^)]*package\.json/.test(pruneJs),
+  "判据用 resolve.paths + existsSync，而不是 require.resolve(pkg+'/package.json')（后者要求包导出 package.json，会误摘健康包）");
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-profile-"));
+try {
+  fs.mkdirSync(path.join(dir, "node_modules"), { recursive: true });
+  for (const p of ["dshmarket", "dsh-config-manager"]) {
+    fs.mkdirSync(path.join(dir, "node_modules", p), { recursive: true });
+    fs.writeFileSync(path.join(dir, "node_modules", p, "package.json"), JSON.stringify({ name: p, version: "1.0.0" }));
+  }
+  const manifest = {
+    name: "web",
+    dsh: { profile: { bundles: ["dsh-file-upload", "dshmarket", "dsh-config-manager"] } },
+    dependencies: { "dsh-file-upload": "^0.4.3", dshmarket: "^1.0.0", "dsh-config-manager": "^0.1.0" },
+  };
+  const write = () => fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify(manifest, void 0, 2) + "\n");
+  write();
+  const anchor = path.join(dir, "install", "package.json");
+  const run = () => cp.execFileSync(process.execPath, ["-e", pruneJs, anchor, dir, "dsh-file-upload", "dshmarket", "dsh-config-manager"], { encoding: "utf8" }).trim();
+  const out = run();
+  eq(out, "dsh-file-upload", "只摘掉解析不到的那个，健康包不动");
+  const after = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
+  eq(after.dsh.profile.bundles, ["dshmarket", "dsh-config-manager"], "bundles 摘掉坏声明（留着它 dsh 就起不来）");
+  eq(Object.keys(after.dependencies), ["dshmarket", "dsh-config-manager"], "dependencies 也摘（否则下次 pnpm install 会装回来）");
+  eq(run(), "", "幂等：再跑一次无事发生");
+  ok(fs.readFileSync(path.join(dir, "package.json"), "utf8").endsWith("}\n"), "写回格式与 dsh 的 writeProfileManifest 一致（2 空格 + 末尾换行）");
+} finally {
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// 结构断言：这条自愈必须同时挂在「启动前」与「启动失败后」两条路径上
+const seedForPrune = SRC.rt.slice(SRC.rt.indexOf("private suspend fun seedPlugins"), SRC.rt.indexOf("private fun applySeedRepair"));
+ok(seedForPrune.includes("pruneUnresolvableBundles(SEED_PLUGINS.toSet())"), "启动前先清理声明残留（不让用户先看一轮「服务进程已退出」）");
+const startBody = SRC.rt.slice(SRC.rt.indexOf("private suspend fun startAndAwait"), SRC.rt.indexOf("private suspend fun repairUnresolvableBundles"));
+ok(startBody.includes("repairUnresolvableBundles()"), "启动失败后也会尝试清理并重试一次");
+ok(/if \(repairDuplicateLoaderEntry\(\)\) repaired = true/.test(startBody) && /if \(repairUnresolvableBundles\(\)\) repaired = true/.test(startBody),
+  "两种自愈各查各的：同时存在时一轮修完");
+ok(SRC.rt.includes('Regex("cannot resolve profile bundle'),
+  "失败判据取 dsh 自己的那句 cannot resolve profile bundle");
+ok(SRC.rt.includes("dsh_log_bundle_unresolvable_user"),
+  "不是预装清单里的包就只提示、不擅自改用户的东西");
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);
