@@ -107,10 +107,20 @@ jobs:
       # 版本说明那条：VERSION / baseVersionName / 条目文案三处不一致时宁可不发版；
       # Kotlin 注释那条：块注释在 Kotlin 里可嵌套，注释体里一个多余的起始标记
       # 会吞掉整个文件后半段，报出来的是一片「unresolved reference」（本项目踩过一次）。
+      #
+      # 另外四个原本只在本地跑，现在也进 CI —— 它们的判据全是纯文本/纯逻辑，成本是毫秒级：
+      #   check-strings 资源转义（裸撇号会让 aapt2 以一个和撇号毫无关系的 NPE 失败）；
+      #   check-i18n 多语言键集；check-refs 文档/代码互引；
+      #   check-native-logic 决策逻辑复刻（1.9.0 的「预装账本」死循环就属于这一类：
+      #   编译通过、真机才炸，而且每次启动都换个位置炸）。
       - name: Static source checks
         run: |
           node tools/check-changelog.js
           node tools/check-kotlin-comments.js
+          node tools/check-strings.js
+          node tools/check-i18n.js
+          node tools/check-refs.js
+          node tools/check-native-logic.js
 
       # release 包必须真签名。缺任何一项就硬失败 —— 悄悄用 debug key 签出一个
       # 「release」比构建失败危险得多：它装得上、看着正常，但和正式包签名不同，
