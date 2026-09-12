@@ -342,16 +342,14 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Runtime updated to dsh 0.1.5 and now ships its own self-contained pnpm (no more pnpm not found on PATH). Updating keeps sessions, plugins, config and dependencies, resumes after an interruption, and a clean reinstall is also available.</item>
-        <item>Fixed startup failures after upgrading to dsh 0.1.5: upstream now bundles a file-upload capability that clashed with a preinstalled plugin. The clash is detected and the seed plugin is skipped or removed automatically.</item>
-        <item>Native capabilities grew from 19 to over 30 (camera, microphone, text-to-speech, calendar, contacts, location, phone, sensors, network, volume, ringer, system settings, install, usage stats, SMS, clipboard, share and open-link, and more), with per-capability levels: off / write / read / read+write / full control.</item>
-        <item>New permission call log: newest first, with the command, the reason, the level and the outcome; sensitive values are masked by default.</item>
-        <item>The AI no longer has to ask and then call again: the call itself is held open while you answer, and if you allow it the app runs it right there and hands the real result back. Allow once, a 60-second auto-deny countdown, and the exact command shown verbatim are all part of that dialog.</item>
-        <item>If you allowed it in the app but Android itself still lacks the permission, a second dialog names what is missing and can jump straight into system settings; the app re-checks when you come back.</item>
-        <item>Runtime management: one button for check-and-update, long-press to switch to any runtime version in the repository (downgrades included), trusted local import, a beta channel that stays off by default, and runtimes may declare a minimum app version.</item>
-        <item>Settings reorganized: permission channels, native capabilities and wireless ADB live under Security; data directories and runtime management under Features.</item>
-        <item>App update checks now race the direct GitHub connection against several mirrors for a faster result.</item>
-        <item>Text-to-speech (system TTS) is in, and autostart now has three routes: boot broadcast, accessibility service and a root boot script.</item>
+        <item>Fixed startup failures caused by a seeded plugin colliding with a capability the runtime now bundles, plus the uninstall/reinstall loop that followed (dsh-file-upload versus the file-upload entry built into dsh 0.1.5). The collision is now resolved before startup, so that duplicate loader entry id failure no longer happens.</item>
+        <item>The seeding ledger now keeps “upstream already provides this, do not install” separate from “we tried and it did not take”, so the former is never reinstalled as if it had failed. That record follows the runtime version: an older runtime without the built-in capability seeds it again.</item>
+        <item>── The rest is what 1.9.0 brought; skip if you already run 1.9.0 ──</item>
+        <item>Runtime updated to dsh 0.1.5 with its own self-contained pnpm; updating keeps sessions, plugins, config and dependencies, resumes after an interruption, and a clean reinstall is available.</item>
+        <item>Native capabilities grew to over 30 with per-capability levels (off / write / read / read+write / full control) and a new permission call log that masks sensitive values.</item>
+        <item>The AI no longer has to ask and then call again: the call itself is held open while you answer, and allowing it runs the command right there and returns the real result — with allow once, a 60-second countdown and the exact command shown.</item>
+        <item>Runtime management: check-and-update in one button, long-press to switch to any version (downgrades included), trusted local import, a beta channel that stays off, and runtimes may declare a minimum app version.</item>
+        <item>Settings reorganized (permission channels, native capabilities and wireless ADB under Security), racing mirrors for app update checks, text-to-speech and three autostart routes.</item>
     </string-array>
 
     

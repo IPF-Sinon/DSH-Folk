@@ -29,6 +29,7 @@ const SRC = {
   pd: fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshPersonalData.kt", "utf8"),
   ds: fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshDeviceSense.kt", "utf8"),
   bridge: fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshNativeBridge.kt", "utf8"),
+  rt: fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8"),
 };
 const CODE = Object.fromEntries(Object.entries(SRC).map(([k, v]) => [k, code(v)]));
 
@@ -196,6 +197,101 @@ for (const fn of ["brightnessSet", "timeoutSet", "rotationSet", "volumeSet", "ri
 ok(SRC.sys.includes('"autoBrightness", modeNow'), "改亮度时报告自动亮度是否还开着（否则写入会被覆盖）");
 ok(SRC.sys.includes("dndActive(ctx) && !PermissionUtils.hasNotificationPolicyAccess"),
   "勿扰开着且没授权时拒绝改音量（否则静默无效）");
+
+// ───────────────── 预装插件的「上游已内置」不能变成死循环 ─────────────────
+//
+// 1.9.0 真机升级到 dsh 0.1.5 后的现象（用户日志原文）：先「检测到重复的插件入口 id
+// file-upload（上游已内置），卸载预装插件 dsh-file-upload 后重试启动」，下一次冷启动
+// 又「补装预装插件：容器里缺 dsh-file-upload，重新安装」，如此往复。
+//
+// 根因是**两类事实混在一个账本里**：SEED_ENTRY_IDS 判定「上游已内置」后把包名写进
+// attempted，而 applySeedEnvRetry 把 attempted 里「不在 bundles 里」的一律当成「记过账
+// 却没生效」，于是摘账重装。这里把两侧的决策都复刻一遍，断言闭环不成立。
+console.log("\n── 预装账本：上游已内置 ≠ 试过 ──");
+const SEED_PLUGINS = ["dsh-web-mobile", "dshmarket", "dsh-config-manager", "dsh-file-upload"];
+const SEED_ENTRY_IDS = { "dsh-file-upload": "file-upload" };
+const SEED_MAX_PASSES = 3;
+
+/**
+ * 复刻 seedPlugins → 启动 → repairDuplicateLoaderEntry 的完整序列。
+ *
+ * 状态：bundles = profile 里真的装着的包（= 老逻辑里的 installed）、attempted = 账本、
+ * shadowed = 落盘的「上游已内置」记录（带运行时版本）。
+ * builtinFrom = 从第几次启动开始，上游核心包声明 file-upload（99 = 一直不声明）。
+ * fixed = false 复刻 1.9.0 的老逻辑（把「上游已内置」写进账本），true 是修好后的。
+ */
+function simulate({ preseeded, builtinFrom, fixed, starts }) {
+  let attempted = new Set(preseeded ? SEED_PLUGINS : []);
+  let bundles = new Set(preseeded ? SEED_PLUGINS : []);
+  let storedShadowed = new Set();
+  let storedShadowedRuntime = null;
+  let pnpmInstalls = 0;
+  let dupFailures = 0;
+  for (let i = 1; i <= starts; i++) {
+    const runtime = i >= builtinFrom ? "0.1.5-r4" : "0.1.4-r4";
+    const entries = new Map([["@deepseek-ai/dsh-web-app", runtime === "0.1.5-r4" ? ["file-upload"] : []]]);
+    for (const pkg of bundles) entries.set(pkg, SEED_ENTRY_IDS[pkg] ? [SEED_ENTRY_IDS[pkg]] : []);
+
+    const mappedShadowed = new Set(Object.entries(SEED_ENTRY_IDS)
+      .filter(([pkg, id]) => [...entries].some(([owner, ids]) => owner !== pkg && ids.includes(id)))
+      .map(([pkg]) => pkg));
+    const recordedShadowed = storedShadowedRuntime === runtime ? storedShadowed : new Set();
+    const shadowed = fixed ? new Set([...mappedShadowed, ...recordedShadowed]) : new Set();
+    if (!fixed) for (const pkg of mappedShadowed) attempted.add(pkg); // 老逻辑就错在这一行
+
+    for (const pkg of [...shadowed]) if (bundles.has(pkg)) { bundles.delete(pkg); attempted.delete(pkg); }
+
+    const repairRetry = [...attempted].filter((pkg) => SEED_PLUGINS.includes(pkg) && !bundles.has(pkg) && !shadowed.has(pkg));
+    for (const pkg of repairRetry) attempted.delete(pkg);
+    const envRetry = [...attempted].filter((pkg) => SEED_PLUGINS.includes(pkg) && !bundles.has(pkg) && !shadowed.has(pkg));
+    for (const pkg of envRetry) attempted.delete(pkg);
+
+    const todo = SEED_PLUGINS.filter((pkg) => !attempted.has(pkg) && !shadowed.has(pkg));
+    for (const pkg of todo.filter((pkg) => !bundles.has(pkg))) { bundles.add(pkg); attempted.add(pkg); pnpmInstalls++; }
+
+    const conflict = [...bundles].some((pkg) => {
+      const id = SEED_ENTRY_IDS[pkg];
+      return id !== undefined && [...entries].some(([owner, ids]) => owner !== pkg && ids.includes(id));
+    });
+    if (conflict) {
+      dupFailures++;
+      for (const pkg of [...bundles]) if (SEED_ENTRY_IDS[pkg]) bundles.delete(pkg);
+      if (fixed) { storedShadowed = new Set([...storedShadowed, "dsh-file-upload"]); storedShadowedRuntime = runtime; }
+    }
+  }
+  return { attempted, bundles, pnpmInstalls, dupFailures };
+}
+
+// 用户的真实序列：四个预装包都在老运行时（0.1.2/r3）时装好了，然后升级到 0.1.5-r4
+const buggy = simulate({ preseeded: true, builtinFrom: 2, fixed: false, starts: 5 });
+ok(buggy.pnpmInstalls >= 3, `老逻辑在升级后反复重装（4 次冷启动装了 ${buggy.pnpmInstalls} 次，重复 id 失败 ${buggy.dupFailures} 次）`);
+const healed = simulate({ preseeded: true, builtinFrom: 2, fixed: true, starts: 5 });
+eq(healed.pnpmInstalls, 0, "修好后：升级运行时之后一次都不再重装");
+eq(healed.dupFailures, 0, "修好后：启动前就把冲突包摘掉，不再有 duplicate entry id 那一轮失败");
+ok(!healed.bundles.has("dsh-file-upload"), "修好后：冲突的预装包不在 bundles 里");
+const sameRuntime = simulate({ preseeded: true, builtinFrom: 99, fixed: true, starts: 3 });
+eq(sameRuntime.pnpmInstalls, 0, "运行时没变、上游也没内置：照样不重装（不能白跑 pnpm）");
+const fresh = simulate({ preseeded: false, builtinFrom: 1, fixed: true, starts: 2 });
+eq(fresh.pnpmInstalls, 3, "全新安装在新运行时上：只装另外三个，file-upload 交给上游");
+const freshOld = simulate({ preseeded: false, builtinFrom: 99, fixed: true, starts: 2 });
+eq(freshOld.pnpmInstalls, 4, "全新安装在没有内置的运行时上：四个都装");
+
+// 结构断言：这类「决策分散在多处」的 bug 靠模拟只能盖住已想到的组合
+const seedBody = SRC.rt.slice(SRC.rt.indexOf("private suspend fun seedPlugins"), SRC.rt.indexOf("private fun applySeedRepair"));
+ok(!/attempted\.addAll\(\s*shadowed|attempted\.addAll\(\s*mappedShadowed/.test(seedBody),
+  "【上游已内置】不能写进 attempted（写进去就会被补修逻辑当成失败项重装）");
+ok(seedBody.includes("attempted.removeAll(shadowed.toSet())"), "反而要把历史遗留的记账摘掉（换回旧运行时才会重新预装）");
+ok(/applySeedRepair\(p, attempted, installed, shadowed\)/.test(seedBody), "补修要认 shadowed");
+ok(/applySeedEnvRetry\(p, attempted, installed, shadowed\)/.test(seedBody), "换运行时重试要认 shadowed");
+for (const fn of ["applySeedRepair", "applySeedEnvRetry"]) {
+  const at = SRC.rt.indexOf("private fun " + fn + "(");
+  const body = SRC.rt.slice(at, SRC.rt.indexOf("\n    }", at));
+  ok(body.includes("it !in shadowed"), `${fn} 的待重试集合排除 shadowed`);
+}
+const dupRepair = SRC.rt.slice(SRC.rt.indexOf("private suspend fun repairDuplicateLoaderEntry"), SRC.rt.indexOf("private suspend fun repairDuplicateLoaderEntry") + 2000);
+ok(dupRepair.includes("rememberShadowed(culprits)"),
+  "启动失败后的兜底修复要把卸掉的包落盘（映射表没覆盖的冲突靠它避免下轮重装）");
+ok(/\.putString\(DshEnv\.KEY_SEED_SHADOWED_RUNTIME, runtime\)/.test(SRC.rt), "shadowed 记录跟随运行时版本（换回旧运行时即作废）");
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

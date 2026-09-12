@@ -240,6 +240,12 @@ object DshRuntime {
      * dsh 0.1.5 起 `dsh-web-app` 自带 `file-upload` loader entry：再预装三方
      * `dsh-file-upload` 会让整棵插件树报 `duplicate loader entry id` 而启动失败
      * （1.8.3 真机升级运行时后启动报错的根因，见上游 deepseek-harness#3263）。
+     *
+     * 离线核对过：`@deepseek-ai/dsh-web-app@0.1.5-rc.1` 的 cordis.patch.yml 声明了 94 条
+     * entry id，与四个预装包声明的 `dsh-web-mobile` / `dsh-market` / `config-manager` /
+     * `file-upload` 相比**只撞这一条**。核对方式（不需要设备）：
+     * `npm view @deepseek-ai/dsh-web-app@<版本> dist.tarball` 取包，读它 package.json 里
+     * `dsh.bundle.patch` 指向的文件的 `- id:` 行，再和预装包的同类声明取交集。
      */
     private val SEED_ENTRY_IDS = mapOf("dsh-file-upload" to "file-upload")
 
@@ -1350,26 +1356,56 @@ object DshRuntime {
             .getOrElse { DshPluginRepo.BundleState(emptyList(), emptySet()) }
         val installed = bundleState.declared.filter { it in bundleState.present }.toSet()
 
-        // 修好根因后补修历史失败（见 KEY_SEED_REPAIR_REV）
-        applySeedRepair(p, attempted, installed)
-        // 换运行时（或本键还不存在）时再给一次机会：见 KEY_SEED_RUNTIME 的说明
-        applySeedEnvRetry(p, attempted, installed)
-
-        // 上游已内置同名 entry id 的预装包直接跳过：dsh 0.1.5 起 dsh-web-app 自带
-        // file-upload loader entry，再预装 dsh-file-upload 会让整棵插件树报
-        // duplicate loader entry id 而启动失败（1.8.3 真机故障的根因）。
-        // 判据是**实际读到的 entry id**（含核心包），不是碰运气 —— 表里的映射只是
-        // 快速路径，漏了也由下面的重复 id 兜底检查兜住。
-        val occupied = runCatching { DshPluginRepo.pluginEntries(includeCore = true) }
-            .getOrElse { emptyMap() }.values.flatten().toSet()
-        val builtInSkip = SEED_ENTRY_IDS.filterValues { it in occupied }.keys
-        if (builtInSkip.isNotEmpty()) {
-            attempted.addAll(builtInSkip)
-            persistSeeded(attempted)
-            logInfo(R.string.dsh_log_seed_skip_builtin, joinForLog(builtInSkip))
+        // ── 「上游已内置」必须与「试过了」分开记账 ──
+        //
+        // 判据是**实际读到的 entry id**：同一条 id 只要由**别的**包（通常是上游核心包，
+        // dsh 0.1.5 的 dsh-web-app 就自带 file-upload）声明了，这个预装包就不能再装 ——
+        // 装了会让整棵插件树报 duplicate loader entry id 而根本起不来。
+        //
+        // 关键是**不能写进 attempted**。写进去等于告诉补修逻辑「我们试过它、但它不在
+        // bundles 里」，于是被摘账重装，形成：跳过 → 重装 → 启动失败 → 自动卸载 →
+        // 下次启动又重装 的死循环（1.9.0 真机实测）。所以这里单独一份 shadowed，
+        // 并且三处都要认它：补修、换运行时重试、以及本轮要装哪些。
+        val entries = runCatching { DshPluginRepo.pluginEntries(includeCore = true) }
+            .getOrElse { emptyMap() }
+        val mappedShadowed = SEED_ENTRY_IDS.filter { (pkg, id) ->
+            entries.any { (owner, ids) -> owner != pkg && id in ids }
+        }.keys
+        // 落盘的补充项：只由「启动失败 → 自动卸载」那条路径才能知道、映射表没覆盖的冲突。
+        // 不落盘的话每次冷启动都会重装一次再失败一次。换运行时即作废（内置与否是运行时的属性）。
+        val runtimeNow = p.getString(DshEnv.KEY_RUNTIME_VERSION, "").orEmpty()
+        val recordedShadowed = if (p.getString(DshEnv.KEY_SEED_SHADOWED_RUNTIME, null) == runtimeNow) {
+            p.getString(DshEnv.KEY_SEED_SHADOWED, null)
+                ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
+                .orEmpty()
+        } else {
+            emptySet()
         }
+        val shadowed = mappedShadowed + recordedShadowed
 
-        val todo = SEED_PLUGINS.filter { it !in attempted }
+        // 已经装着的冲突包**在启动之前**就摘掉：否则这次启动照样先以 duplicate entry id
+        // 失败一次，再走「失败后自愈」重试 —— 用户白等一轮，日志里多一段 node 堆栈。
+        val shadowedInstalled = shadowed.filter { it in installed }
+        for (pkg in shadowedInstalled) {
+            logWarn(R.string.dsh_log_seed_shadow_uninstall, pkg, SEED_ENTRY_IDS[pkg] ?: pkg)
+            runCatching {
+                DshPluginRepo.uninstall(pkg, onLine = { line -> appendLog(line) })
+            }.onFailure { appendLog(it.message ?: it.javaClass.simpleName) }
+        }
+        val shadowedSkipped = shadowed - shadowedInstalled.toSet()
+        if (shadowedSkipped.isNotEmpty()) {
+            logInfo(R.string.dsh_log_seed_skip_builtin, joinForLog(shadowedSkipped))
+        }
+        // 历史遗留：这些包以前被记成「试过了」。摘掉它们 —— 万一以后换回不含该能力的
+        // 运行时，实时判定不再命中，它们就该重新预装。
+        if (attempted.removeAll(shadowed.toSet())) persistSeeded(attempted)
+
+        // 修好根因后补修历史失败（见 KEY_SEED_REPAIR_REV）
+        applySeedRepair(p, attempted, installed, shadowed)
+        // 换运行时（或本键还不存在）时再给一次机会：见 KEY_SEED_RUNTIME 的说明
+        applySeedEnvRetry(p, attempted, installed, shadowed)
+
+        val todo = SEED_PLUGINS.filter { it !in attempted && it !in shadowed }
         val missing = todo.filter { it !in installed }
         if (todo.isNotEmpty() && missing.isEmpty()) {
             persistSeeded(attempted + todo)
@@ -1447,6 +1483,30 @@ object DshRuntime {
         .lastOrNull { it.startsWith(DshPluginRepo.EXIT_MARKER) }
         ?.removePrefix(DshPluginRepo.EXIT_MARKER)?.trim()?.toIntOrNull()
 
+    /**
+     * 记下「上游已内置、别再预装」的包（跟随运行时版本，换运行时即作废）。
+     *
+     * 只有启动失败后的兜底修复才用得上它 —— 映射表能判定的冲突在启动前就算出来了，
+     * 不需要落盘。这条路径的存在是为了让**没进映射表**的冲突也不至于变成每轮启动一次的
+     * 「卸载 → 重装 → 再失败」。
+     */
+    private fun rememberShadowed(names: Collection<String>) {
+        if (names.isEmpty()) return
+        val p = prefs()
+        val runtime = p.getString(DshEnv.KEY_RUNTIME_VERSION, "").orEmpty()
+        val known = if (p.getString(DshEnv.KEY_SEED_SHADOWED_RUNTIME, null) == runtime) {
+            p.getString(DshEnv.KEY_SEED_SHADOWED, null)
+                ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
+                .orEmpty()
+        } else {
+            emptySet()
+        }
+        p.edit()
+            .putString(DshEnv.KEY_SEED_SHADOWED, (known + names).distinct().joinToString(","))
+            .putString(DshEnv.KEY_SEED_SHADOWED_RUNTIME, runtime)
+            .apply()
+    }
+
     /** 记下「已尝试预装」的包名集合。 */
     private fun persistSeeded(names: Collection<String>) {
         prefs().edit()
@@ -1468,9 +1528,12 @@ object DshRuntime {
         p: android.content.SharedPreferences,
         attempted: MutableSet<String>,
         installed: Set<String>,
+        shadowed: Set<String>,
     ) {
         if (p.getInt(DshEnv.KEY_SEED_REPAIR_REV, 0) >= SEED_REPAIR_REV) return
-        val retry = attempted.filter { it in SEED_PLUGINS && it !in installed }
+        // shadowed 的包是「上游已内置、不该装」，不是「试过但没生效」：摘它的账只会让它
+        // 被重装一次再撞 duplicate entry id（1.9.0 的死循环就是这么来的）。
+        val retry = attempted.filter { it in SEED_PLUGINS && it !in installed && it !in shadowed }
         if (retry.isNotEmpty()) {
             attempted.removeAll(retry.toSet())
             persistSeeded(attempted)
@@ -1496,13 +1559,15 @@ object DshRuntime {
         p: android.content.SharedPreferences,
         attempted: MutableSet<String>,
         installed: Set<String>,
+        shadowed: Set<String>,
     ) {
         val runtimeNow = p.getString(DshEnv.KEY_RUNTIME_VERSION, "").orEmpty()
         val lastRuntime = p.getString(DshEnv.KEY_SEED_RUNTIME, null)
         val passes = p.getInt(DshEnv.KEY_SEED_PASSES, 0)
         // 版本没变且配额已用尽：不再重试（否则每次冷启动都要多等一轮 pnpm）
         if (lastRuntime == runtimeNow && passes >= SEED_MAX_PASSES) return
-        val retry = attempted.filter { it in SEED_PLUGINS && it !in installed }
+        // 同 applySeedRepair：上游已内置的不算「没生效」，不重试
+        val retry = attempted.filter { it in SEED_PLUGINS && it !in installed && it !in shadowed }
         if (retry.isEmpty()) {
             // 没有要补的：只记下「这个版本已经检查过」，不消耗配额
             if (lastRuntime != runtimeNow) {
@@ -1570,6 +1635,9 @@ object DshRuntime {
             logWarn(R.string.dsh_log_dup_entry_repair, pkg, id)
             DshPluginRepo.uninstall(pkg, onLine = { line -> appendLog(line) })
         }
+        // 必须落盘：这张表（[SEED_ENTRY_IDS]）没覆盖的冲突只有这里才知道，不记下来的话
+        // 下次冷启动会把它们当「缺的预装包」重新装上，再失败一次 —— 也就是刚才那个循环。
+        rememberShadowed(culprits)
         return true
     }
 

@@ -259,6 +259,27 @@ object DshEnv {
      */
     const val KEY_SEED_PASSES = "seed_passes"
 
+    /**
+     * 「上游已内置同名 loader entry id，所以**不该**预装」的包（逗号分隔）。
+     *
+     * 与 [KEY_SEEDED_PLUGINS] 是**两种不同的事实**，必须分开记：
+     * 前者是「我们真的跑过 pnpm，不管成没成」，后者是「根本不需要装」。混在一起会让
+     * 补修逻辑（[DshRuntime.applySeedRepair] / [DshRuntime.applySeedEnvRetry]）把
+     * 「不需要装」误判成「记过账却没生效」，于是摘账重装 → duplicate loader entry id
+     * → 启动失败 → 自动卸载 → 下次启动再重装。1.9.0 真机升级到 dsh 0.1.5 后就是这个
+     * 死循环（日志里能看到「卸载预装插件 dsh-file-upload」与「补装预装插件…重新安装」
+     * 交替出现）。
+     */
+    const val KEY_SEED_SHADOWED = "seed_shadowed_plugins"
+
+    /**
+     * [KEY_SEED_SHADOWED] 是按哪个运行时版本判定的。
+     *
+     * 「上游是否内置」是运行时的属性：换回不含该能力的旧运行时就要重新预装。所以版本
+     * 一变这条记录即作废，交给启动时的实时判定（读 profile 里各包的 entry id）重算。
+     */
+    const val KEY_SEED_SHADOWED_RUNTIME = "seed_shadowed_runtime"
+
     /** 安装插件后是否用 `dsh web --port 0` 验证一次能否启动（默认开）。 */
     const val KEY_VERIFY_AFTER_INSTALL = "verify_after_install"
 

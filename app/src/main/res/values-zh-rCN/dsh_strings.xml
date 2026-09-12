@@ -844,6 +844,7 @@
     <string name="dsh_log_seed_failed">预装失败 %1$s（可稍后在插件商店手动安装）</string>
     <string name="dsh_log_seed_exception">预装异常: %1$s</string>
     <string name="dsh_log_seed_retry_exception">预装重试异常: %1$s</string>
+    <string name="dsh_log_seed_shadow_uninstall">上游已内置 %2$s，启动前先卸载预装插件 %1$s</string>
     <string name="dsh_log_seed_skip_builtin">上游已内置以下预装插件的同名能力，跳过安装：%1$s</string>
     <string name="dsh_log_dup_entry_removed">检测到重复的插件入口 id %2$s，已卸载冲突的预装插件 %1$s</string>
     <string name="dsh_log_dup_entry_repair">检测到重复的插件入口 id %2$s（上游已内置），卸载预装插件 %1$s 后重试启动</string>
