@@ -342,15 +342,9 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed service startup failures caused by a stale seeded-plugin declaration: when the profile still declares a plugin whose package is gone, dsh exits with “cannot resolve profile bundle” (the app only showed “the service process exited” and fell back to proot, no matter how often you restarted). Such declarations are now pruned before startup, so the failed round no longer happens.</item>
-        <item>The repair removes the entry from both the profile bundles list and its dependencies, and only ever touches packages from the seeding list — a user-installed plugin that lost its package is reported, never modified.</item>
-        <item>Together with the previous release: the seeding ledger keeps “upstream already provides this” separate from “we tried and it did not take”, so upgrading the runtime no longer reinstalls dsh-file-upload over and over.</item>
-        <item>── The rest is what 1.9.0 brought; skip if you already run 1.9.0 ──</item>
-        <item>Runtime updated to dsh 0.1.5 with its own self-contained pnpm; updating keeps sessions, plugins, config and dependencies, resumes after an interruption, and a clean reinstall is available.</item>
-        <item>Native capabilities grew to over 30 with per-capability levels (off / write / read / read+write / full control) and a new permission call log that masks sensitive values.</item>
-        <item>The AI no longer has to ask and then call again: the call itself is held open while you answer, and allowing it runs the command right there and returns the real result — with allow once, a 60-second countdown and the exact command shown.</item>
-        <item>Runtime management: check-and-update in one button, long-press to switch to any version (downgrades included), trusted local import, a beta channel that stays off, and runtimes may declare a minimum app version.</item>
-        <item>Settings reorganized (permission channels, native capabilities and wireless ADB under Security), racing mirrors for app update checks, text-to-speech and three autostart routes.</item>
+        <item>Fixed the whole web UI failing to open on older WebViews: with an old system WebView (Chromium 110 on this device) it showed "Failed to load plugins — Iterator is not defined" and never opened. The compatibility shim now also provides Iterator, Promise.try, ArrayBuffer.transfer and friends (it only adds what is missing and applies to http://127.0.0.1 only); it turns itself on when the kernel is too old and explains that once — you can switch it off from that notice.</item>
+        <item>JavaScript errors on the page are now written to the app log: previously the page drew its own error screen and neither the log nor a bug report contained a single word, so a screenshot was the only clue.</item>
+        <item>Removed the dsh-file-upload preinstall entirely: upstream dsh 0.1.5 already ships file-upload, and the third-party copy was both redundant and fatal — it made the plugin tree fail with "duplicate loader entry id". It is never installed again, and on runtimes with dsh ≥ 0.1.5 an existing copy is uninstalled together with any leftover profile declaration (on older runtimes it is left alone, so nothing you still rely on disappears).</item>
     </string-array>
 
     

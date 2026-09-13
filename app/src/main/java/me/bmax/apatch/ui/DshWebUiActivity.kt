@@ -148,10 +148,11 @@ private val BALL_INSET = 8.dp
 @Composable
 private fun DshCompatShimDialog(
     kernel: DshWebCompat.Kernel,
-    onPick: (enable: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onDisable: () -> Unit,
 ) {
     AlertDialog(
-        onDismissRequest = { /* 划掉 = 这次先不决定，下次打开再问 */ },
+        onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.dsh_webui_compat_title)) },
         text = {
             Text(
@@ -163,13 +164,13 @@ private fun DshCompatShimDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onPick(true) }) {
-                Text(stringResource(R.string.dsh_webui_compat_enable))
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.dsh_webui_compat_ok))
             }
         },
         dismissButton = {
-            TextButton(onClick = { onPick(false) }) {
-                Text(stringResource(R.string.dsh_webui_compat_skip))
+            TextButton(onClick = onDisable) {
+                Text(stringResource(R.string.dsh_webui_compat_disable))
             }
         },
     )
@@ -261,31 +262,29 @@ class DshWebUiActivity : AppCompatActivity() {
                 // 这份申请他永远看不到（60 秒后静默超时算拒绝）
                 ElevationRequestDialogHost()
 
-                // 首次遇到旧内核时问一次要不要装兼容垫片。
-                // 在这里问而不是在设置页：只有真正打开 WebUI 才知道内核是哪个，
-                // 而且此刻用户正要用它，说明「不装会打不开工作区」最有说服力。
+                // 旧内核上**自动**注入兼容垫片，然后只说明一次。
+                //
+                // 为什么不再是「先问」：缺 Iterator 这类全局时整个 WebUI 会渲染成
+                // "Failed to load plugins"，用户连设置页都进不去，问了也答不上来
+                // （1.9.2 真机实测）。所以先保证能用，再把「已启用兼容模式 / 可关闭」
+                // 明确告诉用户 —— off 仍然是用户的决定权，落盘后永不注入。
                 val kernel = remember { DshWebCompat.kernel(this@DshWebUiActivity) }
-                var askCompat by remember {
-                    mutableStateOf(DshWebCompat.shouldAsk(this@DshWebUiActivity, kernel))
+                var showCompatNotice by remember {
+                    mutableStateOf(DshWebCompat.shouldNotice(this@DshWebUiActivity, kernel))
                 }
-                if (askCompat) {
+                if (showCompatNotice) {
                     DshCompatShimDialog(
                         kernel = kernel,
-                        onPick = { enable ->
-                            DshWebCompat.setMode(
-                                this@DshWebUiActivity,
-                                if (enable) DshWebCompat.MODE_ON else DshWebCompat.MODE_OFF,
-                            )
-                            askCompat = false
-                            if (enable) {
-                                // 页面已经在加载了，而 addDocumentStartJavaScript 只对
-                                // 「调用返回之后才开始加载」的 frame 生效 —— 所以这里补装一次
-                                // 再 reload，让垫片真的落在 document-start 上
-                                webView?.let { view ->
-                                    compatShimInstalled = installCompatShim(view, url)
-                                    view.reload()
-                                }
-                            }
+                        onDismiss = {
+                            DshWebCompat.markNoticed(this@DshWebUiActivity)
+                            showCompatNotice = false
+                        },
+                        onDisable = {
+                            DshWebCompat.setMode(this@DshWebUiActivity, DshWebCompat.MODE_OFF)
+                            DshWebCompat.markNoticed(this@DshWebUiActivity)
+                            showCompatNotice = false
+                            // 关掉之后要重新加载一次，垫片才真的不在这份文档里
+                            webView?.reload()
                         },
                     )
                 }
@@ -395,6 +394,29 @@ class DshWebUiActivity : AppCompatActivity() {
                                 webChromeClient = object : android.webkit.WebChromeClient() {
                                     override fun onProgressChanged(view: WebView?, p: Int) {
                                         progress = p
+                                    }
+
+                                    /**
+                                     * 把页面里的 JS 报错带进 App 日志。
+                                     *
+                                     * 这条是补课：上游客户端 bundle 抛
+                                     * "Failed to load plugins … Iterator is not defined"
+                                     * 时，页面自己画了个错误页，而 logcat 与上报里**一个字都没有**
+                                     * —— 排查时只能靠用户截图。现在页面报错会落到
+                                     * [me.bmax.apatch.util.LogStore]，随 bugreport 一起带出来。
+                                     */
+                                    override fun onConsoleMessage(
+                                        msg: android.webkit.ConsoleMessage?,
+                                    ): Boolean {
+                                        val m = msg ?: return false
+                                        if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
+                                            Log.w(
+                                                TAG,
+                                                "page error: " + m.message() + " @" +
+                                                    m.sourceId() + ":" + m.lineNumber(),
+                                            )
+                                        }
+                                        return false
                                     }
 
                                     /**
@@ -668,8 +690,21 @@ class DshWebUiActivity : AppCompatActivity() {
          *
          * | API | 需要 | 用在哪 |
          * |---|---|---|
+         * | `Iterator`（全局对象本身 + 助手） | Chrome 122 | `dsh-client-ui-sidebar-documentpreview`：`typeof Iterator.prototype.join !== 'function'` 先求值 `Iterator.prototype`，内核没有这个全局就抛 `ReferenceError` |
+         * | `Promise.try` | Chrome 128 | pdf.js（文档预览插件内）：`Promise.try(fn, arg)` |
          * | `AbortSignal.any` | Chrome 116 | 每个带 signal 的 RPC（`ctx.sessions.search`、`ctx.workspaces.listDirectory`…）、`postJson` 超时合并 |
          * | `Promise.withResolvers` | Chrome 119 | cordis 的 `ctx.timeout()` / `ctx.interval()` |
+         * | `ArrayBuffer.prototype.transferToFixedLength` | Chrome 114 | pdf.js 编译系统字体信息 |
+         * | `Symbol.dispose` / `Symbol.asyncDispose` | Chrome 134 | 一个客户端 bundle 用它作属性键（缺失时键变成 `undefined`） |
+         * | `crypto.randomUUID` | 任意版本，但只在安全上下文提供 | 会话消息 id、附件草稿 |
+         *
+         * 表里每一项都对应一次真机的「整个 WebUI 加载不出来」：
+         * `Iterator` 缺失时页面直接显示 **Failed to load plugins —
+         * failed to import loader entry …: Iterator is not defined**，
+         * 连设置都进不去（1.9.2 及以前）。所以补齐范围以**上游客户端包的实际用法**为准，
+         * 由 tools/check-web-shim.js 对着同一张表反向断言，漏补会被门禁拦下。
+         *
+         * 判定阈值见 [DshEnv.DSH_COMPAT_MIN_CHROMIUM]。
          *
          * 都是纯语言/平台 API，能在主线程用几行 JS 等价实现。前端全部代码里没有
          * `new Worker` / `SharedWorker` / service worker，所以主文档一份就够。
@@ -734,6 +769,167 @@ class DshWebUiActivity : AppCompatActivity() {
       var p = new Promise(function(a, b){ res = a; rej = b; });
       return { promise: p, resolve: res, reject: rej };
     };
+  }
+  // Iterator：ES2025 的迭代器助手。dsh 前端（documentpreview 插件）里有一句
+  //   if (typeof Iterator.prototype.join !== 'function') Iterator.prototype.join = …
+  // 它先求值 Iterator.prototype —— 内核没有这个全局时 typeof 保护不住，直接
+  // ReferenceError，整个插件 import 失败、页面变成 "Failed to load plugins"。
+  // 所以**全局对象本身**必须存在，助手也一并给全（别的地方可能真调它们）。
+  // 原型取 %IteratorPrototype%（所有内置迭代器的共同原型），比手搓一个更像真货。
+  if (typeof Iterator === 'undefined') {
+    var IteratorPrototype = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()));
+    var defineHelper = function(name, fn){
+      if (typeof IteratorPrototype[name] !== 'function') {
+        Object.defineProperty(IteratorPrototype, name, {
+          value: fn, writable: true, configurable: true
+        });
+      }
+    };
+    var wrap = function(iter){ return Object.assign(Object.create(IteratorPrototype), { __it: iter }); };
+    Object.defineProperty(IteratorPrototype, '__it', {
+      value: null, writable: true, configurable: true
+    });
+    // 迭代器协议本体：Symbol.iterator 返回自己（这才是「迭代器」的定义）
+    if (typeof IteratorPrototype[Symbol.iterator] !== 'function') {
+      Object.defineProperty(IteratorPrototype, Symbol.iterator, {
+        value: function(){ return this; }, writable: true, configurable: true
+      });
+    }
+    defineHelper('next', function(){
+      return this.__it ? this.__it.next() : { done: true, value: undefined };
+    });
+    defineHelper('map', function(fn){
+      var it = this; return wrap({ next: function(){
+        var r = it.next(); return r.done ? r : { done: false, value: fn(r.value) };
+      } });
+    });
+    defineHelper('filter', function(fn){
+      var it = this; return wrap({ next: function(){
+        for (;;) { var r = it.next(); if (r.done) return r; if (fn(r.value)) return r; }
+      } });
+    });
+    defineHelper('take', function(n){
+      var it = this, left = n; return wrap({ next: function(){
+        if (left <= 0) return { done: true, value: undefined };
+        left--; return it.next();
+      } });
+    });
+    defineHelper('drop', function(n){
+      var it = this, left = n; return wrap({ next: function(){
+        while (left > 0) { left--; var r = it.next(); if (r.done) return r; }
+        return it.next();
+      } });
+    });
+    defineHelper('takeWhile', function(fn){
+      var it = this; return wrap({ next: function(){
+        var r = it.next(); if (r.done || !fn(r.value)) return { done: true, value: undefined };
+        return r;
+      } });
+    });
+    defineHelper('dropWhile', function(fn){
+      var it = this, dropping = true; return wrap({ next: function(){
+        for (;;) {
+          var r = it.next(); if (r.done) return r;
+          if (dropping && fn(r.value)) continue;
+          dropping = false; return r;
+        }
+      } });
+    });
+    defineHelper('flatMap', function(fn){
+      var it = this, inner = null; return wrap({ next: function(){
+        for (;;) {
+          if (inner) {
+            var r = inner.next(); if (!r.done) return r; inner = null;
+          }
+          var o = it.next(); if (o.done) return o;
+          var src = fn(o.value);
+          if (!src) { inner = null; continue; }
+          // 既接受可迭代对象（数组、Set、另一个垫片迭代器），也接受裸迭代器
+          inner = typeof src[Symbol.iterator] === 'function' ? src[Symbol.iterator]() : src;
+          if (!inner || typeof inner.next !== 'function') inner = null;
+        }
+      } });
+    });
+    defineHelper('reduce', function(fn, init){
+      var it = this, acc = init, seen = arguments.length > 1;
+      for (;;) {
+        var r = it.next();
+        if (r.done) {
+          if (!seen) throw new TypeError('Reduce of empty iterator with no initial value');
+          return acc;
+        }
+        if (!seen) { acc = r.value; seen = true; } else { acc = fn(acc, r.value); }
+      }
+    });
+    defineHelper('toArray', function(){
+      var out = [], r = this.next(); while (!r.done) { out.push(r.value); r = this.next(); } return out;
+    });
+    defineHelper('forEach', function(fn){
+      var r = this.next(); while (!r.done) { fn(r.value); r = this.next(); }
+    });
+    defineHelper('some', function(fn){
+      var r = this.next(); while (!r.done) { if (fn(r.value)) return true; r = this.next(); } return false;
+    });
+    defineHelper('every', function(fn){
+      var r = this.next(); while (!r.done) { if (!fn(r.value)) return false; r = this.next(); } return true;
+    });
+    defineHelper('find', function(fn){
+      var r = this.next(); while (!r.done) { if (fn(r.value)) return r.value; r = this.next(); }
+    });
+    defineHelper('join', function(sep){
+      var parts = [], r = this.next();
+      while (!r.done) { parts.push(String(r.value)); r = this.next(); }
+      return parts.join(sep === undefined ? ',' : sep);
+    });
+    var IteratorGlobal = { prototype: IteratorPrototype };
+    // Iterator.from(iterable | iterator)：数组、Set、字符串、生成器都吃得下
+    IteratorGlobal.from = function(source){
+      var it = source && typeof source[Symbol.iterator] === 'function'
+        ? source[Symbol.iterator]() : source;
+      if (!it || typeof it.next !== 'function') throw new TypeError('Iterator.from: not iterable');
+      return Object.assign(Object.create(IteratorPrototype), { __it: it });
+    };
+    // 标准里 @@iterator 指回构造器，前端做 instanceof / 鸭子判断时可能碰到
+    IteratorGlobal[Symbol.iterator] = function(){ return IteratorGlobal; };
+    try { globalThis.Iterator = IteratorGlobal; } catch (e) { window.Iterator = IteratorGlobal; }
+  }
+  // Promise.try(fn, …args)：同步异常也要变成 rejected promise（pdf.js 在用）
+  if (typeof Promise !== 'undefined' && typeof Promise.try !== 'function') {
+    Promise.try = function(fn){
+      var args = Array.prototype.slice.call(arguments, 1);
+      return new Promise(function(resolve){ resolve(fn.apply(undefined, args)); });
+    };
+  }
+  // Symbol.dispose / asyncDispose：缺了只会让属性键变成 undefined（不抛），
+  // 但显式定义更像真货，且某些库会做 'dispose' in Symbol 之类的判断
+  if (typeof Symbol === 'function') {
+    if (!Symbol.dispose) {
+      try { Object.defineProperty(Symbol, 'dispose', { value: Symbol('Symbol.dispose') }); } catch (e) {}
+    }
+    if (!Symbol.asyncDispose) {
+      try { Object.defineProperty(Symbol, 'asyncDispose', { value: Symbol('Symbol.asyncDispose') }); } catch (e) {}
+    }
+  }
+  // ArrayBuffer.prototype.transfer / transferToFixedLength：pdf.js 编译系统字体时用。
+  // 真实现会 detach 原 buffer；这里用 slice 复制近似 —— 调用点只取返回值，
+  // 代价是多一份内存，换来老内核上不炸（Chrome 114 起才有）。
+  if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.prototype) {
+    if (typeof ArrayBuffer.prototype.transfer !== 'function') {
+      ArrayBuffer.prototype.transfer = function(newLength){
+        var len = newLength === undefined ? this.byteLength : newLength;
+        var out = new ArrayBuffer(len);
+        new Uint8Array(out).set(new Uint8Array(this, 0, Math.min(len, this.byteLength)));
+        return out;
+      };
+    }
+    if (typeof ArrayBuffer.prototype.transferToFixedLength !== 'function') {
+      ArrayBuffer.prototype.transferToFixedLength = function(newLength){
+        var len = newLength === undefined ? this.byteLength : newLength;
+        var out = new ArrayBuffer(len);
+        new Uint8Array(out).set(new Uint8Array(this, 0, Math.min(len, this.byteLength)));
+        return out;
+      };
+    }
   }
   // crypto.randomUUID()：它**只在安全上下文提供**。http://127.0.0.1 算安全，
   // 但开了「局域网访问」后页面是 http://<手机IP>:<端口>，不算 —— 于是

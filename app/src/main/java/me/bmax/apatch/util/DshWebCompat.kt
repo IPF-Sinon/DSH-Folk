@@ -26,8 +26,8 @@ import me.bmax.apatch.dsh.DshEnv
  *
  * ## 三种状态
  *
- * - [MODE_AUTO]（默认）：**尚未决定**。这个状态下不注入 —— 内核够新时本来就不需要，
- *   内核旧时先弹一次说明（见 [shouldAsk]）让用户决定，用户的选择固化成 on/off。
+ * - [MODE_AUTO]（默认）：**按内核自动**。内核缺 API（[Kernel.needsShim]）时直接注入，
+ *   随后只说明一次（见 [shouldNotice]）；内核够新则什么都不做。
  * - [MODE_ON]：始终注入。
  * - [MODE_OFF]：从不注入。
  *
@@ -85,20 +85,35 @@ object DshWebCompat {
     /**
      * 这次打开 WebUI 要不要注入垫片。
      *
-     * 只有 [MODE_ON] 才注入。auto 是「还没问过」，此时不动页面 —— 该问的由
-     * [shouldAsk] 负责，用户同意后模式变成 on，再由调用方重新装一次并 reload。
+     * - [MODE_ON]：注入。
+     * - [MODE_AUTO]（默认）：**内核缺 API 就注入**（[Kernel.needsShim]）。
+     *   不再先问：缺 `Iterator` 这类全局时整页会变成 "Failed to load plugins"，
+     *   用户连设置都进不去，问了也没机会答（1.9.2 真机实测）。
+     * - [MODE_OFF]：从不注入 —— 这是用户的最终决定权，提示框里的「关闭兼容模式」
+     *   就是把它落成 off。
      */
-    fun shouldInject(ctx: Context): Boolean = mode(ctx) == MODE_ON
+    fun shouldInject(ctx: Context, kernel: Kernel = kernel(ctx)): Boolean =
+        when (mode(ctx)) {
+            MODE_ON -> true
+            MODE_OFF -> false
+            else -> kernel.needsShim
+        }
 
     /**
-     * 要不要弹那次说明对话框。
+     * 要不要弹那次**说明**（不是询问）对话框。
      *
-     * 条件：仍是 auto（没决定过）、且内核确实旧。内核够新时永远不问、也不注入。
-     * 用户点了任一按钮后模式落到 on/off，这里自然不再为真；
-     * 直接划掉对话框则什么都不存，下次打开再问。
+     * 只在「自动注入过、且还没说明过」时为真；说明一次就落盘
+     * （[DshEnv.KEY_WEBUI_COMPAT_NOTICED]），同一台设备不再打扰。
+     * 内核够新时不需要垫片，也就没有说明。
      */
-    fun shouldAsk(ctx: Context, kernel: Kernel = kernel(ctx)): Boolean =
-        mode(ctx) == MODE_AUTO && kernel.needsShim
+    fun shouldNotice(ctx: Context, kernel: Kernel = kernel(ctx)): Boolean =
+        shouldInject(ctx, kernel) &&
+            !prefs(ctx).getBoolean(DshEnv.KEY_WEBUI_COMPAT_NOTICED, false)
+
+    /** 记下「兼容模式说明已弹过」。 */
+    fun markNoticed(ctx: Context) {
+        prefs(ctx).edit().putBoolean(DshEnv.KEY_WEBUI_COMPAT_NOTICED, true).apply()
+    }
 
     private fun prefs(ctx: Context) =
         ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)

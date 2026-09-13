@@ -484,10 +484,14 @@
     <string name="dsh_docs_grant_revoked">Access revoked.</string>
 
     <!-- 旧 WebView 内核的 JS 兼容垫片 -->
-    <string name="dsh_webui_compat_title">This WebView is out of date</string>
-    <string name="dsh_webui_compat_body">Your system WebView is Chromium %1$s, which lacks JavaScript APIs the DSH web interface needs — opening a workspace fails with "AbortSignal.any is not a function".\n\nDSH-Folk can inject a small compatibility script into the local page before it loads. It only adds missing APIs and never changes anything else, and it applies only to http://127.0.0.1. Updating Android System WebView from your app store is the proper fix.</string>
-    <string name="dsh_webui_compat_enable">Inject</string>
-    <string name="dsh_webui_compat_skip">Not now</string>
+    <string name="dsh_webui_compat_ok">Got it</string>
+    <string name="dsh_webui_compat_disable">Turn compatibility mode off</string>
+    <string name="dsh_webui_compat_title">Outdated WebView (compatibility mode enabled)</string>
+    <string name="dsh_webui_compat_body">Your system WebView is Chromium %1$s, which lacks JavaScript APIs the DSH web interface needs (Iterator, for example). Without them the whole interface shows "Failed to load plugins" and never opens.
+
+DSH-Folk has already injected a small compatibility script before the local page loads. It only adds missing APIs and never changes anything else, and it applies only to http://127.0.0.1.
+
+Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_webui_compat_section">Old-WebView compatibility</string>
     <string name="dsh_webui_compat_section_summary">Add missing JavaScript APIs to the in-app web interface. Current WebView: %1$s</string>
     <string name="dsh_webui_compat_auto">Automatic</string>

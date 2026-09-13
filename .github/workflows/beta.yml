@@ -84,6 +84,7 @@ jobs:
           node tools/check-i18n.js
           node tools/check-refs.js
           node tools/check-native-logic.js
+          node tools/check-web-shim.js
 
       # 与 build.yml 的 release job 同一套校验：缺任何一项就硬失败。
       # 用 debug key 悄悄签出一个「测试版」的后果更隐蔽 —— 用户装不上，

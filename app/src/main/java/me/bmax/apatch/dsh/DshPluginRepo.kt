@@ -639,8 +639,19 @@ object DshPluginRepo {
     private fun dshRealPrefix(): String =
         "DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); "
 
-    /** [pluginEntries] / [disabledEntries] 共用的 JS 片段：从 dsh 入口解析出 yaml 库。 */
-    private val YAML_REQUIRE_JS = "let YAML=null;try{YAML=require('module').createRequire(process.argv[1])('yaml')}catch(e){}"
+    /**
+     * [pluginEntries] / [disabledEntries] 共用的 JS 片段：解析出 yaml 库。
+     *
+     * 三个锚点依次试：dsh 入口（最开始只有这一个）、profile 目录、以及容器里 node
+     * 自带的解析路径。**为什么要加**：只有一个锚点时，dsh 的依赖布局一变（0.1.5 的
+     * pnpm 布局把 yaml 挪进了嵌套 node_modules）就解析不到 —— 而调用方拿到的是
+     * `YAML=null` 后**每条 entry id 都为空**的静默结果，冲突检测整个失效。
+     * 真机症状就是「上游已内置的预装包怎么还在装」。
+     */
+    private val YAML_REQUIRE_JS = "let YAML=null;" +
+        "for(const a of [process.argv[1],require('path').join(process.argv[2]||'.','package.json'),null]){" +
+        "try{YAML=require('module').createRequire(a||process.cwd()+'/x.js')('yaml');break}catch(e){}" +
+        "}"
 
     /** 递归收集 cordis patch 里所有对象的 `id` 字段（含 group/嵌套，带环保护）。 */
     private val COLLECT_IDS_JS = "function collect(node,out,seen){" +
@@ -699,11 +710,17 @@ object DshPluginRepo {
             "const q=JSON.parse(fs.readFileSync(path.join(pkgDir,'package.json'),'utf8'));" +
             "const doc=loadPatch(pkgDir,q.dsh&&q.dsh.bundle&&q.dsh.bundle.patch);" +
             "if(doc){const s=new Set();collect(doc,s,new Set());ids=Array.from(s)}}catch(e){}" +
+            "if(!YAML)console.log('\\tNO_YAML');" +
             "console.log(n+'\\t'+ids.join(','))}"
         val out = DshRuntime.execRootfsForOutput(
             dshRealPrefix() + "node -e \"$script\" \"\$DSH_REAL\" " + PROFILE_DIR + " 2>/dev/null",
             60_000,
         )
+        // yaml 解析不了时每个包的 entry id 都会是空的 —— 那种「成功但没内容」的结果
+        // 正是冲突检测失效的原因，必须吼一声而不能静默。
+        if (out.contains("NO_YAML")) {
+            Log.w(TAG, "pluginEntries: yaml 解析器在容器里加载失败，entry id 一律为空")
+        }
         out.lines().mapNotNull { line ->
             val i = line.indexOf('\t')
             if (i < 0) return@mapNotNull null

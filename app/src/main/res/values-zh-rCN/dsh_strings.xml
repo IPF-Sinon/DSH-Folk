@@ -466,10 +466,14 @@
     <string name="dsh_docs_grant_revoked">已撤销授权。</string>
 
     <!-- 旧 WebView 内核的 JS 兼容垫片 -->
-    <string name="dsh_webui_compat_title">系统 WebView 版本过旧</string>
-    <string name="dsh_webui_compat_body">当前系统 WebView 内核是 Chromium %1$s，缺少 DSH 网页界面用到的 JavaScript 接口，打开工作区会报「AbortSignal.any is not a function」。\n\nDSH-Folk 可以在本机页面加载前注入一小段兼容脚本，只补缺失的接口、不改动其它行为，且仅对 http://127.0.0.1 生效。根治办法是在应用商店更新「Android System WebView」。</string>
-    <string name="dsh_webui_compat_enable">注入</string>
-    <string name="dsh_webui_compat_skip">暂不注入</string>
+    <string name="dsh_webui_compat_ok">知道了</string>
+    <string name="dsh_webui_compat_disable">关闭兼容模式</string>
+    <string name="dsh_webui_compat_title">系统 WebView 版本过旧（已自动启用兼容模式）</string>
+    <string name="dsh_webui_compat_body">当前系统 WebView 内核是 Chromium %1$s，缺少 DSH 网页界面用到的 JavaScript 接口（例如 Iterator）。不补的话整个界面会显示「Failed to load plugins」而完全打不开。
+
+DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补缺失的接口、不改动其它行为，且仅对 http://127.0.0.1 生效。
+
+根治办法是在应用商店更新「Android System WebView」。</string>
     <string name="dsh_webui_compat_section">旧 WebView 兼容</string>
     <string name="dsh_webui_compat_section_summary">给应用内网页界面补齐缺失的 JavaScript 接口。当前 WebView：%1$s</string>
     <string name="dsh_webui_compat_auto">自动</string>

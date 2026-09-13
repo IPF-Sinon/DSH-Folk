@@ -358,7 +358,10 @@ try {
 
 // 结构断言：这条自愈必须同时挂在「启动前」与「启动失败后」两条路径上
 const seedForPrune = SRC.rt.slice(SRC.rt.indexOf("private suspend fun seedPlugins"), SRC.rt.indexOf("private fun applySeedRepair"));
-ok(seedForPrune.includes("pruneUnresolvableBundles(SEED_PLUGINS.toSet())"), "启动前先清理声明残留（不让用户先看一轮「服务进程已退出」）");
+ok(seedForPrune.includes("pruneUnresolvableBundles(managedSeedPackages())"),
+  "启动前先清理声明残留（不让用户先看一轮「服务进程已退出」）");
+ok(/private fun managedSeedPackages\(\)[\s\S]{0,120}SEED_PLUGINS \+ RETIRED_SEED_PLUGINS\.keys/.test(SRC.rt),
+  "清理范围 = 在装的 + 退役的（退役包声明残留同样会让 dsh 拒绝启动）");
 const startBody = SRC.rt.slice(SRC.rt.indexOf("private suspend fun startAndAwait"), SRC.rt.indexOf("private suspend fun repairUnresolvableBundles"));
 ok(startBody.includes("repairUnresolvableBundles()"), "启动失败后也会尝试清理并重试一次");
 ok(/if \(repairDuplicateLoaderEntry\(\)\) repaired = true/.test(startBody) && /if \(repairUnresolvableBundles\(\)\) repaired = true/.test(startBody),

@@ -193,18 +193,38 @@ object DshEnv {
     /**
      * 旧内核 JS 兼容垫片：auto | on | off。
      *
-     * auto（默认）= 还没决定，此时不注入；只有在检测到 WebView 内核 ≤
-     * [DSH_COMPAT_MIN_CHROMIUM] 时弹一次说明，用户的选择固化成 on/off。
+     * auto（默认）= 按内核判断：内核旧（≤ [DSH_COMPAT_MIN_CHROMIUM]）**自动注入**，
+     * 只提示一次（见 [KEY_WEBUI_COMPAT_NOTICED]）；内核够新则什么都不做。
+     *
+     * 为什么不再先问：缺 API 时整个 WebUI 会变成 "Failed to load plugins"，
+     * 用户那时连页面都进不去，问也问不到。on/off 仍是用户的最终决定权 ——
+     * 提示框里的「关闭兼容模式」直接落成 off，之后永不注入。
      */
     const val KEY_WEBUI_COMPAT = "webui_compat_shim"
+
+    /** 自动注入兼容垫片的「已提示」标记：同一台设备只说明一次。 */
+    const val KEY_WEBUI_COMPAT_NOTICED = "webui_compat_noticed"
 
     /**
      * 需要垫片的 Chromium 主版本上界（含）。
      *
-     * 垫片补的是 `AbortSignal.any`（Chrome 116）、`Promise.withResolvers`（119）与
-     * 非安全上下文下缺失的 `crypto.randomUUID`。119 及以下都可能缺，120 起齐全。
+     * 取上界 = **垫片覆盖项里要求最高的那个版本**，低报会让该修的设备一条都不修
+     * （1.9.2 及以前是 119，而 dsh 前端实际用到 Chrome 122 的 `Iterator` 与
+     * 128 的 `Promise.try`，于是 Chromium 110 的设备整页报
+     * "Failed to load plugins … Iterator is not defined"）。
+     *
+     * | 覆盖项 | 需要 | 出现在 |
+     * |---|---|---|
+     * | `AbortSignal.any` | Chrome 116 | 带 signal 的 RPC |
+     * | `Promise.withResolvers` | Chrome 119 | cordis 定时器 |
+     * | `Iterator` | Chrome 122 | 侧栏文档预览插件（整页加载失败） |
+     * | `Promise.try` | Chrome 128 | pdf.js |
+     * | `ArrayBuffer.prototype.transferToFixedLength` | Chrome 114 | pdf.js 字体编译 |
+     *
+     * tools/check-web-shim.js 会对着这张表反向断言：表里每个 API 要么被垫片覆盖、
+     * 要么所需版本高于本值 —— 漏补 / 数值过期都会被门禁拦下。
      */
-    const val DSH_COMPAT_MIN_CHROMIUM = 119
+    const val DSH_COMPAT_MIN_CHROMIUM = 130
 
     /**
      * 首启预装插件是否已经跑过。

@@ -229,25 +229,36 @@ object DshRuntime {
      * 会补装增量（不会因为「已完成」标记而永远跳过）。
      */
     val SEED_PLUGINS =
-        listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager", "dsh-file-upload")
+        listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager")
 
     /**
-     * 预装包会往 loader 树里插入的 entry id（快速路径，用于「上游已内置同名能力就别装」）。
+     * **退役**的预装包 → 它当年会插入的 entry id。
      *
-     * 只列**确定**的映射；不在表里的包仍会装，装后由 [seedPlugins] 的重复 id 兜底检查
-     * 兜住 —— 那条路径按实际读到的 entry id 判断，不依赖这张表，所以表漏了也不会坏。
+     * 退役 = 上游已经自带同名能力，预装它不但多余，还会让整棵插件树报
+     * `duplicate loader entry id` 而根本起不来。dsh 0.1.5 起 `dsh-web-app` 自带
+     * `file-upload`（`@deepseek-ai/dsh-client-file-upload`，见其 cordis.patch.yml 的
+     * `- id: file-upload`），所以三方 `dsh-file-upload` 退役。
      *
-     * dsh 0.1.5 起 `dsh-web-app` 自带 `file-upload` loader entry：再预装三方
-     * `dsh-file-upload` 会让整棵插件树报 `duplicate loader entry id` 而启动失败
-     * （1.8.3 真机升级运行时后启动报错的根因，见上游 deepseek-harness#3263）。
+     * 用它做三件事，**全部不依赖运行时探测**：
+     * 1. [seedPlugins] 在启动前把已装的退役包卸掉；
+     * 2. 账本 / 补修 / 换运行时重试一律忽略退役包（它们已不在 [SEED_PLUGINS] 里）；
+     * 3. [repairDuplicateLoaderEntry] 的候选集合 —— 早先这里靠 `pluginEntries()` 读
+     *    实际 entry id 再反查包名，可那条路在 yaml 解析失败时会**静默返回空表**，
+     *    于是冲突检测整个失效、退役包被反复预装（真机复现）。
+     *
+     * 判定阈值：只有运行时的 dsh ≥ [RETIRE_MIN_DSH_VERSION] 才自动卸载 —— 老运行时
+     * 没有内置能力，卸掉会让用户失去文件上传；版本读不出来时也不动。
      *
      * 离线核对过：`@deepseek-ai/dsh-web-app@0.1.5-rc.1` 的 cordis.patch.yml 声明了 94 条
-     * entry id，与四个预装包声明的 `dsh-web-mobile` / `dsh-market` / `config-manager` /
+     * entry id，与预装包声明的 `dsh-web-mobile` / `dsh-market` / `config-manager` /
      * `file-upload` 相比**只撞这一条**。核对方式（不需要设备）：
      * `npm view @deepseek-ai/dsh-web-app@<版本> dist.tarball` 取包，读它 package.json 里
      * `dsh.bundle.patch` 指向的文件的 `- id:` 行，再和预装包的同类声明取交集。
      */
-    private val SEED_ENTRY_IDS = mapOf("dsh-file-upload" to "file-upload")
+    private val RETIRED_SEED_PLUGINS = mapOf("dsh-file-upload" to "file-upload")
+
+    /** 退役判定用的 dsh 版本下界：从这个版本起上游自带 `file-upload`。 */
+    private const val RETIRE_MIN_DSH_VERSION = "0.1.5"
 
     /** 启动日志里「profile 声明了 bundles 但包解析不到」的行（声明残留时出现）。 */
     private val PROFILE_BUNDLE_RE =
@@ -1346,8 +1357,9 @@ object DshRuntime {
         // profile 的 bundles 里留着「解析不到的包」会让 dsh 直接拒绝启动
         // （见 DshPluginRepo.pruneUnresolvableBundles 的说明）。启动前先清掉，
         // 别让用户先看一轮「服务进程已退出」再自动切回 proot。
-        val prunedStale = runCatching { DshPluginRepo.pruneUnresolvableBundles(SEED_PLUGINS.toSet()) }
-            .getOrElse { emptySet() }
+        val prunedStale = runCatching {
+            DshPluginRepo.pruneUnresolvableBundles(managedSeedPackages())
+        }.getOrElse { emptySet() }
         if (prunedStale.isNotEmpty()) {
             logInfo(R.string.dsh_log_bundle_pruned, joinForLog(prunedStale))
         }
@@ -1379,14 +1391,15 @@ object DshRuntime {
         // bundles 里」，于是被摘账重装，形成：跳过 → 重装 → 启动失败 → 自动卸载 →
         // 下次启动又重装 的死循环（1.9.0 真机实测）。所以这里单独一份 shadowed，
         // 并且三处都要认它：补修、换运行时重试、以及本轮要装哪些。
-        val entries = runCatching { DshPluginRepo.pluginEntries(includeCore = true) }
-            .getOrElse { emptyMap() }
-        val mappedShadowed = SEED_ENTRY_IDS.filter { (pkg, id) ->
-            entries.any { (owner, ids) -> owner != pkg && id in ids }
-        }.keys
+        // 退役包：上游已自带同名能力，一律不装；已装的在下面摘掉。
+        // 判据是**运行时版本**（dsh ≥ RETIRE_MIN_DSH_VERSION 才有那份内置能力），
+        // 不再去读上游的 entry id —— 那条路 yaml 解析失败时会静默返回空表，
+        // 于是「该退役的没退役」，用户看到预装包还在（真机复现）。
+        val runtimeNow = p.getString(DshEnv.KEY_RUNTIME_VERSION, "").orEmpty()
+        val retiredActive = runtimeSupportsRetiredSeed(runtimeNow)
+        val mappedShadowed = if (retiredActive) RETIRED_SEED_PLUGINS.keys.toSet() else emptySet()
         // 落盘的补充项：只由「启动失败 → 自动卸载」那条路径才能知道、映射表没覆盖的冲突。
         // 不落盘的话每次冷启动都会重装一次再失败一次。换运行时即作废（内置与否是运行时的属性）。
-        val runtimeNow = p.getString(DshEnv.KEY_RUNTIME_VERSION, "").orEmpty()
         val recordedShadowed = if (p.getString(DshEnv.KEY_SEED_SHADOWED_RUNTIME, null) == runtimeNow) {
             p.getString(DshEnv.KEY_SEED_SHADOWED, null)
                 ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
@@ -1401,9 +1414,11 @@ object DshRuntime {
 
         // 已经装着的冲突包**在启动之前**就摘掉：否则这次启动照样先以 duplicate entry id
         // 失败一次，再走「失败后自愈」重试 —— 用户白等一轮，日志里多一段 node 堆栈。
-        val shadowedInstalled = shadowed.filter { it in installed }
+        // 用 declared 而不是 installed：包已从 node_modules 消失、声明却还留着时，
+        // 也要走一次卸载把声明摘干净（dsh 解析不到那条声明就拒绝启动）。
+        val shadowedInstalled = shadowed.filter { it in installed || it in bundleState.declared }
         for (pkg in shadowedInstalled) {
-            logWarn(R.string.dsh_log_seed_shadow_uninstall, pkg, SEED_ENTRY_IDS[pkg] ?: pkg)
+            logWarn(R.string.dsh_log_seed_shadow_uninstall, pkg, RETIRED_SEED_PLUGINS[pkg] ?: pkg)
             runCatching {
                 DshPluginRepo.uninstall(pkg, onLine = { line -> appendLog(line) })
             }.onFailure { appendLog(it.message ?: it.javaClass.simpleName) }
@@ -1632,6 +1647,23 @@ object DshRuntime {
         awaitReady()
     }
 
+    /** 预装流程管得着的包：在装的 + 退役的（退役包也要能卸、能清声明）。 */
+    private fun managedSeedPackages(): Set<String> =
+        (SEED_PLUGINS + RETIRED_SEED_PLUGINS.keys).toSet()
+
+    /**
+     * 这个运行时是否已经自带退役包提供的能力。
+     *
+     * 运行时版本形如 `0.1.5-rc.1-ubuntunoble-r4`，前缀就是它捆绑的 dsh 版本。
+     * 解析不出来一律当「不支持」：宁可让退役包多留一会儿，也不要在老运行时上
+     * 把用户还能用的能力卸掉。
+     */
+    private fun runtimeSupportsRetiredSeed(runtimeVersion: String): Boolean {
+        val core = runtimeVersion.trim().removePrefix("v").substringBefore('-')
+        if (core.isEmpty() || core.substringBefore('.').toIntOrNull() == null) return false
+        return compareVersions(core, RETIRE_MIN_DSH_VERSION) >= 0
+    }
+
     /**
      * 尝试自愈「profile 声明了 bundles，但包已经不在」导致的服务起不来。
      *
@@ -1676,16 +1708,20 @@ object DshRuntime {
         val id = DUP_ENTRY_RE.find(tail)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
             ?: return false
         val entries = runCatching { DshPluginRepo.pluginEntries() }.getOrElse { emptyMap() }
+        val managed = managedSeedPackages()
         val culprits = entries.entries
             .filter { (_, ids) -> id in ids }
             .map { it.key }
-            .filter { it in SEED_PLUGINS }
+            .filter { it in managed }
+            // 探测不到 entry id 时的兜底：这条 id 属于某个退役包，就直接认它 ——
+            // 上游已内置该能力，卸掉退役包是唯一正确的处置。
+            .ifEmpty { RETIRED_SEED_PLUGINS.filter { (_, retiredId) -> retiredId == id }.keys.toList() }
         if (culprits.isEmpty()) return false
         for (pkg in culprits) {
             logWarn(R.string.dsh_log_dup_entry_repair, pkg, id)
             DshPluginRepo.uninstall(pkg, onLine = { line -> appendLog(line) })
         }
-        // 必须落盘：这张表（[SEED_ENTRY_IDS]）没覆盖的冲突只有这里才知道，不记下来的话
+        // 必须落盘：映射表（[RETIRED_SEED_PLUGINS]）没覆盖的冲突只有这里才知道，不记下来的话
         // 下次冷启动会把它们当「缺的预装包」重新装上，再失败一次 —— 也就是刚才那个循环。
         rememberShadowed(culprits)
         return true
