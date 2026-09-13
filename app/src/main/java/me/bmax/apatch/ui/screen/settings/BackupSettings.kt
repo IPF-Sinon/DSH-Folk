@@ -104,6 +104,10 @@ fun BackupSettingsContent(
     onCloudList: () -> Unit = {},
     onCloudRestore: (WebDavUtils.RemoteEntry) -> Unit = {},
     /** 插件保留的快照（恢复的最后依靠）。 */
+    /** 会话归组：是否在跑（要短暂停服务）。 */
+    groupBusy: Boolean = false,
+    groupMessage: String = "",
+    onTidySessions: () -> Unit = {},
     snapshots: List<DshConfigBackup.Snapshot> = emptyList(),
     snapshotBusy: Boolean = false,
     snapshotMessage: String = "",
@@ -254,6 +258,35 @@ fun BackupSettingsContent(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedButton(onClick = onTidySessions, enabled = !groupBusy && pluginReady != false) {
+                            Text(stringResource(R.string.dsh_bk_tidy_sessions))
+                        }
+                        if (groupBusy) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        }
+                    }
+                    Text(
+                        text = stringResource(R.string.dsh_bk_tidy_sessions_summary),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (groupMessage.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = groupMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                                .verticalScroll(rememberScrollState()),
+                        )
                     }
 
                     Spacer(Modifier.height(12.dp))

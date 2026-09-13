@@ -127,10 +127,36 @@ object DshSessionGroup {
         ctx: Context,
         relPaths: List<String>,
         maps: List<Pair<String, String>> = emptyList(),
-        onLine: (String) -> Unit = {},
+        onLine: suspend (String) -> Unit = {},
     ): Report = withContext(Dispatchers.IO) {
         if (relPaths.isEmpty()) return@withContext Report(ok = true, skipped = "no sessions restored")
+        run(ctx, relPaths, maps, onLine)
+    }
 
+    /**
+     * 把树上**所有**还没归属的会话归回工作区。
+     *
+     * 为什么要单独开一个入口：归组原先只发生在「导入会话」那一刻，而
+     * [DshConfigBackup.restoreSessionsFromZip] 遇到已存在的文件是**跳过**的。
+     * 于是旧版本导入过的那批会话（正是「全是未分组」的那批）再导入多少次都不会被
+     * 重新处理 —— 用户需要一个能主动整理的动作，而不是删掉文件重导。
+     *
+     * 注意这是全树扫描：用户故意留在「未分组」里的会话也会被按 cwd 归回它所属的工作区。
+     * 想看清单可以先不写盘（助手支持预览），这里直接执行并在结果里逐条列出。
+     */
+    suspend fun tidyAllSessions(
+        ctx: Context,
+        maps: List<Pair<String, String>> = emptyList(),
+        onLine: suspend (String) -> Unit = {},
+    ): Report = withContext(Dispatchers.IO) { run(ctx, null, maps, onLine) }
+
+    /** 跑一次助手；[relPaths] 为 null 表示扫全树。 */
+    private suspend fun run(
+        ctx: Context,
+        relPaths: List<String>?,
+        maps: List<Pair<String, String>>,
+        onLine: suspend (String) -> Unit,
+    ): Report = withContext(Dispatchers.IO) {
         val tmpDir = DshEnv.tmpDir(ctx).apply { mkdirs() }
         val script = File(tmpDir, ASSET)
         val listFile = File(tmpDir, "dsh-restored-sessions.txt")
@@ -138,7 +164,7 @@ object DshSessionGroup {
             val scriptText = ctx.assets.open(ASSET).bufferedReader().use { it.readText() }
             script.writeText(scriptText)
             // 容器内看到的是 /tmp/...（rootfs/tmp 就是容器的 /tmp）
-            listFile.writeText(relPaths.joinToString("\n") + "\n")
+            if (relPaths != null) listFile.writeText(relPaths.joinToString("\n") + "\n")
 
             val mapArgs = maps
                 .filter { it.first.isNotBlank() && it.second.isNotBlank() }
@@ -147,20 +173,25 @@ object DshSessionGroup {
                 append("node /tmp/").append(ASSET)
                 append(" --sessions-root ").append(shellQuoted(SESSIONS_ROOT))
                 append(" --registry ").append(shellQuoted(REGISTRY))
-                append(" --paths-file /tmp/").append(listFile.name)
+                // 不给 --paths-file 就是扫全树（助手侧据此决定处理范围）
+                if (relPaths != null) append(" --paths-file /tmp/").append(listFile.name)
                 append(mapArgs)
                 append(" --apply 2>&1")
             }
 
+            // execRootfsStreaming 的回调不是挂起上下文，所以先缓冲、拿到结果后再发出去。
+            // 助手本身是秒级的（不像 pnpm 装包要几分钟），这点延迟换的是回调签名干净。
+            val pending = mutableListOf<String>()
             var sawReport: Report? = null
             val raw = DshRuntime.execRootfsStreaming(cmd, 300_000L) { line ->
                 val trimmed = line.trim()
                 if (trimmed.startsWith(REPORT_PREFIX)) {
                     sawReport = parseReport(trimmed.removePrefix(REPORT_PREFIX))
                 } else if (trimmed.isNotEmpty()) {
-                    onLine(trimmed)
+                    pending += trimmed
                 }
             }
+            pending.forEach { onLine(it) }
             sawReport ?: parseReport(raw.substringAfter(REPORT_PREFIX, "").substringBefore('\n').trim())
                 ?: Report(failure = raw.take(300).ifBlank { ctx.appString(R.string.dsh_bk_group_no_output) })
         } catch (e: Exception) {

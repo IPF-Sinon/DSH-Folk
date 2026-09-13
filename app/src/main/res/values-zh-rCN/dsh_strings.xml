@@ -139,6 +139,8 @@
     <string name="dsh_adb_open_devsettings">打开开发者选项</string>
     <string name="dsh_output">输出</string>
 
+    <string name="dsh_bk_tidy_sessions">整理未分组会话</string>
+    <string name="dsh_bk_tidy_sessions_summary">把已经躺在会话目录里、但还没归入工作区的会话按路径放回去（会短暂停一下服务）。旧版本导入进来的那批会话就靠这个补归组 —— 重新导入不会重复处理已存在的文件。</string>
     <string name="dsh_bk_group_stage">正在把 %1$d 个会话归入工作区（需先停服务，稍候）…</string>
     <string name="dsh_bk_group_done">会话归组：%1$d/%2$d 条进入工作区</string>
     <string name="dsh_bk_group_rewritten">，其中 %1$d 条改写了会话里的路径记录</string>

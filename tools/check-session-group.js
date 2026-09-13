@@ -398,6 +398,28 @@ console.log("─ 8. App 侧接线（session 恢复后必须走停机 → 归组 
     "该原语内部先停后起（异常也必须恢复服务）",
   );
   ok(/restoreSessionsFromZip/.test(backup), "会话落盘函数仍在（归组在它之后）");
+
+  // 归组回调必须是 suspend：DshConfigBackup.import 的 onLine 是 suspend 的，
+  // 少写一个 suspend 就是一次编译失败（beta run 34764596409 就是这么挂的）
+  ok(
+    (group.match(/onLine: suspend \(String\) -> Unit/g) || []).length === 3,
+    "两个公开入口 + 私有 run 的 onLine 都是 suspend 回调",
+  );
+  ok(/pending \+= trimmed/.test(group), "助手输出先缓冲再发出（execRootfsStreaming 的回调不是挂起上下文）");
+
+  // 旧版本导入进来的会话：文件已存在 → 再导入会被跳过，必须有一个主动整理入口
+  const content = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettings.kt", "utf8");
+  const screen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettingsScreen.kt", "utf8");
+  ok(/DshSessionGroup\.tidyAllSessions/.test(screen), "界面调用 DshSessionGroup.tidyAllSessions（全树整理入口）");
+  ok(/relPaths: List<String>\?/.test(group) && /if \(relPaths != null\) append\(" --paths-file/.test(group),
+    "不给 --paths-file 即扫全树（助手侧据此决定范围）");
+  ok(/dsh_bk_tidy_sessions/.test(content) && /onTidySessions/.test(content), "备份页有「整理未分组会话」按钮");
+  ok(/onTidySessions = \{[\s\S]{0,1200}withServiceStopped/.test(screen), "整理动作在服务停止时执行");
+  ok(/DshSessionGroup\.tidyAllSessions\(context\)/.test(screen), "界面调的是 tidyAllSessions（全树）");
+
+  // 助手侧：没给 --paths-file 时必须扫全树
+  const helper = fs.readFileSync(HELPER, "utf8");
+  ok(/relPaths = \[\];[\s\S]{0,300}walk\(sessionsRoot/.test(helper), "助手在没有清单时扫全树");
 }
 
 fs.rmSync(root, { recursive: true, force: true });
