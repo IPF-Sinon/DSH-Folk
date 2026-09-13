@@ -539,6 +539,23 @@ object DshConfigBackup {
             if (r.failed > 0) {
                 sessionNote += "\n" + ctx.appString(R.string.dsh_bk_sessions_failed, r.failed)
             }
+            // 会话文件只是「放进去了」；dsh 的分组只在注册表首次 bootstrap 时做一次，
+            // 之后进来的会话一律显示「未分组」且 GUI 没有归组入口 —— 所以这里补上归组。
+            // 注册表以内存状态为准、启动才读盘，必须停着服务改。
+            if (r.paths.isNotEmpty()) {
+                onLine(ctx.appString(R.string.dsh_bk_group_stage, r.paths.size))
+                val report = runCatching {
+                    DshRuntime.withServiceStopped {
+                        DshSessionGroup.groupRestoredSessions(ctx, r.paths, onLine = onLine)
+                    }
+                }.getOrNull()
+                val group = report ?: DshSessionGroup.Report(
+                    failure = ctx.appString(R.string.dsh_bk_group_service_failed),
+                )
+                sessionNote += "\n" + group.summary(ctx)
+                val detail = group.details()
+                if (detail.isNotEmpty()) sessionNote += "\n" + detail
+            }
         }
 
         val head = buildString {
@@ -568,7 +585,18 @@ object DshConfigBackup {
     }
 
     /** [restoreSessionsFromZip] 的结果计数。 */
-    data class SessionRestore(val restored: Int, val skipped: Int, val failed: Int)
+    data class SessionRestore(
+        val restored: Int,
+        val skipped: Int,
+        val failed: Int,
+        /**
+         * 本次真正落盘的文件（相对 sessions 根）。
+         *
+         * 归组助手只处理「这次恢复进来的」会话，所以必须把清单传给它 —— 让它去扫全树的话，
+         * 用户本来就故意留在「未分组」里的会话也会被它动。
+         */
+        val paths: List<String> = emptyList(),
+    )
 
     /**
      * 把备份包里的会话记录直接写进 `~/.dsh/sessions`。
@@ -607,6 +635,7 @@ object DshConfigBackup {
             var restored = 0
             var skipped = 0
             var failed = 0
+            val written = mutableListOf<String>()
             runCatching {
                 java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
                     while (true) {
@@ -635,12 +664,17 @@ object DshConfigBackup {
                             dest.outputStream().use { out -> zis.copyTo(out) }
                             true
                         }.getOrDefault(false)
-                        if (wrote) restored++ else failed++
+                        if (wrote) {
+                            restored++
+                            written += rel
+                        } else {
+                            failed++
+                        }
                         zis.closeEntry()
                     }
                 }
             }.onFailure { failed++ }
-            SessionRestore(restored, skipped, failed)
+            SessionRestore(restored, skipped, failed, written)
         }
 
     /** 会话文件在导出 ZIP 内的目录前缀（插件 SECTION_FILE_PREFIXES.sessions）。 */

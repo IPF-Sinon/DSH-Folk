@@ -96,6 +96,7 @@ jobs:
           node tools/check-native-logic.js
           node tools/check-web-shim.js
           node tools/check-backup-logic.js
+          node tools/check-session-group.js
 
       # 与 build.yml 的 release job 同一套校验：缺任何一项就硬失败。
       # 用 debug key 悄悄签出一个「测试版」的后果更隐蔽 —— 用户装不上，

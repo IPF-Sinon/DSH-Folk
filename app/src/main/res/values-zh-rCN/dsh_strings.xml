@@ -139,6 +139,18 @@
     <string name="dsh_adb_open_devsettings">打开开发者选项</string>
     <string name="dsh_output">输出</string>
 
+    <string name="dsh_bk_group_stage">正在把 %1$d 个会话归入工作区（需先停服务，稍候）…</string>
+    <string name="dsh_bk_group_done">会话归组：%1$d/%2$d 条进入工作区</string>
+    <string name="dsh_bk_group_rewritten">，其中 %1$d 条改写了会话里的路径记录</string>
+    <string name="dsh_bk_group_inferred">，%1$d 条按目录名推断归属（请核对）</string>
+    <string name="dsh_bk_group_ungrouped">，%1$d 条没有对应的工作区</string>
+    <string name="dsh_bk_group_unreadable">，%1$d 个会话文件不可读</string>
+    <string name="dsh_bk_group_problems">，%1$d 项注册表校验未通过</string>
+    <string name="dsh_bk_group_rolled_back">；已回滚工作区注册表</string>
+    <string name="dsh_bk_group_skipped">会话归组已跳过：%1$s</string>
+    <string name="dsh_bk_group_failed">会话归组失败：%1$s</string>
+    <string name="dsh_bk_group_service_failed">服务启停失败，本次未做归组</string>
+    <string name="dsh_bk_group_no_output">归组助手没有输出</string>
     <string name="dsh_bk_step_uploading">正在上传备份：%1$s</string>
     <string name="dsh_bk_step_analyzing">正在分析备份内容…</string>
     <string name="dsh_bk_step_planning">正在生成计划（冲突处理：%1$s）…</string>

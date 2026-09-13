@@ -1833,6 +1833,27 @@ object DshRuntime {
         }
     }
 
+    /**
+     * 在**服务已停止**的状态下跑一段活，然后无论成败都把服务起回来。
+     *
+     * 为什么必须停：dsh 的工作区注册表（`~/.dsh/storages/workspace.json`）以**内存状态为准**，
+     * 只在启动时读盘、之后整份写回。运行中被外部改动的文件会被它下一次持久化覆盖掉，
+     * 所以「改注册表」这类事只能停着进程做 —— 否则改完看着成功，重启后一切照旧。
+     *
+     * 与 [restart] 同样走 bootMutex：两条路径并发会把容器搅成两份 dsh 在抢端口。
+     * [block] 抛异常也必须恢复服务：用户点的是一次「导入」，不该因为归组失败就得到
+     * 一个停着的服务。
+     */
+    suspend fun <T> withServiceStopped(block: suspend () -> T): T? = bootMutex.withLock {
+        stopServer()
+        try {
+            block()
+        } finally {
+            // 端口被占说明容器里已经有一份在跑：保持现状，别在别人的端口上再起一份
+            if (!checkPortConflict()) startAndAwait()
+        }
+    }
+
     /** 重新下载并安装运行时。 */
     fun reinstallRuntime(preserveData: Boolean = true) {
         scope.launch {
