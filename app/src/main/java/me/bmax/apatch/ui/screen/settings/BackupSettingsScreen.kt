@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -482,7 +483,8 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
             onCopy = { clipboard.setText(AnnotatedString(it)) },
             onRestart = {
                 runVisible = false
-                BackupLogManager.log("restart DSH after backup/restore")
+                // BackupLogManager.log 是 suspend，这里不是挂起上下文，得自己开一个
+                scope.launch { BackupLogManager.log("restart DSH after backup/restore") }
                 DshRuntime.restart()
             },
             needsRestart = runNeedsRestart,

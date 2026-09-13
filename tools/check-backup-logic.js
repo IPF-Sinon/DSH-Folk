@@ -56,7 +56,7 @@ ok(/ImportResult\(ok, head, detail, needsRestart\)/.test(backup),
   "构造时把插件的 needsRestart 透出来");
 ok(/restartNeeded = r\.ok && r\.needsRestart/.test(screen),
   "界面只在导入成功且插件要求时才提示重启");
-ok(/onRestart = \{[\s\S]{0,200}DshRuntime\.restart\(\)/.test(screen),
+ok(/onRestart = \{[\s\S]{0,300}DshRuntime\.restart\(\)/.test(screen),
   "进度对话框的「重启服务」真的调 DshRuntime.restart()");
 ok(/needsRestart = runNeedsRestart/.test(screen),
   "该对话框按 runNeedsRestart 决定是否给出重启按钮");

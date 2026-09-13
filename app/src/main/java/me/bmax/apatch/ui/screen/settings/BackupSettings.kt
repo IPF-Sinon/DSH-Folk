@@ -378,11 +378,13 @@ fun BackupSettingsContent(
                         )
                     }
                     Spacer(Modifier.height(12.dp))
+                    // canRun 提到 Column 作用域：下面的列表行也要用它（放在 Row 里就只有
+                    // 那一行可见，行外的按钮引用会编译不过）
+                    val canRun = !snapshotBusy && pluginReady != false
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val canRun = !snapshotBusy && pluginReady != false
                         OutlinedButton(onClick = onSnapshotList, enabled = canRun) {
                             Text(stringResource(R.string.dsh_bk_snapshot_list))
                         }
@@ -548,12 +550,13 @@ fun BackupSettingsContent(
                         )
                     }
                     Spacer(Modifier.height(12.dp))
+                    // 同快照区块：canRun 提到 Column 作用域，列表行里的「恢复」按钮也要用
+                    val hasUrl = BackupConfig.webdavUrl.isNotBlank()
+                    val canRun = !cloudBusy && hasUrl && pluginReady != false
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val hasUrl = BackupConfig.webdavUrl.isNotBlank()
-                        val canRun = !cloudBusy && hasUrl && pluginReady != false
                         OutlinedButton(onClick = onCloudList, enabled = canRun) {
                             Text(stringResource(R.string.dsh_bk_cloud_list))
                         }
