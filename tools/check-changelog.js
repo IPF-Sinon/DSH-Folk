@@ -118,13 +118,13 @@ if (baseName && clVersion) {
 // 两边脱钩会让测试版的 versionCode 落在正式版的错误一侧。
 if (baseName && baseCode) {
   const parts = baseName[1].split(".").map((x) => parseInt(x, 10));
-  // 四段式（补丁版，如 1.9.2.1）固定 = 前三位算出的号 + 1：1.8.2.1 → 10803、1.9.2.1 → 10903。
+  // 四段式（补丁版）= 前三位算出的号 + 第四段：1.8.2.1 → 10803、1.9.2.1 → 10903、1.9.2.2 → 10904。
   // 必须**大于**它修补的那个正式版，否则 App 内更新检查认不出、系统也可能拒绝覆盖
   // （相同号允许覆盖，但「比它大」才是我们想要的语义）。
   const expect = parts.length === 3
     ? parts[0] * 10000 + parts[1] * 100 + parts[2]
-    : parts.length === 4 && parts[3] === 1
-      ? parts[0] * 10000 + parts[1] * 100 + parts[2] + 1
+    : parts.length === 4
+      ? parts[0] * 10000 + parts[1] * 100 + parts[2] + parts[3]
       : null;
   ok(expect !== null && expect === Number(baseCode[1]),
     `baseVersionCode() 与版本名对应（${baseName[1]} → 期望 ${expect}，实际 ${baseCode[1]}）`);

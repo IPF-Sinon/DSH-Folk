@@ -40,6 +40,12 @@ import org.json.JSONObject
 object DshConfigBackup {
     private const val BASE = "/api/dsh-config-manager"
 
+    /** 导入冲突策略（与插件 /plan 的 decisions.strategy 取值一致）。 */
+    const val STRATEGY_MERGE = "merge"
+    const val STRATEGY_REPLACE = "replace"
+    const val STRATEGY_SKIP_EXISTING = "skipExisting"
+
+
     /**
      * 默认导出的分区。
      *
@@ -149,7 +155,7 @@ object DshConfigBackup {
             return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_download_failed))
         }
         // 复制进公共目录；返回给用户看的位置。失败退回应用专属目录（仍可导出，只是不好找）
-        val location = copyToPublic(ctx, tmp, name)
+        val (location, publicOk) = copyToPublic(ctx, tmp, name)
 
         // report / manifest 里有真正落盘的分区与加密状态，比我们请求的 only 更权威
         val report = o.optJSONObject("report")
@@ -161,6 +167,7 @@ object DshConfigBackup {
         val containsSecrets = security?.optBoolean("containsSecrets", false) ?: false
         val warnings = report?.optJSONArray("warnings")
         val warnText = buildString {
+            if (!publicOk) append("\n! ").append(ctx.appString(R.string.dsh_bk_copy_failed))
             if (containsSecrets) append("\n! ").append(ctx.appString(R.string.dsh_bk_contains_secrets))
             if (warnings != null) {
                 for (i in 0 until warnings.length()) {
@@ -196,7 +203,7 @@ object DshConfigBackup {
      * Download/DSH-Folk，文件会出现在系统文件管理器的「下载」里。写不进才退回
      * [backupDir]（SDK<30 或有「所有文件」权限时是真公共目录，否则是应用专属目录）。
      */
-    private fun copyToPublic(ctx: Context, src: File, name: String): String {
+    private fun copyToPublic(ctx: Context, src: File, name: String): Pair<String, Boolean> {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, name)
@@ -226,13 +233,18 @@ object DshConfigBackup {
                     runCatching { ctx.contentResolver.delete(uri, null, null) }
                     false
                 }
-                if (written) return "${Environment.DIRECTORY_DOWNLOADS}/$PUBLIC_SUBDIR/$name"
+                if (written) return "${Environment.DIRECTORY_DOWNLOADS}/$PUBLIC_SUBDIR/$name" to true
             }
         }
         // 兜底：公共目录直接可写（SDK<29 有 WRITE_EXTERNAL_STORAGE），或退回应用专属目录
         val dir = backupDir(ctx)
         if (dir.exists() || dir.mkdirs()) {
-            runCatching { src.copyTo(File(dir, name), overwrite = true) }
+            // 复制失败时**不能**照样把路径报给用户：他拿着一个不存在的路径去文件管理器里找，
+            // 只会以为备份丢了。所以这里校验「存在 + 大小一致」，不一致就说实话退回暂存文件。
+            val target = File(dir, name)
+            val copied = runCatching { src.copyTo(target, overwrite = true) }.isSuccess &&
+                target.exists() && target.length() == src.length()
+            if (!copied) return src.absolutePath to false
             // SDK<29 需要主动触发媒体扫描，文件管理器才看得到新文件
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 runCatching {
@@ -241,10 +253,10 @@ object DshConfigBackup {
                     )
                 }
             }
-            return File(dir, name).absolutePath
+            return target.absolutePath to true
         }
         // 连兜底目录都建不出来：就留在暂存目录，位置照实说
-        return src.absolutePath
+        return src.absolutePath to false
     }
 
     /**
@@ -318,7 +330,18 @@ object DshConfigBackup {
         }
     }
 
-    data class ImportResult(val ok: Boolean, val message: String, val detail: String = "")
+    data class ImportResult(
+        val ok: Boolean,
+        val message: String,
+        val detail: String = "",
+        /**
+         * 插件说「重启 DSH 才生效」（装/卸了插件、改了 MCP 等）。
+         *
+         * 以前它只被拼进一句文案里，界面上没人据此做事 —— 用户看到「需要重启」却不知道
+         * 按钮在哪，回头就以为恢复没生效。现在由它驱动一个真正的「立即重启服务」。
+         */
+        val needsRestart: Boolean = false,
+    )
 
     /**
      * 插件 ImportResult 的字段名（src/core/types.ts ImportResult）：
@@ -343,7 +366,14 @@ object DshConfigBackup {
         strategy: String = "merge",
         password: String = "",
         includeSessions: Boolean = false,
+        /**
+         * 阶段进度（上传/分析/计划/执行/会话）：界面用它显示「在动」，而不是只转圈。
+         *
+         * 是 suspend 回调，因为界面要在里面切回主线程改 Compose 状态。
+         */
+        onLine: suspend (String) -> Unit = {},
     ): ImportResult = withContext(Dispatchers.IO) {
+        onLine(ctx.appString(R.string.dsh_bk_step_uploading, zip.name))
         val up = upload(zip) ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_failed))
         val upObj = runCatching { JSONObject(up) }.getOrNull()
             ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_bad_json))
@@ -368,6 +398,7 @@ object DshConfigBackup {
             zipPath = newPath
         }
 
+        onLine(ctx.appString(R.string.dsh_bk_step_analyzing))
         val analyze = request("POST", "/analyze", JSONObject().put("zipPath", zipPath).toString())
             ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_analyze_failed))
         val analyzeObj = runCatching { JSONObject(analyze) }.getOrNull()
@@ -396,6 +427,7 @@ object DshConfigBackup {
             put("resolutions", JSONObject())
             put("pathMappings", JSONArray())
         }
+        onLine(ctx.appString(R.string.dsh_bk_step_planning, strategy))
         val plan = request(
             "POST", "/plan",
             JSONObject().put("zipPath", zipPath).put("decisions", decisions).toString(),
@@ -410,6 +442,7 @@ object DshConfigBackup {
             put("rollbackOnError", true)
             if (password.isNotEmpty()) put("decryptPassword", password)
         }
+        onLine(ctx.appString(R.string.dsh_bk_step_executing))
         val exec = request(
             "POST", "/execute",
             JSONObject().put("zipPath", zipPath).put("plan", planObj).put("opts", opts).toString(),
@@ -495,6 +528,7 @@ object DshConfigBackup {
         // 一堆没有对应配置的孤立会话。回滚发生时干脆不写。
         var sessionNote = ""
         if (includeSessions && rollback == null) {
+            onLine(ctx.appString(R.string.dsh_bk_step_sessions))
             val r = restoreSessionsFromZip(ctx, zip)
             sessionNote = when {
                 r.restored > 0 -> ctx.appString(R.string.dsh_bk_sessions_restored, r.restored, r.skipped) +
@@ -530,7 +564,7 @@ object DshConfigBackup {
         }
         val detail = if (sessionNote.isEmpty()) notes.toString()
         else notes.toString() + "↺ " + sessionNote
-        ImportResult(ok, head, detail)
+        ImportResult(ok, head, detail, needsRestart)
     }
 
     /** [restoreSessionsFromZip] 的结果计数。 */
@@ -637,6 +671,143 @@ object DshConfigBackup {
         f.outputStream().use { input.copyTo(it) }
         f
     }.getOrNull()
+
+    // ───────────────────────────── 快照 ─────────────────────────────
+
+    /** 插件快照目录里的一个快照（GET /snapshots 的 snapshots[] 元素）。 */
+    data class Snapshot(
+        val id: String,
+        /** 创建时间（毫秒）；插件没给或解析不了时为 0，只影响排序显示。 */
+        val createdAtMs: Long = 0L,
+        val note: String = "",
+        val sizeBytes: Long = 0L,
+    )
+
+    /**
+     * 列出插件保留的快照。
+     *
+     * 快照目录永不被自动清理（插件源码注释明写「它是恢复的最后依靠」），所以这张表就是
+     * 用户真正能回退到的历史状态 —— 而在此之前，它只能去插件的网页界面里看。
+     */
+    suspend fun listSnapshots(): List<Snapshot> = withContext(Dispatchers.IO) {
+        val raw = request("GET", "/snapshots", null, timeoutMs = 60_000) ?: return@withContext emptyList()
+        val arr = runCatching { JSONObject(raw).optJSONArray("snapshots") }.getOrNull()
+            ?: return@withContext emptyList()
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val id = o.optString("id").ifEmpty { return@mapNotNull null }
+            Snapshot(
+                id = id,
+                // 插件侧 createdAt 是 ISO 字符串；也认可能出现的 createdAtMs 数字
+                createdAtMs = o.optLong("createdAtMs", 0L).takeIf { it > 0 }
+                    ?: parseIsoMillis(o.optString("createdAt")),
+                note = o.optString("note"),
+                sizeBytes = o.optLong("sizeBytes", 0L),
+            )
+        }
+    }
+
+    /** 解析 ISO-8601 时间戳；解析不了返回 0（只影响显示排序，不影响功能）。 */
+    private fun parseIsoMillis(text: String): Long {
+        if (text.isBlank()) return 0L
+        return runCatching { java.time.Instant.parse(text).toEpochMilli() }.getOrElse {
+            runCatching { java.time.OffsetDateTime.parse(text).toInstant().toEpochMilli() }
+                .getOrDefault(0L)
+        }
+    }
+
+    data class RestorePreview(
+        val ok: Boolean,
+        /** 计划里的动作数。 */
+        val actions: Int = 0,
+        /** 插件 plan 里的摘要（没有就由界面自己拼计数）。 */
+        val summary: String = "",
+        val message: String = "",
+    )
+
+    /**
+     * 预览恢复到某个快照会做什么（POST /restore，dryRun=true）。
+     *
+     * **零写入**：插件只返回动作计划。恢复会覆盖设置文件、并卸载快照里没有的插件
+     * （报告的 removedPlugins），所以必须在动手前把计划摆给用户看，而不是事后惊讶。
+     */
+    suspend fun previewSnapshot(snapshotId: String): RestorePreview = withContext(Dispatchers.IO) {
+        val raw = request(
+            "POST", "/restore",
+            JSONObject().put("snapshotId", snapshotId).put("dryRun", true).toString(),
+            timeoutMs = 120_000,
+        ) ?: return@withContext RestorePreview(false, message = "no response")
+        val o = runCatching { JSONObject(raw) }.getOrNull()
+            ?: return@withContext RestorePreview(false, message = raw.take(200))
+        val err = o.optString("error")
+        if (err.isNotEmpty()) return@withContext RestorePreview(false, message = err)
+        val plan = o.optJSONObject("plan")
+        val actions = plan?.optJSONArray("actions")?.length()
+            ?: plan?.optJSONArray("steps")?.length() ?: 0
+        RestorePreview(true, actions, plan?.optString("summary").orEmpty())
+    }
+
+    data class RestoreResult(val ok: Boolean, val message: String, val detail: String = "")
+
+    /**
+     * 恢复到一个快照（POST /restore，dryRun=false）。
+     *
+     * 插件侧语义（已核对源码）：恢复前把当前文件复制到 <snapshot>/pre-restore/ 作双保险；
+     * 报告是诚实的 restored / removedPlugins / manualHints / failed / skipped；同一时刻只允许
+     * 一个 restore 在跑（冲突返回 409），这里把 409 转成一句能看懂的话。
+     */
+    suspend fun restoreSnapshot(ctx: Context, snapshotId: String): RestoreResult =
+        withContext(Dispatchers.IO) {
+            val raw = request(
+                "POST", "/restore",
+                JSONObject().put("snapshotId", snapshotId).put("dryRun", false).toString(),
+                timeoutMs = 600_000,
+            ) ?: return@withContext RestoreResult(false, ctx.appString(R.string.dsh_bk_snapshot_failed))
+            val o = runCatching { JSONObject(raw) }.getOrNull()
+                ?: return@withContext RestoreResult(
+                    false, ctx.appString(R.string.dsh_bk_bad_json), raw.take(200),
+                )
+            val err = o.optString("error")
+            if (err.isNotEmpty()) {
+                val busy = err.contains("conflict", ignoreCase = true) ||
+                    err.contains("running", ignoreCase = true)
+                return@withContext RestoreResult(
+                    false,
+                    if (busy) ctx.appString(R.string.dsh_bk_snapshot_busy) else err,
+                )
+            }
+            val restored = o.optJSONArray("restored")?.length() ?: 0
+            val removed = o.optJSONArray("removedPlugins") ?: JSONArray()
+            val failed = o.optJSONArray("failed") ?: JSONArray()
+            val skipped = o.optJSONArray("skipped")?.length() ?: 0
+            val hints = o.optJSONArray("manualHints") ?: JSONArray()
+            val notes = StringBuilder()
+            for (i in 0 until removed.length()) {
+                val v = removed.optString(i)
+                if (v.isNotEmpty()) notes.append("− ").append(v).append('\n')
+            }
+            for (i in 0 until failed.length()) {
+                val item = failed.optJSONObject(i) ?: continue
+                notes.append("✗ ").append(item.optString("item").ifEmpty { item.optString("path") })
+                item.optString("reason").takeIf { it.isNotEmpty() }?.let { notes.append("：").append(it) }
+                notes.append('\n')
+            }
+            for (i in 0 until hints.length()) {
+                val v = hints.optString(i)
+                if (v.isNotEmpty()) notes.append("→ ").append(v).append('\n')
+            }
+            val head = buildString {
+                append(ctx.appString(R.string.dsh_bk_snapshot_done, restored, snapshotId))
+                if (removed.length() > 0) {
+                    append(ctx.appString(R.string.dsh_bk_snapshot_removed, removed.length()))
+                }
+                if (failed.length() > 0) {
+                    append(ctx.appString(R.string.dsh_bk_items_failed, failed.length()))
+                }
+                if (skipped > 0) append(ctx.appString(R.string.dsh_bk_items_skipped, skipped))
+            }
+            RestoreResult(failed.length() == 0, head, notes.toString())
+        }
 
     // ───────────────────────────── HTTP ─────────────────────────────
 

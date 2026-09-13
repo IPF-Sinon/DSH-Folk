@@ -139,12 +139,51 @@
     <string name="dsh_adb_open_devsettings">打开开发者选项</string>
     <string name="dsh_output">输出</string>
 
+    <string name="dsh_bk_step_uploading">正在上传备份：%1$s</string>
+    <string name="dsh_bk_step_analyzing">正在分析备份内容…</string>
+    <string name="dsh_bk_step_planning">正在生成计划（冲突处理：%1$s）…</string>
+    <string name="dsh_bk_step_executing">正在写入配置（可能要重装插件，需要几分钟）…</string>
+    <string name="dsh_bk_step_sessions">正在补写会话记录…</string>
+    <string name="dsh_bk_strategy_title">冲突怎么处理</string>
+    <string name="dsh_bk_strategy_merge">合并（保留本机值）</string>
+    <string name="dsh_bk_strategy_merge_desc">本机已有、备份里也有的项保持本机值，只补缺的。最保守。</string>
+    <string name="dsh_bk_strategy_replace">覆盖（用备份的值）</string>
+    <string name="dsh_bk_strategy_replace_desc">同名项一律用备份里的值替换 —— 想「回到备份当时的状态」选这个。</string>
+    <string name="dsh_bk_strategy_skip">跳过已有</string>
+    <string name="dsh_bk_strategy_skip_desc">只导入本机没有的项，已有的一概不动。</string>
+    <string name="dsh_bk_cloud_restore_title">从云端恢复</string>
+    <string name="dsh_bk_cloud_restore_desc">列出 WebDAV 上的备份并直接恢复。以前只能上传，取回要自己把文件下载下来。</string>
+    <string name="dsh_bk_cloud_list">列出云端备份</string>
+    <string name="dsh_bk_cloud_listing">正在读取云端目录…</string>
+    <string name="dsh_bk_cloud_empty">云端目录里没有找到 .zip 备份。</string>
+    <string name="dsh_bk_cloud_no_url">先在上面配置 WebDAV 地址。</string>
+    <string name="dsh_bk_cloud_unsupported">该服务不支持列目录（HTTP %1$s），请手动下载后再用上面的「导入备份」。</string>
+    <string name="dsh_bk_cloud_downloading">正在下载 %1$s…</string>
+    <string name="dsh_bk_cloud_download_failed">下载失败：%1$s</string>
+    <string name="dsh_bk_cloud_pick">选择要恢复的云端备份</string>
+    <string name="dsh_bk_snapshot_title">恢复到快照</string>
+    <string name="dsh_bk_snapshot_desc">回到某次导入前自动留下的快照。先预览（不写入任何东西），确认后才执行。</string>
+    <string name="dsh_bk_snapshot_list">列出快照</string>
+    <string name="dsh_bk_snapshot_empty">还没有快照（导入配置时会自动创建）。</string>
+    <string name="dsh_bk_snapshot_time_unknown">时间未知</string>
+    <string name="dsh_bk_snapshot_confirm_title">确认恢复到这个快照？</string>
+    <string name="dsh_bk_snapshot_confirm_body">快照：%1$s
+计划动作：%2$d 项
+
+会覆盖设置文件，并卸载快照里没有的插件（结果里会列出）。执行前插件会先把当前文件复制到 pre-restore 作为双保险。</string>
+    <string name="dsh_bk_snapshot_restore_now">恢复</string>
+    <string name="dsh_bk_snapshot_done">已从快照恢复 %1$d 项（%2$s）</string>
+    <string name="dsh_bk_snapshot_removed">，卸载插件 %1$d 个</string>
+    <string name="dsh_bk_snapshot_failed">恢复快照的请求失败</string>
+    <string name="dsh_bk_snapshot_busy">已有一次恢复在执行中，稍后再试。</string>
+    <string name="dsh_bk_snapshot_preview_failed">预览失败：%1$s</string>
+    <string name="dsh_bk_copy_failed">（未能写入下载目录，文件在应用专属目录）</string>
     <string name="dsh_backup_section">DSH 配置备份</string>
     <string name="dsh_backup_summary">与 dsh-config-manager 插件同一套导出格式，手机导出的备份能直接在电脑上导入，反之亦然。</string>
     <string name="dsh_backup_export">导出配置</string>
-    <string name="dsh_backup_export_summary">包含设置、模型提供者、插件清单、MCP 服务器、技能与工作区；凭据不导出。</string>
+    <string name="dsh_backup_export_summary">包含设置、模型提供者、插件清单、MCP 服务器、技能与工作区；凭据不导出；也不含应用自身设置（权限、兼容模式、开机自启等）与运行时。</string>
     <string name="dsh_backup_import">导入备份</string>
-    <string name="dsh_backup_import_summary">选择导出的 .zip；冲突按保守策略合并，执行前先建回滚快照。</string>
+    <string name="dsh_backup_import_summary">选择导出的 .zip；冲突可选用合并/覆盖/跳过，执行前先建回滚快照，失败会自动回滚；恢复插件需要联网重装。</string>
     <string name="dsh_backup_open_dir">打开备份目录</string>
     <string name="dsh_backup_password">备份密码（可选）</string>
     <string name="dsh_backup_password_summary">填写后整包用 AES-256-GCM 加密，导入时需要同一密码。</string>

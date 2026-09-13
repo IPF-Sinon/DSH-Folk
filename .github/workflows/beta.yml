@@ -56,15 +56,25 @@ jobs:
         id: v
         run: |
           TARGET="${{ inputs.target_version }}"
-          if ! printf '%s' "$TARGET" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::target_version must look like 1.8.1, got '$TARGET'"
+          # 允许四段式补丁版（1.9.2.2）。正式版的号已经从 10903 走到 109031/109032，
+          # 三段的 beta（最高 10999）永远压不过它，装了正式版的用户会撞
+          # INSTALL_FAILED_VERSION_DOWNGRADE —— 测试版通道等于失效。
+          if ! printf '%s' "$TARGET" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+            echo "::error::target_version must look like 1.8.1 or 1.9.2.2, got '$TARGET'"
             exit 1
           fi
           MAJOR=${TARGET%%.*}
           REST=${TARGET#*.}
           MINOR=${REST%%.*}
-          PATCH=${REST#*.}
+          REST2=${REST#*.}
+          PATCH=${REST2%%.*}
+          REV=''
+          case "$REST2" in *.*) REV=${REST2#*.} ;; esac
           CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          # 四段式：第四段是加在基准号上的增量（1.9.2.2 → 10904），与 build.gradle.kts 的
+          # baseVersionCode()、tools/check-changelog.js 是同一条规则 —— 三处脱钩会让测试版的
+          # versionCode 落在正式版的错误一侧。最终 APK 号是 CODE*10+ABI 偏移（app/build.gradle.kts）。
+          if [ -n "$REV" ]; then CODE=$((CODE + REV)); fi
           NAME="${TARGET}-beta.${GITHUB_RUN_NUMBER}"
           echo "name=$NAME"   >> "$GITHUB_OUTPUT"
           echo "code=$CODE"   >> "$GITHUB_OUTPUT"
@@ -85,6 +95,7 @@ jobs:
           node tools/check-refs.js
           node tools/check-native-logic.js
           node tools/check-web-shim.js
+          node tools/check-backup-logic.js
 
       # 与 build.yml 的 release job 同一套校验：缺任何一项就硬失败。
       # 用 debug key 悄悄签出一个「测试版」的后果更隐蔽 —— 用户装不上，

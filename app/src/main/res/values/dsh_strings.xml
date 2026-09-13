@@ -157,12 +157,51 @@
     <string name="dsh_output">Output</string>
 
     <!-- 备份：对齐 dsh-config-manager 导出格式 -->
+    <string name="dsh_bk_step_uploading">Uploading %1$s</string>
+    <string name="dsh_bk_step_analyzing">Analyzing the archive…</string>
+    <string name="dsh_bk_step_planning">Building the plan (conflict handling: %1$s)…</string>
+    <string name="dsh_bk_step_executing">Writing configuration (plugins may be reinstalled; this can take minutes)…</string>
+    <string name="dsh_bk_step_sessions">Writing session records…</string>
+    <string name="dsh_bk_strategy_title">How to resolve conflicts</string>
+    <string name="dsh_bk_strategy_merge">Merge (keep this device)</string>
+    <string name="dsh_bk_strategy_merge_desc">Items present both here and in the backup keep this device\'s value; only missing ones are added. Most conservative.</string>
+    <string name="dsh_bk_strategy_replace">Replace (use the backup)</string>
+    <string name="dsh_bk_strategy_replace_desc">Every matching item takes the backup\'s value — pick this to get back to the state the backup captured.</string>
+    <string name="dsh_bk_strategy_skip">Skip existing</string>
+    <string name="dsh_bk_strategy_skip_desc">Import only what this device lacks; touch nothing that already exists.</string>
+    <string name="dsh_bk_cloud_restore_title">Restore from the cloud</string>
+    <string name="dsh_bk_cloud_restore_desc">List the backups on WebDAV and restore one directly. Previously this was upload-only, so getting a backup back meant downloading it by hand.</string>
+    <string name="dsh_bk_cloud_list">List cloud backups</string>
+    <string name="dsh_bk_cloud_listing">Reading the remote directory…</string>
+    <string name="dsh_bk_cloud_empty">No .zip backups found in the remote directory.</string>
+    <string name="dsh_bk_cloud_no_url">Configure the WebDAV address above first.</string>
+    <string name="dsh_bk_cloud_unsupported">This server cannot list directories (HTTP %1$s); download the file yourself and use Import above.</string>
+    <string name="dsh_bk_cloud_downloading">Downloading %1$s…</string>
+    <string name="dsh_bk_cloud_download_failed">Download failed: %1$s</string>
+    <string name="dsh_bk_cloud_pick">Pick a cloud backup to restore</string>
+    <string name="dsh_bk_snapshot_title">Restore to a snapshot</string>
+    <string name="dsh_bk_snapshot_desc">Go back to a snapshot that was taken automatically before an import. Preview first (writes nothing), then confirm.</string>
+    <string name="dsh_bk_snapshot_list">List snapshots</string>
+    <string name="dsh_bk_snapshot_empty">No snapshots yet (one is created automatically when you import).</string>
+    <string name="dsh_bk_snapshot_time_unknown">time unknown</string>
+    <string name="dsh_bk_snapshot_confirm_title">Restore to this snapshot?</string>
+    <string name="dsh_bk_snapshot_confirm_body">Snapshot: %1$s
+Planned actions: %2$d
+
+This overwrites settings files and uninstalls plugins the snapshot does not contain (the result lists them). Before touching anything the plugin copies the current files to pre-restore as a double safeguard.</string>
+    <string name="dsh_bk_snapshot_restore_now">Restore</string>
+    <string name="dsh_bk_snapshot_done">Restored %1$d items from snapshot %2$s</string>
+    <string name="dsh_bk_snapshot_removed">, uninstalled %1$d plugins</string>
+    <string name="dsh_bk_snapshot_failed">The snapshot restore request failed</string>
+    <string name="dsh_bk_snapshot_busy">Another restore is already running; try again shortly.</string>
+    <string name="dsh_bk_snapshot_preview_failed">Preview failed: %1$s</string>
+    <string name="dsh_bk_copy_failed"> (could not be written to Downloads; it is in the app-specific directory)</string>
     <string name="dsh_backup_section">DSH configuration backup</string>
     <string name="dsh_backup_summary">Uses the same export format as the dsh-config-manager plugin, so a backup made here imports on desktop and vice versa.</string>
     <string name="dsh_backup_export">Export configuration</string>
-    <string name="dsh_backup_export_summary">Settings, providers, plugin list, MCP servers, skills and workspaces. Credentials are never exported.</string>
+    <string name="dsh_backup_export_summary">Settings, model providers, plugin inventory, MCP servers, skills and workspaces; credentials are never exported, and neither are the app\'s own settings (permissions, compatibility mode, autostart) or the runtime.</string>
     <string name="dsh_backup_import">Import a backup</string>
-    <string name="dsh_backup_import_summary">Pick an exported .zip; conflicts are merged conservatively and a rollback snapshot is taken first.</string>
+    <string name="dsh_backup_import_summary">Pick an exported .zip; conflicts can be merged, replaced or skipped, a rollback snapshot is taken first and a failure rolls back automatically; restoring plugins needs network access.</string>
     <string name="dsh_backup_open_dir">Open backup folder</string>
     <string name="dsh_backup_password">Backup password (optional)</string>
     <string name="dsh_backup_password_summary">When set, the whole archive is encrypted with AES-256-GCM. The same password is required to import it.</string>

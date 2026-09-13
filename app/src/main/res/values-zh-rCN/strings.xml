@@ -314,9 +314,9 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>修复旧 WebView 打开工作区整页报错：系统 WebView 内核较旧（你这台是 Chromium 110）时会显示「Failed to load plugins — Iterator is not defined」，界面完全打不开。兼容垫片现在补齐了 Iterator、Promise.try、ArrayBuffer.transfer 等新接口（只补缺失的，仅对 http://127.0.0.1 生效），内核旧时自动启用，并说明一次 —— 你可以随时在提示里关闭它。</item>
-        <item>页面里的 JavaScript 报错现在会写进应用日志：以前页面自己画一个错误页，日志与 bugreport 里一个字都没有，只能靠截图排查。</item>
-        <item>彻底去掉 dsh-file-upload 的预装：上游 dsh 0.1.5 已自带 file-upload，三方那份既冗余，又会让整棵插件树报 duplicate loader entry id 而启动失败。以后不再预装，存量设备在 dsh ≥ 0.1.5 的运行时上会自动卸载并清掉残留的 profile 声明（老运行时上保留，不动你还用得上的能力）。</item>
+        <item>恢复完能真正生效了：需要重启的导入（装了/卸了插件、改了 MCP）以前只弹一句「需要重启」，界面上没有任何地方能做这件事，用户多半以为恢复没成功。现在导入与恢复结束会给出「立即重启服务」，并把上传、分析、计划、执行、会话五个阶段逐行显示，而不是一个闷着的转圈。</item>
+        <item>冲突策略由你选：合并 / 覆盖 / 跳过已有。以前写死合并，于是「恢复备份」实际只是「把缺的补上」；想回到备份当时的状态要选覆盖。选择会被记住。</item>
+        <item>多了两条回头路：可以恢复到插件保留的快照（先预览、零写入，确认后才执行，并明确写出会卸载快照里没有的插件）；WebDAV 上的备份现在能在应用内列出、下载并直接恢复 —— 以前只能上传，取回得自己下文件。另外，复制到下载目录失败时不再报一个不存在的路径。</item>
     </string-array>
 
     

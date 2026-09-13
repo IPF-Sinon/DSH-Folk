@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 import me.bmax.apatch.ui.component.ToggleSettingCard
+import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.ui.theme.BackupConfig
 import me.bmax.apatch.util.BackupLogManager
 import me.bmax.apatch.util.WebDavUtils
@@ -45,6 +47,36 @@ private val RESCUE_COMMANDS = listOf(
     "dsh-config-manager reinstall --list",
 )
 
+/** 导入冲突策略的三个选项（顺序即界面顺序，默认第一项）。 */
+private val IMPORT_STRATEGIES = listOf(
+    Triple(DshConfigBackup.STRATEGY_MERGE, R.string.dsh_bk_strategy_merge, R.string.dsh_bk_strategy_merge_desc),
+    Triple(DshConfigBackup.STRATEGY_REPLACE, R.string.dsh_bk_strategy_replace, R.string.dsh_bk_strategy_replace_desc),
+    Triple(
+        DshConfigBackup.STRATEGY_SKIP_EXISTING,
+        R.string.dsh_bk_strategy_skip,
+        R.string.dsh_bk_strategy_skip_desc,
+    ),
+).map { StrategyOption(it.first, it.second, it.third) }
+
+private data class StrategyOption(val id: String, val label: Int, val desc: Int)
+
+/** 快照/远端条目的时间。解析不出来返回 null —— 由调用方说「时间未知」，不画一个假的 1970。 */
+private fun formatSnapshotTime(ms: Long): String? =
+    if (ms <= 0L) null else java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        .format(java.util.Date(ms))
+
+/** 云端条目的大小 + 时间一行摘要；两项都拿不到时返回空串（那一行就不显示副标题）。 */
+private fun formatRemoteMeta(entry: WebDavUtils.RemoteEntry): String {
+    val size = when {
+        entry.sizeBytes <= 0L -> null
+        entry.sizeBytes < 1024 -> "${entry.sizeBytes} B"
+        entry.sizeBytes < 1024 * 1024 -> "${entry.sizeBytes / 1024} KB"
+        else -> "${entry.sizeBytes / (1024 * 1024)} MB"
+    }
+    return listOfNotNull(size, formatSnapshotTime(entry.lastModifiedMs)).joinToString(" ｜ ")
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BackupSettingsContent(
     /** DSH 配置备份：是否正在跑（导出/导入期间禁用按钮）。 */
@@ -62,6 +94,21 @@ fun BackupSettingsContent(
     onDshExport: () -> Unit,
     onDshImport: () -> Unit,
     onDshOpenDir: () -> Unit,
+    /** 导入冲突策略（merge / replace / skipExisting）；以前写死 merge，用户没得选。 */
+    importStrategy: String = DshConfigBackup.STRATEGY_MERGE,
+    onImportStrategyChange: (String) -> Unit = {},
+    /** 云端（WebDAV）备份列表；空表示还没列过或确实没有。 */
+    cloudEntries: List<WebDavUtils.RemoteEntry> = emptyList(),
+    cloudBusy: Boolean = false,
+    cloudMessage: String = "",
+    onCloudList: () -> Unit = {},
+    onCloudRestore: (WebDavUtils.RemoteEntry) -> Unit = {},
+    /** 插件保留的快照（恢复的最后依靠）。 */
+    snapshots: List<DshConfigBackup.Snapshot> = emptyList(),
+    snapshotBusy: Boolean = false,
+    snapshotMessage: String = "",
+    onSnapshotList: () -> Unit = {},
+    onSnapshotRestore: (DshConfigBackup.Snapshot) -> Unit = {},
     /** 运行时 exports 目录里的备份（容器内，文件管理器看不到）。 */
     dshRemoteBackups: List<String>,
     onDshListRemote: () -> Unit,
@@ -210,6 +257,35 @@ fun BackupSettingsContent(
                     }
 
                     Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_bk_strategy_title),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        for (opt in IMPORT_STRATEGIES) {
+                            FilterChip(
+                                selected = importStrategy == opt.id,
+                                enabled = !dshBusy,
+                                onClick = { onImportStrategyChange(opt.id) },
+                                label = { Text(stringResource(opt.label)) },
+                            )
+                        }
+                    }
+                    Text(
+                        text = stringResource(
+                            (IMPORT_STRATEGIES.firstOrNull { it.id == importStrategy }
+                                ?: IMPORT_STRATEGIES.first()).desc,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    Spacer(Modifier.height(12.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -277,6 +353,86 @@ fun BackupSettingsContent(
                                 .heightIn(max = 200.dp)
                                 .verticalScroll(rememberScrollState()),
                         )
+                    }
+                }
+            }
+        }
+
+        // ───────── 恢复到快照 ─────────
+        // 快照目录永不被自动清理（插件源码注释：「它是恢复的最后依靠」）。
+        // 恢复会覆盖设置文件并卸载快照里没有的插件，所以流程是「先预览（零写入）→ 确认 → 执行」。
+        item(key = "backup_snapshot") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.dsh_bk_snapshot_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_bk_snapshot_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val canRun = !snapshotBusy && pluginReady != false
+                        OutlinedButton(onClick = onSnapshotList, enabled = canRun) {
+                            Text(stringResource(R.string.dsh_bk_snapshot_list))
+                        }
+                        if (snapshotBusy) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        }
+                    }
+                    if (snapshots.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 220.dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            for (snap in snapshots) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = snap.id,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace,
+                                        )
+                                        Text(
+                                            text = formatSnapshotTime(snap.createdAtMs)
+                                                ?: stringResource(R.string.dsh_bk_snapshot_time_unknown),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    TextButton(onClick = { onSnapshotRestore(snap) }, enabled = canRun) {
+                                        Text(stringResource(R.string.dsh_bk_snapshot_restore_now))
+                                    }
+                                }
+                            }
+                        }
+                    } else if (!snapshotBusy && snapshotMessage.isBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_bk_snapshot_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (snapshotMessage.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(snapshotMessage, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -370,6 +526,93 @@ fun BackupSettingsContent(
                     BackupConfig.save(context)
                 }
             )
+        }
+
+        // ───────── 从云端恢复 ─────────
+        // 以前只有上传：换机 / 清机之后，WebDAV 上那份备份在 App 里取不回来，
+        // 得自己去文件管理器下载再走「导入备份」。这里把列目录 + 下载并进同一条导入管道。
+        item(key = "backup_cloud_restore", visible = BackupConfig.isBackupEnabled) {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.dsh_bk_cloud_restore_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_bk_cloud_restore_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val hasUrl = BackupConfig.webdavUrl.isNotBlank()
+                        val canRun = !cloudBusy && hasUrl && pluginReady != false
+                        OutlinedButton(onClick = onCloudList, enabled = canRun) {
+                            Text(stringResource(R.string.dsh_bk_cloud_list))
+                        }
+                        if (cloudBusy) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        }
+                    }
+                    if (BackupConfig.webdavUrl.isBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_bk_cloud_no_url),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (cloudEntries.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 220.dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            for (entry in cloudEntries) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(entry.name, style = MaterialTheme.typography.bodySmall)
+                                        Text(
+                                            text = formatRemoteMeta(entry),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = { onCloudRestore(entry) },
+                                        enabled = canRun,
+                                    ) {
+                                        Text(stringResource(R.string.dsh_bk_snapshot_restore_now))
+                                    }
+                                }
+                            }
+                        }
+                    } else if (!cloudBusy && cloudMessage.isBlank() && BackupConfig.webdavUrl.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_bk_cloud_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (cloudMessage.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(cloudMessage, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
         }
 
         item(key = "backup_webdav", visible = BackupConfig.isBackupEnabled) {
