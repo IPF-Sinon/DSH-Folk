@@ -9,7 +9,36 @@ runs:
         distribution: temurin
         java-version: '21'
 
-    - uses: android-actions/setup-android@v3
+    # 这里原来用 android-actions/setup-android@v3，2026-09 起它**必定失败**，与我们改了什么无关：
+    # 它会因为「预装的 sdkmanager 版本不是它期望的那个」而去安装独立的 `tools` 包，
+    # 而 Google 已经把 `tools` 从 SDK 源里移除 —— sdkmanager 回 "Failed to find package 'tools'"
+    # 并以退出码 1 结束，整个 setup 步骤就挂了（同一次运行里在此之前一切正常）。
+    # 我们真正需要的只有两件事：许可证全部接受（AGP 才能自己按需下载 compileSdk/build-tools）
+    # 与 platform-tools。所以直接调 sdkmanager：不挑版本，也不去装那个已经不存在的包。
+    - name: Android SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+        SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+        if [ ! -d "$SDK" ]; then
+          echo "找不到 Android SDK：$SDK" >&2
+          exit 1
+        fi
+        echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+        echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+        # 预装里通常只有 cmdline-tools/<版本>（16.0 这类），latest 不一定在
+        SDKMANAGER="$(find "$SDK/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
+        if [ -z "$SDKMANAGER" ]; then
+          echo "在 $SDK/cmdline-tools 下找不到 sdkmanager" >&2
+          exit 1
+        fi
+        echo "使用 $SDKMANAGER"
+        "$SDKMANAGER" --version || true
+        # 许可证缺一个，AGP 自动下载平台时就会失败，而报错只会说 platform not found，
+        # 看不出是许可证的问题
+        yes | "$SDKMANAGER" --sdk_root="$SDK" --licenses > /dev/null || true
+        "$SDKMANAGER" --sdk_root="$SDK" "platform-tools" > /dev/null
+        echo "$SDK/platform-tools" >> "$GITHUB_PATH"
 
     - uses: gradle/actions/setup-gradle@v3
 
