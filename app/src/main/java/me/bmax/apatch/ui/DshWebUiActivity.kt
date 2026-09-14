@@ -79,6 +79,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -329,16 +330,19 @@ class DshWebUiActivity : AppCompatActivity() {
                 // 铺满整窗后，状态栏与小白条后面就是网页自己的背景 —— 页面本体用
                 // `#root` 的 padding 让开这两个区域，可交互内容一样不会被盖住。
                 val density = LocalDensity.current
+                // 左右的 inset 与书写方向有关（RTL 下 start/end 会翻），所以四个取值里
+                // 横向那两个要连 layoutDirection 一起传
+                val layoutDirection = LocalLayoutDirection.current
                 val insetTopPx = WindowInsets.statusBars.getTop(density)
                 val insetBottomPx = WindowInsets.navigationBars.getBottom(density)
                 // 横屏时三键导航会在侧边、挖孔也在侧边，两边取更大的那个
                 val insetLeftPx = maxOf(
-                    WindowInsets.navigationBars.getLeft(density),
-                    WindowInsets.displayCutout.getLeft(density),
+                    WindowInsets.navigationBars.getLeft(density, layoutDirection),
+                    WindowInsets.displayCutout.getLeft(density, layoutDirection),
                 )
                 val insetRightPx = maxOf(
-                    WindowInsets.navigationBars.getRight(density),
-                    WindowInsets.displayCutout.getRight(density),
+                    WindowInsets.navigationBars.getRight(density, layoutDirection),
+                    WindowInsets.displayCutout.getRight(density, layoutDirection),
                 )
                 // CSS 像素就是 dp，WebView 的视口按 dp 计
                 fun toCss(px: Int): Int = (px / density.density).roundToInt()
