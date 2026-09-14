@@ -107,7 +107,13 @@ for (const m of modes) {
 ok(missStr.length === 0, `每种方式都有标题与说明（${modes.length * 2} 条）` + (missStr.length ? " → 缺 " + missStr.join(",") : ""));
 // 界面上四个单选项一个不少
 const ui = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt", "utf8");
-const uiBlock = ui.slice(ui.indexOf('item(key = "function_autostart")'), ui.indexOf('item(key = "function_port")'));
+// 用 search 而不是 indexOf 常量串：这些 item 后来都带上了 `, visible = …` 参数，写死的整串
+// 一个都匹配不到，切片成了空串 —— 下面三条断言于是全部失败，却一个字都不提真正的原因
+// （标记失效）。空切片本身也要拦住，否则以后同样的失效还得靠人去猜。
+const uiStart = ui.search(/item\(key = "function_autostart"/);
+const uiEnd = ui.search(/item\(key = "function_port"/);
+const uiBlock = uiStart >= 0 && uiEnd > uiStart ? ui.slice(uiStart, uiEnd) : "";
+ok(uiBlock.length > 0, "能定位到开机自启卡片（切片标记没失效）");
 // 只认 RuntimeOption 里的 onSelect —— 光是「在这段里被提到」不够：
 // when (autostartMode) 分支也提到每个 Mode，删掉单选项照样能过。
 const selectable = [...uiBlock.matchAll(/onAutostartModeChange\(DshAutostart\.Mode\.([A-Z_]+)\)/g)]
