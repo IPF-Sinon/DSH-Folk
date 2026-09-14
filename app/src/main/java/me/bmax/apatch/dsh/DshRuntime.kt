@@ -497,11 +497,18 @@ object DshRuntime {
         const cmd = argv[0];
         const opt = {};
         const a = [];
+        // 无值开关：不给它们「吃掉下一个 token」的机会。'shell --su getprop ro.x' 里的 --su
+        // 后面跟的是要执行的命令，按「带值选项」解析会把 getprop 当成 --su 的值，命令就没了。
+        const FLAGS = { su: 1, ongoing: 1, all: 1 };
         for (let i = 1; i < argv.length; i++) {
           const t = argv[i];
+          // '--' 之后一律当参数：被执行的命令自己常带 --flag（'pm list packages --user 0'），
+          // 不划这条线的话那些 flag 会被当成 dsh-native 的选项从命令里消失
+          if (t === '--') { for (let j = i + 1; j < argv.length; j++) a.push(argv[j]); break; }
           if (t.slice(0, 2) === '--') {
             const eq = t.indexOf('=');
             if (eq > 2) { opt[t.slice(2, eq)] = t.slice(eq + 1); }
+            else if (FLAGS[t.slice(2)]) { opt[t.slice(2)] = '1'; }
             else if (i + 1 < argv.length && argv[i + 1].slice(0, 2) !== '--') { opt[t.slice(2)] = argv[++i]; }
             else { opt[t.slice(2)] = '1'; }
           } else { a.push(t); }
@@ -559,6 +566,14 @@ object DshRuntime {
           '  usage list [--days N] [--limit N]           # recent app foreground usage',
           '  sms list [--limit N]                        # recent SMS, read only',
           '  sms send <number> <text>                    # requires send access',
+          '  shell [--su] [--timeout ms] [--] <command...>  # run through the privileged channel',
+          '  a11y tree [--depth N] [--max N]            # read the current screen as a node tree',
+          '  a11y click <text-or-id> [--class C] [--index N]',
+          '  a11y tap <x> <y> [--ms N]',
+          '  a11y swipe <x1> <y1> <x2> <y2> [--ms N]',
+          '  a11y text <text> [--target <text-or-id>]',
+          '  a11y global <back|home|recents|notifications|quick_settings|lock_screen>',
+          '      Put -- before the command if it contains its own --flags.',
           '  caps                                       # access, accessOptions, once, pending, lastElevation',
           '  elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]',
           '      Only if you want the level raised without running anything. Never auto-grants.',
@@ -600,6 +615,57 @@ object DshRuntime {
                 console.error('elevate: refused (a request is already pending, or the app is not in ' +
                   'the foreground). Run "dsh-native caps" and read "pending" / "foreground" instead ' +
                   'of filing another.');
+              }
+            } else if (cmd === 'shell') {
+              // 命令可能带引号/管道，所以收成一段原文而不是拼参数：shell 的语义就是把这段
+              // 东西原样交给通道，宿主不解析它（审计与弹窗里显示的也是这段原文）
+              const line = a.join(' ');
+              if (!line) { console.error(USAGE); process.exit(1); }
+              // 命令自己带的 --flag 会被上面的解析器当成本命令的选项吃掉（'pm list packages --user 0'
+              // 里的 --user）。丢参数比报错危险得多：命令照样跑，但跑的不是 agent 以为的那条。
+              // 认不出来的选项一律拒绝，并告诉它怎么改。
+              const KNOWN = { su: 1, timeout: 1, reason: 1 };
+              const unknown = Object.keys(opt).filter(function (k) { return !KNOWN[k]; });
+              if (unknown.length) {
+                console.error('dsh-native: ' + unknown.map(function (k) { return '--' + k; }).join(' ') +
+                  ' is not a dsh-native option — it looks like part of the command.');
+                console.error('Quote the whole command as one argument, or put -- before it:');
+                console.error('  dsh-native shell --reason "<why>" -- <the command, as you would type it>');
+                process.exit(1);
+              }
+              const res = await req('POST', '/native/shell' + q({
+                cmd: line, su: opt.su, timeout: opt.timeout
+              }));
+              say(res);
+              if (res.status === 403) {
+                console.error('shell: the channel refused it. Read "reason" in the JSON (no_channel,' +
+                  ' adb_write_disabled, root_unavailable ...): those are states to fix in the app,' +
+                  ' not errors to retry.');
+              } else if (res.status === 504) {
+                console.error('shell: timed out and was dropped. Retry with a larger --timeout only if' +
+                  ' the command is genuinely long; do not loop.');
+              }
+            } else if (cmd === 'a11y') {
+              const act = a[0];
+              if (act === 'tree') {
+                say(await req('GET', '/native/a11y/tree' + q({ depth: opt.depth, max: opt.max })));
+              } else if (act === 'click' && a[1]) {
+                say(await req('POST', '/native/a11y/click' + q({
+                  target: a[1], class: opt.class, index: opt.index
+                })));
+              } else if (act === 'tap' && a[1] && a[2]) {
+                say(await req('POST', '/native/a11y/tap' + q({ x: a[1], y: a[2], ms: opt.ms })));
+              } else if (act === 'swipe' && a[1] && a[2] && a[3] && a[4]) {
+                say(await req('POST', '/native/a11y/swipe' + q({
+                  x1: a[1], y1: a[2], x2: a[3], y2: a[4], ms: opt.ms
+                })));
+              } else if (act === 'text' && a[1]) {
+                say(await req('POST', '/native/a11y/text' + q({ text: a[1], target: opt.target })));
+              } else if (act === 'global' && a[1]) {
+                say(await req('POST', '/native/a11y/global' + q({ action: a[1] })));
+              } else {
+                console.error(USAGE);
+                process.exitCode = 1;
               }
             } else if (cmd === 'device') {
               say(await req('GET', '/native/device'));

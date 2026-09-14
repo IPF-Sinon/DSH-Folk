@@ -40,6 +40,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshElevationRequests
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
+import me.bmax.apatch.dsh.PrivPolicy
 
 /**
  * 原生能力申请弹窗（两段）。
@@ -98,19 +99,45 @@ private fun ElevationDialog(activity: Activity, request: DshElevationRequests.Re
         }
     }
 
+    // 这是「档位够、只是要你点头」的那种弹窗（特权严格程度），不是「申请更高档位」
+    val confirmOnly = request.kind == DshElevationRequests.Kind.CALL
+    // 严格档不给「允许（长期）」：那一档的全部含义就是「下次还要问」，给一个落盘的
+    // 长期授权等于把它悄悄降成「一般」。
+    val persistent = !confirmOnly && PrivPolicy.allowsPersistentGrant(PrivPolicy.of(activity))
+
     AlertDialog(
         onDismissRequest = { DshElevationRequests.clear(request.id) },
-        title = { Text(stringResource(R.string.dsh_native_elevate_title)) },
+        title = {
+            Text(
+                stringResource(
+                    if (confirmOnly) R.string.dsh_native_priv_confirm_title
+                    else R.string.dsh_native_elevate_title
+                )
+            )
+        },
         text = {
             Column {
-                Text(
-                    stringResource(
-                        R.string.dsh_native_elevate_message,
-                        request.cap.id,
-                        request.access.id,
-                        request.reason,
+                if (confirmOnly) {
+                    // 用户要判断的不是「要不要给 root」，而是「要不要**用它**跑这条命令」，
+                    // 所以这里给的是通道与身份，而不是能力 id 与档位 id
+                    Text(
+                        stringResource(
+                            R.string.dsh_native_priv_confirm_message,
+                            request.channel ?: stringResource(R.string.dsh_perm_none),
+                            request.uid ?: -1,
+                            request.reason,
+                        )
                     )
-                )
+                } else {
+                    Text(
+                        stringResource(
+                            R.string.dsh_native_elevate_message,
+                            request.cap.id,
+                            request.access.id,
+                            request.reason,
+                        )
+                    )
+                }
                 if (request.cap == DshNativeBridge.Cap.NOTIFY &&
                     request.access == DshNativeBridge.Access.CONTROL
                 ) {
@@ -136,7 +163,10 @@ private fun ElevationDialog(activity: Activity, request: DshElevationRequests.Re
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = stringResource(R.string.dsh_native_elevate_once_hint),
+                    text = stringResource(
+                        if (confirmOnly) R.string.dsh_native_priv_confirm_strict_hint
+                        else R.string.dsh_native_elevate_once_hint
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -153,10 +183,17 @@ private fun ElevationDialog(activity: Activity, request: DshElevationRequests.Re
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = { allowOnce(activity, request) }) {
-                    Text(stringResource(R.string.dsh_native_elevate_once))
+                    Text(
+                        stringResource(
+                            if (confirmOnly) R.string.dsh_native_priv_confirm_allow_once
+                            else R.string.dsh_native_elevate_once
+                        )
+                    )
                 }
-                TextButton(onClick = { allow(activity, request) }) {
-                    Text(stringResource(R.string.dsh_native_elevate_allow))
+                if (persistent) {
+                    TextButton(onClick = { allow(activity, request) }) {
+                        Text(stringResource(R.string.dsh_native_elevate_allow))
+                    }
                 }
             }
         },

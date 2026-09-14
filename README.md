@@ -70,13 +70,34 @@ skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentia
 root / Shizuku / 无线 ADB 都是**可选**的，并且**默认不启用**。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）与已授权的 Shizuku / Sui，
 自身不打任何内核补丁、不安装 su、不内置 Shizuku Server。
 
-「特权」默认是**未启用**：容器本身不需要 root（proot/proroot 从来不需要），只有硬件监控里几项 `/proc` 读取、
-bugreport 里的 dmesg/tombstones 段、以及首页的重启菜单需要它。要用就去 **设置 → 安全 → 权限通道 → 首选通道**
-选一条（或选「自动」按 root > Shizuku > 无线 ADB 挑）。从旧版本升级上来的用户如果此前授权过 root，会自动迁移到「自动」。
+「特权」默认是**未启用**。要用就去 **设置 → 安全 → 权限通道 → 首选通道** 选一条（或选「自动」按
+root > Shizuku > 无线 ADB 挑）；从旧版本升级上来的用户如果此前授权过 root，会自动迁移到「自动」。
+
+选通道有两件事会跟着变：
+
+- **App 自己**用它：硬件监控里几项 `/proc` 读取、bugreport 里的 dmesg/tombstones 段、首页的重启菜单。
+  容器本身不需要 root（proot/proroot 从来不需要）。
+- **容器里的 AI** 也能用它了 —— 通过 `dsh-native shell` 由 App 代跑（见下）。以前特权只在 App 内部用，
+  容器侧唯一那条通路连提示词里都没提过，等于没有。
+
+**严格程度**（同一张卡里）决定「用之前要不要问你」，默认**严格**：
+
+| 档 | 行为 |
+|---|---|
+| 严格（默认） | 每次特权调用都弹窗；弹窗没有「以后都允许」，只有「允许本次」 |
+| 一般 | 只读命令（`getprop` / `dumpsys` / `ls` 这类）直接跑；会改设备状态的每次问你 |
+| 宽松 | 档位内的命令直接跑，只有危险命令（卸载、重启、清数据、往输入框打字）才问 |
+
+弹窗里显示的是**通道 + 身份 + 命令原文**：要判断的不是「给不给 root」，而是「要不要让 uid 0 跑这条命令」。
+AI 只有在真的探测到通道时才会被告知「有特权可用、能提到什么级别」——没有通道时提示词里不提这件事，
+免得它去建议用户开一个这台设备上根本不存在的东西。
 
 配对成功后容器里多出一个 `adb-shell` 命令（以 shell / uid 2000 身份在设备上执行）。默认只放行只读命令
 （`getprop` / `dumpsys` / `ls` / `cat` 之类）；写操作和 `--su` 提权要在 **设置 → 安全 → 无线 ADB** 里分别打开开关，
 没打开时命令会被拒绝并提示开关位置。
+
+AI 平时不必直接用它 —— `dsh-native shell` 选中这条通道时会转发给它，于是那两把锁**依旧生效**
+（宿主不会替 AI 绕过脚本自己的关卡）。
 
 ## 安装
 
@@ -217,6 +238,11 @@ Android 13 起旁加载安装的应用会被「受限设置」挡住，那个无
 留在设备上的旧脚本、或者用户忘了关的无障碍服务，都不会再偷偷拉起东西（切走时也会主动删脚本）。
 运行时还没下载时一律不启动 —— 否则开机自动跑 120 MB 流量。
 
+**系统里会看到两个 DSH-Folk 的无障碍开关**，它们不是同一件事：上面这个（`DshAutostartService`）只为了
+「被系统 bind」，刻意没有读屏权限；剩下那个（`DshA11yService`）是原生能力桥的 **无障碍能力**用的，
+配置里打开了 `canRetrieveWindowContent`。分成两个是因为：当初为了开机自启而打开无障碍的用户，
+不该在毫无察觉的情况下把「能读你屏幕上的内容」一起交出去。两者互不影响，各自可以单独关掉。
+
 **是否同时拉起容器**是独立的一项。开：容器跟着起来，开机后直接能用。关：只出现通知、进程预热，
 点一下就开始，不占开机那几秒 CPU 也不常驻一份 Node 内存。对「只想随手能用」的人来说后者才是对的。
 
@@ -248,14 +274,14 @@ protectionLevel 是 `signature|appop`，应用申请不到）。没授予时上�
 顺带说明：`/storage/emulated/0` 本来就 bind mount 进了容器，普通 `read`/`write`/`glob` 常常够用，
 这个桥的价值是**窄而可审计**的那条路径，不是访问本身。
 
-`dsh-native` —— 借 App 之手调原生能力，共 19 项，**默认整体关闭**：要在 **设置 → 安全 → 原生能力**
+`dsh-native` —— 借 App 之手调原生能力，共 24 项，**默认整体关闭**：要在 **设置 → 安全 → 原生能力**
 里打开总开关，再逐项勾选。界面按「这项能力动的是什么」分四组，越往下越该慎重：
 
 ```
-与设备交互   notify / toast / vibrate / clipboard / intent（分享与打开链接）/ tts（语音合成）
+与设备交互   notify / full_screen_notify / toast / vibrate / clipboard / intent（分享与打开链接）/ tts（语音合成）
 读设备状态   device / network / phone / sensors
-个人数据     media / camera / mic / location / calendar / contacts
-更改系统状态 volume / settings / install
+个人数据     media / camera / mic / location / calendar / contacts / sms / a11y（无障碍）
+更改系统状态 volume / settings / install / usage / shell（特权命令）
 ```
 
 命令：
@@ -287,16 +313,50 @@ dsh-native ringer <normal|vibrate|silent>
 dsh-native settings | settings brightness <1..100> [--auto 0|1] | settings timeout <ms>
 dsh-native settings rotation <0|1>
 dsh-native install                       # 这台机器允不允许安装未知应用
+dsh-native shell [--su] [--timeout ms] [--] <命令>   # 走你选的权限通道执行（见下）
+dsh-native a11y tree [--depth N] [--max N]        # 读当前屏幕的节点树
+dsh-native a11y click <文字或 id> [--class C] [--index N]
+dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
+dsh-native a11y text <文字> [--target <文字或 id>]
+dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen>
 dsh-native caps                          # 查当前哪些能力开着、能不能用
 dsh-native elevate <能力> <read|write|read_write|control> --reason <理由> [--command <命令>]
 ```
+
+### 特权命令（`shell`）
+
+这一项让容器里的 AI 真正用上你选的通道：App 代它执行，它自己不获得任何特权。三条通道的差别只在「谁执行」：
+
+| 通道 | 身份 | 实现 |
+| --- | --- | --- |
+| root | uid 0 | 常驻 su shell |
+| Shizuku | uid 0（Sui/root 模式）或 2000（adb 模式） | Shizuku 的进程接口 |
+| 无线 ADB | 2000，`--su` 才到 0 | 转发给容器内那条脚本，于是它的两把锁照样生效 |
+
+档位只有两档有意义：**读**只放行诊断类命令（与容器内脚本共用**同一张白名单**，`tools/check-native-logic.js`
+会断言两边逐字一致），**读写**才能改设备状态。严格程度决定要不要问（见前文），每一次调用都写进审计，
+记录里带上走的哪条通道、拿到的身份、当时的严格程度，以及这次是用户点过头还是自动放行的。
+返回值里带 `exit` 与 `stdout`/`stderr`（超 64 KB 截断）；跑不成的情况用状态码分开：
+`403` 通道不允许（`no_channel` / `adb_write_disabled` / `root_unavailable` …）、`504` 超时被丢弃、
+`429` 已有一条在执行。这些全是**状态**而不是暂时性错误，提示词里写明不要重试。
+
+### 无障碍（`a11y`）
+
+读当前屏幕的节点树，或对它点按、滑动、输入、返回桌面。目标是**用户此刻正在看的界面**，不是本应用 ——
+所以「读」与「写」的差别比别的能力大得多，而且需要用户在系统设置里单独打开那个无障碍开关
+（未打开时 `caps` 报 `available:false` + `no_a11y_service`）。
+
+读屏优先按文字或 view id 定位再点，而不是记坐标：坐标跨设备跨分辨率都不通用，读树时把 `bounds` 一并返回。
+节点自己常常 `clickable=false`（真正接点击的是父容器），所以点击会往上找可点祖先；找不到才退回按中心坐标
+点一次。安全窗口（锁屏、密码框）系统不给节点，这时明确回 `no_window`，而不是让人以为是自己写错了。
 
 **权限不够时，能力调用自己就是申请**：桥不会立刻回 403，而是**把这次调用挂住**，同时在 App 里弹窗；
 用户答应就地执行这条命令、把真实结果还给 agent，用户拒绝（或 60 秒不处理）这次调用就以失败结束。
 agent 因此不需要「先申请、再调一次」，也不会出现「申请成功了但调用还是失败」这种半途状态。
 
 弹窗给用户三个选择 —— **允许**（级别落盘、长期生效）、**仅本次**（只放行这**一次**调用，用完自动收回，
-设置里的开关不动）、**拒绝**（关掉弹窗等同拒绝）。弹窗正文里**原文照显这次要执行的命令**（等宽、可选中
+设置里的开关不动）、**拒绝**（关掉弹窗等同拒绝）。档位本来就够、只是按严格程度要用户点头的那种弹窗
+（特权命令与无障碍动作）只有 **允许本次** 与 **拒绝** 两个按钮：长期授权与「下次还要问」直接冲突。弹窗正文里**原文照显这次要执行的命令**（等宽、可选中
 复制）：用户要判断的从来不是「camera=write 要不要给」，而是「它接下来到底要做什么」。命令由桥从这次调用
 本身重建，agent 不需要额外带 —— 显式的 `dsh-native elevate` 才需要 `--command` 来告诉用户「我打算做什么」。
 

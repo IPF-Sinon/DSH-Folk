@@ -34,6 +34,21 @@ import java.util.concurrent.atomic.AtomicLong
  * 用户点了「我知道了」或者这一段超时，就把「Android 层没授权」作为结果返回。
  */
 object DshElevationRequests {
+    /**
+     * 这次弹窗问的是哪件事。
+     *
+     * 分两种是因为**按钮不一样**：档位不够时用户可以选「允许（长期）」（LEVEL）；而
+     * 「档位够、只是按严格程度要你点头」时长期授权没有意义 —— 严格档的全部含义就是
+     * 「下次还要问」，所以那种弹窗只有「允许本次」（CALL）。
+     */
+    enum class Kind(val id: String) {
+        /** 档位不够，问要不要放开。 */
+        LEVEL("level"),
+
+        /** 档位够，但这一次仍要用户同意（特权严格程度）。 */
+        CALL("call"),
+    }
+
     data class Request(
         val id: Long,
         val cap: DshNativeBridge.Cap,
@@ -50,6 +65,15 @@ object DshElevationRequests {
         val invocation: String? = null,
         val filedAtMs: Long,
         val expiresAtMs: Long,
+        val kind: Kind = Kind.LEVEL,
+        /**
+         * 这次会用哪条通道、以什么身份执行（特权调用才有）。
+         *
+         * 用户在下决心前要知道的不是「允许 root 吗」，而是「允许**用 Shizuku 拿到的
+         * uid 0** 跑这条命令吗」—— 同一个能力在不同通道上的实际权限差别很大。
+         */
+        val channel: String? = null,
+        val uid: Int? = null,
     )
 
     /** 用户（或超时）对一次申请给出的结论。 */
@@ -142,6 +166,9 @@ object DshElevationRequests {
         reason: String,
         command: String? = null,
         invocation: String? = null,
+        kind: Kind = Kind.LEVEL,
+        channel: String? = null,
+        uid: Int? = null,
     ): Request? {
         if (mutable.value != null) return null
         val now = System.currentTimeMillis()
@@ -154,6 +181,9 @@ object DshElevationRequests {
             invocation?.takeIf { it.isNotBlank() },
             now,
             now + TTL_MS,
+            kind,
+            channel?.takeIf { it.isNotBlank() },
+            uid,
         )
         mutable.value = request
         decisionWaiters[request.id] = CompletableDeferred()

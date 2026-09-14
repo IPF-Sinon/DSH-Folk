@@ -70,13 +70,30 @@ supports resumable downloads, and must pass validation against the release's acc
 root / Shizuku / wireless ADB are all **optional** and **disabled by default**. DSH-Folk only detects and reuses existing su installations (Magisk / KernelSU / APatch) and already-authorized Shizuku / Sui on the device;
 it does not patch the kernel, install su, or bundle a Shizuku Server.
 
-“Privileged access” is **disabled by default**: the container itself does not need root (proot/proroot never do); it is needed only for several `/proc` reads in hardware monitoring,
-the dmesg/tombstones sections of bugreport, and the restart menu on the Home page. To use it, go to **Settings → Security → Permission Channel → Preferred Channel**
+“Privileged access” is **disabled by default**. To use it, go to **Settings → Security → Permission Channel → Preferred Channel**
 and select one (or select “Automatic” to choose in the order root > Shizuku > wireless ADB). Users upgrading from an older version who previously authorized root are migrated automatically to “Automatic.”
+
+Picking a channel changes two things. The **App itself** uses it for several `/proc` reads in hardware monitoring, the dmesg/tombstones sections of bugreport,
+and the restart menu on the Home page (the container never needs root — proot/proroot never do). And the **AI inside the container** can use it too,
+through `dsh-native shell`, which the App runs on its behalf — previously privilege served the App only and the single container-side path was not even mentioned in the prompt.
+
+**Strictness** (same card) decides whether you are asked before that happens, and defaults to **strict**:
+
+| Level | Behaviour |
+| --- | --- |
+| Strict (default) | Every privileged call opens a dialog; there is no “always allow”, only “allow once” |
+| Normal | Read-only commands (`getprop`, `dumpsys`, `ls` …) just run; anything that changes device state asks |
+| Loose | Commands inside the granted level just run; only dangerous ones (uninstall, reboot, wiping data, typing into text fields) ask |
+
+The dialog shows the **channel, the identity and the command text**: the question is not “may it have root” but “should uid 0 run this command”.
+The AI is told that privilege exists only when a channel is actually detected, and what identity it can get; with no channel the prompt stays silent about it,
+so the model does not suggest enabling something the device may not support at all.
 
 After successful pairing, an `adb-shell` command is added inside the container (executing on the device as shell / uid 2000). By default, only read-only commands
 (`getprop` / `dumpsys` / `ls` / `cat`, etc.) are allowed; write operations and `--su` privilege escalation must be enabled separately under **Settings → Security → Wireless ADB**.
 When they are not enabled, the command is rejected and identifies where to find the relevant toggle.
+
+The AI normally does not call this directly: `dsh-native shell` forwards to it when this channel is selected, so those two locks still apply (the host never bypasses the script's own gates).
 
 ## Installation
 
@@ -208,6 +225,11 @@ its configuration intentionally omits `canRetrieveWindowContent` (that is the ca
 and it subscribes only to the lowest-frequency event type, `typeWindowStateChanged` — subscribing to no events causes some ROMs to treat it as an invalid
 service and not display it. Its sole reason for existing is the fact that “the system will rebind it.”
 
+**You will see two DSH-Folk accessibility toggles in the system**, and they are not the same thing: the one above (`DshAutostartService`) exists only to be bound
+by the system and deliberately has no screen-reading permission; the other one (`DshA11yService`) belongs to the native bridge's **accessibility capability** and does
+enable `canRetrieveWindowContent`. They are separate because a user who turned accessibility on for boot autostart should not silently hand over “can read the content
+on your screen” along with it. They do not affect each other and can each be turned off independently.
+
 Starting with Android 13, sideloaded apps are blocked by “restricted settings”; the accessibility toggle is grayed out and does nothing when tapped. The UI explains
 how to resolve this (App info page → ⋮ → Allow restricted settings), because without a clear explanation users would simply assume the feature was broken.
 
@@ -251,14 +273,14 @@ protectionLevel is `signature|appop`, so the app cannot request it directly). Wi
 For context, `/storage/emulated/0` is already bind-mounted into the container, so ordinary `read`/`write`/`glob` often suffice;
 the bridge's value is that it provides a **narrow and auditable** path, not access itself.
 
-`dsh-native` — invokes native capabilities through the App, 19 in total, **all disabled by default**: enable the master toggle under **Settings → Security → Native Capabilities**,
+`dsh-native` — invokes native capabilities through the App, 24 in total, **all disabled by default**: enable the master toggle under **Settings → Security → Native Capabilities**,
 then select individual capabilities. The UI groups them into four categories according to “what this capability affects”; the lower the group, the more caution it warrants:
 
 ```
-Interact with device   notify / toast / vibrate / clipboard / intent (share and open links) / tts (speech synthesis)
+Interact with device   notify / full_screen_notify / toast / vibrate / clipboard / intent (share and open links) / tts (speech synthesis)
 Read device state      device / network / phone / sensors
-Personal data          media / camera / mic / location / calendar / contacts
-Change system state    volume / settings / install
+Personal data          media / camera / mic / location / calendar / contacts / sms / a11y (accessibility)
+Change system state    volume / settings / install / usage / shell (privileged commands)
 ```
 
 Commands:
@@ -290,9 +312,42 @@ dsh-native ringer <normal|vibrate|silent>
 dsh-native settings | settings brightness <1..100> [--auto 0|1] | settings timeout <ms>
 dsh-native settings rotation <0|1>
 dsh-native install                       # whether this device allows installing unknown apps
+dsh-native shell [--su] [--timeout ms] [--] <command>   # run through the channel you picked (see below)
+dsh-native a11y tree [--depth N] [--max N]        # read the current screen as a node tree
+dsh-native a11y click <text-or-id> [--class C] [--index N]
+dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
+dsh-native a11y text <text> [--target <text-or-id>]
+dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen>
 dsh-native caps                          # which capabilities are enabled and available
 dsh-native elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]
 ```
+
+### Privileged commands (`shell`)
+
+This is what finally makes the channel usable by the AI in the container: the App runs the command, and the agent never gains privilege itself.
+The three channels differ only in who executes:
+
+| Channel | Identity | Implementation |
+| --- | --- | --- |
+| root | uid 0 | persistent su shell |
+| Shizuku | uid 0 (Sui/root mode) or 2000 (adb mode) | Shizuku's process API |
+| wireless ADB | 2000, uid 0 only with `--su` | forwarded to the in-container script, so its two locks still apply |
+
+Only two levels are meaningful: **read** allows diagnostics (the **same allowlist** the in-container script uses — `tools/check-native-logic.js` asserts the two are
+byte-identical), **read+write** can change device state. Strictness decides whether you are asked (see above), and every call is audited with the channel, the identity,
+the strictness in force and whether the user approved it or it ran unattended. Results carry `exit` plus `stdout`/`stderr` (truncated past 64 KB); failures are separated by
+status code: `403` the channel does not allow it (`no_channel` / `adb_write_disabled` / `root_unavailable` …), `504` timed out and dropped, `429` one is already running.
+Those are states, not transient errors, and the prompt says not to retry them.
+
+### Accessibility (`a11y`)
+
+Reads the current screen as a node tree, and can tap, swipe, type or go home on it. It acts on **whatever the user is looking at**, not on this app, so the gap between
+“read” and “write” is wider than for any other capability — and it needs the user to turn on that accessibility service in system settings (until then `caps` reports
+`available:false` + `no_a11y_service`).
+
+It clicks by text or view id rather than by remembered coordinates (bounds are device specific; they are returned with the tree). Nodes are often `clickable=false` with the
+real handler on a parent, so a click walks up to the nearest clickable ancestor and only falls back to tapping the centre when there is none. Secure windows (lock screen,
+password fields) refuse to hand over nodes and answer `no_window` instead of failing vaguely.
 
 **When access is missing, the capability call itself is the request**: the bridge does not answer it with a bare 403 — it **holds
 that call open**, shows the dialog in the app, and then either runs the command and hands the real result back, or fails that one call (deny, or no answer within

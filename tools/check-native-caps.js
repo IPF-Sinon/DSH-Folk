@@ -66,7 +66,7 @@ function parseCaps() {
   const start = bridge.indexOf("enum class Cap(val id: String) {");
   const end = bridge.indexOf("\n    }", start);
   const body = bridge.slice(start, end);
-  return [...body.matchAll(/^\s{8}([A-Z_]+)\("([a-z_]+)"\)/gm)].map((m) => ({ name: m[1], id: m[2] }));
+  return [...body.matchAll(/^\s{8}([A-Z0-9_]+)\("([a-z0-9_]+)"\)/gm)].map((m) => ({ name: m[1], id: m[2] }));
 }
 
 const caps = parseCaps();
@@ -82,13 +82,13 @@ const permGated = (() => {
   const sp = bridge.slice(bridge.indexOf("fun specialPermissionOf(cap: Cap)"), bridge.indexOf("enum class Special("));
   const names = new Set();
   for (const b of [rt, sp]) {
-    for (const m of b.matchAll(/Cap\.([A-Z_]+)\s*->/g)) names.add(m[1]);
+    for (const m of b.matchAll(/Cap\.([A-Z0-9_]+)\s*->/g)) names.add(m[1]);
   }
   // 「设备上没这个硬件/引擎」和「缺权限」对 agent 是同一件事：调用会失败，而它需要
   // 知道那不是暂时性错误、不该重试。所以 availability 里任何能返回 false 的能力也算。
   const av = bridge.slice(bridge.indexOf("private fun availability(ctx: Context, cap: Cap)"), bridge.indexOf("private fun hasMicrophone"));
   for (const seg of av.split(/\n {8}(?=Cap\.)/)) {
-    const m = seg.match(/^Cap\.([A-Z_,\s.]+?)\s*->/);
+    const m = seg.match(/^Cap\.([A-Z0-9_,\s.]+?)\s*->/);
     if (!m) continue;
     if (!/false to "/.test(seg)) continue;
     for (const one of m[1].split(",")) names.add(one.trim().replace("Cap.", ""));
@@ -104,7 +104,7 @@ const groupBlock = ui.slice(
   ui.indexOf("internal enum class CapGroup("),
   ui.indexOf("\n}", ui.indexOf("internal enum class CapGroup("))
 );
-const grouped = [...groupBlock.matchAll(/DshNativeBridge\.Cap\.([A-Z_]+)/g)].map((m) => m[1]);
+const grouped = [...groupBlock.matchAll(/DshNativeBridge\.Cap\.([A-Z0-9_]+)/g)].map((m) => m[1]);
 const missingGroup = caps.filter((c) => !grouped.includes(c.name));
 ok(missingGroup.length === 0,
   "每个 Cap 都在某个分组里" + (missingGroup.length ? " → 缺 " + missingGroup.map((c) => c.id).join(",") : ""));
@@ -148,7 +148,7 @@ ok(!routed.includes("/native/capabilities") && !declared.includes("/native/capab
   "/native/capabilities 走独立分支（总开关关闭时也可查）");
 
 // capOf 必须覆盖每个 Cap（一个能力没有任何端点 = 一个永远没用的开关）
-const capsInCapOf = [...new Set([...capOfBody.matchAll(/Cap\.([A-Z_]+)/g)].map((m) => m[1]))];
+const capsInCapOf = [...new Set([...capOfBody.matchAll(/Cap\.([A-Z0-9_]+)/g)].map((m) => m[1]))];
 const capsNoEndpoint = caps.filter((c) => !capsInCapOf.includes(c.name));
 ok(capsNoEndpoint.length === 0,
   "每个 Cap 都至少有一个端点" + (capsNoEndpoint.length ? " → 缺 " + capsNoEndpoint.map((c) => c.id).join(",") : ""));
@@ -168,7 +168,7 @@ for (const [label, src, anchor] of TABLES) {
   }
   const to = src.indexOf("\n}", from) > 0 ? src.indexOf("\n}", from) : src.length;
   const body = src.slice(from, to);
-  const covered = [...new Set([...body.matchAll(/Cap\.([A-Z_]+)/g)].map((m) => m[1]))];
+  const covered = [...new Set([...body.matchAll(/Cap\.([A-Z0-9_]+)/g)].map((m) => m[1]))];
   const miss = caps.filter((c) => !covered.includes(c.name));
   ok(miss.length === 0, label + " 覆盖每个 Cap" + (miss.length ? " → 缺 " + miss.map((c) => c.id).join(",") : ""));
 }
@@ -176,14 +176,14 @@ for (const [label, src, anchor] of TABLES) {
 {
   const from = ui.indexOf("internal fun capPermissionHintRes(");
   const body = ui.slice(from, ui.indexOf("\n}", from));
-  const covered = [...new Set([...body.matchAll(/Cap\.([A-Z_]+)/g)].map((m) => m[1]))];
+  const covered = [...new Set([...body.matchAll(/Cap\.([A-Z0-9_]+)/g)].map((m) => m[1]))];
   // 需要权限 = runtimePermissions 非空，或有特殊权限
   const rtStart = bridge.indexOf("fun runtimePermissions(cap: Cap): Array<String> = when (cap) {");
   const rtBody = bridge.slice(rtStart, bridge.indexOf("else -> emptyArray()", rtStart));
-  const needsRuntime = [...new Set([...rtBody.matchAll(/Cap\.([A-Z_]+) ->/g)].map((m) => m[1]))];
+  const needsRuntime = [...new Set([...rtBody.matchAll(/Cap\.([A-Z0-9_]+) ->/g)].map((m) => m[1]))];
   const spStart = bridge.indexOf("fun specialPermissionOf(cap: Cap): Special? = when (cap) {");
   const spBody = bridge.slice(spStart, bridge.indexOf("else -> null", spStart));
-  const needsSpecial = [...new Set([...spBody.matchAll(/Cap\.([A-Z_]+) ->/g)].map((m) => m[1]))];
+  const needsSpecial = [...new Set([...spBody.matchAll(/Cap\.([A-Z0-9_]+) ->/g)].map((m) => m[1]))];
   const needsAny = [...new Set([...needsRuntime, ...needsSpecial])];
   const miss = needsAny.filter((n) => !covered.includes(n));
   ok(miss.length === 0,
@@ -230,7 +230,7 @@ console.log("\n── 穷尽 when ──");
       const body = w.body;
       found++;
       const line = src.slice(0, m.index).split("\n").length;
-      const covered = [...new Set([...body.matchAll(/Cap\.([A-Z_]+)/g)].map((x) => x[1]))];
+      const covered = [...new Set([...body.matchAll(/Cap\.([A-Z0-9_]+)/g)].map((x) => x[1]))];
       const miss = caps.filter((c) => !covered.includes(c.name));
       ok(miss.length === 0,
         `${name}:${line} 的 when (cap) 覆盖全部 ${caps.length} 项` +
@@ -341,7 +341,7 @@ console.log("\n── 提示词插件 ──");
     // 只认顶层的 `  id:` 行（两空格缩进），否则 usage 字符串里的冒号也会被算进去。
     // 字符类必须含下划线：`full_screen_notify` 这种 id 在 `[a-zA-Z]+` 下是隐形的，
     // 结果是「表里明明有、检查器说缺」。
-    const keys = (b) => [...b.matchAll(/^ {2}([a-zA-Z_]+):/gm)].map((m) => m[1]);
+    const keys = (b) => [...b.matchAll(/^ {2}([a-zA-Z0-9_]+):/gm)].map((m) => m[1]);
     const uk = keys(usage);
     const ck = keys(caveat);
     const missU = caps.filter((c) => !uk.includes(c.id)).map((c) => c.id);

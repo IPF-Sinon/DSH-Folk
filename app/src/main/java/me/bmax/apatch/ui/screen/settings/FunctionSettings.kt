@@ -85,6 +85,7 @@ import me.bmax.apatch.dsh.RuntimeVersion
 import me.bmax.apatch.dsh.compareVersions
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
+import me.bmax.apatch.dsh.PrivStrictness
 import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.ExpressiveSwitch
@@ -163,6 +164,9 @@ fun FunctionSettingsContent(
     /** 权限通道首选（off | auto | root | shizuku | adb）。 */
     permPrefName: String,
     onPermPrefChange: (String) -> Unit,
+    /** 特权严格程度（严格 | 一般 | 宽松）。 */
+    privStrictness: PrivStrictness,
+    onPrivStrictnessChange: (PrivStrictness) -> Unit,
     /** 原生能力桥总开关。 */
     nativeBridgeEnabled: Boolean,
     onNativeBridgeEnabledChange: (Boolean) -> Unit,
@@ -1195,6 +1199,43 @@ fun FunctionSettingsContent(
                         )
                     }
 
+                    Spacer(Modifier.height(16.dp))
+                    // 严格程度只管「要不要问」，与选哪条通道是两件事，所以排在同一张卡里、
+                    // 通道选择之后：用户先决定用哪条通道，再决定它有多自由。
+                    Text(
+                        text = stringResource(R.string.dsh_priv_strictness_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_priv_strictness_summary),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    RuntimeOption(
+                        selected = privStrictness == PrivStrictness.STRICT,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_priv_strict),
+                        summary = stringResource(R.string.dsh_priv_strict_desc),
+                        onSelect = { onPrivStrictnessChange(PrivStrictness.STRICT) },
+                    )
+                    RuntimeOption(
+                        selected = privStrictness == PrivStrictness.NORMAL,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_priv_normal),
+                        summary = stringResource(R.string.dsh_priv_normal_desc),
+                        onSelect = { onPrivStrictnessChange(PrivStrictness.NORMAL) },
+                    )
+                    RuntimeOption(
+                        selected = privStrictness == PrivStrictness.LOOSE,
+                        enabled = true,
+                        title = stringResource(R.string.dsh_priv_loose),
+                        summary = stringResource(R.string.dsh_priv_loose_desc),
+                        onSelect = { onPrivStrictnessChange(PrivStrictness.LOOSE) },
+                    )
+
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = onRefreshPerm) {
@@ -1319,8 +1360,19 @@ fun FunctionSettingsContent(
                             }
                             val on = nativeBridgeEnabled && nativeAccess[cap] != DshNativeBridge.Access.OFF
                             if (on && cap !in capsWithPermission) {
-                                TextButton(onClick = { onRequestCapPermission(cap) }) {
-                                    Text(stringResource(capPermissionHintRes(cap)))
+                                if (cap == DshNativeBridge.Cap.SHELL) {
+                                    // 特权命令缺的不是 Android 权限 —— 没有任何框可弹、也没有系统页
+                                    // 可跳（解决办法在本页的「权限通道」那一段），所以是一行说明而
+                                    // 不是一个按下去什么都不发生的按钮。
+                                    Text(
+                                        text = stringResource(capPermissionHintRes(cap)),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                } else {
+                                    TextButton(onClick = { onRequestCapPermission(cap) }) {
+                                        Text(stringResource(capPermissionHintRes(cap)))
+                                    }
                                 }
                             } else if (on && cap == DshNativeBridge.Cap.LOCATION &&
                                 coarseLocationOnly
@@ -1697,6 +1749,8 @@ internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_cap_install
     DshNativeBridge.Cap.USAGE -> R.string.dsh_native_cap_usage
     DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms
+    DshNativeBridge.Cap.SHELL -> R.string.dsh_native_cap_shell
+    DshNativeBridge.Cap.A11Y -> R.string.dsh_native_cap_a11y
 }
 
 internal fun accessLabelRes(cap: DshNativeBridge.Cap, access: DshNativeBridge.Access): Int = when {
@@ -1735,6 +1789,8 @@ internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_cap_install_desc
     DshNativeBridge.Cap.USAGE -> R.string.dsh_native_cap_usage_desc
     DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms_desc
+    DshNativeBridge.Cap.SHELL -> R.string.dsh_native_cap_shell_desc
+    DshNativeBridge.Cap.A11Y -> R.string.dsh_native_cap_a11y_desc
 }
 
 /**
@@ -1763,6 +1819,9 @@ internal fun capPermissionHintRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_need_install_perm
     DshNativeBridge.Cap.USAGE -> R.string.dsh_native_need_usage_perm
     DshNativeBridge.Cap.SMS -> R.string.dsh_native_need_sms_perm
+    // 特权命令缺的不是 Android 权限，而是「还没选通道」：点下去跳到本页的权限通道那一段
+    DshNativeBridge.Cap.SHELL -> R.string.dsh_native_cap_shell_need_channel
+    DshNativeBridge.Cap.A11Y -> R.string.dsh_native_need_a11y_perm
     // 剩下的（toast/振动/剪贴板/分享/设备信息/网络）不需要任何权限。
     // 界面只在 cap !in capsWithPermission 时才取这一行，而这些项恒在集合里，
     // 所以这个分支实际不会被显示；给一个中性串而不是抛，免得将来加了新能力就崩。
@@ -1819,6 +1878,8 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
             DshNativeBridge.Cap.CONTACTS,
             DshNativeBridge.Cap.USAGE,
             DshNativeBridge.Cap.SMS,
+            // 读屏更进一步：它读的是用户此刻看的那个界面（可能是聊天窗口）
+            DshNativeBridge.Cap.A11Y,
         ),
     ),
 
@@ -1826,6 +1887,8 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
     CONTROL(
         R.string.dsh_native_group_control,
         listOf(
+            // 特权命令是全组里权限最大的一项：它不通过 Android 权限，而是借整条通道
+            DshNativeBridge.Cap.SHELL,
             DshNativeBridge.Cap.VOLUME,
             DshNativeBridge.Cap.SETTINGS,
             DshNativeBridge.Cap.INSTALL,

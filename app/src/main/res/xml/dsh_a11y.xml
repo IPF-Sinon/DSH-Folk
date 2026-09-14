@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DshA11yService 的配置。
+
+  与 dsh_autostart_a11y.xml 是**两份不同的授权**，刻意不合并：
+
+  - canRetrieveWindowContent="true" 是「能读你屏幕上的内容」的来源。自启那份刻意没有
+    这一位，因为用户当初只是想让 DSH 开机自启，而不是让应用看他的屏幕。
+  - canPerformGestures="true" 让它能点、滑（dispatchGesture）。没有它，这一项就只是
+    「看」，做不了「操作」。
+  - flagReportViewIds 让节点带上 viewIdResourceName：按 text 点不到时还能按 id 定位，
+    比坐标稳。
+  - 事件只订阅窗口变化与内容变化两类：读数按需现取（rootInActiveWindow），不靠事件流；
+    订阅得越少，系统推给我们的（以及留在内存里的）就越少。
+  - packageNames 留空 = 监听全部。这一项的用处就是「agent 需要时看一眼当前界面」，
+    写死包名会让它连自己的目标应用都看不到。真正管住它的是原生能力桥的档位与审计。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/dsh_a11y_service_desc"
+    android:notificationTimeout="100"
+    android:summary="@string/dsh_a11y_service_summary" />

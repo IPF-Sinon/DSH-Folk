@@ -141,6 +141,21 @@ object DshNativeBridge {
         USAGE("usage"),
         /** 短信读取权限。 */
         SMS("sms"),
+        /**
+         * 特权命令：把宿主已经拿到的那条通道（root / Shizuku / 无线 ADB）借给 agent 用。
+         *
+         * 不需要任何 Android 权限 —— 通道本身就是「已经拿到权限的进程」，见
+         * [PrivilegedShell]。档位只区分读（只读诊断命令）与读写（还能改设备状态）；
+         * 「要不要每次都问一声」由 [PrivPolicy] 的严格程度决定，与档位是两件事。
+         */
+        SHELL("shell"),
+        /**
+         * 无障碍：读当前屏幕的节点树，或对它做一次操作（点按/滑动/输入/系统动作）。
+         *
+         * 目标**不是本应用**，是用户此刻正在看的界面，所以只读（看屏幕）与读写（动手操作）
+         * 的差别比别的能力大得多；需要用户单独打开那个无障碍服务（[Special.A11Y_SERVICE]）。
+         */
+        A11Y("a11y"),
     }
 
     /**
@@ -184,6 +199,7 @@ object DshNativeBridge {
      * 不会两者都要。null 表示不需要特殊权限。
      */
     fun specialPermissionOf(cap: Cap): Special? = when (cap) {
+        Cap.A11Y -> Special.A11Y_SERVICE
         Cap.SETTINGS -> Special.WRITE_SETTINGS
         Cap.VOLUME -> Special.NOTIFICATION_POLICY
         Cap.INSTALL -> Special.REQUEST_INSTALL
@@ -223,6 +239,16 @@ object DshNativeBridge {
 
         /** 应用使用统计访问权；系统只提供应用列表页。 */
         USAGE_STATS(Settings.ACTION_USAGE_ACCESS_SETTINGS, false),
+
+        /**
+         * 无障碍服务。
+         *
+         * 它不是一个「权限」，而是一个由系统托管、用户单独打开的服务 —— 但对本应用而言
+         * 判定方式与特殊权限完全一样（就是「用户有没有在系统页里打开这一项」），所以并进
+         * 同一张表，于是「跳设置页 + 回前台复查」那套机制可以原样复用。
+         * [perAppUri] 为 false：无障碍设置页不接受 package 参数。
+         */
+        A11Y_SERVICE(Settings.ACTION_ACCESSIBILITY_SETTINGS, false),
     }
 
     /** 这项特殊权限现在是否已经授予。 */
@@ -235,6 +261,7 @@ object DshNativeBridge {
         } else true
         Special.NOTIFICATION_ACCESS -> DshNotificationListener.connected()
         Special.USAGE_STATS -> PermissionUtils.hasUsageStatsPermission(ctx)
+        Special.A11Y_SERVICE -> DshA11y.connected()
     }
 
     fun runtimePermissions(ctx: Context, cap: Cap, access: Access): Array<String> = when (cap) {
@@ -341,9 +368,12 @@ object DshNativeBridge {
     fun supportsWrite(cap: Cap): Boolean = when (cap) {
         Cap.NOTIFY, Cap.FULL_SCREEN_NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.CLIPBOARD, Cap.INTENT,
         Cap.MIC, Cap.CAMERA, Cap.TTS, Cap.CALENDAR, Cap.VOLUME, Cap.SETTINGS,
-        Cap.SMS -> true
+        Cap.SMS, Cap.SHELL, Cap.A11Y -> true
         else -> false
     }
+
+    // 特权命令是**唯一**既读又写却没有 Android 权限的能力：它的门禁全在通道上
+    // （[PrivilegedShell.denyReason]）与严格程度上（[PrivPolicy.needsConfirm]）。
 
     fun supportsRead(cap: Cap): Boolean = when (cap) {
         Cap.TOAST, Cap.VIBRATE, Cap.FULL_SCREEN_NOTIFY, Cap.INTENT, Cap.MIC, Cap.CAMERA -> false
@@ -422,7 +452,7 @@ object DshNativeBridge {
      * write / read）：只看读写的版本会漏掉 `notify/system` 的 CONTROL 档，那一档的一次性授权
      * 就能被反复使用。
      */
-    private fun spendOnce(ctx: Context, cap: Cap, method: String, path: String) {
+    private fun spendOnce(ctx: Context, cap: Cap, method: String, path: String, params: Map<String, String>) {
         val once = onceStore[cap] ?: return
         if (once.expiresAtMs <= System.currentTimeMillis()) {
             onceStore.remove(cap, once)
@@ -431,7 +461,7 @@ object DshNativeBridge {
         val persisted = access(ctx, cap)
         val authorizedBefore = when {
             path == "/native/notify/system" -> persisted == Access.CONTROL
-            isWriteRequest(method, path) -> accessNeedsWrite(persisted)
+            isWriteRequest(method, path, params) -> accessNeedsWrite(persisted)
             else -> accessNeedsRead(persisted)
         }
         if (authorizedBefore) return
@@ -547,6 +577,14 @@ object DshNativeBridge {
         Cap.SMS ->
             if (PermissionUtils.hasSmsPermission(ctx)) true to ""
             else false to "no_sms_permission"
+        // 特权命令能不能用，取决于用户有没有选一条通道。「读了但没启用」与「设备上真的
+        // 没有」在这里是同一个答案：agent 该做的就是让用户去设置 → 权限通道选一条。
+        Cap.SHELL ->
+            if (PrivilegedShell.reach(ctx) != null) true to ""
+            else false to "no_channel"
+        // 无障碍服务没开时这一项做不了任何事：agent 该提示用户去打开那个开关
+        Cap.A11Y ->
+            if (DshA11y.connected()) true to "" else false to "no_a11y_service"
         else -> true to ""
     }
 
@@ -585,6 +623,9 @@ object DshNativeBridge {
 
         val reason = text(params["reason"])
             ?: return 400 to err(str(ctx, R.string.dsh_native_err_reason_required), "reason_required")
+        // 这次调用是否经过用户当场同意（免确认路径留 auto）。只用于审计 —— 事后要能回答
+        // 「这条 root 命令是用户点过头的，还是宽松档直接跑的」。
+        var privDecision = "auto"
         val cap = capOf(path)
             ?: return 404 to err(
                 str(ctx, R.string.dsh_native_err_unknown_endpoint, method, path),
@@ -592,8 +633,17 @@ object DshNativeBridge {
             )
         // 档位不够时**不**直接 403，而是阻塞着问用户。用户同意就把这次调用就地执行掉并返回真实
         // 结果 —— agent 不需要「申请 → 再调一次」，也就不会看到「申请成功了但调用还是失败」。
-        val need = insufficient(ctx, cap, method, path)
-        if (need != null) {
+        val need = insufficient(ctx, cap, method, path, params)
+        // 档位够不代表就能直接跑：特权调用还要过「严格程度」这一关（[PrivPolicy]）。
+        // 严格档下每一次都要用户当场同意，档位够不够与此无关。
+        val risk = when (cap) {
+            Cap.SHELL -> PrivilegedShell.riskOf(params["cmd"].orEmpty())
+            Cap.A11Y -> DshA11y.riskOf(path.substringAfterLast('/'))
+            else -> null
+        }
+        val strictness = PrivPolicy.of(ctx)
+        val confirm = risk != null && PrivPolicy.needsConfirm(strictness, risk)
+        if (need != null || confirm) {
             // 弹窗只有在前台才看得见；不在前台就别把这条连接挂在这里等一个永远不会出现的弹窗
             if (!isForeground(ctx)) {
                 val result = 409 to err(
@@ -605,7 +655,21 @@ object DshNativeBridge {
             }
             // 弹窗上显示的就是这条命令本身（与审计同款重建），用户看到的即是将要执行的
             val command = auditCommand(method, path, params, reason, maskSensitive = false)
-            val request = DshElevationRequests.submit(cap, need, reason, command, null)
+            // 两种弹窗：LEVEL 是「档位不够，问要不要放开」；CALL 是「档位够，但按严格程度
+            // 这次仍要你点头」。分开是因为按钮不同 —— LEVEL 可能有「允许（长期）」，
+            // CALL 只有「允许本次」。
+            val kind = if (need != null) DshElevationRequests.Kind.LEVEL else DshElevationRequests.Kind.CALL
+            val reach = if (cap == Cap.SHELL) PrivilegedShell.reach(ctx) else null
+            val request = DshElevationRequests.submit(
+                cap = cap,
+                access = need ?: effectiveAccess(ctx, cap),
+                reason = reason,
+                command = command,
+                invocation = null,
+                kind = kind,
+                channel = reach?.channel?.let { channelLabel(ctx, it) },
+                uid = reach?.uid,
+            )
             if (request == null) {
                 val result = 409 to err(
                     str(ctx, R.string.dsh_native_err_elevate_busy),
@@ -615,12 +679,14 @@ object DshNativeBridge {
                 return result
             }
             runCatching { DshHostPrompt.writeFacts(ctx.applicationContext) }
+            privDecision = if (kind == DshElevationRequests.Kind.CALL) "confirmed" else "level_granted"
             when (DshElevationRequests.awaitDecision(request.id)) {   // 阻塞在这里等用户
                 DshElevationRequests.Decision.ALLOWED,
                 DshElevationRequests.Decision.ONCE,
                 -> Unit
 
                 DshElevationRequests.Decision.DENIED -> {
+                    privDecision = "denied"
                     val result = 403 to err(
                         str(ctx, R.string.dsh_native_err_denied, capName(ctx, cap)),
                         "denied_by_user",
@@ -630,6 +696,7 @@ object DshNativeBridge {
                 }
 
                 DshElevationRequests.Decision.EXPIRED -> {
+                    privDecision = "expired"
                     val result = 403 to err(
                         str(ctx, R.string.dsh_native_err_request_expired, capName(ctx, cap)),
                         "request_expired",
@@ -654,7 +721,7 @@ object DshNativeBridge {
             audit(ctx, method, path, params, cap, reason, result)
             return result
         }
-        if (isWriteRequest(method, path) && !canWrite(ctx, cap)) {
+        if (isWriteRequest(method, path, params) && !canWrite(ctx, cap)) {
             val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_write_disabled, capName(ctx, cap)),
                 "write_disabled",
@@ -662,7 +729,7 @@ object DshNativeBridge {
             audit(ctx, method, path, params, cap, reason, result)
             return result
         }
-        if (!isWriteRequest(method, path) && !canRead(ctx, cap)) {
+        if (!isWriteRequest(method, path, params) && !canRead(ctx, cap)) {
             val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_read_disabled, capName(ctx, cap)),
                 "read_disabled",
@@ -694,9 +761,16 @@ object DshNativeBridge {
         // 放在设备可用性检查**之后**：用户点了「仅本次」，接着在 Android 自己的权限框上
         // 点了拒绝（或者干脆没给），这次调用什么也做不成；那种情况烧掉配额等于让他为同一件
         // 事回答两次。配额本身有三分钟寿命，所以留着也不会变成长期授权。
-        spendOnce(ctx, cap, method, path)
+        spendOnce(ctx, cap, method, path, params)
 
         val result = when {
+            method == "POST" && path == "/native/shell" -> shellExec(ctx, params)
+            method == "GET" && path == "/native/a11y/tree" -> a11yExec(ctx, "tree", params)
+            method == "POST" && path == "/native/a11y/tap" -> a11yExec(ctx, "tap", params)
+            method == "POST" && path == "/native/a11y/click" -> a11yExec(ctx, "click", params)
+            method == "POST" && path == "/native/a11y/swipe" -> a11yExec(ctx, "swipe", params)
+            method == "POST" && path == "/native/a11y/text" -> a11yExec(ctx, "text", params)
+            method == "POST" && path == "/native/a11y/global" -> a11yExec(ctx, "global", params)
             method == "POST" && path == "/native/notify" -> notify(ctx, params)
             method == "DELETE" && path == "/native/notify" -> cancelNotify(ctx, params)
             method == "GET" && path == "/native/notify/list" -> notificationList(ctx, params)
@@ -750,9 +824,135 @@ object DshNativeBridge {
             method == "POST" && path == "/native/sms/send" -> smsSend(ctx, params)
             else -> methodNotAllowed(ctx, method, path)
         }
-        audit(ctx, method, path, params, cap, reason, result)
+        audit(ctx, method, path, params, cap, reason, result, privAuditExtra(ctx, cap, privDecision))
         return result
     }
+
+    /**
+     * 执行一条特权命令。
+     *
+     * 走到这里时档位与用户同意都已经过了（见 [handle] 的闸门），这一层只负责：通道允许不允许
+     * （[PrivilegedShell.denyReason]）、单飞、真的跑、把结果按协议返回。
+     *
+     * 命令本身**不**在 JSON 里回显 —— 它已经在审计里了，而回显等于让 agent 以为自己看到的是
+     * 「宿主批准的命令」，实际上批准的是它自己写的那串。
+     */
+    private fun shellExec(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val command = text(params["cmd"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_shell_no_command), "no_command")
+        val asRoot = params["su"] == "1"
+        val timeout = params["timeout"]?.toLongOrNull() ?: PrivilegedShell.DEFAULT_TIMEOUT_MS
+        val risk = PrivilegedShell.riskOf(command)
+        // 这里**不**自己写审计：[handle] 拿到返回值之后统一记一条，自己再记一条会变成
+        // 同一次调用出现两行（而且下面那些早期返回也都被记过两遍）
+        PrivilegedShell.denyReason(ctx, risk, asRoot)?.let { deny ->
+            return 403 to err(str(ctx, R.string.dsh_native_err_priv_denied, privReasonText(ctx, deny)), deny)
+        }
+        if (!PrivilegedShell.tryEnter()) {
+            return 429 to err(str(ctx, R.string.dsh_native_err_priv_busy), "busy")
+        }
+        val outcome = try {
+            PrivilegedShell.exec(ctx, command, asRoot, timeout)
+        } finally {
+            PrivilegedShell.exit()
+        }
+        val reach = PrivilegedShell.reach(ctx)
+        val body = JSONObject()
+            .put("ok", outcome.note == null && outcome.exit == 0)
+            .put("exit", outcome.exit)
+            .put("stdout", outcome.stdout)
+            .put("stderr", outcome.stderr)
+            .put("timedOut", outcome.timedOut)
+            .put("channel", reach?.channel?.name?.lowercase().orEmpty())
+            .put("uid", reach?.uid ?: -1)
+            .put("asRoot", asRoot)
+            .put("risk", riskId(risk))
+        // 跑不成（通道没了 / 超时）与「跑了但退出码非零」是两件事：前者 agent 应当改策略，
+        // 后者它应当去读 stderr。用状态码把它们分开。
+        outcome.note?.let { body.put("reason", it) }
+        return if (outcome.note == null) {
+            200 to body.toString()
+        } else {
+            val status = if (outcome.timedOut) 504 else 409
+            body.put("error", str(ctx, R.string.dsh_native_err_shell_failed, privReasonText(ctx, outcome.note)))
+            status to body.toString()
+        }
+    }
+
+    /**
+     * 执行一次无障碍读/写。
+     *
+     * 与 [shellExec] 同样是「闸门都过了才走到这里」：档位（关/读/读写）、严格程度下的确认、
+     * 服务是否开着，都已经在前面判定过。这一层只负责调用 [DshA11y] 并把结果按协议返回。
+     */
+    private fun a11yExec(ctx: Context, action: String, params: Map<String, String>): Pair<Int, String> {
+        val body = try {
+            when (action) {
+                "tree" -> DshA11y.snapshot(
+                    maxDepth = params["depth"]?.toIntOrNull() ?: DshA11y.MAX_DEPTH,
+                    maxNodes = params["max"]?.toIntOrNull() ?: DshA11y.MAX_NODES,
+                )
+                "tap" -> {
+                    val x = params["x"]?.toFloatOrNull()
+                    val y = params["y"]?.toFloatOrNull()
+                    if (x == null || y == null) {
+                        return 400 to err(str(ctx, R.string.dsh_native_err_a11y_bad_args), "bad_args")
+                    }
+                    DshA11y.tap(x, y, params["ms"]?.toLongOrNull() ?: 60L)
+                }
+                "click" -> {
+                    val target = text(params["target"])
+                        ?: return 400 to err(str(ctx, R.string.dsh_native_err_a11y_bad_args), "bad_args")
+                    DshA11y.click(target, text(params["class"]), params["index"]?.toIntOrNull() ?: 0)
+                }
+                "swipe" -> {
+                    val nums = listOf("x1", "y1", "x2", "y2").map { params[it]?.toFloatOrNull() }
+                    if (nums.any { it == null }) {
+                        return 400 to err(str(ctx, R.string.dsh_native_err_a11y_bad_args), "bad_args")
+                    }
+                    DshA11y.swipe(nums[0]!!, nums[1]!!, nums[2]!!, nums[3]!!, params["ms"]?.toLongOrNull() ?: 300L)
+                }
+                "text" -> {
+                    val value = params["text"]
+                        ?: return 400 to err(str(ctx, R.string.dsh_native_err_a11y_bad_args), "bad_args")
+                    DshA11y.setText(value, text(params["target"]))
+                }
+                "global" -> {
+                    val act = text(params["action"])
+                        ?: return 400 to err(str(ctx, R.string.dsh_native_err_a11y_bad_args), "bad_args")
+                    DshA11y.global(act)
+                }
+                else -> JSONObject().put("ok", false).put("reason", "unknown_action")
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "无障碍调用失败: " + e.message)
+            JSONObject().put("ok", false).put("reason", "a11y_failed")
+        }
+        body.put("action", action)
+        return if (body.optBoolean("ok")) 200 to body.toString() else 409 to body.toString()
+    }
+
+    private fun riskId(risk: PrivRisk): String = when (risk) {
+        PrivRisk.READONLY -> "readonly"
+        PrivRisk.WRITE -> "write"
+        PrivRisk.DANGEROUS -> "dangerous"
+    }
+
+    /** 把通道侧的拒绝理由翻成给用户/agent 看的一句话（reason 码本身另给）。 */
+    private fun privReasonText(ctx: Context, reason: String): String = str(
+        ctx,
+        when (reason) {
+            "no_channel" -> R.string.dsh_native_priv_reason_no_channel
+            "root_unavailable" -> R.string.dsh_native_priv_reason_root_unavailable
+            "adb_root_disabled" -> R.string.dsh_native_priv_reason_adb_root
+            "adb_write_disabled" -> R.string.dsh_native_priv_reason_adb_write
+            "runtime_missing" -> R.string.dsh_native_priv_reason_runtime
+            "root_lost" -> R.string.dsh_native_priv_reason_root_lost
+            "channel_lost" -> R.string.dsh_native_priv_reason_channel_lost
+            "timeout" -> R.string.dsh_native_priv_reason_timeout
+            else -> R.string.dsh_native_priv_reason_unknown
+        },
+    )
 
     /**
      * 能力的**本地化**名字，用在给用户看的报错里。
@@ -785,8 +985,27 @@ object DshNativeBridge {
             Cap.INSTALL -> R.string.dsh_native_cap_install
             Cap.USAGE -> R.string.dsh_native_cap_usage
             Cap.SMS -> R.string.dsh_native_cap_sms
+            Cap.SHELL -> R.string.dsh_native_cap_shell
+            Cap.A11Y -> R.string.dsh_native_cap_a11y
         },
     )
+
+    /**
+     * 这次请求算不算「写」。
+     *
+     * 多数端点看路径就够，但 `/native/shell` 必须看**命令本身**：`dumpsys window` 是读，
+     * `settings put` 是写。按路径一刀切成写，会让「读」档位连 `getprop` 都用不了 ——
+     * 而那一档存在的意义正是「只允许看」。
+     */
+    private fun isWriteRequest(method: String, path: String, params: Map<String, String>): Boolean =
+        when {
+            // 只读的那一个动作单列：读屏不改变任何东西，不该被写档位挡住
+            path == "/native/a11y/tree" -> false
+            path.startsWith("/native/a11y/") -> true
+            path == "/native/shell" ->
+                PrivilegedShell.riskOf(params["cmd"].orEmpty()) != PrivRisk.READONLY
+            else -> isWriteRequest(method, path)
+        }
 
     private fun isWriteRequest(method: String, path: String): Boolean = when {
         path == "/native/notify" || path == "/native/notify/system" || path == "/native/notify/full-screen" -> true
@@ -797,6 +1016,8 @@ object DshNativeBridge {
         path.startsWith("/native/tts/") && path != "/native/tts/voices" -> true
         path == "/native/clipboard" && method == "POST" -> true
         path == "/native/calendar/create" -> true
+        path == "/native/shell" -> true
+        path.startsWith("/native/a11y/") && path != "/native/a11y/tree" -> true
         path == "/native/volume" && method == "POST" -> true
         path == "/native/ringer" -> true
         path.startsWith("/native/settings/") && method == "POST" -> true
@@ -829,6 +1050,13 @@ object DshNativeBridge {
         "/native/install" -> Cap.INSTALL
         "/native/usage/list" -> Cap.USAGE
         "/native/sms/list", "/native/sms/send" -> Cap.SMS
+        "/native/shell" -> Cap.SHELL
+        "/native/a11y/tree",
+        "/native/a11y/tap",
+        "/native/a11y/click",
+        "/native/a11y/swipe",
+        "/native/a11y/text",
+        "/native/a11y/global" -> Cap.A11Y
         else -> null
     }
 
@@ -886,8 +1114,28 @@ object DshNativeBridge {
                         .put("agoMs", (System.currentTimeMillis() - it.atMs).coerceAtLeast(0L))
                 } ?: JSONObject.NULL,
             )
+            // 特权通道：**没有通道就是 null**，不是 `{"channel":"none"}` —— 提示词只在
+            // 这一段非空时才告诉 agent 「你能提权」，而「设备上根本没有提权途径」这件事
+            // 说与不说都是让 agent 去骚扰用户。
+            .put("elevation", elevationJson(ctx))
             .put("caps", caps)
             .toString()
+    }
+
+    /**
+     * 当前特权通道的事实：走哪条、能拿到什么身份、严格程度如何。
+     *
+     * 四个字段都是 agent 决定「要不要走特权这条路」必需的信息：uid 决定它能读什么，
+     * canRoot 决定 `--su` 有没有意义，strictness 决定这次调用会不会弹窗
+     * （严格档下每次都会，所以别把十件事拆成十条命令）。
+     */
+    internal fun elevationJson(ctx: Context): Any {
+        val reach = PrivilegedShell.reach(ctx) ?: return JSONObject.NULL
+        return JSONObject()
+            .put("channel", reach.channel.name.lowercase())
+            .put("uid", reach.uid)
+            .put("canRoot", reach.canRoot)
+            .put("strictness", PrivPolicy.of(ctx).id)
     }
 
     // ────────────────────────── 能力实现 ──────────────────────────
@@ -898,11 +1146,11 @@ object DshNativeBridge {
      * 取**够用的最低档**：多要一档就等于多问用户一次，而用户对「读通知」和「全权控制通知」的
      * 感受完全不同。档位从 [accessOptions] 里挑，所以只会给出这台设备上合法的那几档。
      */
-    private fun neededAccess(cap: Cap, method: String, path: String): Access {
+    private fun neededAccess(cap: Cap, method: String, path: String, params: Map<String, String>): Access {
         val options = accessOptions(cap)
         val fits: (Access) -> Boolean = when {
             path == "/native/notify/system" -> { a -> a == Access.CONTROL }
-            isWriteRequest(method, path) -> { a -> accessNeedsWrite(a) }
+            isWriteRequest(method, path, params) -> { a -> accessNeedsWrite(a) }
             else -> { a -> accessNeedsRead(a) }
         }
         return options.firstOrNull { it != Access.OFF && fits(it) } ?: options.last()
@@ -923,8 +1171,8 @@ object DshNativeBridge {
     }
 
     /** 档位够不够：够了返回 null，不够返回需要的那一档。 */
-    private fun insufficient(ctx: Context, cap: Cap, method: String, path: String): Access? {
-        val need = neededAccess(cap, method, path)
+    private fun insufficient(ctx: Context, cap: Cap, method: String, path: String, params: Map<String, String>): Access? {
+        val need = neededAccess(cap, method, path, params)
         return if (levelCovers(effectiveAccess(ctx, cap), need)) null else need
     }
 
@@ -973,6 +1221,7 @@ object DshNativeBridge {
             Special.FULL_SCREEN_INTENT -> R.string.dsh_native_perm_label_full_screen
             Special.NOTIFICATION_ACCESS -> R.string.dsh_native_perm_label_notification_access
             Special.USAGE_STATS -> R.string.dsh_native_perm_label_usage
+            Special.A11Y_SERVICE -> R.string.dsh_native_perm_label_a11y
         },
     )
 
@@ -1111,6 +1360,7 @@ object DshNativeBridge {
         cap: Cap,
         reason: String,
         response: Pair<Int, String>,
+        extra: JSONObject? = null,
     ) {
         runCatching {
             val dir = File(ctx.filesDir, "audit").apply { mkdirs() }
@@ -1130,6 +1380,7 @@ object DshNativeBridge {
                 .put("reason", reason)
                 .put("status", response.first)
                 .put("result", auditResult(response.second))
+            if (extra != null) for (key in extra.keys()) entry.put(key, extra.get(key))
             FileWriter(file, true).use { it.append(entry.toString()).append('\n') }
         }.onFailure { Log.w(TAG, "记录能力调用失败: ${it.message}") }
     }
@@ -1143,6 +1394,32 @@ object DshNativeBridge {
     } else {
         body.take(AUDIT_RESULT_MAX_CHARS) + "\n…(已截断，完整长度 ${body.length})"
     }
+
+    /**
+     * 特权调用的审计附加字段：走的哪条通道、拿到什么身份、当时是哪一档严格程度、
+     * 这次有没有经过用户同意。
+     *
+     * 这四项是事后复盘的全部依据 —— 「凌晨三点那条 pm uninstall 是谁批的」只能靠它们回答。
+     */
+    private fun privAuditExtra(ctx: Context, cap: Cap, decision: String): JSONObject? {
+        if (cap != Cap.SHELL) return null
+        val reach = PrivilegedShell.reach(ctx)
+        return JSONObject()
+            .put("channel", reach?.channel?.name?.lowercase().orEmpty())
+            .put("uid", reach?.uid ?: -1)
+            .put("strictness", PrivPolicy.of(ctx).id)
+            .put("decision", decision)
+    }
+
+    private fun channelLabel(ctx: Context, channel: PermissionManager.Channel): String = str(
+        ctx,
+        when (channel) {
+            PermissionManager.Channel.ROOT -> R.string.dsh_perm_root
+            PermissionManager.Channel.SHIZUKU -> R.string.dsh_perm_shizuku
+            PermissionManager.Channel.ADB -> R.string.dsh_perm_adb
+            PermissionManager.Channel.NONE -> R.string.dsh_perm_none
+        },
+    )
 
     private fun auditCommand(
         method: String,
@@ -1201,6 +1478,19 @@ object DshNativeBridge {
             "/native/usage/list" -> "usage list"
             "/native/sms/list" -> "sms list"
             "/native/sms/send" -> "sms send ${value("to", true)} ${value("body", true)}"
+            // 特权命令**不打码**：用户当初点的就是这个命令，记录里把它藏掉等于让「权限调用
+            // 记录」失去唯一的复盘价值（与 /native/elevate 的附带命令同理）
+            "/native/shell" ->
+                (if (params["su"] == "1") "shell --su " else "shell ") + value("cmd")
+            // 无障碍动作同样不打码：用户要复核的是「它点了哪里/输入了什么」，
+            // 把目标文本藏起来等于让审计失去意义（与 /native/shell 同理）
+            "/native/a11y/tree" -> "a11y tree"
+            "/native/a11y/tap" -> "a11y tap ${value("x")} ${value("y")}"
+            "/native/a11y/click" -> "a11y click ${value("target")} ${value("class")} ${value("index")}"
+            "/native/a11y/swipe" ->
+                "a11y swipe ${value("x1")} ${value("y1")} ${value("x2")} ${value("y2")} ${value("ms")}"
+            "/native/a11y/text" -> "a11y text ${value("text")} ${value("target")}"
+            "/native/a11y/global" -> "a11y global ${value("action")}"
             else -> "$method $path"
         }
         val options = when (path) {
@@ -1217,6 +1507,13 @@ object DshNativeBridge {
             "/native/media/read" -> listOf(option("type"))
             "/native/mic/record" -> listOf(option("ms"))
             "/native/camera/photo" -> listOf(option("facing"), option("max"))
+            "/native/shell" -> listOf(option("timeout"))
+            "/native/a11y/tree" -> listOf(option("depth"), option("max"))
+            "/native/a11y/tap" -> listOf()
+            "/native/a11y/click" -> listOf(option("class"), option("index"))
+            "/native/a11y/swipe" -> listOf(option("ms"))
+            "/native/a11y/text" -> listOf(option("target"))
+            "/native/a11y/global" -> listOf()
             "/native/tts/speak", "/native/tts/file" -> listOf(option("lang"), option("rate"), option("pitch"))
             "/native/calendar/list" -> listOf(option("days"), option("limit"))
             "/native/calendar/create" -> listOf(

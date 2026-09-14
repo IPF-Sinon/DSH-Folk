@@ -153,6 +153,8 @@ object SettingsRegistry {
 
             // === Permissions ===
             add(SettingEntry("function_permission", R.string.dsh_perm_section, R.string.dsh_perm_summary, SettingCategory.SECURITY))
+            // 严格程度就在权限通道那张卡里，但用户会按「严格」「宽松」这些词去搜 —— 单列一条
+            add(SettingEntry("function_permission", R.string.dsh_priv_strictness_title, R.string.dsh_priv_strictness_summary, SettingCategory.SECURITY))
             add(SettingEntry("function_native_bridge", R.string.dsh_native_section, R.string.dsh_native_summary, SettingCategory.SECURITY))
             add(SettingEntry("function_wireless_adb", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.SECURITY))
         }

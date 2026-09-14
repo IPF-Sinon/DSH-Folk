@@ -183,6 +183,14 @@ object DshEnv {
     const val KEY_PERM_CHANNEL = "perm_channel_pref"
 
     /**
+     * 特权严格程度：strict | normal | loose（见 [PrivPolicy]）。
+     *
+     * **默认 strict**：每一次特权调用都要用户当场同意。这一项管的是「要不要问一声」，
+     * 与 [KEY_PERM_CHANNEL] 的「用哪条通道」、与能力档位的「允不允许做」是三件事。
+     */
+    const val KEY_PRIV_STRICTNESS = "priv_strictness"
+
+    /**
      * 原生能力桥总开关（默认关）。
      *
      * 关闭时 `/native/` 下的全部端点 一律 403。容器里跑的是 dsh 和用户自己装的第三方插件，

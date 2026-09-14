@@ -432,5 +432,197 @@ ok(SRC.rt.includes("dsh_log_bundle_unresolvable_user"),
     "日志只记 token 长度，不记 token 本身");
 }
 
+
+// ───────────────── 特权：严格程度 × 风险等级 ─────────────────
+//
+// 「三行 when」的判定最容易被当成不用测的东西，而它错了就是**每次特权调用都静默放行**。
+// 这里复刻 PrivPolicy.needsConfirm 并逐格对拍，同时检查它没有被写成两处。
+console.log("── 特权严格程度 ──");
+{
+  const priv = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/PrivPolicy.kt", "utf8");
+  const risk = (s, r) => {
+    if (s === "strict") return true;
+    if (s === "normal") return r !== "readonly";
+    return r === "dangerous";
+  };
+  // 复刻体：必须与 Kotlin 里的分支一一对应
+  const needs = (strictness, r) =>
+    strictness === "strict" ? true : strictness === "normal" ? r !== "readonly" : r === "dangerous";
+  eq([needs("strict", "readonly"), needs("strict", "write"), needs("strict", "dangerous")], [true, true, true],
+    "严格档：读、写、危险都要用户同意（含只读，这正是它区别于「一般」的地方）");
+  eq([needs("normal", "readonly"), needs("normal", "write"), needs("normal", "dangerous")], [false, true, true],
+    "一般档：只读免确认，写与危险要确认");
+  eq([needs("loose", "readonly"), needs("loose", "write"), needs("loose", "dangerous")], [false, false, true],
+    "宽松档：档位内免确认，只有危险命令要确认");
+  eq([risk("strict", "readonly"), risk("normal", "write"), risk("loose", "dangerous")], [true, true, true],
+    "复刻体与参考实现一致");
+  ok(/PrivStrictness\.STRICT -> true/.test(priv), "严格档在所有等级上都返回 true（没有给只读开后门）");
+  ok(/PrivStrictness\.NORMAL -> risk != PrivRisk\.READONLY/.test(priv), "一般档只给只读免确认");
+  ok(/PrivStrictness\.LOOSE -> risk == PrivRisk\.DANGEROUS/.test(priv), "宽松档只拦危险命令");
+  ok(/fun allowsPersistentGrant\(strictness: PrivStrictness\): Boolean =\s*strictness != PrivStrictness\.STRICT/.test(priv),
+    "严格档不给「允许（长期）」");
+  ok(/entries\.firstOrNull \{ it\.id == raw \} \?: DEFAULT/.test(priv) && /val DEFAULT = STRICT/.test(priv),
+    "认不出来的严格程度落回最保守的一档");
+  // 默认值必须是 strict：prefs 里没有这一项时读出来就该是 strict
+  ok(/KEY_PRIV_STRICTNESS = "priv_strictness"/.test(SRC.rt === undefined ? "" : fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt", "utf8")),
+    "严格程度有独立的 prefs 键（默认 strict 由 PrivStrictness.DEFAULT 兜底）");
+}
+
+// ───────────────── 特权：只读命令判定必须与容器内脚本一致 ─────────────────
+//
+// 宿主（Kotlin）与容器内 adb-shell.py 各有一份只读白名单。两边漂移的后果是「同一条命令
+// 走宿主不需要确认、走脚本要确认」——用户看到的行为取决于代码路径，这最难查。
+console.log("\n── 只读白名单：Kotlin ↔ adb-shell.py ──");
+{
+  const shell = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/PrivilegedShell.kt", "utf8");
+  const py = fs.readFileSync("app/src/main/assets/adb-shell.py", "utf8");
+
+  const kotlinCmds = (() => {
+    const at = shell.indexOf("private val READONLY_CMDS = setOf(");
+    const body = shell.slice(at, shell.indexOf(")", shell.indexOf('"echo",')));
+    return [...body.matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1]).sort();
+  })();
+  const pyCmds = (() => {
+    const at = py.indexOf("READONLY_CMDS = frozenset((");
+    const body = py.slice(at, py.indexOf("))", at));
+    return [...body.matchAll(/'([a-z0-9]+)'/g)].map((m) => m[1]).sort();
+  })();
+  ok(kotlinCmds.length > 20 && pyCmds.length > 20, `两边都解析到了白名单（${kotlinCmds.length} / ${pyCmds.length}）`);
+  eq(kotlinCmds.join(","), pyCmds.join(","), "只读命令白名单逐字一致");
+
+  const kotlinSub = (() => {
+    const at = shell.indexOf("private val READONLY_SUB = mapOf(");
+    const body = shell.slice(at, shell.indexOf("private val DANGEROUS_CMDS"));
+    return [...body.matchAll(/"([a-z]+)" to setOf\(([^)]*)\)/g)]
+      .map((m) => m[1] + ":" + [...m[2].matchAll(/"([a-z]+)"/g)].map((x) => x[1]).sort().join("|"))
+      .sort();
+  })();
+  const pySub = (() => {
+    const at = py.indexOf("READONLY_SUB = {");
+    const body = py.slice(at, py.indexOf("}", at));
+    return [...body.matchAll(/'([a-z]+)': frozenset\(\(([^)]*)\)\)/g)]
+      .map((m) => m[1] + ":" + [...m[2].matchAll(/'([a-z]+)'/g)].map((x) => x[1]).sort().join("|"))
+      .sort();
+  })();
+  eq(kotlinSub.join(","), pySub.join(","), "只读子命令白名单逐字一致（空集也算一项）");
+
+  // 判据本身：元字符与 find -delete 这两个坑必须两边都堵上
+  const isReadonly = (cmd) => {
+    const t = cmd.trim();
+    if (!t) return false;
+    for (const m of [">", "<", "|", ";", "&", "$(", "`", "\n", "\r"]) if (t.includes(m)) return false;
+    const parts = t.split(/\s+/);
+    const name = parts[0].split("/").pop();
+    if (name === "find") return !parts.slice(1).some((a) => ["-delete", "-exec", "-fprint", "-fls"].some((f) => a.startsWith(f)));
+    const sub = pySub.find((x) => x.startsWith(name + ":"));
+    if (sub) return parts.length > 1 && sub.slice(name.length + 1).split("|").includes(parts[1]);
+    return pyCmds.includes(name);
+  };
+  const cases = [
+    ["getprop ro.build.version.sdk", true],
+    ["dumpsys window", true],
+    ["ls -la /sdcard", true],
+    ["echo hi > /sdcard/f", false],
+    ["ls; rm -rf /sdcard", false],
+    ["cat /data/x | grep y", false],
+    ["find /sdcard -name x", true],
+    ["find /sdcard -name x -delete", false],
+    ["pm list packages", true],
+    ["pm uninstall com.x", false],
+    ["settings get global x", true],
+    ["settings put global x 1", false],
+    ["input tap 1 2", false],
+    ["am start -n a/b", false],
+    ["", false],
+  ];
+  eq(cases.map((c) => isReadonly(c[0])), cases.map((c) => c[1]), "只读判定在 15 个用例上与期望一致（元字符与 find 两个坑都堵住）");
+  ok(/for \(m in META_CHARS\) if \(s\.contains\(m\)\) return false/.test(shell), "Kotlin 侧确实先查元字符");
+  ok(/a\.startsWith\("-delete"\)/.test(shell), "Kotlin 侧也有 find -delete 的特判");
+}
+
+// ───────────────── 特权：风险分级 ─────────────────
+console.log("\n── 特权风险分级 ──");
+{
+  const shell = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/PrivilegedShell.kt", "utf8");
+  const dangerous = (() => {
+    const at = shell.indexOf("private val DANGEROUS_CMDS = setOf(");
+    return [...shell.slice(at, shell.indexOf(")", at)).matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
+  })();
+  for (const cmd of ["rm", "dd", "mkfs", "reboot"]) ok(dangerous.includes(cmd), `${cmd} 是危险命令`);
+  const subAt = shell.indexOf("private val DANGEROUS_SUB = mapOf(");
+  const subBody = shell.slice(subAt, shell.indexOf("private val META_CHARS"));
+  for (const pair of [["pm", "uninstall"], ["settings", "put"], ["svc", "power"], ["am", "force-stop"]]) {
+    ok(new RegExp(`"${pair[0]}" to setOf\\([^)]*"${pair[1]}"`).test(subBody), `${pair[0]} ${pair[1]} 是危险子命令`);
+  }
+  // 只取这一张表本身：往后再切会把 isReadonly 那些引用只读表的代码也算进来
+  const dangerSlice = code(
+    shell.slice(
+      shell.indexOf("private val DANGEROUS_CMDS"),
+      shell.indexOf("private val DANGEROUS_SUB")
+    )
+  );
+  const readonlyOnly = ["getprop", "dumpsys", "cat", "ls", "ps", "logcat"];
+  ok(readonlyOnly.every((c) => !dangerSlice.includes('"' + c + '"')),
+    "危险表没有混进只读命令（两张表各管一件事）");
+}
+
+// ───────────────── 特权：通道约束与审计 ─────────────────
+console.log("\n── 特权通道约束 ──");
+{
+  const shell = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/PrivilegedShell.kt", "utf8");
+  ok(/ABD_WRITE_DISABLED|adb_write_disabled/.test(shell), "ADB 通道的写开关会被拦下");
+  ok(/adb_root_disabled/.test(shell), "ADB 通道的 root 开关会被拦下（reason 能指路到设置页）");
+  ok(/runtime_missing/.test(shell), "ADB 通道要容器内脚本，rootfs 不在时会说清楚");
+  ok(/DSH_INTERNAL/.test(code(shell)) === false,
+    "宿主调用**不带** DSH_INTERNAL=1：agent 的调用必须过脚本自己的写关卡");
+  ok(/tryEnter\(\)/.test(shell) && /compareAndSet\(false, true\)/.test(shell), "特权命令单飞");
+
+  const bridge = SRC.bridge;
+  ok(/"\/native\/shell" -> Cap\.SHELL/.test(bridge), "端点映射到 Cap.SHELL");
+  ok(/PrivilegedShell\.riskOf\(params\["cmd"\]\.orEmpty\(\)\) != PrivRisk\.READONLY/.test(bridge),
+    "读写判定看命令本身（否则「读」档位连 getprop 都用不了）");
+  ok(/val confirm = risk != null && PrivPolicy\.needsConfirm\(strictness, risk\)/.test(bridge),
+    "严格程度接在闸门上");
+  ok(/if \(need != null \|\| confirm\)/.test(bridge), "「档位不足」与「按严格程度要确认」走同一条弹窗路径");
+  ok(/Kind\.CALL/.test(bridge) && /Kind\.LEVEL/.test(bridge), "两种弹窗分开了（长期授权只对 LEVEL 有意义）");
+  ok(/.put\("decision", decision\)/.test(bridge), "审计记录了「用户点过头还是自动放行」");
+  ok(/.put\("strictness", PrivPolicy\.of\(ctx\)\.id\)/.test(bridge), "审计记录了当时的严格程度");
+  ok(/PrivilegedShell\.denyReason\(ctx, risk, asRoot\)/.test(bridge), "执行前先过通道约束");
+  ok(/spendOnce\(ctx, cap, method, path, params\)/.test(bridge), "「仅本次」配额按同样的读写判据消耗");
+}
+
+// ───────────────── 无障碍：动作风险与服务开关 ─────────────────
+console.log("\n── 无障碍 ──");
+{
+  const a11y = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshA11y.kt", "utf8");
+  const svc = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshA11yService.kt", "utf8");
+  const xml = fs.readFileSync("app/src/main/res/xml/dsh_a11y.xml", "utf8");
+  const auto = fs.readFileSync("app/src/main/res/xml/dsh_autostart_a11y.xml", "utf8");
+  const manifest = fs.readFileSync("app/src/main/AndroidManifest.xml", "utf8");
+
+  const risk = (a) => (a === "tree" ? "readonly" : a === "text" || a === "global" ? "dangerous" : "write");
+  eq(["tree", "click", "tap", "swipe", "text", "global"].map(risk),
+    ["readonly", "write", "write", "write", "dangerous", "dangerous"],
+    "看屏幕是只读；点滑是写；打字与系统动作是危险");
+  ok(/fun riskOf\(action: String\): PrivRisk/.test(a11y), "无障碍也有自己的风险分级");
+  ok(/MAX_NODES/.test(a11y) && /MAX_DEPTH/.test(a11y), "读屏有节点数与深度上限（否则一次调用能读回几十万字符）");
+  ok(/no_a11y_service/.test(a11y), "服务没开时返回可指路的 reason");
+  ok(/no_window/.test(a11y), "安全窗口（锁屏/密码框）拿不到节点时单独一个 reason");
+  ok(/isClickable/.test(a11y) && /performAction\(AccessibilityNodeInfo\.ACTION_CLICK\)/.test(a11y),
+    "点击会往上找可点祖先（文案节点自己往往不可点）");
+  ok(/ACTION_SET_TEXT/.test(a11y), "输入走 ACTION_SET_TEXT，不是模拟按键");
+  ok(/dispatchGesture/.test(a11y) && /await\(/.test(a11y), "手势等回调再返回（不等只是「排队成功」）");
+
+  // 两个无障碍服务必须是两份不同的配置：自启那个不能有读屏权限
+  ok(/canRetrieveWindowContent="true"/.test(xml), "能力服务打开了读屏");
+  const stripXml = (x) => x.replace(/<!--[\s\S]*?-->/g, "");
+  ok(!/canRetrieveWindowContent/.test(stripXml(auto)),
+    "自启服务仍然没有读屏权限（注释里提到它是为了说明为什么没有）");
+  ok(/DshA11yService/.test(manifest) && /DshAutostartService/.test(manifest), "两个服务都在清单里");
+  eq((stripXml(manifest).match(/BIND_ACCESSIBILITY_SERVICE/g) || []).length, 2, "两个无障碍服务各自都有权限门");
+  ok(/canPerformGestures="true"/.test(xml), "能力服务允许手势");
+  ok(/instance === this/.test(svc), "服务断开时只清掉自己的引用（避免误清新实例）");
+}
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

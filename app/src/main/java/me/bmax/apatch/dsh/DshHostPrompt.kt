@@ -199,9 +199,14 @@ object DshHostPrompt {
                 .put("writeSettings", PermissionUtils.canWriteSystemSettings(ctx))
                 .put("dndAccess", PermissionUtils.hasNotificationPolicyAccess(ctx))
                 .put("canRequestInstall", PermissionUtils.canRequestPackageInstalls(ctx))
-                // 提权通道给 agent 看的是「有没有」，不是具体哪条 —— 它用不上具体通道，
-                // 但需要知道「别指望 su」。
-                .put("elevation", elevationLabel(ctx))
+                // 特权事实。**没有通道时整个字段是 null**（不是 {"channel":"none"}）：
+                // 提示词那一段只在它非空时才渲染，于是「这台设备根本没有提权途径」这件事
+                // 压根不会出现在 agent 的视野里 —— 它也就不会去建议用户开一个不存在的东西。
+                .put("elevation", elevationJson(ctx))
+                // 严格程度：agent 据此决定要不要把一件事拆成十条命令（严格档下每条都会弹窗）
+                .put("privStrictness", PrivPolicy.of(ctx).id)
+                // 无障碍服务：和相机一样属于「设备上有没有」的事实
+                .put("a11yService", DshA11y.connected())
                 .toString()
             val f = DshEnv.hostFacts(ctx)
             f.parentFile?.mkdirs()
@@ -228,15 +233,18 @@ object DshHostPrompt {
         return arr
     }
 
-    /** 提权状态的字符串形式：none / root / shizuku / adb。 */
-    private fun elevationLabel(ctx: Context): String {
-        if (!PermissionManager.elevationEnabled(ctx)) return "none"
-        return when (PermissionManager.readPreference(ctx)) {
-            PermissionManager.Channel.ROOT -> "root"
-            PermissionManager.Channel.SHIZUKU -> "shizuku"
-            PermissionManager.Channel.ADB -> "adb"
-            // null = 「自动」：具体走哪条由探测决定，对 agent 而言只要知道「已启用」
-            else -> "auto"
-        }
+    /**
+     * 提权通道的事实，交给 agent 的是「它能提到什么」，而不是我们内部选了哪条通道。
+     *
+     * 四个字段各有用途：channel 让它在报错里说清是哪条通道坏了；uid 决定它能读什么
+     * （0 和 2000 差着整个 /data）；canRoot 决定 --su 有没有意义；strictness 决定这次
+     * 调用会不会弹出确认框。没有通道时返回 null。
+     */
+    private fun elevationJson(ctx: Context): Any {
+        val reach = PrivilegedShell.reach(ctx) ?: return JSONObject.NULL
+        return JSONObject()
+            .put("channel", reach.channel.name.lowercase())
+            .put("uid", reach.uid)
+            .put("canRoot", reach.canRoot)
     }
 }

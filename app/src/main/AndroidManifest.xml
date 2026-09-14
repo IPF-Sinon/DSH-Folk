@@ -369,6 +369,27 @@
                 android:resource="@xml/dsh_autostart_a11y" />
         </service>
 
+        <!-- 原生能力桥的无障碍能力（读屏 + 操作界面）。
+
+             与上面那个自启服务是**两个独立的开关**：那一个刻意没有 canRetrieveWindowContent
+             （只用来被系统 bind），这一个的配置里打开了它 —— 用户当初为自启打开无障碍时，
+             不该连读屏权限一起交出去。见 DshA11yService 的 KDoc 与 res/xml/dsh_a11y.xml。
+
+             exported 同样必须为 true（bind 它的是 system_server）；权限门由
+             BIND_ACCESSIBILITY_SERVICE 把守，对外仍然是关着的。 -->
+        <service
+            android:name=".dsh.DshA11yService"
+            android:exported="true"
+            android:label="@string/dsh_a11y_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/dsh_a11y" />
+        </service>
+
     </application>
 
 </manifest>

@@ -109,6 +109,18 @@ const CAP_USAGE = {
   usage: [
     'dsh-native usage list [--days N] [--limit N]           # recent app foreground usage',
   ],
+  a11y: [
+    'dsh-native a11y tree [--depth N] [--max N]      # read the current screen as a node tree',
+    'dsh-native a11y click <text-or-id> [--class C] [--index N]   # tap that node',
+    'dsh-native a11y tap <x> <y> [--ms N]            # tap a coordinate from a tree you just read',
+    'dsh-native a11y swipe <x1> <y1> <x2> <y2> [--ms N]',
+    'dsh-native a11y text <text> [--target <text-or-id>]  # type into an editable field',
+    'dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen>',
+  ],
+  shell: [
+    'dsh-native shell [--su] [--timeout ms] [--] <command...>   # run through the privileged channel',
+    '    --reason <why> is required like everywhere else; put -- before a command that has its own --flags',
+  ],
   sms: [
     'dsh-native sms list [--limit N]                        # recent SMS, read only',
     'dsh-native sms send <number> <text>                    # send an SMS',
@@ -200,6 +212,21 @@ const CAP_CAVEAT = {
   usage:
     'Read only. Use --days and --limit to request the smallest useful window; foregroundMs is an ' +
     'Android aggregate, not a live process timer.',
+  a11y:
+    'This acts on whatever the user is looking at, not on this app. Read the tree first, then ' +
+    'click by text or id rather than by coordinates: bounds are device specific. It needs the ' +
+    'user to turn on the DSH-Folk accessibility service (a SEPARATE switch from the one used ' +
+    'for boot autostart) and returns no_a11y_service until then. Secure windows (lock screen, ' +
+    'password fields) answer no_window — the system refusing, not a bug. Prefer click over tap: ' +
+    'a node click survives layout shifts. Do this only when the user asked for it in this ' +
+    'turn, and never drive the UI to work around a permission the user has not granted.',
+  shell:
+    'The host runs this for you through the channel the user picked (root / Shizuku / wireless ADB); ' +
+    'you never become root inside the container. Read-only commands need the read level, anything ' +
+    'that changes device state needs read+write, and how often you are asked depends on the ' +
+    'strictness the user chose (strict = every single call pops a dialog). Reasons such as ' +
+    'no_channel, adb_write_disabled, root_unavailable, root_lost, timeout, busy, denied_by_user ' +
+    'are states to report, not errors to retry.',
   sms:
     'Read only. SMS bodies are private: use a small --limit and do not repeat unrelated messages.',
 };
@@ -570,26 +597,67 @@ function render(f) {
   }
 
   // Elevation decides whether shell commands can succeed at all, so it earns its own line.
-  const elevation = str(f.elevation);
+  // Privilege is only mentioned when there IS a channel. Saying "there is a privileged channel
+  // and it is off" makes the model suggest a fix the user may not even be able to apply (no root,
+  // no Shizuku, no wireless debugging on that device) — so when nothing is detected, stay quiet.
+  const elevation = f.elevation && typeof f.elevation === 'object' ? f.elevation : null;
   if (elevation !== null) {
+    const uid = Number(elevation.uid);
+    const canRoot = elevation.canRoot === true;
     lines.push('');
-    lines.push('## Elevation');
+    lines.push('## Privileged channel');
     lines.push('');
-    if (elevation === 'none') {
+    lines.push(
+      'The user has a privileged channel enabled: **' +
+        str(elevation.channel) +
+        '**. Run privileged commands with `dsh-native shell [--su] -- <command>` — the host runs ' +
+        'them for you through that channel. You do NOT get it inside the container: `su` here is ' +
+        'still proot pretending, so never use bare `su` and never assume you are root.'
+    );
+    lines.push('');
+    lines.push(
+      'Identity you get: ' +
+        (uid === 0
+          ? 'uid 0 (full Android privilege).'
+          : 'uid ' +
+            uid +
+            ' (the shell user), which can read most system state and change device settings but ' +
+            'cannot touch other apps\u2019 data. ' +
+            (canRoot
+              ? '`--su` escalates to uid 0 on this channel.'
+              : '`--su` is NOT available on this channel — do not ask for it.')) +
+        ' Read-only commands run as-is; anything that changes device state needs the write level.'
+    );
+    lines.push('');
+    const strictness = str(f.privStrictness) || 'strict';
+    if (strictness === 'strict') {
       lines.push(
-        "The host's privileged channel is **off** (the default). Inside the container you are a root " +
-          'that proot is faking; you have no privilege over Android itself — no dmesg, no /data, no ' +
-          'reboot. When you need that, tell the user to pick a channel in Settings › Features › ' +
-          'Permission channel (root / Shizuku / wireless ADB) instead of trying repeatedly.'
+        'Strictness is **strict**: EVERY privileged call opens a confirmation dialog that the user ' +
+          'must answer (allow once / deny), even for `getprop`. So batch your work into as few, as ' +
+          'meaningful calls as possible, and never fire a loop of small commands — each one costs ' +
+          'the user a tap. If the user denies or the dialog times out, stop and say what you could ' +
+          'not do; do not retry the same command.'
+      );
+    } else if (strictness === 'normal') {
+      lines.push(
+        'Strictness is **normal**: read-only commands run without asking; anything that changes ' +
+          'device state opens a confirmation dialog first.'
       );
     } else {
       lines.push(
-        "The host's privileged channel is " +
-          elevation +
-          '. It belongs to the app: commands you run in the container do NOT inherit it, so do not ' +
-          'assume `su` works in here.'
+        'Strictness is **loose**: commands within the granted level run without asking; only ' +
+          'dangerous ones (uninstall, reboot, wiping data, typing into text fields) ask first.'
       );
     }
+    lines.push('');
+    lines.push(
+      'Failures carry a machine-readable reason: no_channel (the user turned the channel off), ' +
+        'adb_write_disabled / adb_root_disabled (a switch for the wireless-ADB channel is off), ' +
+        'root_unavailable (this channel cannot be root), root_lost / channel_lost (the channel ' +
+        'went away — tell the user to refresh permissions), timeout (504, dropped), busy (429, ' +
+        'another privileged command is still running), denied_by_user / request_expired. All of ' +
+        'those are STATES, not transient errors: report them, do not retry in a loop.'
+    );
   }
 
   return lines.join('\n');

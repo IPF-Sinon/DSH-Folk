@@ -70,6 +70,7 @@ import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
+import me.bmax.apatch.dsh.PrivPolicy
 import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.screen.PluginProgressHost
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
@@ -192,6 +193,7 @@ internal fun DshSettingsScreen(
     var nativeBridgeEnabled by remember {
         mutableStateOf(DshNativeBridge.enabled(context))
     }
+    var privStrictness by remember { mutableStateOf(PrivPolicy.of(context)) }
     var nativeAccess by remember { mutableStateOf(DshNativeBridge.accessMap(context)) }
     // 每一项能力的权限是否齐了。任何一项都可能在系统设置里被撤销，而撤销之后开关
     // 还是亮的 —— 所以必须每次回到本页重读（见下面的 LifecycleResumeEffect），
@@ -715,6 +717,14 @@ internal fun DshSettingsScreen(
                         scope.launch(Dispatchers.IO) {
                             PermissionManager.refresh(context.applicationContext)
                         }
+                    },
+                    privStrictness = privStrictness,
+                    onPrivStrictnessChange = { level ->
+                        privStrictness = level
+                        PrivPolicy.set(context.applicationContext, level)
+                        // 严格程度写进了提示词事实（agent 据此决定「这件事要不要拆成十条命令」），
+                        // 所以改完就得让容器侧看到新值
+                        DshHostPrompt.writeFacts(context.applicationContext)
                     },
                     nativeBridgeEnabled = nativeBridgeEnabled,
                     onNativeBridgeEnabledChange = { on ->
