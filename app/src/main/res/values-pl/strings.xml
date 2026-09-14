@@ -512,9 +512,6 @@
     <string name="theme_download_finalizing">Finalizowanie...</string>
     <string name="settings_predictive_back">Predykcyjny gest wstecz</string>
     <string name="settings_predictive_back_summary">Włącz animację predykcyjnego gestu wstecz w Androidzie 14+</string>
-    <string name="app_title_apatch_folk">Folk APatch</string>
-    <string name="app_title_apatchx">APatch X</string>
-    <string name="app_title_apatch">APatch</string>
     <string name="ink_wash_theme">Malarstwo tuszowe</string>
     <string name="theme_color">Kolor motywu</string>
     <string name="theme_light">Jasny</string>
@@ -523,14 +520,6 @@
     <string name="loading_themes">Ładowanie motywów…</string>
     <string name="loading_apis">Ładowanie źródeł API…</string>
     <string name="retry">Ponów próbę</string>
-    <string name="app_title_fpatch">FPatch</string>
-    <string name="app_title_folkpatch">FolkPatch</string>
-    <string name="app_title_kernelpatch">KernelPatch</string>
-    <string name="app_title_kernelsu">KernelSU</string>
-    <string name="app_title_supersu">SuperSU</string>
-    <string name="app_title_superuser">Superuser</string>
-    <string name="app_title_superpatch">SuperPatch</string>
-    <string name="app_title_magicpatch">MagicPatch</string>
     <string name="settings_custom_badge_text_full_half">W pełni/Częściowo (domyślnie)</string>
     <string name="settings_custom_badge_text_lkm">LKM</string>
     <string name="settings_custom_badge_text_gki">GKI</string>

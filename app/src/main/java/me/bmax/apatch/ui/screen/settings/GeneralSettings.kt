@@ -78,22 +78,11 @@ fun GeneralSettingsContent(
     val launcherIconSummary = stringResource(id = R.string.alt_icon_summary)
 
     val appTitleTitle = stringResource(id = R.string.settings_app_title)
-    var currentAppTitle by remember { mutableStateOf(prefs.getString("app_title", "dsh") ?: "dsh") }
-    val appTitleLabel = when (currentAppTitle) {
-        "custom" -> remember { prefs.getString("custom_app_title", "DSH-Folk") } ?: stringResource(R.string.app_title_custom)
-        "fpatch" -> stringResource(R.string.app_title_fpatch)
-        "apatch_folk" -> stringResource(R.string.app_title_apatch_folk)
-        "apatchx" -> stringResource(R.string.app_title_apatchx)
-        "apatch" -> stringResource(R.string.app_title_apatch)
-        "kernelpatch" -> stringResource(R.string.app_title_kernelpatch)
-        "kernelsu" -> stringResource(R.string.app_title_kernelsu)
-        "supersu" -> stringResource(R.string.app_title_supersu)
-        "folksu" -> stringResource(R.string.app_title_fpatch)
-        "superuser" -> stringResource(R.string.app_title_superuser)
-        "superpatch" -> stringResource(R.string.app_title_superpatch)
-        "magicpatch" -> stringResource(R.string.app_title_magicpatch)
-        "folkpatch" -> stringResource(R.string.app_title_folkpatch)
-        else -> stringResource(R.string.app_title_dsh)
+    var currentAppTitle by remember { mutableStateOf(AppTitle.normalize(prefs.getString("app_title", AppTitle.DEFAULT))) }
+    val appTitleLabel = if (currentAppTitle == AppTitle.CUSTOM) {
+        remember { prefs.getString("custom_app_title", "DSH-Folk") } ?: stringResource(R.string.app_title_custom)
+    } else {
+        stringResource(AppTitle.labelRes(currentAppTitle))
     }
 
     val customAppTitleTitle = stringResource(id = R.string.settings_custom_app_title)
@@ -380,7 +369,7 @@ fun GeneralSettingsContent(
             }
         }
 
-        item(key = "general_custom_app_title", visible = currentAppTitle == "custom") {
+        item(key = "general_custom_app_title", visible = currentAppTitle == AppTitle.CUSTOM) {
             ExpressiveCard(flat = flat, onClick = { showCustomAppTitleDialog.value = true }) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),

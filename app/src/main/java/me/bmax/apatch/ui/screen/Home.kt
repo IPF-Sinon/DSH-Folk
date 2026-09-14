@@ -79,6 +79,7 @@ import me.bmax.apatch.ui.component.ChangelogDialog
 import me.bmax.apatch.ui.component.WelcomeGuideDialog
 import me.bmax.apatch.ui.component.rememberConfirmDialog
 import me.bmax.apatch.ui.theme.BackgroundConfig
+import me.bmax.apatch.ui.screen.settings.AppTitle
 import me.bmax.apatch.ui.theme.MusicConfig
 import me.bmax.apatch.ui.theme.refreshTheme
 import me.bmax.apatch.util.Changelog
@@ -339,25 +340,10 @@ private fun TopBar(
         nightModeEnabled
     }
     
-    val currentTitle = prefs.getString("app_title", "dsh") ?: "dsh"
+    val currentTitle = AppTitle.normalize(prefs.getString("app_title", AppTitle.DEFAULT))
     val customAppTitle = prefs.getString("custom_app_title", "DSH-Folk") ?: "DSH-Folk"
-    val isCustomTitle = currentTitle == "custom"
-    val titleResId = when (currentTitle) {
-        "custom" -> null
-        "fpatch" -> R.string.app_title_fpatch
-        "apatch_folk" -> R.string.app_title_apatch_folk
-        "apatchx" -> R.string.app_title_apatchx
-        "apatch" -> R.string.app_title_apatch
-        "kernelpatch" -> R.string.app_title_kernelpatch
-        "kernelsu" -> R.string.app_title_kernelsu
-        "supersu" -> R.string.app_title_supersu
-        "folksu" -> R.string.app_title_fpatch
-        "superuser" -> R.string.app_title_superuser
-        "superpatch" -> R.string.app_title_superpatch
-        "magicpatch" -> R.string.app_title_magicpatch
-        "folkpatch" -> R.string.app_title_folkpatch
-        else -> R.string.app_title_dsh
-    }
+    val isCustomTitle = currentTitle == AppTitle.CUSTOM
+    val titleResId = AppTitle.labelRes(currentTitle)
 
     val useAdvancedTitleStyle = BackgroundConfig.isAdvancedTitleStyleEnabled && 
                                 !BackgroundConfig.titleImageUri.isNullOrEmpty()
@@ -378,7 +364,7 @@ private fun TopBar(
                     .data(BackgroundConfig.titleImageUri)
                     .crossfade(true)
                     .build(),
-                contentDescription = titleResId?.let { stringResource(it) } ?: customAppTitle,
+                contentDescription = if (isCustomTitle) customAppTitle else stringResource(titleResId),
                 modifier = Modifier
                     .height(40.dp)
                     .offset(x = titleOffsetX.dp)
@@ -400,7 +386,7 @@ private fun TopBar(
                 contentScale = ContentScale.Fit
             )
         } else {
-            Text(if (isCustomTitle) customAppTitle else stringResource(titleResId!!))
+            Text(if (isCustomTitle) customAppTitle else stringResource(titleResId))
         }
     }, actions = {
         // 重启菜单需要 root 才能真正生效，没有 root 通道时不显示

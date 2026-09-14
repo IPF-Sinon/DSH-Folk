@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
+import me.bmax.apatch.ui.screen.settings.AppTitle
 import me.bmax.apatch.util.*
 import me.bmax.apatch.util.ui.APDialogBlurBehindUtils
 import me.bmax.apatch.util.ui.showToast
@@ -215,22 +216,13 @@ fun DpiChooseDialog(showDialog: MutableState<Boolean>) {
 @Composable
 fun AppTitleChooseDialog(showDialog: MutableState<Boolean>, onTitleChanged: (String) -> Unit = {}) {
     val prefs = APApplication.sharedPreferences
-    val currentTitle = remember { prefs.getString("app_title", "dsh") }
+    // 旧版本存下的键（apatch、kernelpatch、superpatch…）现在没有对应选项了。不认的键一律按
+    // 默认项显示，否则用户会看到一个一项都没勾的列表，既不知道自己现在是什么，也无从改回。
+    val currentTitle = AppTitle.normalize(prefs.getString("app_title", AppTitle.DEFAULT))
     val titles = listOf(
-        "dsh" to stringResource(R.string.app_title_dsh),
-        "custom" to stringResource(R.string.app_title_custom),
-        "fpatch" to stringResource(R.string.app_title_fpatch),
-        "apatch_folk" to stringResource(R.string.app_title_apatch_folk),
-        "apatchx" to stringResource(R.string.app_title_apatchx),
-        "apatch" to stringResource(R.string.app_title_apatch),
-        "folkpatch" to stringResource(R.string.app_title_folkpatch),
-        "kernelpatch" to stringResource(R.string.app_title_kernelpatch),
-        "kernelsu" to stringResource(R.string.app_title_kernelsu),
-        "supersu" to stringResource(R.string.app_title_supersu),
-        "folksu" to stringResource(R.string.app_title_fpatch),
-        "superuser" to stringResource(R.string.app_title_superuser),
-        "superpatch" to stringResource(R.string.app_title_superpatch),
-        "magicpatch" to stringResource(R.string.app_title_magicpatch)
+        AppTitle.DEFAULT to stringResource(R.string.app_title_dsh),
+        AppTitle.CUSTOM to stringResource(R.string.app_title_custom),
+        AppTitle.DEEPSEEK_HARNESS to stringResource(R.string.dsh_app_title),
     )
 
     BasicAlertDialog(

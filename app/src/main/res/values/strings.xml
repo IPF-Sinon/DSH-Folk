@@ -221,17 +221,6 @@
     <!-- App Title Strings -->
     <string name="app_title_dsh" translatable="false">DSH-Folk</string>
     <string name="app_title_custom">Custom</string>
-    <string name="app_title_fpatch">FPatch</string>
-    <string name="app_title_apatch_folk">APatch Folk</string>
-    <string name="app_title_apatchx">APatch X</string>
-    <string name="app_title_apatch">APatch</string>
-    <string name="app_title_folkpatch">FolkPatch</string>
-    <string name="app_title_kernelpatch">KernelPatch</string>
-    <string name="app_title_kernelsu">KernelSU</string>
-    <string name="app_title_supersu">SuperSU</string>
-    <string name="app_title_superuser">Superuser</string>
-    <string name="app_title_superpatch">SuperPatch</string>
-    <string name="app_title_magicpatch">MagicPatch</string>
 
     <string name="settings_app_dpi">App DPI</string>
     <string name="dpi_apply_settings">Apply</string>
