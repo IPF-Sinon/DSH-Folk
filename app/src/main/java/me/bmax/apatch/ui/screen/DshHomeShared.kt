@@ -73,6 +73,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshPhase
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.HarnessService
+import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.component.copyInfoToClipboard
@@ -184,7 +185,13 @@ fun ProvideDshHomeState(content: @Composable () -> Unit) {
 
     LaunchedEffect(appContext) {
         DshRuntime.attach(appContext)
-        withContext(Dispatchers.IO) { PermissionManager.refresh(appContext) }
+        withContext(Dispatchers.IO) {
+            // 先补一次 root 验证再探测：老用户的 root 授权是持久的，这里不会弹框，
+            // 但缺了它，缓存里的「未验证」会一直挂着，agent 那边也一直以为还差一步
+            PermissionManager.autoVerifyRoot(appContext)
+            PermissionManager.refresh(appContext)
+            DshHostPrompt.writeFacts(appContext)
+        }
     }
 
     // 「每次询问」的选择框

@@ -615,18 +615,38 @@ function render(f) {
     lines.push('## Privileged channel');
     lines.push('');
     if (!ready) {
+      const askTail =
+        'Ask for it ONCE, in one sentence, and say what you would use it for. Until then, either ' +
+        'work without privilege or tell the user what is blocked. Do not retry the same privileged ' +
+        'call hoping for a different answer.';
+      const justTryTail =
+        'So: try the call you actually need (one meaningful command, not a loop). Only mention ' +
+        'privilege to the user if the call fails — and then say what you could not do, not "please ' +
+        'enable root". Do not retry the same call hoping for a different answer.';
+      // 三条原因要分开讲：root 那条根本不需要用户先做什么（授权过就是静默的，没授权过
+      // 第一次调用会自己弹系统框），把这种用户支使去设置页只会让他觉得你没搞懂。
+      const howTo =
+        reason === 'root_unverified'
+          ? 'su is present and **the app verifies it by itself**, so you do NOT need to send the ' +
+            'user anywhere: just make the call. If this app has never been granted root, that ' +
+            'first call is what triggers the system su prompt (the user taps Allow once and it ' +
+            'works from then on). If it comes back root_lost, the grant was refused — say so and ' +
+            'let the user decide, do not retry.'
+          : reason === 'shizuku_unauthorized'
+            ? 'This one needs the user: ask them to grant this app permission in Shizuku (the ' +
+              'permission card in Settings › Security has the button that opens it).'
+            : reason === 'adb_unpaired'
+              ? 'This one needs the user: ask them to finish the wireless-ADB pairing.'
+              : 'This one needs the user to finish enabling the channel.';
       lines.push(
         'The user has SELECTED a privileged channel — **' +
           str(elevation.channel) +
-          '** — but it is not usable yet (`reason: "' +
+          '** — but it is not ready yet (`reason: "' +
           reason +
-          '"`). Detected but not enabled: nothing privileged will work until the user finishes ' +
-          'that one step, and you cannot do it for them. Ask for it ONCE, in one sentence, and say ' +
-          'what you would use it for: root → press 刷新权限 (Settings › Security › Permission ' +
-          'channel) so the su prompt appears; Shizuku → grant the app permission in Shizuku; ' +
-          'wireless ADB → finish pairing. Until then, either work without privilege or tell the ' +
-          'user what is blocked. Do not retry the same privileged call hoping for a different ' +
-          'answer.'
+          '"`). ' +
+          howTo +
+          ' ' +
+          (reason === 'root_unverified' ? justTryTail : askTail)
       );
       lines.push('');
     }

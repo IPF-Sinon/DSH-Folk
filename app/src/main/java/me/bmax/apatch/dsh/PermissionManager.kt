@@ -246,6 +246,57 @@ object PermissionManager {
     private fun detectSu(): Boolean = SU_PATHS.any { File(it).exists() }
 
     /**
+     * 用户选了 root（或「自动」）时，后台替他验一次。
+     *
+     * ## 为什么必须有这个
+     *
+     * [KEY_ROOT_VERIFIED] 以前**只有**点「刷新权限」那一下才会写。于是：
+     * 用户几年前就授权过 root，但升级 / 迁移之后（存量安装会被重置成「未启用」）只要
+     * 不点那个按钮，缓存里就永远是 false —— 应用自己的特权功能用不了，agent 那边也会
+     * 被告知「已选择，还差一步」，而用户明明早就授权过了。要他去点一下、再被系统弹一次
+     * 授权框，只是在复述一件已经发生的事。
+     *
+     * ## 为什么这次弹框是可以接受的
+     *
+     * `su` 在**已经授权过**的情况下直接返回，不弹框（Magisk / KernelSU / APatch 都记住
+     * 用户的选择）。所以对老用户这一步是静默的，只有真没授权过的人才会看到一次系统框 ——
+     * 而「用 root」正是他选这条通道时要求的东西。刷新权限那个按钮仍然留着，用于撤销后重验。
+     *
+     * ## 什么时候不试
+     *
+     * - 没选通道（`off`）：用户明确说了不要特权，那就别去弹框；
+     * - 明确选了 Shizuku / ADB：那是他不想让 root 掺和，验证 root 只会带来意料外的框；
+     * - 设备上根本没有 su；
+     * - 已经验过；
+     * - **上次被拒过**：一天内不再自动试（否则每次开 App 都弹一次，那是骚扰）。
+     *   用户换通道、点「刷新权限」都能立刻重来。
+     *
+     * 每个进程最多试一次：调用方是首页/功能页的 LaunchedEffect，会随重组反复进来。
+     */
+    fun autoVerifyRoot(ctx: Context) {
+        if (rootAutoTried) return
+        val p = prefs(ctx)
+        val preferred = readPreference(ctx)
+        // null = 「自动」：用户就是让应用自己挑，root 排在最前面
+        if (preferred != null && preferred != Channel.ROOT) return
+        if (!detectSu()) return
+        if (p.getBoolean(KEY_ROOT_VERIFIED, false)) return
+        val deniedAt = p.getLong(KEY_ROOT_DENIED_AT, 0L)
+        if (deniedAt > 0 && System.currentTimeMillis() - deniedAt < ROOT_RETRY_MS) {
+            Log.i(TAG, "root 上次验证被拒，暂不自动重试")
+            return
+        }
+        rootAutoTried = true
+        val ok = verifyRoot()
+        p.edit()
+            .putBoolean(KEY_ROOT_VERIFIED, ok)
+            // 成功就清掉拒绝时间戳；失败记下来，一天内不再自动试
+            .putLong(KEY_ROOT_DENIED_AT, if (ok) 0L else System.currentTimeMillis())
+            .apply()
+        Log.i(TAG, "自动验证 root：$ok")
+    }
+
+    /**
      * 真跑一次 `su -c id` 确认能拿到 uid 0（会弹授权框，由用户决定）。
      *
      * 读流放单独线程：readText() 阻塞到 EOF，而授权框摆在那儿没人点时 su 不会退出 ——
@@ -296,6 +347,15 @@ object PermissionManager {
 
     /** 上次 `su -c id` 是否真的拿到了 uid 0（避免每次进首页都弹授权框）。 */
     private const val KEY_ROOT_VERIFIED = "root_verified"
+
+    /** 上次自动验证被拒的时间（0 = 没有或已成功）。见 [autoVerifyRoot]。 */
+    private const val KEY_ROOT_DENIED_AT = "root_denied_at"
+
+    /** 被拒之后隔多久才自动再试一次。 */
+    private const val ROOT_RETRY_MS = 24L * 60 * 60 * 1000
+
+    /** 每个进程最多自动验证一次（调用方在 LaunchedEffect 里，会反复进来）。 */
+    @Volatile private var rootAutoTried = false
 
     /** 存量安装重置为「未启用」的一次性迁移是否跑过（见 [migratePreference]）。 */
     private const val KEY_PERM_MIGRATED = "perm_pref_migrated"

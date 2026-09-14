@@ -591,6 +591,38 @@ console.log("\n── 特权通道约束 ──");
   ok(/fun readonlyCommands\(\)/.test(shell) && /READONLY_CMDS\.sorted\(\)/.test(shell),
     "只读命令清单对外可见（与 isReadonly 同一份数据，不会两处漂移）");
 
+  // root 的「已验证」以前只有点「刷新权限」才会写，于是老用户升级后必须先手动点一次、
+  // 再被系统弹一次 su 授权框 —— 而他几个月前就授权过了。现在应用自己验一次。
+  const perm = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/PermissionManager.kt", "utf8");
+  const autoVerify = perm.slice(perm.indexOf("fun autoVerifyRoot"), perm.indexOf("private fun verifyRoot"));
+  ok(autoVerify.length > 0, "存在 autoVerifyRoot");
+  ok(/if \(preferred != null && preferred != Channel\.ROOT\) return/.test(autoVerify),
+    "只在选了 root 或「自动」时才自动验证（明确选 Shizuku/ADB 的人不该被弹 su 框）");
+  ok(/if \(!detectSu\(\)\) return/.test(autoVerify) && /KEY_ROOT_VERIFIED, false\)\) return/.test(autoVerify),
+    "没有 su、或已经验过就不重复验");
+  ok(/KEY_ROOT_DENIED_AT/.test(autoVerify) && /ROOT_RETRY_MS/.test(autoVerify),
+    "被拒过就一天内不再自动试（否则每次开 App 都弹一次）");
+  ok(/@Volatile private var rootAutoTried = false/.test(perm) && /if \(rootAutoTried\) return/.test(autoVerify),
+    "每个进程最多自动验证一次（调用方在 LaunchedEffect 里会反复进来）");
+  ok(/putLong\(KEY_ROOT_DENIED_AT, if \(ok\) 0L else System\.currentTimeMillis\(\)\)/.test(autoVerify),
+    "验证成功后清掉拒绝时间戳，失败才记时间");
+
+  // 两个首页入口都要「先验证、再探测、后写事实」，顺序反了事实就是旧的
+  for (const f of ["DshHomeShared.kt", "HomeDsh.kt"]) {
+    const src = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/" + f, "utf8");
+    ok(/autoVerifyRoot[\s\S]{0,400}PermissionManager\.refresh[\s\S]{0,200}DshHostPrompt\.writeFacts/.test(src),
+      "首页入口 " + f + "：先验证 root、再探测、再写事实（顺序即正确性）");
+  }
+
+  // 提示词要按原因给不同指引：把「早就有 root 的用户」支使去设置页是错的
+  const prompt2 = fs.readFileSync("app/src/main/assets/dsh-folk-host.mjs", "utf8");
+  ok(/reason === .root_unverified./.test(prompt2) && /the app verifies it by itself/.test(prompt2),
+    "root 未验证时告诉 agent「应用会自己验、直接调用」而不是让它去指使");
+  ok(/shizuku_unauthorized[\s\S]{0,200}grant this app permission in Shizuku/.test(prompt2),
+    "Shizuku 未授权时给出用户该做的事");
+  ok(/justTryTail/.test(prompt2) && /askTail/.test(prompt2),
+    "收尾语也按原因分开（root 那条不需要用户先做什么）");
+
   // 事实与 caps 必须带上「就绪与否」，否则 agent 会把「还没验证」当成「有特权」。
   const factsJson = SRC.bridge.slice(
     SRC.bridge.indexOf("internal fun elevationJson"),

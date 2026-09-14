@@ -73,6 +73,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshPhase
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.HarnessService
+import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.dsh.PortConflictAction
 import me.bmax.apatch.ui.theme.BackgroundConfig
@@ -102,7 +103,12 @@ fun HomeScreenDsh(
 
     LaunchedEffect(Unit) {
         DshRuntime.attach(context.applicationContext)
-        withContext(Dispatchers.IO) { PermissionManager.refresh(context.applicationContext) }
+        withContext(Dispatchers.IO) {
+            PermissionManager.autoVerifyRoot(context.applicationContext)
+            PermissionManager.refresh(context.applicationContext)
+            // 验证结果要落到宿主事实：容器里的提示词就是按它渲染的
+            DshHostPrompt.writeFacts(context.applicationContext)
+        }
     }
 
     Column(
