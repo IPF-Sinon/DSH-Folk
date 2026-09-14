@@ -371,5 +371,66 @@ ok(SRC.rt.includes('Regex("cannot resolve profile bundle'),
 ok(SRC.rt.includes("dsh_log_bundle_unresolvable_user"),
   "不是预装清单里的包就只提示、不擅自改用户的东西");
 
+// ── WebUI 认证 token：解析与就绪时机 ───────────────────────────────────────────
+//
+// 「外部浏览器打开的链接没有 token 参数」查下来是两个叠在一起的问题，两个都不会
+// 报错、只会表现成认证墙，所以在这里钉死：
+//
+//   1. token 是 base64url（上游 processLaunchToken = encodeBase64Url(randomBytes(32))），
+//      原来的字符类少了 `_` —— 用真 token 量过：46.8% 被截断、1.6% 整条匹配不上。
+//   2. web 服务器「激活即监听」，带 token 的 URL 却在插件树加载完才打印；
+//      在那之前宣布「已就绪」并把地址交出去，拿到的就是不带 token 的裸地址。
+{
+  const m = SRC.rt.match(/DSH_WEB_TOKEN_RE = Regex\("([^"]+)"\)/);
+  ok(m !== null, "能抠出 App 里的 token 正则");
+  if (m) {
+    const re = new RegExp(m[1]);
+    // 上游 processLaunchToken 的实际字符集：base64url 字母表
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const token = (seed) => {
+      // 确定性抽样：覆盖「含 _」「以 _ 开头」「含 -」三种形状
+      let s = "";
+      for (let i = 0; i < 43; i++) s += alphabet[(seed * 7 + i * 13) % 64];
+      return s;
+    };
+    let sample = token(3);
+    if (!sample.includes("_")) sample = "_" + sample.slice(1);
+    const line = (t) => `dsh web: http://127.0.0.1:3080/?token=${t} (LAN: http://192.168.1.5:3080/?token=${t})`;
+
+    eq(re.exec(line(sample))?.[1], sample, `含 \`_\` 的 token 完整取出（${sample}）`);
+    const leading = "_" + token(5).slice(1);
+    eq(re.exec(line(leading))?.[1], leading, "首字符就是 `_` 的 token 也能取出（原来的字符类会整条匹配不上）");
+    const dashed = token(9).replace(/[A-Za-z0-9]/g, "-");
+    eq(re.exec(line(dashed))?.[1], dashed, "全 `-` 的 token 也完整");
+    eq(re.exec(line("abc") + "junk")?.[1], "abc", "不把后面的内容吞进 token");
+    eq(re.exec("dsh web: http://127.0.0.1:3080/")?.[1], undefined, "没有 token 的行不误匹配");
+
+    // 老正则必须在新用例上失败 —— 否则这条检查等于没测到真正的原因
+    const old = new RegExp("\\?token=([A-Za-z0-9+/=-]+)");
+    ok(old.exec(line(sample))?.[1] !== sample, "老字符类（缺 `_`）在这些 token 上确实会截断");
+    ok(old.exec(line(leading)) === null, "老字符类在 `_` 开头的 token 上确实整条匹配不上");
+  }
+
+  // 时机：宣布就绪之前必须先等 token
+  const readyBody = SRC.rt.slice(
+    SRC.rt.indexOf("private suspend fun awaitReady"),
+    SRC.rt.indexOf("private suspend fun awaitWebToken"),
+  );
+  ok(readyBody.includes("awaitWebToken()"), "就绪判定里会等 token");
+  ok(
+    readyBody.indexOf("awaitWebToken()") < readyBody.indexOf("phase = DshPhase.RUNNING"),
+    "等 token 在 `phase = RUNNING` 之前（先后写反等于没等）",
+  );
+  const waitBody = SRC.rt.slice(
+    SRC.rt.indexOf("private suspend fun awaitWebToken"),
+    SRC.rt.indexOf("private fun httpResponds"),
+  );
+  ok(/TOKEN_WAIT_MS/.test(waitBody) && /private const val TOKEN_WAIT_MS = \d+_?\d*L/.test(SRC.rt),
+    "等待有上限：拿不到 token 也不能把启动卡死");
+  ok(waitBody.includes("serverProcess?.isAlive != false"), "进程死了就不等了（超时日志会盖掉真正的失败原因）");
+  ok(/logInfo\(R\.string\.dsh_log_token_captured, token\.length\)/.test(waitBody),
+    "日志只记 token 长度，不记 token 本身");
+}
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

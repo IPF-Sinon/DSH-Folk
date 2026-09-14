@@ -862,6 +862,9 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_log_lan_patched">已为当前运行时强制开放局域网访问</string>
     <string name="dsh_log_lan_off">局域网访问已关闭，仅监听 127.0.0.1</string>
     <string name="dsh_log_ready">服务已就绪: http://127.0.0.1:%1$d/</string>
+    <string name="dsh_log_token_waiting">正在等 WebUI 认证 token（服务先监听、带 token 的地址后打印）</string>
+    <string name="dsh_log_token_captured">已捕获 WebUI 认证 token（%1$d 字符）</string>
+    <string name="dsh_log_token_timeout">等了 %1$d 秒仍没等到 WebUI 认证 token，按不带 token 的地址继续 —— 打开 WebUI 可能要求重新认证</string>
     <string name="dsh_log_switched_to_proot">已切回 proot，请重新启动服务</string>
     <string name="dsh_log_plugin_stage_failure">失败发生在插件树加载阶段，与容器运行时无关，保留 proroot</string>
     <string name="dsh_log_proroot_failed">proroot 启动失败（%1$s），已自动切回 proot</string>

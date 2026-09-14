@@ -338,7 +338,8 @@
         <item>Permission records now keep what each call returned, not just its HTTP status — the response body is stored with the record (truncated when it is a long list) and shown under the command. Values are masked by default while keys, numbers and booleans stay readable, and the biometric unlock reveals the raw body, the same way command arguments already worked. This is what makes a record answer what the agent actually got, or which reason it was refused with, without digging through the container log.</item>
         <item>App title now only offers DSH-Folk, Custom and DeepSeek Harness. The other eleven were the names of the kernel-patch projects this app grew out of, and none of them had anything behind it in DSH-Folk. Anyone who had one of them selected simply sees DSH-Folk again.</item>
         <item>Two new switches in Settings → Function: start the DSH service as soon as the app is opened, and open the DSH page automatically once the service is ready. Both are off by default — bringing the container up takes tens of seconds, and nobody opening the app to change a setting should pay for that unless they asked.</item>
-    </string-array>
+            <item>Opening the DSH page could land on an authentication prompt instead of the UI: the link the app hands out was missing the token dsh prints at startup. Two causes, both fixed now. The token is base64url, and the parser stopped reading at the first underscore — roughly half of all service starts produced a broken link. And the app could call the service ready before dsh had printed that line at all, because the web server starts listening early; anything opened in that window had no token either. The app now waits for the token before reporting the service as ready, so both the built-in page and the external browser get a link that authenticates on the first try.</item>
+</string-array>
 
     
 

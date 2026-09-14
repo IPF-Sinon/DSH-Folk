@@ -572,7 +572,12 @@ class DshWebUiActivity : AppCompatActivity() {
                         onBack = { onBackPressedDispatcher.onBackPressed() },
                         onClose = { finish() },
                         onReload = { webView?.reload() },
-                        onOpenExternal = { DshWebUi.openExternal(this@DshWebUiActivity, url) },
+                        // 交给外部浏览器时**现取**当前地址，而不是用本页进来时那个 [url]：
+                        // dsh 每次重启都会生成新 token（旧地址的 token 随之失效），而本页
+                        // 可以一直开着 —— 用进来时那份就等于把一个过期 token 递给浏览器。
+                        onOpenExternal = {
+                            DshWebUi.openExternal(this@DshWebUiActivity, DshRuntime.webUrl())
+                        },
                     )
                 }
             }

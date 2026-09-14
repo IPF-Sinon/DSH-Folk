@@ -187,6 +187,22 @@ object DshRuntime {
      * 坏运行时走到可用运行时的时间就越长。node 起 dsh web 正常在 10s 内。
      */
     private const val READY_TIMEOUT_MS = 90_000L
+
+    /**
+     * 端口已响应后，再等认证 token 多久才按「没有 token」继续。
+     *
+     * web 服务器**激活即监听**（dsh-host-webserver：「Activation listens immediately」），
+     * 而带 token 的那行 URL 是**插件树加载完**才打印的（dsh-web-app 的 announceReady 等
+     * `loader.await()`），两者之间有一段时间差；这段时间里发出的地址没有 token，打开就是
+     * 认证墙。等这个差值是修掉「外部浏览器打开时链接没有 token」的关键。
+     *
+     * 取 30s：手机上插件树加载通常在这个量级以内。等不到也不卡死 —— 超时就按无 token
+     * 继续（那说明这份运行时的输出格式变了，日志里会写明）。
+     */
+    private const val TOKEN_WAIT_MS = 30_000L
+
+    /** 等 token 时的轮询间隔：这行通常在 1s 内到，密一点能让「已就绪」尽快翻过来。 */
+    private const val TOKEN_POLL_MS = 200L
     /**
      * proroot 连续失败到此次数即强制回退 proot 并清掉用户选择。
      *
@@ -195,8 +211,18 @@ object DshRuntime {
      */
     private const val PROROOT_FAIL_LIMIT = 1
 
-    /** 从 dsh 打印的 `dsh web: http://…?token=…` 里提取认证 token。 */
-    private val DSH_WEB_TOKEN_RE = Regex("\\?token=([A-Za-z0-9+/=-]+)")
+    /**
+     * 从 dsh 打印的 `dsh web: http://…?token=…` 里提取认证 token。
+     *
+     * 字符集必须是 **base64url**：上游 dsh-client-connection 的 `processLaunchToken` 用的是
+     * `encodeBase64Url(randomBytes(32))`，43 个字符里 `-` 与 `_` 都可能出现。这条原来写的是
+     * `\?token=([A-Za-z0-9+/=-]+)`（少了 `_`），用 20000 个真 token 量过：**46.8% 会被从
+     * `_` 处截断**（URL 带着一个错的 token 去撞认证墙），另有 **1.6% 因首字符就是 `_` 而整条
+     * 匹配不上**，URL 里连 token 参数都没有 —— 正是「外部浏览器打开时链接没有 token」。
+     *
+     * 收尾不靠字符类：局域网开着时 dsh 会在同一行再打一个 ` (LAN: …)`，所以按分隔符截断。
+     */
+    private val DSH_WEB_TOKEN_RE = Regex("[?&]token=([A-Za-z0-9_%+/.=~-]+)")
 
     /** ELF `e_machine`：183 = AArch64，62 = x86-64（见 [rootfsArchMismatch]）。 */
     private const val ELF_MACHINE_AARCH64 = 183
@@ -3060,6 +3086,7 @@ object DshRuntime {
         val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
             if (isPortInUse(port()) && httpResponds(port())) {
+                awaitWebToken()
                 _state.update {
                     it.copy(
                         phase = DshPhase.RUNNING,
@@ -3093,6 +3120,40 @@ object DshRuntime {
             logInfo(R.string.dsh_log_switched_to_proot)
         }
         _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
+    }
+
+    /**
+     * 等 dsh 打印出带 token 的地址（见 [TOKEN_WAIT_MS]）。
+     *
+     * 不能把「端口响应」当成「可以打开」：web 服务器**激活即监听**，而 token 那行是插件树
+     * 加载完才打印的，两者之间的 `webUrl` 是不带 token 的裸地址 —— 用它开 WebUI（内置页或
+     * 外部浏览器）都只会撞认证墙。等到了再宣布就绪，所有打开路径拿到的就是带 token 的地址。
+     *
+     * 超时不是错误：这份运行时若哪天不再打印 token（[DSH_WEB_TOKEN_RE] 没命中），也得让
+     * 服务照常可用，所以按无 token 继续，只留一行日志说明 —— 否则表现成「启动卡住」，
+     * 比认证墙更难查。
+     */
+    private suspend fun awaitWebToken() {
+        if (_state.value.webToken != null) return
+        val deadline = System.currentTimeMillis() + TOKEN_WAIT_MS
+        var announced = false
+        while (_state.value.webToken == null &&
+            System.currentTimeMillis() < deadline &&
+            serverProcess?.isAlive != false
+        ) {
+            if (!announced) {
+                logInfo(R.string.dsh_log_token_waiting)
+                announced = true
+            }
+            delay(TOKEN_POLL_MS)
+        }
+        val token = _state.value.webToken
+        if (token == null) {
+            appendLog("! " + str(R.string.dsh_log_token_timeout, TOKEN_WAIT_MS / 1000))
+        } else {
+            // 只记长度，不记 token 本身：长度够用来判断有没有被截断（base64url(32 字节) = 43）
+            logInfo(R.string.dsh_log_token_captured, token.length)
+        }
     }
 
     /**

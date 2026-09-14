@@ -882,6 +882,9 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_log_lan_patched">LAN access was force-enabled for this runtime</string>
     <string name="dsh_log_lan_off">LAN access is OFF, listening on 127.0.0.1 only</string>
     <string name="dsh_log_ready">Service is ready: http://127.0.0.1:%1$d/</string>
+    <string name="dsh_log_token_waiting">Waiting for the WebUI authentication token (the server listens before the token line is printed)</string>
+    <string name="dsh_log_token_captured">WebUI authentication token captured (%1$d chars)</string>
+    <string name="dsh_log_token_timeout">No WebUI authentication token after %1$ds; continuing with a plain URL — opening the WebUI may ask you to authenticate again</string>
     <string name="dsh_log_switched_to_proot">Switched back to proot — please start the service again</string>
     <string name="dsh_log_plugin_stage_failure">The failure happened while loading the plugin tree, unrelated to the container runtime; keeping proroot</string>
     <string name="dsh_log_proroot_failed">proroot failed to start (%1$s), automatically switched back to proot</string>
