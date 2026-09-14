@@ -72,13 +72,10 @@ internal object DshShizukuShell {
         remote?.let { return it }
         synchronized(lock) {
             remote?.let { return it }
-            val bound = runCatching {
-                Shizuku.bindUserService(serviceArgs(context), connection) == 0
-            }.getOrElse { e ->
-                Log.w(TAG, "绑定用户服务失败: ${e.message}")
-                false
-            }
-            if (!bound) return null
+            val requested = runCatching {
+                Shizuku.bindUserService(serviceArgs(context), connection)
+            }.onFailure { e -> Log.w(TAG, "绑定用户服务失败: ${e.message}") }.isSuccess
+            if (!requested) return null
             // 轮询等回调：这里不用 latch 是因为连接回调与这次调用在同一个进程里，
             // 而等不到时我们只想尽快返回失败（上层还要把原因讲给 agent 听）
             val deadline = System.currentTimeMillis() + BIND_TIMEOUT_MS

@@ -582,8 +582,9 @@ console.log("\n── 特权通道约束 ──");
   const shizuku = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshShizukuShell.kt", "utf8");
   ok(/Shizuku\.bindUserService\(/.test(shizuku) && /Shizuku\.unbindUserService\(/.test(shizuku),
     "用户服务有绑定也有解绑");
-  ok(/bindUserService\(serviceArgs\(context\), connection\) == 0/.test(shizuku),
-    "绑定结果按返回值判断（非 0 就是失败，不是抛异常）");
+  // 这个版本的 bindUserService 返回 void：成功只看有没有抛，以及连接回调会不会来
+  ok(/runCatching \{\s*\n\s*Shizuku\.bindUserService\(/.test(shizuku) && !/bindUserService\([^)]*\) == 0/.test(shizuku),
+    "绑定按「有没有抛 + 等连接回调」判断，而不是比较返回值");
   const shizukuSvc = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshShizukuShellService.kt", "utf8");
   ok(/MAX_CHARS/.test(shizukuSvc) && /clip\(/.test(shizukuSvc),
     "用户服务侧自己截断输出（binder 事务 1MB 上限）");
