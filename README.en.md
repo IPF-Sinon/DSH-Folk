@@ -330,7 +330,7 @@ The three channels differ only in who executes:
 | Channel | Identity | Implementation |
 | --- | --- | --- |
 | root | uid 0 | persistent su shell |
-| Shizuku | uid 0 (Sui/root mode) or 2000 (adb mode) | Shizuku's process API |
+| Shizuku | uid 0 (Sui/root mode) or 2000 (adb mode) | a user service running inside Shizuku's process (`newProcess` returns a library-internal type and does not compile from an app) |
 | wireless ADB | 2000, uid 0 only with `--su` | forwarded to the in-container script, so its two locks still apply |
 
 Only two levels are meaningful: **read** allows diagnostics (the **same allowlist** the in-container script uses — `tools/check-native-logic.js` asserts the two are

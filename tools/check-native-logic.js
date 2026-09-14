@@ -576,6 +576,19 @@ console.log("\n── 特权通道约束 ──");
   ok(/DSH_INTERNAL/.test(code(shell)) === false,
     "宿主调用**不带** DSH_INTERNAL=1：agent 的调用必须过脚本自己的写关卡");
   ok(/tryEnter\(\)/.test(shell) && /compareAndSet\(false, true\)/.test(shell), "特权命令单飞");
+  // Shizuku 侧只能走用户服务：newProcess 的返回类型是库内部可见的，直接调编译不过
+  ok(/DshShizukuShell\.exec\(/.test(shell), "Shizuku 通道走用户服务");
+  ok(!/Shizuku\.newProcess/.test(code(shell)), "没有直接调被限制的 Shizuku.newProcess");
+  const shizuku = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshShizukuShell.kt", "utf8");
+  ok(/Shizuku\.bindUserService\(/.test(shizuku) && /Shizuku\.unbindUserService\(/.test(shizuku),
+    "用户服务有绑定也有解绑");
+  ok(/bindUserService\(serviceArgs\(context\), connection\) == 0/.test(shizuku),
+    "绑定结果按返回值判断（非 0 就是失败，不是抛异常）");
+  const shizukuSvc = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshShizukuShellService.kt", "utf8");
+  ok(/MAX_CHARS/.test(shizukuSvc) && /clip\(/.test(shizukuSvc),
+    "用户服务侧自己截断输出（binder 事务 1MB 上限）");
+  ok(/destroyForcibly\(\)/.test(shizukuSvc), "超时由服务侧执行（binder 调用是同步的，应用侧放弃等待不会让命令停下）");
+  ok(/aidl/.test(fs.readdirSync("app/src/main").join(",")) , "AIDL 目录存在（user service 的接口就在这里）");
 
   const bridge = SRC.bridge;
   ok(/"\/native\/shell" -> Cap\.SHELL/.test(bridge), "端点映射到 Cap.SHELL");

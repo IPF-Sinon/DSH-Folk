@@ -330,7 +330,7 @@ dsh-native elevate <能力> <read|write|read_write|control> --reason <理由> [-
 | 通道 | 身份 | 实现 |
 | --- | --- | --- |
 | root | uid 0 | 常驻 su shell |
-| Shizuku | uid 0（Sui/root 模式）或 2000（adb 模式） | Shizuku 的进程接口 |
+| Shizuku | uid 0（Sui/root 模式）或 2000（adb 模式） | 送到 Shizuku 进程里的用户服务执行（`newProcess` 的返回类型是库内部可见的，应用侧编译不过） |
 | 无线 ADB | 2000，`--su` 才到 0 | 转发给容器内那条脚本，于是它的两把锁照样生效 |
 
 档位只有两档有意义：**读**只放行诊断类命令（与容器内脚本共用**同一张白名单**，`tools/check-native-logic.js`

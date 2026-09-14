@@ -5,8 +5,6 @@ import android.util.Log
 import com.topjohnwu.superuser.Shell
 import me.bmax.apatch.util.APatchCli
 import me.bmax.apatch.util.getRootShell
-import rikka.shizuku.Shizuku
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -18,7 +16,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * 三条通道的区别只在「谁来执行」：
  * - **root**：libsu 的常驻 su shell，uid 0；
- * - **Shizuku**：`Shizuku.newProcess`，uid 取决于服务端（Sui/root 模式是 0，adb 模式是 2000）；
+ * - **Shizuku**：命令送到 Shizuku 进程里的用户服务执行（[DshShizukuShell]），uid 由它决定
+ *   （Sui/root 模式是 0，普通 adb 模式是 2000）；
  * - **无线 ADB**：转发给容器内的 `adb-shell.py`（宿主没有 adb 客户端，而那条脚本已经有
  *   自己的只读白名单与两个授权标记），uid 2000，`--su` 才到 0。
  *
@@ -189,7 +188,7 @@ internal object PrivilegedShell {
         val limit = timeoutMs.coerceIn(1_000L, MAX_TIMEOUT_MS)
         return when (reach.channel) {
             PermissionManager.Channel.ROOT -> execViaRootShell(command, limit)
-            PermissionManager.Channel.SHIZUKU -> execViaShizuku(command, limit)
+            PermissionManager.Channel.SHIZUKU -> execViaShizuku(ctx, command, limit)
             PermissionManager.Channel.ADB -> execViaAdb(ctx, command, asRoot, limit)
             PermissionManager.Channel.NONE -> ExecOutcome(-1, "", "", false, "no_channel")
         }
@@ -226,35 +225,25 @@ internal object PrivilegedShell {
     }
 
     /**
-     * Shizuku 通道。
+     * Shizuku 通道：走用户服务，命令在 Shizuku 自己的进程里执行。
      *
-     * `Shizuku.newProcess` 只有在 binder 活着、且用户已授权时才成功，失败就是
-     * ``channel_lost`` —— 需要重来一遍的是「去设置里刷新权限」，不是重试这条命令。
+     * 这里**不能**用 `Shizuku.newProcess` —— 它的返回类型在本项目的依赖版本里是库内部可见的
+     * （@RestrictTo），应用侧根本编译不过。那是库在表达「别走这条路」，官方做法就是用户服务：
+     * Shizuku 在自己的进程里实例化 [DshShizukuShellService]，于是身份由它决定。
+     *
+     * 失败一律 `channel_lost`：需要重来的是「去设置里刷新权限 / 重开 Shizuku」，
+     * 而不是重试这条命令。
      */
-    private fun execViaShizuku(command: String, timeoutMs: Long): ExecOutcome {
-        val process = try {
-            Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
-        } catch (e: Throwable) {
-            Log.w(TAG, "Shizuku newProcess 失败: ${e.message}")
-            return ExecOutcome(-1, "", "", false, "channel_lost")
-        }
-        val stdout = StringBuilder()
-        val stderr = StringBuilder()
-        // 必须边读边等：只 waitFor 的话，输出超过管道缓冲（约 64KB）时进程会阻塞在写上，
-        // 永远不退出，最后被我们当成超时杀掉 —— 而它其实早就把活干完了
-        val outReader = daemonReader { process.inputStream.bufferedReader().forEachLine { stdout.appendLine(it) } }
-        val errReader = daemonReader { process.errorStream.bufferedReader().forEachLine { stderr.appendLine(it) } }
-        val finished = runCatching { process.waitFor(timeoutMs, TimeUnit.MILLISECONDS) }.getOrDefault(false)
-        if (!finished) {
-            runCatching { process.destroyForcibly() }
-            outReader.join(500)
-            errReader.join(500)
-            return ExecOutcome(-1, clip(stdout.toString()), clip(stderr.toString()), true, "timeout")
-        }
-        outReader.join(500)
-        errReader.join(500)
-        val code = runCatching { process.exitValue() }.getOrDefault(-1)
-        return ExecOutcome(code, clip(stdout.toString()), clip(stderr.toString()), false, null)
+    private fun execViaShizuku(ctx: Context, command: String, timeoutMs: Long): ExecOutcome {
+        val json = DshShizukuShell.exec(ctx, command, timeoutMs)
+            ?: return ExecOutcome(-1, "", "", false, "channel_lost")
+        return ExecOutcome(
+            json.optInt("exit", -1),
+            clip(json.optString("stdout")),
+            clip(json.optString("stderr")),
+            json.optBoolean("timedOut"),
+            if (json.optBoolean("failed")) "channel_lost" else null,
+        )
     }
 
     /**
@@ -283,9 +272,6 @@ internal object PrivilegedShell {
         if (exit == null) return ExecOutcome(-1, "", clip(body), false, "channel_lost")
         return ExecOutcome(exit, clip(body), "", false, null)
     }
-
-    private fun daemonReader(block: () -> Unit): Thread =
-        Thread(block).apply { isDaemon = true; start() }
 
     private fun shellArg(value: String): String =
         if (value.matches(Regex("[A-Za-z0-9._:/+=,-]+"))) value

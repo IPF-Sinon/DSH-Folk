@@ -20,6 +20,8 @@ const TARGETS = [
   "dsh/PrivilegedShell.kt",
   "dsh/DshA11y.kt",
   "dsh/DshA11yService.kt",
+  "dsh/DshShizukuShell.kt",
+  "dsh/DshShizukuShellService.kt",
   "util/PermissionUtils.kt",
   "dsh/DshAutostart.kt",
   "dsh/DshTts.kt",

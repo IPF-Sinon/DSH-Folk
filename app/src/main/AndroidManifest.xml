@@ -390,6 +390,13 @@
                 android:resource="@xml/dsh_a11y" />
         </service>
 
+        <!-- Shizuku 用户服务：由 Shizuku 在**它自己的进程**里实例化，命令因此以 Shizuku 的身份
+             执行（Sui/root 模式 uid 0，普通 adb 模式 2000）。应用侧不绑定它就什么也不会发生；
+             exported=false 且没有 intent-filter，外部无法启动它。见 DshShizukuShell 的 KDoc。 -->
+        <service
+            android:name=".dsh.DshShizukuShellService"
+            android:exported="false" />
+
     </application>
 
 </manifest>

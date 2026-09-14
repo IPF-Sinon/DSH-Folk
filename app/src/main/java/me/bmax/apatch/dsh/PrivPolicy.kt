@@ -9,7 +9,7 @@ import android.content.Context
  * 严格程度决定「做的时候要不要每次都问一声」。默认 [STRICT] —— 特权是本应用能拿到的
  * 最高权限，默认应当最保守。
  */
-internal enum class PrivStrictness(val id: String) {
+enum class PrivStrictness(val id: String) {
     /** 每一次调用都要用户当场同意（弹窗只给「允许本次 / 拒绝」）。 */
     STRICT("strict"),
 
