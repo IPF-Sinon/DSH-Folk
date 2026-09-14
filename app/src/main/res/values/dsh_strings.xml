@@ -431,6 +431,8 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_permission_log_reason">Reason: %1$s</string>
     <string name="dsh_permission_log_details">Capability: %1$s · Access: %2$s · HTTP %3$d</string>
     <string name="dsh_permission_log_copy">Copy displayed command</string>
+    <string name="dsh_permission_log_result">Returned result</string>
+    <string name="dsh_permission_log_result_masked">String values are masked; unlock to read them</string>
     <string name="dsh_permission_log_show_sensitive">Show sensitive arguments</string>
     <string name="dsh_permission_log_hide_sensitive">Hide sensitive arguments</string>
 

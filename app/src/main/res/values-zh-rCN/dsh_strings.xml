@@ -413,6 +413,8 @@
     <string name="dsh_permission_log_reason">理由：%1$s</string>
     <string name="dsh_permission_log_details">能力：%1$s · 访问：%2$s · HTTP %3$d</string>
     <string name="dsh_permission_log_copy">复制当前显示的命令</string>
+    <string name="dsh_permission_log_result">返回结果</string>
+    <string name="dsh_permission_log_result_masked">字符串值已打码，解锁后可读</string>
     <string name="dsh_permission_log_show_sensitive">显示敏感参数</string>
     <string name="dsh_permission_log_hide_sensitive">隐藏敏感参数</string>
 

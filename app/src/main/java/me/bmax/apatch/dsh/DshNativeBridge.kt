@@ -326,6 +326,17 @@ object DshNativeBridge {
      */
     private const val MAX_COMMAND_CHARS = 2000
 
+    /** 记录文件的大小上限：超过就把当前文件转成 `.previous` 再重开一份。 */
+    private const val AUDIT_FILE_MAX_BYTES = 1_048_576L
+
+    /**
+     * 一条记录里保存的响应体长度上限。
+     *
+     * 按列表类结果（联系人 / 通知 / 媒体）的典型体量估的：它们动辄几十上百 KB，一条不截
+     * 就能把 [AUDIT_FILE_MAX_BYTES] 挤掉大半，用户翻记录时只看到最近一次调用。
+     */
+    private const val AUDIT_RESULT_MAX_CHARS = 2000
+
     /** 只有同时存在安全可用的读、写操作时才显示第三档。 */
     fun supportsWrite(cap: Cap): Boolean = when (cap) {
         Cap.NOTIFY, Cap.FULL_SCREEN_NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.CLIPBOARD, Cap.INTENT,
@@ -589,7 +600,7 @@ object DshNativeBridge {
                     str(ctx, R.string.dsh_native_err_elevate_foreground),
                     "not_foreground",
                 )
-                audit(ctx, method, path, params, cap, reason, result.first)
+                audit(ctx, method, path, params, cap, reason, result)
                 return result
             }
             // 弹窗上显示的就是这条命令本身（与审计同款重建），用户看到的即是将要执行的
@@ -600,7 +611,7 @@ object DshNativeBridge {
                     str(ctx, R.string.dsh_native_err_elevate_busy),
                     "request_pending",
                 )
-                audit(ctx, method, path, params, cap, reason, result.first)
+                audit(ctx, method, path, params, cap, reason, result)
                 return result
             }
             runCatching { DshHostPrompt.writeFacts(ctx.applicationContext) }
@@ -614,7 +625,7 @@ object DshNativeBridge {
                         str(ctx, R.string.dsh_native_err_denied, capName(ctx, cap)),
                         "denied_by_user",
                     )
-                    audit(ctx, method, path, params, cap, reason, result.first)
+                    audit(ctx, method, path, params, cap, reason, result)
                     return result
                 }
 
@@ -623,7 +634,7 @@ object DshNativeBridge {
                         str(ctx, R.string.dsh_native_err_request_expired, capName(ctx, cap)),
                         "request_expired",
                     )
-                    audit(ctx, method, path, params, cap, reason, result.first)
+                    audit(ctx, method, path, params, cap, reason, result)
                     return result
                 }
             }
@@ -635,12 +646,12 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_cap_disabled, capName(ctx, cap)),
                 "cap_disabled",
             )
-            audit(ctx, method, path, params, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result)
             return result
         }
         if (path == "/native/notify/system" && effectiveAccess(ctx, cap) != Access.CONTROL) {
             val result = 403 to err(str(ctx, R.string.dsh_native_err_control_disabled, capName(ctx, cap)), "control_disabled")
-            audit(ctx, method, path, params, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result)
             return result
         }
         if (isWriteRequest(method, path) && !canWrite(ctx, cap)) {
@@ -648,7 +659,7 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_write_disabled, capName(ctx, cap)),
                 "write_disabled",
             )
-            audit(ctx, method, path, params, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result)
             return result
         }
         if (!isWriteRequest(method, path) && !canRead(ctx, cap)) {
@@ -656,7 +667,7 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_read_disabled, capName(ctx, cap)),
                 "read_disabled",
             )
-            audit(ctx, method, path, params, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result)
             return result
         }
         // Android 自己的权限没给：App 层允许了也执行不了。这一段单独弹（可能要把用户送去系统
@@ -667,7 +678,7 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_no_android_permission, gap.labels.joinToString(", ")),
                 "no_android_permission",
             )
-            audit(ctx, method, path, params, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result)
             return result
         }
         val (ok, why) = availability(ctx, cap)
@@ -676,7 +687,7 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_cap_unavailable, capName(ctx, cap)),
                 why,
             )
-            audit(ctx, method, path, params, cap, reason, result.first)
+            audit(ctx, method, path, params, cap, reason, result)
             return result
         }
         // 到这里这次调用真的会被执行，「仅本次」配额到此为止 —— 一次授权换一次调用。
@@ -739,7 +750,7 @@ object DshNativeBridge {
             method == "POST" && path == "/native/sms/send" -> smsSend(ctx, params)
             else -> methodNotAllowed(ctx, method, path)
         }
-        audit(ctx, method, path, params, cap, reason, result.first)
+        audit(ctx, method, path, params, cap, reason, result)
         return result
     }
 
@@ -1046,7 +1057,6 @@ object DshNativeBridge {
         // 阻塞等用户答复。以前这里立刻回 202，让 agent 自己过一会儿再查 pending —— 那等于把
         // 一次问答拆成三次往返，中间还要 agent 记得回来问。现在这就是一次普通的阻塞调用。
         val decision = DshElevationRequests.awaitDecision(request.id)
-        audit(ctx, "POST", "/native/elevate", params, cap, reason, decisionStatus(decision))
         val base = JSONObject()
             .put("ok", decision == DshElevationRequests.Decision.ALLOWED ||
                 decision == DshElevationRequests.Decision.ONCE)
@@ -1054,7 +1064,7 @@ object DshNativeBridge {
             .put("cap", cap.id)
             .put("access", requested.id)
             .put("expiresInMs", 0)
-        return when (decision) {
+        val response = when (decision) {
             DshElevationRequests.Decision.ALLOWED -> 200 to base
                 .put("note", "The user allowed it. The level is saved; call the capability now.")
                 .toString()
@@ -1079,18 +1089,20 @@ object DshNativeBridge {
                 "request_expired",
             )
         }
+        // 记的是**真正返回的那一份**。以前这里按申请结论另算一个状态码（拒绝 403、
+        // 超时 408），而实际响应两者都是 403 —— 记录与响应体对不上，翻记录时看不出
+        // 「拒绝」和「超时」的区别。现在两者都由响应体里的 reason 区分。
+        audit(ctx, "POST", "/native/elevate", params, cap, reason, response)
+        return response
     }
 
-    /** 申请结论对应的审计状态码（记录里也要能看出「用户拒绝」和「超时」的区别）。 */
-    private fun decisionStatus(decision: DshElevationRequests.Decision): Int = when (decision) {
-        DshElevationRequests.Decision.ALLOWED,
-        DshElevationRequests.Decision.ONCE,
-        -> 200
-
-        DshElevationRequests.Decision.DENIED -> 403
-        DshElevationRequests.Decision.EXPIRED -> 408
-    }
-
+    /**
+     * 写一条能力调用记录。
+     *
+     * [response] 是整个返回值（状态码 + 响应体），不是单独的状态码：记录里只留一个数字
+     * 时，「这次调用到底返回了什么」只能回容器日志里翻，而那条日志早被后来的输出冲掉了。
+     * 状态码仍单独存一份，界面按它上色，不必去解析响应体。
+     */
     private fun audit(
         ctx: Context,
         method: String,
@@ -1098,12 +1110,12 @@ object DshNativeBridge {
         params: Map<String, String>,
         cap: Cap,
         reason: String,
-        status: Int,
+        response: Pair<Int, String>,
     ) {
         runCatching {
             val dir = File(ctx.filesDir, "audit").apply { mkdirs() }
             val file = File(dir, "native-capability.jsonl")
-            if (file.exists() && file.length() > 1_048_576L) {
+            if (file.exists() && file.length() > AUDIT_FILE_MAX_BYTES) {
                 File(dir, "native-capability.previous.jsonl").also { if (it.exists()) it.delete() }
                 file.renameTo(File(dir, "native-capability.previous.jsonl"))
             }
@@ -1116,9 +1128,20 @@ object DshNativeBridge {
                 .put("capability", cap.id)
                 .put("access", access(ctx, cap).id)
                 .put("reason", reason)
-                .put("status", status)
+                .put("status", response.first)
+                .put("result", auditResult(response.second))
             FileWriter(file, true).use { it.append(entry.toString()).append('\n') }
         }.onFailure { Log.w(TAG, "记录能力调用失败: ${it.message}") }
+    }
+
+    /**
+     * 响应体截断。列表类结果（联系人、通知、媒体）可以有几百 KB，而记录文件只留
+     * [AUDIT_FILE_MAX_BYTES] —— 不截断的话一条调用就能把整份历史挤掉。
+     */
+    private fun auditResult(body: String): String = if (body.length <= AUDIT_RESULT_MAX_CHARS) {
+        body
+    } else {
+        body.take(AUDIT_RESULT_MAX_CHARS) + "\n…(已截断，完整长度 ${body.length})"
     }
 
     private fun auditCommand(

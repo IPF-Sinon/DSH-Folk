@@ -47,6 +47,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.util.BiometricUtils
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -58,7 +59,38 @@ private data class PermissionLogEntry(
     val capability: String,
     val access: String,
     val status: Int,
+    /** 这次调用返回给 agent 的响应体；旧记录没有这一栏。 */
+    val result: String?,
 )
+
+/**
+ * 把响应体里的**字符串值**打码，键名与数字 / 布尔原样留着。
+ *
+ * 与命令参数那种「整段涂掉」不同，响应体是结构化数据：`{"ok":true,"count":12}` 这样的
+ * 骨架正是排查时要看的东西，全涂掉等于什么都没记。而真正私密的（剪贴板内容、联系人、
+ * 短信正文）都是字符串值，藏在叶子上 —— 所以只涂叶子。
+ *
+ * 解析不了的（错误页 HTML、纯文本）退回逐字符涂掉：宁可看不清，也不能默认把原文摆出来。
+ */
+private fun maskResultValues(raw: String): String {
+    fun maskLeaf(text: String): String = text.map { if (it.isWhitespace()) it else '•' }.joinToString("")
+    fun walk(value: Any?): Any? = when (value) {
+        is JSONObject -> JSONObject().also { out ->
+            value.keys().forEach { key -> out.put(key, walk(value.opt(key))) }
+        }
+
+        is JSONArray -> JSONArray().also { out ->
+            for (i in 0 until value.length()) out.put(walk(value.opt(i)))
+        }
+
+        is String -> if (value.isEmpty()) value else maskLeaf(value)
+        else -> value
+    }
+
+    return runCatching { walk(JSONObject(raw)).toString() }
+        .recoverCatching { walk(JSONArray(raw)).toString() }
+        .getOrElse { maskLeaf(raw) }
+}
 
 @Destination<RootGraph>
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,6 +120,7 @@ fun PermissionLogScreen(navigator: DestinationsNavigator) {
                                 capability = o.optString("capability"),
                                 access = o.optString("access"),
                                 status = o.optInt("status"),
+                                result = o.optString("result").takeIf { it.isNotBlank() },
                             )
                         }.getOrNull()
                     }.toList()
@@ -99,7 +132,7 @@ fun PermissionLogScreen(navigator: DestinationsNavigator) {
         TopAppBar(
             title = { Text(stringResource(R.string.dsh_permission_log_title)) },
             actions = {
-                if (entries.value.any { it.fullCommand != null }) {
+                if (entries.value.any { it.fullCommand != null || it.result != null }) {
                     IconButton(onClick = {
                         if (sensitiveVisible) {
                             sensitiveVisible = false
@@ -181,6 +214,31 @@ fun PermissionLogScreen(navigator: DestinationsNavigator) {
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
+                        entry.result?.let { raw ->
+                            // 打码要解析 JSON，而列表滚动会反复重组这一项 —— 按原文记住结果，
+                            // 别每次重组都重新解析一遍
+                            val shownResult = if (sensitiveVisible) raw else remember(raw) { maskResultValues(raw) }
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                stringResource(R.string.dsh_permission_log_result),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            SelectionContainer {
+                                Text(
+                                    shownResult,
+                                    fontFamily = FontFamily.Monospace,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            if (!sensitiveVisible) {
+                                Text(
+                                    stringResource(R.string.dsh_permission_log_result_masked),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     }
                 }
             }
