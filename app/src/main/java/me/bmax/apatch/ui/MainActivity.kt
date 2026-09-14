@@ -146,6 +146,8 @@ import me.bmax.apatch.R
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
@@ -154,6 +156,9 @@ import kotlin.system.exitProcess
 import me.bmax.apatch.util.UpdateChecker
 import me.bmax.apatch.ui.component.UpdateDialog
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
+import me.bmax.apatch.dsh.DshEnv
+import me.bmax.apatch.dsh.DshPhase
+import me.bmax.apatch.dsh.HarnessService
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.RuntimeCheckResult
 
@@ -585,6 +590,58 @@ class MainActivity : AppCompatActivity() {
                             runtimePrompt.value = result
                         }
                     }
+                }
+
+                // ───────── 应用启动行为（功能页那两个开关） ─────────
+                //
+                // ① 打开应用就自启服务。放在解锁后的这一支里：锁屏（生物识别）期间不该
+                // 背地里拉起一个本地服务，用户解锁后再说。
+                LaunchedEffect(Unit) {
+                    if (!DshRuntime.autoStartOnLaunch()) return@LaunchedEffect
+                    if (!DshEnv.isRuntimeInstalled(context)) return@LaunchedEffect
+                    val state = DshRuntime.state.value
+                    // 端口冲突时不替他做决定：那种状态要在首页选「换端口 / 指定端口 /
+                    // 强制启动」，这里抢先启动只会把那个对话框跳过。
+                    if (state.portConflict) return@LaunchedEffect
+                    if (state.phase in setOf(
+                            DshPhase.RUNNING,
+                            DshPhase.STARTING,
+                            DshPhase.DOWNLOADING,
+                            DshPhase.EXTRACTING,
+                        )
+                    ) {
+                        return@LaunchedEffect
+                    }
+                    HarnessService.start(context)
+                }
+
+                // ② 服务就绪后自动打开 DSH 页面。
+                //
+                // 整个生命周期都收着这个 flow（不是只在开关打开时才收）：用户在设置里把
+                // 开关打开时，本次会话随后起来的服务也应当兑现 —— 否则「我明明打开了」
+                // 会一直不生效，直到下次启动应用。开关值在**状态跃迁的那一刻**才读。
+                val webUiAutoOpened = rememberSaveable { mutableStateOf(false) }
+                LaunchedEffect(Unit) {
+                    DshRuntime.state
+                        .map { it.phase }
+                        .distinctUntilChanged()
+                        .collect { phase ->
+                            if (phase != DshPhase.RUNNING) return@collect
+                            if (webUiAutoOpened.value) return@collect
+                            if (!DshRuntime.autoOpenWebUi()) return@collect
+                            // 后台不许 startActivity：Android 10+ 会直接吞掉，用户看到的
+                            // 只是「没反应」，还会留下一条系统警告。服务可能在用户已经
+                            // 切走之后才就绪（比如开机自启拉起的那一份）。
+                            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@collect
+                            webUiAutoOpened.value = true
+                            val url = DshRuntime.state.value.webUrl
+                            when (DshWebUi.mode(context)) {
+                                DshWebUi.MODE_BROWSER -> DshWebUi.openExternal(context, url)
+                                // 「每次询问」在自动路径上沉默地选应用内：自动弹一个带倒计时
+                                // 的询问框，比替用户选一次更糟 —— 那时他正等着页面出现。
+                                else -> DshWebUi.openInApp(context, url)
+                            }
+                        }
                 }
 
                 // 弹窗闸门：应用更新检测还在跑、或应用更新弹窗已经弹出来了，就先压着；

@@ -906,6 +906,31 @@ object DshRuntime {
         prefs().edit().putBoolean(DshEnv.KEY_LAN, enabled).apply()
     }
 
+    // ────────────────────────── 应用启动行为 ──────────────────────────
+
+    /**
+     * 打开 App 时是否自动启动服务（默认关）。
+     *
+     * 与开机自启（[DshAutostart]）分开：那是设备开机，这是用户点开应用。两者可以各自
+     * 独立成立 —— 有人只在手动打开时必须自动跑起来，不想让它在后台常驻到开机。
+     */
+    fun autoStartOnLaunch(): Boolean =
+        ready && prefs().getBoolean(DshEnv.KEY_AUTO_START_ON_LAUNCH, false)
+
+    fun setAutoStartOnLaunch(enabled: Boolean) {
+        if (!ready) return
+        prefs().edit().putBoolean(DshEnv.KEY_AUTO_START_ON_LAUNCH, enabled).apply()
+    }
+
+    /** 服务就绪后是否自动打开 DSH 页面（默认关）。 */
+    fun autoOpenWebUi(): Boolean =
+        ready && prefs().getBoolean(DshEnv.KEY_AUTO_OPEN_WEBUI, false)
+
+    fun setAutoOpenWebUi(enabled: Boolean) {
+        if (!ready) return
+        prefs().edit().putBoolean(DshEnv.KEY_AUTO_OPEN_WEBUI, enabled).apply()
+    }
+
     /** 本机局域网 IPv4（site-local），取不到返回 null。 */
     fun lanIp(): String? = runCatching {
         val ifaces = java.net.NetworkInterface.getNetworkInterfaces()

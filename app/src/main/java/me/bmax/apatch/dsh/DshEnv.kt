@@ -160,6 +160,22 @@ object DshEnv {
     const val KEY_AUTOSTART_CONTAINER = "dsh_autostart_container"
 
     /**
+     * 打开 App 后自动启动 DSH 服务（默认**关**）。
+     *
+     * 与 [KEY_AUTOSTART_MODE] 是两件事：那是**设备开机**后自启，这是**用户打开应用**时
+     * 拉起服务。默认关：容器要几十秒才起得来，用户只是进来改个设置时不该顺带烧掉这些。
+     */
+    const val KEY_AUTO_START_ON_LAUNCH = "auto_start_on_launch"
+
+    /**
+     * 服务就绪后自动打开 DSH 页面（默认**关**）。
+     *
+     * 单独一个开关而不是跟着上一个走：有人只想让服务在后台待命（通知栏点一下就能用），
+     * 并不想每次开 App 都被一个网页盖住。
+     */
+    const val KEY_AUTO_OPEN_WEBUI = "auto_open_webui_when_ready"
+
+    /**
      * 权限通道首选：off | auto | root | shizuku | adb。
      *
      * **默认 off**（未启用）。见 [PermissionManager.readPreference] 与迁移逻辑。

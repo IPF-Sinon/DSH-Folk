@@ -220,6 +220,10 @@
     <string name="dsh_plugin_settings_summary">更新检查、插件详情、排序</string>
     <string name="dsh_autostart">开机自启</string>
     <string name="dsh_autostart_summary">设备启动完成后自动拉起 Harness（仅在运行时已安装时生效）</string>
+    <string name="dsh_auto_start_service">启动应用后自启动服务</string>
+    <string name="dsh_auto_start_service_summary">打开 DSH-Folk 就自动把 DSH 服务拉起来，不用再点一次启动（仅在运行时已安装且服务未在运行时生效）</string>
+    <string name="dsh_auto_open_webui">服务就绪后自动打开页面</string>
+    <string name="dsh_auto_open_webui_summary">DSH 服务启动完成后直接打开 DSH 页面（仅应用在前台时）</string>
     <string name="dsh_autostart_mode_off">不自启</string>
     <string name="dsh_autostart_mode_off_desc">只有你打开应用并手动启动时才会跑</string>
     <string name="dsh_autostart_mode_receiver">开机广播</string>

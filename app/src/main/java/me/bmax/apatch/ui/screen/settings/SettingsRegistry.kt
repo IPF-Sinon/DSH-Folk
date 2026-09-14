@@ -137,6 +137,8 @@ object SettingsRegistry {
             // === Function ===
             add(SettingEntry("function_run_mode", R.string.dsh_run_mode, R.string.dsh_run_mode_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_autostart", R.string.dsh_autostart, R.string.dsh_autostart_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_auto_start_service", R.string.dsh_auto_start_service, R.string.dsh_auto_start_service_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_auto_open_webui", R.string.dsh_auto_open_webui, R.string.dsh_auto_open_webui_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_port", R.string.dsh_port_title, R.string.dsh_port_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_lan", R.string.dsh_lan_title, R.string.dsh_lan_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_webui_mode", R.string.dsh_webui_mode, R.string.dsh_webui_mode_summary, SettingCategory.FUNCTION))

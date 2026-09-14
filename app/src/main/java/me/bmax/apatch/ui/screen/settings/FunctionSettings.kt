@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
@@ -125,6 +126,12 @@ fun FunctionSettingsContent(
     /** 无障碍服务当前是否被用户启用了。 */
     autostartA11yEnabled: Boolean,
     onOpenA11ySettings: () -> Unit,
+    /** 打开 App（不是开机）时自动启动服务。 */
+    autoStartOnLaunch: Boolean,
+    onAutoStartOnLaunchChange: (Boolean) -> Unit,
+    /** 服务就绪后自动打开 DSH 页面。 */
+    autoOpenWebUi: Boolean,
+    onAutoOpenWebUiChange: (Boolean) -> Unit,
     /** Web 服务监听端口。 */
     port: Int,
     onPortChange: (Int) -> Unit,
@@ -463,6 +470,33 @@ fun FunctionSettingsContent(
                     }
                 }
             }
+        }
+
+        // ───────── 应用启动行为 ─────────
+        //
+        // 与上面「开机自启」分开：那一条讲的是设备重启后要不要自己起来，这两条讲的是
+        // **用户打开 App** 时的行为。开关也各自独立 —— 只让服务在后台待命、或者每次
+        // 打开都直接进页面，都是合理用法。
+        item(key = "function_auto_start_service", visible = !permissionOnly) {
+            ToggleSettingCard(
+                flat = flat,
+                icon = Icons.Filled.PowerSettingsNew,
+                title = stringResource(R.string.dsh_auto_start_service),
+                description = stringResource(R.string.dsh_auto_start_service_summary),
+                checked = autoStartOnLaunch,
+                onCheckedChange = onAutoStartOnLaunchChange,
+            )
+        }
+
+        item(key = "function_auto_open_webui", visible = !permissionOnly) {
+            ToggleSettingCard(
+                flat = flat,
+                icon = Icons.Filled.OpenInNew,
+                title = stringResource(R.string.dsh_auto_open_webui),
+                description = stringResource(R.string.dsh_auto_open_webui_summary),
+                checked = autoOpenWebUi,
+                onCheckedChange = onAutoOpenWebUiChange,
+            )
         }
 
         // ───────── 端口 ─────────

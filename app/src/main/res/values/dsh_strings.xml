@@ -238,6 +238,10 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_plugin_settings_summary">Update check, plugin details, sorting</string>
     <string name="dsh_autostart">Start on boot</string>
     <string name="dsh_autostart_summary">Launch the harness automatically after the device finishes booting (only when the runtime is already installed)</string>
+    <string name="dsh_auto_start_service">Start the service when I open the app</string>
+    <string name="dsh_auto_start_service_summary">Bring the DSH service up as soon as DSH-Folk is opened, without tapping start (only when the runtime is installed and the service is not already running)</string>
+    <string name="dsh_auto_open_webui">Open the page once the service is ready</string>
+    <string name="dsh_auto_open_webui_summary">Jump straight into the DSH page when the service finishes starting (only while the app is in the foreground)</string>
     <string name="dsh_autostart_mode_off">Off</string>
     <string name="dsh_autostart_mode_off_desc">The harness starts only when you open the app and start it yourself</string>
     <string name="dsh_autostart_mode_receiver">Boot broadcast</string>

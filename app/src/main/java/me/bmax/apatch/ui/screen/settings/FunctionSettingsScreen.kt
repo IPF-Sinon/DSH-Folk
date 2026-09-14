@@ -154,6 +154,9 @@ internal fun DshSettingsScreen(
     // （返回本页会重读 prefs，那才是权威值）。
     var autostartMode by remember { mutableStateOf(DshAutostart.mode(context)) }
     var autostartContainer by remember { mutableStateOf(DshAutostart.startContainer(context)) }
+    // 应用启动行为：打开 App 时自启服务、服务就绪后自动打开页面（两者默认关）
+    var autoStartOnLaunch by remember { mutableStateOf(DshRuntime.autoStartOnLaunch()) }
+    var autoOpenWebUi by remember { mutableStateOf(DshRuntime.autoOpenWebUi()) }
     // 脚本状态要走 root shell 读（/data/adb 对普通应用连 exists() 都是 false），
     // 所以只在 IO 线程查，初值按「没装」显示 —— 宁可少说也不要假称装好了。
     var scriptInstalled by remember { mutableStateOf(false) }
@@ -531,6 +534,16 @@ internal fun DshSettingsScreen(
                     onAutostartContainerChange = { on ->
                         autostartContainer = on
                         DshAutostart.setStartContainer(context, on)
+                    },
+                    autoStartOnLaunch = autoStartOnLaunch,
+                    onAutoStartOnLaunchChange = { on ->
+                        autoStartOnLaunch = on
+                        DshRuntime.setAutoStartOnLaunch(on)
+                    },
+                    autoOpenWebUi = autoOpenWebUi,
+                    onAutoOpenWebUiChange = { on ->
+                        autoOpenWebUi = on
+                        DshRuntime.setAutoOpenWebUi(on)
                     },
                     autostartScriptInstalled = scriptInstalled,
                     autostartScriptOutdated = scriptOutdated,
