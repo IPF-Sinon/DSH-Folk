@@ -108,11 +108,14 @@ jobs:
       # Kotlin 注释那条：块注释在 Kotlin 里可嵌套，注释体里一个多余的起始标记
       # 会吞掉整个文件后半段，报出来的是一片「unresolved reference」（本项目踩过一次）。
       #
-      # 另外四个原本只在本地跑，现在也进 CI —— 它们的判据全是纯文本/纯逻辑，成本是毫秒级：
+      # 另外几个原本只在本地跑，现在也进 CI —— 它们的判据全是纯文本/纯逻辑，成本是毫秒级：
       #   check-strings 资源转义（裸撇号会让 aapt2 以一个和撇号毫无关系的 NPE 失败）；
       #   check-i18n 多语言键集；check-refs 文档/代码互引；
       #   check-native-logic 决策逻辑复刻（1.9.0 的「预装账本」死循环就属于这一类：
-      #   编译通过、真机才炸，而且每次启动都换个位置炸）。
+      #   编译通过、真机才炸，而且每次启动都换个位置炸）；
+      #   check-native-caps 原生能力桥的一致性（每个 Cap 进分组、capOf 与路由互相覆盖、
+      #   映射表与资源串齐全、清单权限已声明）。它此前只在本地跑，期间自己的两处切片
+      #   标记失效都没人发现 —— 加权限这类改动全靠它兜，不能只留在本地。
       - name: Static source checks
         run: |
           node tools/check-changelog.js
@@ -121,6 +124,7 @@ jobs:
           node tools/check-i18n.js
           node tools/check-refs.js
           node tools/check-native-logic.js
+          node tools/check-native-caps.js
           node tools/check-web-shim.js
           node tools/check-backup-logic.js
           node tools/check-session-group.js

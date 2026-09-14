@@ -120,6 +120,12 @@ const CAP_CAVEAT = {
   notify:
     'A notification interrupts the user. Post one when the task is genuinely done or genuinely ' +
     'needs a human, never to report progress.',
+  full_screen_notify:
+    'This one needs two separate permissions and fails without either: POST_NOTIFICATIONS for the ' +
+    'notification itself, and (on Android 14+) the full-screen-intent permission, which only the ' +
+    'user can grant on a system settings page. On 409 no_android_permission / ' +
+    'no_full_screen_permission, say which one is missing and stop — it is not transient, and a ' +
+    'full-screen alert is intrusive enough that retrying is worse than not sending it.',
   vibrate:
     'Tablets and emulators often have no vibrator at all, in which case this reports ' +
     'available:false with reason no_vibrator — that is a property of the device, not a transient ' +

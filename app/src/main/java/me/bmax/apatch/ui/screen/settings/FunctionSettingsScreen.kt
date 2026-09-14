@@ -211,22 +211,6 @@ internal fun DshSettingsScreen(
     }
 
     /**
-     * 运行时权限申请器。
-     *
-     * 用一个 launcher 应付三类能力：contract 收的是权限数组，回调里重读一遍状态就够了，
-     * 不必为每类各建一个 launcher（launcher 必须在组合期注册，条件注册会崩）。
-     */
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) {
-        capsWithPermission = DshNativeBridge.capsWithPermission(context)
-        coarseLocationOnly = PermissionUtils.hasLocationPermission(context) &&
-            !PermissionUtils.hasPreciseLocationPermission(context)
-        // 权限变了，提示词里的能力清单也得跟着变
-        DshHostPrompt.writeFacts(context.applicationContext)
-    }
-
-    /**
      * 跳某项特殊权限的系统设置页。
      *
      * 带包名的 Intent 在少数 ROM 上会打不开，所以失败后退回不带包名的全局列表页；
@@ -260,11 +244,41 @@ internal fun DshSettingsScreen(
             }
         }
     }
+
+    /**
+     * 运行时权限框关掉之后还要接着跳的特殊权限页（没有则为空）。
+     *
+     * 全屏通知是真的两样都要：POST_NOTIFICATIONS 走运行时申请，canUseFullScreenIntent()
+     * 只能去系统页开。用户点一次「去授权」应该两样都补上，否则回来还是
+     * `no_android_permission`，而界面看起来什么也没发生。运行时的框是系统弹窗、不会让
+     * 本页 onResume，所以这一步只能挂在申请回调里。
+     */
+    var specialAfterRuntime by remember { mutableStateOf<DshNativeBridge.Special?>(null) }
+
+    /**
+     * 运行时权限申请器。
+     *
+     * 用一个 launcher 应付三类能力：contract 收的是权限数组，回调里重读一遍状态就够了，
+     * 不必为每类各建一个 launcher（launcher 必须在组合期注册，条件注册会崩）。
+     */
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        capsWithPermission = DshNativeBridge.capsWithPermission(context)
+        coarseLocationOnly = PermissionUtils.hasLocationPermission(context) &&
+            !PermissionUtils.hasPreciseLocationPermission(context)
+        // 权限变了，提示词里的能力清单也得跟着变
+        DshHostPrompt.writeFacts(context.applicationContext)
+        specialAfterRuntime?.let { openSpecialSettings(it) }
+        specialAfterRuntime = null
+    }
     /**
      * 为某项能力补上它缺的权限。
      *
      * 两条路：能 requestPermissions 的直接申请；特殊权限（改系统设置 / 勿扰访问 /
-     * 安装未知应用）只能跳系统页。走错路的后果是按钮按下去毫无反应。
+     * 安装未知应用 / 无障碍服务）只能跳系统页。走错路的后果是按钮按下去毫无反应。
+     * 两样都缺时（全屏通知）先申请运行时的，再在回调里跳特殊页 —— 见
+     * [specialAfterRuntime]。
      *
      * 用户第二次拒绝之后系统不再弹窗（`shouldShowRequestPermissionRationale` 为 false
      * 且权限仍未授予），此时 launch 会立即回调、界面毫无反应 —— 那种情况下直接送去
@@ -274,19 +288,23 @@ internal fun DshSettingsScreen(
         // 特殊权限（改系统设置 / 勿扰访问 / 安装未知应用）不走 requestPermissions ——
         // 那对它们永远返回拒绝，launch 一下界面毫无反应。它们各有一个专门的系统页。
         val currentAccess = DshNativeBridge.access(context, cap)
-        val special = DshNativeBridge.specialPermissionOf(cap, currentAccess)
+        val specialMissing = DshNativeBridge.specialPermissionOf(cap, currentAccess)
+            ?.takeIf { !DshNativeBridge.specialGranted(context, it) }
         val needed = DshNativeBridge.runtimePermissions(context, cap, currentAccess).filter {
             ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (special != null && !DshNativeBridge.specialGranted(context, special)) {
-            openSpecialSettings(special)
-        } else if (needed.isNotEmpty()) {
+        if (needed.isEmpty()) {
+            specialMissing?.let { openSpecialSettings(it) }
+        } else {
             val activity = context as? Activity
             val canAsk = activity == null || !prefsAskedPermission(dshPrefs, cap) ||
                 needed.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
             if (canAsk) {
                 markAskedPermission(dshPrefs, cap)
+                specialAfterRuntime = specialMissing
                 permissionLauncher.launch(needed.toTypedArray())
+            } else if (specialMissing != null) {
+                openSpecialSettings(specialMissing)
             } else if (cap == DshNativeBridge.Cap.NOTIFY) {
                 // 通知有专门的开关页，比通用的应用信息页少两跳
                 runCatching {

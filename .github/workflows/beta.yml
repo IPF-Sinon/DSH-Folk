@@ -83,8 +83,9 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
 
-      # 与 build.yml 的 release job 同一套源码自检：版本说明三处一致、Kotlin 词法闭合。
-      # 放在编译之前是因为这两类问题的报错都指不到真正的那一行，而测试版每次都要
+      # 与 build.yml 的 release job 同一套源码自检：版本说明三处一致、Kotlin 词法闭合、
+      # 原生能力桥的一致性（Cap↔分组↔端点↔资源串）等十项。
+      # 放在编译之前是因为这些问题的报错都指不到真正的那一行，而测试版每次都要
       # 走一遍完整构建 + 发布，让它们在上面拦下来代价最低。
       - name: Static source checks
         run: |
@@ -94,6 +95,7 @@ jobs:
           node tools/check-i18n.js
           node tools/check-refs.js
           node tools/check-native-logic.js
+          node tools/check-native-caps.js
           node tools/check-web-shim.js
           node tools/check-backup-logic.js
           node tools/check-session-group.js

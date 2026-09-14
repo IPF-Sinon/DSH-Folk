@@ -116,16 +116,25 @@ ok(strayGroup.length === 0,
   "分组里没有不存在的 Cap" + (strayGroup.length ? " → " + strayGroup.join(",") : ""));
 
 // ── 3 & 4. 路由 ↔ capOf ──
+//
+// 两处都别再写死 `return when {` / `path == "…"`：路由块早就改成了 `val result = when {`，
+// 而端点里 `/native/notify/full-screen` 带连字符 —— 老字符类 `[a-z/]+` 会把它截成
+// `/native/notify/full`，于是「声明了却没路由」这种误报和一个真的漏路由长得一模一样。
+// 起点改成「以 else -> methodNotAllowed 为锚点往前找最近的那个 when {」。
 console.log("\n── 端点 ──");
-const handleStart = bridge.indexOf("return when {\n            method ==");
-const handleEnd = bridge.indexOf("else -> methodNotAllowed(ctx, method, path)", handleStart);
-const handleBody = bridge.slice(handleStart, handleEnd);
-const routed = [...new Set([...handleBody.matchAll(/path == "(\/native\/[a-z\/]+)"/g)].map((m) => m[1]))];
+const ROUTE_END = "else -> methodNotAllowed(ctx, method, path)";
+const handleEnd = bridge.indexOf(ROUTE_END);
+const handleStart = handleEnd < 0 ? -1 : bridge.lastIndexOf("when {", handleEnd);
+const handleBody = handleStart < 0 ? "" : bridge.slice(handleStart, handleEnd);
+ok(handleBody.length > 0, "能定位到端点路由块（切片标记没失效）");
+const PATH = "(/native/[a-z0-9/-]+)";
+const routed = [...new Set([...handleBody.matchAll(new RegExp(`path == "${PATH}"`, "g"))].map((m) => m[1]))];
 
 const capOfStart = bridge.indexOf("private fun capOf(path: String): Cap? = when (path) {");
 const capOfEnd = bridge.indexOf("else -> null", capOfStart);
 const capOfBody = bridge.slice(capOfStart, capOfEnd);
-const declared = [...new Set([...capOfBody.matchAll(/"(\/native\/[a-z\/]+)"/g)].map((m) => m[1]))];
+const declared = [...new Set([...capOfBody.matchAll(new RegExp(`"${PATH}"`, "g"))].map((m) => m[1]))];
+ok(routed.length > 0 && declared.length > 0, `解析到 ${routed.length} 个已路由 / ${declared.length} 个已声明端点`);
 
 const unmapped = routed.filter((p) => !declared.includes(p));
 ok(unmapped.length === 0,
@@ -180,10 +189,23 @@ for (const [label, src, anchor] of TABLES) {
   ok(miss.length === 0,
     `capPermissionHintRes 覆盖 ${needsAny.length} 项需要权限的能力` + (miss.length ? " → 缺 " + miss.join(",") : ""));
 
-  // ── 8. 两条路互斥 ──
+  // ── 8. 同时要两类权限的情况必须显式登记 ──
+  //
+  // 这条原来写的是「运行时与特殊权限两条路必须互斥」，理由是申请路径会走错分支。但全屏
+  // 通知是真的两样都要：Android 14 起发布全屏 intent 要 canUseFullScreenIntent()（特殊
+  // 权限页），通知本身还要 POST_NOTIFICATIONS。所以改成「允许，但必须逐条登记理由」——
+  // 新增一个「两样都要」的能力时这里会拦住你，逼你想清楚申请路径怎么走（见
+  // FunctionSettingsScreen 的 requestCapPermission：先申请运行时的，再跳特殊权限页）。
+  const BOTH_ALLOWED = {
+    FULL_SCREEN_NOTIFY: "全屏 intent 要 canUseFullScreenIntent()，通知本身要 POST_NOTIFICATIONS",
+  };
   const both = needsRuntime.filter((n) => needsSpecial.includes(n));
-  ok(both.length === 0,
-    "没有能力同时要求运行时权限与特殊权限" + (both.length ? " → " + both.join(",") : ""));
+  const undeclared = both.filter((n) => BOTH_ALLOWED[n] === undefined);
+  ok(undeclared.length === 0,
+    "同时要两类权限的能力都已登记理由" + (undeclared.length ? " → 未登记 " + undeclared.join(",") : ""));
+  const staleBoth = Object.keys(BOTH_ALLOWED).filter((n) => !both.includes(n));
+  ok(staleBoth.length === 0,
+    "登记表里没有已经不需要两类权限的能力" + (staleBoth.length ? " → 多余 " + staleBoth.join(",") : ""));
 }
 
 // ── 5b. 所有对 Cap 的穷尽 when 都必须覆盖每一项 ──
@@ -316,8 +338,10 @@ console.log("\n── 提示词插件 ──");
   const caveat = block("CAP_CAVEAT");
   ok(usage !== null && caveat !== null, "能找到 CAP_USAGE 与 CAP_CAVEAT 两张表");
   if (usage && caveat) {
-    // 只认顶层的 `  id:` 行（两空格缩进），否则 usage 字符串里的冒号也会被算进去
-    const keys = (b) => [...b.matchAll(/^ {2}([a-zA-Z]+):/gm)].map((m) => m[1]);
+    // 只认顶层的 `  id:` 行（两空格缩进），否则 usage 字符串里的冒号也会被算进去。
+    // 字符类必须含下划线：`full_screen_notify` 这种 id 在 `[a-zA-Z]+` 下是隐形的，
+    // 结果是「表里明明有、检查器说缺」。
+    const keys = (b) => [...b.matchAll(/^ {2}([a-zA-Z_]+):/gm)].map((m) => m[1]);
     const uk = keys(usage);
     const ck = keys(caveat);
     const missU = caps.filter((c) => !uk.includes(c.id)).map((c) => c.id);
