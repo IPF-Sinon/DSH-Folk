@@ -226,7 +226,9 @@ const CAP_CAVEAT = {
     'that changes device state needs read+write, and how often you are asked depends on the ' +
     'strictness the user chose (strict = every single call pops a dialog). Reasons such as ' +
     'no_channel, adb_write_disabled, root_unavailable, root_lost, timeout, busy, denied_by_user ' +
-    'are states to report, not errors to retry.',
+    'are states to report, not errors to retry. `dsh-native caps` lists the exact read-only ' +
+    'commands (and whether the channel is ready) — check it before assuming a command needs ' +
+    'permission, because under strict strictness a wrong guess costs the user a tap.',
   sms:
     'Read only. SMS bodies are private: use a small --limit and do not repeat unrelated messages.',
 };
@@ -604,19 +606,52 @@ function render(f) {
   if (elevation !== null) {
     const uid = Number(elevation.uid);
     const canRoot = elevation.canRoot === true;
+    // ready=false 是「用户选了这条通道，但还差一步」：root 没验过、Shizuku 没授权、
+    // ADB 没配对。这种状态以前整段消失，于是 agent 以为设备上根本没有提权途径 ——
+    // 而用户明明刚开过。现在照旧渲染，只是换成「先让用户补上那一步」的说法。
+    const ready = elevation.ready !== false;
+    const reason = str(elevation.reason);
     lines.push('');
     lines.push('## Privileged channel');
     lines.push('');
+    if (!ready) {
+      lines.push(
+        'The user has SELECTED a privileged channel — **' +
+          str(elevation.channel) +
+          '** — but it is not usable yet (`reason: "' +
+          reason +
+          '"`). Detected but not enabled: nothing privileged will work until the user finishes ' +
+          'that one step, and you cannot do it for them. Ask for it ONCE, in one sentence, and say ' +
+          'what you would use it for: root → press 刷新权限 (Settings › Security › Permission ' +
+          'channel) so the su prompt appears; Shizuku → grant the app permission in Shizuku; ' +
+          'wireless ADB → finish pairing. Until then, either work without privilege or tell the ' +
+          'user what is blocked. Do not retry the same privileged call hoping for a different ' +
+          'answer.'
+      );
+      lines.push('');
+    }
     lines.push(
-      'The user has a privileged channel enabled: **' +
-        str(elevation.channel) +
-        '**. Run privileged commands with `dsh-native shell [--su] -- <command>` — the host runs ' +
+      (ready
+        ? 'The user has a privileged channel enabled: **' + str(elevation.channel) + '**. '
+        : 'Once it is usable, the channel is **' + str(elevation.channel) + '**: ') +
+        'Run privileged commands with `dsh-native shell [--su] -- <command>` — the host runs ' +
         'them for you through that channel. You do NOT get it inside the container: `su` here is ' +
         'still proot pretending, so never use bare `su` and never assume you are root.'
     );
     lines.push('');
+    if (str(elevation.fellBackFrom)) {
+      lines.push(
+        'The user asked for **' +
+          str(elevation.fellBackFrom) +
+          '**, but that is not usable right now, so calls go through **' +
+          str(elevation.channel) +
+          '** instead. Do not describe the fallback as what the user chose; if the difference ' +
+          'matters for the task (root-only paths such as /data), say what is missing.'
+      );
+      lines.push('');
+    }
     lines.push(
-      'Identity you get: ' +
+      (ready ? 'Identity you get: ' : 'Identity you would get: ') +
         (uid === 0
           ? 'uid 0 (full Android privilege).'
           : 'uid ' +
@@ -630,7 +665,9 @@ function render(f) {
     );
     lines.push('');
     const strictness = str(f.privStrictness) || 'strict';
-    if (strictness === 'strict') {
+    if (!ready) {
+      // 还没就绪，讲弹窗频率只会让 agent 以为现在就能调
+    } else if (strictness === 'strict') {
       lines.push(
         'Strictness is **strict**: EVERY privileged call opens a confirmation dialog that the user ' +
           'must answer (allow once / deny), even for `getprop`. So batch your work into as few, as ' +
@@ -651,7 +688,9 @@ function render(f) {
     }
     lines.push('');
     lines.push(
-      'Failures carry a machine-readable reason: no_channel (the user turned the channel off), ' +
+        'Failures carry a machine-readable reason: no_channel (the user turned the channel off), ' +
+        'root_unverified / shizuku_unauthorized / adb_unpaired (the user selected a channel but has ' +
+        'not finished enabling it — ask once, see above), ' +
         'adb_write_disabled / adb_root_disabled (a switch for the wireless-ADB channel is off), ' +
         'root_unavailable (this channel cannot be root), root_lost / channel_lost (the channel ' +
         'went away — tell the user to refresh permissions), timeout (504, dropped), busy (429, ' +

@@ -108,8 +108,33 @@ internal object PrivilegedShell {
         return PrivRisk.WRITE
     }
 
-    /** 当前通道能拿到的身份。null = 一条通道都没有（用户没启用特权）。 */
-    data class Reach(val channel: PermissionManager.Channel, val uid: Int, val canRoot: Boolean)
+    /**
+     * 当前的执行通道。
+     *
+     * @param channel 真正会执行的那条通道
+     * @param uid 预期身份
+     * @param canRoot 这条通道能不能到 uid 0
+     * @param ready 现在就能用吗：root 验过 / Shizuku 已授权 / ADB 已配对
+     * @param reason [ready] 为 false 时的原因（[REASON_ROOT_UNVERIFIED] 等）
+     * @param selected 用户首选的那条；与 [channel] 不同表示发生了回退
+     */
+    data class Reach(
+        val channel: PermissionManager.Channel,
+        val uid: Int,
+        val canRoot: Boolean,
+        val ready: Boolean = true,
+        val reason: String? = null,
+        val selected: PermissionManager.Channel? = null,
+    ) {
+        /**
+         * 现在能不能试。
+         *
+         * 「root 还没验证过」算能试：调用会真的跑 su，Magisk/KernelSU 这时候才弹授权框，
+         * 用户点一下就成了。真正不能试的是 Shizuku 没授权、ADB 没配对 —— 那两条无论怎么
+         * 调都是失败，提前拦掉既能给出可指路的 reason，也不会白花用户一次弹窗。
+         */
+        val usable: Boolean get() = ready || reason == REASON_ROOT_UNVERIFIED
+    }
 
     /**
      * 探测当前通道。
@@ -117,19 +142,67 @@ internal object PrivilegedShell {
      * 每次调用都重探一次（[PermissionManager.refresh] 在 `allowRootPrompt=false` 下只做
      * 文件检查与 binder ping，不会弹 su 授权框）：用户刚在设置里换了通道、或者刚给 Shizuku
      * 授权，agent 下一次调用就应该看到新事实，而不是等 App 重启。
+     *
+     * **用户选了一条但还没就绪时也必须返回**（只是 ready=false）。这一条以前没有，结果是
+     * 提示词整段消失：用户刚把通道设成 root、还没点过「刷新权限」，agent 那边看起来就是
+     * 「这台设备没有特权」—— 于是它连试都不试，而设备完全能做到。
      */
     fun reach(ctx: Context): Reach? {
         val status = PermissionManager.refresh(ctx, allowRootPrompt = false)
-        return when (status.channel) {
-            PermissionManager.Channel.ROOT -> Reach(PermissionManager.Channel.ROOT, 0, true)
-            PermissionManager.Channel.SHIZUKU ->
-                Reach(PermissionManager.Channel.SHIZUKU, status.shizukuUid, status.shizukuUid == 0)
-            PermissionManager.Channel.ADB -> Reach(
-                PermissionManager.Channel.ADB,
-                2000,
-                AdbBridge.granted(ctx, AdbBridge.ShellGrant.ROOT),
+        val selected = status.preferred?.takeIf { it != PermissionManager.Channel.NONE }
+        when (status.channel) {
+            PermissionManager.Channel.ROOT -> return Reach(
+                channel = PermissionManager.Channel.ROOT,
+                uid = 0,
+                canRoot = true,
+                selected = selected?.takeIf { it != PermissionManager.Channel.ROOT },
             )
-            PermissionManager.Channel.NONE -> null
+            PermissionManager.Channel.SHIZUKU -> return Reach(
+                channel = PermissionManager.Channel.SHIZUKU,
+                uid = status.shizukuUid,
+                canRoot = status.shizukuUid == 0,
+                selected = selected?.takeIf { it != PermissionManager.Channel.SHIZUKU },
+            )
+            PermissionManager.Channel.ADB -> return Reach(
+                channel = PermissionManager.Channel.ADB,
+                uid = 2000,
+                canRoot = AdbBridge.granted(ctx, AdbBridge.ShellGrant.ROOT),
+                selected = selected?.takeIf { it != PermissionManager.Channel.ADB },
+            )
+            PermissionManager.Channel.NONE -> Unit
+        }
+        // 没有可用通道 —— 但用户选了一条、设备上也确实看得到它，那就是「选了还没就绪」
+        return when (selected) {
+            PermissionManager.Channel.ROOT -> if (status.suPresent) {
+                Reach(PermissionManager.Channel.ROOT, 0, true, ready = false, reason = REASON_ROOT_UNVERIFIED)
+            } else null
+            PermissionManager.Channel.SHIZUKU -> if (status.shizukuRunning) {
+                Reach(PermissionManager.Channel.SHIZUKU, 2000, false, ready = false, reason = REASON_SHIZUKU_UNAUTHORIZED)
+            } else null
+            PermissionManager.Channel.ADB ->
+                Reach(PermissionManager.Channel.ADB, 2000, false, ready = false, reason = REASON_ADB_UNPAIRED)
+            else -> null
+        }
+    }
+
+    /** 「选了但还没就绪」的三种原因；词表与提示词、UI 文案共用一份。 */
+    const val REASON_ROOT_UNVERIFIED = "root_unverified"
+    const val REASON_SHIZUKU_UNAUTHORIZED = "shizuku_unauthorized"
+    const val REASON_ADB_UNPAIRED = "adb_unpaired"
+
+    /** 通道的稳定标识：写进事实与审计，也用于提示词。 */
+    fun channelId(channel: PermissionManager.Channel): String = channel.name.lowercase()
+
+    /**
+     * 只读命令清单。
+     *
+     * 给 agent 看的：严格档下每次调用都要用户点一下，它猜错一次就白花一次点击。名单在这里
+     * 只有一份（[isReadonly] 用的就是它），所以不会出现「提示词说只读、宿主说不是」。
+     */
+    fun readonlyCommands(): List<String> = buildList {
+        addAll(READONLY_CMDS.sorted())
+        READONLY_SUB.toSortedMap().forEach { (name, subs) ->
+            subs.sorted().forEach { add("$name $it") }
         }
     }
 
@@ -141,6 +214,8 @@ internal object PrivilegedShell {
      */
     fun denyReason(ctx: Context, risk: PrivRisk, asRoot: Boolean): String? {
         val reach = reach(ctx) ?: return "no_channel"
+        // 没就绪的通道先拦：这类失败与命令本身无关，重试多少次都一样
+        if (!reach.usable) return reach.reason ?: "no_channel"
         if (asRoot && !reach.canRoot) {
             return if (reach.channel == PermissionManager.Channel.ADB) "adb_root_disabled" else "root_unavailable"
         }

@@ -335,7 +335,23 @@ The three channels differ only in who executes:
 
 Only two levels are meaningful: **read** allows diagnostics (the **same allowlist** the in-container script uses — `tools/check-native-logic.js` asserts the two are
 byte-identical), **read+write** can change device state. Strictness decides whether you are asked (see above), and every call is audited with the channel, the identity,
-the strictness in force and whether the user approved it or it ran unattended. Results carry `exit` plus `stdout`/`stderr` (truncated past 64 KB); failures are separated by
+the strictness in force and whether the user approved it or it ran unattended. **"a channel is selected" and "a channel works" are two different things**, and the prompt states both: root that has not been
+refreshed yet is "selected, one step missing" (`root_unverified`) rather than "this device has no privilege" — the latter makes the
+agent give up without trying. Only three cases are blocked up front: unverified root (still attempted, the su prompt appears at call
+time), unauthorized Shizuku, and unfinished ADB pairing. Selecting a channel, tapping Refresh permissions, and just granting Shizuku
+each rewrite the host facts immediately — miss one and the user hits "I turned root on and it seems not to know", because that prompt
+section is rendered from those facts. `dsh-native caps` carries the **read-only command list** and whether the channel is ready:
+under strict strictness a wrong guess costs the user a tap, and the list has a single source shared with the host's own check.
+
+**"a channel is selected" and "a channel works" are two different things**, and the prompt states both: root that has not been
+refreshed yet is "selected, one step missing" (`root_unverified`) rather than "this device has no privilege" — the latter makes the
+agent give up without trying. Only three cases are blocked up front: unverified root (still attempted, the su prompt appears at call
+time), unauthorized Shizuku, and unfinished ADB pairing. Selecting a channel, tapping Refresh permissions, and just granting Shizuku
+each rewrite the host facts immediately — miss one and the user hits "I turned root on and it seems not to know", because that prompt
+section is rendered from those facts. `dsh-native caps` carries the **read-only command list** and whether the channel is ready:
+under strict strictness a wrong guess costs the user a tap, and the list has a single source shared with the host's own check.
+
+Results carry `exit` plus `stdout`/`stderr` (truncated past 64 KB); failures are separated by
 status code: `403` the channel does not allow it (`no_channel` / `adb_write_disabled` / `root_unavailable` …), `504` timed out and dropped, `429` one is already running.
 Those are states, not transient errors, and the prompt says not to retry them.
 

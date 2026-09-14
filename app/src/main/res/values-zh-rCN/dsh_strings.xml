@@ -710,6 +710,9 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_err_shell_failed">特权命令没能执行：%1$s</string>
     <string name="dsh_native_err_priv_denied">这条通道不允许：%1$s</string>
     <string name="dsh_native_err_priv_busy">已有一条特权命令在执行中</string>
+    <string name="dsh_native_priv_reason_root_unverified">已选择 root，但还没验证过 —— 去设置里点一下「刷新权限」</string>
+    <string name="dsh_native_priv_reason_shizuku_unauthorized">已选择 Shizuku，但本应用还没被授权</string>
+    <string name="dsh_native_priv_reason_adb_unpaired">已选择无线 ADB，但还没配对完成</string>
     <string name="dsh_native_priv_reason_no_channel">没有启用任何通道，请到「设置 → 安全 → 权限通道」选一条</string>
     <string name="dsh_native_priv_reason_root_unavailable">这条通道拿不到 root 身份（Shizuku 的 shell 模式，或无线 ADB 未放开 root）</string>
     <string name="dsh_native_priv_reason_adb_root">「容器内允许 root shell」开关没开</string>

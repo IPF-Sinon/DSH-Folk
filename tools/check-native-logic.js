@@ -576,6 +576,65 @@ console.log("\n── 特权通道约束 ──");
   ok(/DSH_INTERNAL/.test(code(shell)) === false,
     "宿主调用**不带** DSH_INTERNAL=1：agent 的调用必须过脚本自己的写关卡");
   ok(/tryEnter\(\)/.test(shell) && /compareAndSet\(false, true\)/.test(shell), "特权命令单飞");
+
+  // 用户把通道设成 root 但还没验证过时，必须**照旧告知 agent**（只是 ready=false）。
+  // 这一条踩过坑：以前只按「解析出的通道」判断，于是提示词整段消失，agent 以为这台
+  // 设备没有提权途径，连试都不试 —— 而用户明明刚开过。
+  // 只切「没有可用通道」这一段的尾巴，避免常量出现在别处就让断言通过
+  const reachTail = shell.slice(shell.indexOf("PermissionManager.Channel.NONE -> Unit"));
+  ok(/Channel\.ROOT -> if \(status\.suPresent\) \{[\s\S]{0,220}reason = REASON_ROOT_UNVERIFIED/.test(reachTail),
+    "没解析出通道时，选了 root 且 su 在就必须回一个未就绪的 Reach（否则提示词整段消失）");
+  ok(/val usable: Boolean get\(\) = ready \|\| reason == REASON_ROOT_UNVERIFIED/.test(shell),
+    "root 未验证仍然可试（调用时才会弹 su 授权框），Shizuku/ADB 未就绪则提前拦");
+  ok(/if \(!reach\.usable\) return reach\.reason/.test(shell),
+    "denyReason 给出精确原因，而不是一律 no_channel");
+  ok(/fun readonlyCommands\(\)/.test(shell) && /READONLY_CMDS\.sorted\(\)/.test(shell),
+    "只读命令清单对外可见（与 isReadonly 同一份数据，不会两处漂移）");
+
+  // 事实与 caps 必须带上「就绪与否」，否则 agent 会把「还没验证」当成「有特权」。
+  const factsJson = SRC.bridge.slice(
+    SRC.bridge.indexOf("internal fun elevationJson"),
+    SRC.bridge.indexOf("internal fun elevationJson") + 900
+  );
+  ok(/\.put\("ready"/.test(factsJson) && /\.put\("reason"/.test(factsJson),
+    "elevation 事实带 ready/reason");
+  ok(/\.put\("fellBackFrom"/.test(factsJson),
+    "回退到别的通道时如实写出来（否则 agent 会以为用户选的就是这条）");
+  ok(/shellReadonly/.test(SRC.bridge) && /JSONArray\(PrivilegedShell\.readonlyCommands\(\)\)/.test(SRC.bridge),
+    "caps 里给出只读命令清单（严格档下猜错一次就白花用户一次点击）");
+
+  // 提示词：未就绪要渲染成「先让用户补一步」，而不是整段消失
+  const prompt = fs.readFileSync("app/src/main/assets/dsh-folk-host.mjs", "utf8");
+  ok(/const ready = elevation\.ready !== false/.test(prompt), "提示词区分就绪与未就绪");
+  ok(/SELECTED a privileged channel/.test(prompt) && /reason: "/.test(prompt),
+    "未就绪时说明「已选择但还差一步」并给出原因");
+  ok(/root_unverified \/ shizuku_unauthorized \/ adb_unpaired/.test(prompt),
+    "三个未就绪原因进了失败词表");
+  ok(/fellBackFrom/.test(prompt), "提示词会说明通道是回退来的");
+  ok(/dsh-native caps\` lists the exact read-only/.test(prompt), "提示 agent 去 caps 查只读清单");
+
+  // 事实文件是「agent 知不知道有特权」的唯一来源：改通道 / 刷新权限 / Shizuku 刚授权
+  // 三条路径都得重写它。少了任何一条，用户会看到「我开了 root 它也不知道」。
+  const settings = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt", "utf8");
+  const prefBlock = settings.slice(
+    settings.indexOf("onPermPrefChange = { name ->"),
+    settings.indexOf("privStrictness = privStrictness,")
+  );
+  ok(prefBlock.length > 0 && prefBlock.includes("DshHostPrompt.writeFacts"),
+    "切换权限通道后重写事实（否则容器里还停在旧值）");
+  const refreshBlock = settings.slice(
+    settings.indexOf("onRefreshPerm = {"),
+    settings.indexOf("onRequestShizuku = {")
+  );
+  ok(refreshBlock.includes("allowRootPrompt = true") && refreshBlock.includes("DshHostPrompt.writeFacts"),
+    "点「刷新权限」验过 root 后重写事实");
+  const listenerRefresh = settings.slice(
+    settings.indexOf("val refresh = {"),
+    settings.indexOf("val onResult =")
+  );
+  ok(listenerRefresh.includes("PermissionManager.refresh(app)") &&
+    listenerRefresh.includes("DshHostPrompt.writeFacts(app)"),
+    "Shizuku 授权回调也会重写事实");
   // Shizuku 侧只能走用户服务：newProcess 的返回类型是库内部可见的，直接调编译不过
   ok(/DshShizukuShell\.exec\(/.test(shell), "Shizuku 通道走用户服务");
   ok(!/Shizuku\.newProcess/.test(code(shell)), "没有直接调被限制的 Shizuku.newProcess");

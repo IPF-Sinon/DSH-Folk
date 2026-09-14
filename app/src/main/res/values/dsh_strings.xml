@@ -728,6 +728,9 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_native_err_shell_failed">The privileged command could not run: %1$s</string>
     <string name="dsh_native_err_priv_denied">This channel does not allow it: %1$s</string>
     <string name="dsh_native_err_priv_busy">Another privileged command is still running</string>
+    <string name="dsh_native_priv_reason_root_unverified">root is selected but has not been verified yet — tap Refresh permissions in Settings</string>
+    <string name="dsh_native_priv_reason_shizuku_unauthorized">Shizuku is selected but this app has not been authorized yet</string>
+    <string name="dsh_native_priv_reason_adb_unpaired">wireless ADB is selected but pairing has not been finished</string>
     <string name="dsh_native_priv_reason_no_channel">no channel is enabled. Pick one in Settings, Security, Permission channel</string>
     <string name="dsh_native_priv_reason_root_unavailable">this channel cannot run as root (Shizuku in shell mode, or root not allowed for wireless ADB)</string>
     <string name="dsh_native_priv_reason_adb_root">the wireless ADB root shell switch is off</string>

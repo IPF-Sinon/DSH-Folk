@@ -577,11 +577,16 @@ object DshNativeBridge {
         Cap.SMS ->
             if (PermissionUtils.hasSmsPermission(ctx)) true to ""
             else false to "no_sms_permission"
-        // 特权命令能不能用，取决于用户有没有选一条通道。「读了但没启用」与「设备上真的
-        // 没有」在这里是同一个答案：agent 该做的就是让用户去设置 → 权限通道选一条。
-        Cap.SHELL ->
-            if (PrivilegedShell.reach(ctx) != null) true to ""
-            else false to "no_channel"
+        // 特权命令能不能用，取决于用户有没有选一条通道、以及那条通道是不是已经就绪。
+        // 未就绪（root 还没验过、Shizuku 还没授权、ADB 还没配对）要回**精确原因**：
+        // 一律回 no_channel 会让 agent 说「用户没开特权」，而实际上用户刚刚开过，
+        // 只是还差一步 —— 那句话会把用户引到一个已经打开了的设置页上。
+        Cap.SHELL -> PrivilegedShell.reach(ctx)?.let { reach ->
+            when {
+                reach.usable -> true to ""
+                else -> false to (reach.reason ?: "no_channel")
+            }
+        } ?: (false to "no_channel")
         // 无障碍服务没开时这一项做不了任何事：agent 该提示用户去打开那个开关
         Cap.A11Y ->
             if (DshA11y.connected()) true to "" else false to "no_a11y_service"
@@ -950,6 +955,11 @@ object DshNativeBridge {
             "root_lost" -> R.string.dsh_native_priv_reason_root_lost
             "channel_lost" -> R.string.dsh_native_priv_reason_channel_lost
             "timeout" -> R.string.dsh_native_priv_reason_timeout
+            // 「选了通道但还没就绪」三种：文案必须说清下一步做什么，
+            // 否则用户看到的是一句像是故障的提示
+            PrivilegedShell.REASON_ROOT_UNVERIFIED -> R.string.dsh_native_priv_reason_root_unverified
+            PrivilegedShell.REASON_SHIZUKU_UNAUTHORIZED -> R.string.dsh_native_priv_reason_shizuku_unauthorized
+            PrivilegedShell.REASON_ADB_UNPAIRED -> R.string.dsh_native_priv_reason_adb_unpaired
             else -> R.string.dsh_native_priv_reason_unknown
         },
     )
@@ -1118,6 +1128,8 @@ object DshNativeBridge {
             // 这一段非空时才告诉 agent 「你能提权」，而「设备上根本没有提权途径」这件事
             // 说与不说都是让 agent 去骚扰用户。
             .put("elevation", elevationJson(ctx))
+            // 只读清单只对 shell 有意义，且只有启用时才给 —— 关着的能力不必描述细节
+            .put("shellReadonly", if (accessMap(ctx)[Cap.SHELL] != Access.OFF) JSONArray(PrivilegedShell.readonlyCommands()) else JSONArray())
             .put("caps", caps)
             .toString()
     }
@@ -1132,9 +1144,15 @@ object DshNativeBridge {
     internal fun elevationJson(ctx: Context): Any {
         val reach = PrivilegedShell.reach(ctx) ?: return JSONObject.NULL
         return JSONObject()
-            .put("channel", reach.channel.name.lowercase())
+            .put("channel", PrivilegedShell.channelId(reach.channel))
             .put("uid", reach.uid)
             .put("canRoot", reach.canRoot)
+            // ready=false 时不能说「你有特权」：用户选了通道但还没点过刷新权限 / 还没授权，
+            // 这时候 agent 该做的是提醒用户，而不是发一条注定失败的调用
+            .put("ready", reach.ready)
+            .put("reason", reach.reason ?: JSONObject.NULL)
+            // 首选不可用而落到了别的通道：不说的话，agent 会以为「用户选的就是这条」
+            .put("fellBackFrom", reach.selected?.let { PrivilegedShell.channelId(it) } ?: JSONObject.NULL)
             .put("strictness", PrivPolicy.of(ctx).id)
     }
 

@@ -391,7 +391,15 @@ internal fun DshSettingsScreen(
      */
     DisposableEffect(Unit) {
         val app = context.applicationContext
-        val refresh = { scope.launch(Dispatchers.IO) { PermissionManager.refresh(app) } }
+        val refresh = {
+            scope.launch(Dispatchers.IO) {
+                PermissionManager.refresh(app)
+                // 状态卡片自己会跟着 StateFlow 变，但**容器侧看不到** —— 提示词里那段
+                // 「用户有没有特权、是哪条通道」是按事实文件渲染的。少了这一行，用户刚
+                // 给 Shizuku 授权、agent 那边还是旧答案（要等 App 重启或回到本页）。
+                DshHostPrompt.writeFacts(app)
+            }
+        }
         val onResult = Shizuku.OnRequestPermissionResultListener { _, _ -> refresh() }
         val onBinder = Shizuku.OnBinderReceivedListener { refresh() }
         runCatching {
@@ -678,6 +686,9 @@ internal fun DshSettingsScreen(
                         // 用户主动点刷新才允许弹 su 授权框（refresh 默认不弹）
                         scope.launch(Dispatchers.IO) {
                             PermissionManager.refresh(context.applicationContext, allowRootPrompt = true)
+                            // 验过之后通道才真的可用，这一刻的事实必须落盘：否则用户点了
+                            // 「刷新权限」、su 也授权了，agent 那边还是「没验过」
+                            DshHostPrompt.writeFacts(context.applicationContext)
                         }
                     },
                     onRequestShizuku = {
@@ -716,6 +727,9 @@ internal fun DshSettingsScreen(
                         PermissionManager.setPreference(context.applicationContext, ch)
                         scope.launch(Dispatchers.IO) {
                             PermissionManager.refresh(context.applicationContext)
+                            // 「我刚把通道设成 root」是用户最期待立刻生效的一步：这里不写，
+                            // agent 会一直以为设备上没有提权途径，连试都不试
+                            DshHostPrompt.writeFacts(context.applicationContext)
                         }
                     },
                     privStrictness = privStrictness,
