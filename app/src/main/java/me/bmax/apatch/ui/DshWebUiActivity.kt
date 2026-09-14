@@ -38,12 +38,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -62,6 +66,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -80,6 +86,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.File
+import kotlin.math.roundToInt
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
@@ -208,6 +215,13 @@ private fun DshCompatShimDialog(
  * `Promise.withResolvers`（Chrome 119），在这种设备上打开工作区就是
  * `AbortSignal.any is not a function`。[COMPAT_SHIM] 在文档开始前补齐这两个 API，
  * 见 [installCompatShim]。
+ *
+ * ## 系统栏是沉浸的（网页画到小白条与状态栏后面）
+ *
+ * WebView 铺满整窗，系统栏后面是**网页自己的背景**；页面本体由 [insetShimScript] 注入的
+ * `#root` 内边距让开这两片区域。targetSdk 35 起系统强制 edge-to-edge，Android 侧给
+ * WebView 留内边距的老做法只会得到两条主题底色带（手势条上下各一条，正是用户报的
+ * 「底部留白」）。键盘例外：那一段仍由 `imePadding()` 让开，见 onCreate 里的注释。
  */
 class DshWebUiActivity : AppCompatActivity() {
 
@@ -216,6 +230,25 @@ class DshWebUiActivity : AppCompatActivity() {
 
     /** document-start 垫片是否已装上；没装上才需要在 onPageStarted 里补注入。 */
     private var compatShimInstalled = false
+
+    /**
+     * 系统栏内边距那一段是否已按 document-start 装上。
+     *
+     * 与 [compatShimInstalled] 分开记：那一个受「旧内核兼容」开关约束，这一段是**无条件**
+     * 的（跟内核新旧无关），失败原因也各自独立。
+     */
+    private var insetShimInstalled = false
+
+    /**
+     * 最近一次算出的系统栏内边距（CSS 像素 = dp）。
+     *
+     * 存成字段而不是只在组合期用局部量：`onPageStarted` 的补注入发生在**别的时刻**
+     * （每次导航、刷新），拿组合期捕获的旧值会让页面在转屏后按旧尺寸避让。
+     */
+    private var cssInsetTop = 0
+    private var cssInsetRight = 0
+    private var cssInsetBottom = 0
+    private var cssInsetLeft = 0
 
     /** 待回填给 `<input type="file">` 的回调；同一时刻只可能有一个选择器。 */
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
@@ -289,17 +322,57 @@ class DshWebUiActivity : AppCompatActivity() {
                     )
                 }
 
+                // 系统栏尺寸交给页面自己避让（见 insetShimScript）。
+                //
+                // 为什么不让 Android 侧给 WebView 加内边距：那样系统栏后面只能垫一层
+                // 主题底色，网页看着像被裁掉了一截（手势条上下各一条色带）。改成 WebView
+                // 铺满整窗后，状态栏与小白条后面就是网页自己的背景 —— 页面本体用
+                // `#root` 的 padding 让开这两个区域，可交互内容一样不会被盖住。
+                val density = LocalDensity.current
+                val insetTopPx = WindowInsets.statusBars.getTop(density)
+                val insetBottomPx = WindowInsets.navigationBars.getBottom(density)
+                // 横屏时三键导航会在侧边、挖孔也在侧边，两边取更大的那个
+                val insetLeftPx = maxOf(
+                    WindowInsets.navigationBars.getLeft(density),
+                    WindowInsets.displayCutout.getLeft(density),
+                )
+                val insetRightPx = maxOf(
+                    WindowInsets.navigationBars.getRight(density),
+                    WindowInsets.displayCutout.getRight(density),
+                )
+                // CSS 像素就是 dp，WebView 的视口按 dp 计
+                fun toCss(px: Int): Int = (px / density.density).roundToInt()
+                val cssTop = toCss(insetTopPx)
+                val cssLeft = toCss(insetLeftPx)
+                val cssRight = toCss(insetRightPx)
+                // 键盘弹起时 WebView 已被 imePadding 抬到键盘上方（键盘本身盖住了手势条），
+                // 再让页面留一条就给键盘上方多垫一层空白
+                val cssBottom = if (WindowInsets.ime.getBottom(density) > 0) 0 else toCss(insetBottomPx)
+                SideEffect {
+                    cssInsetTop = cssTop
+                    cssInsetRight = cssRight
+                    cssInsetBottom = cssBottom
+                    cssInsetLeft = cssLeft
+                }
+                // 尺寸变了（转屏、折叠、键盘）就同步给页面。首次组合时 WebView 还没建，
+                // 那一次没关系：factory 会把这几个值直接写进 document-start 脚本。
+                LaunchedEffect(cssTop, cssRight, cssBottom, cssLeft) {
+                    webView?.evaluateJavascript(
+                        insetUpdateScript(cssTop, cssRight, cssBottom, cssLeft),
+                        null,
+                    )
+                }
+
                 Box(
                     Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                 ) {
-                    // 只有 WebView 需要避开状态栏与手势条；容器本身铺满整窗，
-                    // 悬浮球才能贴到真正的屏幕边缘
                     AndroidView(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(WindowInsets.safeDrawing.asPaddingValues()),
+                            // 只有键盘要让开：左右上下的系统栏由页面用内边距避让
+                            .imePadding(),
                         factory = { ctx ->
                             WebView(ctx).apply {
                                 layoutParams = ViewGroup.LayoutParams(
@@ -372,6 +445,17 @@ class DshWebUiActivity : AppCompatActivity() {
                                             DshWebCompat.shouldInject(this@DshWebUiActivity)
                                         ) {
                                             view?.evaluateJavascript(COMPAT_SHIM, null)
+                                        }
+                                        // 内边距那一段的回落：document-start 装不上时，
+                                        // 至少在这一帧之后把样式补进去（页面会跳一下，
+                                        // 但比一直被系统栏压着好）
+                                        if (!insetShimInstalled && isLoopback(u)) {
+                                            view?.evaluateJavascript(
+                                                insetShimScript(
+                                                    cssInsetTop, cssInsetRight, cssInsetBottom, cssInsetLeft,
+                                                ),
+                                                null,
+                                            )
                                         }
                                         super.onPageStarted(view, u, favicon)
                                     }
@@ -459,6 +543,11 @@ class DshWebUiActivity : AppCompatActivity() {
                                 // 兼容垫片必须在 loadUrl 之前装：addDocumentStartJavaScript
                                 // 只对「调用返回之后才开始加载」的 frame 生效
                                 compatShimInstalled = installCompatShim(this, url)
+                                // 系统栏内边距同样要在文档开始前交给页面，否则第一帧是
+                                // 「网页顶到屏幕边缘、然后突然缩回来」的一跳
+                                insetShimInstalled = installInsetShim(
+                                    this, url, cssInsetTop, cssInsetRight, cssInsetBottom, cssInsetLeft,
+                                )
                                 webView = this
                                 loadUrl(url)
                             }
@@ -639,6 +728,44 @@ class DshWebUiActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 把系统栏内边距交给页面（document-start 安装；返回是否装上了）。
+     *
+     * 与 [installCompatShim] 的唯一区别是**没有开关**：内边距不是兼容性补丁，而是页面
+     * 布局的前提 —— 不注入的话网页会一直顶到屏幕边缘，底部输入框被手势条压住。
+     *
+     * 只对回环 origin 生效（规则同兼容垫片）：这是本机 dsh 的界面，别的站点不该被我们
+     * 动样式。
+     */
+    private fun installInsetShim(
+        view: WebView,
+        url: String,
+        top: Int,
+        right: Int,
+        bottom: Int,
+        left: Int,
+    ): Boolean {
+        val supported = runCatching {
+            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        }.getOrDefault(false)
+        if (!supported) {
+            Log.i(TAG, "document-start script unsupported, inset shim falls back to onPageStarted")
+            return false
+        }
+        val rules = loopbackOriginRules(url)
+        return runCatching {
+            WebViewCompat.addDocumentStartJavaScript(
+                view,
+                insetShimScript(top, right, bottom, left),
+                rules,
+            )
+            true
+        }.getOrElse {
+            Log.w(TAG, "addDocumentStartJavaScript failed for inset shim $rules", it)
+            false
+        }
+    }
+
     override fun onDestroy() {
         // 不销毁的话 WebView 会连着 Activity 一起泄漏
         runCatching {
@@ -680,6 +807,70 @@ class DshWebUiActivity : AppCompatActivity() {
                 "http://[::1]:$port",
             )
         }
+
+        /**
+         * 系统栏内边距脚本：让网页背景铺到状态栏与手势条后面，交互内容让开这两片区域。
+         *
+         * ## 为什么必须由页面自己避让
+         *
+         * Android 侧给 WebView 加内边距（`WindowInsets.safeDrawing`）时，系统栏后面只能垫
+         * 一层主题底色 —— 网页看着被裁掉一截，手势条上下各一条色带。WebView 铺满整窗后
+         * 背景归网页自己画，避让就交给 CSS。
+         *
+         * ## 为什么是 `#root`
+         *
+         * 上游 dsh 前端的外壳是 `html,body,#root{height:100%;margin:0}`，页面背景画在
+         * `body` 上、界面本体挂在 `#root` 里。给 `#root` 加 border-box 的内边距，等于把
+         * 整个界面（连同它的侧栏与底部输入区）整体缩进安全区，而 `body` 的背景照旧铺满
+         * 整窗 —— 这正是「沉浸」要的效果。若改成给 `body` 加内边距，`#root` 的
+         * `height:100%` 会连内边距一起算进去，等于什么都没缩。
+         *
+         * 上游前端里 `position:fixed` 的元素只有弹层类（下拉菜单、hovercard、tooltip、
+         * toast、对话框遮罩、断线提示条），实测都不受 `#root` 内边距影响，逐个核对过：
+         * - 下拉菜单 / hovercard / tooltip 由 JS 按触发元素的位置算坐标，跟着触发元素走；
+         * - 对话框根节点是 `fixed; inset:0` + 居中 + 自带 24px 内边距，居中内容本来就
+         *   不会贴到手势条上；遮罩是它的绝对定位子节点，按 padding box 铺满，不受影响；
+         * - toast 固定 `top:120px`，离开两条系统栏都很远；
+         * - 断线提示条 `fixed; top:0` 是唯一会被状态栏压住的一个，单独补 `top`，见下。
+         *
+         * 文档开始的那一刻 `document.documentElement` 可能还没有，所以先记下尺寸，
+         * 等 DOM 一出现（DOMContentLoaded）再插样式；`window.__dshFolkInsets` 供尺寸变化
+         * 时更新（转屏、折叠、键盘），见 [insetUpdateScript]。
+         */
+        internal fun insetShimScript(top: Int, right: Int, bottom: Int, left: Int): String = """
+(function(){
+  var state = { t: $top, r: $right, b: $bottom, l: $left };
+  function css(){
+    return '#root{box-sizing:border-box!important;padding:' +
+      state.t + 'px ' + state.r + 'px ' + state.b + 'px ' + state.l + 'px!important}' +
+      // 「连接已断开，正在重连」那条提示固定在 top:0，是页面里唯一够得着状态栏的东西。
+      // 用类名子串选（上游的类名带构建哈希，选不中时这条规则自动失效，不会误伤别处）：
+      // 另外两个同样含 _banner_ 的类（markdown 代码块标题栏）都是静态定位，top 对它们
+      // 是空操作，所以这条只可能命中那条提示条。
+      '[class*="_banner_"]{top:' + state.t + 'px!important}';
+  }
+  function render(){
+    if (!document.documentElement) return false;
+    var el = document.getElementById('__dsh_folk_insets__');
+    if (!el) {
+      el = document.createElement('style');
+      el.id = '__dsh_folk_insets__';
+      (document.head || document.documentElement).appendChild(el);
+    }
+    el.textContent = css();
+    return true;
+  }
+  window.__dshFolkInsets = function(t, r, b, l){
+    state.t = t; state.r = r; state.b = b; state.l = l;
+    render();
+  };
+  if (!render()) document.addEventListener('DOMContentLoaded', render);
+})();
+""".trimIndent()
+
+        /** 尺寸变化时通知页面；脚本还没装上时是空操作（那时由 onPageStarted 补注入）。 */
+        internal fun insetUpdateScript(top: Int, right: Int, bottom: Int, left: Int): String =
+            "window.__dshFolkInsets&&window.__dshFolkInsets($top,$right,$bottom,$left)"
 
         /**
          * 旧 WebView 兼容垫片：把 dsh 前端用到、但内核太老没有的 JS API 补齐。

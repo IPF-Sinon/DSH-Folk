@@ -287,5 +287,89 @@ ok(/out\.contains\("NO_YAML"\)\) \{\s*\n\s*Log\.w\(TAG, "pluginEntries/.test(rep
 ok(/for\(const a of \[process\.argv\[1\],require\('path'\)\.join\(process\.argv\[2\]/.test(repo),
   "yaml 解析多锚点尝试（dsh 入口 → profile 目录 → 自带路径）");
 
+console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
+{
+  // 这一段是**函数**返回值（要带上当次量到的系统栏尺寸），不是 const 字符串，
+  // 所以单独抠函数体里的三引号，再把四个 Kotlin 模板换成具体数字。
+  const m = webui.match(
+    /internal fun insetShimScript\([^)]*\): String = """\n([\s\S]*?)\n"""\.trimIndent\(\)/,
+  );
+  if (!m) {
+    ok(false, "能从 DshWebUiActivity.kt 抠出 insetShimScript");
+  } else {
+    const INSETS = { top: 24, right: 0, bottom: 48, left: 0 };
+    const js = m[1].replace(/\$(top|right|bottom|left)\b/g, (_, k) => String(INSETS[k]));
+    ok(true, `脚本还原成功（${js.length} 字节）`);
+    ok(!/\$\{/.test(js) && !/\$(top|right|bottom|left)\b/.test(js),
+      "四个尺寸都换成了字面量，没有留下未展开的模板");
+
+    // 假 DOM：先模拟「文档刚开始、documentElement 还没有」，再让它出现并触发
+    // DOMContentLoaded —— 这正是 document-start 注入时的真实时序。
+    const created = [];
+    const doc = {
+      documentElement: null,
+      head: null,
+      createElement: (tag) => ({ tagName: tag, id: "", textContent: "" }),
+      getElementById: (id) => created.find((e) => e.id === id) || null,
+      addEventListener: (ev, fn) => {
+        if (ev === "DOMContentLoaded") doc.__ready = fn;
+      },
+    };
+    const ctx = { document: doc, console, window: {} };
+    vm.createContext(ctx);
+    let runError = null;
+    try {
+      vm.runInContext(js, ctx);
+    } catch (e) {
+      runError = e;
+    }
+    ok(runError === null, "文档开始阶段执行不报错" + (runError ? `（${runError.message}）` : ""));
+    ok(created.length === 0, "此时还不插节点（documentElement 可能还没有）");
+    ok(typeof doc.__ready === "function", "登记了 DOMContentLoaded 的兜底插入");
+    ok(typeof ctx.window.__dshFolkInsets === "function", "暴露了 __dshFolkInsets 供尺寸变化时更新");
+
+    doc.documentElement = { appendChild: (nn) => created.push(nn) };
+    doc.head = doc.documentElement;
+    if (typeof doc.__ready === "function") doc.__ready();
+    ok(created.length === 1, "DOM 一出现就插入了一个 <style>");
+    const css = created[0] ? created[0].textContent : "";
+    ok(/#root\{box-sizing:border-box!important;padding:24px 0px 48px 0px!important\}/.test(css),
+      "#root 用 border-box 内边距避让系统栏");
+    ok(/\[class\*="_banner_"\]\{top:24px!important\}/.test(css),
+      "fixed 定位的断线提示条单独顶下来（它不受 #root 内边距影响）");
+
+    // 尺寸变化（转屏 / 折叠 / 键盘）走的是这条路径
+    let updateError = null;
+    try {
+      ctx.window.__dshFolkInsets(30, 0, 0, 10);
+    } catch (e) {
+      updateError = e;
+    }
+    ok(updateError === null, "更新尺寸不报错");
+    ok(/padding:30px 0px 0px 10px!important/.test(created[0].textContent),
+      "更新后 CSS 跟上新尺寸（键盘弹起时 bottom 传 0 就是这条路）");
+
+    // 垫片还没装上时 onPageStarted 会补注入；更新调用必须容忍「函数还不存在」
+    const bare = { console, window: {} };
+    vm.createContext(bare);
+    let bareError = null;
+    try {
+      vm.runInContext("window.__dshFolkInsets&&window.__dshFolkInsets(24,0,48,0)", bare);
+    } catch (e) {
+      bareError = e;
+    }
+    ok(bareError === null, "脚本未装上时更新调用是空操作（不会抛）");
+  }
+
+  // 静态侧：WebView 必须真的铺满整窗，只让键盘把它顶起来
+  const webViewModifier = webui.match(/AndroidView\(\s*modifier = Modifier([\s\S]{0,200}?)factory/);
+  const modifierSrc = webViewModifier ? webViewModifier[1] : "";
+  ok(/\.fillMaxSize\(\)/.test(modifierSrc), "WebView 铺满整窗");
+  ok(/\.imePadding\(\)/.test(modifierSrc), "键盘仍由 imePadding 让开");
+  ok(!/safeDrawing/.test(modifierSrc), "WebView 上不再用 safeDrawing 内边距（那会留出色带）");
+  ok(/installInsetShim\(/.test(webui) && /!insetShimInstalled && isLoopback\(u\)/.test(webui),
+    "装上与否分别有 document-start 与 onPageStarted 两条路径");
+}
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);
