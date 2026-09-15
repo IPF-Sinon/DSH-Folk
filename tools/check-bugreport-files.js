@@ -187,6 +187,36 @@ ok(/wantKallsyms = window == LogWindow\.All \|\|/.test(code) && /dumps\.lineSequ
 ok(!/system\/dropbox \/sys\/fs\/pstore[\s\S]{0,80}head -1/.test(code),
   "没有残留「dropbox 里有任何文件就收 kallsyms」的旧判据");
 
+console.log("── 诊断来源：dsh 的日志都要能进归档 ──");
+// 起服务时会清空 dsh 的日志，所以必须轮转留一份 —— 否则「重启之后再采集」只有本次运行的内容
+const runtime = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8");
+const env = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt", "utf8");
+ok(/fun serverLogPrev\(ctx: Context\): File = File\(ctx\.filesDir, "logs\/dsh-web\.prev\.log"\)/.test(env),
+  "DshEnv 提供「上一次运行」的日志路径");
+ok(/fun clearLog\(\)[\s\S]{0,500}?copyTo\(DshEnv\.serverLogPrev\(appContext\), overwrite = true\)/.test(runtime),
+  "clearLog 先轮转再清空（清空发生在每次起服务时）");
+ok(/fun tailPrevLog\(lines: Int = 2000\)/.test(runtime), "DshRuntime 能读回上一次运行的日志");
+
+// 采集项本身
+ok(/val dshPrevLogFile = File\(bugreportDir, "dsh-prev\.log"\)/.test(code), "归档带 dsh-prev.log");
+ok(/tailPrevLog\(2000\)/.test(code), "dsh-prev.log 取最近 2000 行");
+ok(/val dshHomeLogFile = File\(bugreportDir, "dsh-home-logs\.txt"\)/.test(code), "归档带容器内 dsh 自己的日志");
+ok(/execRootfsForOutput\(DshHomeLogsCommand, 60_000L\)/.test(code), "容器日志用容器内执行采集");
+ok(/redactInPlace\(dshPrevLogFile, notes\)/.test(code) && /redactInPlace\(dshHomeLogFile, notes\)/.test(code),
+  "这两项也过脱敏（容器日志里可能有别的凭据）");
+ok(/容器日志采集失败: \$\{it\.message\}/.test(code), "采集失败记进 notes（在 basic.txt 里能看见）");
+// 限长：不然某天日志涨起来会把归档撑爆
+const cmdMatch = code.match(/private val DshHomeLogsCommand = """([\s\S]*?)"""/);
+const cmd = cmdMatch ? cmdMatch[1] : "";
+ok(/head -20/.test(cmd), "容器日志最多取 20 个文件");
+ok(/tail -c 65536/.test(cmd), "每个文件最多 64 KB");
+ok(/-size -8M/.test(cmd), "跳过超大日志文件");
+
+// 前端页面报错也要有一份落进 dsh 日志：logcat 只覆盖最近几分钟，还要看采集时机
+const webui = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/DshWebUiActivity.kt", "utf8");
+ok(/onConsoleMessage[\s\S]{0,2000}?DshRuntime\.appendLog\(\"\[page\] \" \+ line\)/.test(webui),
+  "WebView 的页面报错落进 dsh 日志（不只是 logcat）");
+
 console.log("── 最终归档 ──");
 ok(
   /chown \$uid:\$uid \$\{targetFile\.absolutePath\}/.test(code) &&

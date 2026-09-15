@@ -92,6 +92,15 @@ object DshEnv {
     /** 启动/运行日志文件。 */
     fun serverLog(ctx: Context): File = File(ctx.filesDir, "logs/dsh-web.log")
 
+    /**
+     * **上一次运行**的日志（[serverLog] 在起服务时被轮转到这里）。
+     *
+     * 起服务时清空日志这件事本身没问题，问题是清空之后「重启前发生的错误」就再也查不到了 ——
+     * 真机上 12:xx 的导入报错在 14:24 采集的报告里一个字都没有。留一份上一次运行的日志，
+     * 代价是有界的两份文件。
+     */
+    fun serverLogPrev(ctx: Context): File = File(ctx.filesDir, "logs/dsh-web.prev.log")
+
     /** APK 提取出的可执行 .so 所在目录（proot/proroot 必须从这里执行）。 */
     fun nativeLibDir(ctx: Context): File = File(ctx.applicationInfo.nativeLibraryDir)
 

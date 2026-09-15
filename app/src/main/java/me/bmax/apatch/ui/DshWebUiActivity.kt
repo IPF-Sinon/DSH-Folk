@@ -498,11 +498,15 @@ class DshWebUiActivity : AppCompatActivity() {
                                     ): Boolean {
                                         val m = msg ?: return false
                                         if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
-                                            Log.w(
-                                                TAG,
+                                            val line =
                                                 "page error: " + m.message() + " @" +
-                                                    m.sourceId() + ":" + m.lineNumber(),
-                                            )
+                                                    m.sourceId() + ":" + m.lineNumber()
+                                            Log.w(TAG, line)
+                                            // 也落进 dsh 日志（随 bugreport 带出来）。logcat 只覆盖最近
+                                            // 几分钟、还要看采集时机，而页面报错往往发生在启动那一刻：
+                                            // 真机上「Failed to load plugins」那次就是既没进 logcat 也没进
+                                            // 上报，只能靠用户截图。
+                                            me.bmax.apatch.dsh.DshRuntime.appendLog("[page] " + line)
                                         }
                                         return false
                                     }

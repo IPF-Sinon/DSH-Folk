@@ -276,6 +276,12 @@ without `verticalScroll` simply clips the extra lines — no error, no ellipsis,
 in preview never show it. The update dialog's release body hit exactly that (users saw "update
 content is cut off"). Such problems only appear with long text, so a checker watches for them.
 
+The archive draws logs from three places: the dsh **stdout** the App captures (`dsh.log`, rotated on
+each service start with the previous run kept as `dsh-prev.log`), the `*.log` files dsh writes itself
+inside the container (`dsh-home-logs.txt`, size-capped per file), and WebView page errors (which land
+in logcat and in that log). The first alone is not enough: a service start wipes it, so a report
+collected after a restart shows nothing about what went wrong before it.
+
 Session restore **does not carry `session.lock` over**: it is runtime state ("this session is being
 written"), meaningless across machines, and — worse — the grouping helper parsed it as a session
 (a zero-byte file yields no zstd frame), which is how a real device reported "6 of 15 session files

@@ -45,6 +45,27 @@ enum class LogWindow(val minutes: Int, val labelRes: Int) {
     All(0, R.string.dsh_log_window_all),
 }
 
+/** shell 里的 $，用普通字符串写出来，免得与原始字符串的插值语法打架。 */
+private const val DOLLAR = "\$"
+
+/**
+ * 采集容器内 dsh 自己写的日志。
+ *
+ * 为什么要有这一项：应用收的 `dsh.log` 只是 dsh 进程的 **stdout**，而插件落盘的日志
+ * （例如 `/root/.dsh/dsh-easyrewrite.log`）与 dsh 内部的结构化日志都不在里面。
+ * 真机上「删除会话报错」只在前端弹了一句，后端有没有留痕完全看不到 —— 就是缺这一项。
+ *
+ * 逐文件限长（每个 64 KB、最多 20 个），免得某天日志涨到几十兆把归档撑爆；失败不致命
+ * （容器没起来时这一项就是空的），原因记进 basic.txt 的 Notes。
+ */
+private val DshHomeLogsCommand = """
+for f in ${DOLLAR}(find /root/.dsh -maxdepth 3 -name "*.log" -type f -size -8M 2>/dev/null | head -20); do
+  echo "=== ${DOLLAR}f ==="
+  tail -c 65536 "${DOLLAR}f" 2>/dev/null
+  echo
+done
+"""
+
 /**
  * dropbox 里算「崩溃转储」的条目名。
  *
@@ -310,9 +331,28 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         val dshLogFile = File(bugreportDir, "dsh.log")
         dshLogFile.writeText(runCatching { me.bmax.apatch.dsh.DshRuntime.tailLog(2000) }.getOrDefault(""))
 
+        // 上一次运行的那份（起服务时轮转过来的）。少了它，「重启之后再采集」就永远看不到
+        // 重启之前发生的错误 —— 真机上导入会话的报错就这么凭空消失了。
+        val dshPrevLogFile = File(bugreportDir, "dsh-prev.log")
+        dshPrevLogFile.writeText(
+            runCatching { me.bmax.apatch.dsh.DshRuntime.tailPrevLog(2000) }.getOrDefault("")
+        )
+
+        // 容器里 dsh **自己**写的日志（/root/.dsh 下的 *.log）。应用那份 dsh.log 收的只是
+        // dsh 进程的 stdout；插件自己落盘的日志与 dsh 内部的结构化日志都不在里面，而
+        // 「会话删不掉」这类问题恰恰要往后端日志里找。
+        val dshHomeLogFile = File(bugreportDir, "dsh-home-logs.txt")
+        runCatching {
+            me.bmax.apatch.dsh.DshRuntime.execRootfsForOutput(DshHomeLogsCommand, 60_000L)
+        }.onSuccess { dshHomeLogFile.writeText(it) }
+            .onFailure { notes += "容器日志采集失败: ${it.message}" }
+
         // 打包之前过一遍脱敏：dsh.log 里有 WebUI 的 token（dsh 服务端自己打印的启动地址），
-        // props / cmdline 里有设备稳定标识。归档是要发给别人的，这些不能在里面。
+        // 容器日志里可能还有别的凭据，props / cmdline 里有设备稳定标识。
+        // 归档是要发给别人的，这些不能在里面。
         redactInPlace(dshLogFile, notes)
+        redactInPlace(dshPrevLogFile, notes)
+        redactInPlace(dshHomeLogFile, notes)
         redactInPlace(propFile, notes)
         redactInPlace(cmdlineFile, notes)
 

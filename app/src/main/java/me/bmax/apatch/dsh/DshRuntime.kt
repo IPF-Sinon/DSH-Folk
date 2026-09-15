@@ -3275,8 +3275,24 @@ object DshRuntime {
     fun tailLog(lines: Int = 200): String =
         if (::appContext.isInitialized) LogStore.named(DshEnv.serverLog(appContext)).tail(lines) else ""
 
+    /** **上一次运行**的日志（见 [DshEnv.serverLogPrev]）：重启之后再采集也能回溯到之前的错误。 */
+    fun tailPrevLog(lines: Int = 2000): String =
+        if (::appContext.isInitialized) LogStore.named(DshEnv.serverLogPrev(appContext)).tail(lines) else ""
+
+    /**
+     * 清空本次运行的日志 —— 但**先把上一份轮转成 [DshEnv.serverLogPrev]**。
+     *
+     * 这个函数在**每次起服务时**都会被调到，所以「重启之后再采集 bugreport」看到的永远只有
+     * 本次运行的内容：真机上导入会话报错发生在 12:xx，14:24 的报告里 dsh.log 只有 1 KB
+     * （就是那次启动之后的新内容），只能靠猜。留一份上一次运行的日志，问题才有可能回溯。
+     */
     fun clearLog() {
-        if (::appContext.isInitialized) LogStore.named(DshEnv.serverLog(appContext)).clear()
+        if (!::appContext.isInitialized) return
+        val log = DshEnv.serverLog(appContext)
+        if (log.isFile && log.length() > 0L) {
+            runCatching { log.copyTo(DshEnv.serverLogPrev(appContext), overwrite = true) }
+        }
+        LogStore.named(log).clear()
     }
 
     fun appendLog(line: String) {
