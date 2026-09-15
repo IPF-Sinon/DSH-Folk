@@ -150,7 +150,7 @@
 
     <string name="dsh_bk_tidy_sessions">整理未分组会话</string>
     <string name="dsh_bk_tidy_sessions_summary">把已经躺在会话目录里、但还没归入工作区的会话按路径放回去（会短暂停一下服务）。旧版本导入进来的那批会话就靠这个补归组 —— 重新导入不会重复处理已存在的文件。</string>
-    <string name="dsh_bk_group_stage">正在把 %1$d 个会话归入工作区（需先停服务，稍候）…</string>
+    <string name="dsh_bk_group_stage">正在把 %1$d 个会话归入工作区（先停服务再改，避免被覆盖，稍候）…</string>
     <string name="dsh_bk_group_done">会话归组：%1$d/%2$d 条进入工作区</string>
     <string name="dsh_bk_group_files">，共 %1$d 个会话日志文件</string>
     <string name="dsh_bk_group_ignored">，忽略 %1$d 个非会话文件（session.lock 等）</string>

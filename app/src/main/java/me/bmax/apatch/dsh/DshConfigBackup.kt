@@ -541,7 +541,8 @@ object DshConfigBackup {
             }
             // 会话文件只是「放进去了」；dsh 的分组只在注册表首次 bootstrap 时做一次，
             // 之后进来的会话一律显示「未分组」且 GUI 没有归组入口 —— 所以这里补上归组。
-            // 注册表以内存状态为准、启动才读盘，必须停着服务改。
+            // 运行中改注册表也能生效（启动才读盘），但「改完之后、重启之前」任何一次
+            // workspace 域写都会把整份内存状态盖回盘，改动静默丢失 —— 停着改把这条归零。
             if (r.paths.isNotEmpty()) {
                 onLine(ctx.appString(R.string.dsh_bk_group_stage, r.paths.size))
                 val report = runCatching {

@@ -88,7 +88,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var snapshots by remember { mutableStateOf<List<DshConfigBackup.Snapshot>>(emptyList()) }
     var snapshotBusy by remember { mutableStateOf(false) }
     var snapshotMessage by remember { mutableStateOf("") }
-    // 整理未分组会话（全树扫描，要短暂停服务）
+    // 整理未分组会话（全树扫描；停机做，改动不会被 dsh 的整份写回盖掉）
     var groupBusy by remember { mutableStateOf(false) }
     var groupMessage by remember { mutableStateOf("") }
 

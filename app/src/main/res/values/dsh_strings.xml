@@ -168,7 +168,7 @@
     <!-- 备份：对齐 dsh-config-manager 导出格式 -->
     <string name="dsh_bk_tidy_sessions">Tidy ungrouped sessions</string>
     <string name="dsh_bk_tidy_sessions_summary">Puts sessions that are already on disk but not inside any workspace back where they belong, by path (the service stops briefly). This is how sessions imported by an earlier version get grouped: importing again will not reprocess files that already exist.</string>
-    <string name="dsh_bk_group_stage">Putting %1$d sessions back into their workspaces (the service is stopped briefly)…</string>
+    <string name="dsh_bk_group_stage">Putting %1$d sessions back into their workspaces (stopping briefly first so the change cannot be overwritten)…</string>
     <string name="dsh_bk_group_done">Sessions grouped: %1$d of %2$d are inside a workspace</string>
     <string name="dsh_bk_group_files">", %1$d session log files in total"</string>
     <string name="dsh_bk_group_ignored">", %1$d non-session files ignored (session.lock and friends)"</string>

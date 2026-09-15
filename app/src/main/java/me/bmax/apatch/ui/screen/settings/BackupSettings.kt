@@ -104,7 +104,7 @@ fun BackupSettingsContent(
     onCloudList: () -> Unit = {},
     onCloudRestore: (WebDavUtils.RemoteEntry) -> Unit = {},
     /** 插件保留的快照（恢复的最后依靠）。 */
-    /** 会话归组：是否在跑（要短暂停服务）。 */
+    /** 会话归组：是否在跑（走停机 → 归组 → 起服务，见 DshRuntime.withServiceStopped）。 */
     groupBusy: Boolean = false,
     groupMessage: String = "",
     onTidySessions: () -> Unit = {},
