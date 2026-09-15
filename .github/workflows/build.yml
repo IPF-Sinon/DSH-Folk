@@ -115,7 +115,11 @@ jobs:
       #   编译通过、真机才炸，而且每次启动都换个位置炸）；
       #   check-native-caps 原生能力桥的一致性（每个 Cap 进分组、capOf 与路由互相覆盖、
       #   映射表与资源串齐全、清单权限已声明）。它此前只在本地跑，期间自己的两处切片
-      #   标记失效都没人发现 —— 加权限这类改动全靠它兜，不能只留在本地。
+      #   标记失效都没人发现 —— 加权限这类改动全靠它兜，不能只留在本地；
+      #   check-bugreport-files 采集文件的归属（root shell 写入的文件必须先由应用建好）。
+      #   真机崩溃过：root 建的 dmesg.txt 属主是 root，应用自己再去裁剪就是 EACCES，
+      #   而崩溃发生在清理目录之前 —— 用户再点一次还是崩，只能清应用数据。
+      #   这类错误只在「有 root + 选了时间窗口」的真机上暴露，本地与编译都看不见。
       - name: Static source checks
         run: |
           node tools/check-changelog.js
@@ -128,6 +132,7 @@ jobs:
           node tools/check-web-shim.js
           node tools/check-backup-logic.js
           node tools/check-session-group.js
+          node tools/check-bugreport-files.js
 
       # release 包必须真签名。缺任何一项就硬失败 —— 悄悄用 debug key 签出一个
       # 「release」比构建失败危险得多：它装得上、看着正常，但和正式包签名不同，

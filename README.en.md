@@ -245,6 +245,18 @@ The container is never started if the runtime has not yet been downloaded — ot
 **Whether to start the container at the same time** is an independent option. On: the container starts with the app and is immediately usable after boot. Off: only the notification appears and the process is prewarmed;
 tap once to start, without consuming CPU during those first few seconds of boot or keeping a Node process in memory. The latter is the right choice for users who “just want it handy.”
 
+
+### File ownership when collecting logs
+
+Every collection file in a bugreport is **created empty by the app first** and only then written by the
+root shell (`dmesg > file`, `tar -czf file`). Reason: a real crash — a file created by root is owned by
+root, so the app could not write the trimmed dmesg back into it (EACCES); and since the crash happened
+before the temp directory was cleaned up, the root-owned file stayed behind and every retry crashed until
+app data was cleared. With the file pre-created, root's write is only a truncation and ownership stays with
+the app; leftovers from older versions are cleaned up because deleting only needs directory write
+permission. When adding a collection item you **must** add it to that pre-creation list —
+`tools/check-bugreport-files.js` fails CI on a missing one (this class of bug only shows up on a device
+with root and a chosen time window).
 ## What the Container Can Access on the Host
 
 In addition to dsh itself, the container includes two commands written to disk by the App. Both use the same loopback bridge bound only to `127.0.0.1` (with a random token;

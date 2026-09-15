@@ -127,10 +127,14 @@ fun GeneralSettingsContent(
     // 采集并分享日志（两级对话框确认时间窗口后调用）。
     val collectAndShare: (LogWindow) -> Unit = { window ->
         scope.launch {
+            // 采集失败只提示，不让异常穿出协程把应用带走：真机上报过 EACCES 崩溃，
+            // 用户看到的是「点发送日志 → 应用闪退」，比「这次没采到」糟糕得多
             val bugreport = loadingDialog.withLoading {
-                withContext(Dispatchers.IO) {
-                    getBugreportFile(context, window)
-                }
+                withContext(Dispatchers.IO) { runCatching { getBugreportFile(context, window) }.getOrNull() }
+            }
+            if (bugreport == null) {
+                showToast(context, R.string.dsh_log_collect_failed)
+                return@launch
             }
             val uri: Uri = FileProvider.getUriForFile(
                 context,

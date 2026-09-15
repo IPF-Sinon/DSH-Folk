@@ -3,6 +3,7 @@
     <!-- DSH-Folk 专属字符串（与 FolkPatch 原有 strings.xml 分开，便于维护与同步上游） -->
 
     <!-- 底栏 -->
+    <string name="dsh_log_collect_failed">Collecting logs failed — please retry (see the app log for details)</string>
     <string name="dsh_terminal">Terminal</string>
     <string name="dsh_plugins">Plugins</string>
 

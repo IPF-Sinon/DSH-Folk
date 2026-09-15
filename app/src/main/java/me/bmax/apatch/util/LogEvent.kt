@@ -45,6 +45,35 @@ enum class LogWindow(val minutes: Int, val labelRes: Int) {
     All(0, R.string.dsh_log_window_all),
 }
 
+/**
+ * 让 [file] 变成一个**属主是应用**的空文件，供 root shell 写入。
+ *
+ * 为什么必须这样（真机踩出来的，不是理论）：
+ *  - root 的 `>` 重定向与 `tar -czf` 会**新建**一个 root:root 的文件，之后应用自己再写它
+ *    就是 EACCES —— beta.44 上表现为「选时间窗口采集日志时崩溃」，崩在裁剪 dmesg 那一步；
+ *  - root 的 umask 若是 077，新文件是 0600，应用**连读都读不了**，归档里那一项永远是空的。
+ *
+ * 先由应用建好（属主应用、0600）之后，root 的写入只是截断一个已存在的文件：属主与权限都不变。
+ *
+ * 历史遗留（旧版本留下的 root 文件）靠「删除只需要**目录**写权限」清掉 —— 目录属主是应用。
+ * 清不掉时返回 false，调用方写入失败会在 basic.txt 的 Notes 里看到原因，而不是再崩一次。
+ */
+private fun prepareOut(file: File): Boolean {
+    file.parentFile?.mkdirs()
+    if (file.exists() && !file.canWrite()) {
+        // 旧版本用 root 直接建的：删掉重建，否则它会把后续每一次采集都变成 EACCES
+        if (!file.delete()) {
+            android.util.Log.w("LogEvent", "清理不可写的旧采集文件失败: ${file.name}")
+            return false
+        }
+    }
+    if (!file.exists()) {
+        runCatching { file.createNewFile() }
+            .onFailure { android.util.Log.w("LogEvent", "创建采集文件失败 ${file.name}: ${it.message}") }
+    }
+    return file.exists()
+}
+
 suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All): File = withContext(Dispatchers.IO) {
 
     val bugreportDir = File(context.cacheDir, "bugreport")
@@ -69,8 +98,21 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
     val packageConfigFile = File(bugreportDir, "package_config")
     val kernelConfig = File(bugreportDir, "defconfig")
 
+    // 采集期的异常都记在这里，最后写进 basic.txt。不翻译 —— 诊断字段一律原文。
+    // 以前这里不留痕：裁剪失败直接抛出去，整份报告连同应用一起没了（真机报过 EACCES 崩溃）。
+    val notes = mutableListOf<String>()
+
     val cutoffMillis = System.currentTimeMillis() - window.minutes * 60_000L
     val cutoffTs = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(cutoffMillis)
+
+    // 所有**由 root shell 写入**的文件都先由应用建好，理由见 [prepareOut]。
+    // 漏掉哪一个，那一个就是下一次真机崩溃的位置。
+    listOf(
+        dmesgFile, logcatFile,
+        tombstonesFile, dropboxFile, pstoreFile, diagFile, oplusFile, bootlogFile,
+        kallsymsFile, cpuinfoFile, cmdlineFile, mountsFile, fileSystemsFile,
+        apFileTree, appListFile, propFile, packageConfigFile, kernelConfig,
+    ).forEach { prepareOut(it) }
 
     tryGetRootShell(context).use { shell ->
         // 崩溃转储目录按 mtime 收窗口内的文件：find 出相对路径清单，再交给 tar -T。
@@ -109,14 +151,19 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         // -T 在个别 ROM 上不被接受会输出空文件：回落到全量 + 行首时间戳自行过滤。
         if (window != LogWindow.All && logcatFile.length() == 0L) {
             val full = ShellUtils.fastCmd(shell, "logcat -d")
-            logcatFile.writeText(filterLogcatByTime(full, cutoffMillis))
+            runCatching { logcatFile.writeText(filterLogcatByTime(full, cutoffMillis)) }
+                .onFailure { notes += "logcat 回退过滤失败: ${it.message}" }
         }
         // dmesg 行首是相对开机秒（无绝对时间），按 /proc/uptime 换算窗口下界再过滤。
         val uptimeSeconds = ShellUtils.fastCmd(shell, "cat /proc/uptime")
             .trim().substringBefore(' ').toDoubleOrNull()
         if (window != LogWindow.All && uptimeSeconds != null && dmesgFile.length() > 0) {
             val cutoffUptime = uptimeSeconds - window.minutes * 60.0
-            dmesgFile.writeText(filterDmesgByUptime(dmesgFile.readText(), cutoffUptime))
+            // 这一步就是崩溃点：文件是 root 建的，应用写进去就是 EACCES。
+            // 现在文件先由应用建好；万一还有别的意外，也只记一笔，不让整份报告崩掉 ——
+            // 未裁剪的内容照样在归档里，只是比选定的窗口大。
+            runCatching { dmesgFile.writeText(filterDmesgByUptime(dmesgFile.readText(), cutoffUptime)) }
+                .onFailure { notes += "dmesg 裁剪失败: ${it.message}" }
         }
         tarDir(tombstonesFile, "/data/tombstones")
         tarDir(dropboxFile, "/data/system/dropbox")
@@ -178,6 +225,7 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
             pw.println("Nodename: ${uname.nodename}")
             pw.println("Sysname: ${uname.sysname}")
 
+            if (notes.isNotEmpty()) pw.println("Notes: " + notes.joinToString("; "))
             pw.println("DshRuntime: ${me.bmax.apatch.dsh.DshRuntime.state.value.runtimeVersion}")
             pw.println("DshPhase: ${me.bmax.apatch.dsh.DshRuntime.state.value.phase}")
             // 两个都记：选的是什么、实际跑的是什么。x86_64 上 proroot 不可用会静默
