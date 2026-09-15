@@ -46,6 +46,64 @@ enum class LogWindow(val minutes: Int, val labelRes: Int) {
 }
 
 /**
+ * dropbox 里算「崩溃转储」的条目名。
+ *
+ * 反面清单同样重要：`SYSTEM_BOOT` / `SYSTEM_RESTART` / `SYSTEM_LAST_KMSG` 这类每次开机
+ * 都会写，把它们当崩溃会让 kallsyms（压缩后 600 KB 上下）几乎每次都被收进归档。
+ */
+private val CRASH_DUMP_HINTS = listOf(
+    "tombstone", "crash", "anr", "not_responding", "watchdog", "wtf", "native", "panic", "oops",
+)
+
+/** 这个路径算不算真正的崩溃转储（见 [CRASH_DUMP_HINTS]）。 */
+private fun isCrashDump(path: String): Boolean {
+    val p = path.trim().lowercase()
+    if (p.isEmpty()) return false
+    // tombstones 与 pstore 里的一切都是崩溃产物，不必看文件名
+    if (p.startsWith("/data/tombstones") || p.startsWith("/sys/fs/pstore")) return true
+    val name = p.substringAfterLast('/')
+    return CRASH_DUMP_HINTS.any { it in name }
+}
+
+/**
+ * 归档内文本的脱敏词表。
+ *
+ * bugreport 是**要发给别人的**（issue、群里），里面绝不能有能用来访问这台设备的东西。
+ * 实测真机报告里就带着 WebUI 的认证 token（dsh 服务端把带 token 的地址打进了启动日志，
+ * 应用原样收进 dsh.log），它等于这台设备上 DSH 的完整入口；`props` 里还有
+ * `persist.netd.stable_secret` 这类稳定的设备标识。
+ *
+ * 逐条替换而不是整段丢弃：其余内容对诊断有用。
+ */
+private val SECRET_PATTERNS = listOf(
+    // ?token=… / &token=… （URL 里的认证 token）
+    Regex("""(?i)([?&]token=)[A-Za-z0-9_\-]{6,}"""),
+    // key=value / key: value 形式的敏感字段
+    // 结尾允许 ] 与 [ ：getprop 的输出是 [key]: [value]
+    Regex(
+        """(?i)(\b(?:password|passwd|secret|token|api[_-]?key|apikey|authorization|credential|access[_-]?key)\b\]?\s*[=:]\s*\[?)([^\s\]\n]+)"""
+    ),
+    // 设备稳定标识
+    Regex("""(?i)(\b(?:serialno|serial|android_id|stable_secret|device_id)\b\]?\s*[=:]\s*\[?)([^\s\]\n]+)"""),
+    Regex("""(?i)(androidboot\.(?:serialno|android_id|device_id)\s*=\s*)(\S+)"""),
+)
+
+/** 把 [text] 里的凭据与设备标识替换成占位符。 */
+private fun redact(text: String): String =
+    SECRET_PATTERNS.fold(text) { acc, re -> re.replace(acc) { m -> m.groupValues[1] + "<redacted>" } }
+
+/**
+ * 原地脱敏：读回、替换、写回。失败只记一笔（[notes]），不致命。
+ *
+ * 这些文件已经由 [prepareOut] 变成应用属主，所以这里写得进去 —— 顺序不能反。
+ */
+private fun redactInPlace(file: File, notes: MutableList<String>) {
+    if (!file.isFile || file.length() == 0L) return
+    runCatching { file.writeText(redact(file.readText())) }
+        .onFailure { notes += "${file.name} 脱敏失败: ${it.message}" }
+}
+
+/**
  * 让 [file] 变成一个**属主是应用**的空文件，供 root shell 写入。
  *
  * 为什么必须这样（真机踩出来的，不是理论）：
@@ -174,13 +232,20 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
 
         shell.newJob().add("cat /proc/1/mountinfo > ${mountsFile.absolutePath}").exec()
         shell.newJob().add("cat /proc/filesystems > ${fileSystemsFile.absolutePath}").exec()
-        // kallsyms 是这份归档里最大的一项（实测 4.3 MB，压缩后仍占归档近一半），
+        // kallsyms 是这份归档里最大的一项（实测 4.3 MB 原始 / 620 KB 压缩，占归档六成以上），
         // 唯一用途是给内核崩溃地址符号化。窗口内没有任何崩溃转储时就别收了。
-        val wantKallsyms = window == LogWindow.All || ShellUtils.fastCmd(
+        //
+        // 判据不能是「dropbox 目录里有任何文件」：SYSTEM_BOOT / SYSTEM_RESTART 这类条目
+        // **每次开机都会写**，于是刚开机采集时必然命中 —— 一份 10 分钟窗口、开机 134 秒的
+        // 真机报告里 4.3 MB 的 kallsyms 就是这么进来的（归档 960 KB，它一个人占 620 KB）。
+        // 只认真正的崩溃转储：tombstones 与 pstore 里的一切，加上 dropbox 里名字像崩溃的那些。
+        val dumps = if (window == LogWindow.All) "" else ShellUtils.fastCmd(
             shell,
-            "find /data/tombstones /data/system/dropbox /sys/fs/pstore " +
-                "-type f -mmin -${window.minutes} 2>/dev/null | head -1"
-        ).isNotBlank()
+            "find /data/tombstones /sys/fs/pstore -type f -mmin -${window.minutes} 2>/dev/null; " +
+                "find /data/system/dropbox -type f -mmin -${window.minutes} 2>/dev/null"
+        )
+        val wantKallsyms = window == LogWindow.All ||
+            dumps.lineSequence().any { isCrashDump(it) }
         if (wantKallsyms) {
             shell.newJob().add("cat /proc/kallsyms > ${kallsymsFile.absolutePath}").exec()
         }
@@ -244,6 +309,12 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         // DSH 启动日志（替代原来的内核模块列表）
         val dshLogFile = File(bugreportDir, "dsh.log")
         dshLogFile.writeText(runCatching { me.bmax.apatch.dsh.DshRuntime.tailLog(2000) }.getOrDefault(""))
+
+        // 打包之前过一遍脱敏：dsh.log 里有 WebUI 的 token（dsh 服务端自己打印的启动地址），
+        // props / cmdline 里有设备稳定标识。归档是要发给别人的，这些不能在里面。
+        redactInPlace(dshLogFile, notes)
+        redactInPlace(propFile, notes)
+        redactInPlace(cmdlineFile, notes)
 
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH_mm")
         val current = LocalDateTime.now().format(formatter)

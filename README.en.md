@@ -257,6 +257,19 @@ the app; leftovers from older versions are cleaned up because deleting only need
 permission. When adding a collection item you **must** add it to that pre-creation list —
 `tools/check-bugreport-files.js` fails CI on a missing one (this class of bug only shows up on a device
 with root and a chosen time window).
+
+The archive is **redacted before it is packed**: the dsh server prints its token-bearing start URL into
+its own log, the app copies that log verbatim into `dsh.log`, and the archive is meant to be shared —
+that token is full access to DSH on the device. The same goes for stable device identifiers from getprop
+(`persist.netd.stable_secret` and friends). All of them are replaced line by line; other diagnostics stay.
+
+The **time window is honoured for real**, but know which items it can trim: anything with timestamps
+(logcat, dmesg, the crash-dump directories) is filtered by the window, while snapshots (props, mounts,
+cpuinfo, packages, defconfig) have no time dimension and are always collected in full. `kallsyms` (the
+kernel symbol table, still over sixty percent of the archive after compression) is collected only when
+the window actually contains a crash dump — the old test was "the dropbox directory has any file at
+all", which `SYSTEM_BOOT` satisfies on every boot; that is how 4.3 MB of symbols ended up in a
+ten-minute report from a device that had been up for 134 seconds.
 ## What the Container Can Access on the Host
 
 In addition to dsh itself, the container includes two commands written to disk by the App. Both use the same loopback bridge bound only to `127.0.0.1` (with a random token;
