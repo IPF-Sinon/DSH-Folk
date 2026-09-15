@@ -120,10 +120,12 @@ private fun passwordStrength(pw: String): Int {
         classes >= 3 -> 1
         else -> 0
     }
-    return when (lenScore + classScore) {
-        >= 4 -> 3
-        3 -> 2
-        2 -> 1
+    // 注意这里必须用无主语 when：Kotlin 的带主语 when 只接受相等/包含判定，
+    // 写 ">= 4 ->" 会直接是语法错误（编译期才发现）。
+    return when {
+        lenScore + classScore >= 4 -> 3
+        lenScore + classScore == 3 -> 2
+        lenScore + classScore == 2 -> 1
         else -> 0
     }
 }

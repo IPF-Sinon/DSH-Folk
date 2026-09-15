@@ -417,8 +417,11 @@ object DshConfigBackup {
     private fun stamp(): String =
         java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
 
-    /** 容器里的 dsh 版本：插件在跑就问它，问不到就写 unknown（只有纯软件数据包用得上）。 */
-    private fun dshVersionOrUnknown(ctx: Context): String =
+    /**
+     * 容器里的 dsh 版本：插件在跑就问它，问不到就写 unknown（只有纯软件数据包用得上，
+     * 那种包的 manifest 由我们自己写，而 [status] 是 suspend 的，所以这里也得是 suspend）。
+     */
+    private suspend fun dshVersionOrUnknown(ctx: Context): String =
         runCatching { status(ctx).dshVersion }.getOrNull()?.takeIf { it.isNotEmpty() } ?: "unknown"
 
     private fun describe(e: Exception): String = e.javaClass.simpleName + ": " + (e.message ?: "")

@@ -635,6 +635,9 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         )
                     }
                 },
+                // 三个选项本身就是这个对话框的按钮，不需要额外的确认键；
+                // 但 AlertDialog 的两个重载都要求按钮槽位存在，给空 lambda 即可。
+                confirmButton = {},
                 dismissButton = {
                     TextButton(onClick = cancelPick) {
                         Text(stringResource(android.R.string.cancel))
