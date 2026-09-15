@@ -120,6 +120,9 @@ jobs:
       #   真机崩溃过：root 建的 dmesg.txt 属主是 root，应用自己再去裁剪就是 EACCES，
       #   而崩溃发生在清理目录之前 —— 用户再点一次还是崩，只能清应用数据。
       #   这类错误只在「有 root + 选了时间窗口」的真机上暴露，本地与编译都看不见。
+      #   check-text-clipping 限高又不给滚动的 Text：Text 拿到有界高度又没有 overflow
+      #   时多出来的行是静默裁掉的（用户看到的「更新内容显示不全」），而预览里的短文案
+      #   永远看不出问题。
       - name: Static source checks
         run: |
           node tools/check-changelog.js
@@ -133,6 +136,7 @@ jobs:
           node tools/check-backup-logic.js
           node tools/check-session-group.js
           node tools/check-bugreport-files.js
+          node tools/check-text-clipping.js
 
       # release 包必须真签名。缺任何一项就硬失败 —— 悄悄用 debug key 签出一个
       # 「release」比构建失败危险得多：它装得上、看着正常，但和正式包签名不同，

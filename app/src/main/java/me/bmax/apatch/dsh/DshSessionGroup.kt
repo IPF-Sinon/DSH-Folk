@@ -54,10 +54,24 @@ object DshSessionGroup {
     data class Report(
         val ok: Boolean = false,
         val applied: Boolean = false,
-        /** 本次处理的会话数。 */
+        /** 本次处理的**日志文件**数（同一会话的新旧两个文件各算一个）。 */
         val total: Int = 0,
-        /** 成功归组的条数。 */
+        /** 成功归组的**日志文件**数。 */
         val grouped: Int = 0,
+        /**
+         * 本次处理的**会话**数。
+         *
+         * 与 [total] 分开是有原因的：dsh 的会话目录里可能有新旧两个日志文件
+         * （`session.jsonl.zstd` 与 `session.v3.jsonl.zstd`），按文件数报出来的
+         * 「9/15 条」读起来像有 9 个会话进了工作区，而实际只有 6 个。
+         */
+        val sessions: Int = 0,
+        /** 成功归组的**会话**数。 */
+        val groupedSessions: Int = 0,
+        /** 日志文件总数（含同一会话的新旧副本）。 */
+        val files: Int = 0,
+        /** 清单里被忽略的非会话文件数（session.lock 这类运行时文件）。 */
+        val ignoredNonSession: Int = 0,
         /** 改写了 header（跨设备路径映射）的条数。 */
         val rewritten: Int = 0,
         /** 按 basename 推断出目标的条数。 */
@@ -85,7 +99,12 @@ object DshSessionGroup {
             skipped.isNotEmpty() && grouped == 0 && unreadable.isEmpty() ->
                 ctx.appString(R.string.dsh_bk_group_skipped, skipped)
             else -> buildString {
-                append(ctx.appString(R.string.dsh_bk_group_done, grouped, total))
+                // 报会话数而不是文件数（助手会把两者都给出来；老版本助手没有这两个字段时退回文件数）
+                val sessionCount = if (sessions > 0) sessions else total
+                val groupedCount = if (sessions > 0) groupedSessions else grouped
+                append(ctx.appString(R.string.dsh_bk_group_done, groupedCount, sessionCount))
+                if (files > sessionCount) append(ctx.appString(R.string.dsh_bk_group_files, files))
+                if (ignoredNonSession > 0) append(ctx.appString(R.string.dsh_bk_group_ignored, ignoredNonSession))
                 if (rewritten > 0) append(ctx.appString(R.string.dsh_bk_group_rewritten, rewritten))
                 if (inferredCount > 0) append(ctx.appString(R.string.dsh_bk_group_inferred, inferredCount))
                 if (ungrouped.isNotEmpty()) {
@@ -105,6 +124,8 @@ object DshSessionGroup {
         fun details(limit: Int = 6): String {
             val lines = mutableListOf<String>()
             for (s in ungrouped.take(limit)) lines += "· " + s
+            // 恢复清单里混进的运行时文件（session.lock）不是错误，只是不会被处理；
+            // 静默忽略过一次，结果用户看到的是一串没有文件名的报错 —— 说清楚。
             if (ungrouped.size > limit) lines += "· …(+${ungrouped.size - limit})"
             for (s in unreadable.take(limit)) lines += "! " + s
             if (unreadable.size > limit) lines += "! …(+${unreadable.size - limit})"
@@ -211,9 +232,18 @@ object DshSessionGroup {
             return (0 until arr.length()).mapNotNull { i ->
                 when (val v = arr.opt(i)) {
                     is JSONObject -> buildString {
+                        // 路径必须打出来：真机上出现过 6 条「cannot parse the first zstd frame」
+                        // 却不知道说的是哪个文件，隔离项更是只显示一个空的 ⊘。
+                        val path = v.optString("path").ifEmpty { v.optString("from") }
+                        val to = v.optString("to")
                         val id = v.optString("id")
                         val cwd = v.optString("cwd")
                         val reason = v.optString("reason").ifEmpty { v.optString("action") }
+                        if (path.isNotEmpty()) {
+                            append(path)
+                            if (to.isNotEmpty()) append(" → ").append(to)
+                            append("  ")
+                        }
                         if (id.isNotEmpty()) append(id).append("  ")
                         if (cwd.isNotEmpty()) append(cwd).append("  ")
                         append(reason)
@@ -228,6 +258,10 @@ object DshSessionGroup {
             applied = o.optBoolean("applied", false),
             total = o.optInt("total", 0),
             grouped = o.optInt("grouped", 0),
+            sessions = o.optInt("sessions", 0),
+            groupedSessions = o.optInt("groupedSessions", 0),
+            files = o.optInt("files", 0),
+            ignoredNonSession = o.optJSONArray("ignoredNonSession")?.length() ?: 0,
             rewritten = o.optInt("rewritten", 0),
             inferredCount = o.optJSONArray("inferred")?.length() ?: 0,
             ungrouped = strings("ungrouped"),

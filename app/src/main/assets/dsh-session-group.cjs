@@ -53,7 +53,17 @@ const path = require("node:path");
 const zlib = require("node:zlib");
 
 const REPORT_PREFIX = "DSH_GROUP_REPORT ";
+/**
+ * 会话日志文件名。
+ *
+ * 不能写死一个名字：dsh 的新格式是 \`session.v3.jsonl.zstd\`（旧的是 \`session.jsonl.zstd\`），
+ * 只认旧名字会让新格式的会话在「整树扫描」里**完全看不见**，而搬迁时写死目标名还会把
+ * 新格式的文件改成旧名字（内容没变、名字变了，读它的 dsh 就不再确认它是什么）。
+ * 锁文件 \`session.lock\` 不匹配：它不是会话数据。
+ */
+const SESSION_FILE_RE = /^session(\.[A-Za-z0-9]+)*\.jsonl(\.zstd)?$/;
 const SESSION_FILE = "session.jsonl.zstd";
+const isSessionFile = (name) => SESSION_FILE_RE.test(name);
 const ZSTD_MAGIC = 0xfd2fb528;
 
 /* ────────────────────────────── 参数 ────────────────────────────── */
@@ -312,8 +322,17 @@ async function main() {
     ok: false,
     applied: false,
     sessionsRoot,
+    /** 处理过的日志文件数。 */
     total: 0,
+    /** 同上（显式命名以便读出「会话数 vs 文件数」的区别）。 */
+    files: 0,
     grouped: 0,
+    /** 归组成功的**会话**数（同一会话的新旧两个文件只算一条）。 */
+    groupedSessions: 0,
+    /** 同一会话的第二个及以后的日志文件数。 */
+    duplicateFiles: 0,
+    /** 调用方递进来的路径里不是会话日志的那些（session.lock 等），原样留在原处。 */
+    ignoredNonSession: [],
     moved: 0,
     rewritten: 0,
     inferred: [],
@@ -366,18 +385,37 @@ async function main() {
     return report;
   }
   const { table, state } = parts;
+  /**
+   * 调用方递进来的路径里不是会话日志的那些（session.lock 等）。
+   * 原样留在原处，既不解析也不隔离 —— 真机上 6 个锁文件曾被当成坏会话搬走。
+   */
+  const ignoredNonSession = [];
+  // 同一个数组引用，后面 push 的内容会出现在报告里
+  report.ignoredNonSession = ignoredNonSession;
 
   /* 待处理清单 */
   let relPaths;
   if (args.pathsFile) {
-    relPaths = fs.readFileSync(args.pathsFile, "utf8").split("\n").map((s) => s.trim()).filter(Boolean);
+    // 调用方给的是「本次恢复进来的文件」，可能混进 session.lock 这类运行时文件。
+    // 以前它们会被当成坏会话：报「不可读」并**挪出 sessions 树**（真机上 6 个锁文件
+    // 就是这么被搬走的）。这里先按文件名过滤，非会话文件原样留在原处。
+    relPaths = fs
+      .readFileSync(args.pathsFile, "utf8")
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((rel) => {
+        if (isSessionFile(path.basename(rel))) return true;
+        ignoredNonSession.push(rel);
+        return false;
+      });
   } else {
     relPaths = [];
     const walk = (dir, rel) => {
       for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
         const r = rel ? `${rel}/${e.name}` : e.name;
         if (e.isDirectory()) walk(path.join(dir, e.name), r);
-        else if (e.name === SESSION_FILE) relPaths.push(r);
+        else if (isSessionFile(e.name)) relPaths.push(r);
       }
     };
     walk(sessionsRoot, "");
@@ -395,7 +433,7 @@ async function main() {
     for (const e of entries) {
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) walkAll(path.join(dir, e.name), r);
-      else if (e.name === SESSION_FILE) index.push({ rel: r, file: path.join(dir, e.name) });
+      else if (isSessionFile(e.name)) index.push({ rel: r, file: path.join(dir, e.name) });
     }
   };
   walkAll(sessionsRoot, "");
@@ -453,9 +491,11 @@ async function main() {
   for (const entry of index) await headerOf(entry);
 
   /* 逐条处理 */
+  const seenIds = new Set();
   for (const rel of relPaths) {
     const file = path.join(sessionsRoot, rel);
     report.total++;
+    report.files++;
     if (!fs.existsSync(file)) {
       report.ungrouped.push({ path: rel, reason: "file missing" });
       continue;
@@ -469,6 +509,11 @@ async function main() {
     const header = inspected.header;
     headerCache.set(file, header);
     const sid = header.id;
+    // 一个会话可能有新旧两个日志文件（header 里的 cwd 两边都有，迁移时必须一起改写），
+    // 但摘要里要报的是**会话数**：以前按文件数报出「9/15 条」，读起来像有 9 个会话。
+    const firstOfSession = !seenIds.has(sid);
+    if (firstOfSession) seenIds.add(sid);
+    else report.duplicateFiles++;
     const cwd = header.cwd;
 
     let targetId = null;
@@ -520,7 +565,8 @@ async function main() {
         continue;
       }
       const seg = path.basename(path.dirname(rel)); // encodeSegment(id) 只依赖 id，跨设备一致
-      destRel = `${pk}/${seg}/${SESSION_FILE}`;
+      // 保留原文件名：把 session.v3.jsonl.zstd 写成 session.jsonl.zstd 等于偷偷换了格式名
+      destRel = `${pk}/${seg}/${path.basename(rel)}`;
       const dest = path.join(sessionsRoot, destRel);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, rebuilt);
@@ -547,6 +593,7 @@ async function main() {
     if (!table[targetId].sessionIds.includes(sid)) table[targetId].sessionIds.push(sid);
     table[targetId].updatedAt = new Date().toISOString();
     report.grouped++;
+    if (firstOfSession) report.groupedSessions++;
     report.items.push({
       id: sid,
       action: needsRewrite ? "rewrite+group" : "group",

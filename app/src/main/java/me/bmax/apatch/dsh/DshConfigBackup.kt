@@ -647,6 +647,14 @@ object DshConfigBackup {
                             zis.closeEntry()
                             continue
                         }
+                        // 会话目录里的 session.lock 是**运行时状态**（「这个会话正在被写」的
+                        // 标记），不是会话数据：跨机恢复一份别人的锁没有意义，而且后面的归组
+                        // 步骤会把它当成一个会话去解析 —— 0 字节解不出 zstd 帧，于是真机上出现
+                        // 「15 个会话文件里 6 个不可读」，还把 6 个锁文件挪出了 sessions 树。
+                        if (isSessionRuntimeState(rel)) {
+                            zis.closeEntry()
+                            continue
+                        }
                         val dest = File(base, rel)
                         val destCanon = runCatching { dest.canonicalPath }.getOrNull()
                         if (destCanon == null || !destCanon.startsWith(baseCanon + File.separator)) {
@@ -679,6 +687,18 @@ object DshConfigBackup {
 
     /** 会话文件在导出 ZIP 内的目录前缀（插件 SECTION_FILE_PREFIXES.sessions）。 */
     private const val SESSION_PREFIX = "sessions/"
+
+    /**
+     * 会话目录里的**运行时状态**文件：锁、临时文件、点开头的东西。
+     *
+     * 它们不是会话数据，恢复时不该带走：一份别机的锁在本机没有任何意义，而它会被
+     * [DshSessionGroup] 当成会话去解析 —— 0 字节解析不出 zstd 帧，报「不可读」并把它
+     * 挪出 sessions 树（真机上 6 个会话文件报错的根因）。
+     */
+    private fun isSessionRuntimeState(rel: String): Boolean {
+        val name = rel.substringAfterLast('/')
+        return name.startsWith(".") || name.endsWith(".lock") || name.endsWith(".tmp")
+    }
 
     /**
      * ZIP 条目名 → 相对会话目录的安全路径；不是会话文件或路径不可信时返回 null。

@@ -170,6 +170,8 @@
     <string name="dsh_bk_tidy_sessions_summary">Puts sessions that are already on disk but not inside any workspace back where they belong, by path (the service stops briefly). This is how sessions imported by an earlier version get grouped: importing again will not reprocess files that already exist.</string>
     <string name="dsh_bk_group_stage">Putting %1$d sessions back into their workspaces (the service is stopped briefly)…</string>
     <string name="dsh_bk_group_done">Sessions grouped: %1$d of %2$d are inside a workspace</string>
+    <string name="dsh_bk_group_files">", %1$d session log files in total"</string>
+    <string name="dsh_bk_group_ignored">", %1$d non-session files ignored (session.lock and friends)"</string>
     <string name="dsh_bk_group_rewritten">, %1$d of them had their recorded path rewritten</string>
     <string name="dsh_bk_group_inferred">, %1$d inferred from the directory name (please double-check)</string>
     <string name="dsh_bk_group_ungrouped">, %1$d have no matching workspace</string>

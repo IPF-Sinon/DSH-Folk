@@ -377,6 +377,133 @@ console.log("─ 7. 助手自身约定");
   ok(/validateRegistry/.test(src) && /rolledBack/.test(src), "有红线自校验与回滚路径");
 }
 
+console.log("─ 9. 恢复清单里的 session.lock：不是会话，不许解析也不许隔离");
+{
+  // 真机复现：一份 6 个会话的备份里 sessions/ 下有 15 个文件（9 个日志 + 6 个 0 字节的锁）。
+  // App 以前把它们整份交给助手，助手逐个解析 → 6 条「cannot parse the first zstd frame」，
+  // 还把这 6 个锁文件挪出了 sessions 树。
+  const lockRoot = real("lock-case");
+  const lockSessions = real("lock-case/sessions");
+  const lockStorages = real("lock-case/storages");
+  const lockRegistry = path.join(lockStorages, "workspace.json");
+  const lockPaths = path.join(lockRoot, "restored.txt");
+  const lockWs = real("lock-case/ws");
+  fs.writeFileSync(
+    lockRegistry,
+    JSON.stringify({
+      state: { initialized: true, workspaceIds: ["ws-l"], archivedSessionIds: [] },
+      workspaces: {
+        "ws-l": { path: lockWs, title: "ws", sessionIds: [], createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z" },
+      },
+    }, null, 2) + "\n",
+  );
+  const writeInto = (base, rel, headerLine, batches) => {
+    const parts = [frame(headerLine)];
+    for (const b of batches) parts.push(frame(b));
+    const abs = path.join(base, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, Buffer.concat(parts));
+    return abs;
+  };
+  const lockSessionRel = "pkL/seg-l/session.jsonl.zstd";
+  writeInto(lockSessions, lockSessionRel, hdr("s-l", lockWs), ["batch-l\n"]);
+  // 0 字节的锁：真机上 6 个都是这个形状
+  const lockAbs = path.join(lockSessions, "pkL/seg-l/session.lock");
+  fs.writeFileSync(lockAbs, Buffer.alloc(0));
+  // 顺带一个临时文件：也不是会话
+  const tmpAbs = path.join(lockSessions, "pkL/seg-l/session.jsonl.zstd.tmp");
+  fs.writeFileSync(tmpAbs, Buffer.alloc(0));
+  fs.writeFileSync(
+    lockPaths,
+    ["pkL/seg-l/session.jsonl.zstd", "pkL/seg-l/session.lock", "pkL/seg-l/session.jsonl.zstd.tmp"].join("\n") + "\n",
+  );
+
+  const run9 = (extra) => {
+    const args = [HELPER, "--sessions-root", lockSessions, "--registry", lockRegistry, "--paths-file", lockPaths, ...extra];
+    let stdout = "";
+    let code = 0;
+    try {
+      stdout = execFileSync(process.execPath, args, { encoding: "utf8" });
+    } catch (e) {
+      stdout = (e.stdout || "") + (e.stderr || "");
+      code = e.status === undefined ? -1 : e.status;
+    }
+    const marker = stdout.split("\n").find((l) => l.startsWith("DSH_GROUP_REPORT "));
+    return { code, report: marker ? JSON.parse(marker.slice("DSH_GROUP_REPORT ".length)) : null };
+  };
+
+  const { code: c9, report: r9 } = run9(["--apply"]);
+  ok(r9 !== null && r9.ok === true && c9 === 0, "含锁文件的清单照样跑通（退出码 0）");
+  ok(r9 && r9.total === 1 && r9.files === 1, "只处理 1 个会话日志文件（实际 total=" + (r9 && r9.total) + "）");
+  ok(r9 && r9.unreadable.length === 0, "锁文件不再被报成「不可读」（以前正好 6 条）");
+  ok(r9 && r9.quarantined.length === 0, "没有文件被隔离");
+  ok(fs.existsSync(lockAbs) && fs.statSync(lockAbs).size === 0, "锁文件原样留在原处");
+  ok(fs.existsSync(tmpAbs), "临时文件也留在原处");
+  ok(r9 && Array.isArray(r9.ignoredNonSession) && r9.ignoredNonSession.length === 2,
+    "报告里记下了被忽略的非会话文件（" + (r9 && r9.ignoredNonSession && r9.ignoredNonSession.length) + " 个）");
+  ok(!fs.existsSync(path.join(lockSessions, "..", "sessions-invalid")), "没有生成 sessions-invalid 目录");
+}
+
+console.log("─ 10. dsh 新格式的文件名（session.v3.jsonl.zstd）");
+{
+  const v3Root = real("v3-case");
+  const v3Sessions = real("v3-case/sessions");
+  const v3Storages = real("v3-case/storages");
+  const v3Registry = path.join(v3Storages, "workspace.json");
+  const v3Ws = real("v3-case/ws");
+  fs.writeFileSync(
+    v3Registry,
+    JSON.stringify({
+      state: { initialized: true, workspaceIds: ["ws-v"], archivedSessionIds: [] },
+      workspaces: {
+        "ws-v": { path: v3Ws, title: "ws", sessionIds: ["s-seed"], createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z" },
+      },
+    }, null, 2) + "\n",
+  );
+  const mk = (rel, id, cwd) => {
+    const abs = path.join(v3Sessions, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, Buffer.concat([frame(hdr(id, cwd)), frame("batch-" + id + "\n")]));
+    return abs;
+  };
+  // 种子：已归组的一条，助手靠它认出目标工作区对应的 projectKey 目录（找不到就不敢猜）
+  mk("pkV/seg-seed/session.jsonl.zstd", "s-seed", v3Ws);
+  // 外机路径 + 新格式命名：既要被归组，也要保住 .v3. 这个名字
+  mk("pkOld/seg-v/session.v3.jsonl.zstd", "s-v", "/root/deepseek-harness");
+
+  const run10 = (extra) => {
+    const args = [HELPER, "--sessions-root", v3Sessions, "--registry", v3Registry, ...extra];
+    let stdout = "";
+    let code = 0;
+    try {
+      stdout = execFileSync(process.execPath, args, { encoding: "utf8" });
+    } catch (e) {
+      stdout = (e.stdout || "") + (e.stderr || "");
+      code = e.status === undefined ? -1 : e.status;
+    }
+    const marker = stdout.split("\n").find((l) => l.startsWith("DSH_GROUP_REPORT "));
+    return { code, report: marker ? JSON.parse(marker.slice("DSH_GROUP_REPORT ".length)) : null };
+  };
+
+  // 不给 --paths-file = 扫全树（「整理未分组会话」走的就是这条路）
+  const { report: rPreview } = run10(["--map", `/root/deepseek-harness=${v3Ws}`]);
+  ok(rPreview !== null && rPreview.ok === true, "全树扫描跑通");
+  ok(rPreview && rPreview.total === 2, "全树扫描看得见 .v3. 命名的会话（旧名字写死时这里只会数到 1 条种子，实际 " + (rPreview && rPreview.total) + "）");
+  ok(rPreview && rPreview.items.some((i) => i.id === "s-v" && i.action === "rewrite+group"),
+    "预览里 .v3. 会话被识别为需要改写并归组");
+  const { report: rApply } = run10(["--map", `/root/deepseek-harness=${v3Ws}`, "--apply"]);
+  ok(rApply && rApply.rewritten === 1, "跨机路径的 .v3. 会话被改写并归组");
+  const keptV3 = path.join(v3Sessions, "pkV/seg-v/session.v3.jsonl.zstd");
+  const renamedLegacy = path.join(v3Sessions, "pkV/seg-v/session.jsonl.zstd");
+  ok(fs.existsSync(keptV3), "搬迁后文件名仍是 .v3.（不再被改成 session.jsonl.zstd）");
+  ok(!fs.existsSync(renamedLegacy), "没有产生一个改了名的假旧格式文件");
+  ok(!fs.existsSync(path.join(v3Sessions, "pkOld/seg-v/session.v3.jsonl.zstd")), "原位置文件已删除");
+  const v3Frames = splitFrames(fs.readFileSync(keptV3));
+  ok(v3Frames !== null && v3Frames.length === 2, "搬迁后的 .v3. 文件帧结构完好");
+  const v3Header = v3Frames ? JSON.parse(v3Frames[0].trim()) : {};
+  ok(v3Header.id === "s-v" && v3Header.cwd === v3Ws, "header 已改写为目标工作区路径");
+}
+
 console.log("─ 8. App 侧接线（session 恢复后必须走停机 → 归组 → 起服务）");
 {
   const backup = fs.readFileSync(SRC_DB, "utf8");
@@ -398,6 +525,20 @@ console.log("─ 8. App 侧接线（session 恢复后必须走停机 → 归组 
     "该原语内部先停后起（异常也必须恢复服务）",
   );
   ok(/restoreSessionsFromZip/.test(backup), "会话落盘函数仍在（归组在它之后）");
+  // 恢复时不许把 session.lock 这类运行时文件带进来：它会被归组助手当成会话解析
+  // （0 字节解不出 zstd 帧），真机上正是「15 个会话文件里 6 个不可读」的来源
+  ok(/isSessionRuntimeState\(rel\)/.test(backup), "恢复会话时跳过运行时状态文件");
+  ok(
+    /private fun isSessionRuntimeState[\s\S]{0,400}?endsWith\("\.lock"\)[\s\S]{0,200}?endsWith\("\.tmp"\)/.test(backup),
+    "运行时状态文件判据覆盖 .lock 与 .tmp",
+  );
+  ok(
+    /isSessionRuntimeState\(rel\)[\s\S]{0,200}?zis\.closeEntry\(\)[\s\S]{0,80}?continue[\s\S]{0,400}?val dest = File\(base, rel\)/.test(backup),
+    "跳过发生在写盘之前（先判再写）",
+  );
+  // 报告里的明细必须带路径：真机上出现过 6 条没有文件名的「cannot parse the first zstd frame」
+  ok(/optString\("path"\)\.ifEmpty \{ v\.optString\("from"\) \}/.test(group), "报告解析优先取 path/from");
+  ok(/groupedSessions/.test(group) && /dsh_bk_group_files/.test(group), "摘要区分会话数与日志文件数");
 
   // 归组回调必须是 suspend：DshConfigBackup.import 的 onLine 是 suspend 的，
   // 少写一个 suspend 就是一次编译失败（beta run 34764596409 就是这么挂的）

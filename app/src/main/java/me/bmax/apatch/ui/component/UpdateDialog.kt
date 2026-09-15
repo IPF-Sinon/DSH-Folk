@@ -126,7 +126,11 @@ fun UpdateDialog(
                         style = MaterialTheme.typography.bodyMedium,
                     )
 
-                    // 更新内容（release body）。主体统一滚动，notes 自身只限制占用高度。
+                    // 更新内容（release body）。**不要**给它限高：这里是长文本（几段说明），
+                    // 而 Text 一旦拿到有界高度又没有 overflow 配置，多出来的行是**静默裁掉**
+                    // 的 —— 用户看到的正是「更新内容显示不全」，而且对话框里没有任何滚动条
+                    // 提示他下面还有东西。外层 Column 已经是「整体限高 + verticalScroll」，
+                    // 正文自然跟着滚，所以这里只需要占满宽度。
                     if (status != null && status.notes.isNotEmpty()) {
                         Spacer(Modifier.height(12.dp))
                         Text(
@@ -139,9 +143,7 @@ fun UpdateDialog(
                             text = status.notes,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 160.dp),
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
 

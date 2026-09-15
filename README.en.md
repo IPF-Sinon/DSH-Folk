@@ -270,6 +270,16 @@ kernel symbol table, still over sixty percent of the archive after compression) 
 the window actually contains a crash dump — the old test was "the dropbox directory has any file at
 all", which `SYSTEM_BOOT` satisfies on every boot; that is how 4.3 MB of symbols ended up in a
 ten-minute report from a device that had been up for 134 seconds.
+
+The same `check-text-clipping` rule guards the UI: a Compose `Text` given a **bounded height**
+without `verticalScroll` simply clips the extra lines — no error, no ellipsis, and the short strings
+in preview never show it. The update dialog's release body hit exactly that (users saw "update
+content is cut off"). Such problems only appear with long text, so a checker watches for them.
+
+Session restore **does not carry `session.lock` over**: it is runtime state ("this session is being
+written"), meaningless across machines, and — worse — the grouping helper parsed it as a session
+(a zero-byte file yields no zstd frame), which is how a real device reported "6 of 15 session files
+are unreadable" and had all six lock files moved out of the sessions tree.
 ## What the Container Can Access on the Host
 
 In addition to dsh itself, the container includes two commands written to disk by the App. Both use the same loopback bridge bound only to `127.0.0.1` (with a random token;
