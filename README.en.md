@@ -286,6 +286,52 @@ Session restore **does not carry `session.lock` over**: it is runtime state ("th
 written"), meaningless across machines, and — worse — the grouping helper parsed it as a session
 (a zero-byte file yields no zstd frame), which is how a real device reported "6 of 15 session files
 are unreadable" and had all six lock files moved out of the sessions tree.
+## Why the App Encrypts Backups Itself
+
+The contents of a config backup still come from the `dsh-config-manager` plugin inside the container
+(it is the one that knows what in `~/.dsh` is configuration), but the part **between what it is asked
+for and what it hands back** is done by the app:
+
+1. ask the plugin for a **plain** ZIP, explicitly without the `sessions` section;
+2. add the selected sessions, the app settings and native capability log, and (when the vault is
+   selected) the credentials, locally;
+3. when a password is given, seal the container in the app (`DCA1`:
+   `magic+version+salt(16)+iv(12)+tag(16)+ciphertext`, scrypt N=16384/r=8/p=1 + AES-256-GCM).
+
+It cannot be the other way around, because the plugin seals the final container the moment it is given
+a password - the app would never get a chance to put anything into the archive, which rules out both
+"export the last five sessions" and "take my app settings along". An archive built this way is
+byte-for-byte the plugin format, so restoring inside the plugin and on the desktop still works; on
+import the app opens the container first and hands the plugin an ordinary plain archive.
+
+Two mistakes there are invisible in the app and fatal on the other side, so the checkers pin them:
+
+- **checksums must be recomputed**: the import side verifies every entry in `integrity/checksums.json`
+  with SHA-256 and rejects the whole archive otherwise. The table covers everything except
+  `manifest.json` and the table itself.
+- **`encrypted=true` requires `security/secrets.enc`**: imports refuse to run when an archive claims to
+  be encrypted but yields no credentials, so an empty placeholder is written even when the vault is not
+  included (the plugin does the same).
+
+The encryption implementation (its own scrypt plus a hand-written PBKDF2, because `PBEKeySpec` char to
+byte encoding differs between implementations) self-tests against **vectors produced by the plugin
+itself**: one scrypt vector and one real `DCA1` container. A failed self-test refuses the export - a
+backup nobody can open is worse than no backup, and that failure mode is completely invisible from the
+app side (the file is produced, the size is right, the password is right, and neither the plugin nor
+the desktop can open it). `tools/check-backup-crypto.js` recomputes both vectors independently with
+the Node standard library.
+
+What the UI offers: four levels for the contents (app data only / DSH data only / both, the default /
+with the vault, warned about first), five levels for sessions (none by default, last 5, 20, 50, all), a
+password field that leaves the archive unencrypted when empty but is mandatory with the vault. Import
+counts the sessions in the archive first and then asks whether to skip them, restore them while dsh
+runs, or restore them with the service stopped - restoring live does work (the registry is read at
+startup), but a later workspace operation would overwrite the grouping, hence the recommendation.
+
+"App data" means `SharedPreferences` plus `audit/*.jsonl`, and it carries **no secrets**: all
+`webdav_*` keys, anything named like a password, token or secret, and `app_initialized` (restoring it
+would make a new device skip first-run setup).
+
 ## What the Container Can Access on the Host
 
 In addition to dsh itself, the container includes two commands written to disk by the App. Both use the same loopback bridge bound only to `127.0.0.1` (with a random token;

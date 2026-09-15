@@ -203,6 +203,226 @@ object DshConfigBackup {
      * Download/DSH-Folk，文件会出现在系统文件管理器的「下载」里。写不进才退回
      * [backupDir]（SDK<30 或有「所有文件」权限时是真公共目录，否则是应用专属目录）。
      */
+    /**
+     * 新导出：插件只负责把 DSH 分区打成**明文** ZIP，选中的会话、软件数据、凭据由我们在
+     * 本地补进包里，整包加密最后也由我们做（见 [DshBackupArchive] 与 [DshBackupCrypto]）。
+     *
+     * 为什么绕这一圈：插件不能按数量筛会话、也不认识 App 自己的数据；而它一旦被要求加密，
+     * 就直接产出最终容器 —— 我们就再也没有机会往包里放东西了。反过来做（插件出明文 →
+     * 本地补包 → 本地加密）产出的包与插件自己的格式完全一致，所以插件内恢复、桌面端
+     * dsh-config-manager 恢复都不受影响。
+     *
+     * 自检先行：只要路径上会用到密码，就先用**插件产出的向量**验证我们的 scrypt/GCM 实现；
+     * 不过就拒绝导出。宁可这一次没有备份，也不要给用户一个连自己都打不开的备份文件。
+     */
+    suspend fun exportArchive(
+        ctx: Context,
+        plan: ExportPlan,
+        onLine: suspend (String) -> Unit = {},
+    ): ExportResult = withContext(Dispatchers.IO) {
+        if (!plan.valid) {
+            return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_vault_needs_password))
+        }
+        if (plan.password.isNotEmpty()) {
+            val bad = DshBackupCrypto.selfTest()
+            if (bad != null) {
+                return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_crypto_broken, bad))
+            }
+        }
+        val stage = File(ctx.getExternalFilesDir(null) ?: ctx.cacheDir, "config-backup").apply { mkdirs() }
+        // 上一次留下的中间产物先清掉：用户连点两次导出时它们会和新产物同名
+        val pluginPlain = File(stage, "plugin-plain.zip")
+        val merged = File(stage, "merged.zip")
+        pluginPlain.delete()
+        merged.delete()
+
+        // 1) 插件导出。刻意**不带密码**也不带 includeSecrets：这一步只出明文，密码由我们
+        //    最后统一施加；sessions 也不向它要（会话由我们按数量挑，见 DshBackupArchive）。
+        var fromPlugin: File? = null
+        if (plan.includesDsh) {
+            onLine(ctx.appString(R.string.dsh_bk_step_exporting))
+            val body = JSONObject().apply {
+                put("includeSecrets", false)
+                put("only", JSONArray(DshBackupArchive.pluginSections()))
+            }
+            val raw = request("POST", "/export", body.toString())
+                ?: return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_export_req_failed))
+            val o = runCatching { JSONObject(raw) }.getOrNull()
+                ?: return@withContext ExportResult(
+                    false,
+                    message = ctx.appString(R.string.dsh_bk_export_bad_json, raw.take(200)),
+                )
+            val err = o.optString("error")
+            if (err.isNotEmpty()) return@withContext ExportResult(false, message = err)
+            val zipPath = o.optString("zipPath")
+            if (zipPath.isEmpty()) {
+                return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_export_no_path))
+            }
+            if (download(zipPath, pluginPlain) <= 0) {
+                return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_download_failed))
+            }
+            fromPlugin = pluginPlain
+        }
+
+        // 2) 本地补包
+        onLine(ctx.appString(R.string.dsh_bk_step_merging))
+        val appData = if (plan.includesAppData) DshAppData.collect(ctx) else null
+        val audit = if (plan.includesAppData) DshAppData.auditFiles(ctx) else emptyList()
+        val secrets = if (plan.password.isEmpty()) {
+            null
+        } else {
+            // 含 vault：把凭据原文放进包里（由密码保护）；不含 vault 时写**空内容占位** ——
+            // manifest 一旦声明 encrypted=true，插件的导入侧就要求能解出 secrets.enc
+            // （解不出直接拒绝执行），插件自己也是这么做的。
+            val yaml = if (plan.includesVault) {
+                runCatching {
+                    File(DshEnv.dshHome(ctx), ".credentials.yaml").readText(StandardCharsets.UTF_8)
+                }.getOrDefault("")
+            } else {
+                ""
+            }
+            DshBackupCrypto.encryptSecrets(yaml, plan.password)
+        }
+        val stats = try {
+            DshBackupArchive.merge(
+                ctx = ctx,
+                input = fromPlugin,
+                output = merged,
+                plan = plan,
+                appData = appData,
+                auditFiles = audit,
+                secrets = secrets,
+                sourceDshVersion = dshVersionOrUnknown(ctx),
+            )
+        } catch (e: Exception) {
+            return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_merge_failed, describe(e)))
+        }
+
+        // 3) 整包加密（有密码时）
+        val name = "dsh-config-" + stamp() + ".zip"
+        val finalFile = File(stage, name)
+        finalFile.delete()
+        if (plan.password.isEmpty()) {
+            merged.copyTo(finalFile, overwrite = true)
+        } else {
+            try {
+                DshBackupCrypto.encryptArchiveToFile(merged, finalFile, plan.password)
+            } catch (e: Exception) {
+                finalFile.delete()
+                return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_encrypt_failed, describe(e)))
+            }
+        }
+        merged.delete()
+        pluginPlain.delete()
+
+        // 4) 落公共 Download/DSH-Folk（写不进才退回应用专属目录）
+        val (location, publicOk) = copyToPublic(ctx, finalFile, name)
+        val outSummary = buildString {
+            append(ctx.appString(R.string.dsh_bk_exported, name))
+            if (stats.sessions > 0) {
+                append("，").append(ctx.appString(R.string.dsh_bk_out_sessions, stats.sessions, stats.sessionFiles))
+            }
+            append("，").append(ctx.appString(R.string.dsh_bk_out_appdata))
+            .append(if (stats.appData) "" else "×")
+            append("，").append(
+                if (stats.secrets) ctx.appString(R.string.dsh_bk_out_vault) else ctx.appString(R.string.dsh_bk_out_novault)
+            )
+            if (!publicOk) append("\n! ").append(ctx.appString(R.string.dsh_bk_copy_failed))
+        }
+        ExportResult(
+            ok = true,
+            file = finalFile,
+            sizeBytes = finalFile.length(),
+            location = location,
+            sections = if (plan.includesDsh) DshBackupArchive.pluginSections().size else 0,
+            encrypted = plan.password.isNotEmpty(),
+            message = outSummary,
+        )
+    }
+
+    /**
+     * 导入之前先看一眼包里有多少个会话 —— 界面拿它决定「要不要弹那个询问框」。
+     *
+     * 加密包得先用密码解到临时文件才能数（条目表在容器里面），所以这里要有密码；密码为空
+     * 且确实是加密包时返回 0：那种情况下界面本来就要先要密码，谈不上问会话。
+     * 解出来的临时明文用完即删，不留含凭据的中间产物。
+     */
+    suspend fun countSessionsForPrompt(ctx: Context, zip: File, password: String): Int =
+        withContext(Dispatchers.IO) {
+            if (!DshBackupCrypto.isArchiveBlobFile(zip)) return@withContext countSessionsInZip(zip)
+            if (password.isEmpty()) return@withContext 0
+            val tmp = File(File(ctx.filesDir, "backup-tmp").apply { mkdirs() }, "peek-plain.zip")
+            val ok = runCatching { DshBackupCrypto.decryptArchiveToFile(zip, tmp, password) }.getOrDefault(false)
+            val n = if (ok) countSessionsInZip(tmp) else 0
+            tmp.delete()
+            n
+        }
+
+    /** 导入时会话怎么处理 —— 就是用户在弹窗里选的那一项。 */
+    enum class SessionImport {
+        /** 只恢复配置，不动会话。 */
+        SKIP,
+
+        /** 在 dsh 运行中直接写入（重启 dsh 后生效）。 */
+        DIRECT,
+
+        /** 先停服务再写（推荐：写完之后不会被任何工作区操作盖掉）。 */
+        STOP,
+    }
+
+    /**
+     * 包里有多少个会话文件（弹窗靠它决定要不要问、以及显示数量）。
+     *
+     * 只读 ZIP 的条目表，不碰内容 —— 一个几百 MB 的包在这里也不该被读进内存。
+     */
+    fun countSessionsInZip(zip: File): Int = runCatching {
+        var n = 0
+        java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
+            while (true) {
+                val e = zis.nextEntry ?: break
+                if (!e.isDirectory && e.name.startsWith(SESSION_PREFIX)) {
+                    val rel = safeSessionRel(e.name)
+                    if (rel != null && !isSessionRuntimeState(rel)) n++
+                }
+                zis.closeEntry()
+            }
+        }
+        n
+    }.getOrDefault(0)
+
+    /**
+     * 这个包里有没有需要插件出面的 DSH 分区。
+     *
+     * 读不到 manifest 时返回 true：那是「不是本生态的包/包坏了」，该由插件去报那个更准确的
+     * 错，而不是被我们当成纯软件数据包吞掉、回一句「不含软件数据」。
+     */
+    private fun hasDshSections(zip: File): Boolean = runCatching {
+        java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
+            while (true) {
+                val e = zis.nextEntry ?: break
+                if (!e.isDirectory && e.name == DshBackupArchive.MANIFEST) {
+                    val sections = JSONObject(zis.readBytes().toString(StandardCharsets.UTF_8))
+                        .optJSONObject("sections")
+                    if (sections == null) return@runCatching true
+                    for (k in sections.keys()) if (sections.optBoolean(k)) return@runCatching true
+                    return@runCatching false
+                }
+                zis.closeEntry()
+            }
+            true
+        }
+    }.getOrDefault(true)
+
+    /** export 文件名里的时间戳（与插件自动命名的风格一致，便于在文件管理器里排在一起）。 */
+    private fun stamp(): String =
+        java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
+
+    /** 容器里的 dsh 版本：插件在跑就问它，问不到就写 unknown（只有纯软件数据包用得上）。 */
+    private fun dshVersionOrUnknown(ctx: Context): String =
+        runCatching { status(ctx).dshVersion }.getOrNull()?.takeIf { it.isNotEmpty() } ?: "unknown"
+
+    private fun describe(e: Exception): String = e.javaClass.simpleName + ": " + (e.message ?: "")
+
     private fun copyToPublic(ctx: Context, src: File, name: String): Pair<String, Boolean> {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
@@ -357,15 +577,16 @@ object DshConfigBackup {
      *
      * @param strategy 冲突策略：merge（保守，冲突保留）/ replace / skipExisting
      * @param password 加密备份的解锁密码
-     * @param includeSessions 插件导入结束后，额外把包里的会话记录补写进
-     *        `~/.dsh/sessions`。**必须由我们自己做**，原因见 [restoreSessionsFromZip]。
+     * @param sessions 包里带着会话时怎么办（[SessionImport]）：跳过、在 dsh 运行中直接
+     *        写入，还是先停服务再写。会话记录**必须由我们自己做**，原因见 [restoreSessionsFromZip]。
+     * @param onLine 阶段进度（上传/分析/计划/执行/会话/软件数据）。
      */
     suspend fun import(
         ctx: Context,
         zip: File,
         strategy: String = "merge",
         password: String = "",
-        includeSessions: Boolean = false,
+        sessions: SessionImport = SessionImport.SKIP,
         /**
          * 阶段进度（上传/分析/计划/执行/会话）：界面用它显示「在动」，而不是只转圈。
          *
@@ -373,8 +594,43 @@ object DshConfigBackup {
          */
         onLine: suspend (String) -> Unit = {},
     ): ImportResult = withContext(Dispatchers.IO) {
-        onLine(ctx.appString(R.string.dsh_bk_step_uploading, zip.name))
-        val up = upload(zip) ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_failed))
+        // 整体加密的包由**我们**解开（见 [DshBackupCrypto]），不再请插件解：格式本来就是同一个
+        // （DCA1），自己解顺带确认了「这确实是本生态的备份」，而且插件那一步只看到普通明文包
+        // —— 所以插件内恢复、桌面端恢复都照旧能用。解出来的明文落在应用专属目录，导入结束就删。
+        val tmpDir = File(ctx.filesDir, "backup-tmp").apply { mkdirs() }
+        val plainZip: File = if (DshBackupCrypto.isArchiveBlobFile(zip)) {
+            if (password.isEmpty()) {
+                return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_need_password))
+            }
+            DshBackupCrypto.selfTest()?.let {
+                return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_crypto_broken, it))
+            }
+            val plain = File(tmpDir, "import-plain.zip")
+            if (!DshBackupCrypto.decryptArchiveToFile(zip, plain, password)) {
+                return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_bad_password))
+            }
+            plain
+        } else {
+            zip
+        }
+
+        // 纯软件数据包：插件那边一个分区都没有，走完整流程只会白跑（还可能因为「没有可导入
+        // 的项」报错）。直接恢复 App 数据即可 —— 这类包正是「仅软件数据」那一档导出来的。
+        if (!hasDshSections(plainZip)) {
+            val data = DshAppData.readFromZip(plainZip)
+                ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_appdata_none))
+            onLine(ctx.appString(R.string.dsh_bk_step_appdata))
+            val changed = DshAppData.apply(ctx, data)
+            val lines = DshAppData.mergeAudit(ctx, plainZip)
+            val note = buildString {
+                append(ctx.appString(R.string.dsh_bk_appdata_restored, changed))
+                if (lines > 0) append("，").append(ctx.appString(R.string.dsh_bk_audit_merged, lines))
+            }
+            return@withContext ImportResult(true, ctx.appString(R.string.dsh_bk_import_done, note))
+        }
+
+        onLine(ctx.appString(R.string.dsh_bk_step_uploading, plainZip.name))
+        val up = upload(plainZip) ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_failed))
         val upObj = runCatching { JSONObject(up) }.getOrNull()
             ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_bad_json))
         var zipPath = upObj.optString("zipPath")
@@ -382,20 +638,10 @@ object DshConfigBackup {
             return@withContext ImportResult(false, upObj.optString("error").ifEmpty { ctx.appString(R.string.dsh_bk_upload_no_path) })
         }
 
-        // 整体加密备份必须先解锁成明文 ZIP，否则 analyze 读不出 manifest
+        // 走到这里还被告知是加密包，说明它的 magic 不是 DCA1（例如别人改过字节）——不猜，
+        // 直接告诉用户解不开，而不是把一个半懂的文件递给插件。
         if (upObj.optString("containerType") == "encrypted") {
-            if (password.isEmpty()) return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_need_password))
-            val dec = request(
-                "POST", "/decrypt-archive",
-                JSONObject().put("zipPath", zipPath).put("password", password).toString(),
-            ) ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_unlock_failed))
-            val decObj = runCatching { JSONObject(dec) }.getOrNull()
-                ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_unlock_bad_json))
-            val newPath = decObj.optString("zipPath")
-            if (newPath.isEmpty()) {
-                return@withContext ImportResult(false, decObj.optString("error").ifEmpty { ctx.appString(R.string.dsh_bk_bad_password) })
-            }
-            zipPath = newPath
+            return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_unlock_failed))
         }
 
         onLine(ctx.appString(R.string.dsh_bk_step_analyzing))
@@ -527,9 +773,9 @@ object DshConfigBackup {
         // 会话记录必须在插件跑完之后再补：插件失败会整体回滚，先写会话就会留下
         // 一堆没有对应配置的孤立会话。回滚发生时干脆不写。
         var sessionNote = ""
-        if (includeSessions && rollback == null) {
+        if (sessions != SessionImport.SKIP && rollback == null) {
             onLine(ctx.appString(R.string.dsh_bk_step_sessions))
-            val r = restoreSessionsFromZip(ctx, zip)
+            val r = restoreSessionsFromZip(ctx, plainZip)
             sessionNote = when {
                 r.restored > 0 -> ctx.appString(R.string.dsh_bk_sessions_restored, r.restored, r.skipped) +
                     "\n" + ctx.appString(R.string.dsh_bk_sessions_foreign_workspace)
@@ -546,7 +792,14 @@ object DshConfigBackup {
             if (r.paths.isNotEmpty()) {
                 onLine(ctx.appString(R.string.dsh_bk_group_stage, r.paths.size))
                 val report = runCatching {
-                    DshRuntime.withServiceStopped {
+                    // 「停机恢复」与「直接恢复」在这里分岔：两者都能生效（注册表启动才读盘），
+                    // 区别只在于直接恢复时，用户接下来若在 WebUI 里动工作区，这次归组可能被
+                    // dsh 的整份内存写回盖掉。所以推荐停机，但把选择权交给用户。
+                    if (sessions == SessionImport.STOP) {
+                        DshRuntime.withServiceStopped {
+                            DshSessionGroup.groupRestoredSessions(ctx, r.paths, onLine = onLine)
+                        }
+                    } else {
                         DshSessionGroup.groupRestoredSessions(ctx, r.paths, onLine = onLine)
                     }
                 }.getOrNull()
@@ -557,6 +810,17 @@ object DshConfigBackup {
                 val detail = group.details()
                 if (detail.isNotEmpty()) sessionNote += "\n" + detail
             }
+        }
+
+        // 软件数据：插件不认识它，一直由我们自己带、自己放回（见 [DshAppData]）。
+        var appNote = ""
+        val appData = DshAppData.readFromZip(plainZip)
+        if (appData != null) {
+            onLine(ctx.appString(R.string.dsh_bk_step_appdata))
+            val changed = DshAppData.apply(ctx, appData)
+            val lines = DshAppData.mergeAudit(ctx, plainZip)
+            appNote = ctx.appString(R.string.dsh_bk_appdata_restored, changed) +
+                if (lines > 0) "，" + ctx.appString(R.string.dsh_bk_audit_merged, lines) else ""
         }
 
         val head = buildString {
@@ -580,8 +844,13 @@ object DshConfigBackup {
             execObj.optString("snapshotId").takeIf { it.isNotEmpty() }
                 ?.let { append(ctx.appString(R.string.dsh_bk_snapshot, it)) }
         }
-        val detail = if (sessionNote.isEmpty()) notes.toString()
-        else notes.toString() + "↺ " + sessionNote
+        val detail = buildString {
+            append(notes)
+            if (appNote.isNotEmpty()) append("◧ ").append(appNote).append('\n')
+            if (sessionNote.isNotEmpty()) append("↺ ").append(sessionNote)
+        }
+        // 明文中间产物里含解出来的凭据，不留
+        if (plainZip != zip) plainZip.delete()
         ImportResult(ok, head, detail, needsRestart)
     }
 

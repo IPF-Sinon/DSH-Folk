@@ -123,6 +123,11 @@ jobs:
       #   check-text-clipping 限高又不给滚动的 Text：Text 拿到有界高度又没有 overflow
       #   时多出来的行是静默裁掉的（用户看到的「更新内容显示不全」），而预览里的短文案
       #   永远看不出问题。
+      #   check-backup-crypto 备份加密与补包链路（容器常量必须与插件逐字节一致、GCM 的
+      #   tag 在 header 里而不是密文尾部、补包后必须重算 checksums、encrypted=true 必须有
+      #   secrets.enc、旧的对话数据开关必须真没了）。它还**用 Node 的独立实现复算**嵌在
+      #   Kotlin 里的两条自检向量 —— 加密实现写错的后果是「包生成了、密码也对、谁都打不开」，
+      #   而那在 App 侧完全看不出来。
       - name: Static source checks
         run: |
           node tools/check-changelog.js
@@ -137,6 +142,7 @@ jobs:
           node tools/check-session-group.js
           node tools/check-bugreport-files.js
           node tools/check-text-clipping.js
+          node tools/check-backup-crypto.js
 
       # release 包必须真签名。缺任何一项就硬失败 —— 悄悄用 debug key 签出一个
       # 「release」比构建失败危险得多：它装得上、看着正常，但和正式包签名不同，

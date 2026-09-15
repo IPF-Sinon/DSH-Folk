@@ -4,11 +4,17 @@ import android.net.Uri
 import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -29,7 +35,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -74,12 +82,16 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var dshMessage by rememberSaveable { mutableStateOf("") }
     var dshPassword by rememberSaveable { mutableStateOf("") }
     var dshRemote by rememberSaveable { mutableStateOf(listOf<String>()) }
-    // 是否把 sessions（会话记录）也导进去：体积能到几百 MB 且含敏感信息，默认关。
-    var dshIncludeSessions by rememberSaveable { mutableStateOf(false) }
-    // 导入时是否恢复备份包里的 sessions（会话记录）：默认关，与导出开关独立。
-    var dshImportSessions by rememberSaveable { mutableStateOf(false) }
     // 冲突策略：落盘记住（BackupConfig），下次进来还是上次那档
     var importStrategy by rememberSaveable { mutableStateOf(BackupConfig.importStrategy) }
+    // 导入前要问用户「会话怎么处理」时，把选好的文件 + 当时的密码/策略暂存起来：
+    // 探测会话数是在后台跑的，等用户在对话框里选完才真正调用 import()。
+    // 密码/策略必须快照而不是读实时值 —— 弹窗期间用户可能又改了输入框。
+    var pendingImportPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingImportPassword by rememberSaveable { mutableStateOf("") }
+    var pendingImportStrategy by rememberSaveable { mutableStateOf(BackupConfig.importStrategy) }
+    var pendingImportCount by rememberSaveable { mutableStateOf(0) }
+    var pendingImportPrompt by rememberSaveable { mutableStateOf(false) }
 
     // 云端备份 / 快照列表
     var cloudEntries by remember { mutableStateOf<List<WebDavUtils.RemoteEntry>>(emptyList()) }
@@ -136,6 +148,48 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     val tidyTarget = stringResource(R.string.dsh_bk_tidy_sessions)
     val clipboard = LocalClipboardManager.current
 
+    /**
+     * 导入的真正执行（进度对话框 + 逐行日志）。调用时机：
+     * 探测到包里有会话时，要等用户在「会话怎么处理」三选一里选完才调（三个选项都会
+     * 执行导入，区别只是会话怎么写进去 —— 选「跳过」不是取消导入）；探测为 0 或失败
+     * 时不弹框，直接以 SKIP 调它。
+     */
+    fun runImport(
+        zip: File,
+        password: String,
+        strategy: String,
+        sessions: DshConfigBackup.SessionImport,
+    ) {
+        runVisible = true
+        runTarget = importTarget
+        runLines = emptyList()
+        runRunning = true
+        runFailed = false
+        runNeedsRestart = false
+        scope.launch(Dispatchers.IO) {
+            val r = DshConfigBackup.import(
+                context, zip,
+                strategy = strategy,
+                password = password,
+                sessions = sessions,
+                // 阶段进度直接进对话框：不然用户只看到一个转圈，不知道在干什么
+                onLine = { line -> withContext(Dispatchers.Main) { runLines = runLines + line } },
+            )
+            zip.delete()
+            val text = if (r.detail.isBlank()) r.message else "${r.message}\n${r.detail}"
+            val restartNeeded = r.ok && r.needsRestart
+            BackupLogManager.log("import strategy=$strategy sessions=$sessions ok=${r.ok} restart=$restartNeeded")
+            withContext(Dispatchers.Main) {
+                dshMessage = text
+                dshBusy = false
+                runRunning = false
+                runFailed = !r.ok
+                runNeedsRestart = restartNeeded
+                runLines = runLines + text
+            }
+        }
+    }
+
     val importPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -154,34 +208,42 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                     DshConfigBackup.stage(context, input, "import-${System.currentTimeMillis()}.zip")
                 }
             }.getOrNull()
-            val text: String
-            var restartNeeded = false
-            var failed = false
             if (staged == null) {
-                failed = true
-                text = context.getString(R.string.dsh_plugin_local_read_failed)
-            } else {
-                val r = DshConfigBackup.import(
-                    context, staged,
-                    strategy = importStrategy,
-                    password = dshPassword,
-                    includeSessions = dshImportSessions,
-                    // 阶段进度直接进对话框：不然用户只看到一个转圈，不知道在干什么
-                    onLine = { line -> withContext(Dispatchers.Main) { runLines = runLines + line } },
-                )
-                staged.delete()
-                text = if (r.detail.isBlank()) r.message else "${r.message}\n${r.detail}"
-                restartNeeded = r.ok && r.needsRestart
-                failed = !r.ok
-                BackupLogManager.log("import strategy=$importStrategy ok=${r.ok} restart=$restartNeeded")
+                val text = context.getString(R.string.dsh_plugin_local_read_failed)
+                withContext(Dispatchers.Main) {
+                    dshMessage = text
+                    dshBusy = false
+                    runRunning = false
+                    runFailed = true
+                    runLines = runLines + text
+                }
+                return@launch
             }
-            withContext(Dispatchers.Main) {
-                dshMessage = text
-                dshBusy = false
-                runRunning = false
-                runFailed = failed
-                runNeedsRestart = restartNeeded
-                runLines = runLines + text
+            // 先探测包里有多少个会话：>0 才需要问用户怎么处理（弹三选一，选完才真正导入）
+            val count = DshConfigBackup.countSessionsForPrompt(context, staged, dshPassword)
+            if (count > 0) {
+                withContext(Dispatchers.Main) {
+                    // 把文件 + 当时的密码/策略暂存（rememberSaveable），对话框选完再导入
+                    pendingImportPath = staged.absolutePath
+                    pendingImportPassword = dshPassword
+                    pendingImportStrategy = importStrategy
+                    pendingImportCount = count
+                    pendingImportPrompt = true
+                    dshMessage = ""
+                    dshBusy = false
+                    runVisible = false
+                    runRunning = false
+                }
+            } else {
+                // 0 个会话（或探测失败/加密包没给密码）：不弹框，按 SKIP 直接导入
+                withContext(Dispatchers.Main) {
+                    runImport(
+                        zip = staged,
+                        password = dshPassword,
+                        strategy = importStrategy,
+                        sessions = DshConfigBackup.SessionImport.SKIP,
+                    )
+                }
             }
         }
     }
@@ -210,7 +272,12 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                     dshMessage = dshMessage,
                     dshPassword = dshPassword,
                     onDshPasswordChange = { dshPassword = it },
-                    onDshExport = {
+                    onDshExport = { plan ->
+                        if (!plan.valid) {
+                            // 含 vault 却没密码：界面已禁用按钮，这里再挡一道
+                            dshMessage = context.getString(R.string.dsh_bk_vault_needs_password)
+                            return@BackupSettingsContent
+                        }
                         dshBusy = true
                         dshMessage = exporting
                         scope.launch(Dispatchers.IO) {
@@ -219,10 +286,11 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                             val text = if (!status.ready) {
                                 if (status.error.isEmpty()) pluginMissing else notRunning
                             } else {
-                                val r = DshConfigBackup.export(
+                                val r = DshConfigBackup.exportArchive(
                                     context,
-                                    sections = DshConfigBackup.sections(dshIncludeSessions),
-                                    password = dshPassword,
+                                    plan,
+                                    // 阶段进度直接进结果区：不然用户只看到一个转圈，不知道在干什么
+                                    onLine = { line -> withContext(Dispatchers.Main) { dshMessage = line } },
                                 )
                                 if (!r.ok) r.message else {
                                     val local = "${r.message}\n${r.location.ifBlank { r.file?.absolutePath ?: "" }}"
@@ -319,8 +387,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         }
                     },
                     onCloudRestore = { entry ->
-                        // 云端那条只是「源」：下载到暂存后走与本地导入同一条管道，
-                        // 策略/密码/会话选项完全一致，不另起一套逻辑。
+                        // 云端只是「源」：下载到暂存后走与本地导入同一条管道
                         dshBusy = true
                         runVisible = true
                         runTarget = cloudTarget
@@ -330,43 +397,49 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         runNeedsRestart = false
                         cloudMessage = ""
                         scope.launch(Dispatchers.IO) {
-                            val dest = File(
-                                File(context.cacheDir, "config-import").apply { mkdirs() },
-                                entry.name.ifBlank { "cloud-backup.zip" },
-                            )
-                            val dl = WebDavUtils.downloadTo(
-                                baseUrl = BackupConfig.webdavUrl,
-                                user = BackupConfig.webdavUsername,
-                                pass = BackupConfig.webdavPassword,
-                                remotePath = entry.path,
-                                dest = dest,
-                            )
-                            var restartNeeded = false
-                            val text: String
+                            val dest = File(File(context.cacheDir, "config-import").apply { mkdirs() }, entry.name.ifBlank { "cloud-backup.zip" })
+                            val dl = WebDavUtils.downloadTo(baseUrl = BackupConfig.webdavUrl, user = BackupConfig.webdavUsername, pass = BackupConfig.webdavPassword, remotePath = entry.path, dest = dest)
                             if (dl.isFailure) {
-                                text = context.getString(
-                                    R.string.dsh_bk_cloud_download_failed,
-                                    dl.exceptionOrNull()?.message ?: "",
-                                )
-                            } else {
+                                dest.delete()
+                                val text = context.getString(R.string.dsh_bk_cloud_download_failed, dl.exceptionOrNull()?.message ?: "")
+                                withContext(Dispatchers.Main) { cloudMessage = text; dshBusy = false; runRunning = false; runFailed = true; runLines = runLines + text }
+                                return@launch
+                            }
+                            // 与本地导入一样先探测会话数：0 个（或探测失败/加密没密码）不弹框，按 SKIP 直接导入
+                            val count = DshConfigBackup.countSessionsForPrompt(context, dest, dshPassword)
+                            if (count <= 0) {
                                 val r = DshConfigBackup.import(
                                     context, dest,
                                     strategy = importStrategy,
                                     password = dshPassword,
-                                    includeSessions = dshImportSessions,
+                                    sessions = DshConfigBackup.SessionImport.SKIP,
                                     onLine = { line -> withContext(Dispatchers.Main) { runLines = runLines + line } },
                                 )
                                 dest.delete()
-                                text = if (r.detail.isBlank()) r.message else "${r.message}\n${r.detail}"
-                                restartNeeded = r.ok && r.needsRestart
-                            }
-                            withContext(Dispatchers.Main) {
-                                cloudMessage = text
-                                dshBusy = false
-                                runRunning = false
-                                runFailed = dl.isFailure
-                                runNeedsRestart = restartNeeded
-                                runLines = runLines + text
+                                val text = if (r.detail.isBlank()) r.message else "${r.message}\n${r.detail}"
+                                val restartNeeded = r.ok && r.needsRestart
+                                withContext(Dispatchers.Main) {
+                                    cloudMessage = text
+                                    dshBusy = false
+                                    runRunning = false
+                                    runFailed = !r.ok
+                                    runNeedsRestart = restartNeeded
+                                    runLines = runLines + text
+                                }
+                            } else {
+                                // 探测到会话：先弹三选一，选完才真正导入。
+                                // 文件 + 当时的密码/策略暂存（rememberSaveable），
+                                // 弹窗期间用户改密码不影响这次导入。
+                                withContext(Dispatchers.Main) {
+                                    pendingImportPath = dest.absolutePath
+                                    pendingImportPassword = dshPassword
+                                    pendingImportStrategy = importStrategy
+                                    pendingImportCount = count
+                                    pendingImportPrompt = true
+                                    dshBusy = false
+                                    runVisible = false
+                                    runRunning = false
+                                }
                             }
                         }
                     },
@@ -444,10 +517,6 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                             }
                         }
                     },
-                    includeSessions = dshIncludeSessions,
-                    onIncludeSessionsChange = { dshIncludeSessions = it },
-                    importSessions = dshImportSessions,
-                    onImportSessionsChange = { dshImportSessions = it },
                     pluginReady = pluginReady,
                     pluginDetail = pluginDetail,
                     onGoInstallPlugin = { navigator.navigate(DshPluginStoreScreenDestination) },
@@ -514,6 +583,67 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
         }
     }
 
+    // 导入前的会话三选一：探测到包里有会话（countSessionsForPrompt > 0）才弹。
+    // 三个选项都会真正执行导入，区别只是会话怎么写进去 —— 选「跳过」不是取消导入；
+    // 取消（点外面 / 取消按钮）才是不导，并把暂存文件清掉。
+    if (pendingImportPrompt) {
+        val pendingPath = pendingImportPath
+        if (pendingPath != null) {
+            val pick: (DshConfigBackup.SessionImport) -> Unit = { choice ->
+                pendingImportPrompt = false
+                pendingImportPath = null
+                runImport(
+                    zip = File(pendingPath),
+                    password = pendingImportPassword,
+                    strategy = pendingImportStrategy,
+                    sessions = choice,
+                )
+            }
+            val cancelPick: () -> Unit = {
+                pendingImportPrompt = false
+                pendingImportPath = null
+                File(pendingPath).delete()
+            }
+            AlertDialog(
+                onDismissRequest = cancelPick,
+                title = { Text(stringResource(R.string.dsh_bk_sessions_ask_title)) },
+                text = {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.dsh_bk_sessions_ask_message, pendingImportCount),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        // 推荐项（停机恢复）放最上面，样式上也最突出
+                        SessionChoiceRow(
+                            title = stringResource(R.string.dsh_bk_sessions_ask_stop),
+                            note = stringResource(R.string.dsh_bk_sessions_ask_stop_note),
+                            recommended = true,
+                            onClick = { pick(DshConfigBackup.SessionImport.STOP) },
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        SessionChoiceRow(
+                            title = stringResource(R.string.dsh_bk_sessions_ask_direct),
+                            note = stringResource(R.string.dsh_bk_sessions_ask_direct_note),
+                            onClick = { pick(DshConfigBackup.SessionImport.DIRECT) },
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        SessionChoiceRow(
+                            title = stringResource(R.string.dsh_bk_sessions_ask_skip),
+                            note = stringResource(R.string.dsh_bk_sessions_ask_skip_note),
+                            onClick = { pick(DshConfigBackup.SessionImport.SKIP) },
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = cancelPick) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
+                },
+            )
+        }
+    }
+
     // 导入 / 云端恢复 / 快照恢复共用一个进度对话框：
     // 结束后若插件说「需重启才生效」，主按钮就是「重启服务」—— 以前这句话只出现在文案里，
     // 用户看到却找不到按钮，回头就以为恢复没生效。
@@ -537,4 +667,46 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
 
     // CLI 安装与插件安装共用同一套进度对话框（都是分钟级的 npm/pnpm 操作）
     PluginProgressHost(pluginViewModel)
+}
+
+/**
+ * 导入前「会话怎么处理」三选一里的一行选项。
+ * [recommended] 项（停机恢复）放最上面，用 primaryContainer 底色 + 加粗标题突出。
+ */
+@Composable
+private fun SessionChoiceRow(
+    title: String,
+    note: String,
+    recommended: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                if (recommended) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceVariant
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (recommended) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (recommended) MaterialTheme.colorScheme.onPrimaryContainer
+                else MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = note,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (recommended) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
