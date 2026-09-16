@@ -399,40 +399,60 @@ object DshBackupCrypto {
      * 「全部密文 + tag」，少一个字节都会认证失败。
      */
     fun decryptArchiveToFile(blob: File, output: File, password: String): Boolean = runCatching {
-        RandomAccessFile(blob, "r").use { raf ->
-            val size = raf.length()
-            if (size < HEADER_LENGTH + TAG_LENGTH) return false
-            val header = ByteArray(HEADER_LENGTH)
-            raf.readFully(header)
+        val size = blob.length()
+        if (size < HEADER_LENGTH) return false
+        val header = ByteArray(HEADER_LENGTH)
+        // 不用 RandomAccessFile：真机上它在这个目录里写出来的东西不可靠 —— 旧的加密实现
+        // 就是「先占位 49 字节、写完再 seek 回去填头」，结果密文整段丢失、只剩 49 字节的
+        // 空容器。这里全部改成普通顺序读写，读一次、写一次，不回头改任何字节。
+        BufferedInputStream(FileInputStream(blob), STREAM_BUFFER).use { ins ->
+            var got = 0
+            while (got < HEADER_LENGTH) {
+                val n = ins.read(header, got, HEADER_LENGTH - got)
+                if (n <= 0) return false
+                got += n
+            }
             if (!magicMatches(header, ARCHIVE_MAGIC)) return false
             if (header[VERSION_OFFSET].toInt() != VERSION) return false
             val salt = header.copyOfRange(SALT_OFFSET, SALT_OFFSET + SALT_LENGTH)
             val iv = header.copyOfRange(IV_OFFSET, IV_OFFSET + IV_LENGTH)
             val tag = header.copyOfRange(TAG_OFFSET, TAG_OFFSET + TAG_LENGTH)
             val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(deriveKey(password, salt), AES_ALGORITHM), GCMParameterSpec(TAG_BITS, iv))
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                SecretKeySpec(deriveKey(password, salt), AES_ALGORITHM),
+                GCMParameterSpec(TAG_BITS, iv),
+            )
             val body = size - HEADER_LENGTH
-            val held = TAG_LENGTH.toLong().coerceAtMost(body)
+            if (body < 0L) return false
+            // Java 的 GCM 只认「密文||tag」这一种输入拼接，而 tag 在 header 里，所以要扣住密文
+            // 最后 16 字节，连同 tag 一起交给 doFinal。空密文（body=0）时就是「只给 tag」。
+            val held = TAG_LENGTH.toLong().coerceAtMost(body).toInt()
             val streamed = body - held
             BufferedOutputStream(FileOutputStream(output), STREAM_BUFFER).use { out ->
-                val buffer = ByteArray(STREAM_BUFFER)
-                var left = streamed
-                while (left > 0) {
-                    val n = raf.read(buffer, 0, left.coerceAtMost(buffer.size.toLong()).toInt())
-                    if (n <= 0) break
-                    val chunk = cipher.update(buffer, 0, n)
+                var remaining = streamed
+                val buf = ByteArray(STREAM_BUFFER)
+                while (remaining > 0L) {
+                    val want = minOf(buf.size.toLong(), remaining).toInt()
+                    val n = ins.read(buf, 0, want)
+                    if (n <= 0) return false
+                    remaining -= n.toLong()
+                    val chunk = cipher.update(buf, 0, n)
                     if (chunk != null && chunk.isNotEmpty()) out.write(chunk)
-                    left -= n
                 }
-                val tail = ByteArray(held.toInt() + TAG_LENGTH)
-                raf.readFully(tail, 0, held.toInt())
-                System.arraycopy(tag, 0, tail, held.toInt(), TAG_LENGTH)
-                val last = cipher.doFinal(tail)
-                if (last != null && last.isNotEmpty()) out.write(last)
+                val tail = ByteArray(held)
+                var tailGot = 0
+                while (tailGot < held) {
+                    val n = ins.read(tail, tailGot, held - tailGot)
+                    if (n <= 0) return false
+                    tailGot += n
+                }
+                val last = cipher.doFinal(tail + tag)
+                if (last.isNotEmpty()) out.write(last)
             }
         }
         true
-    }.getOrDefault(false)
+    }.getOrElse { false }.getOrDefault(false)
 
     /** 封一个容器：随机 salt/iv，head 49 字节按固定偏移拼好，密文跟在后面。 */
     private fun seal(magic: String, plaintext: ByteArray, password: String): ByteArray {

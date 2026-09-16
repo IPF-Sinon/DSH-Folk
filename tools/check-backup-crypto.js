@@ -327,6 +327,26 @@ ok(/dsh_bk_out_size/.test(backupKt) && /humanSize\(finalFile\.length\(\)\)/.test
 // 尺寸恒等式本身也验一遍：49 = 4 + 1 + 16 + 12 + 16
 ok(4 + 1 + 16 + 12 + 16 === 49, '容器头正好 49 字节（与现场那个坏包大小一致）');
 
+// 真机结论：日志在 merge-done 之后就断了（没有 encrypt= 那一行），卡在流式自检上；
+// 而自检失败说明流式这条路本身是坏的 —— 它正是产出 49 字节空容器的元凶。
+// 两个函数原来都用 RandomAccessFile（先占位、写完 seek 回去回填头部），
+// 在那台设备的这个目录里不可靠：密文整段丢失、只剩头部。现在全部改成顺序读写。
+ok(!/RandomAccessFile\(/.test(cryptoKt), '加解密两个流式函数都不再调用 RandomAccessFile（只留注释说明历史）');
+const decSpan = braceSpan(cryptoKt, 'fun decryptArchiveToFile(blob: File, output: File, password: String): Boolean');
+ok(decSpan !== null, '流式解密函数在');
+if (decSpan) {
+  const body = cryptoKt.slice(decSpan[0], decSpan[1]);
+  ok(/BufferedInputStream\(FileInputStream\(blob\)/.test(body), '解密用顺序读文件头');
+  ok(/val held = TAG_LENGTH\.toLong\(\)\.coerceAtMost\(body\)\.toInt\(\)/.test(body),
+    '扣住密文最后 16 字节（GCM 只认密文||tag）');
+  ok(/cipher\.doFinal\(tail \+ tag\)/.test(body), 'doFinal(tail + tag)');
+  ok(/remaining -= n\.toLong\(\)/.test(body), '按剩余长度流式读取，不整包进内存');
+}
+ok(/failTrace\(ctx, ctx\.appString\(R\.string\.dsh_bk_crypto_broken, bad\)\)/.test(backupKt) &&
+  /failTrace\(ctx, ctx\.appString\(R\.string\.dsh_bk_crypto_broken, streamBad\)\)/.test(backupKt),
+  '自检不过也要记账 —— 这次就是这条分支没记账，日志正好断在那里、原因看不到');
+ok(/selftest-stream=" \+ \(streamBad \?: "ok"\)/.test(backupKt), '流式自检结果本身也进日志');
+
 // 现场证据：DSH 侧日志里插件的明文导出是好的（导出完成 sizeBytes=5108 encrypted=false），
 // 所以空的只能是应用侧。于是把「小包走那条每次导出都验过的内存版」和
 // 「流式版必须自己证明读到了多少字节」都钉住。

@@ -240,7 +240,7 @@ object DshConfigBackup {
         if (plan.password.isNotEmpty()) {
             val bad = DshBackupCrypto.selfTest()
             if (bad != null) {
-                return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_crypto_broken, bad))
+                return@withContext failTrace(ctx, ctx.appString(R.string.dsh_bk_crypto_broken, bad))
             }
         }
         val stage = File(ctx.getExternalFilesDir(null) ?: ctx.cacheDir, "config-backup").apply { mkdirs() }
@@ -353,8 +353,9 @@ object DshConfigBackup {
         } else {
             // 先验流式加解密这条路本身是好的（内存版自检覆盖不到它）
             val streamBad = DshBackupCrypto.selfTestFiles(stage)
+            trace(ctx, "selftest-stream=" + (streamBad ?: "ok"))
             if (streamBad != null) {
-                return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_crypto_broken, streamBad))
+                return@withContext failTrace(ctx, ctx.appString(R.string.dsh_bk_crypto_broken, streamBad))
             }
             try {
                 // 小包走**内存版**：selfTest() 每次导出前都会验它，是这条路里唯一
