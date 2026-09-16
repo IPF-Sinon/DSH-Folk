@@ -588,6 +588,7 @@ object DshConfigBackup {
             ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_analyze_failed))
         trace(ctx, "import-uploaded zipPath=" + zipPath)
         val analyzeObj = runCatching { JSONObject(analyze) }.getOrNull()
+            ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_analyze_bad_json))
         val analyzeErr = analyzeObj.optString("error")
         if (analyzeErr.isNotEmpty()) return@withContext PreflightResult.Failed(analyzeErr)
         if (!analyzeObj.optBoolean("valid", true)) {
