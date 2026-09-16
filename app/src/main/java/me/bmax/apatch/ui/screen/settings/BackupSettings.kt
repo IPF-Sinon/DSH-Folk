@@ -383,6 +383,9 @@ fun BackupSettingsContent(
 
                     // 备份列表做成独立分区（和快照一样）：只是「列出来」没用 ——
                     // 用户点「列出」的下一步一定是「拿这个恢复」或者「这个不要了」。
+                    // canRun 是在上面那个动作 Row 里声明的，作用域到不了这里 ——
+                    // 这个文件里早就有条注释在提醒这个坑（快照分区踩过一次）。
+                    val backupRowCanRun = !dshBusy && pluginReady != false
                     if (dshBackups.isNotEmpty()) {
                         Spacer(Modifier.height(12.dp))
                         Text(
@@ -420,13 +423,13 @@ fun BackupSettingsContent(
                                     }
                                     TextButton(
                                         onClick = { onDshBackupRestore(backup) },
-                                        enabled = canRun,
+                                        enabled = backupRowCanRun,
                                     ) {
                                         Text(stringResource(R.string.dsh_bk_backup_restore))
                                     }
                                     TextButton(
                                         onClick = { onDshBackupDelete(backup) },
-                                        enabled = canRun,
+                                        enabled = backupRowCanRun,
                                     ) {
                                         Text(stringResource(R.string.dsh_bk_backup_delete))
                                     }
