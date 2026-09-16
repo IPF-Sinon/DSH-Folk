@@ -198,6 +198,63 @@ ok(/if \(plainZip != zip\) plainZip\.delete\(\)/.test(backupKt), '解出来的�
 ok(/suspend fun countSessionsForPrompt\(/.test(backupKt), '有导入前的会话探测入口');
 ok(/fun countSessionsInZip\(/.test(backupKt), '有本地会话计数');
 
+/* ---------------------- 6b. 「跳过会话」只跳过会话，别的照常导入 ---------------------- */
+
+/**
+ * 取「从某个标记起的那个 {…} 块」的字符区间（大括号配对）。
+ *
+ * 用它才能断言「某段代码在不在这个守卫里面」—— 纯文本包含判断做不到这件事，而
+ * 「跳过会话」一旦被写成在外面 return，用户在设备上看到的就是「选了跳过，整包都没导入」。
+ */
+function braceSpan(src, marker) {
+  const i = src.indexOf(marker);
+  if (i < 0) return null;
+  const open = src.indexOf('{', i);
+  if (open < 0) return null;
+  let depth = 0;
+  for (let k = open; k < src.length; k++) {
+    if (src[k] === '{') depth++;
+    else if (src[k] === '}') {
+      depth--;
+      if (depth === 0) return [i, k];
+    }
+  }
+  return null;
+}
+
+const sessionsSpan = braceSpan(backupKt, 'if (sessions != SessionImport.SKIP && rollback == null)');
+ok(sessionsSpan !== null, '会话写入仍然只由 sessions 模式守卫');
+if (sessionsSpan) {
+  const appDataAt = backupKt.indexOf('DshAppData.readFromZip(plainZip)', sessionsSpan[1]);
+  ok(appDataAt > sessionsSpan[1], '软件数据恢复在会话守卫**之外**（选跳过时它照样执行）');
+  const execAt = backupKt.indexOf('"/execute"');
+  ok(execAt >= 0 && execAt < sessionsSpan[0], '插件的 analyze/plan/execute 在会话写入之前、且不受它守卫（跳过会话不影响配置导入）');
+}
+ok(
+  /sessions != SessionImport\.SKIP && rollback == null/.test(backupKt),
+  '跳过 = 不写会话，而不是不导入',
+);
+
+// 界面侧：只有探测到会话才弹框；三个选项（含跳过）都走同一条导入
+const screenSrc = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettingsScreen.kt');
+ok(/val count = DshConfigBackup\.countSessionsForPrompt\(/.test(screenSrc), '导入前先探测会话数量');
+const gate = braceSpan(screenSrc, 'if (count > 0)');
+ok(gate !== null, '弹框由「探测到会话」把关');
+if (gate) {
+  const flagAt = screenSrc.indexOf('pendingImportPrompt = true', gate[0]);
+  ok(flagAt > gate[0] && flagAt < gate[1], '只有 count > 0 才置起弹框标记');
+}
+const elseAt = screenSrc.indexOf('} else {', gate ? gate[1] : 0);
+ok(elseAt > 0, 'count == 0 有明确分支');
+const pickSpan = braceSpan(screenSrc, 'val pick: (DshConfigBackup.SessionImport) -> Unit');
+ok(pickSpan !== null, '三个选项共用一个 pick 回调');
+if (pickSpan && gate) {
+  const runAt = screenSrc.indexOf('runImport(', pickSpan[0]);
+  ok(runAt > pickSpan[0] && runAt < pickSpan[1], '选「跳过会话数据」也调用 runImport（不是取消导入）');
+  const cancelAt = screenSrc.indexOf('val cancelPick', pickSpan[1]);
+  ok(cancelAt > pickSpan[1], '只有 cancelPick（点外面/取消）才放弃并删暂存文件');
+}
+
 /* --------------------------------------------------------- 7. 软件数据边界 */
 section('7. 软件数据：设置带走，密钥留下');
 ok(/SKIP_PREFIXES = listOf\("webdav_"\)/.test(appDataKt), 'webdav_* 整组不带（只带地址不带密码等于给用户一个连不上的配置）');

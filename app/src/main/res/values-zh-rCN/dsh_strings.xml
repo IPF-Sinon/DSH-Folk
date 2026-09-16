@@ -1052,8 +1052,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_pw_required">必填：这一档包含 vault</string>
     <string name="dsh_bk_sessions_ask_title">要恢复会话数据吗？</string>
     <string name="dsh_bk_sessions_ask_message">这个归档里有 %1$d 个会话文件。</string>
-    <string name="dsh_bk_sessions_ask_skip">跳过</string>
-    <string name="dsh_bk_sessions_ask_skip_note">只恢复配置，不动会话</string>
+    <string name="dsh_bk_sessions_ask_skip">跳过会话数据</string>
+    <string name="dsh_bk_sessions_ask_skip_note">其余内容照常导入</string>
     <string name="dsh_bk_sessions_ask_direct">直接恢复</string>
     <string name="dsh_bk_sessions_ask_direct_note">在 dsh 运行中写入，重启 dsh 后可见</string>
     <string name="dsh_bk_sessions_ask_stop">停机恢复</string>

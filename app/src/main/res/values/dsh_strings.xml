@@ -1073,8 +1073,8 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_pw_required">Required: this backup includes the vault</string>
     <string name="dsh_bk_sessions_ask_title">Restore session history?</string>
     <string name="dsh_bk_sessions_ask_message">This archive contains %1$d session files.</string>
-    <string name="dsh_bk_sessions_ask_skip">Skip</string>
-    <string name="dsh_bk_sessions_ask_skip_note">Configuration only, no sessions</string>
+    <string name="dsh_bk_sessions_ask_skip">Skip session data</string>
+    <string name="dsh_bk_sessions_ask_skip_note">Everything else is still imported</string>
     <string name="dsh_bk_sessions_ask_direct">Restore now</string>
     <string name="dsh_bk_sessions_ask_direct_note">Written while dsh runs; restart dsh to see them</string>
     <string name="dsh_bk_sessions_ask_stop">Restore with the service stopped</string>
