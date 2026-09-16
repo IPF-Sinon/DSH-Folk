@@ -1083,5 +1083,20 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_backup_plugin_state_unknown">拿不到插件状态，原因未知</string>
     <string name="dsh_bk_log_copy">复制全部日志</string>
     <string name="dsh_bk_log_copied">日志已复制到剪贴板</string>
-    <string name="dsh_bk_log_open">备份日志</string>
+    <string name="dsh_bk_backup_section">DSH 内已有的备份</string>
+    <string name="dsh_bk_backup_restore">恢复</string>
+    <string name="dsh_bk_backup_delete">删除</string>
+    <string name="dsh_bk_remote_delete_bad_name">备份名不合法：%1$s</string>
+    <string name="dsh_bk_remote_delete_failed">删除 DSH 内的备份失败</string>
+    <string name="dsh_bk_remote_fetch_failed">从 DSH 内取备份失败（文件可能已被删掉）</string>
+    <string name="dsh_bk_remote_restore_confirm_title">从 DSH 内的备份恢复？</string>
+    <string name="dsh_bk_remote_restore_confirm_body">将用「%1$s」覆盖当前配置。恢复前会先留一个回滚点，会话与冲突会在下一步询问。</string>
+    <string name="dsh_bk_remote_delete_confirm_title">删除 DSH 内的备份？</string>
+    <string name="dsh_bk_remote_delete_confirm_body">将删除容器里的「%1$s」，删掉之后找不回来。</string>
+    <string name="dsh_bk_snapshot_delete">删除</string>
+    <string name="dsh_bk_snapshot_delete_confirm_title">删除快照？</string>
+    <string name="dsh_bk_snapshot_delete_confirm_body">快照 %1$s 是导入前的回滚点，删掉后就不能再回到那个状态。</string>
+    <string name="dsh_bk_snapshot_delete_failed">删除快照失败</string>
+    <string name="dsh_bk_snapshot_deleted">已删除快照 %1$s</string>
+    <string name="dsh_backup_remote_deleted">已删除「%1$s」</string>
 </resources>

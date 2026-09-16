@@ -77,6 +77,9 @@ object DshConfigBackup {
      * 流式那对函数以前从没被验证过 —— 现场那个 49 字节的空容器就是出自它。所以：
      * 能用内存版就用内存版（几十 MB 以内都没问题），只有真正的几百 MB 大包才走流式。
      */
+    /** 插件放备份的目录（容器内绝对路径）。 */
+    private const val DSH_BACKUP_EXPORTS_DIR = "/root/.dsh/dsh-config-manager/exports/"
+
     private const val IN_MEMORY_ENCRYPT_LIMIT = 16L * 1024 * 1024
 
     /**
@@ -849,10 +852,22 @@ object DshConfigBackup {
     /** 运行时 exports 目录里的一个备份文件。 */
     data class RemoteBackup(
         val name: String,
+        /** 容器里的完整路径（列表没给就按插件 exports 目录推）。 */
+        val path: String = "",
         val sizeBytes: Long = 0,
         val mtimeMs: Long = 0,
         val note: String = "",
     )
+
+    /**
+     * DSH 内某个备份在容器里的完整路径。
+     *
+     * 插件的 /download 要的是容器内路径而不是文件名，列表接口通常会带 path；
+     * 万一没带就按它的 exports 约定推一个 —— 这个目录是插件自己固定用的
+     * （日志里就是 /root/.dsh/dsh-config-manager/exports/xxx.zip）。
+     */
+    fun remoteBackupPath(b: RemoteBackup): String =
+        b.path.ifEmpty { DSH_BACKUP_EXPORTS_DIR + b.name }
 
     /**
      * 备份文件列表（插件侧 exports 目录，不含手机本地已拷出的副本）。
@@ -870,6 +885,7 @@ object DshConfigBackup {
                 is JSONObject -> v.optString("name").ifEmpty { null }?.let { n ->
                     RemoteBackup(
                         name = n,
+                        path = v.optString("path"),
                         sizeBytes = v.optLong("sizeBytes", 0L),
                         mtimeMs = v.optLong("mtimeMs", 0L),
                         note = v.optString("note"),
@@ -878,6 +894,80 @@ object DshConfigBackup {
                 is String -> RemoteBackup(v)
                 else -> null
             }
+        }
+    }
+
+    /**
+     * 删除 DSH 内的一个备份文件。
+     *
+     * 插件只接受「纯 .zip 文件名」（自己会做防穿越），所以这里先在本地挡一道：
+     * 带路径分隔符、不是 .zip 的输入根本不发请求，省得拿一个 400 回来还要翻译。
+     * 成功返回空串，失败返回给用户看的原因。
+     */
+    suspend fun deleteRemoteBackup(ctx: Context, backup: RemoteBackup): String = withContext(Dispatchers.IO) {
+        val name = backup.name
+        if (!name.endsWith(".zip") || name.contains('/') || name.contains('\\')) {
+            return@withContext ctx.appString(R.string.dsh_bk_remote_delete_bad_name, name)
+        }
+        val raw = request(
+            "POST",
+            "/backup-files/delete",
+            JSONObject().put("name", name).toString(),
+            timeoutMs = 60_000,
+        ) ?: return@withContext ctx.appString(R.string.dsh_bk_remote_delete_failed)
+        val o = runCatching { JSONObject(raw) }.getOrNull()
+            ?: return@withContext ctx.appString(R.string.dsh_bk_remote_delete_failed)
+        // 插件失败时给的是 {error}，原样显示比我翻译一遍有用
+        val err = o.optString("error")
+        if (err.isNotEmpty()) err else ""
+    }
+
+    /**
+     * 把 DSH 内的某个备份下载到手机缓存，交给导入流程。
+     *
+     * 为什么不在这里直接导入：DSH 内的备份和手机本地选的文件本质相同（都是 zip，
+     * 可能加密也可能没有），导入那条路（选密码 → 预检 → 会话/冲突询问 → 执行）
+     * 已经齐了，复用它比自己再走一条通道可靠。
+     */
+    suspend fun fetchRemoteBackup(ctx: Context, backup: RemoteBackup): File? = withContext(Dispatchers.IO) {
+        val dir = File(ctx.cacheDir, "config-restore").apply { mkdirs() }
+        val dest = File(dir, backup.name)
+        if (!dest.name.endsWith(".zip")) return@withContext null
+        if (download(remoteBackupPath(backup), dest) <= 0) return@withContext null
+        // 和导出一样：下载完先确认它真的是个能打开的 zip，别把半截文件当备份喂给导入
+        if (!isUsableZip(dest)) {
+            dest.delete()
+            return@withContext null
+        }
+        dest
+    }
+
+    /**
+     * 删除一个快照。
+     *
+     * 快照是导入前的回滚点，删掉就没了（插件那边置顶的快照只能这样手动删），
+     * 所以 UI 上必须二次确认 —— 这里只负责发请求。
+     */
+    suspend fun deleteSnapshot(ctx: Context, snapshotId: String): RestoreResult = withContext(Dispatchers.IO) {
+        val raw = request(
+            "POST",
+            "/snapshots/delete",
+            JSONObject().put("snapshotId", snapshotId).toString(),
+            timeoutMs = 60_000,
+        ) ?: return@withContext RestoreResult(
+            false,
+            ctx.appString(R.string.dsh_bk_snapshot_delete_failed),
+        )
+        val o = runCatching { JSONObject(raw) }.getOrNull()
+            ?: return@withContext RestoreResult(
+                false,
+                ctx.appString(R.string.dsh_bk_snapshot_delete_failed),
+            )
+        val err = o.optString("error")
+        if (err.isNotEmpty()) {
+            RestoreResult(false, err)
+        } else {
+            RestoreResult(true, ctx.appString(R.string.dsh_bk_snapshot_deleted, snapshotId))
         }
     }
 

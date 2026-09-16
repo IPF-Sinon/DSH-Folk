@@ -280,9 +280,11 @@ ok(/expected=" \+ \(DshBackupCrypto\.HEADER_LENGTH \+ merged\.length\(\)\)/.test
 ok(/dsh_bk_log_copy/.test(content) && /clipboard\.setText\(AnnotatedString\(logs\)\)/.test(content),
   "日志对话框有「复制全部日志」按钮，复制的是整份日志");
 ok(/dsh_bk_log_copied/.test(content) && /Toast/.test(content), "复制后给一句反馈");
-ok(/onOpenBackupLog/.test(content) && /onOpenBackupLog = \{ showBackupLog = true \}/.test(screen) &&
-  /BackupLogDialog\(/.test(screen),
-  "备份页自己就有日志入口（原来只在 WebDAV 对话框里，等于没有）");
+// 排查期一度在备份页单独放了个「备份日志」按钮；问题定位之后按用户要求撤掉：
+// 日志查看仍在 WebDAV 对话框里（BackupLogDialog），并随 bugreport 一起打包。
+ok(!/onOpenBackupLog/.test(content) && !/showBackupLog/.test(screen) &&
+  /BackupLogDialog\(/.test(content),
+  "备份页不再单独放日志按钮，日志查看仍在原来的位置（WebDAV 对话框）");
 
 // 日志会随 bugreport 一起走，而且不能无限长大
 const logEvent = fs.readFileSync('app/src/main/java/me/bmax/apatch/util/LogEvent.kt', 'utf8');
@@ -294,6 +296,44 @@ ok(/redactInPlace\(backupLogFile/.test(logEvent) || /backupLogFile/.test(logEven
 const logMgr = fs.readFileSync('app/src/main/java/me/bmax/apatch/util/BackupLogManager.kt', 'utf8');
 ok(/MAX_BYTES = 512L \* 1024L/.test(logMgr) && /rotateIfTooBig/.test(logMgr),
   "日志超过 512KB 就截断旧内容（每一步都记账，不轮转会无限长大）");
+
+console.log("─ 5f. DSH 内备份分区：能恢复、能删除；快照也能删");
+// 「只是列出来」没有用：用户点「列出」的下一步一定是「拿它恢复」或者「不要了」。
+ok(/fun deleteRemoteBackup\(ctx: Context, backup: RemoteBackup\): String/.test(backup) &&
+  /"\/backup-files\/delete"/.test(backup) && /put\("name", name\)/.test(backup),
+  "删备份走插件 /backup-files/delete，请求体是 {name}");
+// 插件只接受纯 .zip 文件名（自己防穿越），本地先挡一道，省得拿 400 回来还要翻译
+ok(/!name\.endsWith\("\.zip"\) \|\| name\.contains\('\/'\).*contains\('\\\\'\)/.test(backup) &&
+  /dsh_bk_remote_delete_bad_name/.test(backup),
+  "删除前先校验文件名（不是纯 .zip 就不发请求）");
+ok(/fun deleteSnapshot\(ctx: Context, snapshotId: String\): RestoreResult/.test(backup) &&
+  /"\/snapshots\/delete"/.test(backup) && /put\("snapshotId", snapshotId\)/.test(backup),
+  "删快照走 /snapshots/delete，请求体是 {snapshotId}");
+ok(/fun fetchRemoteBackup\(ctx: Context, backup: RemoteBackup\): File\?/.test(backup) &&
+  /if \(!isUsableZip\(dest\)\)/.test(backup) &&
+  /fun remoteBackupPath\(b: RemoteBackup\): String/.test(backup),
+  "从 DSH 取备份：下载后仍要过「是不是能打开的 zip」，路径没给就按插件 exports 约定推");
+// 恢复复用导入那条路（密码 → 预检 → 会话/冲突 → 执行），不另开通道
+ok(/pendingImportPath = fetched\.absolutePath/.test(screen) &&
+  /askImportPassword = true/.test(screen) &&
+  /DshBackupCrypto\.isArchiveBlobFile\(fetched\)/.test(screen),
+  "从 DSH 恢复 = 取到本地后走同一条导入流程（不再自己实现一遍解密/预检）");
+ok(/dshBackups: List<DshConfigBackup\.RemoteBackup>/.test(content) &&
+  /onDshBackupRestore: \(DshConfigBackup\.RemoteBackup\) -> Unit/.test(content) &&
+  /onDshBackupDelete: \(DshConfigBackup\.RemoteBackup\) -> Unit/.test(content),
+  "备份列表传的是对象（不是拼好的字符串），每行才给得出动作");
+ok(/onSnapshotDelete: \(DshConfigBackup\.Snapshot\) -> Unit/.test(content) &&
+  /onSnapshotDelete = \{ snap -> pendingSnapshotDelete = snap \}/.test(screen),
+  "快照行也接上删除");
+// 三个写操作都要先问一句
+for (const d of ['pendingRemoteRestore', 'pendingRemoteDelete', 'pendingSnapshotDelete']) {
+  ok(new RegExp(d + '\\?\.let').test(screen), d + " 有确认对话框");
+}
+ok(/dsh_bk_snapshot_delete_confirm_body/.test(screen) &&
+  /回滚点/.test(fs.readFileSync('app/src/main/res/values-zh-rCN/dsh_strings.xml', 'utf8')),
+  "删快照的确认文案说清「删掉的是回滚点」");
+ok(/dsh_bk_remote_restore_confirm_body/.test(screen) && /dsh_bk_remote_delete_confirm_body/.test(screen),
+  "恢复/删除备份各有一句确认文案");
 
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),

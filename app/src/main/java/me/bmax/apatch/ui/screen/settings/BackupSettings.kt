@@ -134,6 +134,13 @@ private fun randomPassword(): String {
     }
 }
 
+/** 备份体积：列表里显示「340 KB」这种，比裸字节数好读。 */
+private fun formatBackupSize(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> "%.1f MB".format(bytes / 1024.0 / 1024.0)
+    bytes >= 1024L -> "${bytes / 1024} KB"
+    else -> "$bytes B"
+}
+
 /** 快照/远端条目的时间。解析不出来返回 null —— 由调用方说「时间未知」，不画一个假的 1970。 */
 private fun formatSnapshotTime(ms: Long): String? =
     if (ms <= 0L) null else java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
@@ -167,8 +174,6 @@ fun BackupSettingsContent(
     onDshExport: (ExportPlan) -> Unit,
     onDshImport: () -> Unit,
     onDshOpenDir: () -> Unit,
-    /** 打开备份日志（导出/导入每一步都在里面）。 */
-    onOpenBackupLog: () -> Unit = {},
     /** 云端（WebDAV）备份列表；空表示还没列过或确实没有。 */
     cloudEntries: List<WebDavUtils.RemoteEntry> = emptyList(),
     cloudBusy: Boolean = false,
@@ -189,9 +194,12 @@ fun BackupSettingsContent(
     snapshotMessage: String = "",
     onSnapshotList: () -> Unit = {},
     onSnapshotRestore: (DshConfigBackup.Snapshot) -> Unit = {},
+    onSnapshotDelete: (DshConfigBackup.Snapshot) -> Unit = {},
     /** 运行时 exports 目录里的备份（容器内，文件管理器看不到）。 */
-    dshRemoteBackups: List<String>,
+    dshBackups: List<DshConfigBackup.RemoteBackup>,
     onDshListRemote: () -> Unit,
+    onDshBackupRestore: (DshConfigBackup.RemoteBackup) -> Unit = {},
+    onDshBackupDelete: (DshConfigBackup.RemoteBackup) -> Unit = {},
     /**
      * dsh-config-manager 插件是否就绪。null = 还在检测。
      *
@@ -368,20 +376,17 @@ fun BackupSettingsContent(
                         TextButton(onClick = onDshListRemote, enabled = canRun) {
                             Text(stringResource(R.string.dsh_backup_remote_refresh))
                         }
-                        // 日志入口就放在这儿：出问题时用户第一反应是「哪里看日志」，
-                        // 原来它藏在 WebDAV 对话框里，等于没有。
-                        TextButton(onClick = onOpenBackupLog) {
-                            Text(stringResource(R.string.dsh_bk_log_open))
-                        }
                         if (dshBusy) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         }
                     }
 
-                    if (dshRemoteBackups.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
+                    // 备份列表做成独立分区（和快照一样）：只是「列出来」没用 ——
+                    // 用户点「列出」的下一步一定是「拿这个恢复」或者「这个不要了」。
+                    if (dshBackups.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
                         Text(
-                            text = stringResource(R.string.dsh_backup_remote_list),
+                            text = stringResource(R.string.dsh_bk_backup_section),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -389,18 +394,52 @@ fun BackupSettingsContent(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(max = 160.dp)
+                                .heightIn(max = 240.dp)
                                 .verticalScroll(rememberScrollState()),
                         ) {
-                            for (line in dshRemoteBackups) {
-                                Text(
-                                    text = line,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                            for (backup in dshBackups) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = backup.name,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace,
+                                        )
+                                        Text(
+                                            text = listOfNotNull(
+                                                backup.sizeBytes.takeIf { it > 0 }?.let(::formatBackupSize),
+                                                formatSnapshotTime(backup.mtimeMs),
+                                                backup.note.takeIf { it.isNotBlank() },
+                                            ).joinToString(" · "),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = { onDshBackupRestore(backup) },
+                                        enabled = canRun,
+                                    ) {
+                                        Text(stringResource(R.string.dsh_bk_backup_restore))
+                                    }
+                                    TextButton(
+                                        onClick = { onDshBackupDelete(backup) },
+                                        enabled = canRun,
+                                    ) {
+                                        Text(stringResource(R.string.dsh_bk_backup_delete))
+                                    }
+                                }
                             }
                         }
+                    } else if (!dshBusy && dshMessage.isBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_backup_remote_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
 
                     if (dshMessage.isNotBlank()) {
@@ -481,6 +520,9 @@ fun BackupSettingsContent(
                                     }
                                     TextButton(onClick = { onSnapshotRestore(snap) }, enabled = canRun) {
                                         Text(stringResource(R.string.dsh_bk_snapshot_restore_now))
+                                    }
+                                    TextButton(onClick = { onSnapshotDelete(snap) }, enabled = canRun) {
+                                        Text(stringResource(R.string.dsh_bk_snapshot_delete))
                                     }
                                 }
                             }

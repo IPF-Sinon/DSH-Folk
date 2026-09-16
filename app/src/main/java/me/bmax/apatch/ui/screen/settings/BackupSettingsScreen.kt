@@ -91,7 +91,12 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var dshBusy by rememberSaveable { mutableStateOf(false) }
     var dshMessage by rememberSaveable { mutableStateOf("") }
     var dshPassword by rememberSaveable { mutableStateOf("") }
-    var dshRemote by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var dshRemote by remember { mutableStateOf<List<DshConfigBackup.RemoteBackup>>(emptyList()) }
+    // 待确认的三个动作：从 DSH 内恢复、删 DSH 内备份、删快照。
+    // 都是写操作，一律先问一句 —— 尤其删快照，删掉的是导入前的回滚点。
+    var pendingRemoteRestore by remember { mutableStateOf<DshConfigBackup.RemoteBackup?>(null) }
+    var pendingRemoteDelete by remember { mutableStateOf<DshConfigBackup.RemoteBackup?>(null) }
+    var pendingSnapshotDelete by remember { mutableStateOf<DshConfigBackup.Snapshot?>(null) }
     // 导入时要问什么，由**预检结果**决定：包里有会话就问会话怎么处理，检测到冲突就问
     // 冲突怎么处理，两样都没有就直接导入 —— 所以这里存的是预检产物本身。
     // 用 remember 而不是 rememberSaveable：Preflight 里有一个 File 与一个容器内的路径，
@@ -140,8 +145,6 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var pluginAbsent by rememberSaveable { mutableStateOf(false) }
     // 用户点「重新检测」时 +1，让下面那个 LaunchedEffect 再跑一遍
     var pluginProbe by rememberSaveable { mutableStateOf(0) }
-    // 备份日志对话框（导出/导入每一步都记在里面，带复制按钮）
-    var showBackupLog by remember { mutableStateOf(false) }
     val pluginViewModel = viewModel<DshPluginViewModel>()
 
     LaunchedEffect(pluginProbe) {
@@ -418,28 +421,21 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         }
                     },
                     onDshImport = { importPicker.launch("*/*") },
-                    dshRemoteBackups = dshRemote,
+                    dshBackups = dshRemote,
                     onDshListRemote = {
                         dshBusy = true
                         scope.launch(Dispatchers.IO) {
                             val list = DshConfigBackup.listRemoteBackups()
-                            val lines = list.map { b ->
-                                buildString {
-                                    append(b.name)
-                                    if (b.sizeBytes > 0) {
-                                        append("  ").append(b.sizeBytes / 1024).append(" KB")
-                                    }
-                                    if (b.note.isNotEmpty()) append("  ").append(b.note)
-                                }
-                            }
                             withContext(Dispatchers.Main) {
-                                dshRemote = lines
-                                if (lines.isEmpty()) dshMessage = remoteEmpty
+                                dshRemote = list
+                                if (list.isEmpty()) dshMessage = remoteEmpty
                                 dshBusy = false
                             }
                         }
                     },
-                    onOpenBackupLog = { showBackupLog = true },
+                    onDshBackupRestore = { backup -> pendingRemoteRestore = backup },
+                    onDshBackupDelete = { backup -> pendingRemoteDelete = backup },
+                    onSnapshotDelete = { snap -> pendingSnapshotDelete = snap },
                     onDshOpenDir = {
                         val opened = DshConfigBackup.openBackupDir(context)
                         if (!opened) dshMessage = openDirFailed
@@ -600,6 +596,119 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
         }
     }
 
+    // 从 DSH 内的备份恢复：确认之后把文件取到本地，交给同一条导入流程
+    // （密码 → 预检 → 会话/冲突询问 → 执行），不另开一条通道。
+    pendingRemoteRestore?.let { backup ->
+        AlertDialog(
+            onDismissRequest = { pendingRemoteRestore = null },
+            title = { Text(stringResource(R.string.dsh_bk_remote_restore_confirm_title)) },
+            text = { Text(stringResource(R.string.dsh_bk_remote_restore_confirm_body, backup.name)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRemoteRestore = null
+                    dshBusy = true
+                    dshMessage = importing
+                    scope.launch(Dispatchers.IO) {
+                        val fetched = DshConfigBackup.fetchRemoteBackup(context, backup)
+                        val encrypted = fetched != null && DshBackupCrypto.isArchiveBlobFile(fetched)
+                        withContext(Dispatchers.Main) {
+                            dshBusy = false
+                            if (fetched == null) {
+                                dshMessage = context.getString(R.string.dsh_bk_remote_fetch_failed)
+                            } else {
+                                dshMessage = ""
+                                // 后面完全复用「选了本地文件」那条路
+                                pendingImportPath = fetched.absolutePath
+                                pendingImportEncrypted = encrypted
+                                importPassword = ""
+                                askImportPassword = true
+                            }
+                        }
+                    }
+                }) {
+                    Text(stringResource(R.string.dsh_bk_backup_restore))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemoteRestore = null }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
+    }
+
+    // 删 DSH 内的备份
+    pendingRemoteDelete?.let { backup ->
+        AlertDialog(
+            onDismissRequest = { pendingRemoteDelete = null },
+            title = { Text(stringResource(R.string.dsh_bk_remote_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.dsh_bk_remote_delete_confirm_body, backup.name)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRemoteDelete = null
+                    dshBusy = true
+                    scope.launch(Dispatchers.IO) {
+                        val err = DshConfigBackup.deleteRemoteBackup(context, backup)
+                        BackupLogManager.log("remote backup delete " + backup.name + " err=" + err.ifEmpty { "none" })
+                        val list = DshConfigBackup.listRemoteBackups()
+                        withContext(Dispatchers.Main) {
+                            dshRemote = list
+                            dshMessage = if (err.isEmpty()) {
+                                context.getString(R.string.dsh_backup_remote_deleted, backup.name)
+                            } else {
+                                err
+                            }
+                            dshBusy = false
+                        }
+                    }
+                }) {
+                    Text(stringResource(R.string.dsh_bk_backup_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemoteDelete = null }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
+    }
+
+    // 删快照（导入前的回滚点，删掉就回不去了，所以确认文案要说清）
+    pendingSnapshotDelete?.let { snap ->
+        AlertDialog(
+            onDismissRequest = { pendingSnapshotDelete = null },
+            title = { Text(stringResource(R.string.dsh_bk_snapshot_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.dsh_bk_snapshot_delete_confirm_body, snap.id)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingSnapshotDelete = null
+                    snapshotBusy = true
+                    scope.launch(Dispatchers.IO) {
+                        val r = DshConfigBackup.deleteSnapshot(context, snap.id)
+                        BackupLogManager.log("snapshot delete " + snap.id + " ok=" + r.ok)
+                        val list = DshConfigBackup.listSnapshots()
+                        withContext(Dispatchers.Main) {
+                            snapshots = list
+                            snapshotBusy = false
+                            snapshotMessage = if (r.detail.isBlank()) {
+                                r.message
+                            } else {
+                                r.message + "\n" + r.detail
+                            }
+                        }
+                    }
+                }) {
+                    Text(stringResource(R.string.dsh_bk_snapshot_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingSnapshotDelete = null }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
+    }
+
     // 快照恢复确认：把预览出来的动作数摆在这里，用户点「恢复」才真的写盘
     pendingSnapshot?.let { snap ->
         if (pendingActions >= 0) {
@@ -650,13 +759,6 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 },
             )
         }
-    }
-
-    if (showBackupLog) {
-        BackupLogDialog(
-            showDialog = remember { mutableStateOf(true) },
-            onDismiss = { showBackupLog = false },
-        )
     }
 
     // 选定文件之后的密码框：留空就是「当作没加密，直接解析」—— 不加密的包不用填，

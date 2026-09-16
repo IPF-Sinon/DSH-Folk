@@ -1104,5 +1104,20 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_backup_plugin_state_unknown">No plugin status available</string>
     <string name="dsh_bk_log_copy">Copy the whole log</string>
     <string name="dsh_bk_log_copied">Log copied to the clipboard</string>
-    <string name="dsh_bk_log_open">Backup log</string>
+    <string name="dsh_bk_backup_section">Backups inside DSH</string>
+    <string name="dsh_bk_backup_restore">Restore</string>
+    <string name="dsh_bk_backup_delete">Delete</string>
+    <string name="dsh_bk_remote_delete_bad_name">Invalid backup name: %1$s</string>
+    <string name="dsh_bk_remote_delete_failed">Could not delete the backup inside DSH</string>
+    <string name="dsh_bk_remote_fetch_failed">Could not fetch the backup from DSH (the file may be gone)</string>
+    <string name="dsh_bk_remote_restore_confirm_title">Restore from a backup inside DSH?</string>
+    <string name="dsh_bk_remote_restore_confirm_body">This overwrites the current configuration with \"%1$s\". A rollback point is created first, and sessions plus conflicts are asked about next.</string>
+    <string name="dsh_bk_remote_delete_confirm_title">Delete the backup inside DSH?</string>
+    <string name="dsh_bk_remote_delete_confirm_body">This deletes \"%1$s\" from the container. It cannot be recovered.</string>
+    <string name="dsh_bk_snapshot_delete">Delete</string>
+    <string name="dsh_bk_snapshot_delete_confirm_title">Delete the snapshot?</string>
+    <string name="dsh_bk_snapshot_delete_confirm_body">Snapshot %1$s is the rollback point from before an import. Deleting it means you can no longer go back to that state.</string>
+    <string name="dsh_bk_snapshot_delete_failed">Could not delete the snapshot</string>
+    <string name="dsh_bk_snapshot_deleted">Snapshot %1$s deleted</string>
+    <string name="dsh_backup_remote_deleted">Deleted \"%1$s\"</string>
 </resources>
