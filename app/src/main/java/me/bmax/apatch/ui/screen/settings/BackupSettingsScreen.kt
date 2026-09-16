@@ -191,6 +191,24 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
         }
     }
 
+    /** 用户把该答的都答完了：真正导入（复用预检已上传/已解好的产物）。 */
+    fun finishImport(
+        preflight: DshConfigBackup.Preflight,
+        sessions: DshConfigBackup.SessionImport,
+        strategy: String,
+    ) {
+        askSessions = false
+        askConflicts = false
+        pendingPreflight = null
+        runImport(
+            zip = preflight.plainZip,
+            password = pendingImportPassword,
+            strategy = strategy,
+            sessions = sessions,
+            preflight = preflight,
+        )
+    }
+
     /**
      * 导入的第一步：预检（解容器 → 数会话 → 上传 → 分析 → 试规划看冲突），然后决定问什么。
      *
@@ -231,24 +249,6 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 }
             }
         }
-    }
-
-    /** 用户把该答的都答完了：真正导入（复用预检已上传/已解好的产物）。 */
-    fun finishImport(
-        preflight: DshConfigBackup.Preflight,
-        sessions: DshConfigBackup.SessionImport,
-        strategy: String,
-    ) {
-        askSessions = false
-        askConflicts = false
-        pendingPreflight = null
-        runImport(
-            zip = preflight.plainZip,
-            password = pendingImportPassword,
-            strategy = strategy,
-            sessions = sessions,
-            preflight = preflight,
-        )
     }
 
     /** 用户在任一弹窗上取消：不导，并把预检留下的临时明文清掉。 */

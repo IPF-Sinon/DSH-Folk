@@ -204,9 +204,9 @@ fun BackupSettingsContent(
 
     val showWebDavDialog = remember { mutableStateOf(false) }
 
-    // 密码框的「显示密码」开关。默认密文；两个框各自独立，不共用一个状态。
+    // 导出密码框的「显示密码」开关，默认密文。WebDAV 那个框在它自己的对话框函数里，
+    // 状态也声明在那里 —— 两个框各自独立，不共用一个状态。
     var showExportPassword by rememberSaveable { mutableStateOf(false) }
-    var showWebDavPassword by rememberSaveable { mutableStateOf(false) }
 
     // ── 导出选项：数据范围 / 会话数量 / 加密密码 ──
     // 档位存索引而不是枚举：滑块拖动是连续值，Dialog 内用预览值（scopePreview），
@@ -931,6 +931,8 @@ fun BackupSettingsContent(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
+    // 这个对话框是独立函数，显示状态得声明在它自己里面（外面那个是导出密码用的）
+    var showWebDavPassword by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     var url by remember { mutableStateOf(BackupConfig.webdavUrl) }
     var username by remember { mutableStateOf(BackupConfig.webdavUsername) }
