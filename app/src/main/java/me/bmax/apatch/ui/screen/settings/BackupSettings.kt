@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -165,6 +166,8 @@ fun BackupSettingsContent(
     onDshExport: (ExportPlan) -> Unit,
     onDshImport: () -> Unit,
     onDshOpenDir: () -> Unit,
+    /** 打开备份日志（导出/导入每一步都在里面）。 */
+    onOpenBackupLog: () -> Unit = {},
     /** 云端（WebDAV）备份列表；空表示还没列过或确实没有。 */
     cloudEntries: List<WebDavUtils.RemoteEntry> = emptyList(),
     cloudBusy: Boolean = false,
@@ -363,6 +366,11 @@ fun BackupSettingsContent(
                         }
                         TextButton(onClick = onDshListRemote, enabled = canRun) {
                             Text(stringResource(R.string.dsh_backup_remote_refresh))
+                        }
+                        // 日志入口就放在这儿：出问题时用户第一反应是「哪里看日志」，
+                        // 原来它藏在 WebDAV 对话框里，等于没有。
+                        TextButton(onClick = onOpenBackupLog) {
+                            Text(stringResource(R.string.dsh_bk_log_open))
                         }
                         if (dshBusy) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -1110,6 +1118,10 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
 fun BackupLogDialog(showDialog: MutableState<Boolean>, onDismiss: () -> Unit) {
     var logs by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    // 复制成功了给一句反馈：点一下什么都没发生，用户会以为按钮坏了
+    var copied by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         logs = BackupLogManager.readLogs()
@@ -1164,6 +1176,16 @@ fun BackupLogDialog(showDialog: MutableState<Boolean>, onDismiss: () -> Unit) {
                         }
                     }) {
                         Text(stringResource(R.string.webdav_clear_logs))
+                    }
+                    // 一键把整份日志拿走：报问题时直接粘贴，不用在手机上手抄
+                    OutlinedButton(onClick = {
+                        clipboard.setText(AnnotatedString(logs))
+                        copied = true
+                        android.widget.Toast
+                            .makeText(context, R.string.dsh_bk_log_copied, android.widget.Toast.LENGTH_SHORT)
+                            .show()
+                    }) {
+                        Text(stringResource(R.string.dsh_bk_log_copy))
                     }
                     Button(onClick = onDismiss) {
                         Text(stringResource(R.string.close))

@@ -1081,4 +1081,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_verify_failed">加密后自检没通过（%1$s：期望 %2$s，实际 %3$s）。这个文件已经删掉：宁可没有备份，也不能给你一个装作成功的坏包。</string>
     <string name="dsh_backup_plugin_retry">重新检测</string>
     <string name="dsh_backup_plugin_state_unknown">拿不到插件状态，原因未知</string>
+    <string name="dsh_bk_log_copy">复制全部日志</string>
+    <string name="dsh_bk_log_copied">日志已复制到剪贴板</string>
+    <string name="dsh_bk_log_open">备份日志</string>
 </resources>

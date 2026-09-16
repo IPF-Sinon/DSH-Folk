@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
+import me.bmax.apatch.util.BackupLogManager
 import me.bmax.apatch.util.appString
 import me.bmax.apatch.util.getSafeDownloadsDir
 import org.json.JSONArray
@@ -243,6 +244,12 @@ object DshConfigBackup {
             }
         }
         val stage = File(ctx.getExternalFilesDir(null) ?: ctx.cacheDir, "config-backup").apply { mkdirs() }
+        trace(
+            ctx,
+            "start scope=" + plan.scope + " sessions=" + plan.sessions +
+                " password=" + (if (plan.password.isEmpty()) "no" else "yes") +
+                " vault=" + plan.includesVault + " appdata=" + plan.includesAppData,
+        )
         // 上一次留下的中间产物先清掉：用户连点两次导出时它们会和新产物同名
         val pluginPlain = File(stage, "plugin-plain.zip")
         val merged = File(stage, "merged.zip")
@@ -258,6 +265,7 @@ object DshConfigBackup {
                 put("includeSecrets", false)
                 put("only", JSONArray(DshBackupArchive.pluginSections()))
             }
+            trace(ctx, "plugin-request only=" + DshBackupArchive.pluginSections().size)
             val raw = request("POST", "/export", body.toString())
                 ?: return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_export_req_failed))
             val o = runCatching { JSONObject(raw) }.getOrNull()
@@ -271,17 +279,16 @@ object DshConfigBackup {
             if (zipPath.isEmpty()) {
                 return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_export_no_path))
             }
+            trace(ctx, "plugin-file path=" + zipPath)
             val got = download(zipPath, pluginPlain)
+            trace(ctx, "plugin-downloaded bytes=" + got + " ok=" + isUsableZip(pluginPlain))
             if (got <= 0) {
                 return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_download_failed))
             }
             // 下载成功不等于内容可用：插件可能返回了一个 0 字节或半截的文件。
             // 这种包一路补下来会变成「看起来成功、实际解不开」的东西，必须在源头拦住。
             if (!isUsableZip(pluginPlain)) {
-                return@withContext ExportResult(
-                    false,
-                    message = ctx.appString(R.string.dsh_bk_plugin_zip_bad, got),
-                )
+                return@withContext failTrace(ctx, ctx.appString(R.string.dsh_bk_plugin_zip_bad, got))
             }
             fromPlugin = pluginPlain
         }
@@ -305,6 +312,12 @@ object DshConfigBackup {
             }
             DshBackupCrypto.encryptSecrets(yaml, plan.password)
         }
+        trace(
+            ctx,
+            "merge-start input=" + (fromPlugin?.length()?.toString() ?: "none") +
+                " appdata=" + (appData != null) + " audit=" + audit.size +
+                " secrets=" + (secrets != null),
+        )
         val stats = try {
             DshBackupArchive.merge(
                 ctx = ctx,
@@ -321,11 +334,14 @@ object DshConfigBackup {
         }
         // 补包可能「什么都没写」还不报错（例如输入是空文件 + 提前返回的写法）。
         // 49 字节的空容器就是这么来的：加密一个空文件，头 + 空密文的 tag 正好 49 字节。
+        trace(
+            ctx,
+            "merge-done bytes=" + merged.length() + " sessions=" + stats.sessions +
+                " sessionFiles=" + stats.sessionFiles + " appdata=" + stats.appData +
+                " auditFiles=" + stats.auditFiles + " secrets=" + stats.secrets,
+        )
         if (!isUsableZip(merged)) {
-            return@withContext ExportResult(
-                false,
-                message = ctx.appString(R.string.dsh_bk_merge_empty, merged.length()),
-            )
+            return@withContext failTrace(ctx, ctx.appString(R.string.dsh_bk_merge_empty, merged.length()))
         }
 
         // 3) 整包加密（有密码时）
@@ -345,20 +361,42 @@ object DshConfigBackup {
                 // 「每一版都验过」的加密器；流式那对函数只留给大包（几百 MB 的 vault 包
                 // 不能整个读进内存）。两条路的容器格式完全一致，验证步骤对两者都适用。
                 if (merged.length() <= IN_MEMORY_ENCRYPT_LIMIT) {
-                    finalFile.writeBytes(DshBackupCrypto.encryptArchive(merged.readBytes(), plan.password))
+                    val plainBytes = merged.readBytes()
+                    trace(ctx, "encrypt=memory plainRead=" + plainBytes.size + " fileLen=" + merged.length())
+                    // 「文件说 N 字节、实际只读出 M 字节」这种事必须当场拦下：
+                    // 否则加密出来就是一个头 + 空密文的 49 字节容器。
+                    if (plainBytes.size.toLong() != merged.length()) {
+                        return@withContext failTrace(
+                            ctx,
+                            ctx.appString(
+                                R.string.dsh_bk_verify_failed,
+                                "读取明文",
+                                merged.length().toString() + " 字节",
+                                plainBytes.size.toString() + " 字节",
+                            ),
+                        )
+                    }
+                    finalFile.writeBytes(DshBackupCrypto.encryptArchive(plainBytes, plan.password))
                 } else {
+                    trace(ctx, "encrypt=stream fileLen=${merged.length()}")
                     DshBackupCrypto.encryptArchiveToFile(merged, finalFile, plan.password)
                 }
             } catch (e: Exception) {
                 finalFile.delete()
-                return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_encrypt_failed, describe(e)))
+                return@withContext failTrace(ctx, ctx.appString(R.string.dsh_bk_encrypt_failed, describe(e)))
             }
             // 加密不校验等于没做：直接拿刚写出的文件解一遍，解不回来就删掉并如实报错。
             // 大小也要对：GCM 不放大数据，容器必须正好是「头 + 明文」。
             val verify = verifyEncrypted(ctx, merged, finalFile, plan.password, stage)
+            trace(
+                ctx,
+                "container bytes=" + finalFile.length() +
+                    " expected=" + (DshBackupCrypto.HEADER_LENGTH + merged.length()) +
+                    " verify=" + (verify ?: "ok"),
+            )
             if (verify != null) {
                 finalFile.delete()
-                return@withContext ExportResult(false, message = verify)
+                return@withContext failTrace(ctx, verify)
             }
         }
         merged.delete()
@@ -379,6 +417,7 @@ object DshConfigBackup {
             )
             if (!publicOk) append("\n! ").append(ctx.appString(R.string.dsh_bk_copy_failed))
         }
+        trace(ctx, "copy location=" + location + " public=" + publicOk + " bytes=" + finalFile.length())
         ExportResult(
             ok = true,
             file = finalFile,
@@ -388,6 +427,16 @@ object DshConfigBackup {
             encrypted = plan.password.isNotEmpty(),
             message = outSummary,
         )
+    }
+
+    /**
+     * 导出过程记一笔（进 filesDir/backup_log.log，bugreport 会带上它）。
+     *
+     * 「导出的包只有 49 字节」这种事，光看代码读不出来，必须知道每一步的实际大小 ——
+     * 插件给了多少、补包后多少、容器多少。日志里没有这些数字时，就只能靠来回问用户。
+     */
+    private suspend fun trace(ctx: Context, step: String) {
+        runCatching { BackupLogManager.log("export $step") }
     }
 
     /** 这个文件是「能打开的 zip」吗（0 字节、半截文件、非 zip 都算不行）。 */
@@ -510,7 +559,13 @@ object DshConfigBackup {
         } else {
             zip
         }
+        trace(ctx, "import-start file=" + zip.name + " container=" + (plainZip != zip))
         val sessions = countSessionsInZip(plainZip)
+        trace(
+            ctx,
+            "import-decrypted bytes=" + plainZip.length() + " sessions=" + sessions +
+                " dsh=" + hasDshSections(plainZip),
+        )
         if (!hasDshSections(plainZip)) {
             // 纯软件数据包：没有分区要恢复，也就不存在冲突
             return@withContext PreflightResult.Ready(
@@ -531,8 +586,8 @@ object DshConfigBackup {
         onLine(ctx.appString(R.string.dsh_bk_step_analyzing))
         val analyze = request("POST", "/analyze", JSONObject().put("zipPath", zipPath).toString())
             ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_analyze_failed))
+        trace(ctx, "import-uploaded zipPath=" + zipPath)
         val analyzeObj = runCatching { JSONObject(analyze) }.getOrNull()
-            ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_analyze_bad_json))
         val analyzeErr = analyzeObj.optString("error")
         if (analyzeErr.isNotEmpty()) return@withContext PreflightResult.Failed(analyzeErr)
         if (!analyzeObj.optBoolean("valid", true)) {
@@ -565,6 +620,13 @@ object DshConfigBackup {
                 )
                 .toString(),
         )?.let { runCatching { JSONObject(it) }.getOrNull() }
+        trace(
+            ctx,
+            "import-analyze valid=" + analyzeObj.optBoolean("valid", true) +
+                " compat=" + analyzeObj.optString("compatibility") +
+                " encrypted=" + analyzeObj.optBoolean("encrypted") +
+                " secrets=" + analyzeObj.optInt("secretCount"),
+        )
         val items = dryPlan?.optJSONArray("items")
         val conflicts = mutableListOf<String>()
         var total = 0
@@ -578,6 +640,7 @@ object DshConfigBackup {
                 conflicts += if (section.isEmpty()) desc else section + ": " + desc
             }
         }
+        trace(ctx, "import-preflight conflicts=" + total + " listed=" + conflicts.size)
         PreflightResult.Ready(Preflight(zipPath, plainZip, sessions, conflicts, total, needsDsh = true))
     }
 
@@ -681,7 +744,13 @@ object DshConfigBackup {
     private suspend fun dshVersionOrUnknown(ctx: Context): String =
         runCatching { status(ctx).dshVersion }.getOrNull()?.takeIf { it.isNotEmpty() } ?: "unknown"
 
-    private fun describe(e: Exception): String = e.javaClass.simpleName + ": " + (e.message ?: "")
+    /** 失败统一走这里：把原因记进日志再返回，免得「用户看到了提示、日志里什么都没有」。 */
+    private suspend fun failTrace(ctx: Context, message: String): ExportResult {
+        runCatching { BackupLogManager.log("export failed: $message") }
+        return ExportResult(false, message = message)
+    }
+
+    private fun describe(e: Throwable): String = e.javaClass.simpleName + ": " + (e.message ?: "")
 
     private fun copyToPublic(ctx: Context, src: File, name: String): Pair<String, Boolean> {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -891,6 +960,7 @@ object DshConfigBackup {
             }
             onLine(ctx.appString(R.string.dsh_bk_step_appdata))
             val changed = DshAppData.apply(ctx, data)
+            trace(ctx, "import-appdata changed=" + changed)
             // 审计要**再读一次包**，所以删除必须放在它后面（先删会让这一步对着空气空跑）
             val lines = DshAppData.mergeAudit(ctx, plainZip)
             if (plainZip != zip) plainZip.delete()
@@ -1025,6 +1095,12 @@ object DshConfigBackup {
             notes.append('\n')
         }
         // 回滚发生说明这次导入整体没落地，必须显式说出来
+        trace(
+            ctx,
+            "import-execute ok=" + execObj.optBoolean("ok", true) +
+                " rollback=" + (execObj.optJSONObject("rollback") != null) +
+                " needsRestart=" + execObj.optBoolean("needsRestart"),
+        )
         val rollback = execObj.optJSONObject("rollback")
         if (rollback != null) {
             notes.append("↩ ").append(

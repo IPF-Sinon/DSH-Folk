@@ -1102,4 +1102,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_verify_failed">The post-encryption check failed (%1$s: expected %2$s, got %3$s). The file was deleted - a missing backup is better than a broken one that claims success.</string>
     <string name="dsh_backup_plugin_retry">Check again</string>
     <string name="dsh_backup_plugin_state_unknown">No plugin status available</string>
+    <string name="dsh_bk_log_copy">Copy the whole log</string>
+    <string name="dsh_bk_log_copied">Log copied to the clipboard</string>
+    <string name="dsh_bk_log_open">Backup log</string>
 </resources>

@@ -255,6 +255,46 @@ ok(/onRecheckPlugin/.test(content) && /onRecheckPlugin = \{ pluginProbe\+\+ \}/.
 ok(/getOrDefault\(true\)/.test(screen),
   "查不到插件清单时当作「装了」—— 宁可少给一个按钮，也不要指错路");
 
+console.log("─ 5e. 排查通道：每一步都记账、日志一键复制、报告里带上日志");
+// 「导出的包只有 49 字节」这种事，靠读代码读不出来，必须知道每一步的实际大小：
+// 插件给了多少、补包后多少、容器多少、校验过没过。所以这些数字必须落进日志。
+for (const step of [
+  "plugin-request", "plugin-file", "plugin-downloaded",
+  "merge-start", "merge-done", "encrypt=memory", "container bytes=", "copy location=",
+  "import-start", "import-decrypted", "import-uploaded", "import-analyze", "import-preflight", "import-execute",
+]) {
+  ok(backup.includes('"' + step), "导出/导入日志里有 " + step);
+}
+ok(/private suspend fun trace\(ctx: Context, step: String\)/.test(backup) &&
+  /BackupLogManager\.log\("export \$step"\)/.test(backup),
+  "trace 走 BackupLogManager（写进 backup_log.log）");
+ok(/private suspend fun failTrace\(ctx: Context, message: String\): ExportResult/.test(backup) &&
+  /export failed: \$message/.test(backup),
+  "失败也记一笔 —— 用户看到的提示与日志里的一致，不会「用户看到了、日志里什么都没有」");
+ok(/merge-done bytes=" \+ merged\.length\(\)/.test(backup) && /stats\.sessionFiles/.test(backup),
+  "补包结果连同 stats 一起记（会话数/文件数/软件数据/secrets）");
+ok(/expected=" \+ \(DshBackupCrypto\.HEADER_LENGTH \+ merged\.length\(\)\)/.test(backup),
+  "容器日志里同时记「期望大小」（头 + 明文），49 字节的现场一眼可见");
+
+// 日志一键复制：用户要的就是点一下把日志拿走
+ok(/dsh_bk_log_copy/.test(content) && /clipboard\.setText\(AnnotatedString\(logs\)\)/.test(content),
+  "日志对话框有「复制全部日志」按钮，复制的是整份日志");
+ok(/dsh_bk_log_copied/.test(content) && /Toast/.test(content), "复制后给一句反馈");
+ok(/onOpenBackupLog/.test(content) && /onOpenBackupLog = \{ showBackupLog = true \}/.test(screen) &&
+  /BackupLogDialog\(/.test(screen),
+  "备份页自己就有日志入口（原来只在 WebDAV 对话框里，等于没有）");
+
+// 日志会随 bugreport 一起走，而且不能无限长大
+const logEvent = fs.readFileSync('app/src/main/java/me/bmax/apatch/util/LogEvent.kt', 'utf8');
+ok(/backup-log\.txt/.test(logEvent) && /backup_log\.log/.test(logEvent),
+  "bugreport 里带上 backup-log.txt（应用自己的备份日志）");
+ok(/takeLast\(400\)/.test(logEvent), "只取最后 400 行，报告不会被日志撑爆");
+ok(/redactInPlace\(backupLogFile/.test(logEvent) || /backupLogFile/.test(logEvent),
+  "备份日志也过脱敏流程");
+const logMgr = fs.readFileSync('app/src/main/java/me/bmax/apatch/util/BackupLogManager.kt', 'utf8');
+ok(/MAX_BYTES = 512L \* 1024L/.test(logMgr) && /rotateIfTooBig/.test(logMgr),
+  "日志超过 512KB 就截断旧内容（每一步都记账，不轮转会无限长大）");
+
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),
   "copyToPublic 返回 (位置, 是否真的落进公共目录)");

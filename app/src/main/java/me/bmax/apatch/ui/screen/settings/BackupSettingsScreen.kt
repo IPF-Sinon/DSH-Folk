@@ -140,6 +140,8 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var pluginAbsent by rememberSaveable { mutableStateOf(false) }
     // 用户点「重新检测」时 +1，让下面那个 LaunchedEffect 再跑一遍
     var pluginProbe by rememberSaveable { mutableStateOf(0) }
+    // 备份日志对话框（导出/导入每一步都记在里面，带复制按钮）
+    var showBackupLog by remember { mutableStateOf(false) }
     val pluginViewModel = viewModel<DshPluginViewModel>()
 
     LaunchedEffect(pluginProbe) {
@@ -437,6 +439,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                             }
                         }
                     },
+                    onOpenBackupLog = { showBackupLog = true },
                     onDshOpenDir = {
                         val opened = DshConfigBackup.openBackupDir(context)
                         if (!opened) dshMessage = openDirFailed
@@ -647,6 +650,13 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 },
             )
         }
+    }
+
+    if (showBackupLog) {
+        BackupLogDialog(
+            showDialog = remember { mutableStateOf(true) },
+            onDismiss = { showBackupLog = false },
+        )
     }
 
     // 选定文件之后的密码框：留空就是「当作没加密，直接解析」—— 不加密的包不用填，

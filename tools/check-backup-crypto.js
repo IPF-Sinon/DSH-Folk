@@ -331,8 +331,12 @@ ok(4 + 1 + 16 + 12 + 16 === 49, '容器头正好 49 字节（与现场那个坏�
 // 所以空的只能是应用侧。于是把「小包走那条每次导出都验过的内存版」和
 // 「流式版必须自己证明读到了多少字节」都钉住。
 ok(/if \(merged\.length\(\) <= IN_MEMORY_ENCRYPT_LIMIT\)/.test(backupKt) &&
-  /finalFile\.writeBytes\(DshBackupCrypto\.encryptArchive\(merged\.readBytes\(\), plan\.password\)\)/.test(backupKt),
+  /val plainBytes = merged\.readBytes\(\)/.test(backupKt) &&
+  /finalFile\.writeBytes\(DshBackupCrypto\.encryptArchive\(plainBytes, plan\.password\)\)/.test(backupKt),
   '小包走内存版加密器（selfTest 每版都验它），只有大包才走流式');
+ok(/if \(plainBytes\.size\.toLong\(\) != merged\.length\(\)\)/.test(backupKt) &&
+  /读取明文/.test(backupKt),
+  '内存路先核对「文件长度 vs 实际读出的字节数」—— 只读出 0 字节时当场报错，而不是封出一个空容器');
 ok(/private const val IN_MEMORY_ENCRYPT_LIMIT = 16L \* 1024 \* 1024/.test(backupKt),
   '内存加密上限写死在常量里（16MB，vault 大包不会被读爆）');
 

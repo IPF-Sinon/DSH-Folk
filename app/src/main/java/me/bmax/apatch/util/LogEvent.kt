@@ -347,6 +347,42 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         }.onSuccess { dshHomeLogFile.writeText(it) }
             .onFailure { notes += "容器日志采集失败: ${it.message}" }
 
+        // 应用自己的备份/恢复日志（filesDir/backup_log.log）：导出与导入的每一步大小、
+        // 用了哪条加密路、校验结果都在里面。用户报「导出的包只有 49 字节」时，最需要的就是
+        // 这份东西 —— 而它原来根本不在报告里，只能靠来回问。
+        val backupLogFile = File(bugreportDir, "backup-log.txt")
+        runCatching {
+            val src = File(apApp.filesDir, "backup_log.log")
+            if (src.isFile) {
+                val lines = src.readLines()
+                // 只留最后 400 行：这类日志是追加的，旧内容对定位没有帮助
+                lines.takeLast(400).joinToString("\n").also {
+                    if (lines.size > 400) notes += "backup_log.log 只取了最后 400 行（共 ${lines.size} 行）"
+                }
+            } else {
+                ""
+            }
+        }.onSuccess { backupLogFile.writeText(it) }
+            .onFailure { notes += "备份日志采集失败: ${it.message}" }
+
+        // 应用自己的备份/恢复日志（filesDir/backup_log.log）：导出与导入的每一步大小、
+        // 用了哪条加密路、校验结果都在里面。用户报「导出的包只有 49 字节」时，最需要的就是
+        // 这份东西 —— 而它原来根本不在报告里，只能靠来回问。
+        val backupLogFile = File(bugreportDir, "backup-log.txt")
+        runCatching {
+            val src = File(apApp.filesDir, "backup_log.log")
+            if (src.isFile) {
+                val lines = src.readLines()
+                // 只留最后 400 行：这类日志是追加的，旧内容对定位没有帮助
+                lines.takeLast(400).joinToString("\n").also {
+                    if (lines.size > 400) notes += "backup_log.log 只取了最后 400 行（共 ${lines.size} 行）"
+                }
+            } else {
+                ""
+            }
+        }.onSuccess { backupLogFile.writeText(it) }
+            .onFailure { notes += "备份日志采集失败: ${it.message}" }
+
         // 打包之前过一遍脱敏：dsh.log 里有 WebUI 的 token（dsh 服务端自己打印的启动地址），
         // 容器日志里可能还有别的凭据，props / cmdline 里有设备稳定标识。
         // 归档是要发给别人的，这些不能在里面。
