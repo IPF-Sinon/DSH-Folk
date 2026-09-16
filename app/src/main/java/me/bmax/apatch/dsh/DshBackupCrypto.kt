@@ -332,7 +332,7 @@ object DshBackupCrypto {
 
     /** 逐块算 sha256（比对用；不把整个文件读进内存）。 */
     private fun sha256File(f: File): String {
-        val md = MessageDigest.getInstance("SHA-256")
+        val md = java.security.MessageDigest.getInstance("SHA-256")
         val buf = ByteArray(STREAM_BUFFER)
         FileInputStream(f).use { ins ->
             var n = ins.read(buf)
@@ -341,7 +341,7 @@ object DshBackupCrypto {
                 n = ins.read(buf)
             }
         }
-        return hex(md.digest())
+        return toHex(md.digest())
     }
 
     fun encryptArchiveToFile(plain: File, output: File, password: String) {
