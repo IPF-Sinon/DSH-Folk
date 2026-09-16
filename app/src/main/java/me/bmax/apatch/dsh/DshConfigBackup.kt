@@ -70,6 +70,15 @@ object DshConfigBackup {
     const val PUBLIC_SUBDIR = "DSH-Folk"
 
     /**
+     * 超过这个大小才走流式加密。
+     *
+     * 内存版（[DshBackupCrypto.encryptArchive]）每次导出前都会被 selfTest() 验一遍，
+     * 流式那对函数以前从没被验证过 —— 现场那个 49 字节的空容器就是出自它。所以：
+     * 能用内存版就用内存版（几十 MB 以内都没问题），只有真正的几百 MB 大包才走流式。
+     */
+    private const val IN_MEMORY_ENCRYPT_LIMIT = 16L * 1024 * 1024
+
+    /**
      * 手机上备份文件的落地目录（尽力而为的兜底）。
      *
      * 首选走 MediaStore 直接写公共 `Download/DSH-Folk`（API 29+，免「所有文件」权限，
@@ -332,7 +341,14 @@ object DshConfigBackup {
                 return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_crypto_broken, streamBad))
             }
             try {
-                DshBackupCrypto.encryptArchiveToFile(merged, finalFile, plan.password)
+                // 小包走**内存版**：selfTest() 每次导出前都会验它，是这条路里唯一
+                // 「每一版都验过」的加密器；流式那对函数只留给大包（几百 MB 的 vault 包
+                // 不能整个读进内存）。两条路的容器格式完全一致，验证步骤对两者都适用。
+                if (merged.length() <= IN_MEMORY_ENCRYPT_LIMIT) {
+                    finalFile.writeBytes(DshBackupCrypto.encryptArchive(merged.readBytes(), plan.password))
+                } else {
+                    DshBackupCrypto.encryptArchiveToFile(merged, finalFile, plan.password)
+                }
             } catch (e: Exception) {
                 finalFile.delete()
                 return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_encrypt_failed, describe(e)))

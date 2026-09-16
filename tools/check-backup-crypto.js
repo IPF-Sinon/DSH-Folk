@@ -327,6 +327,26 @@ ok(/dsh_bk_out_size/.test(backupKt) && /humanSize\(finalFile\.length\(\)\)/.test
 // 尺寸恒等式本身也验一遍：49 = 4 + 1 + 16 + 12 + 16
 ok(4 + 1 + 16 + 12 + 16 === 49, '容器头正好 49 字节（与现场那个坏包大小一致）');
 
+// 现场证据：DSH 侧日志里插件的明文导出是好的（导出完成 sizeBytes=5108 encrypted=false），
+// 所以空的只能是应用侧。于是把「小包走那条每次导出都验过的内存版」和
+// 「流式版必须自己证明读到了多少字节」都钉住。
+ok(/if \(merged\.length\(\) <= IN_MEMORY_ENCRYPT_LIMIT\)/.test(backupKt) &&
+  /finalFile\.writeBytes\(DshBackupCrypto\.encryptArchive\(merged\.readBytes\(\), plan\.password\)\)/.test(backupKt),
+  '小包走内存版加密器（selfTest 每版都验它），只有大包才走流式');
+ok(/private const val IN_MEMORY_ENCRYPT_LIMIT = 16L \* 1024 \* 1024/.test(backupKt),
+  '内存加密上限写死在常量里（16MB，vault 大包不会被读爆）');
+
+const encSpan = braceSpan(cryptoKt, 'fun encryptArchiveToFile(plain: File, output: File, password: String) {');
+ok(encSpan !== null, '流式加密函数在');
+if (encSpan) {
+  const body = cryptoKt.slice(encSpan[0], encSpan[1]);
+  ok(/if \(written != plain\.length\(\)\)/.test(body) && /throw IllegalStateException\("只读到/.test(body),
+    '流式加密读到的字节数必须等于文件长度，否则抛错（空读会报出确切数字，不再静默产出 49 字节）');
+  ok(!/RandomAccessFile\(/.test(body), '不再用 RandomAccessFile 回填头部（改成两趟：先流密文拿 tag，再拼头 + 密文）');
+  ok(/\.body"/.test(body) && /body\.delete\(\)/.test(body), '临时密文体用完即删');
+  ok(/out\.write\(header\)[\s\S]{0,200}copyTo\(out\)/.test(body), '容器 = 头 + 密文，两次普通写，没有回头改');
+}
+
 /* --------------------------------------------------------- 7. 软件数据边界 */
 section('7. 软件数据：设置带走，密钥留下');
 ok(/SKIP_PREFIXES = listOf\("webdav_"\)/.test(appDataKt), 'webdav_* 整组不带（只带地址不带密码等于给用户一个连不上的配置）');

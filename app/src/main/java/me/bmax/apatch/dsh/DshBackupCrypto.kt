@@ -351,29 +351,44 @@ object DshBackupCrypto {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(deriveKey(password, salt), AES_ALGORITHM), GCMParameterSpec(TAG_BITS, iv))
         val buffer = ByteArray(STREAM_BUFFER)
+
+        // 两趟写法：先把密文流到一个临时文件（顺带拿到 tag），再拼出「头 + 密文」。
+        // 原来是在输出文件里先占位 49 字节、写完再用 RandomAccessFile 跳回去回填头部 ——
+        // 少一个「写进去又回头改」的环节，出问题时也就少一种解释，而且每一步都能验。
+        val body = File(output.parentFile, output.name + ".body")
+        body.delete()
+        var written = 0L
         var tag: ByteArray? = null
-        RandomAccessFile(output, "rw").use { out ->
-            out.setLength(0)
-            out.write(ByteArray(HEADER_LENGTH))
+        BufferedOutputStream(FileOutputStream(body), STREAM_BUFFER).use { out ->
             BufferedInputStream(FileInputStream(plain), STREAM_BUFFER).use { ins ->
                 var n = ins.read(buffer)
                 while (n > 0) {
                     val chunk = cipher.update(buffer, 0, n)
                     if (chunk != null && chunk.isNotEmpty()) out.write(chunk)
+                    written += n.toLong()
                     n = ins.read(buffer)
                 }
             }
             // GCM 的 tag 由 doFinal() 返回（此时没有待处理输入，返回的就是那 16 字节）
             tag = cipher.doFinal()
-            val header = ByteArray(HEADER_LENGTH)
-            writeMagic(header, ARCHIVE_MAGIC)
-            header[VERSION_OFFSET] = VERSION.toByte()
-            System.arraycopy(salt, 0, header, SALT_OFFSET, SALT_LENGTH)
-            System.arraycopy(iv, 0, header, IV_OFFSET, IV_LENGTH)
-            System.arraycopy(tag, 0, header, TAG_OFFSET, TAG_LENGTH)
-            out.seek(0)
-            out.write(header)
         }
+        // 这一条就是为「拿到的明文是空的」这种现场准备的：真发生了，报的是确切数字，
+        // 而不是留下一个 49 字节、看起来成功的空容器（头 + 空密文的 tag 正好 49 字节）。
+        if (written != plain.length()) {
+            body.delete()
+            throw IllegalStateException("只读到 $written 字节，而文件是 ${plain.length()} 字节")
+        }
+        val header = ByteArray(HEADER_LENGTH)
+        writeMagic(header, ARCHIVE_MAGIC)
+        header[VERSION_OFFSET] = VERSION.toByte()
+        System.arraycopy(salt, 0, header, SALT_OFFSET, SALT_LENGTH)
+        System.arraycopy(iv, 0, header, IV_OFFSET, IV_LENGTH)
+        System.arraycopy(tag ?: throw IllegalStateException("没有拿到认证标签"), 0, header, TAG_OFFSET, TAG_LENGTH)
+        BufferedOutputStream(FileOutputStream(output), STREAM_BUFFER).use { out ->
+            out.write(header)
+            BufferedInputStream(FileInputStream(body), STREAM_BUFFER).use { it.copyTo(out) }
+        }
+        body.delete()
     }
 
     /**
