@@ -206,9 +206,9 @@
     <string name="dsh_backup_section">DSH 配置备份</string>
     <string name="dsh_backup_summary">与 dsh-config-manager 插件同一套导出格式，手机导出的备份能直接在电脑上导入，反之亦然。</string>
     <string name="dsh_backup_export">导出配置</string>
-    <string name="dsh_backup_export_summary">包含设置、模型提供者、插件清单、MCP 服务器、技能与工作区；凭据不导出；也不含应用自身设置（权限、兼容模式、开机自启等）与运行时。</string>
+    <string name="dsh_backup_export_summary">导出什么由你在弹窗里选：软件数据（应用设置 + 原生权限记录）、DSH 数据（设置、模型提供者、插件清单、MCP 服务器、技能与工作区），或两者。凭据默认不导出，只有「含 vault」那一档会带上。</string>
     <string name="dsh_backup_import">导入备份</string>
-    <string name="dsh_backup_import_summary">选择导出的 .zip；冲突可选用合并/覆盖/跳过，执行前先建回滚快照，失败会自动回滚；恢复插件需要联网重装。</string>
+    <string name="dsh_backup_import_summary">选择一个导出的 .zip。会先把包读一遍：检测到冲突时才问怎么处理，包里有会话时也会问会话怎么处理。执行前会先建回滚快照，失败自动回滚。</string>
     <string name="dsh_backup_open_dir">打开备份目录</string>
     <string name="dsh_backup_password">备份密码（可选）</string>
     <string name="dsh_backup_password_summary">填写后整包用 AES-256-GCM 加密，导入时需要同一密码。</string>
@@ -308,9 +308,9 @@
     <!-- 搜索无结果（与「目录拉取失败」区分开） -->
     <string name="dsh_plugin_no_match">没有匹配「%1$s」的插件</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>
-    <string name="dsh_backup_remote_list">运行时里的备份</string>
-    <string name="dsh_backup_remote_refresh">列出运行时备份</string>
-    <string name="dsh_backup_remote_empty">运行时里还没有备份文件。</string>
+    <string name="dsh_backup_remote_list">DSH 内已有的备份文件（插件 exports 目录）</string>
+    <string name="dsh_backup_remote_refresh">列出 DSH 内的备份</string>
+    <string name="dsh_backup_remote_empty">DSH 内还没有备份文件。</string>
     <string name="dsh_plugin_needs_restart">已完成，重启 DSH 后生效</string>
     <string name="dsh_plugin_restart_now">立即重启</string>
     <string name="dsh_plugin_inactive">未生效</string>
@@ -1069,4 +1069,10 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_conflict_more">…另有 %1$d 项</string>
     <string name="dsh_pw_show">显示密码</string>
     <string name="dsh_pw_hide">隐藏密码</string>
+    <string name="dsh_bk_export_dialog_title">导出什么</string>
+    <string name="dsh_bk_export_dialog_confirm">导出</string>
+    <string name="dsh_bk_import_pw_title">输入备份密码</string>
+    <string name="dsh_bk_import_pw_hint_plain">这个文件不是加密包，留空就可以直接解析。</string>
+    <string name="dsh_bk_import_pw_hint_encrypted">检测到这是加密包（DCA1），要填密码才能解析；留空会当作不加密直接读，读不出来。</string>
+    <string name="dsh_bk_import_parse">解析</string>
 </resources>

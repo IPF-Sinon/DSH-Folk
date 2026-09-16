@@ -17,11 +17,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
@@ -37,6 +40,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -55,6 +60,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DshBackupCrypto
 import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSessionGroup
@@ -89,6 +95,12 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var pendingPreflight by remember { mutableStateOf<DshConfigBackup.Preflight?>(null) }
     var pendingImportPassword by rememberSaveable { mutableStateOf("") }
     var pendingSessionChoice by rememberSaveable { mutableStateOf(DshConfigBackup.SessionImport.SKIP.name) }
+    // 选定文件后先问密码：留空就是「这个包没加密，直接解析」。本地选文件与云端下载共用它。
+    var pendingImportPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingImportEncrypted by rememberSaveable { mutableStateOf(false) }
+    var importPassword by rememberSaveable { mutableStateOf("") }
+    var showImportPassword by rememberSaveable { mutableStateOf(false) }
+    var askImportPassword by rememberSaveable { mutableStateOf(false) }
     var askSessions by rememberSaveable { mutableStateOf(false) }
     var askConflicts by rememberSaveable { mutableStateOf(false) }
 
@@ -237,6 +249,10 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                     }
                     is DshConfigBackup.PreflightResult.Ready -> {
                         val p = r.preflight
+                        // 加密包已经解开，那份暂存的密文副本就没用了（明文包由 import 收尾时删）
+                        if (zip != p.plainZip && (zip.parentFile?.name == "backup-tmp" || zip.parentFile?.name == "config-import")) {
+                            zip.delete()
+                        }
                         pendingPreflight = p
                         pendingImportPassword = password
                         pendingSessionChoice = DshConfigBackup.SessionImport.SKIP.name
@@ -293,10 +309,17 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 }
                 return@launch
             }
-            // 预检之后才知道要不要问用户（会话 / 冲突），所以这里只启动预检
+            // 先问密码再解析：留空按「没加密」处理（DCA1 包留空会解析失败，框里有提示）
+            val encrypted = withContext(Dispatchers.IO) { DshBackupCrypto.isArchiveBlobFile(staged) }
             withContext(Dispatchers.Main) {
                 dshMessage = ""
-                startImport(staged, dshPassword)
+                dshBusy = false
+                runVisible = false
+                runRunning = false
+                pendingImportPath = staged.absolutePath
+                pendingImportEncrypted = encrypted
+                importPassword = ""
+                askImportPassword = true
             }
         }
     }
@@ -453,9 +476,16 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                                 withContext(Dispatchers.Main) { cloudMessage = text; dshBusy = false; runRunning = false; runFailed = true; runLines = runLines + text }
                                 return@launch
                             }
-                            // 下载成功后与本地导入完全同一条管道：预检 → 按需提问 → 导入
+                            // 下载成功后与本地导入完全同一条管道：问密码 → 预检 → 按需提问 → 导入
+                            val encrypted = withContext(Dispatchers.IO) { DshBackupCrypto.isArchiveBlobFile(dest) }
                             withContext(Dispatchers.Main) {
-                                startImport(dest, dshPassword)
+                                pendingImportPath = dest.absolutePath
+                                pendingImportEncrypted = encrypted
+                                importPassword = ""
+                                askImportPassword = true
+                                dshBusy = false
+                                runVisible = false
+                                runRunning = false
                             }
                         }
                     },
@@ -593,6 +623,83 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 dismissButton = {
                     TextButton(onClick = { pendingSnapshot = null }) {
                         Text(stringResource(R.string.close))
+                    }
+                },
+            )
+        }
+    }
+
+    // 选定文件之后的密码框：留空就是「当作没加密，直接解析」—— 不加密的包不用填，
+    // 加密包填错或留空会在解析阶段报错并说明原因，不会把密文当成包导进去。
+    if (askImportPassword) {
+        val path = pendingImportPath
+        if (path != null) {
+            val cancelAsk: () -> Unit = {
+                askImportPassword = false
+                pendingImportPath = null
+                // 用户自己选的暂存副本，不导就删掉
+                File(path).delete()
+                dshBusy = false
+                runRunning = false
+                runVisible = false
+            }
+            AlertDialog(
+                onDismissRequest = cancelAsk,
+                title = { Text(stringResource(R.string.dsh_bk_import_pw_title)) },
+                text = {
+                    Column {
+                        Text(
+                            text = stringResource(
+                                if (pendingImportEncrypted) R.string.dsh_bk_import_pw_hint_encrypted
+                                else R.string.dsh_bk_import_pw_hint_plain,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (pendingImportEncrypted) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = importPassword,
+                            onValueChange = { importPassword = it },
+                            label = { Text(stringResource(R.string.dsh_bk_pw_title)) },
+                            singleLine = true,
+                            visualTransformation = if (showImportPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { showImportPassword = !showImportPassword }) {
+                                    Icon(
+                                        imageVector = if (showImportPassword) Icons.Filled.VisibilityOff else Icons.Outlined.Visibility,
+                                        contentDescription = stringResource(
+                                            if (showImportPassword) R.string.dsh_pw_hide else R.string.dsh_pw_show,
+                                        ),
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            askImportPassword = false
+                            pendingImportPath = null
+                            dshBusy = true
+                            runVisible = true
+                            runTarget = importTarget
+                            runLines = emptyList()
+                            runRunning = true
+                            runFailed = false
+                            runNeedsRestart = false
+                            // 空密码也照常往下走：预检会把它当作「没有加密」
+                            startImport(File(path), importPassword)
+                        },
+                    ) {
+                        Text(stringResource(R.string.dsh_bk_import_parse))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = cancelAsk) {
+                        Text(stringResource(android.R.string.cancel))
                     }
                 },
             )

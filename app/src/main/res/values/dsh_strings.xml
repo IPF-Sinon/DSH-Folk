@@ -224,9 +224,9 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_backup_section">DSH configuration backup</string>
     <string name="dsh_backup_summary">Uses the same export format as the dsh-config-manager plugin, so a backup made here imports on desktop and vice versa.</string>
     <string name="dsh_backup_export">Export configuration</string>
-    <string name="dsh_backup_export_summary">Settings, model providers, plugin inventory, MCP servers, skills and workspaces; credentials are never exported, and neither are the app\'s own settings (permissions, compatibility mode, autostart) or the runtime.</string>
+    <string name="dsh_backup_export_summary">What goes into the archive is chosen in the dialog: app data (app settings + native permission log), DSH data (settings, model providers, plugin inventory, MCP servers, skills and workspaces), or both. Credentials are left out unless you pick the vault option.</string>
     <string name="dsh_backup_import">Import a backup</string>
-    <string name="dsh_backup_import_summary">Pick an exported .zip; conflicts can be merged, replaced or skipped, a rollback snapshot is taken first and a failure rolls back automatically; restoring plugins needs network access.</string>
+    <string name="dsh_backup_import_summary">Pick an exported .zip. It is read first: you are asked about conflicts only if some are found, and about sessions only if the archive has any. A rollback snapshot is taken before writing, so a failure rolls back.</string>
     <string name="dsh_backup_open_dir">Open backup folder</string>
     <string name="dsh_backup_password">Backup password (optional)</string>
     <string name="dsh_backup_password_summary">When set, the whole archive is encrypted with AES-256-GCM. The same password is required to import it.</string>
@@ -326,9 +326,9 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <!-- 搜索无结果（与「目录拉取失败」区分开） -->
     <string name="dsh_plugin_no_match">No plugin matches “%1$s”</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>
-    <string name="dsh_backup_remote_list">Backups inside the runtime</string>
-    <string name="dsh_backup_remote_refresh">List runtime backups</string>
-    <string name="dsh_backup_remote_empty">No backup files in the runtime yet.</string>
+    <string name="dsh_backup_remote_list">Backups already inside DSH (the plugin exports folder)</string>
+    <string name="dsh_backup_remote_refresh">List backups inside DSH</string>
+    <string name="dsh_backup_remote_empty">No backup files inside DSH yet.</string>
     <string name="dsh_plugin_needs_restart">Done — restart DSH for it to take effect</string>
     <string name="dsh_plugin_restart_now">Restart now</string>
     <string name="dsh_plugin_inactive">Not a profile layer</string>
@@ -1090,4 +1090,10 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_conflict_more">…and %1$d more</string>
     <string name="dsh_pw_show">Show password</string>
     <string name="dsh_pw_hide">Hide password</string>
+    <string name="dsh_bk_export_dialog_title">What to export</string>
+    <string name="dsh_bk_export_dialog_confirm">Export</string>
+    <string name="dsh_bk_import_pw_title">Enter the backup password</string>
+    <string name="dsh_bk_import_pw_hint_plain">This file is not an encrypted archive, so it can be read with the field left empty.</string>
+    <string name="dsh_bk_import_pw_hint_encrypted">This looks like an encrypted archive (DCA1) and needs a password to be read; leaving it empty reads it as plain, which will fail.</string>
+    <string name="dsh_bk_import_parse">Read archive</string>
 </resources>

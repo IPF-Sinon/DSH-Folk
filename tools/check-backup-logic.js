@@ -33,6 +33,27 @@ const SRC_CONFIG = "app/src/main/java/me/bmax/apatch/ui/theme/BackupConfig.kt";
 
 let n = 0;
 let bad = 0;
+/**
+ * 取出某个标记所在那一段代码（从标记到它开的大括号闭掉为止）。
+ * 「这段逻辑有没有被那个条件包住」光用全文包含判断会误判 —— 别处也常有同名代码，
+ * 必须真的按括号配对切出区间来问。
+ */
+function braceSpan(src, marker) {
+  const at = src.indexOf(marker);
+  if (at < 0) return null;
+  const open = src.indexOf("{", at);
+  if (open < 0) return null;
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}") {
+      depth--;
+      if (depth === 0) return [at, i];
+    }
+  }
+  return null;
+}
+
 function ok(cond, label) {
   n++;
   if (cond) {
@@ -156,16 +177,66 @@ ok(/code == "405" \|\| code == "501"/.test(screen) &&
   /context\.getString\(R\.string\.dsh_bk_cloud_unsupported, code\)/.test(screen) &&
   /context\.getString\(R\.string\.dsh_backup_webdav_failed, msg\)/.test(screen),
   "405/501（服务端不支持列目录）与其它失败分开说：否则用户不知道该改服务端还是改密码");
+// 两条入口（本地选文件 / 云端下载）都先落到「问密码」这一步，再由同一个 startImport 开跑。
+// 断言成「startImport 全文件只出现一次」比什么都直接：多写一套管道就必然多一处调用。
+// 定义 1 处、调用 1 处：本地与云端都汇到同一个入口，不会各写一套管道
+const defCalls = (screen.match(/fun startImport\(/g) || []).length;
+const useCalls = (screen.match(/startImport\(File\(path\), importPassword\)/g) || []).length;
+ok(defCalls === 1 && useCalls === 1, "只有一个开跑入口 startImport（定义 " + defCalls + " 处、调用 " + useCalls + " 处）");
 ok(
-  /onCloudRestore = \{[\s\S]{0,2200}DshConfigBackup\.import\(/.test(screen) ||
-    /onCloudRestore = \{[\s\S]{0,2200}startImport\(/.test(screen),
-  "云端下载后复用同一条导入管道（现在两条路径都先走预检，不再各写一套）",
+  /onCloudRestore = \{[\s\S]{0,3000}pendingImportPath = dest\.absolutePath[\s\S]{0,200}askImportPassword = true/.test(screen),
+  "云端下载完先问密码（加密包要密码才解得开）",
 );
 ok(
-  /val staged = runCatching \{[\s\S]{0,300}DshConfigBackup\.stage\(/.test(screen) &&
-    /startImport\(staged, dshPassword\)/.test(screen),
-  "本地选文件也走同一个 startImport（预检 → 按需提问 → 导入）",
+  /val staged = runCatching \{[\s\S]{0,1400}pendingImportPath = staged\.absolutePath[\s\S]{0,200}askImportPassword = true/.test(screen),
+  "本地选文件也先问密码（预检在密码之后才跑）",
 );
+ok(
+  /DshBackupCrypto\.isArchiveBlobFile\(staged\)/.test(screen) &&
+    /DshBackupCrypto\.isArchiveBlobFile\(dest\)/.test(screen),
+  "两条入口都用 magic 判断「是不是加密包」，据此决定提示哪一句",
+);
+
+console.log("─ 5b. 导出/导入：页面上只有动作，内容都在弹窗里问");
+const contentSrc2 = content; // 顶部已经读过这一份
+ok(/onClick = \{ showExportDialog = true \}/.test(contentSrc2),
+  "页面上的「导出」只是打开弹窗，不再直接开跑");
+const exportDialog = braceSpan(contentSrc2, 'if (showExportDialog) {');
+ok(exportDialog !== null, "有「导出什么」弹窗");
+if (exportDialog) {
+  const dialogBody = contentSrc2.slice(exportDialog[0], exportDialog[1]);
+  ok(/ExportPlan\(/.test(dialogBody), "导出计划（范围/会话/密码）在弹窗里组装");
+  ok(/dsh_bk_scope_title/.test(dialogBody) && /dsh_bk_sessions_title/.test(dialogBody),
+    "范围与会话两档都在弹窗里（页面上没有）");
+  ok(/dsh_bk_pw_title/.test(dialogBody) && /dsh_bk_pw_random/.test(dialogBody),
+    "密码框与随机生成也在弹窗里");
+  ok(/enabled = exportPlan\.valid/.test(dialogBody), "含 vault 却没密码时确认键禁用");
+  ok(/verticalScroll/.test(dialogBody), "弹窗内容可滚动（小屏不会被截断）");
+}
+// 弹窗必须组合在两个滑块对话框之前，否则滑块会叠在它下面点不到
+const exportAt = contentSrc2.indexOf('if (showExportDialog)');
+const scopeAt = contentSrc2.indexOf('// ── 数据范围滑块');
+ok(exportAt > 0 && scopeAt > exportAt, "导出弹窗组合在滑块对话框之前（滑块才叠得上去）");
+// 页面上的导出说明搬进弹窗了，页面上不再有它
+ok(
+  !/^\s+Text\(\s*$[\s\S]{0,200}dsh_backup_export_summary/m.test(contentSrc2.split('if (showExportDialog)')[0]),
+  "页面上的导出说明已挪进弹窗（页面上不再重复一大段）",
+);
+
+console.log("─ 5c. 导入密码：留空即按「没加密」解析");
+const pwDialog = braceSpan(screen, 'if (askImportPassword) {');
+ok(pwDialog !== null, "选完文件弹密码框");
+if (pwDialog) {
+  const body = screen.slice(pwDialog[0], pwDialog[1]);
+  ok(/pendingImportEncrypted/.test(body), "按 magic 结果给出「这是加密包 / 不是加密包」两种提示");
+  ok(/dsh_bk_import_pw_hint_plain/.test(body) && /dsh_bk_import_pw_hint_encrypted/.test(body),
+    "两种提示文案都在");
+  ok(!/importPassword\.isEmpty[\s\S]{0,80}Text\(stringResource\(R\.string\.dsh_bk_import_parse\)/.test(body),
+    "空密码不挡确认键 —— 留空就是「不解密直接解析」");
+  ok(/startImport\(File\(path\), importPassword\)/.test(body), "确认后由唯一的入口开跑");
+  ok(/File\(path\)\.delete\(\)/.test(body), "取消时把用户选的暂存副本删掉");
+  ok(/dsh_pw_show|dsh_pw_hide/.test(body), "这个密码框也有显示/隐藏");
+}
 
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),
