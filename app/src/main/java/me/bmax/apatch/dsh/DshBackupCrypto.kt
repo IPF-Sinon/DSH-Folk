@@ -369,8 +369,19 @@ object DshBackupCrypto {
                     n = ins.read(buffer)
                 }
             }
-            // GCM 的 tag 由 doFinal() 返回（此时没有待处理输入，返回的就是那 16 字节）
-            tag = cipher.doFinal()
+            // 关键：Android 的 Conscrypt 会把 AES/GCM 的数据攒到 doFinal() 才吐出来 ——
+            // 上面那个 while 循环里 update() 一直返回 null，密文全在这里的返回值里。
+            // 所以不能"直接把返回值当 tag"：它是「剩余密文 + 16 字节 tag」。
+            // 真机现场：300000 字节明文（读满了，written=300000）最后写出 49 字节的空容器，
+            // 就是因为这里只取了前 16 字节当 tag、剩下整段密文丢掉。
+            val rest = cipher.doFinal()
+            if (rest.size < TAG_LENGTH) {
+                body.delete()
+                throw IllegalStateException("doFinal 只返回 " + rest.size + " 字节，拿不到认证标签")
+            }
+            val restBody = rest.size - TAG_LENGTH
+            if (restBody > 0) out.write(rest, 0, restBody)
+            tag = rest.copyOfRange(restBody, rest.size)
         }
         // 这一条就是为「拿到的明文是空的」这种现场准备的：真发生了，报的是确切数字，
         // 而不是留下一个 49 字节、看起来成功的空容器（头 + 空密文的 tag 正好 49 字节）。

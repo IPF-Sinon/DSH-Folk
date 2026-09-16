@@ -347,6 +347,26 @@ ok(/failTrace\(ctx, ctx\.appString\(R\.string\.dsh_bk_crypto_broken, bad\)\)/.te
   '自检不过也要记账 —— 这次就是这条分支没记账，日志正好断在那里、原因看不到');
 ok(/selftest-stream=" \+ \(streamBad \?: "ok"\)/.test(backupKt), '流式自检结果本身也进日志');
 
+// 真机最终结论（beta.57 的日志）：
+//   selftest-stream=写出的容器大小不对：300049 字节（头 49 + 明文 300000），实际 49
+// 文件读满了（written=300000）却只写出 49 字节 —— Android 的 Conscrypt 会把 AES/GCM
+// 的数据攒到 doFinal() 才吐出来，循环里 update() 一直返回 null。而旧代码把 doFinal()
+// 的返回值**整段当成 tag**（只取前 16 字节），密文全丢 —— 这就是 49 字节的来历。
+// 内存版 seal() 一直没问题，正是因为它用 doFinal(全部明文) 一次性拿「密文||tag」。
+const encFn = braceSpan(cryptoKt, 'fun encryptArchiveToFile(plain: File, output: File, password: String) {');
+const decFn = braceSpan(cryptoKt, 'fun decryptArchiveToFile(blob: File, output: File, password: String): Boolean');
+const encBody = encFn ? cryptoKt.slice(encFn[0], encFn[1]) : '';
+ok(/val rest = cipher\.doFinal\(\)/.test(encBody) &&
+  /val restBody = rest\.size - TAG_LENGTH/.test(encBody) &&
+  /if \(restBody > 0\) out\.write\(rest, 0, restBody\)/.test(encBody) &&
+  /tag = rest\.copyOfRange\(restBody, rest\.size\)/.test(encBody),
+  'doFinal() 的返回值按「剩余密文 + 16 字节 tag」拆开（Conscrypt 会攒到这一步才吐）');
+ok(/if \(rest\.size < TAG_LENGTH\)/.test(encBody), 'doFinal 返回不足 16 字节时明确报错，不当成 tag 用');
+ok(/Conscrypt/.test(encBody), '代码里写明原因（否则下一个人还会踩）');
+ok(/if \(chunk != null && chunk\.isNotEmpty\(\)\) out\.write\(chunk\)/.test(encBody) &&
+  /if \(last\.isNotEmpty\(\)\) out\.write\(last\)/.test(decFn ? cryptoKt.slice(decFn[0], decFn[1]) : ''),
+  '两条路都兼容：update 增量吐（JVM）与攒到 doFinal（Conscrypt）都写得出正确容器');
+
 // 现场证据：DSH 侧日志里插件的明文导出是好的（导出完成 sizeBytes=5108 encrypted=false），
 // 所以空的只能是应用侧。于是把「小包走那条每次导出都验过的内存版」和
 // 「流式版必须自己证明读到了多少字节」都钉住。
