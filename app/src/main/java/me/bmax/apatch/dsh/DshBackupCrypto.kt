@@ -452,7 +452,7 @@ object DshBackupCrypto {
             }
         }
         true
-    }.getOrElse { false }.getOrDefault(false)
+    }.getOrElse { false }
 
     /** 封一个容器：随机 salt/iv，head 49 字节按固定偏移拼好，密文跟在后面。 */
     private fun seal(magic: String, plaintext: ByteArray, password: String): ByteArray {
