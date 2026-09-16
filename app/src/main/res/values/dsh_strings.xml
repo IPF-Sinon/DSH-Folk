@@ -1096,4 +1096,10 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_import_pw_hint_plain">This file is not an encrypted archive, so it can be read with the field left empty.</string>
     <string name="dsh_bk_import_pw_hint_encrypted">This looks like an encrypted archive (DCA1) and needs a password to be read; leaving it empty reads it as plain, which will fail.</string>
     <string name="dsh_bk_import_parse">Read archive</string>
+    <string name="dsh_bk_out_size">size %1$s</string>
+    <string name="dsh_bk_plugin_zip_bad">The archive from the plugin is unusable (%1$d bytes, cannot be opened), so nothing was written.</string>
+    <string name="dsh_bk_merge_empty">The merged archive came out empty (%1$d bytes), so nothing was written.</string>
+    <string name="dsh_bk_verify_failed">The post-encryption check failed (%1$s: expected %2$s, got %3$s). The file was deleted - a missing backup is better than a broken one that claims success.</string>
+    <string name="dsh_backup_plugin_retry">Check again</string>
+    <string name="dsh_backup_plugin_state_unknown">No plugin status available</string>
 </resources>

@@ -290,6 +290,60 @@ object DshBackupCrypto {
      * 数据加密完之后才产生。所以先写 49 字节占位 header、把密文顺着写出去，最后回到文件头
      * 把 magic/version/salt/iv/tag 补上 —— 比「先加密到内存再拼」省掉的正是那份内存。
      */
+    /**
+     * 流式版本的自检：真的落两个文件、加密、比对大小、再解回来逐字节核对。
+     *
+     * 为什么非要单独做这件事 —— [selfTest] 只覆盖内存里的那对函数，而导出用的是
+     * [-encryptArchiveToFile] / [-decryptArchiveToFile]：**流式那条路一次都没被验证过**。
+     * 出问题的现场就是它：用户拿到一个 49 字节的包（正好等于容器头长度、密文长度为 0），
+     * 恢复自然失败。所以这里用 300KB（跨过 64KB 缓冲区好几次）做一遍真写入。
+     *
+     * @return null = 通过；否则返回一句能直接显示给人的原因
+     */
+    fun selfTestFiles(dir: File): String? = runCatching {
+        dir.mkdirs()
+        val plain = File(dir, "selftest-plain.bin")
+        val blob = File(dir, "selftest-blob.bin")
+        val back = File(dir, "selftest-back.bin")
+        try {
+            val payload = ByteArray(300_000)
+            random.nextBytes(payload)
+            plain.writeBytes(payload)
+            encryptArchiveToFile(plain, blob, SELFTEST_PASSWORD)
+            // GCM 不放大数据：容器必须是「头 + 明文长度」，对不上就是没写完
+            val expected = HEADER_LENGTH.toLong() + payload.size
+            if (blob.length() != expected) {
+                return "写出的容器大小不对：$expected 字节（头 ${HEADER_LENGTH} + 明文 ${payload.size}），实际 ${blob.length()}"
+            }
+            if (!decryptArchiveToFile(blob, back, SELFTEST_PASSWORD)) return "写出的容器解不回来（密码是对的）"
+            if (back.length() != plain.length()) {
+                return "解出来的大小不对：${back.length()} != ${plain.length()}"
+            }
+            val a = sha256File(plain)
+            val b = sha256File(back)
+            if (a != b) return "解出来的内容不一致（sha256 $a != $b）"
+            null
+        } finally {
+            plain.delete()
+            blob.delete()
+            back.delete()
+        }
+    }.getOrElse { "流式自检抛异常：" + it.javaClass.simpleName + ": " + it.message }
+
+    /** 逐块算 sha256（比对用；不把整个文件读进内存）。 */
+    private fun sha256File(f: File): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        val buf = ByteArray(STREAM_BUFFER)
+        FileInputStream(f).use { ins ->
+            var n = ins.read(buf)
+            while (n > 0) {
+                md.update(buf, 0, n)
+                n = ins.read(buf)
+            }
+        }
+        return hex(md.digest())
+    }
+
     fun encryptArchiveToFile(plain: File, output: File, password: String) {
         require(password.isNotEmpty()) { "加密密码不能为空" }
         val salt = ByteArray(SALT_LENGTH).also { random.nextBytes(it) }

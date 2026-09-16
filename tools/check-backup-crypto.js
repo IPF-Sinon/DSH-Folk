@@ -288,6 +288,45 @@ ok(/name == DshBackupArchive\.APP_DATA/.test(appDataKt), '读侧用同一个常�
 ok(/DshBackupArchive\.APP_DIR \+ "audit\/"/.test(appDataKt), '审计文件读侧用同一个目录前缀');
 ok(/sums\[APP_DIR \+ "audit\/" \+ f\.name\]/.test(archiveKt), '审计文件写侧也在同一前缀下');
 
+/* --------------------- 6d. 导出必须自校验：坏包绝不当成功交出去 --------------------- */
+
+// 现场：用户拿到一个 49 字节的「备份」= 容器头长度（4+1+16+12+16）+ 零长密文，
+// 恢复自然失败。而内存版自检一直是过的 —— 因为导出走的是流式那两个函数，
+// 它们从没被自检覆盖过。下面几条把「这次是怎么发现的」钉成断言。
+const selfTestFilesSpan = braceSpan(cryptoKt, 'fun selfTestFiles(');
+ok(selfTestFilesSpan !== null, '流式加解密有独立自检（selfTestFiles）');
+if (selfTestFilesSpan) {
+  const body = cryptoKt.slice(selfTestFilesSpan[0], selfTestFilesSpan[1]);
+  ok(/encryptArchiveToFile\(plain, blob, SELFTEST_PASSWORD\)/.test(body),
+    '流式自检真的调用加密落盘（不是又测一遍内存版）');
+  ok(/decryptArchiveToFile\(blob, back, SELFTEST_PASSWORD\)/.test(body), '流式自检把刚写出的文件解回来');
+  ok(/blob\.length\(\) != expected/.test(body) && /HEADER_LENGTH\.toLong\(\) \+ payload\.size/.test(body),
+    '流式自检核对「容器 = 头 + 明文」（49 字节的坏包就是这样被发现的）');
+  ok(/sha256File\(plain\)/.test(body) && /sha256File\(back\)/.test(body), '流式自检比对内容 sha256');
+  ok(/payload\.size/.test(body) && /300_000/.test(body), '自检数据量跨过 64KB 缓冲区（小额数据测不出流式问题）');
+}
+ok(/fun selfTestFiles\(dir: File\): String\?/.test(cryptoKt), 'selfTestFiles 返回可显示的原因（null = 通过）');
+
+ok(/private fun isUsableZip\(f: File\): Boolean/.test(backupKt), '有「能打开的 zip」判定');
+ok(/if \(!isUsableZip\(pluginPlain\)\)/.test(backupKt) && /dsh_bk_plugin_zip_bad/.test(backupKt),
+  '插件下载回来的包先验一遍（0 字节/半截文件当场拦住）');
+ok(/if \(!isUsableZip\(merged\)\)/.test(backupKt) && /dsh_bk_merge_empty/.test(backupKt),
+  '补包结果也验（空结果不许往下走）');
+ok(/val streamBad = DshBackupCrypto\.selfTestFiles\(stage\)/.test(backupKt),
+  '有密码时导出前先跑一次流式自检');
+
+const verifyAt = backupKt.indexOf('val verify = verifyEncrypted(ctx, merged, finalFile, plan.password, stage)');
+const deleteAfterVerify = backupKt.indexOf('finalFile.delete()', verifyAt);
+ok(verifyAt > 0 && deleteAfterVerify > verifyAt, '加密之后当场解回来核对，不通过就删掉文件并报错');
+ok(/private fun verifyEncrypted\(/.test(backupKt) && /back\.length\(\) != plain\.length\(\)/.test(backupKt),
+  '核对包含「大小 + 内容」两项');
+ok(/dsh_bk_verify_failed/.test(backupKt), '核对失败会如实说明期望值与实际值');
+ok(/dsh_bk_out_size/.test(backupKt) && /humanSize\(finalFile\.length\(\)\)/.test(backupKt),
+  '导出结果里报大小（用户一眼能看出是不是空包）');
+
+// 尺寸恒等式本身也验一遍：49 = 4 + 1 + 16 + 12 + 16
+ok(4 + 1 + 16 + 12 + 16 === 49, '容器头正好 49 字节（与现场那个坏包大小一致）');
+
 /* --------------------------------------------------------- 7. 软件数据边界 */
 section('7. 软件数据：设置带走，密钥留下');
 ok(/SKIP_PREFIXES = listOf\("webdav_"\)/.test(appDataKt), 'webdav_* 整组不带（只带地址不带密码等于给用户一个连不上的配置）');

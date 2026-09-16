@@ -1075,4 +1075,10 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_import_pw_hint_plain">这个文件不是加密包，留空就可以直接解析。</string>
     <string name="dsh_bk_import_pw_hint_encrypted">检测到这是加密包（DCA1），要填密码才能解析；留空会当作不加密直接读，读不出来。</string>
     <string name="dsh_bk_import_parse">解析</string>
+    <string name="dsh_bk_out_size">大小 %1$s</string>
+    <string name="dsh_bk_plugin_zip_bad">插件导出的包不能用（%1$d 字节，打不开）—— 已中止，没有生成备份文件。</string>
+    <string name="dsh_bk_merge_empty">补包结果为空（%1$d 字节）—— 已中止，没有生成备份文件。</string>
+    <string name="dsh_bk_verify_failed">加密后自检没通过（%1$s：期望 %2$s，实际 %3$s）。这个文件已经删掉：宁可没有备份，也不能给你一个装作成功的坏包。</string>
+    <string name="dsh_backup_plugin_retry">重新检测</string>
+    <string name="dsh_backup_plugin_state_unknown">拿不到插件状态，原因未知</string>
 </resources>

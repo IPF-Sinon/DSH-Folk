@@ -93,10 +93,14 @@ object DshConfigBackup {
         if (r == null) return@withContext Status(false, error = ctx.appString(R.string.dsh_bk_not_running))
         val o = runCatching { JSONObject(r) }.getOrNull()
             ?: return@withContext Status(false, error = ctx.appString(R.string.dsh_bk_bad_json))
+        // 插件/DSH 自己给的 error 必须带出来：以前只读 ready，于是「未授权」「DSH 没起来」
+        // 这类原因全被界面兜成「插件缺失」，用户被指去重装一个明明装好的插件。
+        val err = o.optString("error")
         Status(
             ready = o.optBoolean("ready", false),
             pluginVersion = o.optString("pluginVersion"),
             dshVersion = o.optString("dshVersion"),
+            error = err,
         )
     }
 
@@ -258,8 +262,17 @@ object DshConfigBackup {
             if (zipPath.isEmpty()) {
                 return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_export_no_path))
             }
-            if (download(zipPath, pluginPlain) <= 0) {
+            val got = download(zipPath, pluginPlain)
+            if (got <= 0) {
                 return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_download_failed))
+            }
+            // 下载成功不等于内容可用：插件可能返回了一个 0 字节或半截的文件。
+            // 这种包一路补下来会变成「看起来成功、实际解不开」的东西，必须在源头拦住。
+            if (!isUsableZip(pluginPlain)) {
+                return@withContext ExportResult(
+                    false,
+                    message = ctx.appString(R.string.dsh_bk_plugin_zip_bad, got),
+                )
             }
             fromPlugin = pluginPlain
         }
@@ -297,6 +310,14 @@ object DshConfigBackup {
         } catch (e: Exception) {
             return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_merge_failed, describe(e)))
         }
+        // 补包可能「什么都没写」还不报错（例如输入是空文件 + 提前返回的写法）。
+        // 49 字节的空容器就是这么来的：加密一个空文件，头 + 空密文的 tag 正好 49 字节。
+        if (!isUsableZip(merged)) {
+            return@withContext ExportResult(
+                false,
+                message = ctx.appString(R.string.dsh_bk_merge_empty, merged.length()),
+            )
+        }
 
         // 3) 整包加密（有密码时）
         val name = "dsh-config-" + stamp() + ".zip"
@@ -305,11 +326,23 @@ object DshConfigBackup {
         if (plan.password.isEmpty()) {
             merged.copyTo(finalFile, overwrite = true)
         } else {
+            // 先验流式加解密这条路本身是好的（内存版自检覆盖不到它）
+            val streamBad = DshBackupCrypto.selfTestFiles(stage)
+            if (streamBad != null) {
+                return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_crypto_broken, streamBad))
+            }
             try {
                 DshBackupCrypto.encryptArchiveToFile(merged, finalFile, plan.password)
             } catch (e: Exception) {
                 finalFile.delete()
                 return@withContext ExportResult(false, message = ctx.appString(R.string.dsh_bk_encrypt_failed, describe(e)))
+            }
+            // 加密不校验等于没做：直接拿刚写出的文件解一遍，解不回来就删掉并如实报错。
+            // 大小也要对：GCM 不放大数据，容器必须正好是「头 + 明文」。
+            val verify = verifyEncrypted(ctx, merged, finalFile, plan.password, stage)
+            if (verify != null) {
+                finalFile.delete()
+                return@withContext ExportResult(false, message = verify)
             }
         }
         merged.delete()
@@ -319,6 +352,7 @@ object DshConfigBackup {
         val (location, publicOk) = copyToPublic(ctx, finalFile, name)
         val outSummary = buildString {
             append(ctx.appString(R.string.dsh_bk_exported, name))
+            append("，").append(ctx.appString(R.string.dsh_bk_out_size, humanSize(finalFile.length())))
             if (stats.sessions > 0) {
                 append("，").append(ctx.appString(R.string.dsh_bk_out_sessions, stats.sessions, stats.sessionFiles))
             }
@@ -338,6 +372,69 @@ object DshConfigBackup {
             encrypted = plan.password.isNotEmpty(),
             message = outSummary,
         )
+    }
+
+    /** 这个文件是「能打开的 zip」吗（0 字节、半截文件、非 zip 都算不行）。 */
+    private fun isUsableZip(f: File): Boolean = runCatching {
+        if (!f.isFile || f.length() <= 0L) return false
+        java.util.zip.ZipInputStream(f.inputStream()).use { zis -> zis.nextEntry != null }
+    }.getOrElse { false }
+
+    /**
+     * 加密之后当场解回来核对（大小 + 内容 sha256），不通过就返回一句给人看的原因。
+     *
+     * 这一步是「不把坏包交给用户」的最后一道闸：它真的读刚落盘的那个文件，而不是相信
+     * 写它的那段代码 —— 之前那次 49 字节的坏包就是「写的人以为写好了」。
+     */
+    private fun verifyEncrypted(
+        ctx: Context,
+        plain: File,
+        blob: File,
+        password: String,
+        stage: File,
+    ): String? {
+        val expected = DshBackupCrypto.HEADER_LENGTH.toLong() + plain.length()
+        if (blob.length() != expected) {
+            return ctx.appString(R.string.dsh_bk_verify_failed, "大小", "$expected", blob.length().toString())
+        }
+        val back = File(stage, "verify-back.zip")
+        try {
+            if (!DshBackupCrypto.decryptArchiveToFile(blob, back, password)) {
+                return ctx.appString(R.string.dsh_bk_verify_failed, "解密", "成功", "失败")
+            }
+            if (back.length() != plain.length()) {
+                return ctx.appString(
+                    R.string.dsh_bk_verify_failed, "大小", plain.length().toString(), back.length().toString(),
+                )
+            }
+            val a = sha256File(plain)
+            val b = sha256File(back)
+            if (a != b) return ctx.appString(R.string.dsh_bk_verify_failed, "内容", a.take(12), b.take(12))
+            return null
+        } finally {
+            back.delete()
+        }
+    }
+
+    /** 逐块算 sha256（大包不读进内存）。 */
+    private fun sha256File(f: File): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val buf = ByteArray(1 shl 16)
+        f.inputStream().use { ins ->
+            var n = ins.read(buf)
+            while (n > 0) {
+                md.update(buf, 0, n)
+                n = ins.read(buf)
+            }
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /** 1536 字节 → "1.5 KB"（只为了让用户一眼看出是不是空包）。 */
+    private fun humanSize(bytes: Long): String = when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
+        else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
     }
 
     /**

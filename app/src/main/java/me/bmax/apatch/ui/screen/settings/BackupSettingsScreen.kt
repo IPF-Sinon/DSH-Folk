@@ -62,6 +62,7 @@ import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshBackupCrypto
 import me.bmax.apatch.dsh.DshConfigBackup
+import me.bmax.apatch.dsh.DshPluginRepo
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSessionGroup
 import me.bmax.apatch.util.BackupLogManager
@@ -73,6 +74,9 @@ import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
 import me.bmax.apatch.util.WebDavUtils
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
+
+/** 备份依赖的那个插件（应用侧查「装没装」时用，不需要 DSH 在跑）。 */
+private const val DSH_CONFIG_MANAGER_PKG = "dsh-config-manager"
 
 @Destination<RootGraph>
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,17 +135,29 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     // null = 检测中；下面的 LaunchedEffect 只跑一次（备份页不是热路径）。
     var pluginReady by rememberSaveable { mutableStateOf<Boolean?>(null) }
     var pluginDetail by rememberSaveable { mutableStateOf("") }
+    // 插件到底装没装：应用侧直接查容器里的插件目录（DshPluginRepo），不需要 DSH 在跑。
+    // 不确定时一律当作「装了」—— 宁可少给一个「去安装」按钮，也不要指错路。
+    var pluginAbsent by rememberSaveable { mutableStateOf(false) }
+    // 用户点「重新检测」时 +1，让下面那个 LaunchedEffect 再跑一遍
+    var pluginProbe by rememberSaveable { mutableStateOf(0) }
     val pluginViewModel = viewModel<DshPluginViewModel>()
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(pluginProbe) {
         val st = withContext(Dispatchers.IO) { DshConfigBackup.status(context) }
+        val installed = withContext(Dispatchers.IO) {
+            runCatching {
+                DshPluginRepo.listInstalled().any { it.pkg == DSH_CONFIG_MANAGER_PKG }
+            }.getOrDefault(true)
+        }
         pluginReady = st.ready
-        // 就绪时报版本，不就绪时报原因 —— status.error 已能区分
-        // 「DSH 没运行」和「插件缺失」，别把两者混成一句
+        pluginAbsent = !st.ready && !installed
+        // 就绪时报版本，不就绪时报**插件自己给的原因** —— status.error 现在会把
+        // 插件的 error 字段带出来（未授权、DSH 没起来、响应不是 JSON 都分得开），
+        // 拿不到才退到「插件缺失」这句话。
         pluginDetail = if (st.ready) {
             st.pluginVersion.ifEmpty { "—" }
         } else {
-            st.error.ifEmpty { context.getString(R.string.dsh_backup_plugin_missing) }
+            st.error.ifEmpty { context.getString(R.string.dsh_backup_needs_running) }
         }
     }
 
@@ -360,7 +376,9 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                             // 先确认插件在：DSH 没起来时直接报「需要先启动」，比让 HTTP 超时更清楚
                             val status = DshConfigBackup.status(context)
                             val text = if (!status.ready) {
-                                if (status.error.isEmpty()) pluginMissing else notRunning
+                                // status.error 现在是插件/DSH 自己给的原因（未授权、没起来、非 JSON…），
+                                // 原样显示比一律说「先启动 DSH」有用
+                                status.error.ifEmpty { pluginMissing }
                             } else {
                                 val r = DshConfigBackup.exportArchive(
                                     context,
@@ -565,6 +583,8 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                     },
                     pluginReady = pluginReady,
                     pluginDetail = pluginDetail,
+                    pluginAbsent = pluginAbsent,
+                    onRecheckPlugin = { pluginProbe++ },
                     onGoInstallPlugin = { navigator.navigate(DshPluginStoreScreenDestination) },
                     onInstallRescueCli = { pluginViewModel.installRescueCli() },
                     onOpenTerminal = { navigator.navigate(DshTerminalScreenDestination) },

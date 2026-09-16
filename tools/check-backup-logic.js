@@ -238,6 +238,23 @@ if (pwDialog) {
   ok(/dsh_pw_show|dsh_pw_hide/.test(body), "这个密码框也有显示/隐藏");
 }
 
+console.log("─ 5d. 插件状态：原因不许被吞，安装按钮只在确认缺失时才画");
+ok(/val err = o\.optString\("error"\)/.test(backup) && /error = err,/.test(backup),
+  "status() 把插件自己的 error 带出来（以前只读 ready，原因全丢）");
+ok(/status\.error\.ifEmpty \{ pluginMissing \}/.test(screen),
+  "导出前的检查显示插件给的真实原因，而不是一律说「DSH 没起来」");
+ok(/DshPluginRepo\.listInstalled\(\)\.any \{ it\.pkg == DSH_CONFIG_MANAGER_PKG \}/.test(screen),
+  "「装没装」由应用侧直接查容器插件目录（不需要 DSH 在跑）");
+ok(/pluginAbsent = !st\.ready && !installed/.test(screen),
+  "只有「没就绪 **且** 确实没装」才算缺失");
+ok(/if \(pluginAbsent\) \{[\s\S]{0,200}onGoInstallPlugin/.test(content),
+  "「去安装插件」只在确认缺失时出现");
+ok(/onRecheckPlugin/.test(content) && /onRecheckPlugin = \{ pluginProbe\+\+ \}/.test(screen) &&
+  /LaunchedEffect\(pluginProbe\)/.test(screen),
+  "其它情况给的是「重新检测」而不是「去安装」");
+ok(/getOrDefault\(true\)/.test(screen),
+  "查不到插件清单时当作「装了」—— 宁可少给一个按钮，也不要指错路");
+
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),
   "copyToPublic 返回 (位置, 是否真的落进公共目录)");

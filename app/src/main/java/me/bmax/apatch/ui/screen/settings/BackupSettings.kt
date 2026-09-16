@@ -172,6 +172,10 @@ fun BackupSettingsContent(
     onCloudList: () -> Unit = {},
     onCloudRestore: (WebDavUtils.RemoteEntry) -> Unit = {},
     /** 插件保留的快照（恢复的最后依靠）。 */
+    /** 插件**确实没装**（应用侧查容器里的插件目录就能确定，不需要 DSH 在跑）。 */
+    pluginAbsent: Boolean = false,
+    /** 重新检测插件/DSH 状态。 */
+    onRecheckPlugin: () -> Unit = {},
     /** 会话归组：是否在跑（走停机 → 归组 → 起服务，见 DshRuntime.withServiceStopped）。 */
     groupBusy: Boolean = false,
     groupMessage: String = "",
@@ -288,8 +292,17 @@ fun BackupSettingsContent(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error,
                                 )
-                                TextButton(onClick = onGoInstallPlugin) {
-                                    Text(stringResource(R.string.dsh_backup_plugin_install))
+                                // 只有**确认插件不在**时才让人去装：DSH 没起来、或插件拒绝了这次
+                                // 请求（例如未授权）也会走到这里，那时候把人指去重装一个装好的
+                                // 插件，是纯粹的误导 —— 用户会以为插件丢了。
+                                if (pluginAbsent) {
+                                    TextButton(onClick = onGoInstallPlugin) {
+                                        Text(stringResource(R.string.dsh_backup_plugin_install))
+                                    }
+                                } else {
+                                    TextButton(onClick = onRecheckPlugin) {
+                                        Text(stringResource(R.string.dsh_backup_plugin_retry))
+                                    }
                                 }
                             }
                         }
