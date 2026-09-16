@@ -78,24 +78,35 @@ ok(/onLine: suspend \(String\) -> Unit = \{\}/.test(backup),
 ok(/onLine = \{ line -> withContext\(Dispatchers\.Main\) \{ runLines = runLines \+ line \} \}/.test(screen),
   "界面把进度行接进对话框");
 
-console.log("─ 3. 冲突策略：三档可选、默认仍保守、选择落盘");
+console.log("─ 3. 冲突策略：检测到冲突才问，三档都在，选完传进 import()");
 ok(/const val STRATEGY_MERGE = "merge"/.test(backup) &&
   /const val STRATEGY_REPLACE = "replace"/.test(backup) &&
   /const val STRATEGY_SKIP_EXISTING = "skipExisting"/.test(backup),
   "三个策略常量与插件 /plan 的 decisions.strategy 取值一致");
 ok(/strategy: String = "merge"/.test(backup), "默认策略仍是插件侧的保守默认 merge");
-ok(/strategy = importStrategy/.test(screen), "界面把用户选的策略传进 import()");
-ok(/Triple\(DshConfigBackup\.STRATEGY_MERGE/.test(content) &&
-  /Triple\(DshConfigBackup\.STRATEGY_REPLACE/.test(content) &&
-  /DshConfigBackup\.STRATEGY_SKIP_EXISTING/.test(content),
-  "界面上三档都在（不是只传参不给选）");
-ok(/data class StrategyOption\(val id: String, val label: Int, val desc: Int\)/.test(content),
-  "每档都带说明文案（用户要知道 merge 与 replace 的差别）");
-ok(/importStrategy = prefs\.getString\(PREF_KEY_IMPORT_STRATEGY/.test(config) &&
-  /putString\(PREF_KEY_IMPORT_STRATEGY, importStrategy\)/.test(config),
-  "策略选择会持久化（下次进页面还是上次那档）");
-ok(/importStrategy = it[\s\S]{0,120}BackupConfig\.save\(context\)/.test(screen),
-  "改策略即落盘");
+// 用户要求：不要在导入前就让他选策略，而是检测到冲突再问。所以断言的是
+// 「问的条件」与「答案流向」，而不是界面上有没有一个事先选好的控件。
+ok(/suspend fun preflightImport\(/.test(backup), "导入前先跑预检（上传/分析/试规划一次做完）");
+ok(/optString\("kind"\) != "Conflict"/.test(backup), "预检按计划项的 kind == Conflict 数冲突");
+ok(/conflictTotal/.test(backup) && /conflicts\.size < MAX_CONFLICT_LIST/.test(backup),
+  "冲突数量与清单都交回给界面（清单有上限，数量如实）");
+ok(/p\.conflictTotal > 0 -> askConflicts = true/.test(screen), "只有检测到冲突才置起冲突弹窗");
+ok(/SessionImport\.valueOf\(pendingSessionChoice\)/.test(screen),
+  "会话与冲突两个答案都带进最终那次导入");
+for (const [strategy, key] of [
+  ["STRATEGY_MERGE", "dsh_bk_strategy_merge"],
+  ["STRATEGY_REPLACE", "dsh_bk_strategy_replace"],
+  ["STRATEGY_SKIP_EXISTING", "dsh_bk_strategy_skip"],
+]) {
+  ok(new RegExp("choose\\(DshConfigBackup\\." + strategy + "\\)").test(screen),
+    "冲突弹窗里有 " + strategy + " 这一档");
+  ok(screen.includes("R.string." + key), "它带说明文案 " + key);
+}
+ok(!/IMPORT_STRATEGIES/.test(content), "事先选策略的控件已经从这一页移除（改成导入时问）");
+ok(/preflight = preflight/.test(screen) && /preflight: Preflight\? = null/.test(backup),
+  "答完之后用预检产物继续导入（不再上传/解密第二遍）");
+ok(/discardPreflight/.test(screen) && /fun discardPreflight\(/.test(backup),
+  "用户取消时把预检解出来的临时明文删掉");
 
 console.log("─ 4. 快照回退：先预览（零写入）→ 确认 → 才执行");
 ok(/suspend fun listSnapshots\(\)/.test(backup) && /"GET", "\/snapshots"/.test(backup),
@@ -145,8 +156,16 @@ ok(/code == "405" \|\| code == "501"/.test(screen) &&
   /context\.getString\(R\.string\.dsh_bk_cloud_unsupported, code\)/.test(screen) &&
   /context\.getString\(R\.string\.dsh_backup_webdav_failed, msg\)/.test(screen),
   "405/501（服务端不支持列目录）与其它失败分开说：否则用户不知道该改服务端还是改密码");
-ok(/onCloudRestore = \{ entry ->[\s\S]{0,2000}DshConfigBackup\.import\(/.test(screen),
-  "云端下载后复用同一条导入管道（策略/密码/会话选项一致），不另起一套");
+ok(
+  /onCloudRestore = \{[\s\S]{0,2200}DshConfigBackup\.import\(/.test(screen) ||
+    /onCloudRestore = \{[\s\S]{0,2200}startImport\(/.test(screen),
+  "云端下载后复用同一条导入管道（现在两条路径都先走预检，不再各写一套）",
+);
+ok(
+  /val staged = runCatching \{[\s\S]{0,300}DshConfigBackup\.stage\(/.test(screen) &&
+    /startImport\(staged, dshPassword\)/.test(screen),
+  "本地选文件也走同一个 startImport（预检 → 按需提问 → 导入）",
+);
 
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),

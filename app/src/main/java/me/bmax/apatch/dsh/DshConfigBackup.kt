@@ -341,6 +341,134 @@ object DshConfigBackup {
     }
 
     /**
+     * 导入预检的结果：上传、分析、**试规划**都已经做过了，界面据此决定要不要问用户。
+     *
+     * 之所以把「试规划」也放进预检：冲突只有生成计划才看得见（`/analyze` 返回的是分区清单
+     * 与兼容性，不含逐项冲突），而计划是零写入的 dry run —— 用默认策略 merge 跑一次，
+     * 凡是 `kind == "Conflict"` 的条目就是「本机已有、且与备份不同」的项。于是界面能做到
+     * 「检测到冲突才问」，而不是事先逼用户选一个策略。
+     */
+    data class Preflight(
+        /** 插件侧的已上传路径；纯软件数据包为空（那种包不进插件流程）。 */
+        val zipPath: String,
+        /** 本地明文包：会话与软件数据都从它读；等于用户选的文件时就是文件本身。 */
+        val plainZip: File,
+        /** 包内会话文件数。 */
+        val sessions: Int,
+        /** 冲突条目（最多 [MAX_CONFLICT_LIST] 条，供弹窗列出来）。 */
+        val conflicts: List<String>,
+        /** 冲突总数（列表被截断时仍然如实报数）。 */
+        val conflictTotal: Int,
+        /** 有没有需要插件出面的 DSH 分区（纯软件数据包为 false）。 */
+        val needsDsh: Boolean,
+    )
+
+    /** 预检结果：要么就绪，要么带一句能直接显示给用户的失败原因。 */
+    sealed class PreflightResult {
+        data class Ready(val preflight: Preflight) : PreflightResult()
+        data class Failed(val message: String) : PreflightResult()
+    }
+
+    /**
+     * 导入前的一次预检：解容器（需要时）→ 数会话 → 上传 → 分析 → 用默认策略试规划看冲突。
+     *
+     * 它把「上传」这一步的产物一并交回去，[import] 拿到 [Preflight] 后不会再传第二遍 ——
+     * 一个带会话的备份可能上百兆，为了问一句话就传两次是不可接受的；解出来的明文包同理。
+     */
+    suspend fun preflightImport(
+        ctx: Context,
+        zip: File,
+        password: String,
+        onLine: suspend (String) -> Unit = {},
+    ): PreflightResult = withContext(Dispatchers.IO) {
+        val plainZip: File = if (DshBackupCrypto.isArchiveBlobFile(zip)) {
+            if (password.isEmpty()) {
+                return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_need_password))
+            }
+            DshBackupCrypto.selfTest()?.let {
+                return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_crypto_broken, it))
+            }
+            val tmpDir = File(ctx.filesDir, "backup-tmp").apply { mkdirs() }
+            val plain = File(tmpDir, "preflight-plain.zip")
+            if (!DshBackupCrypto.decryptArchiveToFile(zip, plain, password)) {
+                return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_bad_password))
+            }
+            plain
+        } else {
+            zip
+        }
+        val sessions = countSessionsInZip(plainZip)
+        if (!hasDshSections(plainZip)) {
+            // 纯软件数据包：没有分区要恢复，也就不存在冲突
+            return@withContext PreflightResult.Ready(
+                Preflight("", plainZip, sessions, emptyList(), 0, needsDsh = false),
+            )
+        }
+        onLine(ctx.appString(R.string.dsh_bk_step_uploading, plainZip.name))
+        val up = upload(plainZip)
+            ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_upload_failed))
+        val upObj = runCatching { JSONObject(up) }.getOrNull()
+            ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_upload_bad_json))
+        val zipPath = upObj.optString("zipPath")
+        if (zipPath.isEmpty()) {
+            return@withContext PreflightResult.Failed(
+                upObj.optString("error").ifEmpty { ctx.appString(R.string.dsh_bk_upload_no_path) },
+            )
+        }
+        onLine(ctx.appString(R.string.dsh_bk_step_analyzing))
+        val analyze = request("POST", "/analyze", JSONObject().put("zipPath", zipPath).toString())
+            ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_analyze_failed))
+        val analyzeObj = runCatching { JSONObject(analyze) }.getOrNull()
+            ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_analyze_bad_json))
+        val analyzeErr = analyzeObj.optString("error")
+        if (analyzeErr.isNotEmpty()) return@withContext PreflightResult.Failed(analyzeErr)
+        if (!analyzeObj.optBoolean("valid", true)) {
+            val errs = analyzeObj.optJSONArray("errors")
+            val detail = buildString {
+                for (i in 0 until (errs?.length() ?: 0)) {
+                    val e = errs?.optString(i) ?: continue
+                    if (e.isNotEmpty()) append("✗ ").append(e).append('\n')
+                }
+            }
+            return@withContext PreflightResult.Failed(
+                ctx.appString(R.string.dsh_bk_invalid_archive) + detail,
+            )
+        }
+        if (analyzeObj.optString("compatibility") == "unsupported") {
+            return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_incompatible))
+        }
+        // 试规划：默认策略下未决策的冲突项保持 kind == "Conflict"，数一下就知道要不要问
+        val dryPlan = request(
+            "POST", "/plan",
+            JSONObject()
+                .put("zipPath", zipPath)
+                .put(
+                    "decisions",
+                    JSONObject().apply {
+                        put("strategy", "merge")
+                        put("resolutions", JSONObject())
+                        put("pathMappings", JSONArray())
+                    },
+                )
+                .toString(),
+        )?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val items = dryPlan?.optJSONArray("items")
+        val conflicts = mutableListOf<String>()
+        var total = 0
+        for (i in 0 until (items?.length() ?: 0)) {
+            val item = items?.optJSONObject(i) ?: continue
+            if (item.optString("kind") != "Conflict") continue
+            total++
+            if (conflicts.size < MAX_CONFLICT_LIST) {
+                val section = item.optString("adapter")
+                val desc = item.optString("description").ifEmpty { item.optString("id") }
+                conflicts += if (section.isEmpty()) desc else section + ": " + desc
+            }
+        }
+        PreflightResult.Ready(Preflight(zipPath, plainZip, sessions, conflicts, total, needsDsh = true))
+    }
+
+    /**
      * 导入之前先看一眼包里有多少个会话 —— 界面拿它决定「要不要弹那个询问框」。
      *
      * 加密包得先用密码解到临时文件才能数（条目表在容器里面），所以这里要有密码；密码为空
@@ -357,6 +485,22 @@ object DshConfigBackup {
             tmp.delete()
             n
         }
+
+    /**
+     * 用户中途放弃导入时调用：把预检解出来的明文临时包删掉。
+     *
+     * 不解密时 [Preflight.plainZip] 就是用户自己选的文件，那种情况什么都不做 —— 删别人的
+     * 文件是不可接受的。解出来的临时包里有 security/secrets.enc 与 App 数据，留在
+     * filesDir 里没有任何理由。
+     */
+    fun discardPreflight(preflight: Preflight) {
+        val f = preflight.plainZip
+        if (f.parentFile?.name != "backup-tmp") return
+        runCatching { f.delete() }
+    }
+
+    /** 预检里最多列几条冲突（弹窗里列清单，不把上百条塞进去）。 */
+    private const val MAX_CONFLICT_LIST = 8
 
     /** 导入时会话怎么处理 —— 就是用户在弹窗里选的那一项。 */
     enum class SessionImport {
@@ -591,6 +735,11 @@ object DshConfigBackup {
         password: String = "",
         sessions: SessionImport = SessionImport.SKIP,
         /**
+         * [preflightImport] 的结果。给了就用它已上传好的路径与已解好的明文包，不再传第二遍
+         * —— 冲突与会话的询问都发生在预检之后，大包不能被传两次。
+         */
+        preflight: Preflight? = null,
+        /**
          * 阶段进度（上传/分析/计划/执行/会话）：界面用它显示「在动」，而不是只转圈。
          *
          * 是 suspend 回调，因为界面要在里面切回主线程改 Compose 状态。
@@ -601,7 +750,7 @@ object DshConfigBackup {
         // （DCA1），自己解顺带确认了「这确实是本生态的备份」，而且插件那一步只看到普通明文包
         // —— 所以插件内恢复、桌面端恢复都照旧能用。解出来的明文落在应用专属目录，导入结束就删。
         val tmpDir = File(ctx.filesDir, "backup-tmp").apply { mkdirs() }
-        val plainZip: File = if (DshBackupCrypto.isArchiveBlobFile(zip)) {
+        val plainZip: File = preflight?.plainZip ?: if (DshBackupCrypto.isArchiveBlobFile(zip)) {
             if (password.isEmpty()) {
                 return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_need_password))
             }
@@ -621,29 +770,43 @@ object DshConfigBackup {
         // 的项」报错）。直接恢复 App 数据即可 —— 这类包正是「仅软件数据」那一档导出来的。
         if (!hasDshSections(plainZip)) {
             val data = DshAppData.readFromZip(plainZip)
-                ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_appdata_none))
+            if (data == null) {
+                // 这条分支不再往下走，临时明文要在这里就删掉：它可能是解密出来的包，
+                // 里面带着 security/secrets.enc 与 App 数据，留在 filesDir 里没有道理。
+                if (plainZip != zip) plainZip.delete()
+                return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_appdata_none))
+            }
             onLine(ctx.appString(R.string.dsh_bk_step_appdata))
             val changed = DshAppData.apply(ctx, data)
+            // 审计要**再读一次包**，所以删除必须放在它后面（先删会让这一步对着空气空跑）
             val lines = DshAppData.mergeAudit(ctx, plainZip)
+            if (plainZip != zip) plainZip.delete()
             val note = buildString {
                 append(ctx.appString(R.string.dsh_bk_appdata_restored, changed))
                 if (lines > 0) append("，").append(ctx.appString(R.string.dsh_bk_audit_merged, lines))
+                append("\n").append(ctx.appString(R.string.dsh_bk_appdata_takes_effect))
             }
             return@withContext ImportResult(true, ctx.appString(R.string.dsh_bk_import_done, note))
         }
 
-        onLine(ctx.appString(R.string.dsh_bk_step_uploading, plainZip.name))
-        val up = upload(plainZip) ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_failed))
-        val upObj = runCatching { JSONObject(up) }.getOrNull()
-            ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_bad_json))
-        var zipPath = upObj.optString("zipPath")
+        var zipPath = preflight?.zipPath.orEmpty()
+        var containerType = ""
         if (zipPath.isEmpty()) {
-            return@withContext ImportResult(false, upObj.optString("error").ifEmpty { ctx.appString(R.string.dsh_bk_upload_no_path) })
+            onLine(ctx.appString(R.string.dsh_bk_step_uploading, plainZip.name))
+            val up = upload(plainZip)
+                ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_failed))
+            val upObj = runCatching { JSONObject(up) }.getOrNull()
+                ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_bad_json))
+            zipPath = upObj.optString("zipPath")
+            containerType = upObj.optString("containerType")
+            if (zipPath.isEmpty()) {
+                return@withContext ImportResult(false, upObj.optString("error").ifEmpty { ctx.appString(R.string.dsh_bk_upload_no_path) })
+            }
         }
 
         // 走到这里还被告知是加密包，说明它的 magic 不是 DCA1（例如别人改过字节）——不猜，
         // 直接告诉用户解不开，而不是把一个半懂的文件递给插件。
-        if (upObj.optString("containerType") == "encrypted") {
+        if (containerType == "encrypted") {
             return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_unlock_failed))
         }
 
@@ -816,14 +979,20 @@ object DshConfigBackup {
         }
 
         // 软件数据：插件不认识它，一直由我们自己带、自己放回（见 [DshAppData]）。
+        // 插件整体回滚时不动它：配置都没落地，先把设置写进去只会让本机处于一个
+        // 「一半是备份里的设置、一半是本机配置」的状态，比不恢复更难解释。
         var appNote = ""
-        val appData = DshAppData.readFromZip(plainZip)
+        val appData = if (rollback == null) DshAppData.readFromZip(plainZip) else null
         if (appData != null) {
             onLine(ctx.appString(R.string.dsh_bk_step_appdata))
             val changed = DshAppData.apply(ctx, appData)
             val lines = DshAppData.mergeAudit(ctx, plainZip)
             appNote = ctx.appString(R.string.dsh_bk_appdata_restored, changed) +
                 if (lines > 0) "，" + ctx.appString(R.string.dsh_bk_audit_merged, lines) else ""
+            // 设置是写进 SharedPreferences 的，界面里那些已经读进内存的状态不会自己刷新
+            appNote += "\n" + ctx.appString(R.string.dsh_bk_appdata_takes_effect)
+        } else if (rollback != null) {
+            appNote = ctx.appString(R.string.dsh_bk_appdata_skipped_rollback)
         }
 
         val head = buildString {

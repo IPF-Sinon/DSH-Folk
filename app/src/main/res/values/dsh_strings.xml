@@ -1083,4 +1083,11 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_appdata_none">This archive has no app data</string>
     <string name="dsh_bk_audit_merged">Native capability log merged (%1$d lines)</string>
     <string name="dsh_bk_step_appdata">Backing up your sessions, then applying app data…</string>
+    <string name="dsh_bk_appdata_takes_effect">Restored app settings take effect after restarting DSH-Folk.</string>
+    <string name="dsh_bk_appdata_skipped_rollback">App data was not restored because the configuration import was rolled back.</string>
+    <string name="dsh_bk_conflict_title">Found %1$d conflicting items</string>
+    <string name="dsh_bk_conflict_note">A conflict means this device already has an item with the same name but different content. You only see this question when there is at least one.</string>
+    <string name="dsh_bk_conflict_more">…and %1$d more</string>
+    <string name="dsh_pw_show">Show password</string>
+    <string name="dsh_pw_hide">Hide password</string>
 </resources>

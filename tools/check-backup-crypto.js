@@ -237,23 +237,56 @@ ok(
 
 // 界面侧：只有探测到会话才弹框；三个选项（含跳过）都走同一条导入
 const screenSrc = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettingsScreen.kt');
-ok(/val count = DshConfigBackup\.countSessionsForPrompt\(/.test(screenSrc), '导入前先探测会话数量');
-const gate = braceSpan(screenSrc, 'if (count > 0)');
-ok(gate !== null, '弹框由「探测到会话」把关');
-if (gate) {
-  const flagAt = screenSrc.indexOf('pendingImportPrompt = true', gate[0]);
-  ok(flagAt > gate[0] && flagAt < gate[1], '只有 count > 0 才置起弹框标记');
-}
-const elseAt = screenSrc.indexOf('} else {', gate ? gate[1] : 0);
-ok(elseAt > 0, 'count == 0 有明确分支');
+ok(/DshConfigBackup\.preflightImport\(/.test(screenSrc), '导入前先跑预检（会话数与冲突都由它给出）');
+ok(/p\.sessions > 0 -> askSessions = true/.test(screenSrc), '只有包里有会话才置起会话弹窗');
+ok(/p\.conflictTotal > 0 -> askConflicts = true/.test(screenSrc), '只有检测到冲突才置起冲突弹窗');
+ok(/else -> finishImport\(p, DshConfigBackup\.SessionImport\.SKIP, DshConfigBackup\.STRATEGY_MERGE\)/.test(screenSrc),
+  '两样都没有就直接导入（不给用户多余的一问）');
 const pickSpan = braceSpan(screenSrc, 'val pick: (DshConfigBackup.SessionImport) -> Unit');
 ok(pickSpan !== null, '三个选项共用一个 pick 回调');
-if (pickSpan && gate) {
-  const runAt = screenSrc.indexOf('runImport(', pickSpan[0]);
-  ok(runAt > pickSpan[0] && runAt < pickSpan[1], '选「跳过会话数据」也调用 runImport（不是取消导入）');
-  const cancelAt = screenSrc.indexOf('val cancelPick', pickSpan[1]);
-  ok(cancelAt > pickSpan[1], '只有 cancelPick（点外面/取消）才放弃并删暂存文件');
+if (pickSpan) {
+  // 「跳过会话数据」必须接着走导入：会话弹窗里的 pick 只会把答案交给 finishImport，
+  // 而 finishImport 才是真正开跑的地方（它调的 runImport 里带 preflight）。
+  const finishAt = screenSrc.indexOf('finishImport(preflight, choice, DshConfigBackup.STRATEGY_MERGE)', pickSpan[0]);
+  ok(finishAt > pickSpan[0] && finishAt < pickSpan[1], '选「跳过会话数据」也继续导入（不是取消导入）');
+  const cancelAt = screenSrc.indexOf('cancelImport(preflight)', pickSpan[1]);
+  ok(cancelAt > pickSpan[1], '只有取消（点外面/取消按钮）才放弃并清掉预检产物');
+  ok(/fun finishImport\(\s*preflight: DshConfigBackup\.Preflight,/.test(screenSrc), 'finishImport 是唯一的开跑入口');
 }
+
+/* --------------------------- 6c. 软件数据真的能恢复回去（走一遍两条入库路径） --------------------------- */
+
+/**
+ * 软件数据是这条链路上唯一「插件不管」的部分：写进去、读回来全靠我们自己的常量对齐。
+ * 两边一旦用了不同的路径或不同的键，症状是**静默的** —— 导入说成功，设置一个都没回来。
+ * 所以这里把四个环节逐一对上：写侧写在哪、读侧找什么、两条入库路径都覆盖、临时包何时删。
+ */
+const appOnlySpan = braceSpan(backupKt, 'if (!hasDshSections(plainZip)) {\n            val data');
+ok(appOnlySpan !== null, '纯软件数据包有独立分支');
+if (appOnlySpan) {
+  const readAt = backupKt.indexOf('DshAppData.readFromZip(plainZip)', appOnlySpan[0]);
+  const applyAt = backupKt.indexOf('DshAppData.apply(ctx, data)', appOnlySpan[0]);
+  const auditAt = backupKt.indexOf('DshAppData.mergeAudit(ctx, plainZip)', appOnlySpan[0]);
+  const delAt = backupKt.indexOf('plainZip.delete()', appOnlySpan[0]);
+  ok(readAt > 0 && applyAt > readAt, '纯软件数据包：先读出来再写回设置');
+  ok(auditAt > applyAt, '审计日志恢复在设置之后');
+  ok(backupKt.indexOf('plainZip.delete()', auditAt) > auditAt, '临时明文在**审计读完之后**才删（先删会让审计对着空气空跑）');
+}
+const normalAt = backupKt.indexOf('val appData = if (rollback == null) DshAppData.readFromZip(plainZip) else null');
+ok(normalAt > 0, '正常路径也恢复软件数据（同一份 JSON，同一个键）');
+ok(backupKt.indexOf('if (rollback == null) DshAppData.readFromZip') >= 0, '插件整体回滚时不恢复软件数据（配置没落地，设置先落地只会前后不一致）');
+ok(/dsh_bk_appdata_skipped_rollback/.test(backupKt), '回滚跳过软件数据这件事会如实告诉用户');
+ok(/dsh_bk_appdata_takes_effect/.test(backupKt), '恢复设置后提示「重启应用才全部生效」（prefs 是热写的，界面里已读进内存的状态不会自己刷新）');
+ok(
+  backupKt.indexOf('val appData = if (rollback == null)') < backupKt.indexOf('val head = buildString {'),
+  '软件数据恢复发生在拼结果之前（否则用户看不到它到底恢复了什么）',
+);
+
+// 写侧与读侧必须用同一批常量，不能一边写 "dsh-folk/app-data.json"、一边找别的名字
+ok(/const val APP_DATA = "dsh-folk\/app-data.json"/.test(archiveKt), '包里 App 数据的路径是常量');
+ok(/name == DshBackupArchive\.APP_DATA/.test(appDataKt), '读侧用同一个常量找它（不是重写的字面量）');
+ok(/DshBackupArchive\.APP_DIR \+ "audit\/"/.test(appDataKt), '审计文件读侧用同一个目录前缀');
+ok(/sums\[APP_DIR \+ "audit\/" \+ f\.name\]/.test(archiveKt), '审计文件写侧也在同一前缀下');
 
 /* --------------------------------------------------------- 7. 软件数据边界 */
 section('7. 软件数据：设置带走，密钥留下');
@@ -288,8 +321,8 @@ ok(
   '旧 export( 已经没有任何界面调用',
 );
 ok(
-  /DshBackupCrypto\.isArchiveBlobFile|countSessionsForPrompt/.test(read(uiFiles[1])),
-  '导入前先探测（加密包要密码才数得出会话）',
+  /DshConfigBackup\.preflightImport\(/.test(read(uiFiles[1])),
+  '界面走预检（加密包由预检用密码解开后才数得出会话）',
 );
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);

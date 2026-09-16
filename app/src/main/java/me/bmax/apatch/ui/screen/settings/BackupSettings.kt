@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsBackupRestore
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -20,7 +21,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
@@ -55,19 +58,6 @@ private val RESCUE_COMMANDS = listOf(
     "dsh-config-manager restore --dry-run",
     "dsh-config-manager reinstall --list",
 )
-
-/** 导入冲突策略的三个选项（顺序即界面顺序，默认第一项）。 */
-private val IMPORT_STRATEGIES = listOf(
-    Triple(DshConfigBackup.STRATEGY_MERGE, R.string.dsh_bk_strategy_merge, R.string.dsh_bk_strategy_merge_desc),
-    Triple(DshConfigBackup.STRATEGY_REPLACE, R.string.dsh_bk_strategy_replace, R.string.dsh_bk_strategy_replace_desc),
-    Triple(
-        DshConfigBackup.STRATEGY_SKIP_EXISTING,
-        R.string.dsh_bk_strategy_skip,
-        R.string.dsh_bk_strategy_skip_desc,
-    ),
-).map { StrategyOption(it.first, it.second, it.third) }
-
-private data class StrategyOption(val id: String, val label: Int, val desc: Int)
 
 /** 导出数据范围的四个档位（枚举顺序即滑块顺序，默认 BOTH）。 */
 private data class ScopeOption(val scope: BackupScope, val label: Int, val summary: Int)
@@ -175,9 +165,6 @@ fun BackupSettingsContent(
     onDshExport: (ExportPlan) -> Unit,
     onDshImport: () -> Unit,
     onDshOpenDir: () -> Unit,
-    /** 导入冲突策略（merge / replace / skipExisting）；以前写死 merge，用户没得选。 */
-    importStrategy: String = DshConfigBackup.STRATEGY_MERGE,
-    onImportStrategyChange: (String) -> Unit = {},
     /** 云端（WebDAV）备份列表；空表示还没列过或确实没有。 */
     cloudEntries: List<WebDavUtils.RemoteEntry> = emptyList(),
     cloudBusy: Boolean = false,
@@ -216,6 +203,10 @@ fun BackupSettingsContent(
     val context = LocalContext.current
 
     val showWebDavDialog = remember { mutableStateOf(false) }
+
+    // 密码框的「显示密码」开关。默认密文；两个框各自独立，不共用一个状态。
+    var showExportPassword by rememberSaveable { mutableStateOf(false) }
+    var showWebDavPassword by rememberSaveable { mutableStateOf(false) }
 
     // ── 导出选项：数据范围 / 会话数量 / 加密密码 ──
     // 档位存索引而不是枚举：滑块拖动是连续值，Dialog 内用预览值（scopePreview），
@@ -382,7 +373,18 @@ fun BackupSettingsContent(
                             label = { Text(stringResource(R.string.dsh_bk_pw_title)) },
                             singleLine = true,
                             enabled = !dshBusy,
-                            visualTransformation = PasswordVisualTransformation(),
+                            // 眼睛：默认密文，点一下显示明文 —— 输错一次不必整条重打
+                            visualTransformation = if (showExportPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { showExportPassword = !showExportPassword }) {
+                                    Icon(
+                                        imageVector = if (showExportPassword) Icons.Filled.VisibilityOff else Icons.Outlined.Visibility,
+                                        contentDescription = stringResource(
+                                            if (showExportPassword) R.string.dsh_pw_hide else R.string.dsh_pw_show,
+                                        ),
+                                    )
+                                }
+                            },
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(Modifier.width(8.dp))
@@ -438,34 +440,8 @@ fun BackupSettingsContent(
                         )
                     }
 
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.dsh_bk_strategy_title),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        for (opt in IMPORT_STRATEGIES) {
-                            FilterChip(
-                                selected = importStrategy == opt.id,
-                                enabled = !dshBusy,
-                                onClick = { onImportStrategyChange(opt.id) },
-                                label = { Text(stringResource(opt.label)) },
-                            )
-                        }
-                    }
-                    Text(
-                        text = stringResource(
-                            (IMPORT_STRATEGIES.firstOrNull { it.id == importStrategy }
-                                ?: IMPORT_STRATEGIES.first()).desc,
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    // 冲突策略不再在这里事先选：导入时会先读一遍包，只有真的检测到冲突
+                    // 才弹窗问（见 BackupSettingsScreen 的冲突对话框）。
 
                     Spacer(Modifier.height(12.dp))
                     Row(
@@ -1009,7 +985,17 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
                     label = { Text(stringResource(R.string.webdav_password)) },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
+                    visualTransformation = if (showWebDavPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showWebDavPassword = !showWebDavPassword }) {
+                            Icon(
+                                imageVector = if (showWebDavPassword) Icons.Filled.VisibilityOff else Icons.Outlined.Visibility,
+                                contentDescription = stringResource(
+                                    if (showWebDavPassword) R.string.dsh_pw_hide else R.string.dsh_pw_show,
+                                ),
+                            )
+                        }
+                    }
                 )
 
                 OutlinedTextField(

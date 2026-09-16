@@ -82,16 +82,15 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var dshMessage by rememberSaveable { mutableStateOf("") }
     var dshPassword by rememberSaveable { mutableStateOf("") }
     var dshRemote by rememberSaveable { mutableStateOf(listOf<String>()) }
-    // 冲突策略：落盘记住（BackupConfig），下次进来还是上次那档
-    var importStrategy by rememberSaveable { mutableStateOf(BackupConfig.importStrategy) }
-    // 导入前要问用户「会话怎么处理」时，把选好的文件 + 当时的密码/策略暂存起来：
-    // 探测会话数是在后台跑的，等用户在对话框里选完才真正调用 import()。
-    // 密码/策略必须快照而不是读实时值 —— 弹窗期间用户可能又改了输入框。
-    var pendingImportPath by rememberSaveable { mutableStateOf<String?>(null) }
+    // 导入时要问什么，由**预检结果**决定：包里有会话就问会话怎么处理，检测到冲突就问
+    // 冲突怎么处理，两样都没有就直接导入 —— 所以这里存的是预检产物本身。
+    // 用 remember 而不是 rememberSaveable：Preflight 里有一个 File 与一个容器内的路径，
+    // Bundle 存不下；真碰上配置变更要重来一次预检，代价只是一次上传。
+    var pendingPreflight by remember { mutableStateOf<DshConfigBackup.Preflight?>(null) }
     var pendingImportPassword by rememberSaveable { mutableStateOf("") }
-    var pendingImportStrategy by rememberSaveable { mutableStateOf(BackupConfig.importStrategy) }
-    var pendingImportCount by rememberSaveable { mutableStateOf(0) }
-    var pendingImportPrompt by rememberSaveable { mutableStateOf(false) }
+    var pendingSessionChoice by rememberSaveable { mutableStateOf(DshConfigBackup.SessionImport.SKIP.name) }
+    var askSessions by rememberSaveable { mutableStateOf(false) }
+    var askConflicts by rememberSaveable { mutableStateOf(false) }
 
     // 云端备份 / 快照列表
     var cloudEntries by remember { mutableStateOf<List<WebDavUtils.RemoteEntry>>(emptyList()) }
@@ -159,6 +158,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
         password: String,
         strategy: String,
         sessions: DshConfigBackup.SessionImport,
+        preflight: DshConfigBackup.Preflight? = null,
     ) {
         runVisible = true
         runTarget = importTarget
@@ -172,6 +172,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 strategy = strategy,
                 password = password,
                 sessions = sessions,
+                preflight = preflight,
                 // 阶段进度直接进对话框：不然用户只看到一个转圈，不知道在干什么
                 onLine = { line -> withContext(Dispatchers.Main) { runLines = runLines + line } },
             )
@@ -188,6 +189,79 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 runLines = runLines + text
             }
         }
+    }
+
+    /**
+     * 导入的第一步：预检（解容器 → 数会话 → 上传 → 分析 → 试规划看冲突），然后决定问什么。
+     *
+     * 为什么不是「先问再导」：会话与冲突都要**读过包**才知道有没有，事先逼用户选一个策略是
+     * 在问一个他还看不见的问题。预检把这些一次问清，并且把上传/解密的结果留在
+     * [DshConfigBackup.Preflight] 里 —— 用户答完再导入时不会把大包传第二遍。
+     */
+    fun startImport(zip: File, password: String) {
+        scope.launch(Dispatchers.IO) {
+            val r = DshConfigBackup.preflightImport(
+                context, zip, password,
+                onLine = { line -> withContext(Dispatchers.Main) { dshMessage = line } },
+            )
+            withContext(Dispatchers.Main) {
+                when (r) {
+                    is DshConfigBackup.PreflightResult.Failed -> {
+                        if (zip.parentFile?.name == "backup-tmp" || zip.parentFile?.name == "config-import") {
+                            zip.delete()
+                        }
+                        val text = r.message
+                        dshMessage = text
+                        dshBusy = false
+                        runRunning = false
+                        runFailed = true
+                        runLines = runLines + text
+                    }
+                    is DshConfigBackup.PreflightResult.Ready -> {
+                        val p = r.preflight
+                        pendingPreflight = p
+                        pendingImportPassword = password
+                        pendingSessionChoice = DshConfigBackup.SessionImport.SKIP.name
+                        when {
+                            p.sessions > 0 -> askSessions = true
+                            p.conflictTotal > 0 -> askConflicts = true
+                            else -> finishImport(p, DshConfigBackup.SessionImport.SKIP, DshConfigBackup.STRATEGY_MERGE)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** 用户把该答的都答完了：真正导入（复用预检已上传/已解好的产物）。 */
+    fun finishImport(
+        preflight: DshConfigBackup.Preflight,
+        sessions: DshConfigBackup.SessionImport,
+        strategy: String,
+    ) {
+        askSessions = false
+        askConflicts = false
+        pendingPreflight = null
+        runImport(
+            zip = preflight.plainZip,
+            password = pendingImportPassword,
+            strategy = strategy,
+            sessions = sessions,
+            preflight = preflight,
+        )
+    }
+
+    /** 用户在任一弹窗上取消：不导，并把预检留下的临时明文清掉。 */
+    fun cancelImport(preflight: DshConfigBackup.Preflight) {
+        askSessions = false
+        askConflicts = false
+        pendingPreflight = null
+        DshConfigBackup.discardPreflight(preflight)
+        // 用户选的那份暂存副本（或云端下载的副本）也归我们，删掉不留垃圾
+        if (preflight.plainZip.parentFile?.name == "config-import") preflight.plainZip.delete()
+        dshBusy = false
+        runRunning = false
+        runVisible = false
     }
 
     val importPicker = rememberLauncherForActivityResult(
@@ -219,31 +293,10 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 }
                 return@launch
             }
-            // 先探测包里有多少个会话：>0 才需要问用户怎么处理（弹三选一，选完才真正导入）
-            val count = DshConfigBackup.countSessionsForPrompt(context, staged, dshPassword)
-            if (count > 0) {
-                withContext(Dispatchers.Main) {
-                    // 把文件 + 当时的密码/策略暂存（rememberSaveable），对话框选完再导入
-                    pendingImportPath = staged.absolutePath
-                    pendingImportPassword = dshPassword
-                    pendingImportStrategy = importStrategy
-                    pendingImportCount = count
-                    pendingImportPrompt = true
-                    dshMessage = ""
-                    dshBusy = false
-                    runVisible = false
-                    runRunning = false
-                }
-            } else {
-                // 0 个会话（或探测失败/加密包没给密码）：不弹框，按 SKIP 直接导入
-                withContext(Dispatchers.Main) {
-                    runImport(
-                        zip = staged,
-                        password = dshPassword,
-                        strategy = importStrategy,
-                        sessions = DshConfigBackup.SessionImport.SKIP,
-                    )
-                }
+            // 预检之后才知道要不要问用户（会话 / 冲突），所以这里只启动预检
+            withContext(Dispatchers.Main) {
+                dshMessage = ""
+                startImport(staged, dshPassword)
             }
         }
     }
@@ -347,12 +400,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         val opened = DshConfigBackup.openBackupDir(context)
                         if (!opened) dshMessage = openDirFailed
                     },
-                    importStrategy = importStrategy,
-                    onImportStrategyChange = {
-                        importStrategy = it
-                        BackupConfig.importStrategy = it
-                        BackupConfig.save(context)
-                    },
+
                     cloudEntries = cloudEntries,
                     cloudBusy = cloudBusy,
                     cloudMessage = cloudMessage,
@@ -405,41 +453,9 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                                 withContext(Dispatchers.Main) { cloudMessage = text; dshBusy = false; runRunning = false; runFailed = true; runLines = runLines + text }
                                 return@launch
                             }
-                            // 与本地导入一样先探测会话数：0 个（或探测失败/加密没密码）不弹框，按 SKIP 直接导入
-                            val count = DshConfigBackup.countSessionsForPrompt(context, dest, dshPassword)
-                            if (count <= 0) {
-                                val r = DshConfigBackup.import(
-                                    context, dest,
-                                    strategy = importStrategy,
-                                    password = dshPassword,
-                                    sessions = DshConfigBackup.SessionImport.SKIP,
-                                    onLine = { line -> withContext(Dispatchers.Main) { runLines = runLines + line } },
-                                )
-                                dest.delete()
-                                val text = if (r.detail.isBlank()) r.message else "${r.message}\n${r.detail}"
-                                val restartNeeded = r.ok && r.needsRestart
-                                withContext(Dispatchers.Main) {
-                                    cloudMessage = text
-                                    dshBusy = false
-                                    runRunning = false
-                                    runFailed = !r.ok
-                                    runNeedsRestart = restartNeeded
-                                    runLines = runLines + text
-                                }
-                            } else {
-                                // 探测到会话：先弹三选一，选完才真正导入。
-                                // 文件 + 当时的密码/策略暂存（rememberSaveable），
-                                // 弹窗期间用户改密码不影响这次导入。
-                                withContext(Dispatchers.Main) {
-                                    pendingImportPath = dest.absolutePath
-                                    pendingImportPassword = dshPassword
-                                    pendingImportStrategy = importStrategy
-                                    pendingImportCount = count
-                                    pendingImportPrompt = true
-                                    dshBusy = false
-                                    runVisible = false
-                                    runRunning = false
-                                }
+                            // 下载成功后与本地导入完全同一条管道：预检 → 按需提问 → 导入
+                            withContext(Dispatchers.Main) {
+                                startImport(dest, dshPassword)
                             }
                         }
                     },
@@ -583,68 +599,126 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
         }
     }
 
-    // 导入前的会话三选一：探测到包里有会话（countSessionsForPrompt > 0）才弹。
-    // 三个选项都会真正执行导入，区别只是会话怎么写进去 —— 选「跳过」不是取消导入；
-    // 取消（点外面 / 取消按钮）才是不导，并把暂存文件清掉。
-    if (pendingImportPrompt) {
-        val pendingPath = pendingImportPath
-        if (pendingPath != null) {
-            val pick: (DshConfigBackup.SessionImport) -> Unit = { choice ->
-                pendingImportPrompt = false
-                pendingImportPath = null
-                runImport(
-                    zip = File(pendingPath),
-                    password = pendingImportPassword,
-                    strategy = pendingImportStrategy,
-                    sessions = choice,
-                )
+    // 导入前的会话三选一：预检发现包里有会话（preflight.sessions > 0）才弹。
+    // 三个选项都会真正执行导入，区别只是会话怎么写进去 —— 选「跳过会话数据」不是取消导入；
+    // 取消（点外面 / 取消按钮）才是不导，并把预检留下的临时文件清掉。
+    val preflight = pendingPreflight
+    if (askSessions && preflight != null) {
+        val pick: (DshConfigBackup.SessionImport) -> Unit = { choice ->
+            pendingSessionChoice = choice.name
+            if (preflight.conflictTotal > 0) {
+                // 还有冲突要问：接着弹第二个框，两个都答完再导
+                askSessions = false
+                askConflicts = true
+            } else {
+                finishImport(preflight, choice, DshConfigBackup.STRATEGY_MERGE)
             }
-            val cancelPick: () -> Unit = {
-                pendingImportPrompt = false
-                pendingImportPath = null
-                File(pendingPath).delete()
-            }
-            AlertDialog(
-                onDismissRequest = cancelPick,
-                title = { Text(stringResource(R.string.dsh_bk_sessions_ask_title)) },
-                text = {
-                    Column {
-                        Text(
-                            text = stringResource(R.string.dsh_bk_sessions_ask_message, pendingImportCount),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        // 推荐项（停机恢复）放最上面，样式上也最突出
-                        SessionChoiceRow(
-                            title = stringResource(R.string.dsh_bk_sessions_ask_stop),
-                            note = stringResource(R.string.dsh_bk_sessions_ask_stop_note),
-                            recommended = true,
-                            onClick = { pick(DshConfigBackup.SessionImport.STOP) },
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        SessionChoiceRow(
-                            title = stringResource(R.string.dsh_bk_sessions_ask_direct),
-                            note = stringResource(R.string.dsh_bk_sessions_ask_direct_note),
-                            onClick = { pick(DshConfigBackup.SessionImport.DIRECT) },
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        SessionChoiceRow(
-                            title = stringResource(R.string.dsh_bk_sessions_ask_skip),
-                            note = stringResource(R.string.dsh_bk_sessions_ask_skip_note),
-                            onClick = { pick(DshConfigBackup.SessionImport.SKIP) },
-                        )
-                    }
-                },
-                // 三个选项本身就是这个对话框的按钮，不需要额外的确认键；
-                // 但 AlertDialog 的两个重载都要求按钮槽位存在，给空 lambda 即可。
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = cancelPick) {
-                        Text(stringResource(android.R.string.cancel))
-                    }
-                },
-            )
         }
+        AlertDialog(
+            onDismissRequest = { cancelImport(preflight) },
+            title = { Text(stringResource(R.string.dsh_bk_sessions_ask_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.dsh_bk_sessions_ask_message, preflight.sessions),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    // 推荐项（停机恢复）放最上面，样式上也最突出
+                    SessionChoiceRow(
+                        title = stringResource(R.string.dsh_bk_sessions_ask_stop),
+                        note = stringResource(R.string.dsh_bk_sessions_ask_stop_note),
+                        recommended = true,
+                        onClick = { pick(DshConfigBackup.SessionImport.STOP) },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SessionChoiceRow(
+                        title = stringResource(R.string.dsh_bk_sessions_ask_direct),
+                        note = stringResource(R.string.dsh_bk_sessions_ask_direct_note),
+                        onClick = { pick(DshConfigBackup.SessionImport.DIRECT) },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SessionChoiceRow(
+                        title = stringResource(R.string.dsh_bk_sessions_ask_skip),
+                        note = stringResource(R.string.dsh_bk_sessions_ask_skip_note),
+                        onClick = { pick(DshConfigBackup.SessionImport.SKIP) },
+                    )
+                }
+            },
+            // 三个选项本身就是这个对话框的按钮，不需要额外的确认键；
+            // 但 AlertDialog 的两个重载都要求按钮槽位存在，给空 lambda 即可。
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { cancelImport(preflight) }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
+    // 冲突策略：只有预检**真的检测到冲突**时才问。没有冲突就不打扰用户（直接用保守的
+    // merge）—— 事先让用户挑一个他还没看见后果的策略，等于把「本机已有同名项」藏起来。
+    if (askConflicts && preflight != null) {
+        val choose: (String) -> Unit = { strategy ->
+            finishImport(preflight, DshConfigBackup.SessionImport.valueOf(pendingSessionChoice), strategy)
+        }
+        AlertDialog(
+            onDismissRequest = { cancelImport(preflight) },
+            title = { Text(stringResource(R.string.dsh_bk_conflict_title, preflight.conflictTotal)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.dsh_bk_conflict_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    for (line in preflight.conflicts) {
+                        Text(
+                            text = "• " + line,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (preflight.conflictTotal > preflight.conflicts.size) {
+                        Text(
+                            text = stringResource(
+                                R.string.dsh_bk_conflict_more,
+                                preflight.conflictTotal - preflight.conflicts.size,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    // 保留本机是默认项：合并只会补上本机缺的，不会动现有内容
+                    SessionChoiceRow(
+                        title = stringResource(R.string.dsh_bk_strategy_merge),
+                        note = stringResource(R.string.dsh_bk_strategy_merge_desc),
+                        recommended = true,
+                        onClick = { choose(DshConfigBackup.STRATEGY_MERGE) },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SessionChoiceRow(
+                        title = stringResource(R.string.dsh_bk_strategy_replace),
+                        note = stringResource(R.string.dsh_bk_strategy_replace_desc),
+                        onClick = { choose(DshConfigBackup.STRATEGY_REPLACE) },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SessionChoiceRow(
+                        title = stringResource(R.string.dsh_bk_strategy_skip),
+                        note = stringResource(R.string.dsh_bk_strategy_skip_desc),
+                        onClick = { choose(DshConfigBackup.STRATEGY_SKIP_EXISTING) },
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { cancelImport(preflight) }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
     }
 
     // 导入 / 云端恢复 / 快照恢复共用一个进度对话框：

@@ -1062,4 +1062,11 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_appdata_none">这个归档不含软件数据</string>
     <string name="dsh_bk_audit_merged">原生权限记录并入 %1$d 行</string>
     <string name="dsh_bk_step_appdata">正在写入会话并恢复软件数据…</string>
+    <string name="dsh_bk_appdata_takes_effect">恢复的应用设置要重启 DSH-Folk 后才会全部生效。</string>
+    <string name="dsh_bk_appdata_skipped_rollback">配置导入已整体回滚，因此没有恢复软件数据。</string>
+    <string name="dsh_bk_conflict_title">检测到 %1$d 项冲突</string>
+    <string name="dsh_bk_conflict_note">冲突指本机已有同名条目、但内容与备份不同。只有真的存在冲突时才会问这一句。</string>
+    <string name="dsh_bk_conflict_more">…另有 %1$d 项</string>
+    <string name="dsh_pw_show">显示密码</string>
+    <string name="dsh_pw_hide">隐藏密码</string>
 </resources>
