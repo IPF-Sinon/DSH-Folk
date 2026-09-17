@@ -752,7 +752,7 @@ object DshConfigBackup {
 
     /** 这份 JSON 是不是工作区分区（section 形状或落盘形状都算）。 */
     private fun looksLikeWorkspaces(text: String): Boolean =
-        ""workspaces"" in text && ""path"" in text
+        text.contains("\"workspaces\"") && text.contains("\"path\"")
 
     /** 从工作区分区 JSON 里取出所有 path 字段。 */
     private fun pathsFromWorkspacesJson(text: String): List<String> = runCatching {
