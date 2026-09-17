@@ -308,8 +308,6 @@
     <!-- 搜索无结果（与「目录拉取失败」区分开） -->
     <string name="dsh_plugin_no_match">没有匹配「%1$s」的插件</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>
-    <string name="dsh_backup_remote_list">DSH 内已有的备份文件（插件 exports 目录）</string>
-    <string name="dsh_backup_remote_refresh">列出 DSH 内的备份</string>
     <string name="dsh_backup_remote_empty">DSH 内还没有备份文件。</string>
     <string name="dsh_plugin_needs_restart">已完成，重启 DSH 后生效</string>
     <string name="dsh_plugin_restart_now">立即重启</string>
@@ -1099,4 +1097,6 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_snapshot_delete_failed">删除快照失败</string>
     <string name="dsh_bk_snapshot_deleted">已删除快照 %1$s</string>
     <string name="dsh_backup_remote_deleted">已删除「%1$s」</string>
+    <string name="dsh_bk_backup_desc">插件留在容器里的历史备份（文件管理器看不到）。可以直接恢复成一个配置，也可以直接删掉；恢复时会先留一个回滚点。</string>
+    <string name="dsh_bk_backup_refresh">刷新列表</string>
 </resources>

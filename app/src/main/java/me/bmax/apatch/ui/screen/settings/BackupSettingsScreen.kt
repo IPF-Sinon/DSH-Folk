@@ -97,6 +97,10 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var pendingRemoteRestore by remember { mutableStateOf<DshConfigBackup.RemoteBackup?>(null) }
     var pendingRemoteDelete by remember { mutableStateOf<DshConfigBackup.RemoteBackup?>(null) }
     var pendingSnapshotDelete by remember { mutableStateOf<DshConfigBackup.Snapshot?>(null) }
+    // 「DSH 内已有的备份」那一块自己的忙状态与消息：它是独立的一块，
+    // 不再蹭配置备份的 dshBusy/dshMessage（否则两个卡片会互相冲掉对方的状态）
+    var dshBackupBusy by remember { mutableStateOf(false) }
+    var dshBackupMessage by remember { mutableStateOf("") }
     // 导入时要问什么，由**预检结果**决定：包里有会话就问会话怎么处理，检测到冲突就问
     // 冲突怎么处理，两样都没有就直接导入 —— 所以这里存的是预检产物本身。
     // 用 remember 而不是 rememberSaveable：Preflight 里有一个 File 与一个容器内的路径，
@@ -422,14 +426,17 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                     },
                     onDshImport = { importPicker.launch("*/*") },
                     dshBackups = dshRemote,
+                    dshBackupBusy = dshBackupBusy,
+                    dshBackupMessage = dshBackupMessage,
                     onDshListRemote = {
-                        dshBusy = true
+                        dshBackupBusy = true
+                        dshBackupMessage = ""
                         scope.launch(Dispatchers.IO) {
                             val list = DshConfigBackup.listRemoteBackups()
                             withContext(Dispatchers.Main) {
                                 dshRemote = list
-                                if (list.isEmpty()) dshMessage = remoteEmpty
-                                dshBusy = false
+                                if (list.isEmpty()) dshBackupMessage = remoteEmpty
+                                dshBackupBusy = false
                             }
                         }
                     },
@@ -606,17 +613,17 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
             confirmButton = {
                 TextButton(onClick = {
                     pendingRemoteRestore = null
-                    dshBusy = true
-                    dshMessage = importing
+                    dshBackupBusy = true
+                    dshBackupMessage = ""
                     scope.launch(Dispatchers.IO) {
                         val fetched = DshConfigBackup.fetchRemoteBackup(context, backup)
                         val encrypted = fetched != null && DshBackupCrypto.isArchiveBlobFile(fetched)
                         withContext(Dispatchers.Main) {
-                            dshBusy = false
+                            dshBackupBusy = false
                             if (fetched == null) {
-                                dshMessage = context.getString(R.string.dsh_bk_remote_fetch_failed)
+                                dshBackupMessage = context.getString(R.string.dsh_bk_remote_fetch_failed)
                             } else {
-                                dshMessage = ""
+                                dshBackupMessage = ""
                                 // 后面完全复用「选了本地文件」那条路
                                 pendingImportPath = fetched.absolutePath
                                 pendingImportEncrypted = encrypted
@@ -646,19 +653,20 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
             confirmButton = {
                 TextButton(onClick = {
                     pendingRemoteDelete = null
-                    dshBusy = true
+                    dshBackupBusy = true
+                    dshBackupMessage = ""
                     scope.launch(Dispatchers.IO) {
                         val err = DshConfigBackup.deleteRemoteBackup(context, backup)
                         BackupLogManager.log("remote backup delete " + backup.name + " err=" + err.ifEmpty { "none" })
                         val list = DshConfigBackup.listRemoteBackups()
                         withContext(Dispatchers.Main) {
                             dshRemote = list
-                            dshMessage = if (err.isEmpty()) {
+                            dshBackupMessage = if (err.isEmpty()) {
                                 context.getString(R.string.dsh_backup_remote_deleted, backup.name)
                             } else {
                                 err
                             }
-                            dshBusy = false
+                            dshBackupBusy = false
                         }
                     }
                 }) {

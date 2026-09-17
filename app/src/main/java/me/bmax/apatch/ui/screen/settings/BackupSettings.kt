@@ -195,9 +195,16 @@ fun BackupSettingsContent(
     onSnapshotList: () -> Unit = {},
     onSnapshotRestore: (DshConfigBackup.Snapshot) -> Unit = {},
     onSnapshotDelete: (DshConfigBackup.Snapshot) -> Unit = {},
-    /** 运行时 exports 目录里的备份（容器内，文件管理器看不到）。 */
+    /**
+     * 插件 exports 目录里的备份（容器内，文件管理器看不到）。
+     *
+     * 这一块有**自己的**忙状态与消息：它跟「配置备份」是两件事，蹭上面的
+     * dshBusy/dshMessage 会让两个卡片互相污染（列个备份把导出进度冲掉之类）。
+     */
     dshBackups: List<DshConfigBackup.RemoteBackup>,
-    onDshListRemote: () -> Unit,
+    dshBackupBusy: Boolean = false,
+    dshBackupMessage: String = "",
+    onDshListRemote: () -> Unit = {},
     onDshBackupRestore: (DshConfigBackup.RemoteBackup) -> Unit = {},
     onDshBackupDelete: (DshConfigBackup.RemoteBackup) -> Unit = {},
     /**
@@ -373,9 +380,6 @@ fun BackupSettingsContent(
                         TextButton(onClick = onDshOpenDir) {
                             Text(stringResource(R.string.dsh_backup_open_dir))
                         }
-                        TextButton(onClick = onDshListRemote, enabled = canRun) {
-                            Text(stringResource(R.string.dsh_backup_remote_refresh))
-                        }
                         if (dshBusy) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         }
@@ -383,67 +387,6 @@ fun BackupSettingsContent(
 
                     // 备份列表做成独立分区（和快照一样）：只是「列出来」没用 ——
                     // 用户点「列出」的下一步一定是「拿这个恢复」或者「这个不要了」。
-                    // canRun 是在上面那个动作 Row 里声明的，作用域到不了这里 ——
-                    // 这个文件里早就有条注释在提醒这个坑（快照分区踩过一次）。
-                    val backupRowCanRun = !dshBusy && pluginReady != false
-                    if (dshBackups.isNotEmpty()) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_bk_backup_section),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 240.dp)
-                                .verticalScroll(rememberScrollState()),
-                        ) {
-                            for (backup in dshBackups) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            text = backup.name,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontFamily = FontFamily.Monospace,
-                                        )
-                                        Text(
-                                            text = listOfNotNull(
-                                                backup.sizeBytes.takeIf { it > 0 }?.let(::formatBackupSize),
-                                                formatSnapshotTime(backup.mtimeMs),
-                                                backup.note.takeIf { it.isNotBlank() },
-                                            ).joinToString(" · "),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    TextButton(
-                                        onClick = { onDshBackupRestore(backup) },
-                                        enabled = backupRowCanRun,
-                                    ) {
-                                        Text(stringResource(R.string.dsh_bk_backup_restore))
-                                    }
-                                    TextButton(
-                                        onClick = { onDshBackupDelete(backup) },
-                                        enabled = backupRowCanRun,
-                                    ) {
-                                        Text(stringResource(R.string.dsh_bk_backup_delete))
-                                    }
-                                }
-                            }
-                        }
-                    } else if (!dshBusy && dshMessage.isBlank()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_backup_remote_empty),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
 
                     if (dshMessage.isNotBlank()) {
                         Spacer(Modifier.height(10.dp))
@@ -547,6 +490,93 @@ fun BackupSettingsContent(
         }
 
         // ───────── 救急 CLI ─────────
+        // 「DSH 内已有的备份」是独立的一块：它们是插件留在容器里的历史备份，
+        // 与「配置备份」这张卡片（导出/导入当前配置）是两件事 —— 挂在别人下面
+        // 会让人以为它们只能从导出流程里用。这里能直接恢复、直接删。
+        item(key = "dsh_backups") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.dsh_bk_backup_section),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_bk_backup_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    // 提到 Column 作用域：下面的列表行也要用它（放在 Row 里就只有那一行可见）
+                    val canRun = !dshBackupBusy && pluginReady != false
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedButton(onClick = onDshListRemote, enabled = canRun) {
+                            Text(stringResource(R.string.dsh_bk_backup_refresh))
+                        }
+                        if (dshBackupBusy) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        }
+                    }
+                    if (dshBackups.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 260.dp)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            for (backup in dshBackups) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = backup.name,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace,
+                                        )
+                                        Text(
+                                            text = listOfNotNull(
+                                                backup.sizeBytes.takeIf { it > 0 }?.let(::formatBackupSize),
+                                                formatSnapshotTime(backup.mtimeMs),
+                                                backup.note.takeIf { it.isNotBlank() },
+                                            ).joinToString(" · "),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    TextButton(onClick = { onDshBackupRestore(backup) }, enabled = canRun) {
+                                        Text(stringResource(R.string.dsh_bk_backup_restore))
+                                    }
+                                    TextButton(onClick = { onDshBackupDelete(backup) }, enabled = canRun) {
+                                        Text(stringResource(R.string.dsh_bk_backup_delete))
+                                    }
+                                }
+                            }
+                        }
+                    } else if (!dshBackupBusy && dshBackupMessage.isBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_backup_remote_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (dshBackupMessage.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(dshBackupMessage, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+
         // 这一整页（含上面的导出/导入）都走 dsh-config-manager 插件的回环 HTTP API，
         // 而插件住在 DSH 里面 —— DSH 起不来时它也用不了。它的 CLI 则完全独立于 DSH
         // 运行时（只依赖 js-yaml，16 个 @deepseek-ai/* 全在 peerDependencies；已实测

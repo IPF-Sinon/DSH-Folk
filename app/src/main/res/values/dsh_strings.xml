@@ -326,8 +326,6 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <!-- 搜索无结果（与「目录拉取失败」区分开） -->
     <string name="dsh_plugin_no_match">No plugin matches “%1$s”</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>
-    <string name="dsh_backup_remote_list">Backups already inside DSH (the plugin exports folder)</string>
-    <string name="dsh_backup_remote_refresh">List backups inside DSH</string>
     <string name="dsh_backup_remote_empty">No backup files inside DSH yet.</string>
     <string name="dsh_plugin_needs_restart">Done — restart DSH for it to take effect</string>
     <string name="dsh_plugin_restart_now">Restart now</string>
@@ -1120,4 +1118,6 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_snapshot_delete_failed">Could not delete the snapshot</string>
     <string name="dsh_bk_snapshot_deleted">Snapshot %1$s deleted</string>
     <string name="dsh_backup_remote_deleted">Deleted \"%1$s\"</string>
+    <string name="dsh_bk_backup_desc">Historical backups the plugin keeps inside the container (invisible to file managers). Restore one as the current configuration, or delete it; restoring leaves a rollback point first.</string>
+    <string name="dsh_bk_backup_refresh">Refresh the list</string>
 </resources>
