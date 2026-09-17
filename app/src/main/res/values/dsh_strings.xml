@@ -1127,4 +1127,6 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_plug_log_summary_done">Installed: %1$s (%2$s)</string>
     <string name="dsh_plug_log_peer_note">This plugin gets its peer dependencies from the DSH runtime, so pnpm missing-peer notices are expected and have been folded away.</string>
     <string name="dsh_plug_log_exit_code">dsh plugin exited with code %1$d</string>
+    <string name="dsh_bk_secrets_in_archive">This archive carries the credentials themselves (%1$d: %2$s); they were handed to the plugin with the password, so they should not appear in the refill list.</string>
+    <string name="dsh_bk_secrets_placeholder">This archive does not carry the credentials (the vault option was off at export time, so it only holds an empty placeholder). They can only be refilled by hand - that is an export-time choice, not an import failure.</string>
 </resources>

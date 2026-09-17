@@ -365,6 +365,27 @@ ok(/dsh_bk_import_dirs_created/.test(backup) && /dsh_bk_import_dirs_failed/.test
 ok(/trace\(\s*ctx,\s*"import-ensure-dirs/.test(backup) && /import-dir-created/.test(backup),
   "补建结果进日志（bugreport 里看得到创建了哪些目录）");
 
+console.log("─ 5h. 凭据能不能恢复：看包里有没有原文，而不是看插件那句话");
+// 插件 /execute 拿我们传的 decryptPassword 解 security/secrets.enc，把 YAML 顶层项收成
+// Map<键, 值>（键就是 DEEPSEEK_API_KEY 这类 env 名）；能拿到值的凭据就不会进待补录清单。
+// 而插件另报的「凭据文件 .credentials.yaml 不在本机 vault」说的是它的**本机镜像**
+// （导出时在同机留的副本），跨机必然缺 —— 跟「包里有没有凭据」是两件事，很容易被读成
+// 「凭据没恢复」。
+ok(/fun secretsInfoInZip\(zip: File, password: String\): SecretsInfo/.test(backup),
+  "有 secretsInfoInZip：读 manifest + secrets.enc 判断包里有没有真凭据");
+ok(/containsSecrets = sec\.optBoolean\("containsSecrets", false\)/.test(backup) &&
+  /DshBackupCrypto\.decryptSecrets\(bytes, salt, iv, tag, password\)/.test(backup),
+  "同时看 manifest 的 containsSecrets 与实际能否解开");
+ok(/private fun credentialKeys\(yaml: String\): List<String>/.test(backup),
+  "解出来的 YAML 只认顶层 KEY: value（嵌套的不当凭据）");
+ok(/dsh_bk_secrets_in_archive/.test(backup) && /dsh_bk_secrets_placeholder/.test(backup),
+  "两种情况各有明确说法：含原文 / 只有空占位");
+ok(/import-secrets encrypted=/.test(backup) && /keys=\" \+ secretsInfo\.keys\.size/.test(backup),
+  "凭据情况进日志（bugreport 里可判）");
+const zh = fs.readFileSync('app/src/main/res/values-zh-rCN/dsh_strings.xml', 'utf8');
+ok(/导出时没勾「含 vault」/.test(zh) && /这是导出时的选择，不是导入出了错/.test(zh),
+  "空占位那条解释清「不可恢复的原因在导出侧」，不让人以为导入坏了");
+
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),
   "copyToPublic 返回 (位置, 是否真的落进公共目录)");

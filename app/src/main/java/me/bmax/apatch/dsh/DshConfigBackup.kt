@@ -716,6 +716,92 @@ object DshConfigBackup {
     }.getOrDefault(0)
 
     /**
+     * 这份备份包里的**凭据原文**情况 —— 它才是「凭据能不能恢复」的唯一判据。
+     *
+     * 链路（已核对插件源码）：插件的 /execute 拿我们传的 decryptPassword 去解
+     * security/secrets.enc，把 YAML 顶层字符串项收成 Map&lt;键, 值&gt;（键就是
+     * DEEPSEEK_API_KEY 这类 env 名），凡是能从这个 Map 里拿到值的凭据就不会出现在
+     * 待补录清单里。
+     *
+     * 所以：**导出时勾了「含 vault」→ 包里是凭据原文 → 能自动恢复；没勾 → 包里是空
+     * 占位（manifest 仍是 encrypted=true）→ 没有值可恢复，只能人工重填。**
+     * 插件还会另报一句「凭据文件 .credentials.yaml 不在本机 vault」—— 那是它的**本机
+     * 镜像**（导出时在同机留的副本），跨机必然缺，和上面的判断是两回事，容易误读成
+     * 「凭据没恢复」。这里把两件事分开算清楚。
+     */
+    data class SecretsInfo(
+        /** manifest.security.encrypted（设了密码就是 true）。 */
+        val encrypted: Boolean = false,
+        /** manifest.security.containsSecrets（导出时勾了「含 vault」才是 true）。 */
+        val containsSecrets: Boolean = false,
+        /** 包里存在 security/secrets.enc。 */
+        val filePresent: Boolean = false,
+        /** 用给出的密码解得开。 */
+        val decrypted: Boolean = false,
+        /** 解出来的凭据键（env 名）。 */
+        val keys: List<String> = emptyList(),
+    )
+
+    /** 读 manifest 与 security/secrets.enc，判断这份包里有没有真的凭据原文。 */
+    fun secretsInfoInZip(zip: File, password: String): SecretsInfo = runCatching {
+        var encrypted = false
+        var containsSecrets = false
+        var blob: ByteArray? = null
+        var salt = ""
+        var iv = ""
+        var tag = ""
+        java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
+            while (true) {
+                val e = zis.nextEntry ?: break
+                when {
+                    !e.isDirectory && e.name == DshBackupArchive.MANIFEST -> {
+                        val sec = runCatching {
+                            JSONObject(zis.readBytes().toString(StandardCharsets.UTF_8))
+                                .optJSONObject("security")
+                        }.getOrNull()
+                        if (sec != null) {
+                            encrypted = sec.optBoolean("encrypted", false)
+                            containsSecrets = sec.optBoolean("containsSecrets", false)
+                            val enc = sec.optJSONObject("encryption")
+                            if (enc != null) {
+                                salt = enc.optString("salt")
+                                iv = enc.optString("iv")
+                                tag = enc.optString("authTag")
+                            }
+                        }
+                    }
+                    !e.isDirectory && e.name == DshBackupArchive.SECRETS -> {
+                        blob = runCatching { zis.readBytes() }.getOrNull()
+                    }
+                }
+                zis.closeEntry()
+            }
+        }
+        val bytes = blob
+        if (bytes == null || !encrypted || password.isEmpty()) {
+            return@runCatching SecretsInfo(encrypted, containsSecrets, bytes != null)
+        }
+        val yaml = DshBackupCrypto.decryptSecrets(bytes, salt, iv, tag, password)
+            ?: return@runCatching SecretsInfo(encrypted, containsSecrets, true, decrypted = false)
+        SecretsInfo(encrypted, containsSecrets, true, decrypted = true, keys = credentialKeys(yaml))
+    }.getOrDefault(SecretsInfo())
+
+    /** 凭据 YAML 的顶层键（只看 KEY: value 这种平铺行，嵌套的不当凭据）。 */
+    private fun credentialKeys(yaml: String): List<String> = yaml.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith("-") }
+        .mapNotNull { line ->
+            val i = line.indexOf(':')
+            if (i <= 0) return@mapNotNull null
+            val key = line.substring(0, i).trim()
+            if (key.isEmpty() || key.contains(' ')) return@mapNotNull null
+            val value = line.substring(i + 1).trim()
+            if (value.isEmpty()) return@mapNotNull null
+            key
+        }
+        .toList()
+
+    /**
      * 备份包引用的**工作区目录**（容器内绝对路径）。
      *
      * 为什么需要它：插件的 workspaces 适配器写记录时要对路径做 realpath，目录不存在就
@@ -1242,6 +1328,17 @@ object DshConfigBackup {
         // 路径 realpath，目录不存在就只留一条非致命警告（§34.17），而 App 的会话归组
         // 随后按 workspace.json 匹配 cwd —— 目录没建起来，会话就只能落单
         // （现场就是「会话归组：0/1 条进入工作区，1 条没有对应的工作区」）。
+        // 凭据能不能恢复，取决于包里有没有真凭据原文（导出时勾没勾「含 vault」）。
+        // 插件那句「不在本机 vault」说的是它的**本机镜像**，跨机必然缺 —— 两件事分开说。
+        val secretsInfo = secretsInfoInZip(plainZip, password)
+        trace(
+            ctx,
+            "import-secrets encrypted=" + secretsInfo.encrypted +
+                " contains=" + secretsInfo.containsSecrets +
+                " file=" + secretsInfo.filePresent +
+                " decrypted=" + secretsInfo.decrypted +
+                " keys=" + secretsInfo.keys.size,
+        )
         var notesForDirs = ""
         val (wantedDirs, dirsSource) = workspacePathsInZip(plainZip)
         if (wantedDirs.isNotEmpty()) {
@@ -1287,6 +1384,21 @@ object DshConfigBackup {
         val notes = StringBuilder()
         // 补建目录的结果放在最前面：它是解释「为什么这次会话进得了工作区」的那句话
         if (notesForDirs.isNotEmpty()) notes.append(notesForDirs).append("\n")
+        // 凭据那句话同样要紧：它区分「包里没有凭据」与「插件说的本机镜像不在」
+        when {
+            secretsInfo.decrypted && secretsInfo.keys.isNotEmpty() -> notes
+                .append(
+                    ctx.appString(
+                        R.string.dsh_bk_secrets_in_archive,
+                        secretsInfo.keys.size,
+                        secretsInfo.keys.joinToString("、"),
+                    ),
+                )
+                .append("\n")
+            secretsInfo.encrypted && secretsInfo.filePresent && !secretsInfo.containsSecrets -> notes
+                .append(ctx.appString(R.string.dsh_bk_secrets_placeholder))
+                .append("\n")
+        }
         for (i in 0 until total) {
             val item = executed?.optJSONObject(i) ?: continue
             val id = item.optString("itemId")
