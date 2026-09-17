@@ -335,6 +335,36 @@ ok(/dsh_bk_snapshot_delete_confirm_body/.test(screen) &&
 ok(/dsh_bk_remote_restore_confirm_body/.test(screen) && /dsh_bk_remote_delete_confirm_body/.test(screen),
   "恢复/删除备份各有一句确认文案");
 
+console.log("─ 5g. 导入前补建缺失的工作区目录（否则会话进不了工作区）");
+// 现场：插件的 workspaces 适配器对路径 realpath，目录不存在就只留一条非致命警告
+// （§34.17），于是「配置都导进来了、只有工作区没写进去」，App 的会话归组随后
+// 找不到对应工作区 → 「会话归组：0/1 条进入工作区」。插件自己在报错里写了修法：
+// 先在目标创建目录 —— 但必须赶在插件 /execute 之前。
+ok(/suspend fun ensureWorkspaceDirs\(ctx: Context, paths: List<String>\): DirFixResult/.test(backup),
+  "有 ensureWorkspaceDirs（补建缺失目录）");
+ok(/fun workspacePathsInZip\(zip: File\): Pair<List<String>, String>/.test(backup),
+  "有 workspacePathsInZip（从包里读工作区路径）");
+const dirCall = backup.indexOf("ensureWorkspaceDirs(ctx, wantedDirs)");
+const execStep = backup.indexOf("dsh_bk_step_executing");
+ok(dirCall > 0 && execStep > 0 && dirCall < execStep,
+  "补目录必须排在插件 /execute 之前（事后补已经晚了）");
+// 路径安全：外部输入不能变成「随便往哪写」的许可
+ok(/if \(!p\.startsWith\("\/"\) \|\| p == "\/"\) return null/.test(backup), "只接受容器内绝对路径");
+ok(/if \(p\.split\('\/'\)\.any \{ it == "\.\." \}\) return null/.test(backup), "含 .. 段的路径直接拒绝");
+ok(/!targetCanon\.startsWith\(rootCanon \+ File\.separator\)/.test(backup), "规范化后必须仍在 rootfs 内（软链逃逸也拦）");
+ok(/target\.isDirectory -> existing \+= path/.test(backup), "已存在目录只记一笔跳过（幂等）");
+ok(/target\.exists\(\) -> failed \+= ".+不是目录，没有覆盖/.test(backup), "目标已存在文件时不覆盖");
+ok(/else -> failed \+= ".+创建失败/.test(backup), "创建失败照实记，不假装成功");
+// 只处理小 JSON：包可能几百 MB
+ok(/e\.size in 1\.\.\(2L \* 1024L \* 1024L\)/.test(backup), "只读 2MB 以内的 JSON 条目，不把整包读进内存");
+ok(/optJSONArray\("workspaces"\)/.test(backup) && /optJSONObject\("tables"\)/.test(backup),
+  "分区形状与落盘形状（tables.workspaces）都认");
+ok(/dsh_bk_import_dirs_created/.test(backup) && /dsh_bk_import_dirs_failed/.test(backup) &&
+  /dsh_bk_step_prepare_dirs/.test(backup),
+  "补建过程与结果都有话给用户（步骤行 + 成功行 + 失败行）");
+ok(/trace\(\s*ctx,\s*"import-ensure-dirs/.test(backup) && /import-dir-created/.test(backup),
+  "补建结果进日志（bugreport 里看得到创建了哪些目录）");
+
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),
   "copyToPublic 返回 (位置, 是否真的落进公共目录)");

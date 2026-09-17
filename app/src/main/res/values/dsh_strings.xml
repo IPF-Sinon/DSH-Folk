@@ -1120,4 +1120,11 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_backup_remote_deleted">Deleted \"%1$s\"</string>
     <string name="dsh_bk_backup_desc">Historical backups the plugin keeps inside the container (invisible to file managers). Restore one as the current configuration, or delete it; restoring leaves a rollback point first.</string>
     <string name="dsh_bk_backup_refresh">Refresh the list</string>
+    <string name="dsh_bk_step_prepare_dirs">Creating the missing workspace directories (%1$d)…</string>
+    <string name="dsh_bk_import_dirs_created">Created %1$d missing directories (%2$s): the workspace paths in this archive do not exist here, and adding them is what lets sessions join their workspace.</string>
+    <string name="dsh_bk_import_dirs_failed">Some directories could not be created (%1$s): the plugin may leave only a workspace warning, and sessions may fail to join their workspace.</string>
+    <string name="dsh_plug_log_summary">Installed: %1$s</string>
+    <string name="dsh_plug_log_summary_done">Installed: %1$s (%2$s)</string>
+    <string name="dsh_plug_log_peer_note">This plugin gets its peer dependencies from the DSH runtime, so pnpm missing-peer notices are expected and have been folded away.</string>
+    <string name="dsh_plug_log_exit_code">dsh plugin exited with code %1$d</string>
 </resources>

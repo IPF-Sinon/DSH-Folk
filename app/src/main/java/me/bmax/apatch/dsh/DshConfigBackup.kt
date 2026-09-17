@@ -716,6 +716,115 @@ object DshConfigBackup {
     }.getOrDefault(0)
 
     /**
+     * 备份包引用的**工作区目录**（容器内绝对路径）。
+     *
+     * 为什么需要它：插件的 workspaces 适配器写记录时要对路径做 realpath，目录不存在就
+     * 直接抛 ENOENT，而它按 §34.17 把这种情况当**非致命警告**（不触发回滚）—— 结果就是
+     * 「配置都导进来了，只有工作区没写进去」，随后 App 的会话归组找不到对应工作区，
+     * 会话只能落单。插件自己在报错里写了修法：**先在目标创建目录**。
+     *
+     * 数据来源是包里的 workspaces 分区（它在 App 的默认导出分区里，一直都在包里）。
+     * 分区形状是 {version:1, workspaces:[{id, path, …}]}；落盘那份是
+     * ~/.dsh/storages/workspace.json 的 tables.workspaces，两种形状都认 ——
+     * 条目名按实际扫描结果取，不硬编码猜路径。
+     */
+    fun workspacePathsInZip(zip: File): Pair<List<String>, String> = runCatching {
+        val found = mutableListOf<String>()
+        var entryName = ""
+        java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
+            while (true) {
+                val e = zis.nextEntry ?: break
+                // 只读小 JSON：包可能有几百 MB，不能把每个条目都读进内存
+                if (!e.isDirectory && e.name.endsWith(".json") && e.size in 1..(2L * 1024L * 1024L)) {
+                    val text = runCatching { zis.readBytes() }.getOrNull()
+                        ?.toString(StandardCharsets.UTF_8)
+                    if (text != null && looksLikeWorkspaces(text)) {
+                        entryName = e.name
+                        found += pathsFromWorkspacesJson(text)
+                        break
+                    }
+                }
+                zis.closeEntry()
+            }
+        }
+        found.distinct() to entryName
+    }.getOrDefault(emptyList<String>() to "")
+
+    /** 这份 JSON 是不是工作区分区（section 形状或落盘形状都算）。 */
+    private fun looksLikeWorkspaces(text: String): Boolean =
+        ""workspaces"" in text && ""path"" in text
+
+    /** 从工作区分区 JSON 里取出所有 path 字段。 */
+    private fun pathsFromWorkspacesJson(text: String): List<String> = runCatching {
+        val root = JSONObject(text)
+        val arr = root.optJSONArray("workspaces")
+            ?: root.optJSONObject("tables")?.optJSONArray("workspaces")
+            ?: return@runCatching emptyList()
+        (0 until arr.length()).mapNotNull { i ->
+            (arr.opt(i) as? JSONObject)?.optString("path")?.ifEmpty { null }
+        }
+    }.getOrDefault(emptyList())
+
+    /**
+     * 一个容器内绝对路径对应的设备路径。
+     *
+     * rootfs 根就是容器根（容器里的 /root/.dsh 对应 rootfs/root/.dsh，见 DshEnv）。
+     * 只接受干净的绝对路径：带 .. 段、不绝对、或规范化后逃出 rootfs 的一律拒绝 ——
+     * 备份是外部输入，不能拿它当「随便往哪写」的许可。
+     */
+    private fun containerPathToDevice(ctx: Context, containerPath: String): File? {
+        val p = containerPath.trim()
+        if (!p.startsWith("/") || p == "/") return null
+        if (p.split('/').any { it == ".." }) return null
+        val root = DshEnv.rootfs(ctx)
+        val target = File(root, p.trimStart('/'))
+        val rootCanon = runCatching { root.canonicalPath }.getOrNull() ?: return null
+        val targetCanon = runCatching { target.canonicalPath }.getOrNull() ?: return null
+        if (targetCanon != rootCanon && !targetCanon.startsWith(rootCanon + File.separator)) return null
+        return target
+    }
+
+    /** 补建目录的结果明细（给日志与界面用）。 */
+    data class DirFixResult(
+        val created: List<String> = emptyList(),
+        val existing: List<String> = emptyList(),
+        /** 非法路径（不绝对 / 含 .. / 逃出 rootfs）。 */
+        val rejected: List<String> = emptyList(),
+        /** 建失败的原因（"路径: 原因"）。 */
+        val failed: List<String> = emptyList(),
+    ) {
+        val changed: Boolean get() = created.isNotEmpty()
+    }
+
+    /**
+     * 导入前把包里引用、目标端却不存在的工作区目录补出来。
+     *
+     * 必须在插件 /import-apply **之前**跑：插件写工作区记录在前、App 会话归组在后，
+     * 事后补目录已经晚了（那正是「会话归组 0/1」的现场）。
+     * 幂等：已存在的只记一笔跳过；失败不改既有行为（插件那条警告照旧）。
+     */
+    suspend fun ensureWorkspaceDirs(ctx: Context, paths: List<String>): DirFixResult = withContext(Dispatchers.IO) {
+        val created = mutableListOf<String>()
+        val existing = mutableListOf<String>()
+        val rejected = mutableListOf<String>()
+        val failed = mutableListOf<String>()
+        for (path in paths.distinct()) {
+            val target = containerPathToDevice(ctx, path)
+            if (target == null) {
+                rejected += path
+                continue
+            }
+            when {
+                target.isDirectory -> existing += path
+                target.exists() -> failed += "$path: 目标已存在但不是目录，没有覆盖"
+                target.mkdirs() || target.isDirectory -> created += path
+                else -> failed += "$path: 创建失败（权限或只读挂载？）"
+            }
+        }
+        DirFixResult(created, existing, rejected, failed)
+    }
+
+    /**
      * 这个包里有没有需要插件出面的 DSH 分区。
      *
      * 读不到 manifest 时返回 true：那是「不是本生态的包/包坏了」，该由插件去报那个更准确的
@@ -1129,6 +1238,36 @@ object DshConfigBackup {
             put("rollbackOnError", true)
             if (password.isNotEmpty()) put("decryptPassword", password)
         }
+        // 补建缺失的工作区目录：必须赶在插件 /execute 之前。插件写工作区记录时会对
+        // 路径 realpath，目录不存在就只留一条非致命警告（§34.17），而 App 的会话归组
+        // 随后按 workspace.json 匹配 cwd —— 目录没建起来，会话就只能落单
+        // （现场就是「会话归组：0/1 条进入工作区，1 条没有对应的工作区」）。
+        var notesForDirs = ""
+        val (wantedDirs, dirsSource) = workspacePathsInZip(plainZip)
+        if (wantedDirs.isNotEmpty()) {
+            onLine(ctx.appString(R.string.dsh_bk_step_prepare_dirs, wantedDirs.size))
+            val fix = ensureWorkspaceDirs(ctx, wantedDirs)
+            trace(
+                ctx,
+                "import-ensure-dirs source=" + dirsSource +
+                    " wanted=" + wantedDirs.size +
+                    " created=" + fix.created.size +
+                    " existing=" + fix.existing.size +
+                    " rejected=" + fix.rejected.size +
+                    " failed=" + fix.failed.size,
+            )
+            for (p in fix.created) trace(ctx, "import-dir-created " + p)
+            for (p in fix.rejected) trace(ctx, "import-dir-rejected " + p)
+            for (p in fix.failed) trace(ctx, "import-dir-failed " + p)
+            if (fix.created.isNotEmpty()) {
+                notesForDirs = ctx.appString(R.string.dsh_bk_import_dirs_created, fix.created.size, fix.created.joinToString("、"))
+            } else if (fix.failed.isNotEmpty() || fix.rejected.isNotEmpty()) {
+                notesForDirs = ctx.appString(
+                    R.string.dsh_bk_import_dirs_failed,
+                    (fix.failed + fix.rejected).joinToString("；"),
+                )
+            }
+        }
         onLine(ctx.appString(R.string.dsh_bk_step_executing))
         val exec = request(
             "POST", "/execute",
@@ -1146,6 +1285,8 @@ object DshConfigBackup {
         var skipped = 0
         var warned = 0
         val notes = StringBuilder()
+        // 补建目录的结果放在最前面：它是解释「为什么这次会话进得了工作区」的那句话
+        if (notesForDirs.isNotEmpty()) notes.append(notesForDirs).append("\n")
         for (i in 0 until total) {
             val item = executed?.optJSONObject(i) ?: continue
             val id = item.optString("itemId")

@@ -1351,6 +1351,9 @@ object DshPluginRepo {
         timeoutMs: Long,
         onLine: (String) -> Unit = {},
     ): String {
+        // 给界面看的那一路先过过滤（pnpm 的 peer WARN 块、Progress 刷屏、退出标记），
+        // 返回的原始输出一个字不动：repairIfLinkageBroken 之类要靠它解析。
+        val filter = DshPluginLogFilter()
         val out = DshRuntime.execRootfsStreaming(
             "export DSH_HOME=/root/.dsh; cd /root; " +
                 "if ! command -v dsh >/dev/null 2>&1; then echo " +
@@ -1365,9 +1368,32 @@ object DshPluginRepo {
                 " 2>&1; " +
                 "echo \"" + EXIT_MARKER + " \$?\"",
             timeoutMs,
-            onLine,
+            { line -> filter.accept(line, onLine) },
         )
+        reportFiltered(filter.finish(), onLine)
         return out.ifBlank { str(R.string.dsh_plug_no_output) }
+    }
+
+    /**
+     * 把过滤后的摘要报给界面。
+     *
+     * 只报「这次到底装了什么/成没成」，不报 pnpm 的 peer 噪音 —— 那些 peer 由 dsh
+     * 运行时提供（profile 的 node_modules 里本来就没有，上游注释写得很清楚），
+     * 每装一个插件铺一屏红字只会让人以为装坏了。
+     */
+    private fun reportFiltered(summary: DshPluginLogFilter.Summary, onLine: (String) -> Unit) {
+        if (!summary.hasSomething) return
+        if (summary.exitCode != 0) {
+            line(onLine, R.string.dsh_plug_log_exit_code, summary.exitCode)
+        }
+        if (summary.packages.isNotEmpty()) {
+            if (summary.duration.isEmpty()) {
+                line(onLine, R.string.dsh_plug_log_summary, summary.packages)
+            } else {
+                line(onLine, R.string.dsh_plug_log_summary_done, summary.packages, summary.duration)
+            }
+        }
+        if (summary.peerBlockFolded) line(onLine, R.string.dsh_plug_log_peer_note)
     }
 
     private fun httpGet(url: String): String? = runCatching {

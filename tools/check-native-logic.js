@@ -729,5 +729,39 @@ console.log("\n── 无障碍 ──");
   ok(/instance === this/.test(svc), "服务断开时只清掉自己的引用（避免误清新实例）");
 }
 
+console.log("─ 预装/安装日志降噪");
+{
+  const repo = fs.readFileSync('app/src/main/java/me/bmax/apatch/dsh/DshPluginRepo.kt', 'utf8');
+  const filter = fs.readFileSync('app/src/main/java/me/bmax/apatch/dsh/DshPluginLogFilter.kt', 'utf8');
+  // 用户现场：预装一个插件就铺一屏 pnpm peer WARN（missing peer cordis/react/…）
+  // 与 Progress 刷屏，还有我们自己的 [DSH-Folk-exit] 0。那些 peer 本来就该是缺的
+  // （由 dsh 运行时提供），不该按错误量级展示。
+  ok(/Issues with peer dependencies found/.test(filter) && /inPeerBlock = true/.test(filter),
+    "过滤 pnpm 的 peer 依赖 WARN 块");
+  ok(/trimmed\.startsWith\("Progress:"\) -> Unit/.test(filter), "丢掉 Progress 刷屏");
+  ok(/startsWith\(DshPluginRepo\.EXIT_MARKER\)/.test(filter) && /exitCode = trimmed\.removePrefix/.test(filter),
+    "退出标记不再直接显示，改成记下退出码");
+  ok(/startsWith\("dependencies:"\)/.test(filter) && /startsWith\("Done in"\)/.test(filter),
+    "从 dependencies: / Done in 提取摘要");
+  // 这条最关键：没有兜底丢弃 —— 任何没被明确处理的行都必须原样交出去
+  ok(/else -> emit\(line\)/.test(filter),
+    "未识别的行一律原样显示（错误与堆栈绝不静默）");
+  // 折叠必须能被打断：块后面跟着的 dsh 自己的报错行不能一起被吃掉
+  ok(/trimmed\.startsWith\("dsh:"\)/.test(filter) && /isBlockEnd/.test(filter),
+    "peer 块遇到 dsh: 段首即结束，后面的真实报错不会被一起折叠");
+  // 返回值必须是原始输出：repairIfLinkageBroken 等要靠它解析
+  ok(/val filter = DshPluginLogFilter\(\).*val out = DshRuntime\.execRootfsStreaming\(/s.test(repo) &&
+    /\{ line -> filter\.accept\(line, onLine\) \}/.test(repo) &&
+    /return out\.ifBlank/.test(repo),
+    "只有界面那一路过滤，返回值仍是原始输出");
+  ok(/reportFiltered\(filter\.finish\(\), onLine\)/.test(repo) &&
+    /dsh_plug_log_summary/.test(repo) && /dsh_plug_log_peer_note/.test(repo) &&
+    /dsh_plug_log_exit_code/.test(repo),
+    "收尾给摘要 + peer 说明 + 非零退出码那句人话");
+  const zh = fs.readFileSync('app/src/main/res/values-zh-rCN/dsh_strings.xml', 'utf8');
+  ok(/dsh_plug_log_peer_note/.test(zh) && /由 DSH 运行时提供/.test(zh),
+    "peer 说明解释了「为什么缺是正常的」");
+}
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);
