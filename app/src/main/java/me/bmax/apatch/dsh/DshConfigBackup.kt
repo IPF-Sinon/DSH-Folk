@@ -809,6 +809,10 @@ object DshConfigBackup {
      *     ctx.secretInputs[ref] ?? decryptedCredentials?.get(ref) → credentials.set(ref, value)
      * 所以把 refs 里的值经 /execute 的 opts.secretInputs 喂回去，它就会真的写进去。
      *
+     * **这条通道是给 0.1.59 及更旧插件用的兼容层**：插件 0.1.60 起自己会认 refs: 块
+     * （src/core/credentials-file.ts），届时这里只是重复提供同样的值（secretInputs 优先级
+     * 更高、值一致，无害）。别把这里当成唯一修复 —— 根因在插件侧。
+     *
      * 解析：顶层单个 KEY: 值（只认 env 风格的键名）＋ 顶层 refs: 块下缩进一层的键值。
      * 其余嵌套结构不算凭据（records 里的会话秘密之类不该被当成 ref）。
      */
