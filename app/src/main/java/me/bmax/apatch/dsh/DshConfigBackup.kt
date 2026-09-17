@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import java.io.File
+import java.util.LinkedHashMap
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -740,6 +741,8 @@ object DshConfigBackup {
         val decrypted: Boolean = false,
         /** 解出来的凭据键（env 名）。 */
         val keys: List<String> = emptyList(),
+        /** 凭据键 → 值（导入时用 secretInputs 直接交给插件）。 */
+        val refs: Map<String, String> = emptyMap(),
     )
 
     /** 读 manifest 与 security/secrets.enc，判断这份包里有没有真的凭据原文。 */
@@ -783,23 +786,60 @@ object DshConfigBackup {
         }
         val yaml = DshBackupCrypto.decryptSecrets(bytes, salt, iv, tag, password)
             ?: return@runCatching SecretsInfo(encrypted, containsSecrets, true, decrypted = false)
-        SecretsInfo(encrypted, containsSecrets, true, decrypted = true, keys = credentialKeys(yaml))
+        val refs = credentialRefs(yaml)
+        SecretsInfo(encrypted, containsSecrets, true, decrypted = true, keys = refs.keys.toList(), refs = refs)
     }.getOrDefault(SecretsInfo())
 
-    /** 凭据 YAML 的顶层键（只看 KEY: value 这种平铺行，嵌套的不当凭据）。 */
-    private fun credentialKeys(yaml: String): List<String> = yaml.lineSequence()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith("-") }
-        .mapNotNull { line ->
-            val i = line.indexOf(':')
-            if (i <= 0) return@mapNotNull null
-            val key = line.substring(0, i).trim()
-            if (key.isEmpty() || key.contains(' ')) return@mapNotNull null
-            val value = line.substring(i + 1).trim()
-            if (value.isEmpty()) return@mapNotNull null
-            key
+    /**
+     * 凭据 YAML 里的「ref → 值」。
+     *
+     * 为什么要 App 自己取：容器的 .credentials.yaml 把凭据放在**顶层 refs: 下面**
+     * （实测形状：
+     *     version: 1
+     *     records:
+     *       client-connection/browser-session: …
+     *     refs:
+     *       RJK66_API_KEY: sk-…
+     *       DEEPSEEK_API_KEY: sk-…
+     * ），而插件收集凭据时只看**顶层字符串项**（Object.entries + typeof v === 'string'）
+     * —— refs 是个对象，于是整段被跳过。结果就是「明明勾了含 vault、包里也确实有原文，
+     * 导入时照样让你重填」。
+     *
+     * 插件其实留了另一条通道：MissingSecret 的 applyItem 是
+     *     ctx.secretInputs[ref] ?? decryptedCredentials?.get(ref) → credentials.set(ref, value)
+     * 所以把 refs 里的值经 /execute 的 opts.secretInputs 喂回去，它就会真的写进去。
+     *
+     * 解析：顶层单个 KEY: 值（只认 env 风格的键名）＋ 顶层 refs: 块下缩进一层的键值。
+     * 其余嵌套结构不算凭据（records 里的会话秘密之类不该被当成 ref）。
+     */
+    private fun credentialRefs(yaml: String): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        var block = ""
+        for (raw in yaml.lineSequence()) {
+            val line = raw.trimEnd()
+            val body = line.trim()
+            if (body.isEmpty() || body.startsWith("#") || body.startsWith("-")) continue
+            val indent = line.length - line.trimStart().length
+            val i = body.indexOf(':')
+            if (i <= 0) continue
+            val key = body.substring(0, i).trim()
+            val value = body.substring(i + 1).trim().trim('"', '\'')
+            if (indent == 0) {
+                block = if (value.isEmpty()) key else ""
+                // 顶层标量：只认 env 风格的键名（version: 1 这类别混进来）
+                if (value.isNotEmpty() && ENV_KEY.matches(key)) out[key] = value
+            } else if (block == REFS_BLOCK && value.isNotEmpty() && !key.contains(' ')) {
+                out[key] = value
+            }
         }
-        .toList()
+        return out
+    }
+
+    /** env 风格的键名（DEEPSEEK_API_KEY、RJK66_API_KEY…）。 */
+    private val ENV_KEY = Regex("^[A-Z][A-Z0-9_]*$")
+
+    /** 凭据值所在的顶层块名（实测容器的 .credentials.yaml 就用这个）。 */
+    private const val REFS_BLOCK = "refs"
 
     /**
      * 备份包引用的**工作区目录**（容器内绝对路径）。
@@ -1339,6 +1379,14 @@ object DshConfigBackup {
                 " decrypted=" + secretsInfo.decrypted +
                 " keys=" + secretsInfo.keys.size,
         )
+        // 把包里的凭据值直接交给插件（见 credentialRefs 的注释：插件自己只看 YAML 顶层项，
+        // 取不到 refs 块里这一段，于是「勾了含 vault 也照样让你重填」）。
+        if (secretsInfo.refs.isNotEmpty()) {
+            val inputs = JSONObject()
+            for ((k, v) in secretsInfo.refs) inputs.put(k, v)
+            opts.put("secretInputs", inputs)
+            trace(ctx, "import-secrets-handoff refs=" + secretsInfo.refs.keys.joinToString(","))
+        }
         var notesForDirs = ""
         val (wantedDirs, dirsSource) = workspacePathsInZip(plainZip)
         if (wantedDirs.isNotEmpty()) {

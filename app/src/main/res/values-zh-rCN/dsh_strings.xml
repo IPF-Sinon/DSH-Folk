@@ -1106,6 +1106,6 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_plug_log_summary_done">已装好：%1$s（%2$s）</string>
     <string name="dsh_plug_log_peer_note">该插件的 peer 依赖由 DSH 运行时提供，pnpm 的 missing peer 提示属正常，已折叠。</string>
     <string name="dsh_plug_log_exit_code">dsh plugin 退出码 %1$d</string>
-    <string name="dsh_bk_secrets_in_archive">这份包里含凭据原文（%1$d 项：%2$s），导入时已随密码交给插件回填 —— 那几条不该再出现在待补录清单里。</string>
+    <string name="dsh_bk_secrets_in_archive">这份包里含凭据原文（%1$d 项：%2$s），已直接交给插件回填 —— 那几条不该再出现在待补录清单里。</string>
     <string name="dsh_bk_secrets_placeholder">这份包不含凭据原文（导出时没勾「含 vault」，包里只有空占位），所以凭据只能人工重填 —— 这是导出时的选择，不是导入出了错。</string>
 </resources>

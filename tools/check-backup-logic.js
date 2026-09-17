@@ -376,8 +376,8 @@ ok(/fun secretsInfoInZip\(zip: File, password: String\): SecretsInfo/.test(backu
 ok(/containsSecrets = sec\.optBoolean\("containsSecrets", false\)/.test(backup) &&
   /DshBackupCrypto\.decryptSecrets\(bytes, salt, iv, tag, password\)/.test(backup),
   "同时看 manifest 的 containsSecrets 与实际能否解开");
-ok(/private fun credentialKeys\(yaml: String\): List<String>/.test(backup),
-  "解出来的 YAML 只认顶层 KEY: value（嵌套的不当凭据）");
+ok(/private fun credentialRefs\(yaml: String\): Map<String, String>/.test(backup),
+  "凭据从 YAML 里按 ref: 值 取出（records 里的会话秘密之类不当凭据）");
 ok(/dsh_bk_secrets_in_archive/.test(backup) && /dsh_bk_secrets_placeholder/.test(backup),
   "两种情况各有明确说法：含原文 / 只有空占位");
 ok(/import-secrets encrypted=/.test(backup) && /keys=\" \+ secretsInfo\.keys\.size/.test(backup),
@@ -385,6 +385,33 @@ ok(/import-secrets encrypted=/.test(backup) && /keys=\" \+ secretsInfo\.keys\.si
 const zh = fs.readFileSync('app/src/main/res/values-zh-rCN/dsh_strings.xml', 'utf8');
 ok(/导出时没勾「含 vault」/.test(zh) && /这是导出时的选择，不是导入出了错/.test(zh),
   "空占位那条解释清「不可恢复的原因在导出侧」，不让人以为导入坏了");
+
+console.log("─ 5i. 凭据值必须真的交回插件（refs 块在 YAML 里是嵌套的）");
+// 实测容器的 .credentials.yaml 形状：
+//   version: 1
+//   records:
+//     client-connection/browser-session: …
+//   refs:
+//     RJK66_API_KEY: sk-…
+//     DEEPSEEK_API_KEY: sk-…
+// 而插件收集凭据时只看**顶层字符串项**（Object.entries + typeof v === 'string'），
+// refs 是对象 → 整段跳过 → 「明明勾了含 vault、包里也有原文，导入时照样让你重填」。
+// 插件留的另一条通道：MissingSecret.applyItem 是
+//   ctx.secretInputs[ref] ?? decryptedCredentials?.get(ref) → credentials.set(ref, value)
+// 所以 App 必须把 refs 里的值经 opts.secretInputs 喂回去。
+ok(/private fun credentialRefs\(yaml: String\): Map<String, String>/.test(backup),
+  "有 credentialRefs：从 YAML 里取出 ref → 值");
+ok(/block == REFS_BLOCK/.test(backup) && /private const val REFS_BLOCK = "refs"/.test(backup),
+  "认顶层 refs: 块（实测容器就是这么放的）");
+ok(/ENV_KEY\.matches\(key\)/.test(backup) && /\^\[A-Z\]\[A-Z0-9_\]\*\$/.test(backup),
+  "顶层标量只认 env 风格键名（version: 1 这类不混进来）");
+ok(/opts\.put\("secretInputs", inputs\)/.test(backup) &&
+  /for \(\(k, v\) in secretsInfo\.refs\) inputs\.put\(k, v\)/.test(backup),
+  "经 /execute 的 opts.secretInputs 交给插件（正是它 applyItem 认的那条路）");
+ok(/import-secrets-handoff refs=/.test(backup), "交接动作进日志");
+ok(/val refs: Map<String, String> = emptyMap\(\)/.test(backup) &&
+  /keys = refs\.keys\.toList\(\)/.test(backup),
+  "SecretsInfo 同时带出键与值");
 
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),
