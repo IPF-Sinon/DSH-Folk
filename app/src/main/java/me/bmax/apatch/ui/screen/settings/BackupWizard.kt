@@ -192,8 +192,18 @@ internal fun BackupImportWizard(
 
         // 「继续」只在需要用户决策的两步出现：它的可用性取决于这一步的决策是否完整，
         // 摆在决策内容旁边（而不是底部按钮行）才看得出「为什么点不动」。
+        // 「预览永远可以继续、只有决策步才卡」这条判据在 DshImportWizard.canAdvance 里，
+        // 界面只负责把 canAdvance 传进来（beta.64 的死结就是两处判据混用造成的）。
         if (step == WizardStep.PREVIEW || step == WizardStep.DECIDE) {
-            WizardAdvanceButton(step = step, enabled = canAdvance, onClick = onNext)
+            WizardAdvanceButton(
+                step = step,
+                nextIsDecide = DshImportWizard.decideNeeded(
+                    sessions = preflight?.sessions ?: 0,
+                    conflicts = preflight?.conflicts.orEmpty(),
+                ),
+                enabled = canAdvance,
+                onClick = onNext,
+            )
         }
 
         Spacer(Modifier.height(16.dp))
@@ -1160,15 +1170,19 @@ private fun WizardButtons(
  *
  * 放在内容里而不是底部按钮行：它的可用性取决于当前这一步的决策（会话选没选、冲突是否
  * 都已表态），摆在决策内容旁边比摆在屏幕底部更容易让人看出「为什么点不动」。
+ *
+ * [nextIsDecide] 只影响文案：预览步在没有会话也没有冲突时会直接跳到确认，
+ * 那时候还写「下一步：处理冲突」就是在指一件不存在的事。
  */
 @Composable
 internal fun WizardAdvanceButton(
     step: WizardStep,
+    nextIsDecide: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
     val label = when (step) {
-        WizardStep.PREVIEW -> R.string.dsh_bk_wiz_to_decide
+        WizardStep.PREVIEW -> if (nextIsDecide) R.string.dsh_bk_wiz_to_decide else R.string.dsh_bk_wiz_to_confirm
         WizardStep.DECIDE -> R.string.dsh_bk_wiz_to_confirm
         else -> R.string.dsh_bk_wiz_next
     }

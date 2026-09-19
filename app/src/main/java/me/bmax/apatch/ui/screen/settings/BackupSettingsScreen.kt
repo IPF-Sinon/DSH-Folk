@@ -97,10 +97,12 @@ private const val THEME_NONE = "none"
  *
  * 两样都没有时直接从预览跳到确认 —— 这正是旧流程的取舍（没有冲突就不弹策略框），
  * 区别只是现在会说清楚「没什么要问你的，看一眼就开跑」。
+ *
+ * 判据本身在 [DshImportWizard.decideNeeded]（与 `canAdvance`、`decisionsComplete` 同一处），
+ * 这里只负责把 nullable 的预检结果翻译成它要的参数 —— 两处各写一份判据迟早会漂移。
  */
 private fun needsDecide(preflight: DshConfigBackup.Preflight?): Boolean =
-    preflight != null && (preflight.sessions > 0 || preflight.conflicts.isNotEmpty())
-
+    preflight != null && DshImportWizard.decideNeeded(preflight.sessions, preflight.conflicts)
 
 @Destination<RootGraph>
 @OptIn(ExperimentalMaterial3Api::class)
@@ -413,14 +415,19 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
         }
     }
 
-    // 「下一步」此刻可不可用：决策步要求「会话已选 + 列出来的冲突都已表态」
-    // （判据在 DshImportWizard.decisionsComplete，不在界面里现拼）。
-    val wizardCanAdvance = DshImportWizard.decisionsComplete(
-        sessions = wizardPreflight?.sessions ?: 0,
-        sessionChoice = wizardSessionChoice(),
-        conflicts = wizardPreflight?.conflicts.orEmpty(),
-        choices = wizardChoices,
-    )
+    // 「下一步」此刻可不可用。判据在 DshImportWizard.canAdvance（不在界面里现拼）：
+    // 预览步永远可以继续（它的下一步就是进入决策步，决策还没开始做），只有决策步才要求
+    // 「会话已选 + 列出来的冲突都已表态」。beta.64 的教训：把决策完成度套在预览步上，
+    // 「下一步」会永远灰着 —— 用户进不了决策页，也就永远做不完决策。
+    val wizardCanAdvance = wizardStep?.let { step ->
+        DshImportWizard.canAdvance(
+            step = step,
+            sessions = wizardPreflight?.sessions ?: 0,
+            sessionChoice = wizardSessionChoice(),
+            conflicts = wizardPreflight?.conflicts.orEmpty(),
+            choices = wizardChoices,
+        )
+    } ?: false
 
     Scaffold(
         topBar = {

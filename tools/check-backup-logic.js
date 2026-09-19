@@ -137,9 +137,23 @@ ok(/fun decisionsComplete\(/.test(wizardModel) &&
   "冲突未逐条表态就不放行（判据在状态机里，不靠界面自己数）");
 ok(/sessions <= 0 \|\| sessionChoice != null/.test(wizardModel),
   "包里有会话时必须明确选一种处理方式（不给默认值：默认写入等于替用户决定动他的聊天记录）");
-ok(/DshImportWizard\.decisionsComplete\(/.test(screen) &&
-  /canAdvance = wizardCanAdvance/.test(screen),
-  "界面用这个判据决定「下一步」能不能点");
+ok(/DshImportWizard\.canAdvance\(/.test(screen) && /canAdvance = wizardCanAdvance/.test(screen),
+  "界面用状态机的判据决定「下一步」能不能点");
+// beta.64 真机死结：预览步的「下一步」被决策完成度卡住 —— 而预览的下一步正是进入决策步，
+// 那时一条冲突都还没表态，于是按钮永远灰着、用户永远进不了决策页。判据必须分步：
+// 预览永远放行，只有决策步才检查完成度。
+ok(/WizardStep\.PREVIEW -> true/.test(wizardModel),
+  "预览步永远可以继续（它的下一步就是进入决策步，此时决策还没开始做）");
+ok(/WizardStep\.DECIDE -> decisionsComplete\(sessions, sessionChoice, conflicts, choices\)/.test(wizardModel),
+  "只有决策步才要求「会话已选 + 列出的冲突都已表态」");
+ok(/DshImportWizard\.canAdvance\(\s*step = step,/.test(screen),
+  "界面把当前步骤一起传进去（少传步骤 = 又变回「一套判据套两步」）");
+ok(/fun decideNeeded\(sessions: Int, conflicts: List<DshConfigBackup\.ConflictItem>\): Boolean/.test(wizardModel) &&
+  /DshImportWizard\.decideNeeded\(preflight\.sessions, preflight\.conflicts\)/.test(screen) &&
+  /DshImportWizard\.decideNeeded\(\s*sessions = preflight\?\.sessions \?: 0,/.test(wizard),
+  "「要不要进决策步」也只有一处判据（界面与向导都调它，不各写一份）");
+ok(/nextIsDecide = DshImportWizard\.decideNeeded\(/.test(wizard),
+  "预览步的按钮文案跟着实际去向走（没有会话也没有冲突时不说「处理冲突」）");
 // 决策真的流进插件：/plan 的 decisions.resolutions 不再是空对象
 ok(/put\("resolutions", JSONObject\(\)\.apply \{ for \(\(id, r\) in resolutions\) put\(id, r\) \}\)/.test(backup),
   "逐条冲突决策真的写进 decisions.resolutions（以前恒为空对象 —— 问了也白问）");

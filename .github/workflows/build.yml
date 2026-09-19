@@ -162,6 +162,7 @@ jobs:
           node tools/check-bugreport-files.js
           node tools/check-text-clipping.js
           node tools/check-backup-crypto.js
+          node tools/check-wizard-gate.js
 
       # release 包必须真签名。缺任何一项就硬失败 —— 悄悄用 debug key 签出一个
       # 「release」比构建失败危险得多：它装得上、看着正常，但和正式包签名不同，

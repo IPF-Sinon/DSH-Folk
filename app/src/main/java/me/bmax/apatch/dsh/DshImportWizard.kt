@@ -91,6 +91,35 @@ object DshImportWizard {
     ): Int = conflicts.count { it.id.isNotEmpty() && it.id !in choices }
 
     /**
+     * 决策步该不该出现：包里有会话、或有冲突，才需要问用户。
+     *
+     * 两样都没有时直接从预览跳到确认 —— 这正是旧流程的取舍（没有冲突就不弹策略框），
+     * 区别只是现在会说清楚「没什么要问你的，看一眼就开跑」。
+     */
+    fun decideNeeded(sessions: Int, conflicts: List<DshConfigBackup.ConflictItem>): Boolean =
+        sessions > 0 || conflicts.isNotEmpty()
+
+    /**
+     * 「下一步」现在能不能点。
+     *
+     * **预览步要看的是「决策做完了没有」吗？不是。** 预览的下一步正是**进入**决策步，
+     * 那一刻冲突一条都还没表态 —— 拿决策完成度去卡它，按钮就永远点不动：用户进不了
+     * 决策页，也就永远做不完决策（beta.64 上真机就是这个死结）。
+     * 所以只有决策步才检查完成度。
+     */
+    fun canAdvance(
+        step: WizardStep,
+        sessions: Int,
+        sessionChoice: DshConfigBackup.SessionImport?,
+        conflicts: List<DshConfigBackup.ConflictItem>,
+        choices: Map<String, String>,
+    ): Boolean = when (step) {
+        WizardStep.PREVIEW -> true
+        WizardStep.DECIDE -> decisionsComplete(sessions, sessionChoice, conflicts, choices)
+        else -> false
+    }
+
+    /**
      * 「决策」这一步能不能继续。
      *
      * 两条都要满足：
