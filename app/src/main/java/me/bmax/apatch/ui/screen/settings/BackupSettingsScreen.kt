@@ -66,6 +66,21 @@ import me.bmax.apatch.util.WebDavUtils
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
 
+/** 备份依赖的那个插件（应用侧查「装没装」时用，不需要 DSH 在跑）。 */
+private const val DSH_CONFIG_MANAGER_PKG = "dsh-config-manager"
+
+/**
+ * 界面侧给这次插件探活的封顶时长。
+ *
+ * 比 [DshConfigBackup.STATUS_TIMEOUT_MS] 略长：让底层先超时、把「连不上」的具体原因
+ * 带回来；这一层只兜住更外层的意外（取消不生效、IO 卡死），保证按钮一定会走到一个
+ * 确定状态，而不是永远停在「检测中」。
+ */
+private const val STATUS_PROBE_TIMEOUT_MS = 20_000L
+
+// 向导自己的常量（WIZARD_TEMP_DIRS / THEME_*）跟着 [RestoreWizardScreen] 走：
+// Kotlin 顶层 private 是**文件私有**，这里放着也读不到。
+
 @Destination<RootGraph>
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
