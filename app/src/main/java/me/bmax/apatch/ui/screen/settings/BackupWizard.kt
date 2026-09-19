@@ -414,6 +414,8 @@ private fun WizardSelectStep(
         }
     }
 }
+
+@Composable
 private fun WizardPreviewStep(
     preflight: DshConfigBackup.Preflight?,
     excluded: Set<String>,

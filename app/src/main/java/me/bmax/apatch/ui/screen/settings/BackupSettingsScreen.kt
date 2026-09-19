@@ -33,6 +33,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -53,6 +54,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshBackupCrypto
 import me.bmax.apatch.dsh.DshConfigBackup
+import me.bmax.apatch.dsh.DshAppDataSnapshot
 import me.bmax.apatch.dsh.DshImportWizard
 import me.bmax.apatch.dsh.WizardStep
 import me.bmax.apatch.dsh.DshPluginRepo
