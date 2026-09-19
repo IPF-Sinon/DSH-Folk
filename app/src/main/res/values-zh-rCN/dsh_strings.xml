@@ -1157,7 +1157,6 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_wiz_prefs_old_schema">这份包是旧版本导出的，只带了一个设置文件 —— DSH 运行时设置（自动打开页面、自启动、局域网、端口等）不在里面。</string>
     <string name="dsh_bk_wiz_theme">外观</string>
     <string name="dsh_bk_wiz_theme_value">包含（%1$d KB：背景、字体、音乐、音效）</string>
-    <string name="dsh_bk_wiz_theme_none">这份包里没有</string>
     <string name="dsh_bk_wiz_audit">权限记录文件</string>
     <string name="dsh_bk_wiz_warnings">插件给的警告</string>
     <string name="dsh_bk_wiz_compat_excellent">完全兼容</string>
@@ -1199,4 +1198,6 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_wiz_to_decide">下一步：处理冲突</string>
     <string name="dsh_bk_wiz_to_confirm">下一步：确认</string>
     <string name="dsh_bk_wiz_next">下一步</string>
+    <string name="dsh_bk_wiz_appearance">外观</string>
+    <string name="dsh_bk_wiz_theme_included">包含（背景、字体、音乐、音效）</string>
 </resources>

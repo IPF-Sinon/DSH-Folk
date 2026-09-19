@@ -147,6 +147,19 @@ object DshBackupArchive {
     fun pluginSections(): List<String> = DshConfigBackup.DEFAULT_SECTIONS
 
     /**
+     * 取某个条目的长度（不存在返回 -1）。
+     *
+     * 走 `ZipFile`（只读中央目录），**不读条目内容**：预检时一个带会话的包可能上百兆，
+     * 为了问一句「外观在不在」把整包再流一遍没有道理。
+     *
+     * 长度可能是 0（先写本地头、写完才补 data descriptor 的条目，头里没有尺寸）——
+     * 只关心「有没有」时不必当真。
+     */
+    fun entrySize(zip: File, name: String): Long = runCatching {
+        java.util.zip.ZipFile(zip).use { zf -> zf.getEntry(name)?.size ?: -1L }
+    }.getOrDefault(-1L)
+
+    /**
      * 会话根目录（容器里的 `~/.dsh/sessions` 在设备上的落点）。
      *
      * 与 [DshConfigBackup.restoreSessionsFromZip] 用的是同一个根：App 直接读写这份树，

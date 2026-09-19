@@ -1179,7 +1179,6 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_wiz_prefs_old_schema">This archive was made by an older version and carries only one settings file, so the DSH runtime settings (auto-open, autostart, LAN, port…) are not in it.</string>
     <string name="dsh_bk_wiz_theme">Appearance</string>
     <string name="dsh_bk_wiz_theme_value">included (%1$d KB: background, font, music, sound)</string>
-    <string name="dsh_bk_wiz_theme_none">not in this archive</string>
     <string name="dsh_bk_wiz_audit">Audit files</string>
     <string name="dsh_bk_wiz_warnings">Warnings from the plugin</string>
     <string name="dsh_bk_wiz_compat_excellent">Fully compatible</string>
@@ -1221,4 +1220,6 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_wiz_to_decide">Next: decide conflicts</string>
     <string name="dsh_bk_wiz_to_confirm">Next: confirm</string>
     <string name="dsh_bk_wiz_next">Next</string>
+    <string name="dsh_bk_wiz_appearance">Appearance</string>
+    <string name="dsh_bk_wiz_theme_included">included (background, font, music, sound)</string>
 </resources>

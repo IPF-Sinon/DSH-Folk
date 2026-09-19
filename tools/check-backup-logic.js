@@ -539,6 +539,17 @@ ok(themeOrderRestore > themeOrderApply && themeOrderRestore2 > themeOrderApply2,
   "主题在软件数据之后落地（自定义主色/首页布局/夜间模式在 config 里，两边都会写）");
 ok(/hasDshSections\(plainZip\)/.test(backup) && /DshAppData\.summarize\(plainZip\)/.test(backup),
   "纯软件数据包也有内容摘要（预览步不能是空白）");
+// 外观不是只有「纯软件数据包」才有：混合包（软件数据 + DSH 分区）同样带主题包，
+// 而恢复外观有副作用（替换背景/字体/音乐、可能换语言）。所以「有没有外观」必须
+// 对两种包都算出来，不能只看纯软件数据包的那份摘要。
+ok(/val themeBytes: Long = -1L/.test(backup) &&
+  (backup.match(/DshBackupArchive\.entrySize\(plainZip, DshBackupArchive\.THEME\)/g) || []).length === 2,
+  "预检在两条分支里都标出「包里有没有外观主题包」");
+ok(/fun entrySize\(zip: File, name: String\): Long/.test(archive) &&
+  /java\.util\.zip\.ZipFile\(zip\)/.test(archive),
+  "只看中央目录读条目长度：不为问一句「外观在不在」把上百兆的包再流一遍");
+ok(/val themeIncluded = preflight != null && preflight\.themeBytes >= 0L/.test(wizard),
+  "预览与确认都按这个字段判断外观，而不是只在纯软件数据包那一支里显示");
 
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),

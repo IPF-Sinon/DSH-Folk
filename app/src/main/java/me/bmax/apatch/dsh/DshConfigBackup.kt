@@ -742,6 +742,14 @@ object DshConfigBackup {
         val appData: AppDataSummary? = null,
         /** 这个包是不是加密的（决定「确认」步要不要提醒密码只在这次会话里）。 */
         val encrypted: Boolean = false,
+        /**
+         * 包里带没带外观主题包，以及它多大（-1 = 没有）。
+         *
+         * 与 [appData] 不同：这个字段对**两种包**都有效。混合包（软件数据 + DSH 分区）
+         * 同样会带上 `dsh-folk/theme.zip`，而恢复外观会替换背景/字体/音乐/音效、还可能
+         * 切换应用语言 —— 这类副作用必须在确认之前说出来，不能因为「有 DSH 分区」就不提。
+         */
+        val themeBytes: Long = -1L,
     )
 
     /** 预检结果：要么就绪，要么带一句能直接显示给用户的失败原因。 */
@@ -798,6 +806,7 @@ object DshConfigBackup {
                     needsDsh = false,
                     appData = DshAppData.summarize(plainZip),
                     encrypted = plainZip != zip,
+                    themeBytes = DshBackupArchive.entrySize(plainZip, DshBackupArchive.THEME),
                 ),
             )
         }
@@ -885,6 +894,9 @@ object DshConfigBackup {
                 analysis = analysisOf(analyzeObj),
                 plan = planSummaryOf(dryPlan),
                 encrypted = plainZip != zip,
+                // 混合包也会带外观主题包（导出时「含软件数据」那一档就会打一份），
+                // 而恢复外观有副作用（替换背景/字体/音乐，可能换语言），确认页必须能说出来。
+                themeBytes = DshBackupArchive.entrySize(plainZip, DshBackupArchive.THEME),
             ),
         )
     }

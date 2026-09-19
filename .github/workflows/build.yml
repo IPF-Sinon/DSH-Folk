@@ -55,7 +55,26 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
 
-      - run: ./gradlew assembleDebug --no-daemon --stacktrace
+      # 编译错误必须能从注解里读出来。细粒度 PAT 读不了 job 日志（logs 接口要 admin），
+      # 所以把 gradle 输出留一份到文件，失败时把错误行转成 GitHub 注解 ——
+      # 否则「构建失败」这四个字就是全部信息，只能靠本地复现去猜。
+      # pipefail 不能少：没有它，管道里的 tee 会把 gradle 的退出码吞掉，
+      # 于是编译失败的工作流会显示成绿色。
+      - run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-build.log
+
+      - name: Surface compile errors
+        if: failure()
+        run: |
+          # 先给编译错误本身（e: 开头是 Kotlin 的错误格式；w: 里带 error 的也算）
+          { grep -E "^(e:|w: .*error|FAILURE:|\* What went wrong)" gradle-build.log || true; } | head -60 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+          # 再给尾部 40 行兜底：Gradle 的失败原因不一定以 e: 开头
+          tail -40 gradle-build.log | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
 
       # 拆包后每个 buildType 出两个 APK（arm64-v8a / x86_64）。原来这里 `head -1`
       # 只收一个，会静默丢掉另一个架构；现在逐 ABI 收并断言恰好两个 —— 少于两个
@@ -174,7 +193,26 @@ jobs:
             printf 'KEY_PASSWORD=%s\n' "$KEY_PASSWORD"
           } > keystore.properties
 
-      - run: ./gradlew assembleRelease --no-daemon --stacktrace
+      # 编译错误必须能从注解里读出来。细粒度 PAT 读不了 job 日志（logs 接口要 admin），
+      # 所以把 gradle 输出留一份到文件，失败时把错误行转成 GitHub 注解 ——
+      # 否则「构建失败」这四个字就是全部信息，只能靠本地复现去猜。
+      # pipefail 不能少：没有它，管道里的 tee 会把 gradle 的退出码吞掉，
+      # 于是编译失败的工作流会显示成绿色。
+      - run: |
+          set -o pipefail
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log
+
+      - name: Surface compile errors
+        if: failure()
+        run: |
+          # 先给编译错误本身（e: 开头是 Kotlin 的错误格式；w: 里带 error 的也算）
+          grep -E "^(e:|w: .*error|FAILURE:|\* What went wrong)" gradle-build.log | head -60 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+          # 再给尾部 40 行兜底：Gradle 的失败原因不一定以 e: 开头
+          tail -40 gradle-build.log | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
 
       - name: Collect APKs
         run: |

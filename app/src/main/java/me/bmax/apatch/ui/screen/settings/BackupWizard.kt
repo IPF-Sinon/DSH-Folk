@@ -423,8 +423,7 @@ private fun WizardPreviewStep(preflight: DshConfigBackup.Preflight?) {
         }
         if (plan != null) {
             Spacer(Modifier.height(14.dp))
-            SectionHeader(stringResource(R.string.dsh_bk_wiz_preview_plan))
-            Spacer(Modifier.height(6.dp))
+            SectionHeader(stringResource(R.string.dsh_bk_wiz_preview_plan))            Spacer(Modifier.height(6.dp))
             StatRow(
                 stringResource(R.string.dsh_bk_wiz_will_change),
                 plan.willChange.toString(),
@@ -502,14 +501,6 @@ private fun WizardPreviewStep(preflight: DshConfigBackup.Preflight?) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            StatRow(
-                stringResource(R.string.dsh_bk_wiz_theme),
-                if (appData.theme) {
-                    stringResource(R.string.dsh_bk_wiz_theme_value, appData.themeBytes / 1024)
-                } else {
-                    stringResource(R.string.dsh_bk_wiz_theme_none)
-                },
-            )
             if (appData.auditFiles > 0) {
                 StatRow(
                     stringResource(R.string.dsh_bk_wiz_audit),
@@ -532,6 +523,28 @@ private fun WizardPreviewStep(preflight: DshConfigBackup.Preflight?) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+        // 外观单独一段，且**两种包都看它**：混合包（软件数据 + DSH 分区）同样带主题包，
+        // 而恢复外观会替换背景/字体/音乐/音效、还可能切换应用语言 —— 这些副作用必须在
+        // 确认之前说清楚，不能因为「有 DSH 分区」就跳过不提。
+        val themeBytes = preflight?.themeBytes ?: -1L
+        if (themeBytes >= 0L) {
+            Spacer(Modifier.height(14.dp))
+            SectionHeader(stringResource(R.string.dsh_bk_wiz_appearance))
+            Spacer(Modifier.height(6.dp))
+            StatRow(
+                stringResource(R.string.dsh_bk_wiz_theme),
+                if (themeBytes > 0L) {
+                    stringResource(R.string.dsh_bk_wiz_theme_value, themeBytes / 1024)
+                } else {
+                    stringResource(R.string.dsh_bk_wiz_theme_included)
+                },
+            )
+            Text(
+                text = stringResource(R.string.dsh_bk_wiz_theme_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         val warnings = analysis?.warnings.orEmpty()
         if (warnings.isNotEmpty()) {
@@ -840,16 +853,18 @@ private fun WizardConfirmStep(
                 ),
             )
         }
-        if (preflight?.appData?.theme == true || plan?.needsRestart == true) {
+        val themeIncluded = preflight != null && preflight.themeBytes >= 0L
+        val restartNeeded = plan?.needsRestart == true
+        if (themeIncluded || restartNeeded) {
             Spacer(Modifier.height(10.dp))
-            if (plan?.needsRestart == true) {
+            if (restartNeeded) {
                 Text(
                     text = stringResource(R.string.dsh_bk_wiz_needs_restart_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (preflight?.appData?.theme == true) {
+            if (themeIncluded) {
                 Text(
                     text = stringResource(R.string.dsh_bk_wiz_theme_note),
                     style = MaterialTheme.typography.bodySmall,
