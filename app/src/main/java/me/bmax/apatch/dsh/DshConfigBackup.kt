@@ -468,7 +468,7 @@ object DshConfigBackup {
      * 与软件设置都已经在包里了。这里失败只记一笔日志并返回 null，导出结果里会如实写出
      * 「不含外观」，而不是安静地少带一半东西。
      */
-    private suspend fun exportThemeZip(ctx: Context, stage: File, onLine: (String) -> Unit): File? {
+    private suspend fun exportThemeZip(ctx: Context, stage: File, onLine: suspend (String) -> Unit): File? {
         val out = File(stage, "theme.zip")
         out.delete()
         return try {
@@ -702,25 +702,6 @@ object DshConfigBackup {
         val estimatedSections: Int = 0,
     )
 
-    /**
-     * 纯软件数据包能预览到的东西。
-     *
-     * 这类包不进插件流程（插件那边一个分区都没有），所以没有分析也没有计划 ——
-     * 但「预览」这一步不能因此变成空白：用户最需要在这一刻看清的恰恰是
-     * 「设置带了几项、外观在不在、有多少项按设计没跟着来」。
-     */
-    data class AppDataSummary(
-        val prefsFiles: Int = 0,
-        val keys: Int = 0,
-        val auditFiles: Int = 0,
-        val theme: Boolean = false,
-        val themeBytes: Long = 0,
-        val excluded: Int = 0,
-        val privilegeSkipped: Int = 0,
-        /** 1 = 旧结构（只有 config），2 = 按文件分组。用于结果里说明「旧包少一类设置」。 */
-        val schema: Int = 0,
-    )
-
     data class Preflight(
         /** 插件侧的已上传路径；纯软件数据包为空（那种包不进插件流程）。 */
         val zipPath: String,
@@ -738,8 +719,17 @@ object DshConfigBackup {
         val analysis: Analysis? = null,
         /** 试规划的结果（纯软件数据包为 null；插件不给计划时为 null）。 */
         val plan: PlanSummary? = null,
-        /** 纯软件数据包的内容摘要（有 DSH 分区时为 null）。 */
-        val appData: AppDataSummary? = null,
+        /**
+         * 纯软件数据包的内容摘要（有 DSH 分区时为 null）。
+         *
+         * 类型就是 [DshAppData.Summary] —— 那是「这份包里的软件数据长什么样」的唯一
+         * 定义；在这里再声明一个同形状的类，只会多一处需要跟它同步的地方。
+         *
+         * 这类包不进插件流程（一个分区都没有），所以没有分析也没有计划，但预览步不能
+         * 因此变成空白：用户此刻最需要看清的恰恰是「设置带了几项、外观在不在、
+         * 有多少项按设计没跟着来」。
+         */
+        val appData: DshAppData.Summary? = null,
         /** 这个包是不是加密的（决定「确认」步要不要提醒密码只在这次会话里）。 */
         val encrypted: Boolean = false,
         /**
@@ -796,6 +786,7 @@ object DshConfigBackup {
         if (!hasDshSections(plainZip)) {
             // 纯软件数据包：没有分区要恢复，也就不存在冲突。这里给出**内容摘要**，
             // 让向导的预览步有东西可说（设置带了几项、外观在不在、排除了多少项）。
+            val summary = DshAppData.summarize(plainZip)
             return@withContext PreflightResult.Ready(
                 Preflight(
                     zipPath = "",
@@ -804,9 +795,10 @@ object DshConfigBackup {
                     conflicts = emptyList(),
                     conflictTotal = 0,
                     needsDsh = false,
-                    appData = DshAppData.summarize(plainZip),
+                    appData = summary,
                     encrypted = plainZip != zip,
-                    themeBytes = DshBackupArchive.entrySize(plainZip, DshBackupArchive.THEME),
+                    // 摘要里的外观尺寸是流式数出来的（准）；中央目录里那个可能是 0。
+                    themeBytes = if (summary.theme) summary.themeBytes else -1L,
                 ),
             )
         }

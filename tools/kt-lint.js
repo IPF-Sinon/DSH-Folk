@@ -24,6 +24,84 @@ const fs = require('node:fs');
  * 处理：行注释、可嵌套块注释、普通字符串（含转义）、三引号字符串、字符字面量。
  * 不处理字符串模板里的嵌套大括号 —— 那需要完整解析器；改为把模板表达式整段跳过。
  */
+/**
+ * 把注释与字符串字面量抹成空格，保留换行与行结构。
+ *
+ * 只服务于下面那条「两行粘成一行」的启发式：判据必须落在**代码**上，
+ * 否则注释里一句 `... )   foo(` 就会误报。
+ */
+function codeOnly(src) {
+  let out = '';
+  let i = 0;
+  const n = src.length;
+  let block = 0;
+  while (i < n) {
+    const c = src[i];
+    const c2 = src[i + 1];
+    if (block > 0) {
+      if (c === '/' && c2 === '*') { block++; i += 2; continue; }
+      if (c === '*' && c2 === '/') { block--; i += 2; continue; }
+      out += c === '\n' ? '\n' : ' ';
+      i++;
+      continue;
+    }
+    if (c === '/' && c2 === '/') {
+      while (i < n && src[i] !== '\n') { out += ' '; i++; }
+      continue;
+    }
+    if (c === '/' && c2 === '*') { block++; out += '  '; i += 2; continue; }
+    if (c === '"' && src[i + 1] === '"' && src[i + 2] === '"') {
+      out += '   ';
+      i += 3;
+      while (i < n && !(src[i] === '"' && src[i + 1] === '"' && src[i + 2] === '"')) {
+        out += src[i] === '\n' ? '\n' : ' ';
+        i++;
+      }
+      if (i < n) { out += '   '; i += 3; }
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      const q = c;
+      out += ' ';
+      i++;
+      while (i < n && src[i] !== q) {
+        if (src[i] === '\\') { out += '  '; i += 2; continue; }
+        out += src[i] === '\n' ? '\n' : ' ';
+        i++;
+      }
+      if (i < n) { out += ' '; i++; }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+/**
+ * 「两行被粘成一行」。
+ *
+ * 起因是一次脚本化改动把
+ *     SectionHeader(...)
+ *     Spacer(...)
+ * 粘成了一行（中间留着缩进用的空格）。编译器报的是 `Unresolved reference 'Spacer'`，
+ * 与真实原因（少了一个换行）看不出关系，白花一轮 CI —— 本地词法检查与括号配平都
+ * 拦不住它，因为文件在语法上仍然是闭合的。
+ *
+ * 判据：代码里 `)` 之后跟 3 个以上空格，紧接着另一个语句的开头。正常 Kotlin 里
+ * `)` 后面的空白只会有：换行、`)`/`}`/`,`/`.`/运算符/类型标注；紧跟标识符调用或
+ * 关键字只可能来自「两行粘一起」。
+ */
+function gluedStatements(src) {
+  const bad = [];
+  codeOnly(src).split('\n').forEach((line, idx) => {
+    if (/\)\s{3,}([A-Za-z_]\w*\s*[({]|val\b|var\b|return\b|if\b|for\b|while\b|when\b)/.test(line)) {
+      bad.push('line ' + (idx + 1) + ': 疑似两行粘成一行 → ' + src.split('\n')[idx].trim().slice(0, 90));
+    }
+  });
+  return bad;
+}
+
 function scan(src) {
   let i = 0;
   let brace = 0;
@@ -184,6 +262,7 @@ function main() {
       continue;
     }
     const r = scan(src);
+    r.errors.push(...gluedStatements(src));
     if (r.errors.length === 0) {
       console.log(`OK    ${f}`);
     } else {

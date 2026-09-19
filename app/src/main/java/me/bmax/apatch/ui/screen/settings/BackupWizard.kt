@@ -423,7 +423,8 @@ private fun WizardPreviewStep(preflight: DshConfigBackup.Preflight?) {
         }
         if (plan != null) {
             Spacer(Modifier.height(14.dp))
-            SectionHeader(stringResource(R.string.dsh_bk_wiz_preview_plan))            Spacer(Modifier.height(6.dp))
+            SectionHeader(stringResource(R.string.dsh_bk_wiz_preview_plan))
+            Spacer(Modifier.height(6.dp))
             StatRow(
                 stringResource(R.string.dsh_bk_wiz_will_change),
                 plan.willChange.toString(),

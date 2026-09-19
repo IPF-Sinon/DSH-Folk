@@ -543,8 +543,9 @@ ok(/hasDshSections\(plainZip\)/.test(backup) && /DshAppData\.summarize\(plainZip
 // 而恢复外观有副作用（替换背景/字体/音乐、可能换语言）。所以「有没有外观」必须
 // 对两种包都算出来，不能只看纯软件数据包的那份摘要。
 ok(/val themeBytes: Long = -1L/.test(backup) &&
-  (backup.match(/DshBackupArchive\.entrySize\(plainZip, DshBackupArchive\.THEME\)/g) || []).length === 2,
-  "预检在两条分支里都标出「包里有没有外观主题包」");
+  /themeBytes = if \(summary\.theme\) summary\.themeBytes else -1L/.test(backup) &&
+  /themeBytes = DshBackupArchive\.entrySize\(plainZip, DshBackupArchive\.THEME\)/.test(backup),
+  "预检在两条分支里都标出「包里有没有外观主题包」（纯软件数据包用流式数出来的尺寸，混合包走中央目录）");
 ok(/fun entrySize\(zip: File, name: String\): Long/.test(archive) &&
   /java\.util\.zip\.ZipFile\(zip\)/.test(archive),
   "只看中央目录读条目长度：不为问一句「外观在不在」把上百兆的包再流一遍");
