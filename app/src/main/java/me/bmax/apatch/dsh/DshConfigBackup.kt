@@ -1170,32 +1170,73 @@ object DshConfigBackup {
      * 「配置都导进来了，只有工作区没写进去」，随后 App 的会话归组找不到对应工作区，
      * 会话只能落单。插件自己在报错里写了修法：**先在目标创建目录**。
      *
-     * 数据来源是包里的 workspaces 分区（它在 App 的默认导出分区里，一直都在包里）。
-     * 分区形状是 {version:1, workspaces:[{id, path, …}]}；落盘那份是
-     * ~/.dsh/storages/workspace.json 的 tables.workspaces，两种形状都认 ——
-     * 条目名按实际扫描结果取，不硬编码猜路径。
+     * 数据来源是包里的 workspaces 分区，位置由插件定死：
+     * `workspaces/workspaces.json`（`SECTION_JSON_PATHS.workspaces`），形状是
+     * `{version:1, workspaces:[{id, path, …}]}`；落盘那份是
+     * `~/.dsh/storages/workspace.json` 的 `tables.workspaces`，两种形状都认。
+     *
+     * ## 不能用条目尺寸做门槛
+     *
+     * 这里曾经要求 `e.size in 1..2MB`，本意是「只读小文件、别把几百 MB 的会话读进内存」。
+     * 但 App 自己合并包时是 `zos.putNextEntry(ZipEntry(name))`（不预设尺寸），Java 的
+     * `ZipOutputStream` 于是走 data descriptor，**本地头里的 size 字段是 0** ——
+     * `ZipInputStream.getSize()` 拿到的就是 0，判据恒假，**一个条目都读不到**。
+     * 症状极具迷惑性：补建目录那一步整段不执行（报告里连「已补建 N 个」这一行都没有），
+     * 随后插件照旧报 ENOENT，看起来像「补建逻辑写了但没生效」。
+     * 现在改为按**条目名精确匹配**分区，尺寸只从中央目录取（读不到也不影响判断）。
      */
-    fun workspacePathsInZip(zip: File): Pair<List<String>, String> = runCatching {
+    fun workspacePathsInZip(
+        zip: File,
+        /**
+         * 诊断回调（可选）。它的存在本身就是这次的教训：上面那段判据失效时，界面与日志里
+         * **一点痕迹都没有** —— 报告里连「已补建 N 个」那行都不出现，看起来像「没写这个功能」。
+         * 有它才能在 bugreport 里看到「分区在不在、读到多少字节、认出几条路径」。
+         */
+        onNote: ((String) -> Unit)? = null,
+    ): Pair<List<String>, String> = runCatching {
         val found = mutableListOf<String>()
         var entryName = ""
         java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
             while (true) {
                 val e = zis.nextEntry ?: break
-                // 只读小 JSON：包可能有几百 MB，不能把每个条目都读进内存
-                if (!e.isDirectory && e.name.endsWith(".json") && e.size in 1..(2L * 1024L * 1024L)) {
+                if (!e.isDirectory && isWorkspacesEntry(e.name)) {
+                    // 只读这一个条目，且它是小 JSON（几十 KB 量级）；真读到异常就整体放弃，
+                    // 不猜路径 —— 建目录是不可逆的外部副作用。
                     val text = runCatching { zis.readBytes() }.getOrNull()
                         ?.toString(StandardCharsets.UTF_8)
                     if (text != null && looksLikeWorkspaces(text)) {
                         entryName = e.name
                         found += pathsFromWorkspacesJson(text)
-                        break
+                        onNote?.invoke("workspaces-entry=" + e.name + " bytes=" + text.length + " paths=" + found.size)
+                    } else {
+                        onNote?.invoke(
+                            "workspaces-entry-unrecognized=" + e.name +
+                                " bytes=" + (text?.length ?: -1),
+                        )
                     }
+                    break
                 }
                 zis.closeEntry()
             }
         }
+        if (entryName.isEmpty()) onNote?.invoke("workspaces-entry-missing")
         found.distinct() to entryName
     }.getOrDefault(emptyList<String>() to "")
+
+    /**
+     * 这个条目名是不是工作区分区。
+     *
+     * 精确匹配插件定死的位置，外加一个宽松兜底（目录名就叫 workspaces 的 json）：
+     * 插件改了布局也不会静默失效 —— 那正是这次的教训。
+     */
+    private fun isWorkspacesEntry(name: String): Boolean {
+        if (name == WORKSPACES_ENTRY) return true
+        val base = name.substringAfterLast('/')
+        return name.contains("/workspaces/") && base.endsWith(".json")
+    }
+
+    /** 插件把工作区分区放在这个条目（src/schema/config.ts 的 SECTION_JSON_PATHS）。 */
+    private const val WORKSPACES_ENTRY = "workspaces/workspaces.json"
 
     /** 这份 JSON 是不是工作区分区（section 形状或落盘形状都算）。 */
     private fun looksLikeWorkspaces(text: String): Boolean =
@@ -1752,7 +1793,15 @@ object DshConfigBackup {
             trace(ctx, "import-secrets-handoff refs=" + secretsInfo.refs.keys.joinToString(","))
         }
         var notesForDirs = ""
-        val (wantedDirs, dirsSource) = workspacePathsInZip(plainZip)
+        // 诊断直通日志：这条链路一旦静默失效（判据写错时一个路径都读不到），报告里就只剩
+        // 插件那条 ENOENT 警告，完全看不出「本来可以补建却没有」。回调不是 suspend
+        // （读 zip 是纯 IO，不该被挂起语义绑住），所以先收进列表再逐条落日志。
+        val dirNotes = mutableListOf<String>()
+        val (wantedDirs, dirsSource) = workspacePathsInZip(plainZip) { dirNotes += it }
+        for (note in dirNotes) trace(ctx, note)
+        if (wantedDirs.isEmpty()) {
+            trace(ctx, "import-dirs-none source=" + dirsSource)
+        }
         if (wantedDirs.isNotEmpty()) {
             onLine(ctx.appString(R.string.dsh_bk_step_prepare_dirs, wantedDirs.size))
             val fix = ensureWorkspaceDirs(ctx, wantedDirs)

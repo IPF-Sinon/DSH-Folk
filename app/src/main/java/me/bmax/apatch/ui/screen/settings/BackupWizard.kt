@@ -18,8 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -34,8 +32,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -296,20 +292,34 @@ private fun WizardSelectStep(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onPickFile) {
+        Spacer(Modifier.height(14.dp))
+        // 没选文件时，**主按钮就是「选择文件」**（而不是一个次级 OutlinedButton 加一个
+        // 灰着的「开始分析」）：用户从设置页点进来，第一眼要能看出「这一步要我做的是选文件」。
+        if (fileName.isEmpty()) {
+            Button(onClick = onPickFile) {
                 Text(stringResource(R.string.dsh_bk_wiz_pick_file))
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
-                text = fileName.ifEmpty { stringResource(R.string.dsh_bk_wiz_no_file) },
+                text = stringResource(R.string.dsh_bk_wiz_no_file),
                 style = MaterialTheme.typography.bodySmall,
-                color = if (fileName.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant
-                else MaterialTheme.colorScheme.onSurface,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-        if (fileName.isNotEmpty()) {
+        } else {
+            // 选好之后，文件名要能一眼看到（用户刚从系统选择器回来，需要确认选对了）
+            SectionHeader(stringResource(R.string.dsh_bk_wiz_selected_file))
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = fileName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = onPickFile) {
+                    Text(stringResource(R.string.dsh_bk_wiz_pick_again))
+                }
+            }
             Spacer(Modifier.height(12.dp))
             // 加密包必须填密码：留空会被预检当成「没加密」直接报解析失败，
             // 那句话（「不是本生态的备份」）会把人指到完全错误的方向去。
@@ -342,7 +352,7 @@ private fun WizardSelectStep(
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
             Button(
                 onClick = onAnalyze,
                 enabled = !encrypted || password.isNotEmpty(),
@@ -352,228 +362,6 @@ private fun WizardSelectStep(
         }
     }
 }
-
-@Composable
-private fun WizardAnalyzeStep(
-    fileName: String,
-    lines: List<String>,
-    running: Boolean,
-    error: String?,
-    onPickFile: () -> Unit,
-    onRetry: () -> Unit,
-) {
-    Column(Modifier.fillMaxWidth()) {
-        if (running) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
-            Spacer(Modifier.height(12.dp))
-        }
-        Text(
-            text = stringResource(R.string.dsh_bk_wiz_analyzing, fileName),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(10.dp))
-        LogBox(lines)
-        if (error != null) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = error,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-            Spacer(Modifier.height(10.dp))
-            // 失败要能原路退回：换一个文件，或对同一个文件再试一次（插件可能只是没起来）
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onPickFile) {
-                    Text(stringResource(R.string.dsh_bk_wiz_pick_again))
-                }
-                Button(onClick = onRetry) {
-                    Text(stringResource(R.string.dsh_backup_plugin_retry))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun WizardPreviewStep(preflight: DshConfigBackup.Preflight?) {
-    Column(Modifier.fillMaxWidth()) {
-        val analysis = preflight?.analysis
-        val plan = preflight?.plan
-        val appData = preflight?.appData
-        if (analysis != null) {
-            CompatibilityBand(analysis.compatibility)
-            Spacer(Modifier.height(12.dp))
-            SectionHeader(stringResource(R.string.dsh_bk_wiz_preview_scope))
-            Spacer(Modifier.height(6.dp))
-            StatRow(
-                stringResource(R.string.dsh_bk_wiz_sections),
-                analysis.sections.toString(),
-            )
-            StatRow(
-                stringResource(R.string.dsh_bk_wiz_plugins),
-                stringResource(
-                    R.string.dsh_bk_wiz_plugins_value,
-                    analysis.pluginsInstalled,
-                    analysis.pluginsToInstall,
-                ),
-            )
-            if (analysis.secretCount > 0) {
-                StatRow(
-                    stringResource(R.string.dsh_bk_wiz_secrets),
-                    analysis.secretCount.toString(),
-                )
-            }
-            if (analysis.pathIssues > 0) {
-                StatRow(
-                    stringResource(R.string.dsh_bk_wiz_path_issues),
-                    stringResource(R.string.dsh_bk_wiz_path_issues_value, analysis.pathIssues),
-                )
-            }
-        }
-        if (plan != null) {
-            Spacer(Modifier.height(14.dp))
-            SectionHeader(stringResource(R.string.dsh_bk_wiz_preview_plan))
-            Spacer(Modifier.height(6.dp))
-            StatRow(
-                stringResource(R.string.dsh_bk_wiz_will_change),
-                plan.willChange.toString(),
-            )
-            StatRow(stringResource(R.string.dsh_bk_wiz_unchanged), plan.unchanged.toString())
-            if (plan.installs > 0) {
-                StatRow(stringResource(R.string.dsh_bk_wiz_installs), plan.installs.toString())
-            }
-            if (plan.conflicts > 0) {
-                StatRow(stringResource(R.string.dsh_bk_wiz_conflicts), plan.conflicts.toString())
-            }
-            if (plan.needsRestart) {
-                StatRow(
-                    stringResource(R.string.dsh_bk_wiz_needs_restart),
-                    stringResource(R.string.dsh_bk_wiz_yes),
-                )
-            }
-            if (plan.missingSecrets.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = stringResource(
-                        R.string.dsh_bk_wiz_missing_secrets,
-                        plan.missingSecrets.size,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            if (plan.items.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                var expanded by remember { mutableStateOf(false) }
-                TextButton(onClick = { expanded = !expanded }) {
-                    Icon(
-                        if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                        contentDescription = null,
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        stringResource(
-                            if (expanded) R.string.dsh_section_collapse else R.string.dsh_section_expand,
-                        ),
-                    )
-                }
-                if (expanded) {
-                    for (item in plan.items) {
-                        Text(
-                            text = "• " + item.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 2.dp),
-                        )
-                    }
-                }
-            }
-        }
-        if (appData != null) {
-            Spacer(Modifier.height(14.dp))
-            SectionHeader(stringResource(R.string.dsh_bk_wiz_preview_appdata))
-            Spacer(Modifier.height(6.dp))
-            StatRow(
-                stringResource(R.string.dsh_bk_wiz_prefs_files),
-                stringResource(R.string.dsh_bk_wiz_prefs_files_value, appData.prefsFiles, appData.keys),
-            )
-            if (appData.schema >= 2 && appData.prefsFiles > 1) {
-                Text(
-                    text = stringResource(R.string.dsh_bk_wiz_prefs_runtime_included),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else if (appData.schema > 0 && appData.schema < 2) {
-                // 旧包只带 config：不说清楚的话，用户会以为「运行时设置也回来了」
-                Text(
-                    text = stringResource(R.string.dsh_bk_wiz_prefs_old_schema),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (appData.auditFiles > 0) {
-                StatRow(
-                    stringResource(R.string.dsh_bk_wiz_audit),
-                    appData.auditFiles.toString(),
-                )
-            }
-            if (appData.excluded > 0) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = stringResource(R.string.dsh_bk_excluded_note, appData.excluded) +
-                        if (appData.privilegeSkipped > 0) {
-                            "；" + stringResource(
-                                R.string.dsh_bk_excluded_privilege,
-                                appData.privilegeSkipped,
-                            )
-                        } else {
-                            ""
-                        },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        // 外观单独一段，且**两种包都看它**：混合包（软件数据 + DSH 分区）同样带主题包，
-        // 而恢复外观会替换背景/字体/音乐/音效、还可能切换应用语言 —— 这些副作用必须在
-        // 确认之前说清楚，不能因为「有 DSH 分区」就跳过不提。
-        val themeBytes = preflight?.themeBytes ?: -1L
-        if (themeBytes >= 0L) {
-            Spacer(Modifier.height(14.dp))
-            SectionHeader(stringResource(R.string.dsh_bk_wiz_appearance))
-            Spacer(Modifier.height(6.dp))
-            StatRow(
-                stringResource(R.string.dsh_bk_wiz_theme),
-                if (themeBytes > 0L) {
-                    stringResource(R.string.dsh_bk_wiz_theme_value, themeBytes / 1024)
-                } else {
-                    stringResource(R.string.dsh_bk_wiz_theme_included)
-                },
-            )
-            Text(
-                text = stringResource(R.string.dsh_bk_wiz_theme_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        val warnings = analysis?.warnings.orEmpty()
-        if (warnings.isNotEmpty()) {
-            Spacer(Modifier.height(14.dp))
-            SectionHeader(stringResource(R.string.dsh_bk_wiz_warnings))
-            Spacer(Modifier.height(6.dp))
-            for (w in warnings) {
-                Text(
-                    text = "! " + w,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(vertical = 2.dp),
-                )
-            }
-        }
-    }
-}
-
 /** 兼容性一带（与插件预览页同一套档位名）。 */
 @Composable
 private fun CompatibilityBand(compatibility: String) {
@@ -1044,9 +832,13 @@ private fun ResultGroup(
 /**
  * 一行可选项（会话怎么处理、冲突没列完时用哪个策略、回滚策略）。
  *
- * [recommended] 项用 primaryContainer 底色 + 加粗标题突出；[selected] 非 null 时右上角
- * 显示选中态（`✓`）—— 向导里必须能一眼看出「我选的是哪个」，这与旧弹窗不同：那时点任意
- * 一行就等于开始导入，没有「选中」这个概念。
+ * ## 高亮只表示「已选中」
+ *
+ * 这里曾经把「推荐」也画成高亮底色（primaryContainer），于是**没被选中的推荐项**看起来
+ * 和选中项一样 —— 真机上用户以为「停机恢复」已经是默认选项，而实际上一条都没选，
+ * 于是「下一步」点不动，还以为按钮坏了（beta.65 反馈）。
+ * 现在底色**只由 [selected] 决定**，[recommended] 退化成一枚「推荐」小标记：
+ * 「默认」与「推荐」是两件事，绝不能共用同一种视觉。
  */
 @Composable
 internal fun SessionChoiceRow(
@@ -1056,32 +848,51 @@ internal fun SessionChoiceRow(
     selected: Boolean = false,
     onClick: () -> Unit,
 ) {
+    // 选中 = primaryContainer 底 + 主色文字；未选中 = surfaceVariant 底 + 常规文字。
+    val bg = if (selected) MaterialTheme.colorScheme.primaryContainer
+    else MaterialTheme.colorScheme.surfaceVariant
+    val titleColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+    else MaterialTheme.colorScheme.onSurface
+    val noteColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+    else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(
-                if (recommended) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceVariant
-            )
+            .background(bg)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (recommended || selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (recommended) MaterialTheme.colorScheme.onPrimaryContainer
-                else MaterialTheme.colorScheme.onSurface,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = titleColor,
+                )
+                if (recommended) {
+                    Spacer(Modifier.width(6.dp))
+                    // 只是「这个选项更稳妥」的信息，不是「已经替你选了」
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(6.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.dsh_bk_wiz_recommended),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(2.dp))
             Text(
                 text = note,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (recommended) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
-                else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = noteColor,
             )
         }
         if (selected) {
@@ -1089,14 +900,12 @@ internal fun SessionChoiceRow(
             Icon(
                 imageVector = Icons.Filled.CheckCircle,
                 contentDescription = null,
-                tint = if (recommended) MaterialTheme.colorScheme.onPrimaryContainer
-                else MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(18.dp),
             )
         }
     }
 }
-
 /** 只读的日志框（执行中与结果步共用）。 */
 @Composable
 private fun LogBox(lines: List<String>) {

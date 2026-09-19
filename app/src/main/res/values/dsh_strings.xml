@@ -1222,4 +1222,6 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_wiz_next">Next</string>
     <string name="dsh_bk_wiz_appearance">Appearance</string>
     <string name="dsh_bk_wiz_theme_included">included (background, font, music, sound)</string>
+    <string name="dsh_bk_wiz_recommended">Recommended</string>
+    <string name="dsh_bk_wiz_selected_file">Selected file</string>
 </resources>

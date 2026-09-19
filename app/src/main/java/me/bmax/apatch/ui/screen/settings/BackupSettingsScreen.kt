@@ -570,9 +570,11 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                                 }
                             }
                         },
-                        // 「导入备份」进的是恢复向导（不再直接弹密码框）：向导第一步就是
-                        // 「选文件 + 填密码」，所以这里先把向导状态清干净再拉选择器 ——
-                        // 用户从选择器退回来时，看到的是向导而不是设置列表。
+                        // 「导入备份」进的是恢复向导（不再直接弹密码框）。**不在这里直接拉起
+                        // 系统选择器**：那样用户是从设置列表被瞬间拽进一个系统弹窗、关掉之后
+                        // 又落在一个完全陌生的整页向导上（beta.64/65 反馈「太生硬」）。
+                        // 现在先落到向导的「选择」步，那一步有「这一步要做什么」的说明和一个
+                        // 明确的「选择文件」按钮 —— 从哪进来、下一步做什么都是可见的。
                         onDshImport = {
                             wizardStep = WizardStep.SELECT
                             wizardPath = null
@@ -581,7 +583,6 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                             wizardAnalyzeError = null
                             wizardPreflight = null
                             wizardResult = null
-                            importPicker.launch("*/*")
                         },
                         dshBackups = dshRemote,
                         dshBackupBusy = dshBackupBusy,

@@ -58,6 +58,16 @@ function braceSpan(src, marker) {
   return null;
 }
 
+/**
+ * 剥掉注释，只留会被编译的代码。
+ *
+ * 「不该出现 X」这类断言必须扫它：判据的「为什么」常常要写在 KDoc 里（比如这次的
+ * `e.size in 1..2MB` —— 不写出来，下一个人还会踩），而注释里的字符串不是违规。
+ */
+function code(src) {
+  return src.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
 function ok(cond, label) {
   n++;
   if (cond) {
@@ -418,8 +428,8 @@ console.log("─ 5g. 导入前补建缺失的工作区目录（否则会话进�
 // 先在目标创建目录 —— 但必须赶在插件 /execute 之前。
 ok(/suspend fun ensureWorkspaceDirs\(ctx: Context, paths: List<String>\): DirFixResult/.test(backup),
   "有 ensureWorkspaceDirs（补建缺失目录）");
-ok(/fun workspacePathsInZip\(zip: File\): Pair<List<String>, String>/.test(backup),
-  "有 workspacePathsInZip（从包里读工作区路径）");
+ok(/fun workspacePathsInZip\(\s*zip: File,/.test(backup) && /onNote: \(\(String\) -> Unit\)\? = null,/.test(backup),
+  "有 workspacePathsInZip（从包里读工作区路径），并带一条诊断回调");
 const dirCall = backup.indexOf("ensureWorkspaceDirs(ctx, wantedDirs)");
 const execStep = backup.indexOf("dsh_bk_step_executing");
 ok(dirCall > 0 && execStep > 0 && dirCall < execStep,
@@ -431,8 +441,11 @@ ok(/!targetCanon\.startsWith\(rootCanon \+ File\.separator\)/.test(backup), "规
 ok(/target\.isDirectory -> existing \+= path/.test(backup), "已存在目录只记一笔跳过（幂等）");
 ok(/target\.exists\(\) -> failed \+= ".+不是目录，没有覆盖/.test(backup), "目标已存在文件时不覆盖");
 ok(/else -> failed \+= ".+创建失败/.test(backup), "创建失败照实记，不假装成功");
-// 只处理小 JSON：包可能几百 MB
-ok(/e\.size in 1\.\.\(2L \* 1024L \* 1024L\)/.test(backup), "只读 2MB 以内的 JSON 条目，不把整包读进内存");
+// 这里原本断言的是「用 e.size 卡在 2MB 以内」——那条断言在 beta.65 上是通过的，
+// 而功能整段没执行（见 5m）：App 合并包时 zip 条目走 data descriptor，getSize() 是 -1/0。
+// 现在断言的是「按条目名精确取那一个分区」，尺寸不再参与判定。
+ok(/isWorkspacesEntry\(e\.name\)/.test(backup) && /private const val WORKSPACES_ENTRY/.test(backup),
+  "只读工作区分区那一个条目（按名字取，不把整包读进内存）");
 ok(/optJSONArray\("workspaces"\)/.test(backup) && /optJSONObject\("tables"\)/.test(backup),
   "分区形状与落盘形状（tables.workspaces）都认");
 ok(/dsh_bk_import_dirs_created/.test(backup) && /dsh_bk_import_dirs_failed/.test(backup) &&
@@ -565,6 +578,50 @@ ok(/fun entrySize\(zip: File, name: String\): Long/.test(archive) &&
   "只看中央目录读条目长度：不为问一句「外观在不在」把上百兆的包再流一遍");
 ok(/val themeIncluded = preflight != null && preflight\.themeBytes >= 0L/.test(wizard),
   "预览与确认都按这个字段判断外观，而不是只在纯软件数据包那一支里显示");
+
+console.log("─ 5m. 工作区路径提取：按条目名，不靠（不可靠的）条目尺寸");
+// 真机现场（beta.65）：报告里连「已补建 N 个缺失目录」那行都没有，插件照旧报
+// realpath ENOENT。根因是提取器用 `e.size in 1..2MB` 当门槛，而 App 自己合并包时
+// 是 zos.putNextEntry(ZipEntry(name))（不预设尺寸）→ Java 走 data descriptor →
+// ZipInputStream.getSize() 拿到 -1/0，判据恒假，**一个条目都读不到**。
+// 所以判据必须是「条目名」这种稳定事实，尺寸只能从中央目录取、且不能当门槛。
+// 只看代码、不看注释：这条判据的「为什么」本身就要在 KDoc 里写出旧写法，
+// 否则下一个读代码的人还会踩同一个坑（注释里的字符串不该被当成违规）。
+ok(!/e\.size in 1\.\./.test(code(backup)),
+  "不再用条目尺寸当过滤门槛（data descriptor 条目上它是 -1/0，会让整段逻辑静默不执行）");
+ok(/private const val WORKSPACES_ENTRY = "workspaces\/workspaces\.json"/.test(backup),
+  "按插件定死的位置精确匹配 workspaces 分区（SECTION_JSON_PATHS.workspaces）");
+ok(/private fun isWorkspacesEntry\(name: String\): Boolean/.test(backup) &&
+  /name\.contains\("\/workspaces\/"\) && base\.endsWith\("\.json"\)/.test(backup),
+  "另有宽松兜底：目录名含 workspaces 的 json 也认（插件改布局不会再次静默失效）");
+ok(/if \(entryName\.isEmpty\(\)\) onNote\?\.invoke\("workspaces-entry-missing"\)/.test(backup),
+  "找不到分区时留一条诊断（这次的教训：静默失效比报错更难查）");
+ok(/\(wantedDirs, dirsSource\) = workspacePathsInZip\(plainZip\) \{ dirNotes \+= it \}/.test(backup) &&
+  /for \(note in dirNotes\) trace\(ctx, note\)/.test(backup),
+  "提取过程的诊断进备份日志（bugreport 里能看到分区在不在、读到多少字节）");
+ok(/if \(wantedDirs\.isEmpty\(\)\) \{\s*\n\s*trace\(ctx, "import-dirs-none source="/.test(backup),
+  "一个路径都没读到也记一笔（这正是本次真机的现场）");
+
+console.log("─ 5n. 向导的交互细节（真机反馈 beta.65）");
+// 1) 「高亮」只能表示已选中。曾经把「推荐」也画成 primaryContainer 底，于是没选中的
+//    推荐项看起来跟选中一样 —— 用户以为「停机恢复」已是默认，其实一条都没选，
+//    于是「下一步」点不动（他会以为按钮坏了）。
+ok(/val bg = if \(selected\) MaterialTheme\.colorScheme\.primaryContainer/.test(wizard),
+  "选项底色只由 selected 决定（「推荐」不再是高亮）");
+ok(!/if \(recommended\) MaterialTheme\.colorScheme\.primaryContainer/.test(wizard),
+  "不存在「推荐就用高亮底」这条老写法");
+ok(/dsh_bk_wiz_recommended/.test(wizard) && /secondaryContainer/.test(wizard),
+  "「推荐」退化成一枚小标记（信息仍在，但不再冒充选中）");
+// 2) 进向导不要生硬：设置页点「导入备份」先落到向导的选择步，
+//    由那一步的按钮去拉系统选择器（而不是当场弹系统框再甩用户一个陌生整页）。
+ok(!/onDshImport = \{[\s\S]{0,600}importPicker\.launch/.test(screen),
+  "点「导入备份」不再当场拉起系统选择器");
+ok(/onDshImport = \{[\s\S]{0,600}wizardStep = WizardStep\.SELECT/.test(screen),
+  "而是先落到向导的选择步（那一步会说明「要做什么」）");
+ok(/if \(fileName\.isEmpty\(\)\) \{\s*\n\s*Button\(onClick = onPickFile\)/.test(wizard),
+  "没选文件时主按钮就是「选择文件」（第一眼就知道这一步要干什么）");
+ok(/dsh_bk_wiz_selected_file/.test(wizard),
+  "选完文件后把文件名与「换一个文件」摆在明面上（用户刚从系统选择器回来）");
 
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),
