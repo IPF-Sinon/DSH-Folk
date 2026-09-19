@@ -269,7 +269,11 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                     // 而系统返回手势不经过那段代码，一划就把整个备份页弹掉、落到设置页
                     // （真机反馈）。现在它是一个真正的 @Destination：返回交给导航栈，
                     // 手势与箭头行为天然一致（权限记录页就是这个模式）。
-                    onDshImport = { navigator.navigate(RestoreWizardScreenDestination) },
+                    // 这个 destination 带参数，生成的 Destination 对象必须**调用**之后才是 Direction
+                    // （无参 destination 才能直接当 Direction 用 —— 权限记录页就是那种）。
+                    onDshImport = {
+                        navigator.navigate(RestoreWizardScreenDestination(stagedPath = null))
+                    },
                     dshBackups = dshRemote,
                     dshBackupBusy = dshBackupBusy,
                     dshBackupMessage = dshBackupMessage,

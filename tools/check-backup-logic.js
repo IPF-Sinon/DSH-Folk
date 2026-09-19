@@ -272,7 +272,7 @@ ok(
 ok(/val staged = runCatching \{[\s\S]{0,1400}path = staged\.absolutePath/.test(wizardScreen),
   "本地选文件在向导页里完成（预检在密码之后才跑）",
 );
-ok(/onDshImport = \{ navigator\.navigate\(RestoreWizardScreenDestination\) \}/.test(screen),
+ok(/onDshImport = \{[\s\S]{0,200}navigator\.navigate\(\s*\n?\s*RestoreWizardScreenDestination\(stagedPath = null\)/.test(screen),
   "点「导入备份」导航到独立的向导页");
 ok(
   /DshBackupCrypto\.isArchiveBlobFile\(staged\)/.test(wizardScreen) &&
@@ -623,7 +623,7 @@ ok(/dsh_bk_wiz_recommended/.test(wizard) && /secondaryContainer/.test(wizard),
 //    由那一步的按钮去拉系统选择器（而不是当场弹系统框再甩用户一个陌生整页）。
 ok(!/onDshImport = \{[\s\S]{0,600}importPicker\.launch/.test(screen),
   "点「导入备份」不再当场拉起系统选择器");
-ok(/onDshImport = \{ navigator\.navigate\(RestoreWizardScreenDestination\) \}/.test(screen),
+ok(/onDshImport = \{[\s\S]{0,200}navigator\.navigate\(\s*\n?\s*RestoreWizardScreenDestination\(stagedPath = null\)/.test(screen),
   "而是导航到一个真正的向导页（返回交给导航栈，手势与箭头一致）");
 // 这次的结构性教训：向导曾是备份页里的一个分支，于是「返回」有两套语义 ——
 // 箭头退一步（手写的）、手势把整页弹掉（导航栈的）。现在它是一个路由。
