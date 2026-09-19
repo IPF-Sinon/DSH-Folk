@@ -1208,4 +1208,9 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_wiz_select_none">全不选</string>
     <string name="dsh_bk_wiz_items_skipped">已取消勾选 %1$d 项：这些不会导入。</string>
     <string name="dsh_bk_wiz_item_conflict_note">冲突项：在下一步决定保留本机还是用包里的</string>
+    <string name="dsh_bk_snapshot_appdata_option">同时回退软件设置</string>
+    <string name="dsh_bk_snapshot_appdata_option_note">App 设置与外观（背景、字体、音乐、音效）存在应用自己这边，由 App 负责回退，不在插件的快照里。</string>
+    <string name="dsh_bk_snapshot_appdata_absent">这份快照里没有软件设置（它是在开始记录设置之前创建的），所以只会回退 DSH 配置。</string>
+    <string name="dsh_bk_snapshot_appdata_restored">软件设置与外观也已回退。</string>
+    <string name="dsh_bk_snapshot_appdata_failed">DSH 配置已回退，但软件设置没能回退。</string>
 </resources>

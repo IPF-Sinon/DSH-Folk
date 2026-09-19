@@ -320,7 +320,8 @@ object DshConfigBackup {
         // 外观（背景图/视频背景/字体/音乐/音效）不在 prefs 里 —— prefs 只存文件名与
         // `file://` 指向，文件本身在 filesDir。所以它单独打一个主题包进包（见
         // [DshBackupArchive.THEME]），走的是既有的主题导出通路，不另造一套。
-        val theme = if (plan.includesAppData) exportThemeZip(ctx, stage, onLine) else null
+        // 具名传 onLine：它前面还有一个带默认值的 fileName，位置传参会跳不过去。
+        val theme = if (plan.includesAppData) exportThemeZip(ctx, stage, onLine = onLine) else null
         val secrets = if (plan.password.isEmpty()) {
             null
         } else {
@@ -468,8 +469,14 @@ object DshConfigBackup {
      * 与软件设置都已经在包里了。这里失败只记一笔日志并返回 null，导出结果里会如实写出
      * 「不含外观」，而不是安静地少带一半东西。
      */
-    private suspend fun exportThemeZip(ctx: Context, stage: File, onLine: suspend (String) -> Unit): File? {
-        val out = File(stage, "theme.zip")
+    private suspend fun exportThemeZip(
+        ctx: Context,
+        stage: File,
+        /** 落在这个目录下的文件名（两条通路各用各的名字，避免互相覆盖）。 */
+        fileName: String = "theme.zip",
+        onLine: suspend (String) -> Unit,
+    ): File? {
+        val out = File(stage, fileName)
         out.delete()
         return try {
             onLine(ctx.appString(R.string.dsh_bk_step_theme_export))
@@ -1546,6 +1553,8 @@ object DshConfigBackup {
      * 所以 UI 上必须二次确认 —— 这里只负责发请求。
      */
     suspend fun deleteSnapshot(ctx: Context, snapshotId: String): RestoreResult = withContext(Dispatchers.IO) {
+        // 插件侧快照删掉后，我们那份软件设置副本也没有意义了（留着就是孤儿目录）
+        DshAppDataSnapshot.delete(ctx, snapshotId)
         val raw = request(
             "POST",
             "/snapshots/delete",
@@ -1784,6 +1793,19 @@ object DshConfigBackup {
             }
             planObj.put("items", kept)
             trace(ctx, "import-plan-filtered removed=" + removed + " kept=" + kept.length() + " of=" + before)
+        }
+
+        // 软件设置的导入前快照。
+        //
+        // **必须在 /execute 之前采集**，而且只能在这里：插件侧的 DSH 快照按 SECTION_IDS
+        // 采集，够不到 App 的 SharedPreferences 与外观资源文件，所以「恢复快照」一直只回
+        // DSH 配置、软件设置停在导入后的样子（真机反馈）。这里先把当前值拍下来，等 /execute
+        // 返回快照 id 后再落盘 —— 快照 id 那时才存在。
+        val appDataForSnapshot = DshAppData.collect(ctx)
+        // 外观同理：当前背景/字体/音乐/音效打进一个主题包（与备份包里那份同一套通路）。
+        // 进度回调只落日志 —— 这时用户还在「正在恢复」那一步，插不进额外的界面文案。
+        val themeForSnapshot = exportThemeZip(ctx, tmpDir, "snapshot-theme.zip") { note ->
+            trace(ctx, "snapshot-theme " + note)
         }
 
         val opts = JSONObject().apply {
@@ -2060,6 +2082,14 @@ object DshConfigBackup {
             if (appNote.isNotEmpty()) append("◧ ").append(appNote).append('\n')
             if (sessionNote.isNotEmpty()) append("↺ ").append(sessionNote)
         }
+        // 把导入前的软件设置挂到这次导入的回滚快照上（key 就是插件给的快照 id）。
+        // 失败不打断导入：设置的回退点少一份，不该让整次导入失败。
+        val execSnapshotId = execObj.optString("snapshotId")
+        if (execSnapshotId.isNotEmpty()) {
+            val saved = DshAppDataSnapshot.write(ctx, execSnapshotId, appDataForSnapshot, themeForSnapshot)
+            trace(ctx, "import-appdata-snapshot id=" + execSnapshotId + " ok=" + saved)
+        }
+        if (themeForSnapshot != null) themeForSnapshot.delete()
         // 明文中间产物里含解出来的凭据，不留
         if (plainZip != zip) plainZip.delete()
         // restartItems：插件核心结果目前不给这份清单（只有 needsRestart 这个布尔量），

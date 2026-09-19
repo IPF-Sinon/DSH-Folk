@@ -5,12 +5,15 @@ import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -179,6 +182,11 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     // 待确认的快照恢复（预览结果）
     var pendingSnapshot by remember { mutableStateOf<DshConfigBackup.Snapshot?>(null) }
     var pendingActions by remember { mutableStateOf(0) }
+    // 「恢复快照」要不要连软件设置一起退回。默认**选上**：用户点「恢复快照」的意图是
+    // 「回到那个时候」，只回一半（DSH 配置回去了、设置还是导入后的）才是意外结果。
+    // 只有确实存了设置副本（[DshAppDataSnapshot.has]）时才给出这个选项。
+    var snapshotWithAppData by rememberSaveable { mutableStateOf(true) }
+    var snapshotHasAppData by remember { mutableStateOf(false) }
 
     // 插件状态：进页面就查一次，别等用户点了「导出」才报错。
     // null = 检测中；下面的 LaunchedEffect 只跑一次（备份页不是热路径）。
@@ -761,6 +769,8 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                             snapshotMessage = ""
                             scope.launch(Dispatchers.IO) {
                                 val p = DshConfigBackup.previewSnapshot(snap.id)
+                                // 有没有软件设置副本要读文件，别放在主线程上查
+                                val hasAppData = DshAppDataSnapshot.has(context, snap.id)
                                 withContext(Dispatchers.Main) {
                                     if (!p.ok) {
                                         pendingSnapshot = null
@@ -770,6 +780,8 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                                         )
                                     } else {
                                         pendingActions = p.actions
+                                        snapshotWithAppData = true
+                                        snapshotHasAppData = hasAppData
                                     }
                                 }
                             }
@@ -914,13 +926,43 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 onDismissRequest = { pendingSnapshot = null },
                 title = { Text(stringResource(R.string.dsh_bk_snapshot_confirm_title)) },
                 text = {
-                    Text(
-                        stringResource(
-                            R.string.dsh_bk_snapshot_confirm_body,
-                            snap.id,
-                            pendingActions,
-                        ),
-                    )
+                    Column {
+                        Text(
+                            stringResource(
+                                R.string.dsh_bk_snapshot_confirm_body,
+                                snap.id,
+                                pendingActions,
+                            ),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        // 软件设置不在这份快照里（插件够不到 SharedPreferences），是我们自己
+                        // 在导入前另外存的一份；存过才给这个选项，否则它会是一个骗人的开关。
+                        if (snapshotHasAppData) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = snapshotWithAppData,
+                                    onCheckedChange = { snapshotWithAppData = it },
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.dsh_bk_snapshot_appdata_option),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.dsh_bk_snapshot_appdata_option_note),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = stringResource(R.string.dsh_bk_snapshot_appdata_absent),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 },
                 confirmButton = {
                     TextButton(onClick = {
@@ -934,10 +976,30 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         runNeedsRestart = true
                         scope.launch(Dispatchers.IO) {
                             val r = DshConfigBackup.restoreSnapshot(context, snap.id)
-                            BackupLogManager.log("snapshot restore ${snap.id} ok=${r.ok}")
+                            // 软件设置由我们自己回（插件够不到 SharedPreferences）。
+                            // 顺序：先插件快照、后软件设置 —— 与导入时的 插件→App数据→主题 一致，
+                            // 两边都会写外观参数，后写的才是最终生效的那份。
+                            val appDataOutcome = if (snapshotWithAppData && r.ok) {
+                                DshAppDataSnapshot.restore(context, snap.id)
+                            } else {
+                                null
+                            }
+                            BackupLogManager.log(
+                                "snapshot restore ${snap.id} ok=${r.ok} appdata=${appDataOutcome ?: "skipped"}",
+                            )
                             withContext(Dispatchers.Main) {
                                 snapshotBusy = false
-                                snapshotMessage = if (r.detail.isBlank()) r.message else "${r.message}\n${r.detail}"
+                                val appDataNote = when (appDataOutcome) {
+                                    DshAppDataSnapshot.Outcome.RESTORED ->
+                                        context.getString(R.string.dsh_bk_snapshot_appdata_restored)
+                                    DshAppDataSnapshot.Outcome.FAILED ->
+                                        context.getString(R.string.dsh_bk_snapshot_appdata_failed)
+                                    DshAppDataSnapshot.Outcome.MISSING ->
+                                        context.getString(R.string.dsh_bk_snapshot_appdata_absent)
+                                    null -> ""
+                                }
+                                snapshotMessage = (if (r.detail.isBlank()) r.message else "${r.message}\n${r.detail}") +
+                                    if (appDataNote.isNotEmpty()) "\n" + appDataNote else ""
                                 runRunning = false
                                 runFailed = !r.ok
                                 runLines = listOfNotNull(

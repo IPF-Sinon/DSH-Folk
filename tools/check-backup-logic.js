@@ -34,6 +34,7 @@ const SRC_WIZARD = "app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupWi
 const SRC_WIZARD_MODEL = "app/src/main/java/me/bmax/apatch/dsh/DshImportWizard.kt";
 const SRC_APPDATA = "app/src/main/java/me/bmax/apatch/dsh/DshAppData.kt";
 const SRC_ARCHIVE = "app/src/main/java/me/bmax/apatch/dsh/DshBackupArchive.kt";
+const SRC_APPDATA_SNAPSHOT = "app/src/main/java/me/bmax/apatch/dsh/DshAppDataSnapshot.kt";
 
 let n = 0;
 let bad = 0;
@@ -646,6 +647,40 @@ ok(/onSelectAllItems = \{ all ->/.test(screen) &&
 ok(/Checkbox\(/.test(wizard) && /dsh_bk_wiz_pick_items/.test(wizard) &&
   /dsh_bk_wiz_select_all/.test(wizard) && /dsh_bk_wiz_select_none/.test(wizard),
   "预览页有勾选框与全选/全不选");
+
+console.log("─ 5p. 快照带回软件设置（真机反馈：快照里没有软件设置项，回不回去）");
+// 插件快照按 SECTION_IDS 采集，够不到 App 的 SharedPreferences 与外观资源文件，
+// 所以「恢复快照」必须由 App 自己补一份软件设置的副本。
+const appSnap = fs.readFileSync(SRC_APPDATA_SNAPSHOT, "utf8");
+ok(/object DshAppDataSnapshot/.test(appSnap), "有 App 侧的软件设置快照存储");
+ok(/DshAppData\.collect\(ctx\)/.test(backup) &&
+  /val appDataForSnapshot = DshAppData\.collect\(ctx\)/.test(backup),
+  "导入前把当前软件设置拍一份（必须在 /execute 之前：要的是导入前的值）");
+ok(/val execSnapshotId = execObj\.optString\("snapshotId"\)/.test(backup) &&
+  /DshAppDataSnapshot\.write\(ctx, execSnapshotId/.test(backup),
+  "拿到插件返回的快照 id 后挂到那个 id 下（id 只有 /execute 之后才存在）");
+ok(/import-appdata-snapshot id=/.test(backup), "这一步进日志");
+ok(/fun restore\(ctx: Context, snapshotId: String\): Outcome/.test(appSnap) &&
+  /DshAppData\.apply\(ctx, json\)/.test(appSnap),
+  "恢复时复用同一套 DshAppData.apply（不另造一份格式）");
+ok(/isValidId\(id: String\): Boolean/.test(appSnap) && /it\.isDigit\(\)/.test(appSnap),
+  "快照 id 必须先校验再当目录名（id 来自插件，直接拼路径能写到别处去）");
+ok(/MAX_KEPT = 10/.test(appSnap) && /drop\(MAX_KEPT\)/.test(appSnap),
+  "限制保留份数（这是顺手留的回退点，不是备份，不该无限长大）");
+ok(/DshAppDataSnapshot\.delete\(ctx, snapshotId\)/.test(backup),
+  "删除快照时连带清掉软件设置副本（不留孤儿）");
+// 界面：默认勾选 + 只有真的存过才给这个开关（否则它是个骗人的开关）
+ok(/var snapshotWithAppData by rememberSaveable \{ mutableStateOf\(true\) \}/.test(screen),
+  "「同时回退软件设置」默认勾选（点「恢复快照」就是要回到那时候）");
+// 断行为而不是断某一行的写法：这次为了把「读文件」移出主线程，把它拆成了两行，
+// 断言就误报了 —— 门禁咬住无关的排版会让人去改断言而不是改代码。
+ok(/val hasAppData = DshAppDataSnapshot\.has\(context, snap\.id\)/.test(screen) &&
+  /snapshotHasAppData = hasAppData/.test(screen) &&
+  /if \(snapshotHasAppData\) \{/.test(screen),
+  "只有存过设置副本才显示这个选项，否则说明「这份快照没有软件设置」");
+ok(/DshAppDataSnapshot\.Outcome\.RESTORED/.test(screen) &&
+  /dsh_bk_snapshot_appdata_restored/.test(screen),
+  "回退结果如实告诉用户（成功/失败/这份快照没有）");
 
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),

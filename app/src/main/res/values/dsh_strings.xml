@@ -1230,4 +1230,9 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_wiz_select_none">Select none</string>
     <string name="dsh_bk_wiz_items_skipped">%1$d items unchecked: they will not be imported.</string>
     <string name="dsh_bk_wiz_item_conflict_note">Conflict: decided in the next step (keep local or take the archive)</string>
+    <string name="dsh_bk_snapshot_appdata_option">Also roll back app settings</string>
+    <string name="dsh_bk_snapshot_appdata_option_note">App settings and appearance (background, font, music, sound) are stored by the app itself, so they are rolled back by the app rather than by the plugin snapshot.</string>
+    <string name="dsh_bk_snapshot_appdata_absent">This snapshot carries no app settings (it was created before they were captured), so only the DSH configuration will be rolled back.</string>
+    <string name="dsh_bk_snapshot_appdata_restored">App settings and appearance were rolled back too.</string>
+    <string name="dsh_bk_snapshot_appdata_failed">The DSH configuration was rolled back, but the app settings could not be.</string>
 </resources>
