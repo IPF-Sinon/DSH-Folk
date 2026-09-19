@@ -763,5 +763,53 @@ console.log("─ 预装/安装日志降噪");
     "peer 说明解释了「为什么缺是正常的」");
 }
 
+// ───────────────── 权限页：原生能力桥关掉时整块收起 ─────────────────
+//
+// 这一块以前与总开关无关：关掉桥之后分项、共享存储、CLI 提示照样摊在页面上，
+// 每项按钮只是变灰。用户看到的是一堵「关着的开关墙」，读不出「现在什么都不通」，
+// 也读不出「档位还留着」。所以这里的断言是**结构性的**：那一整块必须在开关里面。
+console.log("─ 原生能力桥：关掉时详情整块收起");
+const settingsSrc = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt", "utf8");
+{
+  const at = settingsSrc.indexOf("if (nativeBridgeEnabled) {");
+  ok(at > 0, "能力桥那一块由 nativeBridgeEnabled 包着");
+  if (at > 0) {
+    const open = settingsSrc.indexOf("{", at);
+    let depth = 0;
+    let end = -1;
+    for (let i = open; i < settingsSrc.length; i++) {
+      if (settingsSrc[i] === "{") depth++;
+      else if (settingsSrc[i] === "}") {
+        depth--;
+        if (depth === 0) { end = i; break; }
+      }
+    }
+    ok(end > open, "能按括号配对切出这块的区间");
+    const body = settingsSrc.slice(at, end);
+    ok(/for \(group in CapGroup\.entries\)/.test(body),
+      "逐项能力档位在开关里面（关着就不显示）");
+    ok(/dsh_storage_cap_title/.test(body) && /onOpenAllFilesSettings/.test(body),
+      "共享存储那一节也在里面（它同样只在桥开着时有意义）");
+    ok(/dsh_native_cli_hint/.test(body),
+      "CLI 提示也在里面（关着桥还教人怎么调 CLI，是自相矛盾的）");
+    ok(!/onNativeBridgeEnabledChange/.test(body),
+      "总开关本身不在里面 —— 关着的时候必须还能把它打开");
+  }
+}
+ok(/LaunchedEffect\(nativeBridgeEnabled\) \{[\s\S]{0,120}if \(!nativeBridgeEnabled\) capsExpanded = false/.test(settingsSrc),
+  "关掉时顺手收起详情，重新打开是收起的初始态");
+ok(/val activeCapCount = DshNativeBridge\.Cap\.entries\.count \{/.test(settingsSrc) &&
+  /a != DshNativeBridge\.Access\.OFF/.test(settingsSrc),
+  "数出「档位不是关」的能力项数");
+ok(/R\.string\.dsh_native_off_hint_kept, activeCapCount/.test(settingsSrc) &&
+  /R\.string\.dsh_native_off_hint\b/.test(settingsSrc),
+  "两种收尾说明都在：有档位残留时报数，没有时只说「都不通」");
+const nativeZh = fs.readFileSync("app/src/main/res/values-zh-rCN/dsh_strings.xml", "utf8");
+const nativeEn = fs.readFileSync("app/src/main/res/values/dsh_strings.xml", "utf8");
+ok(/dsh_native_off_hint_kept">[^<]*%1\$d/.test(nativeZh) && /dsh_native_off_hint_kept">[^<]*%1\$d/.test(nativeEn),
+  "「档位保留」那句带条数占位符（中英一致由 check-strings 盯）");
+ok(/保留/.test(nativeZh),
+  "说明里明确写了档位是保留而不是清空（否则用户会以为关掉就把配置丢了）");
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

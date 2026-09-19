@@ -30,6 +30,10 @@ const SRC_SCREEN = "app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSe
 const SRC_CONTENT = "app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettings.kt";
 const SRC_WEBDAV = "app/src/main/java/me/bmax/apatch/util/WebDavUtils.kt";
 const SRC_CONFIG = "app/src/main/java/me/bmax/apatch/ui/theme/BackupConfig.kt";
+const SRC_WIZARD = "app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupWizard.kt";
+const SRC_WIZARD_MODEL = "app/src/main/java/me/bmax/apatch/dsh/DshImportWizard.kt";
+const SRC_APPDATA = "app/src/main/java/me/bmax/apatch/dsh/DshAppData.kt";
+const SRC_ARCHIVE = "app/src/main/java/me/bmax/apatch/dsh/DshBackupArchive.kt";
 
 let n = 0;
 let bad = 0;
@@ -69,20 +73,28 @@ const screen = fs.readFileSync(SRC_SCREEN, "utf8");
 const content = fs.readFileSync(SRC_CONTENT, "utf8");
 const webdav = fs.readFileSync(SRC_WEBDAV, "utf8");
 const config = fs.readFileSync(SRC_CONFIG, "utf8");
+const wizard = fs.readFileSync(SRC_WIZARD, "utf8");
+const wizardModel = fs.readFileSync(SRC_WIZARD_MODEL, "utf8");
+const appData = fs.readFileSync(SRC_APPDATA, "utf8");
+const archive = fs.readFileSync(SRC_ARCHIVE, "utf8");
 
 console.log("─ 1. 导入后的收尾：needsRestart 必须驱动一个真的动作");
 ok(/val needsRestart: Boolean = false/.test(backup),
   "ImportResult 带 needsRestart（不再只是文案）");
-ok(/ImportResult\(ok, head, detail, needsRestart\)/.test(backup),
+ok(/needsRestart = needsRestart,/.test(backup),
   "构造时把插件的 needsRestart 透出来");
-ok(/restartNeeded = r\.ok && r\.needsRestart/.test(screen),
-  "界面只在导入成功且插件要求时才提示重启");
+ok(/restartItems = restartItems,/.test(backup) && /missingSecrets = missingSecrets,/.test(backup) &&
+  /unresolved = unresolved,/.test(backup) && /snapshotId = execObj\.optString\("snapshotId"\)/.test(backup),
+  "结果里的「下一步」字段也是结构化的（需重启项/缺凭据项/没处理的项/快照 id），而不是只在文案里");
+ok(/needsRestart = r\.ok && r\.needsRestart,/.test(screen),
+  "界面只在导入成功且插件要求时才提示重启（失败却提示重启会让人以为重启能救回来）");
 ok(/onRestart = \{[\s\S]{0,300}DshRuntime\.restart\(\)/.test(screen),
   "进度对话框的「重启服务」真的调 DshRuntime.restart()");
 ok(/needsRestart = runNeedsRestart/.test(screen),
   "该对话框按 runNeedsRestart 决定是否给出重启按钮");
-ok(/BackupLogManager\.log\("import strategy=/.test(screen),
-  "导入结果（策略/成败/是否需重启）落一条日志 —— 出问题时有据可查");
+ok(/BackupLogManager\.log\(\s*"import strategy="/.test(screen) &&
+  /resolutions=" \+ wizardChoices\.size/.test(screen),
+  "导入结果（策略/会话/回滚/逐条决策数/成败/是否需重启）落一条日志 —— 出问题时有据可查");
 
 console.log("─ 2. 阶段进度：分钟级操作不能只转圈");
 for (const key of [
@@ -96,8 +108,8 @@ for (const key of [
 }
 ok(/onLine: suspend \(String\) -> Unit = \{\}/.test(backup),
   "onLine 是 suspend 回调（界面要在里面切主线程改状态）");
-ok(/onLine = \{ line -> withContext\(Dispatchers\.Main\) \{ runLines = runLines \+ line \} \}/.test(screen),
-  "界面把进度行接进对话框");
+ok(/onLine = \{ line -> withContext\(Dispatchers\.Main\) \{ wizardLines = wizardLines \+ line \} \}/.test(screen),
+  "界面把进度行接进向导（预检与执行两处都接）");
 
 console.log("─ 3. 冲突策略：检测到冲突才问，三档都在，选完传进 import()");
 ok(/const val STRATEGY_MERGE = "merge"/.test(backup) &&
@@ -111,20 +123,50 @@ ok(/suspend fun preflightImport\(/.test(backup), "导入前先跑预检（上传
 ok(/optString\("kind"\) != "Conflict"/.test(backup), "预检按计划项的 kind == Conflict 数冲突");
 ok(/conflictTotal/.test(backup) && /conflicts\.size < MAX_CONFLICT_LIST/.test(backup),
   "冲突数量与清单都交回给界面（清单有上限，数量如实）");
-ok(/p\.conflictTotal > 0 -> askConflicts = true/.test(screen), "只有检测到冲突才置起冲突弹窗");
-ok(/SessionImport\.valueOf\(pendingSessionChoice\)/.test(screen),
-  "会话与冲突两个答案都带进最终那次导入");
+// 决策步只在**有东西要问**的时候出现：没有会话也没有冲突就直接从预览进确认。
+ok(/private fun needsDecide\(/.test(screen) &&
+  /if \(needsDecide\(wizardPreflight\)\) WizardStep\.DECIDE else WizardStep\.CONFIRM/.test(screen),
+  "只有真的检测到会话或冲突才进决策步（不给用户多余的一问）");
+// 逐条冲突决策：键是计划项 id，取值是插件协议的 keepCurrent/useImported
+ok(/data class ConflictItem\(/.test(backup) && /id = item\.optString\("id"\)/.test(backup),
+  "冲突条目带计划项 id —— 逐条决策的键就是它，没有 id 只能整包选一个策略");
+ok(/"keepCurrent"/.test(wizardModel) && /"useImported"/.test(wizardModel),
+  "两种处置用插件协议值（拼错了插件会当成 review，用户选「用包里的」却什么都没发生）");
+ok(/fun decisionsComplete\(/.test(wizardModel) &&
+  /conflicts\.count \{ it\.id\.isNotEmpty\(\) && it\.id !in choices \}/.test(wizardModel),
+  "冲突未逐条表态就不放行（判据在状态机里，不靠界面自己数）");
+ok(/sessions <= 0 \|\| sessionChoice != null/.test(wizardModel),
+  "包里有会话时必须明确选一种处理方式（不给默认值：默认写入等于替用户决定动他的聊天记录）");
+ok(/DshImportWizard\.decisionsComplete\(/.test(screen) &&
+  /canAdvance = wizardCanAdvance/.test(screen),
+  "界面用这个判据决定「下一步」能不能点");
+// 决策真的流进插件：/plan 的 decisions.resolutions 不再是空对象
+ok(/put\("resolutions", JSONObject\(\)\.apply \{ for \(\(id, r\) in resolutions\) put\(id, r\) \}\)/.test(backup),
+  "逐条冲突决策真的写进 decisions.resolutions（以前恒为空对象 —— 问了也白问）");
+ok(/resolutions: Map<String, String> = emptyMap\(\)/.test(backup) &&
+  /resolutions = DshImportWizard\.resolutions\(p\.conflicts, wizardChoices\)/.test(screen),
+  "决策从界面一路传到 /plan");
+ok(/sessions = wizardSessionChoice\(\) \?: DshConfigBackup\.SessionImport\.SKIP/.test(screen),
+  "会话答案也带进最终那次导入");
+// 回滚开关：插件侧是 === true 的严格判断，漏传等于关掉
+ok(/rollbackOnError: Boolean = true/.test(backup) &&
+  /put\("rollbackOnError", rollbackOnError\)/.test(backup) &&
+  /rollbackOnError = wizardRollback/.test(screen),
+  "回滚开关是可传参数、永远显式写、且由确认步决定（漏传等于关掉回滚）");
 for (const [strategy, key] of [
   ["STRATEGY_MERGE", "dsh_bk_strategy_merge"],
   ["STRATEGY_REPLACE", "dsh_bk_strategy_replace"],
   ["STRATEGY_SKIP_EXISTING", "dsh_bk_strategy_skip"],
 ]) {
-  ok(new RegExp("choose\\(DshConfigBackup\\." + strategy + "\\)").test(screen),
-    "冲突弹窗里有 " + strategy + " 这一档");
-  ok(screen.includes("R.string." + key), "它带说明文案 " + key);
+  ok(new RegExp("onStrategyChange\\(DshConfigBackup\\." + strategy + "\\)").test(wizard),
+    "向导的决策步里有 " + strategy + " 这一档");
+  ok(wizard.includes("R.string." + key), "它带说明文案 " + key);
 }
+// 列不完的冲突由全局策略兜底 —— 界面上必须说出来，否则用户以为没列出来的没被处理
+ok(/dsh_bk_wiz_strategy_for_rest/.test(wizard) && /byStrategy/.test(wizardModel),
+  "没列出来的冲突明确交回全局策略，并把条数说出来");
 ok(!/IMPORT_STRATEGIES/.test(content), "事先选策略的控件已经从这一页移除（改成导入时问）");
-ok(/preflight = preflight/.test(screen) && /preflight: Preflight\? = null/.test(backup),
+ok(/preflight = p,/.test(screen) && /preflight: Preflight\? = null/.test(backup),
   "答完之后用预检产物继续导入（不再上传/解密第二遍）");
 ok(/discardPreflight/.test(screen) && /fun discardPreflight\(/.test(backup),
   "用户取消时把预检解出来的临时明文删掉");
@@ -147,8 +189,14 @@ ok(/val busy = err\.contains\("conflict", ignoreCase = true\)/.test(backup),
   "409 冲突（已有恢复在跑）转成一句能看懂的话，而不是抛原始错误");
 ok(/pendingActions = -1/.test(screen) && /if \(pendingActions >= 0\)/.test(screen),
   "预览没回来之前不弹确认框（避免 0 项动作的假确认）");
-ok(/onSnapshotRestore[\s\S]{0,400}previewSnapshot\(snap\.id\)/.test(screen),
-  "点「恢复」先走预览，不是直接执行");
+// 用括号配对切出这个回调本身再断言：原来按「400 字符以内」判定，一次缩进调整
+// 就会把它挤出去，于是检查器报的是格式问题、不是行为问题。
+const snapRestoreSpan = braceSpan(screen, "onSnapshotRestore = { snap ->");
+ok(snapRestoreSpan !== null, "快照行接了「恢复」回调");
+if (snapRestoreSpan) {
+  ok(/previewSnapshot\(snap\.id\)/.test(screen.slice(snapRestoreSpan[0], snapRestoreSpan[1])),
+    "点「恢复」先走预览，不是直接执行");
+}
 ok(/R\.string\.dsh_bk_snapshot_confirm_body,\s*snap\.id,\s*pendingActions/.test(screen),
   "确认框把快照 id 与动作数摆出来（含「会卸载快照里没有的插件」这句）");
 const confirmBody = fs.readFileSync("app/src/main/res/values-zh-rCN/dsh_strings.xml", "utf8")
@@ -177,20 +225,28 @@ ok(/code == "405" \|\| code == "501"/.test(screen) &&
   /context\.getString\(R\.string\.dsh_bk_cloud_unsupported, code\)/.test(screen) &&
   /context\.getString\(R\.string\.dsh_backup_webdav_failed, msg\)/.test(screen),
   "405/501（服务端不支持列目录）与其它失败分开说：否则用户不知道该改服务端还是改密码");
-// 两条入口（本地选文件 / 云端下载）都先落到「问密码」这一步，再由同一个 startImport 开跑。
-// 断言成「startImport 全文件只出现一次」比什么都直接：多写一套管道就必然多一处调用。
-// 定义 1 处、调用 1 处：本地与云端都汇到同一个入口，不会各写一套管道
-const defCalls = (screen.match(/fun startImport\(/g) || []).length;
-const useCalls = (screen.match(/startImport\(File\(path\), importPassword\)/g) || []).length;
-ok(defCalls === 1 && useCalls === 1, "只有一个开跑入口 startImport（定义 " + defCalls + " 处、调用 " + useCalls + " 处）");
+// 三条入口（本地选文件 / 云端 WebDAV / DSH 内备份）都落进同一套向导状态，再由同一个
+// wizardAnalyze 预检、同一个 wizardRun 开跑。断言成「各自只出现一次」比什么都直接：
+// 多写一套管道就必然多一处定义或调用。
+const anDef = (screen.match(/fun wizardAnalyze\(/g) || []).length;
+const anUse = (screen.match(/onAnalyze = \{ wizardAnalyze\(\) \}/g) || []).length;
+ok(anDef === 1 && anUse === 1,
+  "只有一个预检入口 wizardAnalyze（定义 " + anDef + " 处、调用 " + anUse + " 处）");
+const runDef = (screen.match(/fun wizardRun\(/g) || []).length;
+const runUse = (screen.match(/onStartRun = \{ wizardRun\(\) \}/g) || []).length;
+ok(runDef === 1 && runUse === 1,
+  "只有一个开跑入口 wizardRun（定义 " + runDef + " 处、调用 " + runUse + " 处）");
 ok(
-  /onCloudRestore = \{[\s\S]{0,3000}pendingImportPath = dest\.absolutePath[\s\S]{0,200}askImportPassword = true/.test(screen),
-  "云端下载完先问密码（加密包要密码才解得开）",
+  /onCloudRestore = \{[\s\S]{0,3000}wizardPath = dest\.absolutePath[\s\S]{0,300}wizardStep = WizardStep\.SELECT/.test(screen),
+  "云端下载完进向导的选择步（加密包要密码才解得开）",
 );
 ok(
-  /val staged = runCatching \{[\s\S]{0,1400}pendingImportPath = staged\.absolutePath[\s\S]{0,200}askImportPassword = true/.test(screen),
-  "本地选文件也先问密码（预检在密码之后才跑）",
+  /val staged = runCatching \{[\s\S]{0,1400}wizardPath = staged\.absolutePath[\s\S]{0,300}wizardStep = WizardStep\.SELECT/.test(screen),
+  "本地选文件也进同一条向导（预检在密码之后才跑）",
 );
+ok(/wizardStep = WizardStep\.SELECT/.test(screen) &&
+  /onDshImport = \{[\s\S]{0,600}wizardStep = WizardStep\.SELECT/.test(screen),
+  "点「导入备份」先进向导的选择步，而不是直接弹密码框");
 ok(
   /DshBackupCrypto\.isArchiveBlobFile\(staged\)/.test(screen) &&
     /DshBackupCrypto\.isArchiveBlobFile\(dest\)/.test(screen),
@@ -223,20 +279,26 @@ ok(
   "页面上的导出说明已挪进弹窗（页面上不再重复一大段）",
 );
 
-console.log("─ 5c. 导入密码：留空即按「没加密」解析");
-const pwDialog = braceSpan(screen, 'if (askImportPassword) {');
-ok(pwDialog !== null, "选完文件弹密码框");
-if (pwDialog) {
-  const body = screen.slice(pwDialog[0], pwDialog[1]);
-  ok(/pendingImportEncrypted/.test(body), "按 magic 结果给出「这是加密包 / 不是加密包」两种提示");
+console.log("─ 5c. 导入密码：留空即按「没加密」解析（现在是向导的第一步）");
+const selectStep = braceSpan(wizard, "private fun WizardSelectStep(");
+ok(selectStep !== null, "向导第一步就是「选文件 + 填密码」");
+if (selectStep) {
+  const body = wizard.slice(selectStep[0], selectStep[1]);
+  ok(/encrypted/.test(body), "按 magic 结果给出「这是加密包 / 不是加密包」两种提示");
   ok(/dsh_bk_import_pw_hint_plain/.test(body) && /dsh_bk_import_pw_hint_encrypted/.test(body),
     "两种提示文案都在");
-  ok(!/importPassword\.isEmpty[\s\S]{0,80}Text\(stringResource\(R\.string\.dsh_bk_import_parse\)/.test(body),
-    "空密码不挡确认键 —— 留空就是「不解密直接解析」");
-  ok(/startImport\(File\(path\), importPassword\)/.test(body), "确认后由唯一的入口开跑");
-  ok(/File\(path\)\.delete\(\)/.test(body), "取消时把用户选的暂存副本删掉");
+  ok(/enabled = !encrypted \|\| password\.isNotEmpty\(\)/.test(body),
+    "明文包空密码就能继续（留空 = 不解密直接解析），加密包必须先填 —— 留空会让预检把密文当包解，"
+      + "报出来的却是「不是本生态的备份」，把人指到完全错误的方向");
+  ok(/onAnalyze/.test(body), "填好之后进预检，而不是立刻写盘");
   ok(/dsh_pw_show|dsh_pw_hide/.test(body), "这个密码框也有显示/隐藏");
 }
+// 退出向导时必须把「我们自己造的」临时副本收拾掉，且只删自己造的
+ok(/WIZARD_TEMP_DIRS = setOf\("config-import", "config-restore", "backup-tmp"\)/.test(screen),
+  "只删自己造的暂存目录（config-import / config-restore / backup-tmp）");
+ok(/fun closeWizard\(/.test(screen) && /staged\.delete\(\)/.test(screen) &&
+  /DshConfigBackup\.discardPreflight\(it\)/.test(screen),
+  "退出向导时删掉暂存副本与预检解出来的明文包");
 
 console.log("─ 5d. 插件状态：原因不许被吞，安装按钮只在确认缺失时才画");
 ok(/val err = o\.optString\("error"\)/.test(backup) && /error = err,/.test(backup),
@@ -245,8 +307,8 @@ ok(/status\.error\.ifEmpty \{ pluginMissing \}/.test(screen),
   "导出前的检查显示插件给的真实原因，而不是一律说「DSH 没起来」");
 ok(/DshPluginRepo\.listInstalled\(\)\.any \{ it\.pkg == DSH_CONFIG_MANAGER_PKG \}/.test(screen),
   "「装没装」由应用侧直接查容器插件目录（不需要 DSH 在跑）");
-ok(/pluginAbsent = !st\.ready && !installed/.test(screen),
-  "只有「没就绪 **且** 确实没装」才算缺失");
+ok(/pluginAbsent = st\?\.ready != true && !installed/.test(screen),
+  "只有「没就绪（含检测超时）**且** 确实没装」才算缺失");
 ok(/if \(pluginAbsent\) \{[\s\S]{0,200}onGoInstallPlugin/.test(content),
   "「去安装插件」只在确认缺失时出现");
 ok(/onRecheckPlugin/.test(content) && /onRecheckPlugin = \{ pluginProbe\+\+ \}/.test(screen) &&
@@ -314,10 +376,10 @@ ok(/fun fetchRemoteBackup\(ctx: Context, backup: RemoteBackup\): File\?/.test(ba
   /fun remoteBackupPath\(b: RemoteBackup\): String/.test(backup),
   "从 DSH 取备份：下载后仍要过「是不是能打开的 zip」，路径没给就按插件 exports 约定推");
 // 恢复复用导入那条路（密码 → 预检 → 会话/冲突 → 执行），不另开通道
-ok(/pendingImportPath = fetched\.absolutePath/.test(screen) &&
-  /askImportPassword = true/.test(screen) &&
+ok(/wizardPath = fetched\.absolutePath/.test(screen) &&
+  /wizardStep = WizardStep\.SELECT/.test(screen) &&
   /DshBackupCrypto\.isArchiveBlobFile\(fetched\)/.test(screen),
-  "从 DSH 恢复 = 取到本地后走同一条导入流程（不再自己实现一遍解密/预检）");
+  "从 DSH 恢复 = 取到本地后进同一条向导（不再自己实现一遍解密/预检）");
 ok(/dshBackups: List<DshConfigBackup\.RemoteBackup>/.test(content) &&
   /onDshBackupRestore: \(DshConfigBackup\.RemoteBackup\) -> Unit/.test(content) &&
   /onDshBackupDelete: \(DshConfigBackup\.RemoteBackup\) -> Unit/.test(content),
@@ -412,6 +474,71 @@ ok(/import-secrets-handoff refs=/.test(backup), "交接动作进日志");
 ok(/val refs: Map<String, String> = emptyMap\(\)/.test(backup) &&
   /keys = refs\.keys\.toList\(\)/.test(backup),
   "SecretsInfo 同时带出键与值");
+
+console.log("─ 5j. 插件没就绪时按钮不许可点（null 是「还不知道」，不是「允许」）");
+// 原来的判据是 `pluginReady != false`：检测中（null）会被放行，用户一进页面就能点导出，
+// 而那一刻插件可能根本没起来。现在一律按 == true 判定。
+ok(!/pluginReady != false/.test(content),
+  "不再把「还在检测」当成可点");
+const gates = (content.match(/pluginReady == true/g) || []).length;
+ok(gates >= 5, "所有依赖插件的入口都按 == true 判定（找到 " + gates + " 处：会话整理/导出导入/快照/DSH 内备份/云端）");
+ok(/const val STATUS_TIMEOUT_MS = 15_000/.test(backup) &&
+  /request\("GET", "\/status", null, timeoutMs = STATUS_TIMEOUT_MS\)/.test(backup),
+  "探活用自己的 15 秒超时（request 默认 300 秒是给导入导出那种真在干活的请求用的）");
+ok(/withTimeoutOrNull\(STATUS_PROBE_TIMEOUT_MS\)/.test(screen),
+  "界面侧再包一层超时兜底：按钮一定会走到一个确定状态，而不是永远停在「检测中」");
+ok(/dsh_backup_plugin_timeout/.test(screen),
+  "超时有一条能直接显示的原因（不是空白，也不是「插件缺失」这种误导）");
+ok(/enabled = !dshBusy/.test(content) && /onInstallRescueCli/.test(content),
+  "不依赖插件的入口（打开备份目录、救急 CLI、WebDAV 开关）不受这个 gating 约束");
+
+console.log("─ 5k. 软件数据范围：config + dshfolk，设备/运行时状态与提权项不带");
+ok(/val PREFS_FILES = listOf\(PREFS_NAME, DshEnv\.PREF\)/.test(appData),
+  "带两个设置文件：config 与 dshfolk（「服务就绪后自动打开页面」那批设置就在后者里）");
+ok(/KEY_AUTO_OPEN_WEBUI = "auto_open_webui_when_ready"/.test(fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt", "utf8")) &&
+  /const val PREF = "dshfolk"/.test(fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt", "utf8")),
+  "那条设置确实住在 dshfolk 里（只带 config 的话，恢复后它不会回来）");
+for (const key of [
+  "KEY_SEED_PLUGINS_DONE", "KEY_SEEDED_PLUGINS", "KEY_SEED_REPAIR_REV", "KEY_SEED_RUNTIME",
+  "KEY_SEED_PASSES", "KEY_SEED_SHADOWED", "KEY_SEED_SHADOWED_RUNTIME",
+  "KEY_RUNTIME_VERSION", "KEY_RUNTIME_MIN_APP", "KEY_PROROOT_FAIL", "KEY_ROOTFS_SIZE",
+  "KEY_PERM_CHANNEL", "KEY_PRIV_STRICTNESS", "KEY_NATIVE_BRIDGE", "KEY_NATIVE_CAPS",
+]) {
+  ok(new RegExp("DshEnv\\." + key + ",").test(appData), "排除表点名 " + key);
+}
+ok(/val PRIVILEGE_KEYS = setOf\(/.test(appData) && /fun excludedPrivilegeCount\(/.test(appData),
+  "提权项单独数出来：结果里要说明「这几项不是漏了，是按设计没跟着走」");
+ok(/schema/.test(appData) && /SCHEMA_V2 = 2/.test(appData),
+  "包结构带版本号（v2 起 prefs 按文件分组）");
+ok(/private fun isFlatV1\(/.test(appData) && /if \(v\.has\("t"\)\) return true/.test(appData),
+  "读侧能认出 v1 的扁平结构（旧包必须继续能导）");
+ok(/excludedCount\(data\)/.test(appData) && /dsh_bk_excluded_note/.test(backup),
+  "按设计跳过的项数会如实告诉用户");
+
+console.log("─ 5l. 外观走主题包：写进包、按顺序恢复、失败不误导");
+ok(/const val THEME = "dsh-folk\/theme\.zip"/.test(archive),
+  "外观主题包落在 dsh-folk/theme.zip（与 app-data.json 同一前缀）");
+ok(/copyInto\(zos, theme, THEME\)/.test(archive) && /themeBytes = theme\.length\(\)/.test(archive),
+  "补包时把主题包写进包并记下大小");
+ok(/ThemeManager\.exportTheme\(/.test(backup) && /ThemeManager\.ThemeMetadata\(/.test(backup),
+  "导出用的就是既有的主题导出通路（外观带资源文件，prefs 搬不动）");
+ok(/private suspend fun exportThemeZip\(/.test(backup) &&
+  /trace\(ctx, "theme-export-failed " \+ describe\(e\)\)/.test(backup),
+  "外观打不出来不阻断导出，只记一笔并如实报「不含外观」");
+ok(/private suspend fun restoreThemeZip\(/.test(backup) && /ThemeManager\.importTheme\(ctx, Uri\.fromFile\(tmp\)\)/.test(backup),
+  "恢复走既有的主题导入通路（它会把 file:// URI 重写成新路径，并刷 UI）");
+ok(/enum class ThemeOutcome \{ RESTORED, ABSENT, FAILED \}/.test(backup) &&
+  /ThemeOutcome\.ABSENT -> ctx\.appString\(R\.string\.dsh_bk_theme_absent\)/.test(backup),
+  "三种结局（恢复/包里有但这次没走软件数据/失败）分开说，旧包不会被当成失败");
+// 顺序：软件数据在前、主题在后（两边都写外观参数，主题后落地才是最终生效的那份）
+const themeOrderApply = backup.indexOf("DshAppData.apply(ctx, data)");
+const themeOrderRestore = backup.indexOf("restoreThemeZip(ctx, plainZip");
+const themeOrderApply2 = backup.indexOf("DshAppData.apply(ctx, appData)");
+const themeOrderRestore2 = backup.indexOf("restoreThemeZip(ctx, plainZip", themeOrderApply2);
+ok(themeOrderRestore > themeOrderApply && themeOrderRestore2 > themeOrderApply2,
+  "主题在软件数据之后落地（自定义主色/首页布局/夜间模式在 config 里，两边都会写）");
+ok(/hasDshSections\(plainZip\)/.test(backup) && /DshAppData\.summarize\(plainZip\)/.test(backup),
+  "纯软件数据包也有内容摘要（预览步不能是空白）");
 
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),

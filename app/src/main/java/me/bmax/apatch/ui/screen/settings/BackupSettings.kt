@@ -212,6 +212,10 @@ fun BackupSettingsContent(
      *
      * 导出/导入完全走这个插件的回环 API，没它这一页做不了事 —— 所以状态必须在
      * 进页面时就摆出来，而不是等用户点了「导出」再报错。
+     *
+     * 这一页所有依赖插件的入口都按 **`== true`** 判定（不是 `!= false`）：`null` 是
+     * 「还不知道」，把它当放行会让按钮在检测完成前就可点。不依赖插件的入口
+     * （打开备份目录、救急 CLI、WebDAV 地址与开关）不受它约束。
      */
     pluginReady: Boolean? = null,
     /** 插件版本（就绪时显示），或未就绪的原因。 */
@@ -332,7 +336,7 @@ fun BackupSettingsContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        OutlinedButton(onClick = onTidySessions, enabled = !groupBusy && pluginReady != false) {
+                        OutlinedButton(onClick = onTidySessions, enabled = !groupBusy && pluginReady == true) {
                             Text(stringResource(R.string.dsh_bk_tidy_sessions))
                         }
                         if (groupBusy) {
@@ -365,8 +369,11 @@ fun BackupSettingsContent(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // 插件未就绪时禁用，而不是让用户点了再收一条报错。
-                        // 还在检测（null）时放行：不确定就别拦，检测本身可能超时。
-                        val canRun = !dshBusy && pluginReady != false
+                        // **只有明确 ready=true 才放行**：`null` 是「还不知道」，此前它被当成
+                        // 「不确定就别拦」放过去，结果是一进页面就能点导出 —— 用户按下按钮的
+                        // 那一刻插件可能根本没启动，收到的错误还与他刚做的操作对不上号。
+                        // 探活本身有 15 秒请求超时 + 20 秒界面兜底，等待是有终点的。
+                        val canRun = !dshBusy && pluginReady == true
                         Button(
                             // 导出什么（范围 / 会话 / 密码）都在弹窗里选，页面上只有这两个动作
                             onClick = { showExportDialog = true },
@@ -426,7 +433,7 @@ fun BackupSettingsContent(
                     Spacer(Modifier.height(12.dp))
                     // canRun 提到 Column 作用域：下面的列表行也要用它（放在 Row 里就只有
                     // 那一行可见，行外的按钮引用会编译不过）
-                    val canRun = !snapshotBusy && pluginReady != false
+                    val canRun = !snapshotBusy && pluginReady == true
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -511,7 +518,7 @@ fun BackupSettingsContent(
                     }
                     Spacer(Modifier.height(12.dp))
                     // 提到 Column 作用域：下面的列表行也要用它（放在 Row 里就只有那一行可见）
-                    val canRun = !dshBackupBusy && pluginReady != false
+                    val canRun = !dshBackupBusy && pluginReady == true
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -688,7 +695,7 @@ fun BackupSettingsContent(
                     Spacer(Modifier.height(12.dp))
                     // 同快照区块：canRun 提到 Column 作用域，列表行里的「恢复」按钮也要用
                     val hasUrl = BackupConfig.webdavUrl.isNotBlank()
-                    val canRun = !cloudBusy && hasUrl && pluginReady != false
+                    val canRun = !cloudBusy && hasUrl && pluginReady == true
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,

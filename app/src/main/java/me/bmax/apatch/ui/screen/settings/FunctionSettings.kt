@@ -1286,152 +1286,164 @@ fun FunctionSettingsContent(
                         )
                     }
 
-                    // 总开关关着时分项没有意义；折叠后仍保留总开关，方便快速查看页面。
+                    // 总开关关着时这一整块都不显示：分项、共享存储、CLI 提示摊在那里，
+                    // 只会让人以为「关了也还有东西在跑」。档位本身仍留在 prefs 里，重新打开
+                    // 开关即恢复 —— 这件事由下面的 offHint 说清楚，不靠用户自己猜。
                     var capsExpanded by remember { mutableStateOf(false) }
-                    TextButton(onClick = { capsExpanded = !capsExpanded }) {
-                        Icon(
-                            if (capsExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                            contentDescription = null,
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(if (capsExpanded) R.string.dsh_section_collapse else R.string.dsh_section_expand))
+                    // 关掉时顺手收起详情，下次打开是收起的初始态
+                    LaunchedEffect(nativeBridgeEnabled) {
+                        if (!nativeBridgeEnabled) capsExpanded = false
                     }
-                    AnimatedVisibility(visible = capsExpanded) {
-                        Column {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.dsh_native_caps),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    // 十几项平铺成一列会变成一堵开关墙，所以按「这项能力动的是什么」分组。
-                    // 分组只是视觉的：开关语义、prefs 存储、协议 id 全都不变。
-                    for (group in CapGroup.entries) {
-                        val caps = group.caps
-                        if (caps.isEmpty()) continue
-                        Spacer(Modifier.height(8.dp))
+                    // 这一项统计给 offHint 用：关了开关之后还有多少项「档位不是关」，
+                    // 它们此刻立即失效、但值还在 —— 不说等于把状态藏起来。
+                    val activeCapCount = DshNativeBridge.Cap.entries.count {
+                        val a = nativeAccess[it]
+                        a != null && a != DshNativeBridge.Access.OFF
+                    }
+                    if (nativeBridgeEnabled) {
+                        TextButton(onClick = { capsExpanded = !capsExpanded }) {
+                            Icon(
+                                if (capsExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(if (capsExpanded) R.string.dsh_section_collapse else R.string.dsh_section_expand))
+                        }
+                        AnimatedVisibility(visible = capsExpanded) {
+                            Column {
+                        Spacer(Modifier.height(12.dp))
                         Text(
-                            text = stringResource(group.titleRes),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
+                            text = stringResource(R.string.dsh_native_caps),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
                         )
-                        for (cap in caps) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(nativeCapTitleRes(cap)),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                    Text(
-                                        text = stringResource(nativeCapSummaryRes(cap)),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    val modes = DshNativeBridge.accessOptions(cap)
-                                    for (mode in modes) {
-                                        OutlinedButton(
-                                            onClick = { onNativeAccessChange(cap, mode) },
-                                            enabled = nativeBridgeEnabled,
-                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-                                        ) {
-                                            Text(
-                                                stringResource(
-                                                    when (mode) {
-                                                        DshNativeBridge.Access.OFF -> R.string.dsh_native_access_off
-                                                        DshNativeBridge.Access.WRITE -> accessLabelRes(cap, mode)
-                                                        DshNativeBridge.Access.READ -> accessLabelRes(cap, mode)
-                                                        DshNativeBridge.Access.CONTROL -> R.string.dsh_native_access_control
-                                                        DshNativeBridge.Access.READ_WRITE -> accessLabelRes(cap, mode)
-                                                    }
-                                                ),
-                                                color = if (nativeAccess[cap] == mode) MaterialTheme.colorScheme.primary
-                                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
+                        Spacer(Modifier.height(4.dp))
+                        // 十几项平铺成一列会变成一堵开关墙，所以按「这项能力动的是什么」分组。
+                        // 分组只是视觉的：开关语义、prefs 存储、协议 id 全都不变。
+                        for (group in CapGroup.entries) {
+                            val caps = group.caps
+                            if (caps.isEmpty()) continue
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(group.titleRes),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            for (cap in caps) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = stringResource(nativeCapTitleRes(cap)),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            text = stringResource(nativeCapSummaryRes(cap)),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        val modes = DshNativeBridge.accessOptions(cap)
+                                        for (mode in modes) {
+                                            OutlinedButton(
+                                                onClick = { onNativeAccessChange(cap, mode) },
+                                                enabled = nativeBridgeEnabled,
+                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                                            ) {
+                                                Text(
+                                                    stringResource(
+                                                        when (mode) {
+                                                            DshNativeBridge.Access.OFF -> R.string.dsh_native_access_off
+                                                            DshNativeBridge.Access.WRITE -> accessLabelRes(cap, mode)
+                                                            DshNativeBridge.Access.READ -> accessLabelRes(cap, mode)
+                                                            DshNativeBridge.Access.CONTROL -> R.string.dsh_native_access_control
+                                                            DshNativeBridge.Access.READ_WRITE -> accessLabelRes(cap, mode)
+                                                        }
+                                                    ),
+                                                    color = if (nativeAccess[cap] == mode) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            val on = nativeBridgeEnabled && nativeAccess[cap] != DshNativeBridge.Access.OFF
-                            if (on && cap !in capsWithPermission) {
-                                if (cap == DshNativeBridge.Cap.SHELL) {
-                                    // 特权命令缺的不是 Android 权限 —— 没有任何框可弹、也没有系统页
-                                    // 可跳（解决办法在本页的「权限通道」那一段），所以是一行说明而
-                                    // 不是一个按下去什么都不发生的按钮。
+                                val on = nativeBridgeEnabled && nativeAccess[cap] != DshNativeBridge.Access.OFF
+                                if (on && cap !in capsWithPermission) {
+                                    if (cap == DshNativeBridge.Cap.SHELL) {
+                                        // 特权命令缺的不是 Android 权限 —— 没有任何框可弹、也没有系统页
+                                        // 可跳（解决办法在本页的「权限通道」那一段），所以是一行说明而
+                                        // 不是一个按下去什么都不发生的按钮。
+                                        Text(
+                                            text = stringResource(capPermissionHintRes(cap)),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    } else {
+                                        TextButton(onClick = { onRequestCapPermission(cap) }) {
+                                            Text(stringResource(capPermissionHintRes(cap)))
+                                        }
+                                    }
+                                } else if (on && cap == DshNativeBridge.Cap.LOCATION &&
+                                    coarseLocationOnly
+                                ) {
+                                    // 大致位置**不是**缺权限（很多人就想只给这个），所以是一行
+                                    // 说明而不是「去授权」按钮：点了也只会再弹一次同样的框。
                                     Text(
-                                        text = stringResource(capPermissionHintRes(cap)),
+                                        text = stringResource(R.string.dsh_native_precise_location),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                } else {
-                                    TextButton(onClick = { onRequestCapPermission(cap) }) {
-                                        Text(stringResource(capPermissionHintRes(cap)))
-                                    }
                                 }
-                            } else if (on && cap == DshNativeBridge.Cap.LOCATION &&
-                                coarseLocationOnly
-                            ) {
-                                // 大致位置**不是**缺权限（很多人就想只给这个），所以是一行
-                                // 说明而不是「去授权」按钮：点了也只会再弹一次同样的框。
+                            }
+                        }
+
+                        // ── 共享存储 ──
+                        // 与上面的分项同列而不另开一张卡：对用户来说「让 agent 读写手机文件」
+                        // 和「让 agent 发通知」是同一类决定。但它**不是** Cap：MANAGE_EXTERNAL_STORAGE
+                        // 的 protectionLevel 是 signature|appop，requestPermissions() 申请不到，
+                        // 只能跳系统设置页，所以没有开关、只有状态与入口。
+                        HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = stringResource(R.string.dsh_native_precise_location),
+                                    text = stringResource(R.string.dsh_storage_cap_title),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    text = stringResource(R.string.dsh_storage_cap_desc),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                        }
-                    }
-
-                    // ── 共享存储 ──
-                    // 与上面的分项同列而不另开一张卡：对用户来说「让 agent 读写手机文件」
-                    // 和「让 agent 发通知」是同一类决定。但它**不是** Cap：MANAGE_EXTERNAL_STORAGE
-                    // 的 protectionLevel 是 signature|appop，requestPermissions() 申请不到，
-                    // 只能跳系统设置页，所以没有开关、只有状态与入口。
-                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.dsh_storage_cap_title),
-                                style = MaterialTheme.typography.bodyMedium,
+                            Spacer(Modifier.width(8.dp))
+                            Icon(
+                                imageVector = if (allFilesGranted) Icons.Filled.CheckCircle
+                                else Icons.Filled.Warning,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = if (allFilesGranted) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.error,
                             )
+                        }
+                        if (allFilesGranted) {
                             Text(
-                                text = stringResource(R.string.dsh_storage_cap_desc),
+                                text = stringResource(R.string.dsh_storage_granted),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        } else {
+                            TextButton(onClick = onOpenAllFilesSettings) {
+                                Text(stringResource(R.string.dsh_storage_need_perm))
+                            }
                         }
-                        Spacer(Modifier.width(8.dp))
-                        Icon(
-                            imageVector = if (allFilesGranted) Icons.Filled.CheckCircle
-                            else Icons.Filled.Warning,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = if (allFilesGranted) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    if (allFilesGranted) {
-                        Text(
-                            text = stringResource(R.string.dsh_storage_granted),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        TextButton(onClick = onOpenAllFilesSettings) {
-                            Text(stringResource(R.string.dsh_storage_need_perm))
-                        }
-                    }
 
-                    if (nativeBridgeEnabled) {
                         Spacer(Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.dsh_native_cli_hint),
@@ -1439,8 +1451,19 @@ fun FunctionSettingsContent(
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
+                            }
                         }
+                    } else {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = if (activeCapCount > 0) {
+                                stringResource(R.string.dsh_native_off_hint_kept, activeCapCount)
+                            } else {
+                                stringResource(R.string.dsh_native_off_hint)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

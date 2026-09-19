@@ -67,6 +67,10 @@ data class MergeStats(
     val appData: Boolean = false,
     val auditFiles: Int = 0,
     val secrets: Boolean = false,
+    /** 包里带了外观主题包（[DshBackupArchive.THEME]）。 */
+    val theme: Boolean = false,
+    /** 主题包大小，用于结果里告诉用户「外观占了多少」。 */
+    val themeBytes: Long = 0,
 )
 
 /**
@@ -106,6 +110,17 @@ object DshBackupArchive {
     /** App 自己的数据在包里的目录前缀。用独立前缀是为了不与插件的分区命名撞车。 */
     const val APP_DIR = "dsh-folk/"
     const val APP_DATA = "dsh-folk/app-data.json"
+
+    /**
+     * 外观主题包在包里的落点（[ThemeIO.exportTheme] 的产物，原样搬进来）。
+     *
+     * 为什么外观要单独装一个 zip 而不是塞进 app-data.json：背景图、背景视频、字体、
+     * 音乐、音效都是 `filesDir` 下的**资源文件**，prefs 里存的只是文件名和一个
+     * `file://` 指向；只搬 prefs 会得到一台「设置说要显示某张图、而那张图不存在」的机器。
+     * 而「当前外观 + 它的文件」打成 zip 这件事，[ThemeIO] 已经做了（还负责导入时把 URI
+     * 重写成新路径、破 Coil 缓存），所以这里复用它，不另造一套。
+     */
+    const val THEME = "dsh-folk/theme.zip"
 
     const val SESSION_PREFIX = "sessions/"
 
@@ -173,6 +188,7 @@ object DshBackupArchive {
      * @param output 结果落点（会被覆盖）
      * @param appData [DshAppData.collect] 的结果（不含 vault 时为 null，不写进包）
      * @param auditFiles 要带走的审计文件（与 [appData] 同进退）
+     * @param theme 外观主题包（[ThemeIO.exportTheme] 的产物，见 [THEME]）；没有就传 null
      * @param secrets 含 vault 或设了密码时由 [DshBackupCrypto.encryptSecrets] 产出；
      *   不含 vault 但设了密码时是**空内容占位**（导入侧的硬要求）
      * @param sourceDshVersion 写进 manifest.source.dshVersion（新建包时才用得上）
@@ -184,6 +200,7 @@ object DshBackupArchive {
         plan: ExportPlan,
         appData: JSONObject?,
         auditFiles: List<File>,
+        theme: File? = null,
         secrets: DshBackupCrypto.Secrets?,
         sourceDshVersion: String,
         onNote: (String) -> Unit = {},
@@ -252,6 +269,14 @@ object DshBackupArchive {
                     sums[APP_DIR + "audit/" + f.name] = copyInto(zos, f, APP_DIR + "audit/" + f.name)
                 }
                 stats = stats.copy(auditFiles = auditFiles.count { it.isFile && it.length() > 0L })
+            }
+
+            // 3b) 外观主题包。与软件数据同进退（都属于「App 自己的东西」那一档），但走的是
+            //     资源文件那条路 —— 理由见 [THEME] 的说明。空文件不写：一个 0 字节的
+            //     theme.zip 会让导入侧以为「有外观」却解不出任何东西。
+            if (plan.includesAppData && theme != null && theme.isFile && theme.length() > 0L) {
+                sums[THEME] = copyInto(zos, theme, THEME)
+                stats = stats.copy(theme = true, themeBytes = theme.length())
             }
 
             // 4) secrets.enc（设了密码就必须有：导入侧在 encrypted=true 时会去找它解）

@@ -237,21 +237,35 @@ ok(
 
 // 界面侧：只有探测到会话才弹框；三个选项（含跳过）都走同一条导入
 const screenSrc = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettingsScreen.kt');
+const wizardSrc = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupWizard.kt');
 ok(/DshConfigBackup\.preflightImport\(/.test(screenSrc), '导入前先跑预检（会话数与冲突都由它给出）');
-ok(/p\.sessions > 0 -> askSessions = true/.test(screenSrc), '只有包里有会话才置起会话弹窗');
-ok(/p\.conflictTotal > 0 -> askConflicts = true/.test(screenSrc), '只有检测到冲突才置起冲突弹窗');
-ok(/else -> finishImport\(p, DshConfigBackup\.SessionImport\.SKIP, DshConfigBackup\.STRATEGY_MERGE\)/.test(screenSrc),
-  '两样都没有就直接导入（不给用户多余的一问）');
-const pickSpan = braceSpan(screenSrc, 'val pick: (DshConfigBackup.SessionImport) -> Unit');
-ok(pickSpan !== null, '三个选项共用一个 pick 回调');
-if (pickSpan) {
-  // 「跳过会话数据」必须接着走导入：会话弹窗里的 pick 只会把答案交给 finishImport，
-  // 而 finishImport 才是真正开跑的地方（它调的 runImport 里带 preflight）。
-  const finishAt = screenSrc.indexOf('finishImport(preflight, choice, DshConfigBackup.STRATEGY_MERGE)', pickSpan[0]);
-  ok(finishAt > pickSpan[0] && finishAt < pickSpan[1], '选「跳过会话数据」也继续导入（不是取消导入）');
-  const cancelAt = screenSrc.indexOf('cancelImport(preflight)', pickSpan[1]);
-  ok(cancelAt > pickSpan[1], '只有取消（点外面/取消按钮）才放弃并清掉预检产物');
-  ok(/fun finishImport\(\s*preflight: DshConfigBackup\.Preflight,/.test(screenSrc), 'finishImport 是唯一的开跑入口');
+// 会话与冲突都在向导的「决策」步里问，而且**只有真的有**才问：
+// 没有会话就不画那一段、没有冲突就不画那一段，两样都没有时预览直接进确认。
+const decideSpan = braceSpan(wizardSrc, 'private fun WizardDecideStep(');
+ok(decideSpan !== null, '向导有决策步（会话与冲突都在这里问）');
+if (decideSpan) {
+  const body = wizardSrc.slice(decideSpan[0], decideSpan[1]);
+  ok(/if \(sessions > 0\) \{/.test(body), '只有包里有会话才画「会话怎么处理」那一段');
+  ok(/if \(conflicts\.isNotEmpty\(\)\) \{/.test(body), '只有检测到冲突才画冲突逐条决策那一段');
+  // 「跳过会话数据」必须仍然导入：决策步只是收集答案，真正的开跑在 wizardRun。
+  ok(/onSessionChoice\(DshConfigBackup\.SessionImport\.SKIP\)/.test(body),
+    '「跳过会话数据」是一个正常的选项，不是取消导入');
+  for (const mode of ['STOP', 'DIRECT', 'SKIP']) {
+    ok(new RegExp('onSessionChoice\\(DshConfigBackup\\.SessionImport\\.' + mode + '\\)').test(body),
+      '三个会话选项共用一个回调：' + mode);
+  }
+}
+ok(/sessions = wizardSessionChoice\(\) \?: DshConfigBackup\.SessionImport\.SKIP/.test(screenSrc),
+  '会话答案在真正导入时才消费（跳过 = 不写会话，其余照常导入）');
+ok(/if \(needsDecide\(wizardPreflight\)\) WizardStep\.DECIDE else WizardStep\.CONFIRM/.test(screenSrc),
+  '两样都没有就直接进确认（不给用户多余的一问）');
+ok(/onCancel = \{ closeWizard\(\) \}/.test(screenSrc) && /fun closeWizard\(/.test(screenSrc),
+  '只有取消（取消按钮/返回箭头）才放弃并清掉预检产物');
+const runSpan = braceSpan(screenSrc, 'fun wizardRun()');
+ok(runSpan !== null, 'wizardRun 是唯一的开跑入口');
+if (runSpan) {
+  ok(/DshConfigBackup\.import\(\s*context, p\.plainZip,/.test(screenSrc.slice(runSpan[0], runSpan[1])),
+    '开跑用的是预检留下的那份明文包（不再上传/解密第二遍）');
 }
 
 /* --------------------------- 6c. 软件数据真的能恢复回去（走一遍两条入库路径） --------------------------- */
@@ -395,7 +409,17 @@ if (encSpan) {
 section('7. 软件数据：设置带走，密钥留下');
 ok(/SKIP_PREFIXES = listOf\("webdav_"\)/.test(appDataKt), 'webdav_* 整组不带（只带地址不带密码等于给用户一个连不上的配置）');
 ok(/"password", "passwd", "token", "secret"/.test(appDataKt), '密钥类键名被过滤');
-ok(/SKIP_KEYS = setOf\("app_initialized"\)/.test(appDataKt), '不带 app_initialized（否则新设备会跳过首次初始化）');
+ok(/PREFS_NAME to setOf\("app_initialized"\)/.test(appDataKt),
+  '不带 app_initialized（否则新设备会跳过首次初始化）');
+// dshfolk 里的机器/运行时状态与提权项同样不带：它们记的是「这台机器发生过什么」，
+// 搬到另一台机器就是伪造事实；提权项则该由用户自己重新点一次。
+ok(/DshEnv\.KEY_SEEDED_PLUGINS,/.test(appDataKt) && /DshEnv\.KEY_RUNTIME_VERSION,/.test(appDataKt) &&
+  /DshEnv\.KEY_PROROOT_FAIL,/.test(appDataKt),
+  'dshfolk 的预装账本与本机运行时状态被点名排除');
+ok(/DshEnv\.KEY_PERM_CHANNEL,/.test(appDataKt) && /DshEnv\.KEY_NATIVE_CAPS,/.test(appDataKt),
+  '提权类（权限通道、原生能力档位）不随备份走');
+ok(/val PREFS_FILES = listOf\(PREFS_NAME, DshEnv\.PREF\)/.test(appDataKt),
+  'config 与 dshfolk 两个设置文件都进包');
 ok(/put\("t", "s"\)/.test(appDataKt) && /put\("t", "i"\)/.test(appDataKt), 'prefs 值带类型标记（否则 int 会被写成 double）');
 ok(/SecureRandom|DshAppData/.test(appDataKt), '模块自带完整实现');
 

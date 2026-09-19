@@ -15,7 +15,9 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.R
+import me.bmax.apatch.ui.theme.ThemeManager
 import me.bmax.apatch.util.BackupLogManager
 import me.bmax.apatch.util.appString
 import me.bmax.apatch.util.getSafeDownloadsDir
@@ -46,6 +48,14 @@ object DshConfigBackup {
     const val STRATEGY_MERGE = "merge"
     const val STRATEGY_REPLACE = "replace"
     const val STRATEGY_SKIP_EXISTING = "skipExisting"
+
+    /**
+     * `/status` 探活的读超时。
+     *
+     * 它是**一次健康检查**，不是一次作业：返回慢只有一个含义 —— 不可用。所以这里用
+     * 秒级而不是 [request] 默认的分钟级，界面才可能在一次转身之内给出结论。
+     */
+    const val STATUS_TIMEOUT_MS = 15_000
 
 
     /**
@@ -101,9 +111,15 @@ object DshConfigBackup {
         val error: String = "",
     )
 
-    /** 插件在不在、能不能用。DSH 没起来或插件没装都会落到 ready=false。 */
+    /**
+     * 插件在不在、能不能用。DSH 没起来或插件没装都会落到 ready=false。
+     *
+     * 这是一次**探活**，用的是自己的短超时（见 [STATUS_TIMEOUT_MS]）：[request] 默认的
+     * 300 秒是给导入导出那种真在干活的请求用的，套在探活上会让「检测中」持续五分钟 ——
+     * 界面那边按钮的可点性全挂在这个结果上，那种时长等于没有反馈。
+     */
     suspend fun status(ctx: Context): Status = withContext(Dispatchers.IO) {
-        val r = request("GET", "/status", null)
+        val r = request("GET", "/status", null, timeoutMs = STATUS_TIMEOUT_MS)
         if (r == null) return@withContext Status(false, error = ctx.appString(R.string.dsh_bk_not_running))
         val o = runCatching { JSONObject(r) }.getOrNull()
             ?: return@withContext Status(false, error = ctx.appString(R.string.dsh_bk_bad_json))
@@ -301,6 +317,10 @@ object DshConfigBackup {
         onLine(ctx.appString(R.string.dsh_bk_step_merging))
         val appData = if (plan.includesAppData) DshAppData.collect(ctx) else null
         val audit = if (plan.includesAppData) DshAppData.auditFiles(ctx) else emptyList()
+        // 外观（背景图/视频背景/字体/音乐/音效）不在 prefs 里 —— prefs 只存文件名与
+        // `file://` 指向，文件本身在 filesDir。所以它单独打一个主题包进包（见
+        // [DshBackupArchive.THEME]），走的是既有的主题导出通路，不另造一套。
+        val theme = if (plan.includesAppData) exportThemeZip(ctx, stage, onLine) else null
         val secrets = if (plan.password.isEmpty()) {
             null
         } else {
@@ -320,6 +340,7 @@ object DshConfigBackup {
             ctx,
             "merge-start input=" + (fromPlugin?.length()?.toString() ?: "none") +
                 " appdata=" + (appData != null) + " audit=" + audit.size +
+                " theme=" + (theme?.length()?.toString() ?: "none") +
                 " secrets=" + (secrets != null),
         )
         val stats = try {
@@ -330,6 +351,7 @@ object DshConfigBackup {
                 plan = plan,
                 appData = appData,
                 auditFiles = audit,
+                theme = theme,
                 secrets = secrets,
                 sourceDshVersion = dshVersionOrUnknown(ctx),
             )
@@ -417,6 +439,11 @@ object DshConfigBackup {
             }
             append("，").append(ctx.appString(R.string.dsh_bk_out_appdata))
             .append(if (stats.appData) "" else "×")
+            // 外观是软件数据里最占体积的一块（背景视频能上百 MB），所以带上具体大小 ——
+            // 「包里装了什么」这句话里，用户最需要知道的就是它。
+            if (stats.theme) {
+                append("，").append(ctx.appString(R.string.dsh_bk_out_theme, humanSize(stats.themeBytes)))
+            }
             append("，").append(
                 if (stats.secrets) ctx.appString(R.string.dsh_bk_out_vault) else ctx.appString(R.string.dsh_bk_out_novault)
             )
@@ -433,6 +460,105 @@ object DshConfigBackup {
             message = outSummary,
         )
     }
+
+    /**
+     * 生成外观主题包（见 [DshBackupArchive.THEME]）。
+     *
+     * 失败**不阻断导出**：外观拿不到不该让整份备份失败 —— 用户最需要的 DSH 配置、会话
+     * 与软件设置都已经在包里了。这里失败只记一笔日志并返回 null，导出结果里会如实写出
+     * 「不含外观」，而不是安静地少带一半东西。
+     */
+    private suspend fun exportThemeZip(ctx: Context, stage: File, onLine: (String) -> Unit): File? {
+        val out = File(stage, "theme.zip")
+        out.delete()
+        return try {
+            onLine(ctx.appString(R.string.dsh_bk_step_theme_export))
+            // exportTheme 内部自己切到 IO，并先清空它自己的暂存目录再写。
+            val ok = ThemeManager.exportTheme(
+                ctx,
+                Uri.fromFile(out),
+                ThemeManager.ThemeMetadata(
+                    name = ctx.appString(R.string.dsh_bk_theme_name),
+                    type = "phone",
+                    version = BuildConfig.VERSION_NAME,
+                    author = "DSH-Folk",
+                    description = ctx.appString(R.string.dsh_bk_theme_desc),
+                ),
+            )
+            val bytes = out.length()
+            trace(ctx, "theme-export ok=" + ok + " bytes=" + bytes)
+            if (ok && out.isFile && bytes > 0L) out else null
+        } catch (e: Exception) {
+            trace(ctx, "theme-export-failed " + describe(e))
+            null
+        }
+    }
+
+    /**
+     * 把包里的外观主题包应用回本机。
+     *
+     * 顺序很要紧：**必须在软件数据之后**。外观参数（自定义主色、首页布局、夜间模式、
+     * 导航栏图标）本身就存在 `config` 里，两边都会写这几个键 —— 主题后写，它才是最终
+     * 生效的那一份，与用户在导出时看到的外观一致。
+     *
+     * 还要注意副作用（导入结果里会说清）：主题导入会**替换**本机的音乐与音效
+     * （`MusicConfig.clearMusic` + 重新设置），并在包内语言与当前语言不同时改变界面语言
+     * （会触发 Activity 重建）。
+     *
+     * 返回三态：[ThemeOutcome.RESTORED] / [ThemeOutcome.ABSENT]（这个包没有外观）/
+     * [ThemeOutcome.FAILED]（解不开或导入失败）。三种都不影响其余部分是否成功。
+     */
+    private suspend fun restoreThemeZip(ctx: Context, zip: File, stage: File): ThemeOutcome {
+        val entry = readEntry(zip, DshBackupArchive.THEME) ?: return ThemeOutcome.ABSENT
+        val tmp = File(stage, "theme-restore.zip")
+        return try {
+            tmp.delete()
+            tmp.writeBytes(entry)
+            val ok = ThemeManager.importTheme(ctx, Uri.fromFile(tmp))
+            trace(ctx, "theme-import ok=" + ok + " bytes=" + entry.size)
+            if (ok) ThemeOutcome.RESTORED else ThemeOutcome.FAILED
+        } catch (e: Exception) {
+            trace(ctx, "theme-import-failed " + describe(e))
+            ThemeOutcome.FAILED
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    /** 外观恢复的三种结果。 */
+    enum class ThemeOutcome { RESTORED, ABSENT, FAILED }
+
+    /** 外观结局的一句话。三种都要说出来：用户问的是「我的背景和字体回来了吗」。 */
+    private fun themeNote(ctx: Context, outcome: ThemeOutcome): String = when (outcome) {
+        ThemeOutcome.RESTORED -> ctx.appString(R.string.dsh_bk_theme_restored)
+        ThemeOutcome.ABSENT -> ctx.appString(R.string.dsh_bk_theme_absent)
+        ThemeOutcome.FAILED -> ctx.appString(R.string.dsh_bk_theme_failed)
+    }
+
+    /**
+     * 追加「按设计没跟着过来」的那一行。
+     *
+     * 这一行不能省：不写它，用户会以为整份备份都回来了 —— 而权限通道、原生能力档位
+     * 恰恰是换机之后最需要重新确认的东西，静默跳过比明确拒绝更危险。
+     */
+    private fun StringBuilder.appendExcluded(ctx: Context, data: JSONObject, excluded: Int) {
+        if (excluded <= 0) return
+        append("\n").append(ctx.appString(R.string.dsh_bk_excluded_note, excluded))
+        val priv = DshAppData.excludedPrivilegeCount(data)
+        if (priv > 0) append("；").append(ctx.appString(R.string.dsh_bk_excluded_privilege, priv))
+    }
+
+    /** 读出包里的一个条目（不存在返回 null）。 */
+    private fun readEntry(zip: File, name: String): ByteArray? = runCatching {
+        java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
+            while (true) {
+                val e = zis.nextEntry ?: break
+                if (!e.isDirectory && e.name == name) return@runCatching zis.readBytes()
+                zis.closeEntry()
+            }
+            null
+        }
+    }.getOrNull()
 
     /**
      * 导出过程记一笔（进 filesDir/backup_log.log，bugreport 会带上它）。
@@ -515,6 +641,86 @@ object DshConfigBackup {
      * 凡是 `kind == "Conflict"` 的条目就是「本机已有、且与备份不同」的项。于是界面能做到
      * 「检测到冲突才问」，而不是事先逼用户选一个策略。
      */
+    /**
+     * 包内的一条冲突。
+     *
+     * 带 [id] 是因为逐条决策要它：插件的 `decisions.resolutions` 是
+     * `{ 计划项 id: keepCurrent | useImported }`，没有 id 就只能整包选一个策略。
+     */
+    data class ConflictItem(
+        val id: String,
+        val adapter: String,
+        val description: String,
+        /** 计划项自带的冲突建议（插件 plan item 的 `conflict.resolution`），没有就是 review。 */
+        val suggestion: String = "",
+    ) {
+        /** 列表里显示成一行。 */
+        fun line(): String = if (adapter.isEmpty()) description else "$adapter: $description"
+    }
+
+    /**
+     * 插件 `/analyze` 的摘要（向导的「分析」与「预览」两步都读它）。
+     *
+     * 字段名与插件 `ImportAnalysis` 一一对应，只挑界面用得上的：分区数、插件安装情况、
+     * 凭据条数、路径问题数、兼容性与警告。`unsupportedSections` / `unsupportedVersions`
+     * 这类更细的结构化信息不单独搬 —— 它们已经被插件写进了 `warnings` 文案里。
+     */
+    data class Analysis(
+        val compatibility: String = "",
+        val sections: Int = 0,
+        val pluginsInstalled: Int = 0,
+        val pluginsToInstall: Int = 0,
+        val secretCount: Int = 0,
+        val pathIssues: Int = 0,
+        val encrypted: Boolean = false,
+        val warnings: List<String> = emptyList(),
+    )
+
+    /** 计划里的一项（预览页只列出会改动的那些）。 */
+    data class PlanItemLite(
+        val id: String,
+        val kind: String,
+        val adapter: String,
+        val description: String,
+    )
+
+    /**
+     * 试规划之后的摘要（向导的「预览」与「决策」两步读它）。
+     *
+     * 计数口径与插件 Web UI 一致：`willChange` 只算真的会动东西的项
+     * （Create/Update/Install/Conflict），`unchanged` 是 Skip。这样「这次会改动 N 项」
+     * 与插件界面上的数字对得上，用户在两边看到的不是两个说法。
+     */
+    data class PlanSummary(
+        val items: List<PlanItemLite> = emptyList(),
+        val willChange: Int = 0,
+        val unchanged: Int = 0,
+        val installs: Int = 0,
+        val conflicts: Int = 0,
+        val needsRestart: Boolean = false,
+        val missingSecrets: List<String> = emptyList(),
+        val estimatedSections: Int = 0,
+    )
+
+    /**
+     * 纯软件数据包能预览到的东西。
+     *
+     * 这类包不进插件流程（插件那边一个分区都没有），所以没有分析也没有计划 ——
+     * 但「预览」这一步不能因此变成空白：用户最需要在这一刻看清的恰恰是
+     * 「设置带了几项、外观在不在、有多少项按设计没跟着来」。
+     */
+    data class AppDataSummary(
+        val prefsFiles: Int = 0,
+        val keys: Int = 0,
+        val auditFiles: Int = 0,
+        val theme: Boolean = false,
+        val themeBytes: Long = 0,
+        val excluded: Int = 0,
+        val privilegeSkipped: Int = 0,
+        /** 1 = 旧结构（只有 config），2 = 按文件分组。用于结果里说明「旧包少一类设置」。 */
+        val schema: Int = 0,
+    )
+
     data class Preflight(
         /** 插件侧的已上传路径；纯软件数据包为空（那种包不进插件流程）。 */
         val zipPath: String,
@@ -522,12 +728,20 @@ object DshConfigBackup {
         val plainZip: File,
         /** 包内会话文件数。 */
         val sessions: Int,
-        /** 冲突条目（最多 [MAX_CONFLICT_LIST] 条，供弹窗列出来）。 */
-        val conflicts: List<String>,
+        /** 冲突条目（最多 [MAX_CONFLICT_LIST] 条，供向导逐条列出并决策）。 */
+        val conflicts: List<ConflictItem>,
         /** 冲突总数（列表被截断时仍然如实报数）。 */
         val conflictTotal: Int,
         /** 有没有需要插件出面的 DSH 分区（纯软件数据包为 false）。 */
         val needsDsh: Boolean,
+        /** 插件 `/analyze` 的摘要（纯软件数据包为 null）。 */
+        val analysis: Analysis? = null,
+        /** 试规划的结果（纯软件数据包为 null；插件不给计划时为 null）。 */
+        val plan: PlanSummary? = null,
+        /** 纯软件数据包的内容摘要（有 DSH 分区时为 null）。 */
+        val appData: AppDataSummary? = null,
+        /** 这个包是不是加密的（决定「确认」步要不要提醒密码只在这次会话里）。 */
+        val encrypted: Boolean = false,
     )
 
     /** 预检结果：要么就绪，要么带一句能直接显示给用户的失败原因。 */
@@ -572,9 +786,19 @@ object DshConfigBackup {
                 " dsh=" + hasDshSections(plainZip),
         )
         if (!hasDshSections(plainZip)) {
-            // 纯软件数据包：没有分区要恢复，也就不存在冲突
+            // 纯软件数据包：没有分区要恢复，也就不存在冲突。这里给出**内容摘要**，
+            // 让向导的预览步有东西可说（设置带了几项、外观在不在、排除了多少项）。
             return@withContext PreflightResult.Ready(
-                Preflight("", plainZip, sessions, emptyList(), 0, needsDsh = false),
+                Preflight(
+                    zipPath = "",
+                    plainZip = plainZip,
+                    sessions = sessions,
+                    conflicts = emptyList(),
+                    conflictTotal = 0,
+                    needsDsh = false,
+                    appData = DshAppData.summarize(plainZip),
+                    encrypted = plainZip != zip,
+                ),
             )
         }
         onLine(ctx.appString(R.string.dsh_bk_step_uploading, plainZip.name))
@@ -634,20 +858,106 @@ object DshConfigBackup {
                 " secrets=" + analyzeObj.optInt("secretCount"),
         )
         val items = dryPlan?.optJSONArray("items")
-        val conflicts = mutableListOf<String>()
+        val conflicts = mutableListOf<ConflictItem>()
         var total = 0
         for (i in 0 until (items?.length() ?: 0)) {
             val item = items?.optJSONObject(i) ?: continue
             if (item.optString("kind") != "Conflict") continue
             total++
             if (conflicts.size < MAX_CONFLICT_LIST) {
-                val section = item.optString("adapter")
-                val desc = item.optString("description").ifEmpty { item.optString("id") }
-                conflicts += if (section.isEmpty()) desc else section + ": " + desc
+                conflicts += ConflictItem(
+                    id = item.optString("id"),
+                    adapter = item.optString("adapter"),
+                    description = item.optString("description").ifEmpty { item.optString("id") },
+                    suggestion = item.optJSONObject("conflict")?.optString("resolution").orEmpty(),
+                )
             }
         }
         trace(ctx, "import-preflight conflicts=" + total + " listed=" + conflicts.size)
-        PreflightResult.Ready(Preflight(zipPath, plainZip, sessions, conflicts, total, needsDsh = true))
+        PreflightResult.Ready(
+            Preflight(
+                zipPath = zipPath,
+                plainZip = plainZip,
+                sessions = sessions,
+                conflicts = conflicts,
+                conflictTotal = total,
+                needsDsh = true,
+                analysis = analysisOf(analyzeObj),
+                plan = planSummaryOf(dryPlan),
+                encrypted = plainZip != zip,
+            ),
+        )
+    }
+
+    /**
+     * 把插件 `/analyze` 的响应读成 [Analysis]。
+     *
+     * 一个字段读不出来不影响其余：插件版本比我们新或旧时，界面该显示的部分照常显示，
+     * 缺的那一项显示为 0 / 空而不是让整次预检失败。
+     */
+    private fun analysisOf(obj: JSONObject): Analysis {
+        val summary = obj.optJSONObject("pluginSummary")
+        val pathIssues = obj.optJSONArray("pathIssues")
+        val warnings = obj.optJSONArray("warnings")
+        return Analysis(
+            compatibility = obj.optString("compatibility"),
+            sections = obj.optJSONArray("sectionsInZip")?.length() ?: 0,
+            pluginsInstalled = summary?.optInt("installed") ?: 0,
+            pluginsToInstall = summary?.optInt("toInstall") ?: 0,
+            secretCount = obj.optInt("secretCount"),
+            pathIssues = pathIssues?.length() ?: 0,
+            encrypted = obj.optBoolean("encrypted"),
+            warnings = (0 until (warnings?.length() ?: 0))
+                .mapNotNull { warnings?.optString(it)?.takeIf { s -> s.isNotEmpty() } },
+        )
+    }
+
+    /**
+     * 把插件 `/plan` 的响应读成 [PlanSummary]。
+     *
+     * 计数口径照插件 Web UI：会改动 = Create + Update + Install + Conflict；Skip 归入
+     * 「保持不变」。`estimatedActions` 是插件按分区给的预估动作数，这里只取分区个数 ——
+     * 界面要说的是「涉及 N 个分区」，不是再造一张逐分区的表。
+     */
+    private fun planSummaryOf(plan: JSONObject?): PlanSummary? {
+        plan ?: return null
+        val items = plan.optJSONArray("items") ?: return null
+        val list = mutableListOf<PlanItemLite>()
+        var willChange = 0
+        var unchanged = 0
+        var installs = 0
+        var conflicts = 0
+        for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            val kind = item.optString("kind")
+            val lite = PlanItemLite(
+                id = item.optString("id"),
+                kind = kind,
+                adapter = item.optString("adapter"),
+                description = item.optString("description").ifEmpty { item.optString("id") },
+            )
+            when (kind) {
+                "Skip" -> unchanged++
+                "Create", "Update", "Install", "Conflict" -> willChange++
+            }
+            if (kind == "Install") installs++
+            if (kind == "Conflict") conflicts++
+            // 预览只列会动的东西：把「保持不变」的几十项也铺出来，真正要看的就被淹了
+            if (kind != "Skip" && list.size < MAX_PREVIEW_ITEMS) list += lite
+        }
+        val missing = plan.optJSONArray("missingSecrets")
+        return PlanSummary(
+            items = list,
+            willChange = willChange,
+            unchanged = unchanged,
+            installs = installs,
+            conflicts = conflicts,
+            needsRestart = plan.optBoolean("needsRestart"),
+            missingSecrets = (0 until (missing?.length() ?: 0)).mapNotNull { i ->
+                missing?.optJSONObject(i)?.optString("ref")?.takeIf { it.isNotEmpty() }
+            },
+            estimatedSections = plan.optJSONObject("estimatedActions")?.length() ?: 0,
+        )
     }
 
     /**
@@ -681,8 +991,11 @@ object DshConfigBackup {
         runCatching { f.delete() }
     }
 
-    /** 预检里最多列几条冲突（弹窗里列清单，不把上百条塞进去）。 */
+    /** 预检里最多列几条冲突（向导列清单，不把上百条塞进去）。 */
     private const val MAX_CONFLICT_LIST = 8
+
+    /** 预览页最多列几条会改动的计划项（剩下的只报数）。 */
+    private const val MAX_PREVIEW_ITEMS = 30
 
     /** 导入时会话怎么处理 —— 就是用户在弹窗里选的那一项。 */
     enum class SessionImport {
@@ -1221,6 +1534,27 @@ object DshConfigBackup {
          * 按钮在哪，回头就以为恢复没生效。现在由它驱动一个真正的「立即重启服务」。
          */
         val needsRestart: Boolean = false,
+        /**
+         * 需要重启才生效的**具体项**。
+         *
+         * 插件当前的核心结果里只有 `needsRestart` 这个布尔量（逐项清单是它的 Web UI 自己
+         * 推出来的），所以这里按 `restartItems` 字段读，读到就没有 —— 那时界面只显示
+         * 「需要重启服务」这一句。写成字段而不是写死一句话，是为了插件哪天补上清单时
+         * 我们不用改协议。
+         */
+        val restartItems: List<String> = emptyList(),
+        /** 插件报「缺凭据」的项：导入本身成功，但运行时用不了，需要用户补上。 */
+        val missingSecrets: List<String> = emptyList(),
+        /** 插件顶层 warnings（非致命，但用户该知道）。 */
+        val warnings: List<String> = emptyList(),
+        /** 失败项、回滚失败项、被删除墓碑挡掉的项 —— 结果页的「还需要处理」直接列这些。 */
+        val unresolved: List<String> = emptyList(),
+        /** 插件在 DSH 里留下的回滚快照 id（有的话结果页会写出来，用户可以据此回退）。 */
+        val snapshotId: String = "",
+        /** 外观主题包在这次导入里的结局（null = 这次导入没走软件数据那条路）。 */
+        val theme: ThemeOutcome? = null,
+        /** 按设计被跳过的提权项数量（[DshAppData.PRIVILEGE_KEYS]），结果页要如实说明。 */
+        val privilegeSkipped: Int = 0,
     )
 
     /**
@@ -1236,6 +1570,10 @@ object DshConfigBackup {
      * 导入一个导出 ZIP：upload → analyze → plan → execute。
      *
      * @param strategy 冲突策略：merge（保守，冲突保留）/ replace / skipExisting
+     * @param resolutions 逐条冲突决策：计划项 id → `keepCurrent` / `useImported`。向导里
+     *        用户对每条冲突都表了态才走到这里；空表就是「按 strategy 统一处理」。
+     * @param rollbackOnError 任一项失败时是否整体回滚（默认开）。**必须显式传**：插件那边
+     *        是 `=== true` 的严格判断，漏传等于关掉回滚。
      * @param password 加密备份的解锁密码
      * @param sessions 包里带着会话时怎么办（[SessionImport]）：跳过、在 dsh 运行中直接
      *        写入，还是先停服务再写。会话记录**必须由我们自己做**，原因见 [restoreSessionsFromZip]。
@@ -1245,6 +1583,8 @@ object DshConfigBackup {
         ctx: Context,
         zip: File,
         strategy: String = "merge",
+        resolutions: Map<String, String> = emptyMap(),
+        rollbackOnError: Boolean = true,
         password: String = "",
         sessions: SessionImport = SessionImport.SKIP,
         /**
@@ -1290,17 +1630,27 @@ object DshConfigBackup {
                 return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_appdata_none))
             }
             onLine(ctx.appString(R.string.dsh_bk_step_appdata))
-            val changed = DshAppData.apply(ctx, data)
-            trace(ctx, "import-appdata changed=" + changed)
+            val applied = DshAppData.apply(ctx, data)
+            trace(ctx, "import-appdata changed=" + applied.changed + " files=" + applied.files)
+            // 外观必须在软件数据**之后**落地：两边都会写那几个外观参数（自定义主色、
+            // 首页布局、夜间模式、导航栏图标都在 config 里），主题后写才是最终生效的那份。
+            val theme = restoreThemeZip(ctx, plainZip, tmpDir)
             // 审计要**再读一次包**，所以删除必须放在它后面（先删会让这一步对着空气空跑）
             val lines = DshAppData.mergeAudit(ctx, plainZip)
             if (plainZip != zip) plainZip.delete()
             val note = buildString {
-                append(ctx.appString(R.string.dsh_bk_appdata_restored, changed))
+                append(ctx.appString(R.string.dsh_bk_appdata_restored, applied.changed))
                 if (lines > 0) append("，").append(ctx.appString(R.string.dsh_bk_audit_merged, lines))
+                append("，").append(themeNote(ctx, theme))
+                appendExcluded(ctx, data, applied.excluded)
                 append("\n").append(ctx.appString(R.string.dsh_bk_appdata_takes_effect))
             }
-            return@withContext ImportResult(true, ctx.appString(R.string.dsh_bk_import_done, note))
+            return@withContext ImportResult(
+                ok = true,
+                message = ctx.appString(R.string.dsh_bk_import_done, note),
+                theme = theme,
+                privilegeSkipped = DshAppData.excludedPrivilegeCount(data),
+            )
         }
 
         var zipPath = preflight?.zipPath.orEmpty()
@@ -1350,7 +1700,11 @@ object DshConfigBackup {
 
         val decisions = JSONObject().apply {
             put("strategy", strategy)
-            put("resolutions", JSONObject())
+            // 逐条冲突决策（向导里「这条冲突保留本机还是用包里的」）。键是**计划项 id**，
+            // 取值只有 keepCurrent / useImported 两种（插件 core/types.ts ItemResolution）。
+            // 插件不认 resolutions 里没提到的项时按 strategy 兜底，所以没逐条表态的项
+            // 不需要在这里补默认值。
+            put("resolutions", JSONObject().apply { for ((id, r) in resolutions) put(id, r) })
             put("pathMappings", JSONArray())
         }
         onLine(ctx.appString(R.string.dsh_bk_step_planning, strategy))
@@ -1365,7 +1719,9 @@ object DshConfigBackup {
 
         val opts = JSONObject().apply {
             put("confirm", true)
-            put("rollbackOnError", true)
+            // 插件侧是**严格判断**（`opts['rollbackOnError'] === true`），漏传等于「不回滚」，
+            // 所以这里永远显式写。用户在向导的确认步取消勾选时才写 false。
+            put("rollbackOnError", rollbackOnError)
             if (password.isNotEmpty()) put("decryptPassword", password)
         }
         // 补建缺失的工作区目录：必须赶在插件 /execute 之前。插件写工作区记录时会对
@@ -1434,6 +1790,10 @@ object DshConfigBackup {
         var skipped = 0
         var warned = 0
         val notes = StringBuilder()
+        // 结果页的「还需要处理」直接列这几组，不再让用户从整段日志里自己挑
+        val unresolved = mutableListOf<String>()
+        val warnings = mutableListOf<String>()
+        val missingSecrets = mutableListOf<String>()
         // 补建目录的结果放在最前面：它是解释「为什么这次会话进得了工作区」的那句话
         if (notesForDirs.isNotEmpty()) notes.append(notesForDirs).append("\n")
         // 凭据那句话同样要紧：它区分「包里没有凭据」与「插件说的本机镜像不在」
@@ -1461,12 +1821,14 @@ object DshConfigBackup {
                     notes.append("✗ ").append(id)
                     if (note.isNotEmpty()) notes.append(' ').append(note)
                     notes.append('\n')
+                    unresolved += if (note.isNotEmpty()) "$id $note" else id
                 }
                 "warning" -> {
                     warned++
                     notes.append("! ").append(id)
                     if (note.isNotEmpty()) notes.append(' ').append(note)
                     notes.append('\n')
+                    warnings += if (note.isNotEmpty()) "$id $note" else id
                 }
                 "skipped" -> skipped++
             }
@@ -1480,6 +1842,7 @@ object DshConfigBackup {
                 if (v.isEmpty()) continue
                 notes.append(if (key == "warnings") "! " else "? ").append(v)
                 notes.append('\n')
+                if (key == "warnings") warnings += v else missingSecrets += v
             }
         }
         // 被删除墓碑挡掉的条目：状态是「成功」但东西没进来，不说用户会以为导入了
@@ -1488,8 +1851,10 @@ object DshConfigBackup {
         for (i in 0 until tombstonedCount) {
             val t = tombstoned?.optJSONObject(i) ?: continue
             notes.append("⊘ ").append(t.optString("id"))
-            t.optString("adapter").takeIf { it.isNotEmpty() }?.let { notes.append(" (").append(it).append(")") }
+            val adapter = t.optString("adapter")
+            if (adapter.isNotEmpty()) notes.append(" (").append(adapter).append(")")
             notes.append('\n')
+            unresolved += if (adapter.isNotEmpty()) "${t.optString("id")} ($adapter)" else t.optString("id")
         }
         // 回滚发生说明这次导入整体没落地，必须显式说出来
         trace(
@@ -1517,6 +1882,8 @@ object DshConfigBackup {
                 f.optString("reason").takeIf { it.isNotEmpty() }?.let { notes.append("：").append(it) }
                 f.optString("manualHint").takeIf { it.isNotEmpty() }?.let { notes.append(" → ").append(it) }
                 notes.append('\n')
+                unresolved += ctx.appString(R.string.dsh_bk_rollback_failed, f.optString("item")) +
+                    f.optString("manualHint").takeIf { it.isNotEmpty() }?.let { " → $it" }.orEmpty()
             }
         }
         val needsRestart = execObj.optBoolean("needsRestart", planObj.optBoolean("needsRestart", false))
@@ -1568,13 +1935,22 @@ object DshConfigBackup {
         // 插件整体回滚时不动它：配置都没落地，先把设置写进去只会让本机处于一个
         // 「一半是备份里的设置、一半是本机配置」的状态，比不恢复更难解释。
         var appNote = ""
+        var themeOutcome: ThemeOutcome? = null
+        var privilegeSkipped = 0
         val appData = if (rollback == null) DshAppData.readFromZip(plainZip) else null
         if (appData != null) {
             onLine(ctx.appString(R.string.dsh_bk_step_appdata))
-            val changed = DshAppData.apply(ctx, appData)
+            val applied = DshAppData.apply(ctx, appData)
+            privilegeSkipped = DshAppData.excludedPrivilegeCount(appData)
+            // 外观在软件数据之后（见 [restoreThemeZip]）：两边都写那几个外观参数，
+            // 主题后落地才是与导出时一致的那一份。
+            val theme = restoreThemeZip(ctx, plainZip, tmpDir)
+            themeOutcome = theme
             val lines = DshAppData.mergeAudit(ctx, plainZip)
-            appNote = ctx.appString(R.string.dsh_bk_appdata_restored, changed) +
+            appNote = ctx.appString(R.string.dsh_bk_appdata_restored, applied.changed) +
                 if (lines > 0) "，" + ctx.appString(R.string.dsh_bk_audit_merged, lines) else ""
+            appNote += "，" + themeNote(ctx, theme)
+            appNote += buildString { appendExcluded(ctx, appData, applied.excluded) }
             // 设置是写进 SharedPreferences 的，界面里那些已经读进内存的状态不会自己刷新
             appNote += "\n" + ctx.appString(R.string.dsh_bk_appdata_takes_effect)
         } else if (rollback != null) {
@@ -1609,7 +1985,24 @@ object DshConfigBackup {
         }
         // 明文中间产物里含解出来的凭据，不留
         if (plainZip != zip) plainZip.delete()
-        ImportResult(ok, head, detail, needsRestart)
+        // restartItems：插件核心结果目前不给这份清单（只有 needsRestart 这个布尔量），
+        // 所以读到什么算什么 —— 界面在它为空时只显示一句「需要重启服务」。
+        val restartItems = execObj.optJSONArray("restartItems")?.let { arr ->
+            (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotEmpty() } }
+        } ?: emptyList()
+        ImportResult(
+            ok = ok,
+            message = head,
+            detail = detail,
+            needsRestart = needsRestart,
+            restartItems = restartItems,
+            missingSecrets = missingSecrets,
+            warnings = warnings,
+            unresolved = unresolved,
+            snapshotId = execObj.optString("snapshotId"),
+            theme = themeOutcome,
+            privilegeSkipped = privilegeSkipped,
+        )
     }
 
     /** [restoreSessionsFromZip] 的结果计数。 */
