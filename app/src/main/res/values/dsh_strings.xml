@@ -1224,4 +1224,10 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_wiz_theme_included">included (background, font, music, sound)</string>
     <string name="dsh_bk_wiz_recommended">Recommended</string>
     <string name="dsh_bk_wiz_selected_file">Selected file</string>
+    <string name="dsh_bk_wiz_pick_items">Choose what to import</string>
+    <string name="dsh_bk_wiz_pick_items_note">Everything is selected by default. Unchecking an item leaves it untouched on this device.</string>
+    <string name="dsh_bk_wiz_select_all">Select all</string>
+    <string name="dsh_bk_wiz_select_none">Select none</string>
+    <string name="dsh_bk_wiz_items_skipped">%1$d items unchecked: they will not be imported.</string>
+    <string name="dsh_bk_wiz_item_conflict_note">Conflict: decided in the next step (keep local or take the archive)</string>
 </resources>

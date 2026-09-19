@@ -623,6 +623,30 @@ ok(/if \(fileName\.isEmpty\(\)\) \{\s*\n\s*Button\(onClick = onPickFile\)/.test(
 ok(/dsh_bk_wiz_selected_file/.test(wizard),
   "选完文件后把文件名与「换一个文件」摆在明面上（用户刚从系统选择器回来）");
 
+console.log("─ 5o. 预览页逐条勾选（真机反馈：每个条目应该能单独选）");
+// 状态记「被取消的」而不是「被选中的」：计划项可能比预览列出的多（MAX_PREVIEW_ITEMS
+// 截断），按选中集合提交等于让截断替用户决定「这些不导入」。
+ok(/var wizardExcluded by rememberSaveable \{ mutableStateOf<Set<String>>\(emptySet\(\)\) \}/.test(screen),
+  "取消勾选的项记成「排除集」（而不是选中集），没显示出来的条目不会被静默丢掉");
+ok(/excludedItems = wizardExcluded/.test(screen) && /excludedItems: Set<String> = emptySet\(\)/.test(backup),
+  "排除集一路传到 import()");
+ok(/if \(excludedItems\.isNotEmpty\(\)\) \{/.test(backup) &&
+  /planObj\.put\("items", kept\)/.test(backup) &&
+  /trace\(ctx, "import-plan-filtered removed="/.test(backup),
+  "执行前按排除集过滤 plan.items，并把「去掉了几条」记进日志");
+// 冲突项不提供勾选框：它不是「要不要导入」，而是「哪一边说了算」，下一步会逐条问。
+// 两处表达同一件事会互相矛盾。
+ok(/selectable = item\.kind != "Conflict"/.test(wizard) &&
+  /if \(selectable\) onToggle\(\)/.test(wizard) &&
+  /dsh_bk_wiz_item_conflict_note/.test(wizard),
+  "冲突项的勾选框禁用并说明原因（由下一步逐条决定）");
+ok(/onSelectAllItems = \{ all ->/.test(screen) &&
+  /\.filter \{ it\.kind != "Conflict" \}/.test(screen),
+  "「全不选」不会把冲突项也算进去");
+ok(/Checkbox\(/.test(wizard) && /dsh_bk_wiz_pick_items/.test(wizard) &&
+  /dsh_bk_wiz_select_all/.test(wizard) && /dsh_bk_wiz_select_none/.test(wizard),
+  "预览页有勾选框与全选/全不选");
+
 console.log("─ 6. 失败不许虚报");
 ok(/private fun copyToPublic\(ctx: Context, src: File, name: String\): Pair<String, Boolean>/.test(backup),
   "copyToPublic 返回 (位置, 是否真的落进公共目录)");

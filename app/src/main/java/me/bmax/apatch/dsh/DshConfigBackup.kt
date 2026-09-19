@@ -1619,6 +1619,10 @@ object DshConfigBackup {
      *        用户对每条冲突都表了态才走到这里；空表就是「按 strategy 统一处理」。
      * @param rollbackOnError 任一项失败时是否整体回滚（默认开）。**必须显式传**：插件那边
      *        是 `=== true` 的严格判断，漏传等于关掉回滚。
+     * @param excludedItems 用户在预览页取消勾选的计划项 id。**排除式**：只有明确列出的 id
+     *        会被剔除，其余（含因展示上限没列出来的）照常导入。插件引擎支持只跑子集
+     *        （它自己的「重试失败项」就是 `executeImportPlan(zip, {...plan, items: subset})`），
+     *        所以这里直接过滤计划项，不需要插件额外配合。
      * @param password 加密备份的解锁密码
      * @param sessions 包里带着会话时怎么办（[SessionImport]）：跳过、在 dsh 运行中直接
      *        写入，还是先停服务再写。会话记录**必须由我们自己做**，原因见 [restoreSessionsFromZip]。
@@ -1630,6 +1634,7 @@ object DshConfigBackup {
         strategy: String = "merge",
         resolutions: Map<String, String> = emptyMap(),
         rollbackOnError: Boolean = true,
+        excludedItems: Set<String> = emptySet(),
         password: String = "",
         sessions: SessionImport = SessionImport.SKIP,
         /**
@@ -1761,6 +1766,25 @@ object DshConfigBackup {
             ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_plan_bad_json))
         val planErr = planObj.optString("error")
         if (planErr.isNotEmpty()) return@withContext ImportResult(false, planErr)
+
+        // 用户在预览页取消勾选的项：直接从计划里剔除（排除式，见 excludedItems 的 KDoc）。
+        // 冲突项不在其中 —— 它由 decisions.resolutions 决定「哪一边说了算」，不是丢不丢。
+        if (excludedItems.isNotEmpty()) {
+            val arr = planObj.optJSONArray("items")
+            val before = arr?.length() ?: 0
+            val kept = JSONArray()
+            var removed = 0
+            for (i in 0 until before) {
+                val item = arr?.optJSONObject(i) ?: continue
+                if (item.optString("id") in excludedItems) {
+                    removed++
+                    continue
+                }
+                kept.put(item)
+            }
+            planObj.put("items", kept)
+            trace(ctx, "import-plan-filtered removed=" + removed + " kept=" + kept.length() + " of=" + before)
+        }
 
         val opts = JSONObject().apply {
             put("confirm", true)

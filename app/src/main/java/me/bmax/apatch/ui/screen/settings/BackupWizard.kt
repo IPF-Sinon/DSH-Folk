@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -100,6 +101,8 @@ internal fun BackupImportWizard(
     sessionChoice: DshConfigBackup.SessionImport?,
     strategy: String,
     choices: Map<String, String>,
+    /** 预览页里被取消勾选的计划项 id（排除式，见 BackupSettingsScreen 的说明）。 */
+    excludedItems: Set<String>,
     rollback: Boolean,
     lines: List<String>,
     running: Boolean,
@@ -114,6 +117,8 @@ internal fun BackupImportWizard(
     onStrategyChange: (String) -> Unit,
     onChoice: (String, String) -> Unit,
     onChooseAll: (String) -> Unit,
+    onToggleItem: (String) -> Unit,
+    onSelectAllItems: (Boolean) -> Unit,
     onRollbackChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onCancel: () -> Unit,
@@ -155,7 +160,12 @@ internal fun BackupImportWizard(
                 onRetry = onAnalyze,
             )
 
-            WizardStep.PREVIEW -> WizardPreviewStep(preflight = preflight)
+            WizardStep.PREVIEW -> WizardPreviewStep(
+                preflight = preflight,
+                excluded = excludedItems,
+                onToggleItem = onToggleItem,
+                onSelectAll = onSelectAllItems,
+            )
 
             WizardStep.DECIDE -> WizardDecideStep(
                 preflight = preflight,
@@ -276,6 +286,48 @@ private fun wizardStageTitle(stage: WizardStage): Int = when (stage) {
 }
 
 @Composable
+private fun WizardAnalyzeStep(
+    fileName: String,
+    lines: List<String>,
+    running: Boolean,
+    error: String?,
+    onPickFile: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        if (running) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            Spacer(Modifier.height(12.dp))
+        }
+        Text(
+            text = stringResource(R.string.dsh_bk_wiz_analyzing, fileName),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        LogBox(lines)
+        if (error != null) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Spacer(Modifier.height(10.dp))
+            // 失败要能原路退回：换一个文件，或对同一个文件再试一次（插件可能只是没起来）
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onPickFile) {
+                    Text(stringResource(R.string.dsh_bk_wiz_pick_again))
+                }
+                Button(onClick = onRetry) {
+                    Text(stringResource(R.string.dsh_backup_plugin_retry))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun WizardSelectStep(
     fileName: String,
     encrypted: Boolean,
@@ -362,6 +414,254 @@ private fun WizardSelectStep(
         }
     }
 }
+private fun WizardPreviewStep(
+    preflight: DshConfigBackup.Preflight?,
+    excluded: Set<String>,
+    onToggleItem: (String) -> Unit,
+    onSelectAll: (Boolean) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        val analysis = preflight?.analysis
+        val plan = preflight?.plan
+        val appData = preflight?.appData
+        if (analysis != null) {
+            CompatibilityBand(analysis.compatibility)
+            Spacer(Modifier.height(12.dp))
+            SectionHeader(stringResource(R.string.dsh_bk_wiz_preview_scope))
+            Spacer(Modifier.height(6.dp))
+            StatRow(
+                stringResource(R.string.dsh_bk_wiz_sections),
+                analysis.sections.toString(),
+            )
+            StatRow(
+                stringResource(R.string.dsh_bk_wiz_plugins),
+                stringResource(
+                    R.string.dsh_bk_wiz_plugins_value,
+                    analysis.pluginsInstalled,
+                    analysis.pluginsToInstall,
+                ),
+            )
+            if (analysis.secretCount > 0) {
+                StatRow(
+                    stringResource(R.string.dsh_bk_wiz_secrets),
+                    analysis.secretCount.toString(),
+                )
+            }
+            if (analysis.pathIssues > 0) {
+                StatRow(
+                    stringResource(R.string.dsh_bk_wiz_path_issues),
+                    stringResource(R.string.dsh_bk_wiz_path_issues_value, analysis.pathIssues),
+                )
+            }
+        }
+        if (plan != null) {
+            Spacer(Modifier.height(14.dp))
+            SectionHeader(stringResource(R.string.dsh_bk_wiz_preview_plan))
+            Spacer(Modifier.height(6.dp))
+            StatRow(
+                stringResource(R.string.dsh_bk_wiz_will_change),
+                plan.willChange.toString(),
+            )
+            StatRow(stringResource(R.string.dsh_bk_wiz_unchanged), plan.unchanged.toString())
+            if (plan.installs > 0) {
+                StatRow(stringResource(R.string.dsh_bk_wiz_installs), plan.installs.toString())
+            }
+            if (plan.conflicts > 0) {
+                StatRow(stringResource(R.string.dsh_bk_wiz_conflicts), plan.conflicts.toString())
+            }
+            if (plan.needsRestart) {
+                StatRow(
+                    stringResource(R.string.dsh_bk_wiz_needs_restart),
+                    stringResource(R.string.dsh_bk_wiz_yes),
+                )
+            }
+            if (plan.missingSecrets.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(
+                        R.string.dsh_bk_wiz_missing_secrets,
+                        plan.missingSecrets.size,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            // ── 逐条勾选（默认全选）──
+            //
+            // 状态记的是「被取消的那些 id」而不是「被选中的那些」：计划项可能比上面这个
+            // 列表多（[DshConfigBackup] 的 MAX_PREVIEW_ITEMS 截断），按「选中集合」提交
+            // 会让没显示出来的条目**静默不导入** —— 用户没做过的决定不该由截断替他做。
+            if (plan.items.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.dsh_bk_wiz_pick_items),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { onSelectAll(true) }) {
+                        Text(stringResource(R.string.dsh_bk_wiz_select_all))
+                    }
+                    TextButton(onClick = { onSelectAll(false) }) {
+                        Text(stringResource(R.string.dsh_bk_wiz_select_none))
+                    }
+                }
+                Text(
+                    text = stringResource(R.string.dsh_bk_wiz_pick_items_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                for (item in plan.items) {
+                    PlanItemRow(
+                        item = item,
+                        // 冲突项不在这里取消：它不是「要不要导入」，而是「哪一边说了算」，
+                        // 下一步会逐条问。在这里提供一个勾选框等于给了两种互相矛盾的表达。
+                        selectable = item.kind != "Conflict",
+                        checked = item.id !in excluded,
+                        onToggle = { onToggleItem(item.id) },
+                    )
+                }
+                val skipped = plan.items.count { it.id in excluded }
+                if (skipped > 0) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_bk_wiz_items_skipped, skipped),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+        if (appData != null) {
+            Spacer(Modifier.height(14.dp))
+            SectionHeader(stringResource(R.string.dsh_bk_wiz_preview_appdata))
+            Spacer(Modifier.height(6.dp))
+            StatRow(
+                stringResource(R.string.dsh_bk_wiz_prefs_files),
+                stringResource(R.string.dsh_bk_wiz_prefs_files_value, appData.prefsFiles, appData.keys),
+            )
+            if (appData.schema >= 2 && appData.prefsFiles > 1) {
+                Text(
+                    text = stringResource(R.string.dsh_bk_wiz_prefs_runtime_included),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (appData.schema > 0 && appData.schema < 2) {
+                // 旧包只带 config：不说清楚的话，用户会以为「运行时设置也回来了」
+                Text(
+                    text = stringResource(R.string.dsh_bk_wiz_prefs_old_schema),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (appData.auditFiles > 0) {
+                StatRow(
+                    stringResource(R.string.dsh_bk_wiz_audit),
+                    appData.auditFiles.toString(),
+                )
+            }
+            if (appData.excluded > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.dsh_bk_excluded_note, appData.excluded) +
+                        if (appData.privilegeSkipped > 0) {
+                            "；" + stringResource(
+                                R.string.dsh_bk_excluded_privilege,
+                                appData.privilegeSkipped,
+                            )
+                        } else {
+                            ""
+                        },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        // 外观单独一段，且**两种包都看它**：混合包（软件数据 + DSH 分区）同样带主题包，
+        // 而恢复外观会替换背景/字体/音乐/音效、还可能切换应用语言 —— 这些副作用必须在
+        // 确认之前说清楚，不能因为「有 DSH 分区」就跳过不提。
+        val themeBytes = preflight?.themeBytes ?: -1L
+        if (themeBytes >= 0L) {
+            Spacer(Modifier.height(14.dp))
+            SectionHeader(stringResource(R.string.dsh_bk_wiz_appearance))
+            Spacer(Modifier.height(6.dp))
+            StatRow(
+                stringResource(R.string.dsh_bk_wiz_theme),
+                if (themeBytes > 0L) {
+                    stringResource(R.string.dsh_bk_wiz_theme_value, themeBytes / 1024)
+                } else {
+                    stringResource(R.string.dsh_bk_wiz_theme_included)
+                },
+            )
+            Text(
+                text = stringResource(R.string.dsh_bk_wiz_theme_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val warnings = analysis?.warnings.orEmpty()
+        if (warnings.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            SectionHeader(stringResource(R.string.dsh_bk_wiz_warnings))
+            Spacer(Modifier.height(6.dp))
+            for (w in warnings) {
+                Text(
+                    text = "! " + w,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 预览里的一条计划项（可勾选）。
+ *
+ * 勾选框用 [Checkbox] 而不是整行可点：这一行里还有描述文字，整行可点会让「想看清文字」
+ * 的人误触成取消。冲突项的勾选框禁用并给出原因（它由下一步逐条决定，不是丢不丢）。
+ */
+@Composable
+private fun PlanItemRow(
+    item: DshConfigBackup.PlanItemLite,
+    selectable: Boolean,
+    checked: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = { if (selectable) onToggle() },
+            enabled = selectable,
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = item.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (selectable && !checked) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.onSurface,
+            )
+            if (!selectable) {
+                Text(
+                    text = stringResource(R.string.dsh_bk_wiz_item_conflict_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
 /** 兼容性一带（与插件预览页同一套档位名）。 */
 @Composable
 private fun CompatibilityBand(compatibility: String) {

@@ -102,6 +102,44 @@ function gluedStatements(src) {
   return bad;
 }
 
+/**
+ * 「本文件内调用了、但整个文件里没有定义」的顶层函数。
+ *
+ * 起因：一次脚本化改动把 WizardPreviewStep / WizardAnalyzeStep 的函数体整段删掉了，
+ * 而调用点还在（`WizardPreviewStep(preflight = preflight)`）。括号配平、词法闭包、
+ * 「两行粘成一行」三条检查全部通过 —— 它们只看语法；少一个函数**语法完全合法**。
+ * 这类错误只能等 CI 编译（约 5 分钟一轮），而它恰恰是脚本改文件时最容易出的错。
+ *
+ * 判据刻意保守（宁可漏报也不误报）：
+ *  - 只认「行首（允许缩进）大写字母开头、后跟 (」的调用，且该名字在本文件出现过定义
+ *    或本来就是被点名的 UI 组件 —— 不追踪跨文件引用（Kotlin 里同包无需 import）。
+ *  - 排除紧跟 `fun `/`.`/`@`/`//` 的情形，以及 `if (`/`for (` 这类关键字。
+ */
+function calledButUndefined(src) {
+  const defined = new Set();
+  for (const m of src.matchAll(/\bfun\s+(?:<[^>]*>\s*)?(\w+)\s*\(/g)) defined.add(m[1]);
+
+  // 只挑「看起来是本文件的顶层 UI/工具函数」：首字母大写的调用，且带命名参数或参数列表
+  const suspects = new Map();
+  const lines = src.split('\n');
+  lines.forEach((line, idx) => {
+    for (const m of line.matchAll(/(?<![\w.@])([A-Z][A-Za-z0-9_]*)\s*\(/g)) {
+      const name = m[1];
+      // 常见非函数：构造函数以外的类型/枚举/单例引用，靠「本文件有定义」或下方白名单消化
+      if (/^(Unit|String|Int|Long|Float|Boolean|List|Map|Set|Pair|JSONObject|JSONArray|File|Uri|Modifier|MaterialTheme|Icons|R|Log|BuildConfig)$/.test(name)) continue;
+      if (!suspects.has(name)) suspects.set(name, idx + 1);
+    }
+  });
+
+  // 有人在本文件里以「类型/对象」方式用过它（如 WizardResultUi(...) 声明为 data class）也算有定义
+  for (const name of [...suspects.keys()]) {
+    const asDecl = new RegExp('\\b(data class|class|object|enum class|interface)\\s+' + name + '\\b');
+    if (asDecl.test(src)) suspects.delete(name);
+  }
+  for (const name of [...suspects.keys()]) if (defined.has(name)) suspects.delete(name);
+  return suspects;
+}
+
 function scan(src) {
   let i = 0;
   let brace = 0;
@@ -263,6 +301,30 @@ function main() {
     }
     const r = scan(src);
     r.errors.push(...gluedStatements(src));
+    // 「调用了但本文件没定义」只对**明确自洽的函数家族**检查。
+    //
+    // 通配启发式（凡是大写开头的调用都查）会误报一片跨文件的 composable
+    // （SplicedColumnGroup / HomeBottomSpacer / 各 SettingsContent …），而一把狼来了的
+    // 门禁比没有门禁更糟 —— 它会训练人忽略它。所以只认这张表：这些函数必须在同一个
+    // 文件里定义齐（曾经因为脚本化改动整段删掉过两个，只有编译器才发现）。
+    const REQUIRED_TOGETHER = {
+      'BackupWizard.kt': [
+        'WizardStepper', 'WizardSelectStep', 'WizardAnalyzeStep', 'WizardPreviewStep',
+        'WizardDecideStep', 'WizardConfirmStep', 'WizardExecuteStep', 'WizardResultStep',
+        'WizardButtons', 'WizardAdvanceButton', 'SessionChoiceRow', 'PlanItemRow',
+        'CompatibilityBand', 'StatRow', 'LogBox', 'ResultGroup', 'ChoiceChip',
+        'ConflictRow', 'StrategyRow', 'BackupImportWizard',
+      ],
+    };
+    const required = REQUIRED_TOGETHER[f.split("/").pop()];
+    if (required) {
+      const defined = new Set([...src.matchAll(/\bfun\s+(\w+)\s*\(/g)].map((m) => m[1]));
+      const gone = required.filter((name) => !defined.has(name));
+      if (gone.length > 0) {
+        r.errors.push('本文件缺少这些函数的定义: ' + gone.join(', ') +
+          '（它们被调用点引用；脚本改文件时整段删掉过，只有编译器才会发现）');
+      }
+    }
     if (r.errors.length === 0) {
       console.log(`OK    ${f}`);
     } else {

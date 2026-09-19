@@ -142,6 +142,13 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var wizardRollback by rememberSaveable { mutableStateOf(true) }
     /** 逐条冲突决策：计划项 id → keepCurrent / useImported（值就是插件协议值）。 */
     var wizardChoices by rememberSaveable { mutableStateOf<Map<String, String>>(emptyMap()) }
+    /**
+     * 预览页里被用户**取消勾选**的计划项 id。
+     *
+     * 记「排除」而不是「选中」：计划项可能比预览列出来的多（[DshConfigBackup.MAX_PREVIEW_ITEMS]
+     * 会截断），按选中集合提交等于让截断替用户决定「这些不导入」—— 他没做过的决定不该被执行。
+     */
+    var wizardExcluded by rememberSaveable { mutableStateOf<Set<String>>(emptySet()) }
     var wizardRunning by rememberSaveable { mutableStateOf(false) }
     var wizardAnalyzeError by rememberSaveable { mutableStateOf<String?>(null) }
     var wizardResult by rememberSaveable { mutableStateOf<WizardResultUi?>(null) }
@@ -241,6 +248,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
         wizardShowPassword = false
         wizardSession = null
         wizardChoices = emptyMap()
+        wizardExcluded = emptySet()
         wizardStrategy = DshConfigBackup.STRATEGY_MERGE
         wizardRollback = true
         wizardRunning = false
@@ -293,6 +301,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         wizardPreflight = p
                         wizardSession = null
                         wizardChoices = emptyMap()
+                        wizardExcluded = emptySet()
                         wizardStep = WizardStep.PREVIEW
                     }
                 }
@@ -340,6 +349,8 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 strategy = wizardStrategy,
                 resolutions = DshImportWizard.resolutions(p.conflicts, wizardChoices),
                 rollbackOnError = wizardRollback,
+                // 用户在预览页取消勾选的项在这里被剔除（排除式：没显示出来的条目不受影响）
+                excludedItems = wizardExcluded,
                 password = wizardPassword,
                 sessions = wizardSessionChoice() ?: DshConfigBackup.SessionImport.SKIP,
                 preflight = p,
@@ -478,6 +489,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 sessionChoice = wizardSessionChoice(),
                 strategy = wizardStrategy,
                 choices = wizardChoices,
+                excludedItems = wizardExcluded,
                 rollback = wizardRollback,
                 lines = wizardLines,
                 running = wizardRunning,
@@ -491,6 +503,19 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                 onSessionChoice = { wizardSession = it.name },
                 onStrategyChange = { wizardStrategy = it },
                 onChoice = { id, c -> wizardChoices = wizardChoices + (id to c) },
+                onToggleItem = { id ->
+                    wizardExcluded = if (id in wizardExcluded) wizardExcluded - id
+                    else wizardExcluded + id
+                },
+                onSelectAllItems = { all ->
+                    // 全选 = 清空排除集；全不选 = 排除所有**列出来的**可取消项
+                    wizardExcluded = if (all) emptySet()
+                    else wizardPreflight?.plan?.items
+                        ?.filter { it.kind != "Conflict" }
+                        ?.map { it.id }
+                        ?.toSet()
+                        .orEmpty()
+                },
                 // 「全部保留本机 / 全部用包里的」：一次表态所有**列出来**的冲突；
                 // 没列出来的那些由全局策略处理（见 DshImportWizard.tally）。
                 onChooseAll = { c ->
