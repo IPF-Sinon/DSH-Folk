@@ -237,8 +237,9 @@ ok(
 
 // 界面侧：只有探测到会话才弹框；三个选项（含跳过）都走同一条导入
 const screenSrc = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettingsScreen.kt');
+const wizardScreenSrc = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/RestoreWizardScreen.kt');
 const wizardSrc = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupWizard.kt');
-ok(/DshConfigBackup\.preflightImport\(/.test(screenSrc), '导入前先跑预检（会话数与冲突都由它给出）');
+ok(/DshConfigBackup\.preflightImport\(/.test(wizardScreenSrc), '导入前先跑预检（会话数与冲突都由它给出）');
 // 会话与冲突都在向导的「决策」步里问，而且**只有真的有**才问：
 // 没有会话就不画那一段、没有冲突就不画那一段，两样都没有时预览直接进确认。
 const decideSpan = braceSpan(wizardSrc, 'private fun WizardDecideStep(');
@@ -255,16 +256,17 @@ if (decideSpan) {
       '三个会话选项共用一个回调：' + mode);
   }
 }
-ok(/sessions = wizardSessionChoice\(\) \?: DshConfigBackup\.SessionImport\.SKIP/.test(screenSrc),
+ok(/sessions = sessionChoice\(\) \?: DshConfigBackup\.SessionImport\.SKIP/.test(wizardScreenSrc),
   '会话答案在真正导入时才消费（跳过 = 不写会话，其余照常导入）');
-ok(/if \(needsDecide\(wizardPreflight\)\) WizardStep\.DECIDE else WizardStep\.CONFIRM/.test(screenSrc),
+ok(/if \(needsDecide\(preflight\)\) WizardStep\.DECIDE else WizardStep\.CONFIRM/.test(wizardScreenSrc),
   '两样都没有就直接进确认（不给用户多余的一问）');
-ok(/onCancel = \{ closeWizard\(\) \}/.test(screenSrc) && /fun closeWizard\(/.test(screenSrc),
-  '只有取消（取消按钮/返回箭头）才放弃并清掉预检产物');
-const runSpan = braceSpan(screenSrc, 'fun wizardRun()');
-ok(runSpan !== null, 'wizardRun 是唯一的开跑入口');
+ok(/onCancel = \{ exit\(\) \}/.test(wizardScreenSrc) && /fun exit\(\)/.test(wizardScreenSrc) &&
+  /onDispose \{ cleanUp\(\) \}/.test(wizardScreenSrc),
+  '取消（或手势返回离开这一页）才放弃并清掉预检产物');
+const runSpan = braceSpan(wizardScreenSrc, 'fun runImport()');
+ok(runSpan !== null, 'runImport 是唯一的开跑入口');
 if (runSpan) {
-  ok(/DshConfigBackup\.import\(\s*context, p\.plainZip,/.test(screenSrc.slice(runSpan[0], runSpan[1])),
+  ok(/DshConfigBackup\.import\(\s*context, p\.plainZip,/.test(wizardScreenSrc.slice(runSpan[0], runSpan[1])),
     '开跑用的是预检留下的那份明文包（不再上传/解密第二遍）');
 }
 
@@ -434,7 +436,7 @@ for (const f of uiFiles) {
   ok(!/dshIncludeSessions|dshImportSessions/.test(src), `${path.basename(f)} 里不再有旧开关状态`);
   ok(!/includeSessions\s*=/.test(src), `${path.basename(f)} 里不再传 includeSessions 参数`);
 }
-ok(/SessionImport\./.test(read(uiFiles[1])), '导入界面接上了三模式');
+ok(/SessionImport\./.test(wizardScreenSrc), '导入界面接上了三模式');
 ok(
   /ExportPlan\(/.test(uiFiles.map(read).join('\n')),
   '导出界面接上了 ExportPlan（内容层构造、屏幕层执行都算）',
@@ -448,7 +450,7 @@ ok(
   '旧 export( 已经没有任何界面调用',
 );
 ok(
-  /DshConfigBackup\.preflightImport\(/.test(read(uiFiles[1])),
+  /DshConfigBackup\.preflightImport\(/.test(wizardScreenSrc),
   '界面走预检（加密包由预检用密码解开后才数得出会话）',
 );
 

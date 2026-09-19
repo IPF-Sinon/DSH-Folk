@@ -31,6 +31,7 @@ const SRC_CONTENT = "app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupS
 const SRC_WEBDAV = "app/src/main/java/me/bmax/apatch/util/WebDavUtils.kt";
 const SRC_CONFIG = "app/src/main/java/me/bmax/apatch/ui/theme/BackupConfig.kt";
 const SRC_WIZARD = "app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupWizard.kt";
+const SRC_WIZARD_SCREEN = "app/src/main/java/me/bmax/apatch/ui/screen/settings/RestoreWizardScreen.kt";
 const SRC_WIZARD_MODEL = "app/src/main/java/me/bmax/apatch/dsh/DshImportWizard.kt";
 const SRC_APPDATA = "app/src/main/java/me/bmax/apatch/dsh/DshAppData.kt";
 const SRC_ARCHIVE = "app/src/main/java/me/bmax/apatch/dsh/DshBackupArchive.kt";
@@ -81,6 +82,8 @@ function ok(cond, label) {
 
 const backup = fs.readFileSync(SRC_BACKUP, "utf8");
 const screen = fs.readFileSync(SRC_SCREEN, "utf8");
+// 恢复向导已经独立成页（RestoreWizardScreen.kt）：与「恢复流程」有关的断言都看它。
+const wizardScreen = fs.readFileSync(SRC_WIZARD_SCREEN, "utf8");
 const content = fs.readFileSync(SRC_CONTENT, "utf8");
 const webdav = fs.readFileSync(SRC_WEBDAV, "utf8");
 const config = fs.readFileSync(SRC_CONFIG, "utf8");
@@ -97,14 +100,14 @@ ok(/needsRestart = needsRestart,/.test(backup),
 ok(/restartItems = restartItems,/.test(backup) && /missingSecrets = missingSecrets,/.test(backup) &&
   /unresolved = unresolved,/.test(backup) && /snapshotId = execObj\.optString\("snapshotId"\)/.test(backup),
   "结果里的「下一步」字段也是结构化的（需重启项/缺凭据项/没处理的项/快照 id），而不是只在文案里");
-ok(/needsRestart = r\.ok && r\.needsRestart,/.test(screen),
+ok(/needsRestart = r\.ok && r\.needsRestart,/.test(wizardScreen),
   "界面只在导入成功且插件要求时才提示重启（失败却提示重启会让人以为重启能救回来）");
 ok(/onRestart = \{[\s\S]{0,300}DshRuntime\.restart\(\)/.test(screen),
   "进度对话框的「重启服务」真的调 DshRuntime.restart()");
 ok(/needsRestart = runNeedsRestart/.test(screen),
   "该对话框按 runNeedsRestart 决定是否给出重启按钮");
-ok(/BackupLogManager\.log\(\s*"import strategy="/.test(screen) &&
-  /resolutions=" \+ wizardChoices\.size/.test(screen),
+ok(/BackupLogManager\.log\(\s*"import strategy="/.test(wizardScreen) &&
+  /resolutions=" \+ choices\.size/.test(wizardScreen),
   "导入结果（策略/会话/回滚/逐条决策数/成败/是否需重启）落一条日志 —— 出问题时有据可查");
 
 console.log("─ 2. 阶段进度：分钟级操作不能只转圈");
@@ -119,7 +122,7 @@ for (const key of [
 }
 ok(/onLine: suspend \(String\) -> Unit = \{\}/.test(backup),
   "onLine 是 suspend 回调（界面要在里面切主线程改状态）");
-ok(/onLine = \{ line -> withContext\(Dispatchers\.Main\) \{ wizardLines = wizardLines \+ line \} \}/.test(screen),
+ok(/onLine = \{ line -> withContext\(Dispatchers\.Main\) \{ lines = lines \+ line \} \}/.test(wizardScreen),
   "界面把进度行接进向导（预检与执行两处都接）");
 
 console.log("─ 3. 冲突策略：检测到冲突才问，三档都在，选完传进 import()");
@@ -135,8 +138,9 @@ ok(/optString\("kind"\) != "Conflict"/.test(backup), "预检按计划项的 kind
 ok(/conflictTotal/.test(backup) && /conflicts\.size < MAX_CONFLICT_LIST/.test(backup),
   "冲突数量与清单都交回给界面（清单有上限，数量如实）");
 // 决策步只在**有东西要问**的时候出现：没有会话也没有冲突就直接从预览进确认。
-ok(/private fun needsDecide\(/.test(screen) &&
-  /if \(needsDecide\(wizardPreflight\)\) WizardStep\.DECIDE else WizardStep\.CONFIRM/.test(screen),
+// needsDecide 现在定义在向导页文件里，界面与「下一步」共用它
+ok(/private fun needsDecide\(preflight: DshConfigBackup\.Preflight\?\): Boolean/.test(wizardScreen) &&
+  /if \(needsDecide\(preflight\)\) WizardStep\.DECIDE else WizardStep\.CONFIRM/.test(wizardScreen),
   "只有真的检测到会话或冲突才进决策步（不给用户多余的一问）");
 // 逐条冲突决策：键是计划项 id，取值是插件协议的 keepCurrent/useImported
 ok(/data class ConflictItem\(/.test(backup) && /id = item\.optString\("id"\)/.test(backup),
@@ -148,7 +152,7 @@ ok(/fun decisionsComplete\(/.test(wizardModel) &&
   "冲突未逐条表态就不放行（判据在状态机里，不靠界面自己数）");
 ok(/sessions <= 0 \|\| sessionChoice != null/.test(wizardModel),
   "包里有会话时必须明确选一种处理方式（不给默认值：默认写入等于替用户决定动他的聊天记录）");
-ok(/DshImportWizard\.canAdvance\(/.test(screen) && /canAdvance = wizardCanAdvance/.test(screen),
+ok(/DshImportWizard\.canAdvance\(/.test(wizardScreen) && /canAdvance = canAdvance/.test(wizardScreen),
   "界面用状态机的判据决定「下一步」能不能点");
 // beta.64 真机死结：预览步的「下一步」被决策完成度卡住 —— 而预览的下一步正是进入决策步，
 // 那时一条冲突都还没表态，于是按钮永远灰着、用户永远进不了决策页。判据必须分步：
@@ -157,26 +161,26 @@ ok(/WizardStep\.PREVIEW -> true/.test(wizardModel),
   "预览步永远可以继续（它的下一步就是进入决策步，此时决策还没开始做）");
 ok(/WizardStep\.DECIDE -> decisionsComplete\(sessions, sessionChoice, conflicts, choices\)/.test(wizardModel),
   "只有决策步才要求「会话已选 + 列出的冲突都已表态」");
-ok(/DshImportWizard\.canAdvance\(\s*step = step,/.test(screen),
+ok(/DshImportWizard\.canAdvance\(\s*step = step,/.test(wizardScreen),
   "界面把当前步骤一起传进去（少传步骤 = 又变回「一套判据套两步」）");
 ok(/fun decideNeeded\(sessions: Int, conflicts: List<DshConfigBackup\.ConflictItem>\): Boolean/.test(wizardModel) &&
-  /DshImportWizard\.decideNeeded\(preflight\.sessions, preflight\.conflicts\)/.test(screen) &&
+  /DshImportWizard\.decideNeeded\(preflight\.sessions, preflight\.conflicts\)/.test(wizardScreen) &&
   /DshImportWizard\.decideNeeded\(\s*sessions = preflight\?\.sessions \?: 0,/.test(wizard),
-  "「要不要进决策步」也只有一处判据（界面与向导都调它，不各写一份）");
+  "「要不要进决策步」只有一处判据（模型里定义，向导页与按钮文案都调它）");
 ok(/nextIsDecide = DshImportWizard\.decideNeeded\(/.test(wizard),
   "预览步的按钮文案跟着实际去向走（没有会话也没有冲突时不说「处理冲突」）");
 // 决策真的流进插件：/plan 的 decisions.resolutions 不再是空对象
 ok(/put\("resolutions", JSONObject\(\)\.apply \{ for \(\(id, r\) in resolutions\) put\(id, r\) \}\)/.test(backup),
   "逐条冲突决策真的写进 decisions.resolutions（以前恒为空对象 —— 问了也白问）");
 ok(/resolutions: Map<String, String> = emptyMap\(\)/.test(backup) &&
-  /resolutions = DshImportWizard\.resolutions\(p\.conflicts, wizardChoices\)/.test(screen),
+  /resolutions = DshImportWizard\.resolutions\(p\.conflicts, choices\)/.test(wizardScreen),
   "决策从界面一路传到 /plan");
-ok(/sessions = wizardSessionChoice\(\) \?: DshConfigBackup\.SessionImport\.SKIP/.test(screen),
+ok(/sessions = sessionChoice\(\) \?: DshConfigBackup\.SessionImport\.SKIP/.test(wizardScreen),
   "会话答案也带进最终那次导入");
 // 回滚开关：插件侧是 === true 的严格判断，漏传等于关掉
 ok(/rollbackOnError: Boolean = true/.test(backup) &&
   /put\("rollbackOnError", rollbackOnError\)/.test(backup) &&
-  /rollbackOnError = wizardRollback/.test(screen),
+  /rollbackOnError = rollback/.test(wizardScreen),
   "回滚开关是可传参数、永远显式写、且由确认步决定（漏传等于关掉回滚）");
 for (const [strategy, key] of [
   ["STRATEGY_MERGE", "dsh_bk_strategy_merge"],
@@ -191,9 +195,9 @@ for (const [strategy, key] of [
 ok(/dsh_bk_wiz_strategy_for_rest/.test(wizard) && /byStrategy/.test(wizardModel),
   "没列出来的冲突明确交回全局策略，并把条数说出来");
 ok(!/IMPORT_STRATEGIES/.test(content), "事先选策略的控件已经从这一页移除（改成导入时问）");
-ok(/preflight = p,/.test(screen) && /preflight: Preflight\? = null/.test(backup),
+ok(/preflight = p,/.test(wizardScreen) && /preflight: Preflight\? = null/.test(backup),
   "答完之后用预检产物继续导入（不再上传/解密第二遍）");
-ok(/discardPreflight/.test(screen) && /fun discardPreflight\(/.test(backup),
+ok(/discardPreflight/.test(wizardScreen) && /fun discardPreflight\(/.test(backup),
   "用户取消时把预检解出来的临时明文删掉");
 
 console.log("─ 4. 快照回退：先预览（零写入）→ 确认 → 才执行");
@@ -253,28 +257,27 @@ ok(/code == "405" \|\| code == "501"/.test(screen) &&
 // 三条入口（本地选文件 / 云端 WebDAV / DSH 内备份）都落进同一套向导状态，再由同一个
 // wizardAnalyze 预检、同一个 wizardRun 开跑。断言成「各自只出现一次」比什么都直接：
 // 多写一套管道就必然多一处定义或调用。
-const anDef = (screen.match(/fun wizardAnalyze\(/g) || []).length;
-const anUse = (screen.match(/onAnalyze = \{ wizardAnalyze\(\) \}/g) || []).length;
+const anDef = (wizardScreen.match(/fun analyze\(\)/g) || []).length;
+const anUse = (wizardScreen.match(/onAnalyze = \{ analyze\(\) \}/g) || []).length;
 ok(anDef === 1 && anUse === 1,
   "只有一个预检入口 wizardAnalyze（定义 " + anDef + " 处、调用 " + anUse + " 处）");
-const runDef = (screen.match(/fun wizardRun\(/g) || []).length;
-const runUse = (screen.match(/onStartRun = \{ wizardRun\(\) \}/g) || []).length;
+const runDef = (wizardScreen.match(/fun runImport\(\)/g) || []).length;
+const runUse = (wizardScreen.match(/onStartRun = \{ runImport\(\) \}/g) || []).length;
 ok(runDef === 1 && runUse === 1,
   "只有一个开跑入口 wizardRun（定义 " + runDef + " 处、调用 " + runUse + " 处）");
 ok(
-  /onCloudRestore = \{[\s\S]{0,3000}wizardPath = dest\.absolutePath[\s\S]{0,300}wizardStep = WizardStep\.SELECT/.test(screen),
-  "云端下载完进向导的选择步（加密包要密码才解得开）",
+  /onCloudRestore = \{[\s\S]{0,3000}RestoreWizardScreenDestination\([\s\S]{0,200}stagedPath = dest\.absolutePath/.test(screen),
+  "云端下载完把包交给向导页（加密包要密码才解得开）",
 );
-ok(
-  /val staged = runCatching \{[\s\S]{0,1400}wizardPath = staged\.absolutePath[\s\S]{0,300}wizardStep = WizardStep\.SELECT/.test(screen),
-  "本地选文件也进同一条向导（预检在密码之后才跑）",
+ok(/val staged = runCatching \{[\s\S]{0,1400}path = staged\.absolutePath/.test(wizardScreen),
+  "本地选文件在向导页里完成（预检在密码之后才跑）",
 );
-ok(/wizardStep = WizardStep\.SELECT/.test(screen) &&
-  /onDshImport = \{[\s\S]{0,600}wizardStep = WizardStep\.SELECT/.test(screen),
-  "点「导入备份」先进向导的选择步，而不是直接弹密码框");
+ok(/onDshImport = \{ navigator\.navigate\(RestoreWizardScreenDestination\) \}/.test(screen),
+  "点「导入备份」导航到独立的向导页");
 ok(
-  /DshBackupCrypto\.isArchiveBlobFile\(staged\)/.test(screen) &&
-    /DshBackupCrypto\.isArchiveBlobFile\(dest\)/.test(screen),
+  /DshBackupCrypto\.isArchiveBlobFile\(staged\)/.test(wizardScreen) &&
+    /DshBackupCrypto\.isArchiveBlobFile\(dest\)/.test(screen) &&
+    /stagedEncrypted = encrypted/.test(screen),
   "两条入口都用 magic 判断「是不是加密包」，据此决定提示哪一句",
 );
 
@@ -319,11 +322,15 @@ if (selectStep) {
   ok(/dsh_pw_show|dsh_pw_hide/.test(body), "这个密码框也有显示/隐藏");
 }
 // 退出向导时必须把「我们自己造的」临时副本收拾掉，且只删自己造的
-ok(/WIZARD_TEMP_DIRS = setOf\("config-import", "config-restore", "backup-tmp"\)/.test(screen),
+ok(/WIZARD_TEMP_DIRS = setOf\("config-import", "config-restore", "backup-tmp"\)/.test(wizardScreen),
   "只删自己造的暂存目录（config-import / config-restore / backup-tmp）");
-ok(/fun closeWizard\(/.test(screen) && /staged\.delete\(\)/.test(screen) &&
-  /DshConfigBackup\.discardPreflight\(it\)/.test(screen),
+// 「退出时清理」现在是挂在这一页被销毁上的：系统返回手势也会走到它 ——
+// 这正是把向导做成独立路由换来的东西（页内分支时手势返回把整页弹掉，谁都清不到）。
+ok(/fun cleanUp\(\)/.test(wizardScreen) && /staged\.delete\(\)/.test(wizardScreen) &&
+  /DshConfigBackup\.discardPreflight\(it\)/.test(wizardScreen),
   "退出向导时删掉暂存副本与预检解出来的明文包");
+ok(/DisposableEffect\(Unit\) \{\s*\n\s*onDispose \{ cleanUp\(\) \}/.test(wizardScreen),
+  "清理挂在页面销毁上（手势返回也会走到，不再依赖「记得点取消」）");
 
 console.log("─ 5d. 插件状态：原因不许被吞，安装按钮只在确认缺失时才画");
 ok(/val err = o\.optString\("error"\)/.test(backup) && /error = err,/.test(backup),
@@ -401,10 +408,9 @@ ok(/fun fetchRemoteBackup\(ctx: Context, backup: RemoteBackup\): File\?/.test(ba
   /fun remoteBackupPath\(b: RemoteBackup\): String/.test(backup),
   "从 DSH 取备份：下载后仍要过「是不是能打开的 zip」，路径没给就按插件 exports 约定推");
 // 恢复复用导入那条路（密码 → 预检 → 会话/冲突 → 执行），不另开通道
-ok(/wizardPath = fetched\.absolutePath/.test(screen) &&
-  /wizardStep = WizardStep\.SELECT/.test(screen) &&
+ok(/RestoreWizardScreenDestination\([\s\S]{0,200}stagedPath = fetched\.absolutePath/.test(screen) &&
   /DshBackupCrypto\.isArchiveBlobFile\(fetched\)/.test(screen),
-  "从 DSH 恢复 = 取到本地后进同一条向导（不再自己实现一遍解密/预检）");
+  "从 DSH 恢复 = 取到本地后交给同一条向导（不再自己实现一遍解密/预检）");
 ok(/dshBackups: List<DshConfigBackup\.RemoteBackup>/.test(content) &&
   /onDshBackupRestore: \(DshConfigBackup\.RemoteBackup\) -> Unit/.test(content) &&
   /onDshBackupDelete: \(DshConfigBackup\.RemoteBackup\) -> Unit/.test(content),
@@ -617,8 +623,18 @@ ok(/dsh_bk_wiz_recommended/.test(wizard) && /secondaryContainer/.test(wizard),
 //    由那一步的按钮去拉系统选择器（而不是当场弹系统框再甩用户一个陌生整页）。
 ok(!/onDshImport = \{[\s\S]{0,600}importPicker\.launch/.test(screen),
   "点「导入备份」不再当场拉起系统选择器");
-ok(/onDshImport = \{[\s\S]{0,600}wizardStep = WizardStep\.SELECT/.test(screen),
-  "而是先落到向导的选择步（那一步会说明「要做什么」）");
+ok(/onDshImport = \{ navigator\.navigate\(RestoreWizardScreenDestination\) \}/.test(screen),
+  "而是导航到一个真正的向导页（返回交给导航栈，手势与箭头一致）");
+// 这次的结构性教训：向导曾是备份页里的一个分支，于是「返回」有两套语义 ——
+// 箭头退一步（手写的）、手势把整页弹掉（导航栈的）。现在它是一个路由。
+ok(/@Destination<RootGraph>/.test(wizardScreen) && /fun RestoreWizardScreen\(/.test(wizardScreen),
+  "恢复向导是独立目的地（与权限记录页同一模式）");
+ok(/BackHandler\(enabled = true\) \{ handleBack\(\) \}/.test(wizardScreen) &&
+  /IconButton\(onClick = \{ handleBack\(\) \}\)/.test(wizardScreen),
+  "返回箭头与系统返回手势共用同一个 handleBack（两套入口各写一份正是之前的坑）");
+ok(/WizardStep\.SELECT, WizardStep\.RESULT -> exit\(\)/.test(wizardScreen) &&
+  /WizardStep\.EXECUTE -> Unit/.test(wizardScreen),
+  "退到头才离开这一页；执行中不退（插件已在写盘，退出只留半写入状态）");
 ok(/if \(fileName\.isEmpty\(\)\) \{\s*\n\s*Button\(onClick = onPickFile\)/.test(wizard),
   "没选文件时主按钮就是「选择文件」（第一眼就知道这一步要干什么）");
 ok(/dsh_bk_wiz_selected_file/.test(wizard),
@@ -627,9 +643,9 @@ ok(/dsh_bk_wiz_selected_file/.test(wizard),
 console.log("─ 5o. 预览页逐条勾选（真机反馈：每个条目应该能单独选）");
 // 状态记「被取消的」而不是「被选中的」：计划项可能比预览列出的多（MAX_PREVIEW_ITEMS
 // 截断），按选中集合提交等于让截断替用户决定「这些不导入」。
-ok(/var wizardExcluded by rememberSaveable \{ mutableStateOf<Set<String>>\(emptySet\(\)\) \}/.test(screen),
+ok(/var excluded by rememberSaveable \{ mutableStateOf<Set<String>>\(emptySet\(\)\) \}/.test(wizardScreen),
   "取消勾选的项记成「排除集」（而不是选中集），没显示出来的条目不会被静默丢掉");
-ok(/excludedItems = wizardExcluded/.test(screen) && /excludedItems: Set<String> = emptySet\(\)/.test(backup),
+ok(/excludedItems = excluded/.test(wizardScreen) && /excludedItems: Set<String> = emptySet\(\)/.test(backup),
   "排除集一路传到 import()");
 ok(/if \(excludedItems\.isNotEmpty\(\)\) \{/.test(backup) &&
   /planObj\.put\("items", kept\)/.test(backup) &&
@@ -641,8 +657,8 @@ ok(/selectable = item\.kind != "Conflict"/.test(wizard) &&
   /if \(selectable\) onToggle\(\)/.test(wizard) &&
   /dsh_bk_wiz_item_conflict_note/.test(wizard),
   "冲突项的勾选框禁用并说明原因（由下一步逐条决定）");
-ok(/onSelectAllItems = \{ all ->/.test(screen) &&
-  /\.filter \{ it\.kind != "Conflict" \}/.test(screen),
+ok(/onSelectAllItems = \{ all ->/.test(wizardScreen) &&
+  /\.filter \{ it\.kind != "Conflict" \}/.test(wizardScreen),
   "「全不选」不会把冲突项也算进去");
 ok(/Checkbox\(/.test(wizard) && /dsh_bk_wiz_pick_items/.test(wizard) &&
   /dsh_bk_wiz_select_all/.test(wizard) && /dsh_bk_wiz_select_none/.test(wizard),
