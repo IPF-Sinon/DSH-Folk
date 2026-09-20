@@ -718,5 +718,42 @@ ok(/put\("includeSecrets", false\)/.test(backup), "导出仍然不带凭据");
 ok(/if \(Build\.VERSION\.SDK_INT <= Build\.VERSION_CODES\.R\)/.test(backup),
   "MediaStore 的 IS_PENDING 处理还在（否则备份在「下载」里不可见）");
 
+console.log("─ 5q. WebDAV 配置与插件共用一套（保存时写进插件的 /sync/config）");
+// 插件那半边已有一整套 WebDAV sync（凭据落 DSH credentials、增量、历史）。这里只做「共用配置」：
+// App 保存时把地址/用户名/口令写进插件，两边一套服务器。纯 App 侧，不改插件仓。
+ok(/fun syncStatus\(\): SyncConfigStatus/.test(backup) && /"GET", "\/sync\/status"/.test(backup),
+  "读插件同步状态走 GET /sync/status");
+ok(/fun pushWebdavConfig\(/.test(backup) && /"POST", "\/sync\/config"/.test(backup) &&
+  /put\("transport", "webdav"\)/.test(backup),
+  "写插件配置走 POST /sync/config，体是 transport=webdav 三栏");
+// 口令留空不下发：插件按契约保留原凭据，不会被清掉。
+ok(/if \(password\.isNotEmpty\(\)\) put\("password", password\)/.test(backup),
+  "口令留空则不下发（不覆盖插件已存的口令）");
+// reachable=false 与「写失败」分开：DSH 没起来只是没同步，不是错。
+ok(/\?: return@withContext SyncConfigStatus\(reachable = false\)/.test(backup) &&
+  /SyncConfigPush\(ok = false, reachable = false\)/.test(backup),
+  "DSH 不可达安静降级（reachable=false），不当成错误");
+// 界面：保存先落本机、再写插件；本机口令**不清**（App 自己的 zip 上传仍要用）——本次决策
+ok(/fun persistAndPush\(force: Boolean\)/.test(content) &&
+  /BackupConfig\.save\(context\)/.test(content) &&
+  /DshConfigBackup\.pushWebdavConfig\(/.test(content),
+  "保存 = 本机存 + 写插件（两步都在）");
+ok(/BackupConfig\.webdavPassword = password/.test(content),
+  "本机仍存口令（不清明文：App 自己的上传要用它）——本次锁定的决策");
+// 路径不折叠进插件 url：只把三栏给插件，App 的 path 各自保留
+ok(/DshConfigBackup\.pushWebdavConfig\(url\.trim\(\), username, password\)/.test(content),
+  "只共用地址/用户名/口令三栏，App 的路径不折叠进插件 url");
+// 插件在 git 且已配 → 先确认再切通道，不擅自改插件行为
+ok(/cur\.transport == "git" && cur\.configured/.test(content) &&
+  /pendingSwitch = true/.test(content) &&
+  /dsh_bk_sync_switch_title/.test(content),
+  "插件当前在 git 时，切到 webdav 前先弹确认");
+// 参照区只显示口令布尔，绝不回显/回填口令
+ok(/passwordConfigured/.test(backup) && !/optString\("password"\)/.test(backup),
+  "口令永不回传：只读 passwordConfigured 布尔");
+ok(/dsh_bk_sync_prefill_from_plugin/.test(content) &&
+  /url = sync\.webdavUrl; username = sync\.webdavUsername/.test(content),
+  "一键填充只填地址与用户名（口令仍需手输，插件不回传）");
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

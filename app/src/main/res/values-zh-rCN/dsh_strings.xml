@@ -1213,4 +1213,16 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_snapshot_appdata_absent">这份快照里没有软件设置（它是在开始记录设置之前创建的），所以只会回退 DSH 配置。</string>
     <string name="dsh_bk_snapshot_appdata_restored">软件设置与外观也已回退。</string>
     <string name="dsh_bk_snapshot_appdata_failed">DSH 配置已回退，但软件设置没能回退。</string>
+    <string name="dsh_bk_sync_plugin_ref">DSH 插件的 WebDAV：%1$s（用户名 %2$s，%3$s）。保存会把这三栏与插件共用。</string>
+    <string name="dsh_bk_sync_plugin_none">DSH 插件还没配 WebDAV。保存会把这三栏一并写过去。</string>
+    <string name="dsh_bk_sync_plugin_unreachable">DSH 未运行，插件那边现在同步不了（仍会保存在本机）。</string>
+    <string name="dsh_bk_sync_pw_set">口令已配置</string>
+    <string name="dsh_bk_sync_pw_unset">口令未配置</string>
+    <string name="dsh_bk_sync_prefill_from_plugin">用插件里的地址与用户名填充</string>
+    <string name="dsh_bk_sync_pushed_ok">已写入 DSH 插件。</string>
+    <string name="dsh_bk_sync_pushed_offline">已保存在本机。DSH 未运行，插件那边未同步。</string>
+    <string name="dsh_bk_sync_push_failed">已保存在本机，但插件拒绝了：%1$s</string>
+    <string name="dsh_bk_sync_switch_title">把插件切到 WebDAV？</string>
+    <string name="dsh_bk_sync_switch_msg">DSH 插件当前用 git 同步。保存会把它的激活通道切到 WebDAV。git 配置会保留，随时可切回。</string>
+    <string name="dsh_bk_sync_switch_confirm">切换并保存</string>
 </resources>

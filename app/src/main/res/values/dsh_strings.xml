@@ -1235,4 +1235,16 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_snapshot_appdata_absent">This snapshot carries no app settings (it was created before they were captured), so only the DSH configuration will be rolled back.</string>
     <string name="dsh_bk_snapshot_appdata_restored">App settings and appearance were rolled back too.</string>
     <string name="dsh_bk_snapshot_appdata_failed">The DSH configuration was rolled back, but the app settings could not be.</string>
+    <string name="dsh_bk_sync_plugin_ref">DSH plugin WebDAV: %1$s (user %2$s, %3$s). Saving shares these three fields with the plugin.</string>
+    <string name="dsh_bk_sync_plugin_none">The DSH plugin has no WebDAV configured yet. Saving will set it up there too.</string>
+    <string name="dsh_bk_sync_plugin_unreachable">DSH is not running, so the plugin side cannot be synced right now (saved on this device anyway).</string>
+    <string name="dsh_bk_sync_pw_set">password set</string>
+    <string name="dsh_bk_sync_pw_unset">password not set</string>
+    <string name="dsh_bk_sync_prefill_from_plugin">Fill address and username from the plugin</string>
+    <string name="dsh_bk_sync_pushed_ok">Written to the DSH plugin too.</string>
+    <string name="dsh_bk_sync_pushed_offline">Saved on this device. DSH is not running, so the plugin side was not synced.</string>
+    <string name="dsh_bk_sync_push_failed">Saved on this device, but the plugin rejected it: %1$s</string>
+    <string name="dsh_bk_sync_switch_title">Switch the plugin to WebDAV?</string>
+    <string name="dsh_bk_sync_switch_msg">The DSH plugin is currently syncing over git. Saving will switch its active channel to WebDAV. The git settings are kept and you can switch back anytime.</string>
+    <string name="dsh_bk_sync_switch_confirm">Switch and save</string>
 </resources>

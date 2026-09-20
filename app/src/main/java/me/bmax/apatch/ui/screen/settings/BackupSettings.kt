@@ -1079,7 +1079,50 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
     var isTesting by remember { mutableStateOf(false) }
     var showLogDialog by remember { mutableStateOf(false) }
 
+    // 插件那半边现在配的是哪台 WebDAV：打开时读一次，摆给用户看（口令永不回传，只回布尔）。
+    // null = 还没读到。
+    var pluginSync by remember { mutableStateOf<DshConfigBackup.SyncConfigStatus?>(null) }
+    // 保存后「写插件」的即时反馈（一行字；空 = 还没保存过）。
+    var syncNote by remember { mutableStateOf("") }
+    // 插件当前在 git 通道、保存会把它切到 webdav —— 切换前先弹这个确认。
+    var pendingSwitch by remember { mutableStateOf(false) }
+
     val scope = rememberCoroutineScope()
+
+    // 打开即拉一次插件状态：DSH 没起来也不报错，只是参照区显示「插件未运行」。
+    LaunchedEffect(Unit) {
+        pluginSync = withContext(Dispatchers.IO) { DshConfigBackup.syncStatus() }
+    }
+
+    // 保存的公共尾巴：本机先存（App 自己的 zip 上传要用），再把三栏写进插件（共用一套配置）。
+    // force=true 表示用户已确认「从 git 切到 webdav」。
+    fun persistAndPush(force: Boolean) {
+        BackupConfig.webdavUrl = url
+        BackupConfig.webdavUsername = username
+        BackupConfig.webdavPassword = password
+        BackupConfig.webdavPath = path
+        BackupConfig.save(context)
+        scope.launch {
+            val cur = pluginSync ?: withContext(Dispatchers.IO) { DshConfigBackup.syncStatus() }
+            // 插件在 git 且已配过 git，又没确认过切换 → 先问，不擅自改插件的激活通道
+            if (!force && cur.reachable && cur.transport == "git" && cur.configured) {
+                pendingSwitch = true
+                return@launch
+            }
+            if (url.isBlank()) { showDialog.value = false; return@launch }
+            val push = withContext(Dispatchers.IO) {
+                DshConfigBackup.pushWebdavConfig(url.trim(), username, password)
+            }
+            syncNote = when {
+                !push.reachable -> context.getString(R.string.dsh_bk_sync_pushed_offline)
+                push.ok -> context.getString(R.string.dsh_bk_sync_pushed_ok)
+                else -> context.getString(R.string.dsh_bk_sync_push_failed, push.error)
+            }
+            pluginSync = withContext(Dispatchers.IO) { DshConfigBackup.syncStatus() }
+            // 成功才关：失败/离线留在框里，让用户看到那行提示
+            if (push.reachable && push.ok) showDialog.value = false
+        }
+    }
 
     BasicAlertDialog(
         onDismissRequest = { showDialog.value = false },
@@ -1142,9 +1185,53 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
                     value = path,
                     onValueChange = { path = it },
                     label = { Text(stringResource(R.string.webdav_path_label)) },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true
                 )
+
+                // 参照区：插件那半边现在配的是哪台 WebDAV。保存时这三栏会写进插件，两边共用
+                // 同一台服务器（路径各自保留）。口令按插件的设计不回传，这里只显示「已/未配置」。
+                val sync = pluginSync
+                if (sync != null) {
+                    Text(
+                        text = when {
+                            !sync.reachable -> stringResource(R.string.dsh_bk_sync_plugin_unreachable)
+                            !sync.configured || sync.webdavUrl.isBlank() ->
+                                stringResource(R.string.dsh_bk_sync_plugin_none)
+                            else -> stringResource(
+                                R.string.dsh_bk_sync_plugin_ref,
+                                sync.webdavUrl,
+                                sync.webdavUsername.ifEmpty { "—" },
+                                stringResource(
+                                    if (sync.passwordConfigured) R.string.dsh_bk_sync_pw_set
+                                    else R.string.dsh_bk_sync_pw_unset,
+                                ),
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                    // App 三栏为空、插件却配过 → 一键把地址/用户名填进来（口令仍要手输一次：
+                    // 插件不回传口令，这是设计上的硬约束，不是这里偷懒）。
+                    if (sync.reachable && sync.webdavUrl.isNotBlank() && url.isBlank()) {
+                        TextButton(
+                            onClick = { url = sync.webdavUrl; username = sync.webdavUsername },
+                            contentPadding = PaddingValues(0.dp),
+                        ) {
+                            Text(stringResource(R.string.dsh_bk_sync_prefill_from_plugin))
+                        }
+                    }
+                }
+                if (syncNote.isNotEmpty()) {
+                    Text(
+                        text = syncNote,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1176,14 +1263,7 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
                         Text(stringResource(R.string.test))
                     }
 
-                    Button(onClick = {
-                        BackupConfig.webdavUrl = url
-                        BackupConfig.webdavUsername = username
-                        BackupConfig.webdavPassword = password
-                        BackupConfig.webdavPath = path
-                        BackupConfig.save(context)
-                        showDialog.value = false
-                    }) {
+                    Button(onClick = { persistAndPush(force = false) }) {
                         Text(stringResource(R.string.save))
                     }
                 }
@@ -1193,6 +1273,27 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
 
     if (showLogDialog) {
         BackupLogDialog(showDialog = remember { mutableStateOf(true) }, onDismiss = { showLogDialog = false })
+    }
+
+    // 插件当前在 git 通道：保存 WebDAV 会把插件的**激活**通道切到 webdav（git 配置会保留、
+    // 可随时切回）。这是会影响插件行为的一步，切换前先明说、征得同意，不擅自替用户改。
+    if (pendingSwitch) {
+        AlertDialog(
+            onDismissRequest = { pendingSwitch = false },
+            title = { Text(stringResource(R.string.dsh_bk_sync_switch_title)) },
+            text = { Text(stringResource(R.string.dsh_bk_sync_switch_msg)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingSwitch = false
+                    persistAndPush(force = true)
+                }) { Text(stringResource(R.string.dsh_bk_sync_switch_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingSwitch = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
     }
 }
 
