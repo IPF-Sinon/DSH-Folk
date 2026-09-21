@@ -28,8 +28,12 @@ const fs = require("fs");
 const SRC_BACKUP = "app/src/main/java/me/bmax/apatch/dsh/DshConfigBackup.kt";
 const SRC_SCREEN = "app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettingsScreen.kt";
 const SRC_CONTENT = "app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettings.kt";
-const SRC_WEBDAV = "app/src/main/java/me/bmax/apatch/util/WebDavUtils.kt";
 const SRC_CONFIG = "app/src/main/java/me/bmax/apatch/ui/theme/BackupConfig.kt";
+// 1.9.2.5：WebDAV 云备份整个搬进 dsh-folk-cloud 插件；App 侧只剩它的客户端与补包桥。
+const SRC_CLOUD = "app/src/main/java/me/bmax/apatch/dsh/DshCloudBackup.kt";
+const SRC_CLOUD_APPDATA = "app/src/main/java/me/bmax/apatch/dsh/DshCloudAppData.kt";
+const SRC_FSBRIDGE = "app/src/main/java/me/bmax/apatch/dsh/DshFsBridge.kt";
+const SRC_RUNTIME = "app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt";
 const SRC_WIZARD = "app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupWizard.kt";
 const SRC_WIZARD_SCREEN = "app/src/main/java/me/bmax/apatch/ui/screen/settings/RestoreWizardScreen.kt";
 const SRC_WIZARD_MODEL = "app/src/main/java/me/bmax/apatch/dsh/DshImportWizard.kt";
@@ -85,8 +89,11 @@ const screen = fs.readFileSync(SRC_SCREEN, "utf8");
 // 恢复向导已经独立成页（RestoreWizardScreen.kt）：与「恢复流程」有关的断言都看它。
 const wizardScreen = fs.readFileSync(SRC_WIZARD_SCREEN, "utf8");
 const content = fs.readFileSync(SRC_CONTENT, "utf8");
-const webdav = fs.readFileSync(SRC_WEBDAV, "utf8");
 const config = fs.readFileSync(SRC_CONFIG, "utf8");
+const cloud = fs.readFileSync(SRC_CLOUD, "utf8");
+const cloudAppData = fs.readFileSync(SRC_CLOUD_APPDATA, "utf8");
+const fsBridge = fs.readFileSync(SRC_FSBRIDGE, "utf8");
+const runtime = fs.readFileSync(SRC_RUNTIME, "utf8");
 const wizard = fs.readFileSync(SRC_WIZARD, "utf8");
 const wizardModel = fs.readFileSync(SRC_WIZARD_MODEL, "utf8");
 const appData = fs.readFileSync(SRC_APPDATA, "utf8");
@@ -233,53 +240,41 @@ const confirmBody = fs.readFileSync("app/src/main/res/values-zh-rCN/dsh_strings.
 ok(confirmBody !== null && /卸载/.test(confirmBody[1]) && /pre-restore/.test(confirmBody[1]),
   "确认文案讲明会卸载插件、以及插件侧的 pre-restore 双保险");
 
-console.log("─ 5. 云端备份：从「只能上传」变成可列可下可导入");
-ok(/suspend fun listRemote\(/.test(webdav) && /\.header\("Depth", "1"\)/.test(webdav),
-  "listRemote 用 PROPFIND Depth: 1 列目录");
-ok(/response\.code != 207 && !response\.isSuccessful/.test(webdav),
-  "207 Multi-Status 与 200 都认，其余才算失败");
-ok(/substringAfterLast\(':'\)\.lowercase\(Locale\.US\)/.test(webdav),
-  "标签名去命名空间前缀再比（D:response / d:response / 无前缀都得认）");
-ok(/name\.endsWith\("\.zip", ignoreCase = true\)/.test(webdav),
-  "只收 .zip");
-ok(/sortedByDescending \{ it\.lastModifiedMs \}/.test(webdav),
-  "按修改时间倒序（最近的排最前）");
-ok(/href\.replace\("\+", "%2B"\)/.test(webdav),
-  "href 解码前把 + 保护起来（URLDecoder 会把 + 当空格，文件名里的 + 是字面量）");
-ok(/suspend fun downloadTo\(/.test(webdav) && /if \(!wrote && dest\.exists\(\)\) dest\.delete\(\)/.test(webdav),
-  "下载失败删掉半截文件（否则下次导入拿到看不懂的解析错误）");
-ok(/WebDavUtils\.listRemote\(/.test(screen) && /WebDavUtils\.downloadTo\(/.test(screen),
-  "界面两条都接了");
-ok(/code == "405" \|\| code == "501"/.test(screen) &&
-  /context\.getString\(R\.string\.dsh_bk_cloud_unsupported, code\)/.test(screen) &&
-  /context\.getString\(R\.string\.dsh_backup_webdav_failed, msg\)/.test(screen),
-  "405/501（服务端不支持列目录）与其它失败分开说：否则用户不知道该改服务端还是改密码");
-// 三条入口（本地选文件 / 云端 WebDAV / DSH 内备份）都落进同一套向导状态，再由同一个
-// wizardAnalyze 预检、同一个 wizardRun 开跑。断言成「各自只出现一次」比什么都直接：
-// 多写一套管道就必然多一处定义或调用。
-const anDef = (wizardScreen.match(/fun analyze\(\)/g) || []).length;
-const anUse = (wizardScreen.match(/onAnalyze = \{ analyze\(\) \}/g) || []).length;
-ok(anDef === 1 && anUse === 1,
-  "只有一个预检入口 wizardAnalyze（定义 " + anDef + " 处、调用 " + anUse + " 处）");
-const runDef = (wizardScreen.match(/fun runImport\(\)/g) || []).length;
-const runUse = (wizardScreen.match(/onStartRun = \{ runImport\(\) \}/g) || []).length;
-ok(runDef === 1 && runUse === 1,
-  "只有一个开跑入口 wizardRun（定义 " + runDef + " 处、调用 " + runUse + " 处）");
-ok(
-  /onCloudRestore = \{[\s\S]{0,3000}RestoreWizardScreenDestination\([\s\S]{0,200}stagedPath = dest\.absolutePath/.test(screen),
-  "云端下载完把包交给向导页（加密包要密码才解得开）",
-);
-ok(/val staged = runCatching \{[\s\S]{0,1400}path = staged\.absolutePath/.test(wizardScreen),
-  "本地选文件在向导页里完成（预检在密码之后才跑）",
-);
+console.log("─ 5. 云备份整个搬进 dsh-folk-cloud 插件，App 侧只剩它的前端");
+// WebDavUtils 已删：App 不再自己传/列/取。这条断言钉住「没人再引用它」。
+ok(!fs.existsSync("app/src/main/java/me/bmax/apatch/util/WebDavUtils.kt"),
+  "WebDavUtils.kt 已删除（App 不再自建 WebDAV 客户端）");
+ok(!/WebDavUtils/.test(screen) && !/WebDavUtils/.test(content),
+  "备份页不再引用 WebDavUtils");
+// BackupConfig 不再存 webdav 配置：只剩本地导入的冲突策略
+// 只看真正的字段/键，不看文档注释里对 webdav 的提及
+ok(!/var webdav/.test(config) && !/PREF_KEY_WEBDAV/.test(config) &&
+  !/var isBackupEnabled/.test(config) && /importStrategy/.test(config),
+  "BackupConfig 不再存 webdav 配置与 isBackupEnabled（只留 importStrategy）");
+// App 侧云备份客户端：读状态 / 存配置 / 触发，都打到 dsh-folk-cloud 的 /api 前缀
+ok(/BASE = "\/api\/dsh-folk-cloud"/.test(cloud),
+  "DshCloudBackup 打到 /api/dsh-folk-cloud");
+ok(/"GET", "\/status"/.test(cloud) && /"POST", "\/config"/.test(cloud) && /"POST", "\/trigger"/.test(cloud),
+  "客户端覆盖 status / config / trigger 三个端点");
+// 口令留空 = 不下发：插件保留原口令（与旧 beta.71 同一条铁律，只是换了目标插件）
+ok(/if \(password\.isNotEmpty\(\)\) put\("password", password\)/.test(cloud),
+  "口令留空则不下发（插件保留原口令）");
+ok(/passwordConfigured/.test(cloud) && !/optString\("password"\)/.test(cloud),
+  "口令永不回传：只读 passwordConfigured 布尔");
+// 界面：云备份块只在插件可达时出现，且走 DshCloudBackup 触发（不再有 WebDavUtils 上传/下载）
+ok(/cloud != null && cloud\.reachable/.test(content),
+  "云备份卡片仅在检测到插件（reachable）时显示");
+ok(/DshCloudBackup\.trigger\("auto"/.test(screen) && /DshCloudBackup\.trigger\("pull"/.test(screen),
+  "「立即同步/从上游恢复」走插件 trigger（auto/pull）");
+ok(/DshCloudBackup\.saveConfig\(/.test(content) && /DshCloudBackup\.test\(/.test(content),
+  "配置弹窗保存/测试都走插件");
+// 本地选文件导入仍走独立向导页（这条与云备份无关，保留）
 ok(/onDshImport = \{[\s\S]{0,200}navigator\.navigate\(\s*\n?\s*RestoreWizardScreenDestination\(stagedPath = null\)/.test(screen),
   "点「导入备份」导航到独立的向导页");
-ok(
-  /DshBackupCrypto\.isArchiveBlobFile\(staged\)/.test(wizardScreen) &&
-    /DshBackupCrypto\.isArchiveBlobFile\(dest\)/.test(screen) &&
-    /stagedEncrypted = encrypted/.test(screen),
-  "两条入口都用 magic 判断「是不是加密包」，据此决定提示哪一句",
-);
+const anDef = (wizardScreen.match(/fun analyze\(\)/g) || []).length;
+const runDef = (wizardScreen.match(/fun runImport\(\)/g) || []).length;
+ok(anDef === 1 && runDef === 1,
+  "向导仍是单一预检/开跑入口（analyze " + anDef + " / runImport " + runDef + "）");
 
 console.log("─ 5b. 导出/导入：页面上只有动作，内容都在弹窗里问");
 const contentSrc2 = content; // 顶部已经读过这一份
@@ -514,8 +509,10 @@ console.log("─ 5j. 插件没就绪时按钮不许可点（null 是「还不知
 // 而那一刻插件可能根本没起来。现在一律按 == true 判定。
 ok(!/pluginReady != false/.test(content),
   "不再把「还在检测」当成可点");
+// 云备份区块改由 dsh-folk-cloud 的 cloudStatus.reachable 把关（另一个插件），不再数 pluginReady；
+// 依赖 dsh-config-manager 的入口（会话整理/导出导入/快照/DSH 内备份）仍按 == true 判定。
 const gates = (content.match(/pluginReady == true/g) || []).length;
-ok(gates >= 5, "所有依赖插件的入口都按 == true 判定（找到 " + gates + " 处：会话整理/导出导入/快照/DSH 内备份/云端）");
+ok(gates >= 4, "依赖 dsh-config-manager 的入口按 == true 判定（找到 " + gates + " 处：会话整理/导出导入/快照/DSH 内备份）");
 ok(/const val STATUS_TIMEOUT_MS = 15_000/.test(backup) &&
   /request\("GET", "\/status", null, timeoutMs = STATUS_TIMEOUT_MS\)/.test(backup),
   "探活用自己的 15 秒超时（request 默认 300 秒是给导入导出那种真在干活的请求用的）");
@@ -718,42 +715,43 @@ ok(/put\("includeSecrets", false\)/.test(backup), "导出仍然不带凭据");
 ok(/if \(Build\.VERSION\.SDK_INT <= Build\.VERSION_CODES\.R\)/.test(backup),
   "MediaStore 的 IS_PENDING 处理还在（否则备份在「下载」里不可见）");
 
-console.log("─ 5q. WebDAV 配置与插件共用一套（保存时写进插件的 /sync/config）");
-// 插件那半边已有一整套 WebDAV sync（凭据落 DSH credentials、增量、历史）。这里只做「共用配置」：
-// App 保存时把地址/用户名/口令写进插件，两边一套服务器。纯 App 侧，不改插件仓。
-ok(/fun syncStatus\(\): SyncConfigStatus/.test(backup) && /"GET", "\/sync\/status"/.test(backup),
-  "读插件同步状态走 GET /sync/status");
-ok(/fun pushWebdavConfig\(/.test(backup) && /"POST", "\/sync\/config"/.test(backup) &&
-  /put\("transport", "webdav"\)/.test(backup),
-  "写插件配置走 POST /sync/config，体是 transport=webdav 三栏");
-// 口令留空不下发：插件按契约保留原凭据，不会被清掉。
-ok(/if \(password\.isNotEmpty\(\)\) put\("password", password\)/.test(backup),
-  "口令留空则不下发（不覆盖插件已存的口令）");
-// reachable=false 与「写失败」分开：DSH 没起来只是没同步，不是错。
-ok(/\?: return@withContext SyncConfigStatus\(reachable = false\)/.test(backup) &&
-  /SyncConfigPush\(ok = false, reachable = false\)/.test(backup),
-  "DSH 不可达安静降级（reachable=false），不当成错误");
-// 界面：保存先落本机、再写插件；本机口令**不清**（App 自己的 zip 上传仍要用）——本次决策
-ok(/fun persistAndPush\(force: Boolean\)/.test(content) &&
-  /BackupConfig\.save\(context\)/.test(content) &&
-  /DshConfigBackup\.pushWebdavConfig\(/.test(content),
-  "保存 = 本机存 + 写插件（两步都在）");
-ok(/BackupConfig\.webdavPassword = password/.test(content),
-  "本机仍存口令（不清明文：App 自己的上传要用它）——本次锁定的决策");
-// 路径不折叠进插件 url：只把三栏给插件，App 的 path 各自保留
-ok(/DshConfigBackup\.pushWebdavConfig\(url\.trim\(\), username, password\)/.test(content),
-  "只共用地址/用户名/口令三栏，App 的路径不折叠进插件 url");
-// 插件在 git 且已配 → 先确认再切通道，不擅自改插件行为
-ok(/cur\.transport == "git" && cur\.configured/.test(content) &&
-  /pendingSwitch = true/.test(content) &&
-  /dsh_bk_sync_switch_title/.test(content),
-  "插件当前在 git 时，切到 webdav 前先弹确认");
-// 参照区只显示口令布尔，绝不回显/回填口令
-ok(/passwordConfigured/.test(backup) && !/optString\("password"\)/.test(backup),
-  "口令永不回传：只读 passwordConfigured 布尔");
-ok(/dsh_bk_sync_prefill_from_plugin/.test(content) &&
-  /url = sync\.webdavUrl; username = sync\.webdavUsername/.test(content),
-  "一键填充只填地址与用户名（口令仍需手输，插件不回传）");
+console.log("─ 5q. 含软件数据的档位：App 经 fs-bridge 补包给插件");
+// 软件数据（prefs + 外观）住在 Android 私有目录，插件够不到；App 经文件桥 /cloud/appdata/*
+// 出/收整包。复用 DshConfigBackup 既有的导出/导入通路，不另造格式。
+ok(/path\.startsWith\("\/cloud\/"\) -> dispatchCloud/.test(fsBridge),
+  "文件桥分发 /cloud/ 到 dispatchCloud");
+ok(/"\/cloud\/appdata\/status"/.test(fsBridge) &&
+  /"\/cloud\/appdata\/export"/.test(fsBridge) &&
+  /"\/cloud\/appdata\/restore"/.test(fsBridge),
+  "补包端点族 status / export / restore 齐全");
+// 补包与 /fs、/native 共用同一 token + 回环守卫（复用同一 handle 前置检查）
+ok(/tokenMatches\(headers\[HEADER_TOKEN\.lowercase\(\)\]\)/.test(fsBridge),
+  "补包端点同样受 token + 回环守卫（与 /fs /native 同一道检查）");
+// 导出：档位字符串 → BackupScope；含软件数据的三档才走 App
+ok(/"app-only" -> BackupScope\.APP_ONLY/.test(cloudAppData) &&
+  /"app-dsh" -> BackupScope\.BOTH/.test(cloudAppData) &&
+  /"app-dsh-vault" -> BackupScope\.BOTH_VAULT/.test(cloudAppData),
+  "档位→BackupScope 映射覆盖含软件数据的三档");
+ok(/DshConfigBackup\.exportArchive\(ctx, plan\)/.test(cloudAppData) &&
+  /DshConfigBackup\.import\(/.test(cloudAppData),
+  "出包/收包复用 DshConfigBackup 既有通路（不另造格式）");
+// vault 档强制加密
+ok(/scopeNeedsVaultPassword\(scope\) && !encrypt/.test(cloudAppData),
+  "含 vault 的档位必须加密（否则拒绝出包）");
+
+console.log("─ 5r. 新档位与预装");
+// BackupScope 新增 DSH_VAULT：纯 DSH + 凭据（插件回退用）
+ok(/DSH_VAULT/.test(archive) &&
+  /this != BackupScope\.DSH_ONLY && scope != BackupScope\.DSH_VAULT/.test(archive) === false,
+  "BackupScope 新增 DSH_VAULT 档");
+ok(/BackupScope\.BOTH_VAULT \|\| scope == BackupScope\.DSH_VAULT/.test(archive),
+  "DSH_VAULT 也算含 vault（强制加密）");
+// 预装清单加入 dsh-folk-cloud，且用 github 规格安装（不发 npm）
+ok(/"dsh-folk-cloud"/.test(runtime) &&
+  /SEED_SPECS = mapOf\("dsh-folk-cloud" to "github:IPF-Sinon\/dsh-folk-cloud"\)/.test(runtime),
+  "SEED_PLUGINS 含 dsh-folk-cloud，用 github 规格安装");
+ok(/DshPluginRepo\.install\(seedSpec\(pkg\)/.test(runtime),
+  "预装用 seedSpec(pkg) 取安装规格（账本仍按包名记）");
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

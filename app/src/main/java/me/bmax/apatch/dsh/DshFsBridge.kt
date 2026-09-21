@@ -159,6 +159,9 @@ object DshFsBridge {
 
                 val result: Pair<Int, String>? = when {
                     path.startsWith("/native/") -> dispatchNative(method, path, params)
+                    // 云备份补包接口：dsh-folk-cloud 插件经此请 App 出/收含软件数据的整包。
+                    // 与 /fs、/native 共用同一 token 与回环守卫 —— 能调到这里 = 容器内可信代码。
+                    path.startsWith("/cloud/") -> dispatchCloud(method, path, input, headers)
                     method == "GET" && path == "/health" -> handleHealth()
                     method == "GET" && path == "/list" -> handleList(params)
                     method == "GET" && path == "/stat" -> handleStat(params["path"])
@@ -192,6 +195,47 @@ object DshFsBridge {
     ): Pair<Int, String>? {
         val ctx = appCtx ?: return 500 to errorJson(str(R.string.dsh_fs_err_native_uninit), "native_uninit")
         return DshNativeBridge.handle(ctx, method, path, params)
+    }
+
+    /**
+     * 云备份补包端点族（`/cloud/appdata/` 下的 status / export / restore）。
+     *
+     * 软件数据（Android `SharedPreferences` + 外观资源）住在 App 的私有目录，容器内的
+     * dsh-folk-cloud 插件物理上够不到 —— 只能反过来请 App 帮忙。这里把 App 已有的
+     * 「导出整包 / 导入整包」通路（[DshConfigBackup]）包一层 HTTP 暴露给插件：
+     *
+     * - `GET  /cloud/appdata/status`  → `{available:true}`（插件据此判断含软件数据的档位能不能跑）；
+     * - `POST /cloud/appdata/export`  → App 出一份含软件数据的整包，回 `{file,size}`；
+     * - `POST /cloud/appdata/restore` → App 把插件下载好的包恢复回本机，回 `{ok,message,needsRestart}`。
+     *
+     * 这些操作是 suspend 的，而桥的分发是同步的，故用 [kotlinx.coroutines.runBlocking] 就地跑完
+     * —— 每个请求本来就在自己的 accept 线程里，阻塞它不影响别的连接。
+     */
+    private fun dispatchCloud(
+        method: String,
+        path: String,
+        input: InputStream,
+        headers: Map<String, String>,
+    ): Pair<Int, String>? {
+        val ctx = appCtx ?: return 500 to errorJson(str(R.string.dsh_fs_err_native_uninit), "native_uninit")
+        return when {
+            method == "GET" && path == "/cloud/appdata/status" ->
+                200 to JSONObject().put("available", true).toString()
+            method == "POST" && path == "/cloud/appdata/export" ->
+                DshCloudAppData.export(ctx, readJsonBody(input, headers))
+            method == "POST" && path == "/cloud/appdata/restore" ->
+                DshCloudAppData.restore(ctx, readJsonBody(input, headers))
+            else -> 404 to errorJson(str(R.string.dsh_fs_err_unknown_endpoint, method, path), "unknown_endpoint")
+        }
+    }
+
+    /** 读一段有界的 JSON 请求体（补包请求都很小：档位/开关/口令/路径，64KB 足够挡住误用）。 */
+    private fun readJsonBody(input: InputStream, headers: Map<String, String>): JSONObject {
+        val len = headers["content-length"]?.toLongOrNull() ?: 0L
+        if (len <= 0 || len > 64L * 1024) return JSONObject()
+        val buf = ByteArrayOutputStream()
+        pump(input, buf, len)
+        return runCatching { JSONObject(buf.toString("UTF-8")) }.getOrDefault(JSONObject())
     }
 
     // ────────────────────────── 端点 ──────────────────────────

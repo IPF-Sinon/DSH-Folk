@@ -62,7 +62,7 @@ import me.bmax.apatch.ui.screen.PluginProgressHost
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.ui.theme.BackupConfig
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
-import me.bmax.apatch.util.WebDavUtils
+import me.bmax.apatch.dsh.DshCloudBackup
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
 
@@ -105,8 +105,9 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var dshBackupBusy by remember { mutableStateOf(false) }
     var dshBackupMessage by remember { mutableStateOf("") }
 
-    // 云端备份 / 快照列表
-    var cloudEntries by remember { mutableStateOf<List<WebDavUtils.RemoteEntry>>(emptyList()) }
+    // 云备份（dsh-folk-cloud 插件）状态：进页面读一次，供云备份区块回填与按钮可点性判断。
+    // null = 还没读到 / 插件不可达。App 不再自己传 zip，这里只是插件配置与触发的前端。
+    var cloudStatus by remember { mutableStateOf<DshCloudBackup.CloudStatus?>(null) }
     var cloudBusy by remember { mutableStateOf(false) }
     var cloudMessage by remember { mutableStateOf("") }
     var snapshots by remember { mutableStateOf<List<DshConfigBackup.Snapshot>>(emptyList()) }
@@ -168,16 +169,15 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
             st.ready -> st.pluginVersion.ifEmpty { "—" }
             else -> st.error.ifEmpty { context.getString(R.string.dsh_backup_needs_running) }
         }
+        // 顺带读一次云备份插件状态（dsh-folk-cloud）：云备份区块靠它决定「显不显示、能不能点」。
+        cloudStatus = withContext(Dispatchers.IO) { runCatching { DshCloudBackup.status() }.getOrNull() }
     }
 
     val notRunning = stringResource(R.string.dsh_backup_needs_running)
     val pluginMissing = stringResource(R.string.dsh_backup_plugin_missing)
     val exporting = stringResource(R.string.dsh_backup_exporting)
     val openDirFailed = stringResource(R.string.dsh_backup_open_dir_failed)
-    val webdavOk = stringResource(R.string.dsh_backup_webdav_ok)
-    val webdavFailed = stringResource(R.string.dsh_backup_webdav_failed)
     val remoteEmpty = stringResource(R.string.dsh_backup_remote_empty)
-    val cloudTarget = stringResource(R.string.dsh_bk_cloud_restore_title)
     val snapshotTarget = stringResource(R.string.dsh_bk_snapshot_title)
     val tidyTarget = stringResource(R.string.dsh_bk_tidy_sessions)
     val clipboard = LocalClipboardManager.current
@@ -236,26 +236,16 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                                     onLine = { line -> withContext(Dispatchers.Main) { dshMessage = line } },
                                 )
                                 if (!r.ok) r.message else {
+                                    // 本地导出：给用户看落盘位置即可。云备份不在这条路上 ——
+                                    // 从 1.9.2.5 起整包上传由 dsh-folk-cloud 插件按触发器自己做，
+                                    // App 不再顺手推 WebDAV（那条自带链已退役）。
                                     val local = "${r.message}\n${r.location.ifBlank { r.file?.absolutePath ?: "" }}"
-                                    // 开了云备份就顺手推一份到 WebDAV，失败只追加一行说明，不影响本地备份
                                     val zip = r.file
-                                    val result = if (BackupConfig.isBackupEnabled && zip != null && BackupConfig.webdavUrl.isNotBlank()) {
-                                        val up = WebDavUtils.uploadFile(
-                                            baseUrl = BackupConfig.webdavUrl,
-                                            user = BackupConfig.webdavUsername,
-                                            pass = BackupConfig.webdavPassword,
-                                            file = zip,
-                                            // 用户没填远端路径时给个固定子目录，别把备份散在 WebDAV 根上
-                                            subDir = BackupConfig.webdavPath.trim('/').ifEmpty { "DSH-Folk" },
-                                        )
-                                        local + "\n" + if (up.isSuccess) webdavOk
-                                            else webdavFailed.format(up.exceptionOrNull()?.message ?: "")
-                                    } else local
-                                    // 暂存文件只是「下载→复制进公共目录」的中转：公共目录里已有正式副本，
+                                    // 暂存文件只是「导出→复制进公共目录」的中转：公共目录里已有正式副本，
                                     // 这里删掉避免导几次就攒出几百 MB。只有「连兜底目录都写不进」的极端
                                     // 情况 location 才指向暂存文件本身，那种情况不能删。
                                     zip?.takeIf { it.absolutePath != r.location }?.delete()
-                                    result
+                                    local
                                 }
                             }
                             withContext(Dispatchers.Main) {
@@ -297,71 +287,48 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         if (!opened) dshMessage = openDirFailed
                     },
 
-                    cloudEntries = cloudEntries,
+                    cloudStatus = cloudStatus,
                     cloudBusy = cloudBusy,
                     cloudMessage = cloudMessage,
-                    onCloudList = {
+                    onCloudRefresh = {
                         cloudBusy = true
-                        cloudMessage = ""
                         scope.launch(Dispatchers.IO) {
-                            val sub = BackupConfig.webdavPath.trim('/').ifEmpty { "DSH-Folk" }
-                            val r = WebDavUtils.listRemote(
-                                baseUrl = BackupConfig.webdavUrl,
-                                user = BackupConfig.webdavUsername,
-                                pass = BackupConfig.webdavPassword,
-                                subDir = sub,
-                            )
+                            val st = DshCloudBackup.status()
                             withContext(Dispatchers.Main) {
+                                cloudStatus = st
                                 cloudBusy = false
-                                cloudEntries = r.getOrDefault(emptyList())
-                                cloudMessage = if (r.isSuccess) {
-                                    ""
-                                } else {
-                                    // 服务端不支持列目录（405/501）与口令错、网络错要分开说：
-                                    // 都糊成「失败」的话，用户不知道该改服务端还是改密码。
-                                    val msg = r.exceptionOrNull()?.message ?: ""
-                                    val code = Regex("HTTP (\\d+)").find(msg)?.groupValues?.get(1)
-                                    if (code == "405" || code == "501") {
-                                        context.getString(R.string.dsh_bk_cloud_unsupported, code)
-                                    } else {
-                                        context.getString(R.string.dsh_backup_webdav_failed, msg)
-                                    }
-                                }
                             }
                         }
                     },
-                    onCloudRestore = { entry ->
-                        // 云端只是「源」：下载到暂存后走与本地导入同一条管道
-                        dshBusy = true
-                        runVisible = true
-                        runTarget = cloudTarget
-                        runLines = listOf(context.getString(R.string.dsh_bk_cloud_downloading, entry.name))
-                        runRunning = true
-                        runFailed = false
-                        runNeedsRestart = false
+                    // 立即同步 / 从上游恢复：都只是把活儿交给插件（auto 按状态机决定推或拉；
+                    // pull 强制从上游恢复）。加密档位需要口令 —— 这里复用导出密码框里的那个。
+                    onCloudSync = {
+                        cloudBusy = true
                         cloudMessage = ""
                         scope.launch(Dispatchers.IO) {
-                            val dest = File(File(context.cacheDir, "config-import").apply { mkdirs() }, entry.name.ifBlank { "cloud-backup.zip" })
-                            val dl = WebDavUtils.downloadTo(baseUrl = BackupConfig.webdavUrl, user = BackupConfig.webdavUsername, pass = BackupConfig.webdavPassword, remotePath = entry.path, dest = dest)
-                            if (dl.isFailure) {
-                                dest.delete()
-                                val text = context.getString(R.string.dsh_bk_cloud_download_failed, dl.exceptionOrNull()?.message ?: "")
-                                withContext(Dispatchers.Main) { cloudMessage = text; dshBusy = false; runRunning = false; runFailed = true; runLines = runLines + text }
-                                return@launch
-                            }
-                            // 下载成功后与本地导入完全同一条管道：进恢复向导页，
-                            // 把这份下载好的包直接交给它（用户不必再选一次文件）
-                            val encrypted = withContext(Dispatchers.IO) { DshBackupCrypto.isArchiveBlobFile(dest) }
+                            val r = DshCloudBackup.trigger("auto", dshPassword)
+                            val st = DshCloudBackup.status()
                             withContext(Dispatchers.Main) {
-                                dshBusy = false
-                                runVisible = false
-                                runRunning = false
-                                navigator.navigate(
-                                    RestoreWizardScreenDestination(
-                                        stagedPath = dest.absolutePath,
-                                        stagedEncrypted = encrypted,
-                                    ),
-                                )
+                                cloudBusy = false
+                                cloudStatus = st
+                                cloudMessage = if (r.reachable) r.message.ifEmpty {
+                                    if (r.ok) context.getString(R.string.dsh_bk_cloud_sync_ok) else r.error
+                                } else context.getString(R.string.dsh_bk_cloud_plugin_offline)
+                            }
+                        }
+                    },
+                    onCloudRestore = {
+                        cloudBusy = true
+                        cloudMessage = ""
+                        scope.launch(Dispatchers.IO) {
+                            val r = DshCloudBackup.trigger("pull", dshPassword)
+                            val st = DshCloudBackup.status()
+                            withContext(Dispatchers.Main) {
+                                cloudBusy = false
+                                cloudStatus = st
+                                cloudMessage = if (r.reachable) r.message.ifEmpty {
+                                    if (r.ok) context.getString(R.string.dsh_bk_cloud_restore_ok) else r.error
+                                } else context.getString(R.string.dsh_bk_cloud_plugin_offline)
                             }
                         }
                     },

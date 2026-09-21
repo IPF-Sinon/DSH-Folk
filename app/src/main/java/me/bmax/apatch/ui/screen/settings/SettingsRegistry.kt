@@ -117,8 +117,9 @@ object SettingsRegistry {
             // === Backup ===
             add(SettingEntry("backup_dsh_config", R.string.dsh_backup_section, R.string.dsh_backup_summary, SettingCategory.BACKUP))
             add(SettingEntry("backup_rescue_cli", R.string.dsh_backup_rescue_section, R.string.dsh_backup_rescue_cmds_title, SettingCategory.BACKUP))
-            add(SettingEntry("backup_cloud", R.string.settings_enable_cloud_backup, R.string.settings_enable_cloud_backup_summary, SettingCategory.BACKUP))
-            add(SettingEntry("backup_webdav", R.string.settings_configure_webdav, category = SettingCategory.BACKUP))
+            // 云备份现在是一整块卡片（item key = backup_cloud），只在检测到 dsh-folk-cloud
+            // 插件时显示；WebDAV 配置是卡片里的一个按钮，不再是独立可滚动项，故不再单列搜索项。
+            add(SettingEntry("backup_cloud", R.string.dsh_bk_cloud_title, R.string.dsh_bk_cloud_desc, SettingCategory.BACKUP))
 
             // === Plugin ===
             add(SettingEntry("module_disable_update", R.string.dsh_plugin_disable_update_check, R.string.dsh_plugin_disable_update_check_summary, SettingCategory.MODULE))

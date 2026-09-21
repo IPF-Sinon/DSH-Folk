@@ -22,6 +22,14 @@ import java.util.zip.ZipOutputStream
 enum class BackupScope {
     APP_ONLY,
     DSH_ONLY,
+    /**
+     * 仅 DSH 数据 + 凭据原文。
+     *
+     * 云备份插件的 `dsh-vault` 档位对应这一档：换机时想把整套 DSH 环境（含凭据）搬走、
+     * 但**不带** App 自己的设置与外观。以前只有 [BOTH_VAULT] 能带 vault，逼着「只要 DSH」
+     * 的用户连 App 数据一起打包 —— 这一档补上那个缺口。含 vault，故与 [BOTH_VAULT] 一样强制加密。
+     */
+    DSH_VAULT,
     BOTH,
     BOTH_VAULT,
 }
@@ -53,8 +61,9 @@ data class ExportPlan(
     val password: String = "",
 ) {
     val includesDsh: Boolean get() = scope != BackupScope.APP_ONLY
-    val includesAppData: Boolean get() = scope != BackupScope.DSH_ONLY
-    val includesVault: Boolean get() = scope == BackupScope.BOTH_VAULT
+    // 只有「仅 DSH」两档不含 App 数据；DSH_VAULT 同样是纯 DSH，故也排除
+    val includesAppData: Boolean get() = scope != BackupScope.DSH_ONLY && scope != BackupScope.DSH_VAULT
+    val includesVault: Boolean get() = scope == BackupScope.BOTH_VAULT || scope == BackupScope.DSH_VAULT
 
     /** 含 vault 却没设密码 = 非法组合，导出前必须挡住。 */
     val valid: Boolean get() = !includesVault || password.isNotEmpty()

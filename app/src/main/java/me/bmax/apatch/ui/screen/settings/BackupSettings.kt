@@ -42,7 +42,6 @@ import me.bmax.apatch.dsh.ExportPlan
 import me.bmax.apatch.dsh.SessionPick
 import me.bmax.apatch.ui.theme.BackupConfig
 import me.bmax.apatch.util.BackupLogManager
-import me.bmax.apatch.util.WebDavUtils
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
@@ -61,12 +60,13 @@ private val RESCUE_COMMANDS = listOf(
     "dsh-config-manager reinstall --list",
 )
 
-/** 导出数据范围的四个档位（枚举顺序即滑块顺序，默认 BOTH）。 */
+/** 导出数据范围的档位（枚举顺序即滑块顺序，默认 BOTH）。 */
 private data class ScopeOption(val scope: BackupScope, val label: Int, val summary: Int)
 
 private val SCOPE_OPTIONS = listOf(
     ScopeOption(BackupScope.APP_ONLY, R.string.dsh_bk_scope_app_only, R.string.dsh_bk_scope_app_only_summary),
     ScopeOption(BackupScope.DSH_ONLY, R.string.dsh_bk_scope_dsh_only, R.string.dsh_bk_scope_dsh_only_summary),
+    ScopeOption(BackupScope.DSH_VAULT, R.string.dsh_bk_scope_dsh_vault, R.string.dsh_bk_scope_dsh_vault_summary),
     ScopeOption(BackupScope.BOTH, R.string.dsh_bk_scope_both, R.string.dsh_bk_scope_both_summary),
     ScopeOption(BackupScope.BOTH_VAULT, R.string.dsh_bk_scope_vault, R.string.dsh_bk_scope_vault_summary),
 )
@@ -146,17 +146,6 @@ private fun formatSnapshotTime(ms: Long): String? =
     if (ms <= 0L) null else java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
         .format(java.util.Date(ms))
 
-/** 云端条目的大小 + 时间一行摘要；两项都拿不到时返回空串（那一行就不显示副标题）。 */
-private fun formatRemoteMeta(entry: WebDavUtils.RemoteEntry): String {
-    val size = when {
-        entry.sizeBytes <= 0L -> null
-        entry.sizeBytes < 1024 -> "${entry.sizeBytes} B"
-        entry.sizeBytes < 1024 * 1024 -> "${entry.sizeBytes / 1024} KB"
-        else -> "${entry.sizeBytes / (1024 * 1024)} MB"
-    }
-    return listOfNotNull(size, formatSnapshotTime(entry.lastModifiedMs)).joinToString(" ｜ ")
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BackupSettingsContent(
@@ -174,12 +163,18 @@ fun BackupSettingsContent(
     onDshExport: (ExportPlan) -> Unit,
     onDshImport: () -> Unit,
     onDshOpenDir: () -> Unit,
-    /** 云端（WebDAV）备份列表；空表示还没列过或确实没有。 */
-    cloudEntries: List<WebDavUtils.RemoteEntry> = emptyList(),
+    /**
+     * 云备份插件（dsh-folk-cloud）的状态；null = 未装 / 不可达。
+     *
+     * App 不再自己传 zip：云备份整个由插件按触发器做，这里只是它的**前端** ——
+     * 显示状态、开配置弹窗、给「立即同步 / 从上游恢复」两个触发按钮。
+     */
+    cloudStatus: DshCloudBackup.CloudStatus? = null,
     cloudBusy: Boolean = false,
     cloudMessage: String = "",
-    onCloudList: () -> Unit = {},
-    onCloudRestore: (WebDavUtils.RemoteEntry) -> Unit = {},
+    onCloudRefresh: () -> Unit = {},
+    onCloudSync: () -> Unit = {},
+    onCloudRestore: () -> Unit = {},
     /** 插件保留的快照（恢复的最后依靠）。 */
     /** 插件**确实没装**（应用侧查容器里的插件目录就能确定，不需要 DSH 在跑）。 */
     pluginAbsent: Boolean = false,
@@ -238,7 +233,7 @@ fun BackupSettingsContent(
     // ── 导出选项：数据范围 / 会话数量 / 加密密码 ──
     // 档位存索引而不是枚举：滑块拖动是连续值，Dialog 内用预览值（scopePreview），
     // 确认了才写回正式值（scopeIndex）—— 含 vault 那档还要先过一道警告框。
-    var scopeIndex by rememberSaveable { mutableStateOf(2) } // 默认 BOTH
+    var scopeIndex by rememberSaveable { mutableStateOf(3) } // 默认 BOTH（新增 DSH_VAULT 档后 BOTH 移到 index 3）
     var sessionIndex by rememberSaveable { mutableStateOf(0) } // 默认 NONE
     var showScopeDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -659,135 +654,95 @@ fun BackupSettingsContent(
             }
         }
 
-        item(key = "backup_cloud") {
-            ToggleSettingCard(
-                flat = flat,
-                icon = Icons.Filled.Cloud,
-                title = stringResource(id = R.string.settings_enable_cloud_backup),
-                description = stringResource(id = R.string.settings_enable_cloud_backup_summary),
-                checked = BackupConfig.isBackupEnabled,
-                onCheckedChange = {
-                    BackupConfig.isBackupEnabled = it
-                    BackupConfig.save(context)
-                }
-            )
-        }
-
-        // ───────── 从云端恢复 ─────────
-        // 以前只有上传：换机 / 清机之后，WebDAV 上那份备份在 App 里取不回来，
-        // 得自己去文件管理器下载再走「导入备份」。这里把列目录 + 下载并进同一条导入管道。
-        item(key = "backup_cloud_restore", visible = BackupConfig.isBackupEnabled) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Column {
-                        Text(
-                            text = stringResource(R.string.dsh_bk_cloud_restore_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_bk_cloud_restore_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    // 同快照区块：canRun 提到 Column 作用域，列表行里的「恢复」按钮也要用
-                    val hasUrl = BackupConfig.webdavUrl.isNotBlank()
-                    val canRun = !cloudBusy && hasUrl && pluginReady == true
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedButton(onClick = onCloudList, enabled = canRun) {
-                            Text(stringResource(R.string.dsh_bk_cloud_list))
-                        }
-                        if (cloudBusy) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        }
-                    }
-                    if (BackupConfig.webdavUrl.isBlank()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_bk_cloud_no_url),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (cloudEntries.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 220.dp)
-                                .verticalScroll(rememberScrollState()),
-                        ) {
-                            for (entry in cloudEntries) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(entry.name, style = MaterialTheme.typography.bodySmall)
-                                        Text(
-                                            text = formatRemoteMeta(entry),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    TextButton(
-                                        onClick = { onCloudRestore(entry) },
-                                        enabled = canRun,
-                                    ) {
-                                        Text(stringResource(R.string.dsh_bk_snapshot_restore_now))
-                                    }
-                                }
+        // ───────── 云备份（由 dsh-folk-cloud 插件负责）─────────
+        //
+        // App 不再自己传 zip：云备份整个交给插件（定时/启动后/手动触发，哈希去重，冲突停下问）。
+        // 这一块只是插件的**薄前端** —— 仅在**检测到该插件**时出现（`cloudStatus?.reachable == true`），
+        // 显示状态 + 开配置弹窗 + 「立即同步 / 从上游恢复」两个触发按钮。完整设置在插件自己的
+        // dsh web「云备份」页里。插件没装/没跑时整块不显示，免得给一个点了没反应的入口。
+        val cloud = cloudStatus
+        if (cloud != null && cloud.reachable) {
+            item(key = "backup_cloud") {
+                ExpressiveCard(flat = flat) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Cloud,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.dsh_bk_cloud_title),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = stringResource(R.string.dsh_bk_cloud_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (cloudBusy) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             }
                         }
-                    } else if (!cloudBusy && cloudMessage.isBlank() && BackupConfig.webdavUrl.isNotBlank()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_bk_cloud_empty),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (cloudMessage.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(cloudMessage, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
 
-        item(key = "backup_webdav", visible = BackupConfig.isBackupEnabled) {
-            val configureWebDavTitle = stringResource(id = R.string.settings_configure_webdav)
-            ExpressiveCard(
-                flat = flat,
-                onClick = {
-                    showWebDavDialog.value = true
-                }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp),
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = configureWebDavTitle,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
+                        Spacer(Modifier.height(10.dp))
+                        // 状态行：配没配、地址、档位（回退时标出实际档位）、上次同步。
+                        val statusLine = if (!cloud.configured || cloud.url.isBlank()) {
+                            stringResource(R.string.dsh_bk_cloud_unconfigured)
+                        } else {
+                            val tierText = if (cloud.tierFellBack) {
+                                stringResource(R.string.dsh_bk_cloud_tier_fellback, cloud.tier, cloud.effectiveTier)
+                            } else {
+                                cloud.tier
+                            }
+                            stringResource(R.string.dsh_bk_cloud_status_line, cloud.url, tierText)
+                        }
+                        Text(statusLine, style = MaterialTheme.typography.bodySmall)
+                        if (cloud.lastSyncedHash.isNotBlank()) {
+                            Text(
+                                text = stringResource(
+                                    R.string.dsh_bk_cloud_last_sync,
+                                    cloud.lastSyncedHash.take(12),
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // 依赖提示：dsh-config-manager 缺席时 DSH 数据备不了，明说
+                        if (!cloud.configManagerAvailable) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.dsh_bk_cloud_needs_manager),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                        val canRun = !cloudBusy && cloud.configured && cloud.url.isNotBlank()
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { showWebDavDialog.value = true }) {
+                                Text(stringResource(R.string.settings_configure_webdav))
+                            }
+                            OutlinedButton(onClick = onCloudSync, enabled = canRun) {
+                                Text(stringResource(R.string.dsh_bk_cloud_sync_now))
+                            }
+                            OutlinedButton(onClick = onCloudRestore, enabled = canRun) {
+                                Text(stringResource(R.string.dsh_bk_cloud_pull))
+                            }
+                            OutlinedButton(onClick = onCloudRefresh, enabled = !cloudBusy) {
+                                Text(stringResource(R.string.dsh_bk_cloud_refresh))
+                            }
+                        }
+                        if (cloudMessage.isNotBlank()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(cloudMessage, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
@@ -920,7 +875,10 @@ fun BackupSettingsContent(
                             }
                         }
                         val strength = passwordStrength(dshPassword)
-                        val vaultNeedsPassword = currentScope == BackupScope.BOTH_VAULT && dshPassword.isEmpty()
+                        // 含 vault 的两档（BOTH_VAULT / DSH_VAULT）都强制密码
+                        val vaultNeedsPassword =
+                            (currentScope == BackupScope.BOTH_VAULT || currentScope == BackupScope.DSH_VAULT) &&
+                                dshPassword.isEmpty()
                         Text(
                             text = when {
                                 vaultNeedsPassword -> stringResource(R.string.dsh_bk_pw_required)
@@ -985,7 +943,10 @@ fun BackupSettingsContent(
                 TextButton(onClick = {
                     showScopeDialog = false
                     val next = scopePreview.coerceIn(0, SCOPE_OPTIONS.lastIndex)
-                    if (SCOPE_OPTIONS[next].scope == BackupScope.BOTH_VAULT && next != scopeIndex) {
+                    val nextScope = SCOPE_OPTIONS[next].scope
+                    val nextHasVault =
+                        nextScope == BackupScope.BOTH_VAULT || nextScope == BackupScope.DSH_VAULT
+                    if (nextHasVault && next != scopeIndex) {
                         // 含 vault 会把凭据原文带进包里：确认选中之前先让用户过目警告
                         showVaultWarnDialog = true
                     } else {
@@ -1069,60 +1030,75 @@ fun BackupSettingsContent(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
-    // 这个对话框是独立函数，显示状态得声明在它自己里面（外面那个是导出密码用的）
+    // WebDAV 云备份配置从 1.9.2.5 起只存 dsh-folk-cloud 插件一份，这个框是它的前端：
+    // 打开时从插件读回填（口令永不回传，只显示「已/未配置」），保存写回插件，口令留空 = 不改。
     var showWebDavPassword by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
-    var url by remember { mutableStateOf(BackupConfig.webdavUrl) }
-    var username by remember { mutableStateOf(BackupConfig.webdavUsername) }
-    var password by remember { mutableStateOf(BackupConfig.webdavPassword) }
-    var path by remember { mutableStateOf(BackupConfig.webdavPath) }
-    var isTesting by remember { mutableStateOf(false) }
-    var showLogDialog by remember { mutableStateOf(false) }
-
-    // 插件那半边现在配的是哪台 WebDAV：打开时读一次，摆给用户看（口令永不回传，只回布尔）。
-    // null = 还没读到。
-    var pluginSync by remember { mutableStateOf<DshConfigBackup.SyncConfigStatus?>(null) }
-    // 保存后「写插件」的即时反馈（一行字；空 = 还没保存过）。
-    var syncNote by remember { mutableStateOf("") }
-    // 插件当前在 git 通道、保存会把它切到 webdav —— 切换前先弹这个确认。
-    var pendingSwitch by remember { mutableStateOf(false) }
-
     val scope = rememberCoroutineScope()
 
-    // 打开即拉一次插件状态：DSH 没起来也不报错，只是参照区显示「插件未运行」。
-    LaunchedEffect(Unit) {
-        pluginSync = withContext(Dispatchers.IO) { DshConfigBackup.syncStatus() }
-    }
+    // null = 还没读到 / 插件不可达。读到之前整个表单禁用（免得在空表单上瞎填一通再发现插件没跑）。
+    var status by remember { mutableStateOf<DshCloudBackup.CloudStatus?>(null) }
+    var loaded by remember { mutableStateOf(false) }
 
-    // 保存的公共尾巴：本机先存（App 自己的 zip 上传要用），再把三栏写进插件（共用一套配置）。
-    // force=true 表示用户已确认「从 git 切到 webdav」。
-    fun persistAndPush(force: Boolean) {
-        BackupConfig.webdavUrl = url
-        BackupConfig.webdavUsername = username
-        BackupConfig.webdavPassword = password
-        BackupConfig.webdavPath = path
-        BackupConfig.save(context)
-        scope.launch {
-            val cur = pluginSync ?: withContext(Dispatchers.IO) { DshConfigBackup.syncStatus() }
-            // 插件在 git 且已配过 git，又没确认过切换 → 先问，不擅自改插件的激活通道
-            if (!force && cur.reachable && cur.transport == "git" && cur.configured) {
-                pendingSwitch = true
-                return@launch
-            }
-            if (url.isBlank()) { showDialog.value = false; return@launch }
-            val push = withContext(Dispatchers.IO) {
-                DshConfigBackup.pushWebdavConfig(url.trim(), username, password)
-            }
-            syncNote = when {
-                !push.reachable -> context.getString(R.string.dsh_bk_sync_pushed_offline)
-                push.ok -> context.getString(R.string.dsh_bk_sync_pushed_ok)
-                else -> context.getString(R.string.dsh_bk_sync_push_failed, push.error)
-            }
-            pluginSync = withContext(Dispatchers.IO) { DshConfigBackup.syncStatus() }
-            // 成功才关：失败/离线留在框里，让用户看到那行提示
-            if (push.reachable && push.ok) showDialog.value = false
+    var url by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    // 口令框始终从空开始：插件不回传口令，留空提交 = 保持插件里已存的那个。
+    var password by remember { mutableStateOf("") }
+    var remoteDir by remember { mutableStateOf("dsh-folk") }
+    var isTesting by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf("") }
+    var showLogDialog by remember { mutableStateOf(false) }
+
+    // 打开即从插件拉一次配置回填。DSH 没起来也不报错，只是表单禁用 + 一行「插件未运行」。
+    LaunchedEffect(Unit) {
+        val st = withContext(Dispatchers.IO) { runCatching { DshCloudBackup.status() }.getOrNull() }
+        status = st
+        loaded = true
+        if (st != null && st.reachable) {
+            url = st.url
+            username = st.username
+            remoteDir = st.remoteDir.ifEmpty { "dsh-folk" }
         }
     }
+
+    fun save() {
+        val st = status
+        if (st == null || !st.reachable) {
+            note = context.getString(R.string.dsh_bk_cloud_plugin_offline)
+            return
+        }
+        saving = true
+        note = ""
+        scope.launch {
+            val r = withContext(Dispatchers.IO) {
+                DshCloudBackup.saveConfig(
+                    url = url,
+                    username = username,
+                    // 留空 = 不改：不下发 password，插件保留原口令
+                    password = password,
+                    remoteDir = remoteDir.trim().ifEmpty { "dsh-folk" },
+                    // 档位与其它高级项在插件的 dsh web「云备份」页里调；这里只碰连接三栏 + 目录，
+                    // 其余原样回填（status 读到什么就写回什么，不覆盖用户在插件页的选择）。
+                    tier = st.tier.ifEmpty { "app-dsh" },
+                    encrypt = st.encrypt,
+                    includeSessions = st.includeSessions,
+                    intervalMinutes = st.intervalMinutes,
+                    onStartup = st.onStartup,
+                )
+            }
+            saving = false
+            note = when {
+                !r.reachable -> context.getString(R.string.dsh_bk_cloud_plugin_offline)
+                r.ok -> context.getString(R.string.dsh_bk_cloud_saved)
+                else -> r.error.ifEmpty { context.getString(R.string.dsh_bk_cloud_save_failed, "") }
+            }
+            if (r.reachable && r.ok) showDialog.value = false
+        }
+    }
+
+    val reachable = status?.reachable == true
+    val formEnabled = loaded && reachable
 
     BasicAlertDialog(
         onDismissRequest = { showDialog.value = false },
@@ -1143,13 +1119,29 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
                 Text(
                     text = stringResource(R.string.webdav_config_title),
                     style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
+                Text(
+                    text = stringResource(R.string.dsh_bk_cloud_config_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+
+                if (loaded && !reachable) {
+                    Text(
+                        text = stringResource(R.string.dsh_bk_cloud_plugin_offline),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
 
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
                     label = { Text(stringResource(R.string.webdav_url)) },
+                    enabled = formEnabled,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true
                 )
@@ -1158,6 +1150,7 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
                     value = username,
                     onValueChange = { username = it },
                     label = { Text(stringResource(R.string.webdav_username)) },
+                    enabled = formEnabled,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true
                 )
@@ -1166,6 +1159,16 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
                     value = password,
                     onValueChange = { password = it },
                     label = { Text(stringResource(R.string.webdav_password)) },
+                    enabled = formEnabled,
+                    // 占位符说明「已/未配置」+「留空不改」，免得用户以为界面把口令弄丢了
+                    placeholder = {
+                        Text(
+                            stringResource(
+                                if (status?.passwordConfigured == true) R.string.dsh_bk_cloud_pw_keep
+                                else R.string.dsh_bk_cloud_pw_unset,
+                            ),
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true,
                     visualTransformation = if (showWebDavPassword) VisualTransformation.None else PasswordVisualTransformation(),
@@ -1182,50 +1185,17 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
                 )
 
                 OutlinedTextField(
-                    value = path,
-                    onValueChange = { path = it },
+                    value = remoteDir,
+                    onValueChange = { remoteDir = it },
                     label = { Text(stringResource(R.string.webdav_path_label)) },
+                    enabled = formEnabled,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true
                 )
 
-                // 参照区：插件那半边现在配的是哪台 WebDAV。保存时这三栏会写进插件，两边共用
-                // 同一台服务器（路径各自保留）。口令按插件的设计不回传，这里只显示「已/未配置」。
-                val sync = pluginSync
-                if (sync != null) {
+                if (note.isNotEmpty()) {
                     Text(
-                        text = when {
-                            !sync.reachable -> stringResource(R.string.dsh_bk_sync_plugin_unreachable)
-                            !sync.configured || sync.webdavUrl.isBlank() ->
-                                stringResource(R.string.dsh_bk_sync_plugin_none)
-                            else -> stringResource(
-                                R.string.dsh_bk_sync_plugin_ref,
-                                sync.webdavUrl,
-                                sync.webdavUsername.ifEmpty { "—" },
-                                stringResource(
-                                    if (sync.passwordConfigured) R.string.dsh_bk_sync_pw_set
-                                    else R.string.dsh_bk_sync_pw_unset,
-                                ),
-                            )
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 4.dp),
-                    )
-                    // App 三栏为空、插件却配过 → 一键把地址/用户名填进来（口令仍要手输一次：
-                    // 插件不回传口令，这是设计上的硬约束，不是这里偷懒）。
-                    if (sync.reachable && sync.webdavUrl.isNotBlank() && url.isBlank()) {
-                        TextButton(
-                            onClick = { url = sync.webdavUrl; username = sync.webdavUsername },
-                            contentPadding = PaddingValues(0.dp),
-                        ) {
-                            Text(stringResource(R.string.dsh_bk_sync_prefill_from_plugin))
-                        }
-                    }
-                }
-                if (syncNote.isNotEmpty()) {
-                    Text(
-                        text = syncNote,
+                        text = note,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 4.dp),
@@ -1249,21 +1219,23 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
                         onClick = {
                             scope.launch {
                                 isTesting = true
-                                val result = WebDavUtils.testConnection(url, username, password)
+                                val r = withContext(Dispatchers.IO) {
+                                    DshCloudBackup.test(url, username, password)
+                                }
                                 isTesting = false
-                                if (result.isSuccess) {
-                                    showToast(context, context.getString(R.string.webdav_test_success))
-                                } else {
-                                    showToast(context, context.getString(R.string.webdav_test_failed, result.exceptionOrNull()?.message))
+                                when {
+                                    !r.reachable -> showToast(context, context.getString(R.string.dsh_bk_cloud_plugin_offline))
+                                    r.ok -> showToast(context, context.getString(R.string.webdav_test_success))
+                                    else -> showToast(context, context.getString(R.string.webdav_test_failed, r.error))
                                 }
                             }
                         },
-                        enabled = !isTesting
+                        enabled = formEnabled && !isTesting
                     ) {
                         Text(stringResource(R.string.test))
                     }
 
-                    Button(onClick = { persistAndPush(force = false) }) {
+                    Button(onClick = { save() }, enabled = formEnabled && !saving) {
                         Text(stringResource(R.string.save))
                     }
                 }
@@ -1273,27 +1245,6 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
 
     if (showLogDialog) {
         BackupLogDialog(showDialog = remember { mutableStateOf(true) }, onDismiss = { showLogDialog = false })
-    }
-
-    // 插件当前在 git 通道：保存 WebDAV 会把插件的**激活**通道切到 webdav（git 配置会保留、
-    // 可随时切回）。这是会影响插件行为的一步，切换前先明说、征得同意，不擅自替用户改。
-    if (pendingSwitch) {
-        AlertDialog(
-            onDismissRequest = { pendingSwitch = false },
-            title = { Text(stringResource(R.string.dsh_bk_sync_switch_title)) },
-            text = { Text(stringResource(R.string.dsh_bk_sync_switch_msg)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingSwitch = false
-                    persistAndPush(force = true)
-                }) { Text(stringResource(R.string.dsh_bk_sync_switch_confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingSwitch = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
     }
 }
 

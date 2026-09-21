@@ -321,12 +321,21 @@ app side (the file is produced, the size is right, the password is right, and ne
 the desktop can open it). `tools/check-backup-crypto.js` recomputes both vectors independently with
 the Node standard library.
 
-What the UI offers: four levels for the contents (app data only / DSH data only / both, the default /
-with the vault, warned about first), five levels for sessions (none by default, last 5, 20, 50, all), a
-password field that leaves the archive unencrypted when empty but is mandatory with the vault. Import
-counts the sessions in the archive first and then asks whether to skip them, restore them while dsh
-runs, or restore them with the service stopped - restoring live does work (the registry is read at
-startup), but a later workspace operation would overwrite the grouping, hence the recommendation.
+What the UI offers: five levels for the contents (app data only / DSH only / DSH only + vault, added in
+1.9.2.5 / app + DSH, the default / app + DSH + vault, the last two warned about first because they carry
+credential plaintext), five levels for sessions (none by default, last 5, 20, 50, all), a password field
+that leaves the archive unencrypted when empty but is mandatory with either vault scope. Import counts
+the sessions in the archive first and then asks whether to skip them, restore them while dsh runs, or
+restore them with the service stopped - restoring live does work (the registry is read at startup), but
+a later workspace operation would overwrite the grouping, hence the recommendation.
+
+**WebDAV cloud backup moved entirely into the `dsh-folk-cloud` plugin in 1.9.2.5.** The app no longer
+uploads zips itself; the backup screen's cloud section is a thin front-end that only appears when the
+plugin is detected, showing status, a config dialog (writes the plugin's `/api/dsh-folk-cloud/config`),
+and Sync-now / Restore-from-upstream buttons. WebDAV settings live only in the plugin (password in DSH
+credentials, never returned — leave the field empty to keep it); the plugin keeps its own manifest with
+hash-based dedup and stops to ask on conflicts. App-data scopes fall back automatically when the app's
+packing interface (`/cloud/appdata/*` on the loopback bridge) is absent.
 
 "App data" means `SharedPreferences` plus `audit/*.jsonl`, and it carries **no secrets**: all
 `webdav_*` keys, anything named like a password, token or secret, and `app_initialized` (restoring it
@@ -359,6 +368,13 @@ protectionLevel is `signature|appop`, so the app cannot request it directly). Wi
 **Settings → Security → Native Capabilities → Shared Storage** and tap once to open the relevant system page.
 For context, `/storage/emulated/0` is already bind-mounted into the container, so ordinary `read`/`write`/`glob` often suffice;
 the bridge's value is that it provides a **narrow and auditable** path, not access itself.
+
+The same loopback bridge also exposes **cloud-backup packing endpoints** (`/cloud/appdata/status`,
+`/cloud/appdata/export`, `/cloud/appdata/restore`) that the `dsh-folk-cloud` plugin calls in reverse
+when a backup/restore includes **app data**: app settings and appearance live in the app's private
+directory where the container cannot reach them, so the app produces/consumes the full archive (reusing
+the backup screen's export/import path). They share the same token and loopback guard as
+`dsh-fs`/`dsh-native`; older app versions lacking them make the plugin fall back to DSH-only tiers.
 
 `dsh-native` — invokes native capabilities through the App, 24 in total, **all disabled by default**: enable the master toggle under **Settings → Security → Native Capabilities**,
 then select individual capabilities. The UI groups them into four categories according to “what this capability affects”; the lower the group, the more caution it warrants:

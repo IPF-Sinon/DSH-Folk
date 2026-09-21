@@ -432,9 +432,13 @@ const uiFiles = [
   'app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettingsScreen.kt',
 ];
 for (const f of uiFiles) {
-  const src = read(f);
+  let src = read(f);
   ok(!/dshIncludeSessions|dshImportSessions/.test(src), `${path.basename(f)} 里不再有旧开关状态`);
-  ok(!/includeSessions\s*=/.test(src), `${path.basename(f)} 里不再传 includeSessions 参数`);
+  // 1.9.2.5：云备份弹窗把插件配置里的 includeSessions 原样回写给插件（DshCloudBackup.saveConfig
+  // 的具名参数）——那是**插件档位**的开关，不是旧的「导出对话数据」布尔。先把 saveConfig 调用块
+  // 剔掉再断言，避免把这个合法透传误判成旧开关复活。
+  src = src.replace(/DshCloudBackup\.saveConfig\([\s\S]*?\n\s*\)/g, '');
+  ok(!/includeSessions\s*=/.test(src), `${path.basename(f)} 里不再传旧的 includeSessions 导出开关`);
 }
 ok(/SessionImport\./.test(wizardScreenSrc), '导入界面接上了三模式');
 ok(

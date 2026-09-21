@@ -255,7 +255,26 @@ object DshRuntime {
      * 会补装增量（不会因为「已完成」标记而永远跳过）。
      */
     val SEED_PLUGINS =
-        listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager")
+        listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager", "dsh-folk-cloud")
+
+    /**
+     * 预装包名 → 安装 spec 的覆盖表（缺省 spec 就是包名本身）。
+     *
+     * `dsh-folk-cloud` **不发布到 npm**（免得和别的包撞名，也免去维护发布口令），
+     * 靠 GitHub 仓库直接装：`github:owner/name` 规格由 [DshPluginRepo.install] 里的
+     * `resolveSpec` 解析成 pnpm 能吃的形态。但账本（[SEED_PLUGINS]、`installed`、
+     * `attempted`、补修）全部按**包名**记 —— spec 只在真正调 install 的那一刻替换，
+     * 这样「装了没有」的判断不会因为 spec 形态而错位。
+     *
+     * 它依赖 dsh-config-manager，但只经回环 HTTP 调用（从不 import），因此其 package.json
+     * 把 dsh-config-manager 记为**可选 peer**：pnpm 不会在它底下再嵌一份，避免
+     * `config-manager` 这个 loader id 被声明两次而整棵插件树起不来。两者都在本清单里、
+     * 各自独立安装到 profile 顶层，互为并列。
+     */
+    private val SEED_SPECS = mapOf("dsh-folk-cloud" to "github:IPF-Sinon/dsh-folk-cloud")
+
+    /** 取某个预装包的安装 spec（默认即包名）。 */
+    fun seedSpec(pkg: String): String = SEED_SPECS[pkg] ?: pkg
 
     /**
      * **退役**的预装包 → 它当年会插入的 entry id。
@@ -1564,7 +1583,7 @@ object DshRuntime {
             for (pkg in missing) {
                 logInfo(R.string.dsh_log_seeding, pkg)
                 var out = runCatching {
-                    DshPluginRepo.install(pkg, onLine = { line -> appendLog(line) })
+                    DshPluginRepo.install(seedSpec(pkg), onLine = { line -> appendLog(line) })
                 }.getOrElse { str(R.string.dsh_log_seed_exception, it.message ?: it.javaClass.simpleName) }
                 var code = exitCodeOf(out)
 
@@ -1582,7 +1601,7 @@ object DshRuntime {
                         logInfo(R.string.dsh_log_seed_builds_blocked, joinForLog(pending))
                         out = runCatching {
                             DshPluginRepo.install(
-                                pkg,
+                                seedSpec(pkg),
                                 onLine = { line -> appendLog(line) },
                                 allowBuilds = pending,
                             )
