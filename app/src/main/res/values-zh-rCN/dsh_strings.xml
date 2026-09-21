@@ -586,6 +586,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <!-- 局域网访问 -->
     <string name="dsh_lan_title">局域网访问</string>
     <string name="dsh_lan_summary">开启后同一局域网的设备可访问 WebUI（鉴权由 dsh 登录页负责）</string>
+    <string name="dsh_gh_mirror_title">GitHub 插件镜像线路</string>
+    <string name="dsh_gh_mirror_summary">装 github/git 插件时走 gh-proxy 镜像（gh-proxy → axisnow → 直连 GitHub）。默认开；能直连 GitHub 或有自己的代理可关掉，改为直连不改写。</string>
 
     <!-- 预装插件标签 -->
     <string name="dsh_plugin_seeded_label">预装</string>
@@ -972,6 +974,9 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_plug_log_no_pkg_remove">包名为空，无法卸载</string>
     <string name="dsh_plug_log_git_repair">这个插件来自 git 源，容器里的 git 不可用，正在修复（apt，可能要几分钟）…</string>
     <string name="dsh_plug_log_git_fixed">git 已修复</string>
+    <string name="dsh_plug_log_gh_mirror_try">正在试 GitHub 镜像线路 %1$s …</string>
+    <string name="dsh_plug_log_gh_direct_try">镜像都没成，改用直连 GitHub 再试 …</string>
+    <string name="dsh_plug_log_gh_tgz_try">git 全线路失败，回落到离线包 %1$s …</string>
     <string name="dsh_plug_log_git_still_broken">git 仍不可用（%1$s）。请到 设置 → 功能 → 运行时 更新运行时 —— 新版已内置完整的 git 依赖。</string>
     <string name="dsh_plug_log_npm_instead_of_git">目录未登记 npm 包名；已核对 npm 上的 %1$s 指向同一仓库（%2$s），改用 npm 安装以避开 git</string>
     <string name="dsh_plug_log_relink_repair">检测到依赖被装成指向内容存储的链接，正在重建（清空 node_modules 后重装，可能要几分钟）…</string>

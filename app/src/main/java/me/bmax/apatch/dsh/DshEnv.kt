@@ -345,6 +345,16 @@ object DshEnv {
      */
     const val KEY_HOST_PROMPT = "host_prompt_enabled"
 
+    /**
+     * 装 github/git 插件时是否走 gh-proxy 镜像线路（默认开）。
+     *
+     * 国内直连 github.com 的 git clone 常年握手失败，插件商店里过半条目是 `github:` 规格
+     * （见 [DshPluginRepo.install]），于是「装不上」。开着时先给容器的 git 配一层 insteadOf
+     * 重写，把 github 流量导到 gh-proxy 的几条线路，逐条回退、最后才直连 github 兜底。
+     * 关掉则一律直连 —— 给能直连 github 或有自己代理的用户留一条不被改写的干净路径。
+     */
+    const val KEY_PLUGIN_GH_MIRROR = "plugin_gh_mirror"
+
     /** 宿主事实文件（JSON），由 App 写、dsh-folk-host 插件读。 */
     fun hostFacts(ctx: Context): File = File(dshHome(ctx), "host-facts.json")
 }

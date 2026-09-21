@@ -195,6 +195,26 @@ object DshPluginRepo {
      */
     private const val GIT_READY_MARK = "/root/.dsh/.git-ready-v2"
 
+    /**
+     * 装 github/git 插件时给容器 git 套的镜像前缀，按顺序逐条试、失败换下一条。
+     *
+     * 前缀直接拼在 github URL 前（gh-proxy 的约定就是 `<prefix>https://github.com/...`，
+     * 连 git 的 smart-HTTP clone 也支持）。空串 = 不改写、直连 github，永远作为最后一条
+     * 兜底：镜像全挂时能直连的用户仍装得上。前两条与运行时下载复用同一组 gh-proxy 线路
+     * （见 [DshSource]）。这只是 git 传输层的重写，不改任何 spec、不动 pnpm 解析。
+     */
+    private val GH_MIRROR_PREFIXES = listOf(
+        "https://v6.gh-proxy.org/",
+        "https://axisnow.gh-proxy.org/",
+        "",
+    )
+
+    /** git 的 insteadOf 键里那段被重写的源，覆盖 github 的几种等价写法。 */
+    private val GIT_REWRITE_BASES = listOf(
+        "https://github.com/",
+        "git+https://github.com/",
+    )
+
     /** 动态加载器失败的输出签名（proot/proroot 下 exec 缺库时长这样）。 */
     private val LDSO_FAILURE_MARKS = listOf(
         "cannot find lib",
@@ -816,14 +836,96 @@ object DshPluginRepo {
         version: String = "",
         onLine: (String) -> Unit = {},
         allowBuilds: List<String> = emptyList(),
+        fallbackTgz: String? = null,
     ): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext str(R.string.dsh_plug_log_no_pkg_install)
         if (allowBuilds.isNotEmpty()) DshRuntime.allowProfileBuilds(allowBuilds, onLine)
         val resolved = resolveSpec(pkg, onLine)
         val spec = if (version.isBlank()) resolved else "$resolved@$version"
-        if (spec.startsWith("github:") || spec.startsWith("git+")) ensureGit(onLine)
-        val out = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+        val isGit = spec.startsWith("github:") || spec.startsWith("git+")
+        val out = if (isGit) {
+            ensureGit(onLine)
+            installGitSpec(spec, fallbackTgz, onLine)
+        } else {
+            dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+        }
         out + repairIfLinkageBroken(onLine)
+    }
+
+    /**
+     * 装一个 git/github 规格：镜像开关开着就逐条镜像线路试，全失败再落 tgz 兜底。
+     *
+     * pnpm 对 `github:` 规格走 git 传输，而国内直连 github 的 clone 常年失败。这里在**不改
+     * spec、不动 pnpm 解析**的前提下，给容器 git 配一层 `insteadOf`，把 github 流量按顺序
+     * 导到 gh-proxy 的几条线路，某条装成（退出码 0）即返回；空前缀那条等于直连 github，
+     * 永远垫底。全部失败且给了 [fallbackTgz] 时，最后用 tgz 直链（纯 HTTP、绕开 git）再试
+     * 一次——直链本身也走一遍镜像前缀。镜像开关关掉则只按原样直连一次，不做任何重写。
+     */
+    private suspend fun installGitSpec(
+        spec: String,
+        fallbackTgz: String?,
+        onLine: (String) -> Unit,
+    ): String {
+        if (!DshRuntime.pluginGhMirrorEnabled()) {
+            clearGitRewrite()
+            return dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+        }
+        var last = ""
+        for (prefix in GH_MIRROR_PREFIXES) {
+            applyGitRewrite(prefix)
+            if (prefix.isNotEmpty()) line(onLine, R.string.dsh_plug_log_gh_mirror_try, prefix)
+            else line(onLine, R.string.dsh_plug_log_gh_direct_try)
+            last = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+            if (exitOk(last)) { clearGitRewrite(); return last }
+        }
+        // git 全线路都没成：有 tgz 直链就绕开 git 再试（同样逐条镜像前缀）
+        if (!fallbackTgz.isNullOrBlank()) {
+            clearGitRewrite() // tgz 是纯 HTTP 下载，不需要（也不该）带 git 重写
+            for (prefix in GH_MIRROR_PREFIXES) {
+                val url = prefix + fallbackTgz
+                line(onLine, R.string.dsh_plug_log_gh_tgz_try, url)
+                last = dshPlugin("add ${importFlag()}'$url'", 900_000, onLine)
+                if (exitOk(last)) return last
+            }
+        }
+        clearGitRewrite()
+        return last
+    }
+
+    /** 从安装输出判断这次是不是成功（退出码 0）。没有标记行按失败处理。 */
+    private fun exitOk(out: String): Boolean =
+        out.lineSequence().lastOrNull { it.startsWith(EXIT_MARKER) }
+            ?.removePrefix(EXIT_MARKER)?.trim()?.toIntOrNull() == 0
+
+    /**
+     * 给容器全局 git 配 `insteadOf`，把 github 流量重写到 [prefix]（空串=清空重写）。
+     *
+     * 写全局是**必须**的：pnpm 在自己的子进程里 fork git，命令行传不进去，只有
+     * `~/.gitconfig` 能被继承。每次装前重设、装后清掉，不给用户留下持久的重写。
+     */
+    private fun applyGitRewrite(prefix: String) {
+        clearGitRewrite()
+        if (prefix.isEmpty()) return
+        // git config 键 url.<URL>.insteadOf：首点分 section、末点分变量名，中间整段当子节
+        // 逐字保留（点/冒号/斜杠都行）。这些 URL 无 shell 元字符，双引号成一个 token 即可。
+        val cmds = GIT_REWRITE_BASES.joinToString("; ") { base ->
+            "git config --global \"url.$prefix$base.insteadOf\" \"$base\""
+        }
+        DshRuntime.execRootfsForOutput(cmds, 30_000)
+    }
+
+    /** 清掉上面配的所有 github insteadOf 重写（幂等，节点不存在时静默返回）。 */
+    private fun clearGitRewrite() {
+        val cmds = buildString {
+            for (prefix in GH_MIRROR_PREFIXES) {
+                if (prefix.isEmpty()) continue
+                for (base in GIT_REWRITE_BASES) {
+                    append("git config --global --unset-all \"url.$prefix$base.insteadOf\" 2>/dev/null; ")
+                }
+            }
+            append("true")
+        }
+        DshRuntime.execRootfsForOutput(cmds, 30_000)
     }
 
     /**

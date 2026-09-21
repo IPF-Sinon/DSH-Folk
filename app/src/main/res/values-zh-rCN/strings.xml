@@ -314,12 +314,9 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>WebDAV 云备份整个搬进了一个专门的插件 dsh-folk-cloud。App 里原来那套只会「整包上传/列出/下载」的 WebDAV 客户端删掉了；新插件自维护一份上游清单，按内容哈希判断上游有没有更新、去重，上游与本机都改动时停下来问你，而不是自作主张合并。它按定时 / DSH 启动后 / 手动触发，DSH 侧数据仍由 dsh-config-manager 提供。</item>
-        <item>备份页只在检测到该插件时才显示「云备份」卡片。它只是个薄前端：显示状态、开一个把 WebDAV 地址/用户名/口令/远端目录直接写进插件的弹窗、给「立即同步」和「从上游恢复」两个按钮。WebDAV 设置从此只存插件一份（口令进 DSH 凭据、永不回传）——口令框留空即保持已存的那个。完整选项（档位、加密、触发间隔）在插件自己的 dsh web「云备份」页里。</item>
-        <item>App 不再自己存或上传 WebDAV 设置，旧的「启用云备份」开关也去掉了。本地导出/导入到文件不受影响。</item>
-        <item>新增备份档位：仅 DSH 数据 + vault（含凭据、不含软件数据）。它是插件在「含软件数据的备份取不到 App 补包接口」时的回退目标——以前只能退到不含 vault 的「仅 DSH」档，会悄悄丢掉凭据。两个含 vault 的档位都强制加密。</item>
-        <item>对含软件数据（App 设置与外观）的档位，插件经一组新的回环端点（/cloud/appdata）请 App 出/收整包，复用备份页已有的那条导出/导入通路。旧版 App 没有这组端点时，插件会自动回退到不含软件数据的档位。</item>
-        <item>预装清单新增 dsh-folk-cloud 插件（与 dsh-config-manager 并列）。</item>
+        <item>GitHub 插件装得上了。以前装 github/git 插件是直连 github.com，而国内直连的 git clone 常年握手失败——插件商店里过半条目（github: 规格，包括预装的云备份插件）就这么装不上。现在安装会走运行时下载已经在用的那几条 gh-proxy 镜像：先 gh-proxy、再 axisnow、最后直连 GitHub 兜底，逐条回退。</item>
+        <item>预装的 dsh-folk-cloud 仍然跟最新代码（从 GitHub 仓库经镜像安装）；但当 git 所有线路都失败时，会回落到用纯 HTTP 下载一个钉死版本的离线包安装——它完全绕开 git，插件照样装得上。装上后可在插件商店自行更新。</item>
+        <item>设置 → 功能 → GitHub 插件镜像 新增开关（默认开）。关掉后装 github/git 插件改为直连 GitHub、不做任何改写——留给能直连 GitHub 或自带代理的用户。</item>
 </string-array>
 
     

@@ -139,6 +139,9 @@ fun FunctionSettingsContent(
     /** 局域网访问开关（默认关；开则 dsh web 绑 0.0.0.0）。 */
     lanEnabled: Boolean,
     onLanChange: (Boolean) -> Unit,
+    /** 装 github/git 插件是否走 gh-proxy 镜像线路（默认开）。 */
+    ghMirrorEnabled: Boolean,
+    onGhMirrorChange: (Boolean) -> Unit,
     /** 运行时下载源：DshSource.SOURCE_* 之一。 */
     downloadSource: String,
     onDownloadSourceChange: (String) -> Unit,
@@ -578,6 +581,18 @@ fun FunctionSettingsContent(
                 description = stringResource(R.string.dsh_lan_summary),
                 checked = lanEnabled,
                 onCheckedChange = onLanChange,
+            )
+        }
+
+        // ───────── GitHub 插件镜像线路 ─────────
+        item(key = "function_gh_mirror", visible = !permissionOnly) {
+            ToggleSettingCard(
+                flat = flat,
+                icon = Icons.Filled.CloudDownload,
+                title = stringResource(R.string.dsh_gh_mirror_title),
+                description = stringResource(R.string.dsh_gh_mirror_summary),
+                checked = ghMirrorEnabled,
+                onCheckedChange = onGhMirrorChange,
             )
         }
 

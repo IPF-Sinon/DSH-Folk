@@ -750,8 +750,13 @@ ok(/BackupScope\.BOTH_VAULT \|\| scope == BackupScope\.DSH_VAULT/.test(archive),
 ok(/"dsh-folk-cloud"/.test(runtime) &&
   /SEED_SPECS = mapOf\("dsh-folk-cloud" to "github:IPF-Sinon\/dsh-folk-cloud"\)/.test(runtime),
   "SEED_PLUGINS 含 dsh-folk-cloud，用 github 规格安装");
-ok(/DshPluginRepo\.install\(seedSpec\(pkg\)/.test(runtime),
+ok(/DshPluginRepo\.install\(\s*\n?\s*seedSpec\(pkg\)/.test(runtime),
   "预装用 seedSpec(pkg) 取安装规格（账本仍按包名记）");
+// 1.9.2.6：git 全线路失败时，预装带上 tgz 兜底直链（钉死版本，绕开 git）
+ok(/fun seedFallbackTgz\(pkg[^\n]*\)/.test(runtime) &&
+  /releases\/download\/v0\.1\.0\/dsh-folk-cloud-0\.1\.0\.tgz/.test(runtime) &&
+  /fallbackTgz = seedFallbackTgz\(pkg\)/.test(runtime),
+  "预装把 tgz 兜底直链传给 install（git 全失败时用）");
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

@@ -166,6 +166,7 @@ internal fun DshSettingsScreen(
     var a11yEnabled by remember { mutableStateOf(DshAutostart.a11yEnabled(context)) }
     var port by rememberSaveable { mutableStateOf(DshRuntime.port()) }
     var lanEnabled by rememberSaveable { mutableStateOf(DshRuntime.lanEnabled()) }
+    var ghMirrorEnabled by rememberSaveable { mutableStateOf(DshRuntime.pluginGhMirrorEnabled()) }
     var verifyAfterInstall by rememberSaveable {
         mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, true))
     }
@@ -625,6 +626,11 @@ internal fun DshSettingsScreen(
                     onLanChange = { on ->
                         lanEnabled = on
                         DshRuntime.setLanEnabled(on)
+                    },
+                    ghMirrorEnabled = ghMirrorEnabled,
+                    onGhMirrorChange = { on ->
+                        ghMirrorEnabled = on
+                        DshRuntime.setPluginGhMirrorEnabled(on)
                     },
                     downloadSource = downloadSource,
                     onDownloadSourceChange = { src ->

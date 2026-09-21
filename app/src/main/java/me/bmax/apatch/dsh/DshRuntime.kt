@@ -273,8 +273,24 @@ object DshRuntime {
      */
     private val SEED_SPECS = mapOf("dsh-folk-cloud" to "github:IPF-Sinon/dsh-folk-cloud")
 
+    /**
+     * 预装包 → 正式 release tgz 直链的兜底表（钉死版本）。
+     *
+     * 正常路径是 [SEED_SPECS] 的 `github:` 规格（跟最新代码，经 gh-proxy 镜像装）；只有
+     * git 全线路都失败时，才回落到这里的 tgz 直链——纯 HTTP 下载、完全绕开 git，由
+     * [DshPluginRepo.install] 在镜像线路里当作最后一条候选。tgz 装的是这个固定版本，
+     * 装上后用户可在插件商店自行更新到更新的版本。
+     */
+    private val SEED_FALLBACK_TGZ = mapOf(
+        "dsh-folk-cloud" to
+            "https://github.com/IPF-Sinon/dsh-folk-cloud/releases/download/v0.1.0/dsh-folk-cloud-0.1.0.tgz",
+    )
+
     /** 取某个预装包的安装 spec（默认即包名）。 */
     fun seedSpec(pkg: String): String = SEED_SPECS[pkg] ?: pkg
+
+    /** 取某个预装包的 tgz 兜底直链（没有则 null）。 */
+    fun seedFallbackTgz(pkg: String): String? = SEED_FALLBACK_TGZ[pkg]
 
     /**
      * **退役**的预装包 → 它当年会插入的 entry id。
@@ -1017,6 +1033,17 @@ object DshRuntime {
         prefs().edit().putBoolean(DshEnv.KEY_LAN, enabled).apply()
     }
 
+    // ────────────────────────── 插件安装镜像线路 ──────────────────────────
+
+    /** 装 github/git 插件是否走 gh-proxy 镜像线路（默认开）。见 [DshPluginRepo.install]。 */
+    fun pluginGhMirrorEnabled(): Boolean =
+        !ready || prefs().getBoolean(DshEnv.KEY_PLUGIN_GH_MIRROR, true)
+
+    fun setPluginGhMirrorEnabled(enabled: Boolean) {
+        if (!ready) return
+        prefs().edit().putBoolean(DshEnv.KEY_PLUGIN_GH_MIRROR, enabled).apply()
+    }
+
     // ────────────────────────── 应用启动行为 ──────────────────────────
 
     /**
@@ -1583,7 +1610,11 @@ object DshRuntime {
             for (pkg in missing) {
                 logInfo(R.string.dsh_log_seeding, pkg)
                 var out = runCatching {
-                    DshPluginRepo.install(seedSpec(pkg), onLine = { line -> appendLog(line) })
+                    DshPluginRepo.install(
+                        seedSpec(pkg),
+                        onLine = { line -> appendLog(line) },
+                        fallbackTgz = seedFallbackTgz(pkg),
+                    )
                 }.getOrElse { str(R.string.dsh_log_seed_exception, it.message ?: it.javaClass.simpleName) }
                 var code = exitCodeOf(out)
 
@@ -1604,6 +1635,7 @@ object DshRuntime {
                                 seedSpec(pkg),
                                 onLine = { line -> appendLog(line) },
                                 allowBuilds = pending,
+                                fallbackTgz = seedFallbackTgz(pkg),
                             )
                         }.getOrElse { str(R.string.dsh_log_seed_retry_exception, it.message ?: it.javaClass.simpleName) }
                         code = exitCodeOf(out)

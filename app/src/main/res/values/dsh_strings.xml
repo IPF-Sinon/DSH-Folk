@@ -604,6 +604,8 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <!-- 局域网访问 -->
     <string name="dsh_lan_title">LAN access</string>
     <string name="dsh_lan_summary">Expose the WebUI to other devices on the same network. Authentication is handled by the dsh login page.</string>
+    <string name="dsh_gh_mirror_title">GitHub plugin mirror</string>
+    <string name="dsh_gh_mirror_summary">Install github/git plugins through gh-proxy mirrors (gh-proxy → axisnow → direct GitHub). On by default; turn off to connect to GitHub directly if you can reach it or have your own proxy.</string>
 
     <!-- 预装插件标签 -->
     <string name="dsh_plugin_seeded_label">Preinstalled</string>
@@ -993,6 +995,9 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_plug_log_no_pkg_remove">The package name is empty, cannot uninstall</string>
     <string name="dsh_plug_log_git_repair">This plugin comes from a git source and git is unavailable in the container; repairing it now (apt, may take a few minutes)…</string>
     <string name="dsh_plug_log_git_fixed">git repaired</string>
+    <string name="dsh_plug_log_gh_mirror_try">Trying GitHub mirror %1$s …</string>
+    <string name="dsh_plug_log_gh_direct_try">Mirrors failed; trying a direct GitHub connection …</string>
+    <string name="dsh_plug_log_gh_tgz_try">git failed on every route; falling back to the tarball %1$s …</string>
     <string name="dsh_plug_log_git_still_broken">git is still unavailable (%1$s). Update the runtime in Settings › Features › Runtime — newer versions ship the complete git dependencies.</string>
     <string name="dsh_plug_log_npm_instead_of_git">The directory does not declare an npm package name; %1$s on npm was verified to point at the same repository (%2$s), so npm is used to avoid git</string>
     <string name="dsh_plug_log_relink_repair">Dependencies were installed as links into the content store; rebuilding (clearing node_modules and reinstalling, may take a few minutes)…</string>
