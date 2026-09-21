@@ -37,6 +37,7 @@ import me.bmax.apatch.ui.component.SplicedColumnGroup
 import me.bmax.apatch.ui.component.ToggleSettingCard
 import me.bmax.apatch.dsh.BackupScope
 import me.bmax.apatch.dsh.DshBackupArchive
+import me.bmax.apatch.dsh.DshCloudBackup
 import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.dsh.ExportPlan
 import me.bmax.apatch.dsh.SessionPick
