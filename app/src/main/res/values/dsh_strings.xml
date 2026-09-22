@@ -1000,6 +1000,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_plug_log_git_repair">This plugin comes from a git source and git is unavailable in the container; repairing it now (apt, may take a few minutes)…</string>
     <string name="dsh_plug_log_git_fixed">git repaired</string>
     <string name="dsh_plug_log_gh_mirror_try">Trying GitHub mirror %1$s …</string>
+    <string name="dsh_plug_log_git_ca">Configured git CA certificates (from Node\'s trust store)</string>
     <string name="dsh_plug_log_gh_direct_try">Mirrors failed; trying a direct GitHub connection …</string>
     <string name="dsh_plug_log_gh_tgz_try">git failed on every route; falling back to the tarball %1$s …</string>
     <string name="dsh_plug_log_git_still_broken">git is still unavailable (%1$s). Update the runtime in Settings › Features › Runtime — newer versions ship the complete git dependencies.</string>

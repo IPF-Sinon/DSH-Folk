@@ -331,8 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>New in the plugin store: install straight from a GitHub link. Tap the link icon in the top bar, paste a repo link or shorthand - owner/name, https://github.com/owner/name, github:owner/name, a /tree/BRANCH link, or a .tgz release link - and it installs. It goes through the same path as everything else, so the GitHub-mirror routes apply when that switch is on.</item>
-        <item>Preinstalled plugins that previously failed to install are retried once on this update. If the cloud-backup plugin (dsh-folk-cloud) never got installed because a direct GitHub connection failed before, it now gets another attempt over the new mirror routes. Plugins already installed are untouched.</item>
+        <item>Fixed GitHub plugin installs failing with a TLS certificate error. The runtime container ships git without any CA certificates, so every https git transfer failed verification (server certificate verification failed, CAfile: none) - both through the gh-proxy mirrors and direct GitHub. Installs now hand git a CA bundle exported from the container Node runtime (the same Mozilla roots pnpm already trusts), so git can verify certificates. This is what actually let the preinstalled cloud-backup plugin and other github plugins install through the mirror routes.</item>
 </string-array>
 
     

@@ -196,6 +196,15 @@ object DshPluginRepo {
     private const val GIT_READY_MARK = "/root/.dsh/.git-ready-v2"
 
     /**
+     * 容器 git 用的 CA 根证书包（用容器 Node 的 tls.rootCertificates 导出，见 [ensureGitCa]）。
+     *
+     * proot 的 rootfs 没装 ca-certificates，git 的 gnutls/curl 后端一份根证书都没有，任何 https
+     * git 传输都验不过（报错 "server certificate verification failed. CAfile: none"）——不管走
+     * gh-proxy 还是直连 github。所以镜像重写做对了也没用，全栽在证书校验。
+     */
+    private const val GIT_CA_FILE = "/root/.dsh/.git-ca.pem"
+
+    /**
      * 装 github/git 插件时给容器 git 套的镜像前缀，按顺序逐条试、失败换下一条。
      *
      * 前缀直接拼在 github URL 前（gh-proxy 的约定就是 `<prefix>https://github.com/...`，
@@ -909,6 +918,7 @@ object DshPluginRepo {
         fallbackTgz: String?,
         onLine: (String) -> Unit,
     ): String {
+        ensureGitCa(onLine)
         if (!DshRuntime.pluginGhMirrorEnabled()) {
             clearGitRewrite()
             return dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
@@ -939,6 +949,26 @@ object DshPluginRepo {
     private fun exitOk(out: String): Boolean =
         out.lineSequence().lastOrNull { it.startsWith(EXIT_MARKER) }
             ?.removePrefix(EXIT_MARKER)?.trim()?.toIntOrNull() == 0
+
+    /**
+     * 给容器 git 喂一份 CA 根证书，让它能校验 https（gh-proxy 与 github 都要）。
+     *
+     * 用容器里的 Node（dsh 就靠它跑，`node` 在 PATH）导出 `tls.rootCertificates`——和 pnpm 用的
+     * 是**同一套 Mozilla 根证书**，不降级安全（不 sslVerify=false）、不 apt 装包（不依赖网络、
+     * 不改 rootfs），只落一份 pem + 一行全局 git 配置。写全局是必须的：pnpm 在子进程里 fork git，
+     * 只有 `~/.gitconfig` 能被继承（与 [applyGitRewrite] 同理）。幂等：pem 已在就只重设配置，
+     * 仅首次生成时打一行日志。
+     */
+    private fun ensureGitCa(onLine: (String) -> Unit) {
+        // JS 里用单引号避开外层双引号；'\\n' 在 Kotlin 里是字面 \n，经 shell 双引号原样传给 node
+        val js = "const fs=require('fs'),tls=require('tls');" +
+            "fs.writeFileSync(process.argv[1],tls.rootCertificates.join('\\n')+'\\n')"
+        val cmd = "if [ -s '$GIT_CA_FILE' ]; then :; else " +
+            "node -e \"$js\" '$GIT_CA_FILE' && echo DSH_CA_GENERATED; fi; " +
+            "git config --global http.sslCAInfo '$GIT_CA_FILE'"
+        val out = DshRuntime.execRootfsForOutput(cmd, 60_000)
+        if (out.contains("DSH_CA_GENERATED")) line(onLine, R.string.dsh_plug_log_git_ca)
+    }
 
     /**
      * 给容器全局 git 配 `insteadOf`，把 github 流量重写到 [prefix]（空串=清空重写）。

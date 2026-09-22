@@ -979,6 +979,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_plug_log_git_repair">这个插件来自 git 源，容器里的 git 不可用，正在修复（apt，可能要几分钟）…</string>
     <string name="dsh_plug_log_git_fixed">git 已修复</string>
     <string name="dsh_plug_log_gh_mirror_try">正在试 GitHub 镜像线路 %1$s …</string>
+    <string name="dsh_plug_log_git_ca">已给 git 配置 CA 根证书（取自 Node 信任库）</string>
     <string name="dsh_plug_log_gh_direct_try">镜像都没成，改用直连 GitHub 再试 …</string>
     <string name="dsh_plug_log_gh_tgz_try">git 全线路失败，回落到离线包 %1$s …</string>
     <string name="dsh_plug_log_git_still_broken">git 仍不可用（%1$s）。请到 设置 → 功能 → 运行时 更新运行时 —— 新版已内置完整的 git 依赖。</string>
