@@ -314,7 +314,7 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>插件商店新增「从 GitHub 链接安装」：点顶栏的链接图标，粘贴仓库链接或简写即可装——owner/name、https://github.com/owner/name、github:owner/name、带 /tree/<分支> 的链接，或 .tgz 直链都认。走和商店一样的安装通道，所以「GitHub 插件镜像」开着时同样逐条镜像线路。</item>
+        <item>插件商店新增「从 GitHub 链接安装」：点顶栏的链接图标，粘贴仓库链接或简写即可装——owner/name、https://github.com/owner/name、github:owner/name、带 /tree/分支名 的链接，或 .tgz 直链都认。走和商店一样的安装通道，所以「GitHub 插件镜像」开着时同样逐条镜像线路。</item>
         <item>本次更新会重试一次之前装失败的预装插件：如果云备份插件（dsh-folk-cloud）之前因直连 GitHub 失败而没装上，现在会用新的镜像线路再试一次。已经装好的插件不受影响。</item>
 </string-array>
 
