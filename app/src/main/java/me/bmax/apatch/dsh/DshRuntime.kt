@@ -360,8 +360,10 @@ object DshRuntime {
      *
      * 修好一个会让预装失败的根因后 +1，让**记过账但实际没生效**的预装包再试一次。
      *   1 = 1.7.7：修 pnpm 拦构建脚本导致 dsh-file-upload 装了但没进 bundles
+     *   2 = 1.9.2.7：github/git 插件安装改走 gh-proxy 镜像线路（1.9.2.6）后，重试一次
+     *       之前因直连 github 失败而记账没生效的预装包（dsh-folk-cloud 首当其冲）
      */
-    private const val SEED_REPAIR_REV = 1
+    private const val SEED_REPAIR_REV = 2
 
     /**
      * 同一个运行时版本下，最多允许几轮「补装没生效的预装包」。

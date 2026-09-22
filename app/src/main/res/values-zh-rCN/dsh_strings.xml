@@ -87,6 +87,10 @@
     <string name="dsh_plugin_downloads">下载量</string>
     <string name="dsh_plugin_stars">星标</string>
     <string name="dsh_local_install">本地安装</string>
+    <string name="dsh_plugin_install_link">从 GitHub 链接安装</string>
+    <string name="dsh_plugin_install_link_desc">粘贴 GitHub 仓库链接或简写。走和商店一样的安装通道——「GitHub 插件镜像」开着时同样会逐条镜像线路。</string>
+    <string name="dsh_plugin_install_link_invalid">格式认不出。可用 owner/name、https://github.com/owner/name、github:owner/name 或 .tgz 链接。</string>
+    <string name="dsh_plugin_install_action">安装</string>
 
     <string name="dsh_acknowledgements">致谢</string>
     <string name="dsh_qq_group">QQ 群</string>

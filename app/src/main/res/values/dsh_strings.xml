@@ -95,6 +95,10 @@
     <string name="dsh_plugin_downloads">Downloads</string>
     <string name="dsh_plugin_stars">Stars</string>
     <string name="dsh_local_install">Install locally</string>
+    <string name="dsh_plugin_install_link">Install from GitHub link</string>
+    <string name="dsh_plugin_install_link_desc">Paste a GitHub repo link or shorthand. It goes through the same install path as the store — including the GitHub-mirror routes when that switch is on.</string>
+    <string name="dsh_plugin_install_link_invalid">Unrecognized format. Try owner/name, https://github.com/owner/name, github:owner/name, or a .tgz link.</string>
+    <string name="dsh_plugin_install_action">Install</string>
 
     <!-- 关于 / 致谢 -->
     <string name="dsh_about_repo" translatable="false">https://github.com/IPF-Sinon/DSH-Folk</string>

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,7 +28,9 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,8 +42,10 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -108,6 +113,56 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
         if (viewModel.storeAll.isEmpty()) viewModel.refreshCatalog()
     }
 
+    // 「从 GitHub 链接安装」弹窗
+    var showLinkInstall by remember { mutableStateOf(false) }
+    var linkInput by remember { mutableStateOf("") }
+    var linkError by remember { mutableStateOf(false) }
+    if (showLinkInstall) {
+        AlertDialog(
+            onDismissRequest = { showLinkInstall = false },
+            title = { Text(stringResource(R.string.dsh_plugin_install_link)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.dsh_plugin_install_link_desc))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = linkInput,
+                        onValueChange = { linkInput = it; linkError = false },
+                        singleLine = true,
+                        isError = linkError,
+                        placeholder = { Text("owner/name") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (linkError) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            stringResource(R.string.dsh_plugin_install_link_invalid),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    // 归一化受「GitHub 插件镜像」开关约束：install() 内部会走 installGitSpec
+                    val spec = DshPluginRepo.normalizeInstallSpec(linkInput)
+                    if (spec == null) {
+                        linkError = true
+                    } else {
+                        showLinkInstall = false
+                        linkInput = ""
+                        viewModel.install(spec)
+                    }
+                }) { Text(stringResource(R.string.dsh_plugin_install_action)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLinkInstall = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
     // 只存 id，实体每次从 storeItems 取：装完/卸完列表会刷新，
     // 存快照的话详情页按钮会停在打开那一刻的状态
     var detailId by remember { mutableStateOf<String?>(null) }
@@ -151,6 +206,12 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
                 onClearClick = { viewModel.search = "" },
                 onBackClick = { navigator.popBackStack() },
                 dropdownContent = {
+                    IconButton(onClick = { showLinkInstall = true }) {
+                        Icon(
+                            Icons.Outlined.Link,
+                            contentDescription = stringResource(R.string.dsh_plugin_install_link),
+                        )
+                    }
                     IconButton(onClick = { viewModel.refreshCatalog(force = true) }) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "Refresh")
                     }

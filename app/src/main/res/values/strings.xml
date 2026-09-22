@@ -331,9 +331,8 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>GitHub plugins install far more reliably now. Installing a github/git plugin used to connect straight to github.com, whose git clone frequently fails on Chinese networks - so more than half the plugin store (github: entries, including the preinstalled cloud-backup plugin) simply would not install. Installs now route through the same gh-proxy mirrors the runtime download already uses, trying gh-proxy then axisnow then a direct GitHub connection, falling back one route at a time.</item>
-        <item>The preinstalled dsh-folk-cloud plugin keeps following the latest code (installed from its GitHub repo through the mirror), but when git fails on every route it now falls back to installing a pinned release tarball over plain HTTP - which sidesteps git entirely, so the plugin still gets installed. You can update it later from the plugin store.</item>
-        <item>New switch in Settings › Function › GitHub plugin mirror (on by default). Turn it off to install github/git plugins by connecting to GitHub directly, without any rewrite - for people who can already reach GitHub or run their own proxy.</item>
+        <item>New in the plugin store: install straight from a GitHub link. Tap the link icon in the top bar, paste a repo link or shorthand - owner/name, https://github.com/owner/name, github:owner/name, a /tree/<branch> link, or a .tgz release link - and it installs. It goes through the same path as everything else, so the GitHub-mirror routes apply when that switch is on.</item>
+        <item>Preinstalled plugins that previously failed to install are retried once on this update. If the cloud-backup plugin (dsh-folk-cloud) never got installed because a direct GitHub connection failed before, it now gets another attempt over the new mirror routes. Plugins already installed are untouched.</item>
 </string-array>
 
     

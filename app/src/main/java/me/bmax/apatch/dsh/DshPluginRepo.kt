@@ -831,6 +831,49 @@ object DshPluginRepo {
      * @param allowBuilds 用户已放行构建脚本的包名。非空时先写进 profile 的
      *        `pnpm-workspace.yaml` 再装，用于 [pendingBuildApproval] 之后的重试。
      */
+    /**
+     * 把用户从 GitHub 复制来的各种写法归一成 dsh plugin 能吃的 spec；认不出返回 null。
+     *
+     * 归一后仍交给 [install]，所以 `github:`/`git+`/tgz URL 都会照常走 [installGitSpec]
+     * 的 gh-proxy 镜像线路（受「GitHub 插件镜像」开关约束）。收下面这些：
+     *  - `owner/name`（裸仓库路径）                          → `github:owner/name`
+     *  - `github.com/owner/name` / `https://github.com/owner/name`(.git)(尾斜杠) → `github:owner/name`
+     *  - `https://github.com/owner/name/tree|commit/<ref>`   → `github:owner/name#<ref>`
+     *  - `github:owner/name` / `github:owner/name#<ref>`     → 原样（跟最新 / 指定 ref）
+     *  - `git+https://…` / 任意 `https://….tgz`（含 release 直链）→ 原样
+     * 其它（空、含空格、非 github 裸串）→ null，调用方提示格式不对，不硬塞。
+     */
+    fun normalizeInstallSpec(raw: String): String? {
+        val s = raw.trim()
+        if (s.isEmpty() || s.any { it.isWhitespace() }) return null
+        if (s.startsWith("github:") || s.startsWith("git+")) return s
+        if ((s.startsWith("https://") || s.startsWith("http://")) &&
+            (s.endsWith(".tgz") || s.endsWith(".tar.gz"))
+        ) return s
+        val ownerNameRef = parseGithubOwnerName(s) ?: return null
+        return "github:$ownerNameRef"
+    }
+
+    /** 从 github URL / 裸 owner/name 抽出 `owner/name` 或 `owner/name#ref`；抽不出返回 null。 */
+    private fun parseGithubOwnerName(input: String): String? {
+        var s = input
+            .removePrefix("git+")
+            .removePrefix("https://")
+            .removePrefix("http://")
+        val idx = s.indexOf("github.com/")
+        if (idx >= 0) s = s.substring(idx + "github.com/".length)
+        s = s.trim('/')
+        if (s.isEmpty()) return null
+        val parts = s.split('/')
+        if (parts.size < 2) return null
+        val nameRe = Regex("^[\\w.-]+$")
+        val owner = parts[0]
+        val name = parts[1].removeSuffix(".git")
+        if (!nameRe.matches(owner) || !nameRe.matches(name)) return null
+        val ref = if (parts.size >= 4 && (parts[2] == "tree" || parts[2] == "commit")) parts[3] else ""
+        return if (ref.isNotEmpty() && nameRe.matches(ref)) "$owner/$name#$ref" else "$owner/$name"
+    }
+
     suspend fun install(
         pkg: String,
         version: String = "",
