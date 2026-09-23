@@ -314,7 +314,9 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>修复 GitHub 插件安装因 TLS 证书报错装不上。运行时容器里的 git 没带任何 CA 根证书，任何 https git 传输都验不过（server certificate verification failed, CAfile: none）——不管走 gh-proxy 镜像还是直连 GitHub 都一样。现在安装会用容器 Node 导出一份 CA 证书包喂给 git（和 pnpm 用的是同一套 Mozilla 根证书），git 就能校验证书了。这才真正让预装的云备份插件和其它 github 插件能通过镜像线路装上。</item>
+        <item>备份页的云备份卡片改为常显（与 DSH 配置备份卡片一致），不再「插件不可达就整块隐藏」。并区分三种情况给出对应按钮：DSH 未启动 → 启动 DSH；插件未安装 → 安装插件；插件已停用 → 启用并重启 DSH。</item>
+        <item>保存 WebDAV 配置后立即刷新云备份状态，不再需要手动点刷新。</item>
+        <item>修复云备份「open failed: ENOENT」失败：宿主 App 读写插件目录时直接用了容器路径 /root/.dsh/…，现在会映射到宿主 rootfs 的真实路径（回给插件的仍是容器路径）。</item>
 </string-array>
 
     

@@ -331,7 +331,9 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed GitHub plugin installs failing with a TLS certificate error. The runtime container ships git without any CA certificates, so every https git transfer failed verification (server certificate verification failed, CAfile: none) - both through the gh-proxy mirrors and direct GitHub. Installs now hand git a CA bundle exported from the container Node runtime (the same Mozilla roots pnpm already trusts), so git can verify certificates. This is what actually let the preinstalled cloud-backup plugin and other github plugins install through the mirror routes.</item>
+        <item>Cloud-backup card now always shows on the Backup page (like the DSH config-backup card) instead of hiding when the plugin is unreachable. It tells the three cases apart and offers the right button: DSH not running -> Start DSH; plugin not installed -> Install plugin; plugin disabled -> Enable and restart DSH.</item>
+        <item>Saving the WebDAV settings now refreshes the cloud-backup status immediately, no manual refresh needed.</item>
+        <item>Fixed cloud backup failing with "open failed: ENOENT" when the host app wrote/read the plugin directory. The app was using the container path /root/.dsh/... directly; it now maps it to the real host rootfs path (and returns the container path back to the plugin).</item>
 </string-array>
 
     

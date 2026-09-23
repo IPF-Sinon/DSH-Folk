@@ -209,6 +209,13 @@
     <string name="dsh_bk_cloud_sync_now">Sync now</string>
     <string name="dsh_bk_cloud_pull">Restore from upstream</string>
     <string name="dsh_bk_cloud_refresh">Refresh</string>
+    <string name="dsh_bk_cloud_dsh_stopped">DSH service is not running, so the cloud-backup plugin cannot work.</string>
+    <string name="dsh_bk_cloud_start_dsh">Start DSH</string>
+    <string name="dsh_bk_cloud_not_installed">The cloud-backup plugin dsh-folk-cloud is not installed yet.</string>
+    <string name="dsh_bk_cloud_install">Install plugin</string>
+    <string name="dsh_bk_cloud_disabled">The cloud-backup plugin is disabled.</string>
+    <string name="dsh_bk_cloud_enable">Enable and restart DSH</string>
+    <string name="dsh_bk_cloud_unreachable">The cloud-backup plugin is temporarily unreachable.</string>
     <string name="dsh_bk_cloud_plugin_offline">The dsh-folk-cloud plugin is not running.</string>
     <string name="dsh_bk_cloud_sync_ok">Sync done.</string>
     <string name="dsh_bk_cloud_restore_ok">Restored from upstream.</string>

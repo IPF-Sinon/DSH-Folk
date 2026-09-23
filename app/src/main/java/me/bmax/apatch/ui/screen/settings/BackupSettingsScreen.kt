@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +56,7 @@ import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.dsh.DshAppDataSnapshot
 import me.bmax.apatch.dsh.DshPluginRepo
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.dsh.DshPhase
 import me.bmax.apatch.dsh.DshSessionGroup
 import me.bmax.apatch.util.BackupLogManager
 import me.bmax.apatch.ui.component.DshPluginProgressDialog
@@ -68,6 +70,9 @@ import me.bmax.apatch.util.ui.NavigationBarsSpacer
 
 /** 备份依赖的那个插件（应用侧查「装没装」时用，不需要 DSH 在跑）。 */
 private const val DSH_CONFIG_MANAGER_PKG = "dsh-config-manager"
+
+/** 云备份插件（dsh-folk-cloud）：云备份卡片按「装没装 / 停没停用」给三态引导。 */
+private const val DSH_FOLK_CLOUD_PKG = "dsh-folk-cloud"
 
 /**
  * 界面侧给这次插件探活的封顶时长。
@@ -110,6 +115,10 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var cloudStatus by remember { mutableStateOf<DshCloudBackup.CloudStatus?>(null) }
     var cloudBusy by remember { mutableStateOf(false) }
     var cloudMessage by remember { mutableStateOf("") }
+    // 云备份卡片不再「插件不可达就整块隐藏」，改成像 DSH 配置卡片那样常显，按三种状态给不同引导：
+    // DSH 没跑 → 启动；插件没装 → 去安装；插件被停用 → 启用并重启。这几个信号进页面/重探时各读一次。
+    var cloudInstalled by remember { mutableStateOf<Boolean?>(null) }
+    var cloudDisabled by remember { mutableStateOf(false) }
     var snapshots by remember { mutableStateOf<List<DshConfigBackup.Snapshot>>(emptyList()) }
     var snapshotBusy by remember { mutableStateOf(false) }
     var snapshotMessage by remember { mutableStateOf("") }
@@ -171,7 +180,17 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
         }
         // 顺带读一次云备份插件状态（dsh-folk-cloud）：云备份区块靠它决定「显不显示、能不能点」。
         cloudStatus = withContext(Dispatchers.IO) { runCatching { DshCloudBackup.status() }.getOrNull() }
+        // 云备份卡片的三态引导用：插件装没装 / 是否被停用（直接查容器插件目录，不需要 DSH 在跑）。
+        val cloudEntry = withContext(Dispatchers.IO) {
+            runCatching { DshPluginRepo.listInstalled().firstOrNull { it.pkg == DSH_FOLK_CLOUD_PKG } }
+                .getOrNull()
+        }
+        cloudInstalled = cloudEntry != null
+        cloudDisabled = cloudEntry?.disabled == true
     }
+
+    // DSH 是否在跑，实时观察：用户点「启动 DSH」后卡片能自己翻篇，不用手动重进页面。
+    val dshRunning = DshRuntime.state.collectAsState().value.phase == DshPhase.RUNNING
 
     val notRunning = stringResource(R.string.dsh_backup_needs_running)
     val pluginMissing = stringResource(R.string.dsh_backup_plugin_missing)
@@ -330,6 +349,24 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                                     if (r.ok) context.getString(R.string.dsh_bk_cloud_restore_ok) else r.error
                                 } else context.getString(R.string.dsh_bk_cloud_plugin_offline)
                             }
+                        }
+                    },
+                    // 云备份卡片三态引导所需的信号与动作。
+                    cloudInstalled = cloudInstalled,
+                    cloudDisabled = cloudDisabled,
+                    dshRunning = dshRunning,
+                    // DSH 没跑：拉起服务（与页内其它「重启」同一入口）。启动后 dshRunning 会自动翻篇。
+                    onStartDsh = { DshRuntime.restart() },
+                    // 插件没装：去插件商店（与 DSH 配置卡片同一去向）。
+                    onGoInstallCloudPlugin = { navigator.navigate(DshPluginStoreScreenDestination) },
+                    // 插件被停用：启用它再重启 DSH 服务让插件树重载（启用只改注册表，需重启才生效）。
+                    onEnableCloudPlugin = {
+                        cloudBusy = true
+                        cloudMessage = ""
+                        // 用 onDone 回调等启用真正写完再重启，避免重启抢在写停用标记之前。
+                        pluginViewModel.setDisabled(DSH_FOLK_CLOUD_PKG, false) {
+                            cloudBusy = false
+                            DshRuntime.restart()
                         }
                     },
                     groupBusy = groupBusy,

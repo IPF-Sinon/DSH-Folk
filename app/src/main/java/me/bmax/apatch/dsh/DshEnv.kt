@@ -18,6 +18,22 @@ object DshEnv {
     fun dshHome(ctx: Context): File = File(rootfs(ctx), "root/.dsh")
 
     /**
+     * 把容器内绝对路径映射到宿主 rootfs 下的真实 [File]（guest `/` = host [rootfs]）。
+     *
+     * 插件（跑在 proot 容器里的 Node）给 App 的路径都是容器视角的 `/root/.dsh/...`，而 App 跑在
+     * Android 上——直接 `File("/root/.dsh/...")` 指向的是 Android 根下并不存在的目录，写入即
+     * `ENOENT`。凡是 App 要按插件给的容器路径读写落盘，必须先过这里换成 `rootfs/root/.dsh/...`。
+     *
+     * 只接受 rootfs 内的路径：非绝对、或含 `..` 逃逸段的一律返回 null（防越界写到 rootfs 之外）。
+     */
+    fun containerToHost(ctx: Context, containerPath: String): File? {
+        if (!containerPath.startsWith("/")) return null
+        val rel = containerPath.removePrefix("/")
+        if (rel.split('/').any { it == ".." }) return null
+        return File(rootfs(ctx), rel)
+    }
+
+    /**
      * 更新运行时时必须跨越 rootfs 替换的子树（rootfs 内相对路径）。
      *
      * 只保 `root/.dsh` 是不够的 —— `.dsh` 里的文件**内容不一定在 `.dsh` 里**，

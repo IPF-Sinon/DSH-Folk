@@ -42,7 +42,20 @@ internal object DshCloudAppData {
             return 400 to error("加密档位必须提供口令")
         }
         // 插件指定把整包放哪（它随后会算哈希、上传）。给了就用它的目录，没给退回缓存。
-        val outDir = body.optString("outDir").ifEmpty { File(ctx.cacheDir, "cloud-export").absolutePath }
+        // 关键：插件给的是**容器路径**（/root/.dsh/dsh-folk-cloud），App 跑在 Android，必须映射到
+        // 宿主 rootfs 真实目录才写得进（否则 File("/root/.dsh/...") 落 ENOENT——真机实测就是这个错）；
+        // 而回给插件的 file 必须仍是**容器路径**，插件要在容器里 stat/读它再上传。
+        val outDirContainer = body.optString("outDir")
+        val destDirHost: File
+        val destPathForPlugin: (String) -> String
+        if (outDirContainer.isNotEmpty()) {
+            destDirHost = DshEnv.containerToHost(ctx, outDirContainer)
+                ?: return 400 to error("插件目录不在 rootfs 内，拒绝写入：$outDirContainer")
+            destPathForPlugin = { name -> outDirContainer.trimEnd('/') + "/" + name }
+        } else {
+            destDirHost = File(ctx.cacheDir, "cloud-export")
+            destPathForPlugin = { name -> File(destDirHost, name).absolutePath }
+        }
 
         val plan = ExportPlan(
             scope = scope,
@@ -58,19 +71,20 @@ internal object DshCloudAppData {
         }
         // 搬到插件指定目录（exportArchive 落在 App 自己的缓存/外部目录；插件要在它的 workDir 里算哈希）
         val src = result.file
-        val destDir = File(outDir).apply { mkdirs() }
-        val dest = File(destDir, src.name)
+        destDirHost.mkdirs()
+        val destHost = File(destDirHost, src.name)
         val moved = runCatching {
-            if (src.absolutePath != dest.absolutePath) {
-                src.copyTo(dest, overwrite = true)
+            if (src.absolutePath != destHost.absolutePath) {
+                src.copyTo(destHost, overwrite = true)
                 src.delete()
             }
-            dest
+            destHost
         }.getOrElse { return 500 to error("落盘到插件目录失败：${it.message ?: it.javaClass.simpleName}") }
 
         return 200 to JSONObject()
             .put("ok", true)
-            .put("file", moved.absolutePath)
+            // 回容器路径（插件在容器里读），不是宿主绝对路径
+            .put("file", destPathForPlugin(src.name))
             .put("size", moved.length())
             .put("tier", tier)
             .put("encrypted", result.encrypted)
@@ -81,8 +95,12 @@ internal object DshCloudAppData {
     fun restore(ctx: Context, body: JSONObject): Pair<Int, String> {
         val filePath = body.optString("file")
         if (filePath.isEmpty()) return 400 to error("缺少 file")
-        val zip = File(filePath)
-        if (!zip.isFile) return 400 to error("文件不存在：$filePath")
+        // 插件给的多半是容器路径（它下载到自己的 workDir，/root/.dsh/...）。先按原样试（兼容 App
+        // 缓存那种宿主绝对路径），够不到再映射到宿主 rootfs 真实路径。
+        val direct = File(filePath)
+        val zip = if (direct.isFile) direct
+            else DshEnv.containerToHost(ctx, filePath)?.takeIf { it.isFile }
+                ?: return 400 to error("文件不存在：$filePath")
         val password = body.optString("password")
 
         val result = runCatching {

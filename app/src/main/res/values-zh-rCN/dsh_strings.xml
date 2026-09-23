@@ -191,6 +191,13 @@
     <string name="dsh_bk_cloud_sync_now">立即同步</string>
     <string name="dsh_bk_cloud_pull">从上游恢复</string>
     <string name="dsh_bk_cloud_refresh">刷新</string>
+    <string name="dsh_bk_cloud_dsh_stopped">DSH 服务未启动，云备份插件无法工作。</string>
+    <string name="dsh_bk_cloud_start_dsh">启动 DSH</string>
+    <string name="dsh_bk_cloud_not_installed">尚未安装云备份插件 dsh-folk-cloud。</string>
+    <string name="dsh_bk_cloud_install">安装插件</string>
+    <string name="dsh_bk_cloud_disabled">云备份插件已被停用。</string>
+    <string name="dsh_bk_cloud_enable">启用并重启 DSH</string>
+    <string name="dsh_bk_cloud_unreachable">云备份插件暂时无法访问。</string>
     <string name="dsh_bk_cloud_plugin_offline">dsh-folk-cloud 插件未运行。</string>
     <string name="dsh_bk_cloud_sync_ok">同步完成。</string>
     <string name="dsh_bk_cloud_restore_ok">已从上游恢复。</string>

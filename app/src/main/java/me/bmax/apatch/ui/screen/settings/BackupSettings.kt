@@ -176,6 +176,19 @@ fun BackupSettingsContent(
     onCloudRefresh: () -> Unit = {},
     onCloudSync: () -> Unit = {},
     onCloudRestore: () -> Unit = {},
+    /**
+     * 云备份卡片三态引导（不再「插件不可达就整块隐藏」，改成常显 + 按状态给按钮）：
+     * - [dshRunning] = false → DSH 没跑，给「启动 DSH」；
+     * - [cloudInstalled] = false → 插件没装，给「去安装」；
+     * - [cloudDisabled] = true → 插件被停用，给「启用并重启」。
+     * [cloudInstalled] = null 表示还在检测。三者都过、且 [cloudStatus].reachable 才是正常态。
+     */
+    cloudInstalled: Boolean? = null,
+    cloudDisabled: Boolean = false,
+    dshRunning: Boolean = false,
+    onStartDsh: () -> Unit = {},
+    onGoInstallCloudPlugin: () -> Unit = {},
+    onEnableCloudPlugin: () -> Unit = {},
     /** 插件保留的快照（恢复的最后依靠）。 */
     /** 插件**确实没装**（应用侧查容器里的插件目录就能确定，不需要 DSH 在跑）。 */
     pluginAbsent: Boolean = false,
@@ -658,41 +671,41 @@ fun BackupSettingsContent(
         // ───────── 云备份（由 dsh-folk-cloud 插件负责）─────────
         //
         // App 不再自己传 zip：云备份整个交给插件（定时/启动后/手动触发，哈希去重，冲突停下问）。
-        // 这一块只是插件的**薄前端** —— 仅在**检测到该插件**时出现（`cloudStatus?.reachable == true`），
-        // 显示状态 + 开配置弹窗 + 「立即同步 / 从上游恢复」两个触发按钮。完整设置在插件自己的
-        // dsh web「云备份」页里。插件没装/没跑时整块不显示，免得给一个点了没反应的入口。
+        // 卡片**常显**（和 DSH 配置备份卡片一致），不再「插件不可达就整块隐藏」。按状态给引导：
+        // 插件可达 → 正常的状态 + 配置/触发按钮；否则依次区分 DSH 没跑 / 插件没装 / 插件被停用，
+        // 各给一个能直接把用户带到位的按钮。完整高级设置仍在插件自己的 dsh web「云备份」页里。
         val cloud = cloudStatus
-        if (cloud != null && cloud.reachable) {
-            item(key = "backup_cloud") {
-                ExpressiveCard(flat = flat) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.Cloud,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(24.dp),
+        item(key = "backup_cloud") {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Cloud,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_bk_cloud_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
                             )
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.dsh_bk_cloud_title),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Text(
-                                    text = stringResource(R.string.dsh_bk_cloud_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (cloudBusy) {
-                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            }
+                            Text(
+                                text = stringResource(R.string.dsh_bk_cloud_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
+                        if (cloudBusy) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        }
+                    }
 
-                        Spacer(Modifier.height(10.dp))
-                        // 状态行：配没配、地址、档位（回退时标出实际档位）、上次同步。
+                    Spacer(Modifier.height(10.dp))
+                    if (cloud != null && cloud.reachable) {
+                        // 正常态：状态行 + 配置/触发按钮。
                         val statusLine = if (!cloud.configured || cloud.url.isBlank()) {
                             stringResource(R.string.dsh_bk_cloud_unconfigured)
                         } else {
@@ -740,10 +753,61 @@ fun BackupSettingsContent(
                                 Text(stringResource(R.string.dsh_bk_cloud_refresh))
                             }
                         }
-                        if (cloudMessage.isNotBlank()) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(cloudMessage, style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        // 不可达：区分原因给引导按钮。判定次序：没装（文件系统可确定，与 DSH 无关）→
+                        // 被停用 → DSH 没跑 → 其它临时不可达。cloudInstalled==null 表示还在检测。
+                        val reason: String
+                        val action: (@Composable () -> Unit)?
+                        when {
+                            cloudInstalled == null -> {
+                                reason = stringResource(R.string.dsh_backup_plugin_checking)
+                                action = null
+                            }
+                            cloudInstalled == false -> {
+                                reason = stringResource(R.string.dsh_bk_cloud_not_installed)
+                                action = {
+                                    Button(onClick = onGoInstallCloudPlugin, enabled = !cloudBusy) {
+                                        Text(stringResource(R.string.dsh_bk_cloud_install))
+                                    }
+                                }
+                            }
+                            cloudDisabled -> {
+                                reason = stringResource(R.string.dsh_bk_cloud_disabled)
+                                action = {
+                                    Button(onClick = onEnableCloudPlugin, enabled = !cloudBusy) {
+                                        Text(stringResource(R.string.dsh_bk_cloud_enable))
+                                    }
+                                }
+                            }
+                            !dshRunning -> {
+                                reason = stringResource(R.string.dsh_bk_cloud_dsh_stopped)
+                                action = {
+                                    Button(onClick = onStartDsh, enabled = !cloudBusy) {
+                                        Text(stringResource(R.string.dsh_bk_cloud_start_dsh))
+                                    }
+                                }
+                            }
+                            else -> {
+                                reason = stringResource(R.string.dsh_bk_cloud_unreachable)
+                                action = null
+                            }
                         }
+                        Text(
+                            text = reason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            action?.invoke()
+                            OutlinedButton(onClick = onCloudRefresh, enabled = !cloudBusy) {
+                                Text(stringResource(R.string.dsh_bk_cloud_refresh))
+                            }
+                        }
+                    }
+                    if (cloudMessage.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(cloudMessage, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -1024,13 +1088,13 @@ fun BackupSettingsContent(
     }
 
     if (showWebDavDialog.value) {
-        WebDavConfigDialog(showWebDavDialog)
+        WebDavConfigDialog(showWebDavDialog, onSaved = onCloudRefresh)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
+fun WebDavConfigDialog(showDialog: MutableState<Boolean>, onSaved: () -> Unit = {}) {
     // WebDAV 云备份配置从 1.9.2.5 起只存 dsh-folk-cloud 插件一份，这个框是它的前端：
     // 打开时从插件读回填（口令永不回传，只显示「已/未配置」），保存写回插件，口令留空 = 不改。
     var showWebDavPassword by rememberSaveable { mutableStateOf(false) }
@@ -1094,7 +1158,11 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>) {
                 r.ok -> context.getString(R.string.dsh_bk_cloud_saved)
                 else -> r.error.ifEmpty { context.getString(R.string.dsh_bk_cloud_save_failed, "") }
             }
-            if (r.reachable && r.ok) showDialog.value = false
+            if (r.reachable && r.ok) {
+                showDialog.value = false
+                // 保存成功立刻让外面刷新一次云备份状态，不用用户再手动点「刷新」。
+                onSaved()
+            }
         }
     }
 
