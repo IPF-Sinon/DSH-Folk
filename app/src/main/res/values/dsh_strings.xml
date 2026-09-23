@@ -223,6 +223,8 @@
     <string name="dsh_bk_cloud_save_failed">Save failed: %1$s</string>
     <string name="dsh_bk_cloud_pw_keep">Configured — leave empty to keep it</string>
     <string name="dsh_bk_cloud_pw_unset">Not configured</string>
+    <string name="dsh_bk_cloud_enc_pw_label">Backup encryption password</string>
+    <string name="dsh_bk_cloud_enc_pw_needed">Encryption is on but no encryption password is set. Automatic backups will fail until you set one here (they will never silently produce an unencrypted archive).</string>
     <string name="dsh_bk_snapshot_title">Restore to a snapshot</string>
     <string name="dsh_bk_snapshot_desc">Go back to a snapshot that was taken automatically before an import. Preview first (writes nothing), then confirm.</string>
     <string name="dsh_bk_snapshot_list">List snapshots</string>

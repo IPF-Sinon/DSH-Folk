@@ -205,6 +205,8 @@
     <string name="dsh_bk_cloud_save_failed">保存失败：%1$s</string>
     <string name="dsh_bk_cloud_pw_keep">已配置 —— 留空则保持不变</string>
     <string name="dsh_bk_cloud_pw_unset">未配置</string>
+    <string name="dsh_bk_cloud_enc_pw_label">备份加密口令</string>
+    <string name="dsh_bk_cloud_enc_pw_needed">已开启加密但尚未设置加密口令。在此设置前自动备份会失败（绝不会静默产出未加密的包）。</string>
     <string name="dsh_bk_snapshot_title">恢复到快照</string>
     <string name="dsh_bk_snapshot_desc">回到某次导入前自动留下的快照。先预览（不写入任何东西），确认后才执行。</string>
     <string name="dsh_bk_snapshot_list">列出快照</string>

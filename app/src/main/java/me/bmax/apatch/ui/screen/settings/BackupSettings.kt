@@ -1098,6 +1098,9 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>, onSaved: () -> Unit = 
     // WebDAV 云备份配置从 1.9.2.5 起只存 dsh-folk-cloud 插件一份，这个框是它的前端：
     // 打开时从插件读回填（口令永不回传，只显示「已/未配置」），保存写回插件，口令留空 = 不改。
     var showWebDavPassword by rememberSaveable { mutableStateOf(false) }
+    // 备份加密口令：与 WebDAV 口令一样从空开始，留空提交 = 不改插件里已存的那个。
+    var encryptPassword by remember { mutableStateOf("") }
+    var showEncryptPassword by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -1150,6 +1153,8 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>, onSaved: () -> Unit = 
                     includeSessions = st.includeSessions,
                     intervalMinutes = st.intervalMinutes,
                     onStartup = st.onStartup,
+                    // 留空 = 不改：加密口令与 WebDAV 口令同样语义，插件保留已存的
+                    encryptPassword = encryptPassword,
                 )
             }
             saving = false
@@ -1261,6 +1266,47 @@ fun WebDavConfigDialog(showDialog: MutableState<Boolean>, onSaved: () -> Unit = 
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true
                 )
+
+                // 备份加密口令：加密档位（含 vault，或插件开了 encrypt）用它加/解密整包。存一份到
+                // DSH 凭据，定时/启动后的自动备份也能加密。留空 = 不改已存的。
+                OutlinedTextField(
+                    value = encryptPassword,
+                    onValueChange = { encryptPassword = it },
+                    label = { Text(stringResource(R.string.dsh_bk_cloud_enc_pw_label)) },
+                    enabled = formEnabled,
+                    placeholder = {
+                        Text(
+                            stringResource(
+                                if (status?.encryptPasswordConfigured == true) R.string.dsh_bk_cloud_pw_keep
+                                else R.string.dsh_bk_cloud_pw_unset,
+                            ),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    singleLine = true,
+                    visualTransformation = if (showEncryptPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showEncryptPassword = !showEncryptPassword }) {
+                            Icon(
+                                imageVector = if (showEncryptPassword) Icons.Filled.VisibilityOff else Icons.Outlined.Visibility,
+                                contentDescription = stringResource(
+                                    if (showEncryptPassword) R.string.dsh_pw_hide else R.string.dsh_pw_show,
+                                ),
+                            )
+                        }
+                    }
+                )
+                // 加密已开启但从未设过加密口令：明说，否则自动备份会因缺口令而报错（不再静默出明文包）。
+                if (status?.encrypt == true && status?.encryptPasswordConfigured != true) {
+                    Text(
+                        text = stringResource(R.string.dsh_bk_cloud_enc_pw_needed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                } else {
+                    Spacer(Modifier.height(4.dp))
+                }
 
                 if (note.isNotEmpty()) {
                     Text(

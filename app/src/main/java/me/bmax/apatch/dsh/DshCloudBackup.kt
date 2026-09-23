@@ -49,6 +49,8 @@ object DshCloudBackup {
         val username: String = "",
         /** 口令在插件的凭据里配没配上（永不回传口令本身）。 */
         val passwordConfigured: Boolean = false,
+        /** 备份**加密口令**是否已存（与 WebDAV 口令分开一份，供自动触发也能加密）。 */
+        val encryptPasswordConfigured: Boolean = false,
         val remoteDir: String = "",
         /** 用户设置的备份档位（dsh-only / dsh-vault / app-only / app-dsh / app-dsh-vault）。 */
         val tier: String = "",
@@ -79,6 +81,7 @@ object DshCloudBackup {
             url = o.optString("url"),
             username = o.optString("username"),
             passwordConfigured = o.optBoolean("passwordConfigured", false),
+            encryptPasswordConfigured = o.optBoolean("encryptPasswordConfigured", false),
             remoteDir = o.optString("remoteDir"),
             tier = o.optString("tier"),
             effectiveTier = o.optString("effectiveTier"),
@@ -120,11 +123,14 @@ object DshCloudBackup {
         includeSessions: Boolean,
         intervalMinutes: Int,
         onStartup: Boolean,
+        /** 备份加密口令；留空则**不下发** —— 插件保留已存的加密口令不动（同 [password] 语义）。 */
+        encryptPassword: String = "",
     ): CloudResult = withContext(Dispatchers.IO) {
         val body = JSONObject().apply {
             put("url", url.trim())
             put("username", username)
             if (password.isNotEmpty()) put("password", password)
+            if (encryptPassword.isNotEmpty()) put("encryptPassword", encryptPassword)
             put("remoteDir", remoteDir)
             put("tier", tier)
             put("encrypt", encrypt)

@@ -331,9 +331,8 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Cloud-backup card now always shows on the Backup page (like the DSH config-backup card) instead of hiding when the plugin is unreachable. It tells the three cases apart and offers the right button: DSH not running -> Start DSH; plugin not installed -> Install plugin; plugin disabled -> Enable and restart DSH.</item>
-        <item>Saving the WebDAV settings now refreshes the cloud-backup status immediately, no manual refresh needed.</item>
-        <item>Fixed cloud backup failing with "open failed: ENOENT" when the host app wrote/read the plugin directory. The app was using the container path /root/.dsh/... directly; it now maps it to the real host rootfs path (and returns the container path back to the plugin).</item>
+        <item>Added a Backup encryption password field to the WebDAV cloud-backup settings. It is stored in DSH credentials (separate from the WebDAV password) so scheduled and on-startup backups can encrypt too. When encryption is on but no password is set, backups now fail with a clear message instead of silently producing an unencrypted archive.</item>
+        <item>Cloud backup now retries with backoff on WebDAV rate-limiting (HTTP 429/503), honoring Retry-After. Fixes "read upstream manifest failed: HTTP 429" seen on self-hosted WebDAV (OpenList) and providers like Nutstore after deleting remote files.</item>
 </string-array>
 
     

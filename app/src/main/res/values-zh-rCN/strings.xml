@@ -314,9 +314,8 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>备份页的云备份卡片改为常显（与 DSH 配置备份卡片一致），不再「插件不可达就整块隐藏」。并区分三种情况给出对应按钮：DSH 未启动 → 启动 DSH；插件未安装 → 安装插件；插件已停用 → 启用并重启 DSH。</item>
-        <item>保存 WebDAV 配置后立即刷新云备份状态，不再需要手动点刷新。</item>
-        <item>修复云备份「open failed: ENOENT」失败：宿主 App 读写插件目录时直接用了容器路径 /root/.dsh/…，现在会映射到宿主 rootfs 的真实路径（回给插件的仍是容器路径）。</item>
+        <item>WebDAV 云备份设置里新增「备份加密口令」输入框。口令存到 DSH 凭据（与 WebDAV 口令分开），让定时/启动后的自动备份也能加密。开启了加密却没设口令时，备份会明确报错，不再静默产出未加密的包。</item>
+        <item>云备份遇到 WebDAV 限流（HTTP 429/503）时改为按 Retry-After 退避重试。修复自建 WebDAV（OpenList）及坚果云等在删除远端文件后出现的「读取上游清单失败：HTTP 429」。</item>
 </string-array>
 
     
