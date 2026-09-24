@@ -314,8 +314,7 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>预装插件随 App 更新自动更新：每次 App 升级后，会把云备份插件 dsh-folk-cloud 按最新代码重装一次，修复无需手动重装即可到位。</item>
-        <item>云备份插件页：新增「备份加密口令」输入框（此前只有 App 里有），备份档位改为名称与描述分两行显示，不再挤在一行。</item>
+        <item>预装插件改为「按需更新」：不再每次 App 升级都重装，而是对比已装插件版本与要求版本名单，只有低于要求时才重装云备份插件。</item>
 </string-array>
 
     

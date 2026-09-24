@@ -274,6 +274,15 @@ object DshRuntime {
     private val SEED_SPECS = mapOf("dsh-folk-cloud" to "github:IPF-Sinon/dsh-folk-cloud")
 
     /**
+     * 预装插件的「最低要求版本」名单（见 [applySeedVersionUpgrade]）。
+     *
+     * DSH 启动时，凡当前已装版本**低于**这里要求的预装包，就用 `github:` 规格重装一次以拉到
+     * 满足要求的新版本；已达标的不动。要求版本必须与插件仓 `package.json` 的版本对齐：插件发了
+     * 需要 App 一并到位的改动，就抬插件版本、再把这里的要求版本同步上来。
+     */
+    private val SEED_MIN_VERSIONS = mapOf("dsh-folk-cloud" to "0.2.0")
+
+    /**
      * 预装包 → 正式 release tgz 直链的兜底表（钉死版本）。
      *
      * 正常路径是 [SEED_SPECS] 的 `github:` 规格（跟最新代码，经 gh-proxy 镜像装）；只有
@@ -1624,9 +1633,9 @@ object DshRuntime {
             _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
         }
 
-        // 随 App 更新刷新预装插件：App 版本名一变，就把当前已装的预装插件（github: 规格）
-        // 重装一次以跟上最新代码（见 KEY_SEED_APP_VERSION）。用户要求「更新后自动更新预装 cloud 插件」。
-        applySeedAppUpgrade(p, installed, shadowed)
+        // 按版本号门控刷新预装插件：只有当前已装版本**低于** SEED_MIN_VERSIONS 要求时才重装
+        // （github: 拉最新 main）。用户要求「只有需要的时候才更新，对比版本号、低于才更新」。
+        applySeedVersionUpgrade(shadowed)
 
         // 装后兜底（每次预装路径都跑，包括 todo 为空时 —— 运行时升级把上游内置能力
         // 带进来后，历史预装包也可能变成冲突源）：按实际读到的 entry id 找重复，
@@ -1725,35 +1734,38 @@ object DshRuntime {
     }
 
     /**
-     * 随 App 更新刷新预装插件：App 版本名（[me.bmax.apatch.BuildConfig.VERSION_NAME]）一变，
-     * 就把**当前已装**的预装插件用 `github:` 规格重装一次，跟上最新代码（见 [DshEnv.KEY_SEED_APP_VERSION]）。
+     * 按版本号门控刷新预装插件：把**当前已装**版本低于 [SEED_MIN_VERSIONS] 要求的预装插件用
+     * `github:` 规格重装一次（重新解析 main 最新提交），跟上必需的修复。
      *
-     * 只碰当前已装、且不在 shadowed（上游已内置、不该装）里的预装包：用户主动卸掉的不会被复活，
-     * 缺失的首装由上面的 missing 循环负责。装完记下版本，同一版本不再重复（每个 App 版本至多刷一轮）。
-     * 重装失败不影响已装的旧版本（install 失败不会卸载），只落一行日志。
+     * 与「每次 App 升级都重装」相比，这里只在**真的过时**时才动手（用户要求：搞个名单，对比
+     * 插件版本号、低于才更新）。判据是容器里 `node_modules/<pkg>/package.json` 的实际版本，
+     * 所以插件仓每次发有意义的改动都要抬 package.json 版本，App 这边再把要求版本填进名单。
+     *
+     * 只碰当前已装、且不在 shadowed（上游已内置、不该装）里的包：用户卸掉的不会被复活，缺失
+     * 首装仍由 missing 循环负责。重装失败不影响已装旧版本（install 失败不卸载），只落一行日志；
+     * 仍低于要求时下次启动会再试（这正是「需要时才更新」的期望行为）。
      */
-    private suspend fun applySeedAppUpgrade(
-        p: android.content.SharedPreferences,
-        installed: Set<String>,
-        shadowed: Set<String>,
-    ) {
-        val appNow = me.bmax.apatch.BuildConfig.VERSION_NAME
-        if (p.getString(DshEnv.KEY_SEED_APP_VERSION, null) == appNow) return
-        val refresh = SEED_PLUGINS.filter { it in installed && it !in shadowed }
-        if (refresh.isNotEmpty()) {
-            _state.update {
-                it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_plugin_seeding))
-            }
-            for (pkg in refresh) {
-                logInfo(R.string.dsh_log_seed_app_upgrade, pkg, appNow)
-                val code = installSeedPkgWithApproval(pkg)
-                if (code == 0) logInfo(R.string.dsh_log_seed_done, pkg) else logWarn(R.string.dsh_log_seed_failed, pkg)
-            }
-            refreshRootfsSize()
-            _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
+    private suspend fun applySeedVersionUpgrade(shadowed: Set<String>) {
+        val wanted = SEED_MIN_VERSIONS.filterKeys { it !in shadowed }
+        if (wanted.isEmpty()) return
+        val byPkg = runCatching { DshPluginRepo.listInstalled() }.getOrNull()
+            ?.associateBy { it.pkg } ?: return
+        // 已装、有可比版本、且低于要求 → 需要重装。没装的不在这里复活（缺失首装走 missing 循环）。
+        val outdated = wanted.filter { (pkg, min) ->
+            val cur = byPkg[pkg]?.installedVersion.orEmpty()
+            cur.isNotEmpty() && compareVersions(cur, min) < 0
         }
-        // 无论有没有要刷的，都记下这个版本已处理过（避免每次开机重判）
-        p.edit().putString(DshEnv.KEY_SEED_APP_VERSION, appNow).apply()
+        if (outdated.isEmpty()) return
+        _state.update {
+            it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_plugin_seeding))
+        }
+        for ((pkg, min) in outdated) {
+            logInfo(R.string.dsh_log_seed_version_upgrade, pkg, byPkg[pkg]?.installedVersion.orEmpty(), min)
+            val code = installSeedPkgWithApproval(pkg)
+            if (code == 0) logInfo(R.string.dsh_log_seed_done, pkg) else logWarn(R.string.dsh_log_seed_failed, pkg)
+        }
+        refreshRootfsSize()
+        _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
     }
 
     /**

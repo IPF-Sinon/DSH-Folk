@@ -331,8 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Pre-installed plugins now auto-update when the app updates: on each new app version, the cloud-backup plugin (dsh-folk-cloud) is reinstalled from its latest code so fixes ship without a manual reinstall.</item>
-        <item>Cloud-backup plugin page: added a Backup encryption password field (previously only in the app), and backup tiers now show the name and description on two lines instead of one cramped line.</item>
+        <item>Pre-installed plugins now update only when needed: instead of reinstalling on every app update, DSH checks the installed plugin version against a required-version list and reinstalls the cloud-backup plugin only when it is older than required.</item>
 </string-array>
 
     

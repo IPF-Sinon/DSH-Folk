@@ -965,7 +965,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_log_extract_failed">解压失败: %1$s</string>
     <string name="dsh_log_groups_added">已给容器补上 Android 补充组: %1$s</string>
     <string name="dsh_log_seeding">预装插件 %1$s …</string>
-    <string name="dsh_log_seed_app_upgrade">App 已更新到 %2$s：刷新预装插件 %1$s …</string>
+    <string name="dsh_log_seed_version_upgrade">预装插件 %1$s 当前 %2$s，低于要求的 %3$s：正在更新 …</string>
     <string name="dsh_log_seed_builds_blocked">pnpm 拦下了构建脚本（%1$s），自动放行后重试…</string>
     <string name="dsh_log_seed_repair">补修预装：%1$s 之前没生效，重试一次</string>
     <string name="dsh_log_seed_retry_missing">补装预装插件：容器里缺 %1$s，重新安装</string>

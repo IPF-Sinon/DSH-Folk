@@ -329,15 +329,6 @@ object DshEnv {
     const val KEY_SEED_PASSES = "seed_passes"
 
     /**
-     * 上次「随 App 更新刷新预装插件」时的 App 版本名（[me.bmax.apatch.BuildConfig.VERSION_NAME]）。
-     *
-     * 预装插件用 `github:` 规格跟最新代码，但一旦装上就冻在当时的 HEAD，App 升级不会自动重拉。
-     * 用户要求「更新后自动更新预装 cloud 插件」：于是每次 App 版本名变化时，对**当前已装**的
-     * 预装插件重装一次（`github:` 会重新解析 main 的最新提交），装完记下版本、同版本不再重复。
-     */
-    const val KEY_SEED_APP_VERSION = "seed_app_version"
-
-    /**
      * 「上游已内置同名 loader entry id，所以**不该**预装」的包（逗号分隔）。
      *
      * 与 [KEY_SEEDED_PLUGINS] 是**两种不同的事实**，必须分开记：

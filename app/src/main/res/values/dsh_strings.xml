@@ -985,7 +985,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_log_extract_failed">Extraction failed: %1$s</string>
     <string name="dsh_log_groups_added">Added the Android supplementary groups to the container: %1$s</string>
     <string name="dsh_log_seeding">Pre-installing plugin %1$s …</string>
-    <string name="dsh_log_seed_app_upgrade">App updated to %2$s: refreshing pre-installed plugin %1$s …</string>
+    <string name="dsh_log_seed_version_upgrade">Pre-installed plugin %1$s is %2$s, below required %3$s: updating …</string>
     <string name="dsh_log_seed_builds_blocked">pnpm blocked build scripts (%1$s), allowing them and retrying…</string>
     <string name="dsh_log_seed_repair">Repairing pre-install: %1$s did not take effect, retrying once</string>
     <string name="dsh_log_seed_retry_missing">Pre-install retry: %1$s is missing from the container, installing again</string>
