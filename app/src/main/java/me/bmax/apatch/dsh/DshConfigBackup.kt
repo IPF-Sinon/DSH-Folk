@@ -2441,7 +2441,7 @@ object DshConfigBackup {
      * @return first = 要上传给插件的包（有外观时是剥离副本，否则就是 [plainZip] 本身）；
      *   second = 需要在上传后删除的临时文件（没有则为 null）。
      */
-    private fun managerZipOf(ctx: Context, plainZip: File): Pair<File, File?> {
+    private suspend fun managerZipOf(ctx: Context, plainZip: File): Pair<File, File?> {
         if (DshBackupArchive.entrySize(plainZip, DshBackupArchive.THEME) < 0L) return plainZip to null
         val tmpDir = File(ctx.filesDir, "backup-tmp").apply { mkdirs() }
         val stripped = File(tmpDir, "manager-" + System.nanoTime() + ".zip")
