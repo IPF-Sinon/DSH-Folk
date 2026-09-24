@@ -63,7 +63,23 @@ ok(
   'header = magic(4)+version(1)+salt(16)+iv(12)+tag(16) = 49',
 );
 ok(/AES\/GCM\/NoPadding/.test(cryptoKt), '用 AES/GCM/NoPadding');
-ok(!/\.setAAD\(|\.updateAAD\(/.test(cryptoKt), '不设 AAD（插件的 Node createCipheriv 也没设，设了就对不上）');
+// v1 容器（与插件 Node createCipheriv / dsh-config-manager 兼容）**绝不能**设 AAD；
+// 分块 v2 则**必须**用 AAD 把块序号 + isFinal 绑进认证（防重排/丢块/截断）。
+{
+  const sealSpan = braceSpan(cryptoKt, 'private fun seal(');
+  const dbSpan = braceSpan(cryptoKt, 'private fun decryptBlock(');
+  const sealBody = sealSpan ? cryptoKt.slice(sealSpan[0], sealSpan[1]) : '';
+  const dbBody = dbSpan ? cryptoKt.slice(dbSpan[0], dbSpan[1]) : '';
+  ok(
+    sealSpan !== null && dbSpan !== null &&
+      !/\.setAAD\(|\.updateAAD\(/.test(sealBody) && !/\.setAAD\(|\.updateAAD\(/.test(dbBody),
+    'v1 容器（seal/decryptBlock，与插件 Node createCipheriv 兼容）不设 AAD',
+  );
+  ok(/updateAAD\(chunkAad\(index, isFinal\)\)/.test(cryptoKt), '分块 v2 用 AAD 绑定块序号 + isFinal（chunkAad）');
+  ok(/private fun chunkIv\(prefix: ByteArray, index: Int\)/.test(cryptoKt) &&
+    /iv\[NONCE_PREFIX_LENGTH\] = \(index ushr 24\)/.test(cryptoKt),
+    '分块 v2 每块 IV = 随机前缀 || 大端块序号（同文件内不重复）');
+}
 ok(/GCMParameterSpec\(TAG_BITS, iv\)/.test(cryptoKt), 'GCM 参数按 tag 位数 + iv 构造');
 
 /* ------------------------------------------- 2. 自检向量（Node 独立实现复算） */
@@ -178,7 +194,7 @@ ok(
 );
 ok(/JSONArray\(DshBackupArchive\.pluginSections\(\)\)/.test(exportBody), 'only 用 pluginSections()');
 ok(/DshBackupArchive\.merge\(/.test(exportBody), '导出走本地补包');
-ok(/DshBackupCrypto\.encryptArchiveToFile\(merged, finalFile, plan\.password\)/.test(exportBody), '有密码时由 App 做容器加密');
+ok(/DshBackupCrypto\.encryptArchiveChunkedToFile\(merged, finalFile, plan\.password\)/.test(exportBody), '有密码时由 App 做容器加密（大包走分块 v2）');
 ok(!/DshConfigBackup\.sections\(/.test(exportBody), '旧的分区拼装入口不再被导出使用');
 
 /* --------------------------------------------------------- 6. 导入管线 */
@@ -308,18 +324,21 @@ ok(/sums\[APP_DIR \+ "audit\/" \+ f\.name\]/.test(archiveKt), '审计文件写�
 
 // 现场：用户拿到一个 49 字节的「备份」= 容器头长度（4+1+16+12+16）+ 零长密文，
 // 恢复自然失败。而内存版自检一直是过的 —— 因为导出走的是流式那两个函数，
-// 它们从没被自检覆盖过。下面几条把「这次是怎么发现的」钉成断言。
+// 它们从没被自检覆盖过。大包现在改走**分块 v2**，所以自检也必须覆盖分块那条路。
 const selfTestFilesSpan = braceSpan(cryptoKt, 'fun selfTestFiles(');
-ok(selfTestFilesSpan !== null, '流式加解密有独立自检（selfTestFiles）');
+ok(selfTestFilesSpan !== null, '流式/分块加解密有独立自检（selfTestFiles）');
 if (selfTestFilesSpan) {
   const body = cryptoKt.slice(selfTestFilesSpan[0], selfTestFilesSpan[1]);
-  ok(/encryptArchiveToFile\(plain, blob, SELFTEST_PASSWORD\)/.test(body),
-    '流式自检真的调用加密落盘（不是又测一遍内存版）');
-  ok(/decryptArchiveToFile\(blob, back, SELFTEST_PASSWORD\)/.test(body), '流式自检把刚写出的文件解回来');
-  ok(/blob\.length\(\) != expected/.test(body) && /HEADER_LENGTH\.toLong\(\) \+ payload\.size/.test(body),
-    '流式自检核对「容器 = 头 + 明文」（49 字节的坏包就是这样被发现的）');
-  ok(/sha256File\(plain\)/.test(body) && /sha256File\(back\)/.test(body), '流式自检比对内容 sha256');
-  ok(/payload\.size/.test(body) && /300_000/.test(body), '自检数据量跨过 64KB 缓冲区（小额数据测不出流式问题）');
+  ok(/encryptChunked\(plain, blob, SELFTEST_PASSWORD, 100_000\)/.test(body),
+    '分块自检真的调用分块加密落盘（不是又测一遍内存版）');
+  ok(/decryptArchiveToFile\(blob, back, SELFTEST_PASSWORD\)/.test(body), '分块自检把刚写出的文件解回来');
+  ok(/isChunkedContainer\(blob\)/.test(body), '分块自检确认写出的是 v2 分块容器');
+  // 分块容器没有「头 + 明文」的尺寸恒等式，改由「截断后必须解不开」把认证/完整性钉死
+  ok(/copyOfRange\(0, full\.size - 32\)/.test(body) && /decryptArchiveToFile\(truncated/.test(body),
+    '分块自检做截断检测（砍掉末块后必须解不开，否则「缺数据也算成功」）');
+  ok(/sha256File\(plain\)/.test(body) && /sha256File\(back\)/.test(body), '分块自检比对内容 sha256');
+  ok(/ByteArray\(300_000\)/.test(body) && /100_000/.test(body),
+    '自检 300KB 明文 + 100KB 块 → 跨多块、末块非满（单块测不出分块框架问题）');
 }
 ok(/fun selfTestFiles\(dir: File\): String\?/.test(cryptoKt), 'selfTestFiles 返回可显示的原因（null = 通过）');
 

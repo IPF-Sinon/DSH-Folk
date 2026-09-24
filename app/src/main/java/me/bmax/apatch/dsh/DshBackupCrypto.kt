@@ -508,14 +508,14 @@ object DshBackupCrypto {
                             val chunk = cipher.update(buf, 0, n)
                             if (chunk != null && chunk.isNotEmpty()) out.write(chunk)
                         }
-                        val tailBuf = ByteArray(held)
+                        val tail = ByteArray(held)
                         var tailGot = 0
                         while (tailGot < held) {
-                            val n = ins.read(tailBuf, tailGot, held - tailGot)
+                            val n = ins.read(tail, tailGot, held - tailGot)
                             if (n <= 0) return false
                             tailGot += n
                         }
-                        val last = cipher.doFinal(tailBuf + tag)
+                        val last = cipher.doFinal(tail + tag)
                         if (last.isNotEmpty()) out.write(last)
                     }
                 }
