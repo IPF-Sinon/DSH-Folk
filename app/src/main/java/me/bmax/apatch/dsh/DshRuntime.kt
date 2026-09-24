@@ -1720,7 +1720,8 @@ object DshRuntime {
         // 只补一句可行动的话，不在这里修 rootfs：pnpm 由运行时自带。旧运行时那个无 shebang
         // 的 pnpm shim 会让 dsh 的 spawnSync 直接 ENOENT，报的就是这一行 —— 出路是更新运行时。
         if (code != 0 && out.contains(DshPluginRepo.NO_PNPM)) logWarn(R.string.dsh_log_missing_pnpm)
-        return code
+        // exitCodeOf 解析不出退出码时返回 null —— 按失败处理（-1），调用方 `code == 0` 才是成功
+        return code ?: -1
     }
 
     /**
