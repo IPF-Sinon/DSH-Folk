@@ -331,9 +331,8 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Cloud-backup plugin (0.4.0, auto-updated with the app): the progress dialog is redesigned with step stages, a byte-level upload progress bar, live logs and animation. It now follows automatic/background syncs too — the settings page polls status, so even after a page refresh you still see a sync in progress.</item>
-        <item>Cloud-backup history: each version now has a Delete button (permanently removes that backup from the cloud, with confirmation). Removed the redundant "Restore from upstream" button since per-version restore already covers it.</item>
-        <item>Backup page: the DSH configuration-backup card now detects state the same way as the cloud-backup card — telling apart plugin-not-installed / plugin-disabled / DSH-not-running with the matching button (Install / Enable and restart / Start DSH).</item>
+        <item>Fixed: restoring a backup that contains a large theme (e.g. a video wallpaper, ~137MB) failed with "backup integrity check failed: dsh-folk/theme.zip". The theme is now restored by the app itself and pulled out of the archive before the config-manager plugin processes the rest, so it no longer hits the plugin&apos;s 100MB per-entry limit.</item>
+        <item>Cloud-backup plugin (0.4.1, auto-updated): the progress dialog no longer shows black text on a dark box for light-theme users — it now uses a self-consistent light/dark color pair so it is readable under any theme.</item>
 </string-array>
 
     

@@ -817,8 +817,11 @@ object DshConfigBackup {
             )
         }
         onLine(ctx.appString(R.string.dsh_bk_step_uploading, plainZip.name))
-        val up = upload(plainZip)
-            ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_upload_failed))
+        // 大外观包拎出去再上传（见 [managerZipOf]）：dsh-config-manager 有 100MB 单条目上限
+        val (managerZip, managerTmp) = managerZipOf(ctx, plainZip)
+        val up = upload(managerZip)
+        managerTmp?.delete()
+        if (up == null) return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_upload_failed))
         val upObj = runCatching { JSONObject(up) }.getOrNull()
             ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_upload_bad_json))
         val zipPath = upObj.optString("zipPath")
@@ -1723,8 +1726,11 @@ object DshConfigBackup {
         var containerType = ""
         if (zipPath.isEmpty()) {
             onLine(ctx.appString(R.string.dsh_bk_step_uploading, plainZip.name))
-            val up = upload(plainZip)
-                ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_failed))
+            // 大外观包拎出去再上传（见 [managerZipOf]）：dsh-config-manager 有 100MB 单条目上限
+            val (managerZip, managerTmp) = managerZipOf(ctx, plainZip)
+            val up = upload(managerZip)
+            managerTmp?.delete()
+            if (up == null) return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_failed))
             val upObj = runCatching { JSONObject(up) }.getOrNull()
                 ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_upload_bad_json))
             zipPath = upObj.optString("zipPath")
@@ -2422,6 +2428,32 @@ object DshConfigBackup {
         val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
         stream?.bufferedReader()?.use { it.readText() } ?: ""
     }.getOrNull()
+
+    /**
+     * 交给 dsh-config-manager 前，把体积大的外观包 `dsh-folk/theme.zip` 从包里拎出去。
+     *
+     * 为什么必须拎：dsh-config-manager 的 zip 安全护栏有「单条目解压 ≤100MB」的硬上限
+     * （`utils/zip.js` maxSingleBytes），真机上 137MB 视频壁纸主题恢复时正是撞在这条上，
+     * 报「备份完整性校验失败: dsh-folk/theme.zip」。外观本来就由 App 自己解（[restoreThemeZip]
+     * 走 java.util.zip，无上限），所以交给插件的那份不需要带它。剥离副本会同步把 checksums
+     * 里那一行摘掉，插件的逐条校验才不会因「清单列了、包里没有」而失败。
+     *
+     * @return first = 要上传给插件的包（有外观时是剥离副本，否则就是 [plainZip] 本身）；
+     *   second = 需要在上传后删除的临时文件（没有则为 null）。
+     */
+    private fun managerZipOf(ctx: Context, plainZip: File): Pair<File, File?> {
+        if (DshBackupArchive.entrySize(plainZip, DshBackupArchive.THEME) < 0L) return plainZip to null
+        val tmpDir = File(ctx.filesDir, "backup-tmp").apply { mkdirs() }
+        val stripped = File(tmpDir, "manager-" + System.nanoTime() + ".zip")
+        val ok = DshBackupArchive.stripEntry(plainZip, stripped, DshBackupArchive.THEME)
+        return if (ok && stripped.isFile) {
+            trace(ctx, "manager-strip-theme from=" + plainZip.length() + " to=" + stripped.length())
+            stripped to stripped
+        } else {
+            stripped.delete()
+            plainZip to null
+        }
+    }
 
     private fun upload(zip: File): String? = runCatching {
         val name = java.net.URLEncoder.encode(zip.name, "UTF-8")

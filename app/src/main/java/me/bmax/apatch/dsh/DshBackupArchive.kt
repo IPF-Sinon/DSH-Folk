@@ -169,6 +169,76 @@ object DshBackupArchive {
     }.getOrDefault(-1L)
 
     /**
+     * 产出一份「去掉某个条目」的归档副本：把 [src] 里除 [entryName] 外的条目**原样流式**拷进
+     * [dst]，并把 [CHECKSUMS] 里对应那一行摘掉（否则导入侧会因「清单列了这一条、包里却找不到」
+     * 判为完整性失败）。
+     *
+     * 用途见 [THEME]：恢复时把体积巨大的外观包 `dsh-folk/theme.zip` 从「交给 dsh-config-manager
+     * 的那份包」里拎出来 —— 外观由 App 自己用 java.util.zip 解开落地（没有单条目上限），
+     * dsh-config-manager 只处理剩下的小包，从而绕开它内置的 100MB 单条目 / 200MB 压缩总量
+     * zip 安全上限（真机上 137MB 视频壁纸主题就是栽在这条上限，报「备份完整性校验失败:
+     * dsh-folk/theme.zip」）。
+     *
+     * @return true = [src] 里确实有 [entryName] 且已产出 [dst]；false = 没有该条目（[dst] 未写，
+     *   调用方直接用 [src] 即可）。整个过程流式，不把大条目读进内存。
+     */
+    fun stripEntry(src: File, dst: File, entryName: String): Boolean = runCatching {
+        // 第一趟：确认条目在不在，顺手读出旧 checksums（小文件），避免白拷一份大包
+        var present = false
+        var checksumsRaw: String? = null
+        ZipInputStream(BufferedInputStream(FileInputStream(src), 1 shl 16)).use { zis ->
+            var e = zis.nextEntry
+            while (e != null) {
+                when (e.name) {
+                    entryName -> present = true
+                    CHECKSUMS -> checksumsRaw = zis.readBytes().toString(Charsets.UTF_8)
+                }
+                zis.closeEntry()
+                e = zis.nextEntry
+            }
+        }
+        if (!present) return@runCatching false
+
+        // 摘掉 entryName 那一行后的 checksums（解析失败就整表照抄，交给导入侧自己去发现不符）
+        val newChecksums: ByteArray? = checksumsRaw?.let { raw ->
+            runCatching {
+                JSONObject(raw).apply { remove(entryName) }.toString(2).toByteArray(Charsets.UTF_8)
+            }.getOrNull()
+        }
+
+        // 第二趟：原样拷贝，跳过 entryName、按新内容重写 checksums
+        ZipInputStream(BufferedInputStream(FileInputStream(src), 1 shl 16)).use { zis ->
+            ZipOutputStream(BufferedOutputStream(FileOutputStream(dst), 1 shl 16)).use { zos ->
+                val buf = ByteArray(1 shl 16)
+                var e = zis.nextEntry
+                while (e != null) {
+                    val name = e.name
+                    when {
+                        name == entryName -> Unit // 丢掉
+                        name == CHECKSUMS && newChecksums != null -> {
+                            zos.putNextEntry(ZipEntry(CHECKSUMS))
+                            zos.write(newChecksums)
+                            zos.closeEntry()
+                        }
+                        else -> {
+                            zos.putNextEntry(ZipEntry(name))
+                            var n = zis.read(buf)
+                            while (n > 0) {
+                                zos.write(buf, 0, n)
+                                n = zis.read(buf)
+                            }
+                            zos.closeEntry()
+                        }
+                    }
+                    zis.closeEntry()
+                    e = zis.nextEntry
+                }
+            }
+        }
+        true
+    }.getOrDefault(false)
+
+    /**
      * 会话根目录（容器里的 `~/.dsh/sessions` 在设备上的落点）。
      *
      * 与 [DshConfigBackup.restoreSessionsFromZip] 用的是同一个根：App 直接读写这份树，
