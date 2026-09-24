@@ -407,20 +407,24 @@ object DshConfigBackup {
                     }
                     finalFile.writeBytes(DshBackupCrypto.encryptArchive(plainBytes, plan.password))
                 } else {
-                    trace(ctx, "encrypt=stream fileLen=${merged.length()}")
-                    DshBackupCrypto.encryptArchiveToFile(merged, finalFile, plan.password)
+                    trace(ctx, "encrypt=chunked fileLen=${merged.length()}")
+                    // 分块 GCM：每块独立加密，内存只占一个分块——几百 MB 的主题包也不再 OOM
+                    // （旧的单段流式在 Android/Conscrypt 上会把整段密文攒到 doFinal，必爆堆）。
+                    DshBackupCrypto.encryptArchiveChunkedToFile(merged, finalFile, plan.password)
                 }
             } catch (e: Exception) {
                 finalFile.delete()
                 return@withContext failTrace(ctx, ctx.appString(R.string.dsh_bk_encrypt_failed, describe(e)))
             }
             // 加密不校验等于没做：直接拿刚写出的文件解一遍，解不回来就删掉并如实报错。
-            // 大小也要对：GCM 不放大数据，容器必须正好是「头 + 明文」。
+            // 大小校验：v1 单段容器是「头 + 明文」；v2 分块容器每块多 4B 长度 + 16B tag，
+            // 所以分块容器只核对「解回来的大小/内容」，不核对容器本身的字节数。
             val verify = verifyEncrypted(ctx, merged, finalFile, plan.password, stage)
+            val chunked = DshBackupCrypto.isChunkedContainer(finalFile)
             trace(
                 ctx,
                 "container bytes=" + finalFile.length() +
-                    " expected=" + (DshBackupCrypto.HEADER_LENGTH + merged.length()) +
+                    (if (chunked) " format=chunked" else " expected=" + (DshBackupCrypto.HEADER_LENGTH + merged.length())) +
                     " verify=" + (verify ?: "ok"),
             )
             if (verify != null) {
@@ -598,7 +602,9 @@ object DshConfigBackup {
         stage: File,
     ): String? {
         val expected = DshBackupCrypto.HEADER_LENGTH.toLong() + plain.length()
-        if (blob.length() != expected) {
+        // v2 分块容器有每块的长度前缀 + tag 开销，容器字节数不等于「头 + 明文」，跳过这条；
+        // 真正的验证是下面「解回来的大小 + sha256」——那对两种格式都成立。
+        if (!DshBackupCrypto.isChunkedContainer(blob) && blob.length() != expected) {
             return ctx.appString(R.string.dsh_bk_verify_failed, "大小", "$expected", blob.length().toString())
         }
         val back = File(stage, "verify-back.zip")

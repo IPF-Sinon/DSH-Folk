@@ -314,7 +314,10 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>预装插件改为「按需更新」：不再每次 App 升级都重装，而是对比已装插件版本与要求版本名单，只有低于要求时才重装云备份插件。</item>
+        <item>修复使用主题后备份失败（内存溢出）。大备份包（带主题可上百 MB）改为分块加密、不再一次性读进内存，备份不会再崩。已有的旧备份仍可正常恢复。</item>
+        <item>云备份插件：备份 / 恢复 / 同步（含自动触发）时会弹出进度遮罩，能看到正在处理、也避免误点或重复点击。</item>
+        <item>云备份插件：现在可以从历史列表恢复任意历史版本，不再只能恢复上游最新那一份。</item>
+        <item>云备份插件：去掉了重复的「只从上游恢复」按钮。</item>
 </string-array>
 
     

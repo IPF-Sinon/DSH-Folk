@@ -106,6 +106,30 @@ object DshBackupCrypto {
     /** 流式加解密的块大小：几百 MB 的包也只占这两个缓冲区。 */
     private const val STREAM_BUFFER = 1 shl 16
 
+    /**
+     * 分块 GCM 容器版本（`DCA1` magic + version=2）。
+     *
+     * 为什么要它：Android 的 Conscrypt 对 AES/GCM 会把**整段密文攒到 doFinal() 才吐出来**
+     * （见旧 [encryptArchiveToFile] 里的注释），所以「一把 GCM 从头加到尾」在真机上必然把整包
+     * 读进内存——137 MB 的主题包就这样把 192 MB 的堆撑爆（OOM 现场：Failed to allocate a
+     * 201195536 byte allocation）。分块格式把明文切成 [CHUNK_PLAIN_SIZE] 一段、每段独立一次
+     * GCM，内存只占一个分块，任意大小都不再 OOM。
+     *
+     * 只有 App 自己产出/消费的大包（含主题/软件数据）走这条路；与插件、dsh-config-manager
+     * 共享的小包仍是 version=1 的单段 DCA1，跨端兼容不受影响。解密侧按 version 字节自动分流，
+     * 老备份（version=1）永远还能解。
+     */
+    const val VERSION_CHUNKED = 2
+
+    /** 分块容器每块明文大小：4 MiB。峰值内存 ≈ 明文块 + 密文块 + Conscrypt 内部缓冲 ≈ 12 MB。 */
+    private const val CHUNK_PLAIN_SIZE = 4 * 1024 * 1024
+
+    /** 每块 IV 的随机前缀长度；后 4 字节放大端块序号，凑满 [IV_LENGTH]=12。 */
+    private const val NONCE_PREFIX_LENGTH = 8
+
+    /** 分块容器头：magic(4) + version(1) + salt(16) + noncePrefix(8) + chunkSize(4 BE) = 33。 */
+    private const val CHUNK_HEADER_LENGTH = MAGIC_LENGTH + 1 + SALT_LENGTH + NONCE_PREFIX_LENGTH + 4
+
     /** 自检用的 scrypt 向量密码。 */
     private const val SELFTEST_PASSWORD = "dsh-folk-selftest-2026"
 
@@ -306,29 +330,38 @@ object DshBackupCrypto {
         val blob = File(dir, "selftest-blob.bin")
         val back = File(dir, "selftest-back.bin")
         try {
+            // 300KB 明文 + 故意调小的块（100KB）→ 跨 3 块、末块非满：把分块框架、每块 IV 序号、
+            // AAD、末块标志一次跑齐。用的就是导出大包那条 encryptChunked/decryptChunked。
             val payload = ByteArray(300_000)
             random.nextBytes(payload)
             plain.writeBytes(payload)
-            encryptArchiveToFile(plain, blob, SELFTEST_PASSWORD)
-            // GCM 不放大数据：容器必须是「头 + 明文长度」，对不上就是没写完
-            val expected = HEADER_LENGTH.toLong() + payload.size
-            if (blob.length() != expected) {
-                return "写出的容器大小不对：$expected 字节（头 ${HEADER_LENGTH} + 明文 ${payload.size}），实际 ${blob.length()}"
-            }
-            if (!decryptArchiveToFile(blob, back, SELFTEST_PASSWORD)) return "写出的容器解不回来（密码是对的）"
+            encryptChunked(plain, blob, SELFTEST_PASSWORD, 100_000)
+            if (!isChunkedContainer(blob)) return "分块容器头不对：version 字节不是 $VERSION_CHUNKED"
+            if (!decryptArchiveToFile(blob, back, SELFTEST_PASSWORD)) return "写出的分块容器解不回来（密码是对的）"
             if (back.length() != plain.length()) {
                 return "解出来的大小不对：${back.length()} != ${plain.length()}"
             }
             val a = sha256File(plain)
             val b = sha256File(back)
             if (a != b) return "解出来的内容不一致（sha256 $a != $b）"
+            // 截断检测：砍掉末尾 32 字节（末块的 tag/密文）后必须解不开，否则「缺数据也算成功」
+            val truncated = File(dir, "selftest-trunc.bin")
+            try {
+                val full = blob.readBytes()
+                truncated.writeBytes(full.copyOfRange(0, full.size - 32))
+                if (decryptArchiveToFile(truncated, back, SELFTEST_PASSWORD)) {
+                    return "截断的分块容器竟然解开了：分块认证没生效"
+                }
+            } finally {
+                truncated.delete()
+            }
             null
         } finally {
             plain.delete()
             blob.delete()
             back.delete()
         }
-    }.getOrElse { "流式自检抛异常：" + it.javaClass.simpleName + ": " + it.message }
+    }.getOrElse { "分块自检抛异常：" + it.javaClass.simpleName + ": " + it.message }
 
     /** 逐块算 sha256（比对用；不把整个文件读进内存）。 */
     private fun sha256File(f: File): String {
@@ -411,59 +444,246 @@ object DshBackupCrypto {
      */
     fun decryptArchiveToFile(blob: File, output: File, password: String): Boolean = runCatching {
         val size = blob.length()
-        if (size < HEADER_LENGTH) return false
-        val header = ByteArray(HEADER_LENGTH)
-        // 不用 RandomAccessFile：真机上它在这个目录里写出来的东西不可靠 —— 旧的加密实现
-        // 就是「先占位 49 字节、写完再 seek 回去填头」，结果密文整段丢失、只剩 49 字节的
-        // 空容器。这里全部改成普通顺序读写，读一次、写一次，不回头改任何字节。
+        if (size < MAGIC_LENGTH + 1) return false
         BufferedInputStream(FileInputStream(blob), STREAM_BUFFER).use { ins ->
-            var got = 0
-            while (got < HEADER_LENGTH) {
-                val n = ins.read(header, got, HEADER_LENGTH - got)
+            // 先读 magic(4) + version(1)，按版本分流：version=2 走分块，version=1 走原单段流式。
+            val head = ByteArray(MAGIC_LENGTH + 1)
+            var h = 0
+            while (h < head.size) {
+                val n = ins.read(head, h, head.size - h)
                 if (n <= 0) return false
-                got += n
+                h += n
             }
-            if (!magicMatches(header, ARCHIVE_MAGIC)) return false
-            if (header[VERSION_OFFSET].toInt() != VERSION) return false
-            val salt = header.copyOfRange(SALT_OFFSET, SALT_OFFSET + SALT_LENGTH)
-            val iv = header.copyOfRange(IV_OFFSET, IV_OFFSET + IV_LENGTH)
-            val tag = header.copyOfRange(TAG_OFFSET, TAG_OFFSET + TAG_LENGTH)
-            val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(
-                Cipher.DECRYPT_MODE,
-                SecretKeySpec(deriveKey(password, salt), AES_ALGORITHM),
-                GCMParameterSpec(TAG_BITS, iv),
-            )
-            val body = size - HEADER_LENGTH
-            if (body < 0L) return false
-            // Java 的 GCM 只认「密文||tag」这一种输入拼接，而 tag 在 header 里，所以要扣住密文
-            // 最后 16 字节，连同 tag 一起交给 doFinal。空密文（body=0）时就是「只给 tag」。
-            val held = TAG_LENGTH.toLong().coerceAtMost(body).toInt()
-            val streamed = body - held
-            BufferedOutputStream(FileOutputStream(output), STREAM_BUFFER).use { out ->
-                var remaining = streamed
-                val buf = ByteArray(STREAM_BUFFER)
-                while (remaining > 0L) {
-                    val want = minOf(buf.size.toLong(), remaining).toInt()
-                    val n = ins.read(buf, 0, want)
-                    if (n <= 0) return false
-                    remaining -= n.toLong()
-                    val chunk = cipher.update(buf, 0, n)
-                    if (chunk != null && chunk.isNotEmpty()) out.write(chunk)
+            if (!magicMatches(head, ARCHIVE_MAGIC)) return false
+            when (head[VERSION_OFFSET].toInt()) {
+                VERSION_CHUNKED -> {
+                    // v2 头剩余：salt(16) + noncePrefix(8) + chunkSize(4)
+                    val rest = ByteArray(SALT_LENGTH + NONCE_PREFIX_LENGTH + 4)
+                    var r = 0
+                    while (r < rest.size) {
+                        val n = ins.read(rest, r, rest.size - r)
+                        if (n <= 0) return false
+                        r += n
+                    }
+                    val salt = rest.copyOfRange(0, SALT_LENGTH)
+                    val prefix = rest.copyOfRange(SALT_LENGTH, SALT_LENGTH + NONCE_PREFIX_LENGTH)
+                    val csOff = SALT_LENGTH + NONCE_PREFIX_LENGTH
+                    val chunkSize = ((rest[csOff].toInt() and 0xff) shl 24) or
+                        ((rest[csOff + 1].toInt() and 0xff) shl 16) or
+                        ((rest[csOff + 2].toInt() and 0xff) shl 8) or (rest[csOff + 3].toInt() and 0xff)
+                    return@runCatching decryptChunked(ins, output, password, salt, prefix, chunkSize)
                 }
-                val tail = ByteArray(held)
-                var tailGot = 0
-                while (tailGot < held) {
-                    val n = ins.read(tail, tailGot, held - tailGot)
-                    if (n <= 0) return false
-                    tailGot += n
+                VERSION -> {
+                    // v1：读齐 49 字节头（已读 5 字节，还差 salt+iv+tag），再按原单段流式解。
+                    val tail = ByteArray(HEADER_LENGTH - (MAGIC_LENGTH + 1))
+                    var t = 0
+                    while (t < tail.size) {
+                        val n = ins.read(tail, t, tail.size - t)
+                        if (n <= 0) return false
+                        t += n
+                    }
+                    val salt = tail.copyOfRange(0, SALT_LENGTH)
+                    val iv = tail.copyOfRange(SALT_LENGTH, SALT_LENGTH + IV_LENGTH)
+                    val tag = tail.copyOfRange(SALT_LENGTH + IV_LENGTH, SALT_LENGTH + IV_LENGTH + TAG_LENGTH)
+                    val cipher = Cipher.getInstance(TRANSFORMATION)
+                    cipher.init(
+                        Cipher.DECRYPT_MODE,
+                        SecretKeySpec(deriveKey(password, salt), AES_ALGORITHM),
+                        GCMParameterSpec(TAG_BITS, iv),
+                    )
+                    val body = size - HEADER_LENGTH
+                    if (body < 0L) return false
+                    // Java 的 GCM 只认「密文||tag」：tag 在 header 里，所以扣住密文最后 16 字节，
+                    // 连同 tag 一起交给 doFinal。空密文（body=0）时就是「只给 tag」。
+                    val held = TAG_LENGTH.toLong().coerceAtMost(body).toInt()
+                    val streamed = body - held
+                    BufferedOutputStream(FileOutputStream(output), STREAM_BUFFER).use { out ->
+                        var remaining = streamed
+                        val buf = ByteArray(STREAM_BUFFER)
+                        while (remaining > 0L) {
+                            val want = minOf(buf.size.toLong(), remaining).toInt()
+                            val n = ins.read(buf, 0, want)
+                            if (n <= 0) return false
+                            remaining -= n.toLong()
+                            val chunk = cipher.update(buf, 0, n)
+                            if (chunk != null && chunk.isNotEmpty()) out.write(chunk)
+                        }
+                        val tailBuf = ByteArray(held)
+                        var tailGot = 0
+                        while (tailGot < held) {
+                            val n = ins.read(tailBuf, tailGot, held - tailGot)
+                            if (n <= 0) return false
+                            tailGot += n
+                        }
+                        val last = cipher.doFinal(tailBuf + tag)
+                        if (last.isNotEmpty()) out.write(last)
+                    }
                 }
-                val last = cipher.doFinal(tail + tag)
-                if (last.isNotEmpty()) out.write(last)
+                else -> return false
             }
         }
         true
     }.getOrElse { false }
+
+    /** 分块容器：判断一个文件是不是 version=2 的 DCA1（读前 5 字节即可）。 */
+    fun isChunkedContainer(file: File): Boolean = runCatching {
+        FileInputStream(file).use { ins ->
+            val head = ByteArray(MAGIC_LENGTH + 1)
+            var got = 0
+            while (got < head.size) {
+                val n = ins.read(head, got, head.size - got)
+                if (n <= 0) return false
+                got += n
+            }
+            magicMatches(head, ARCHIVE_MAGIC) && head[VERSION_OFFSET].toInt() == VERSION_CHUNKED
+        }
+    }.getOrDefault(false)
+
+    /** 每块 IV = 8 字节随机前缀 || 4 字节大端块序号（同一文件内保证不重复）。 */
+    private fun chunkIv(prefix: ByteArray, index: Int): ByteArray {
+        val iv = ByteArray(IV_LENGTH)
+        System.arraycopy(prefix, 0, iv, 0, NONCE_PREFIX_LENGTH)
+        iv[NONCE_PREFIX_LENGTH] = (index ushr 24).toByte()
+        iv[NONCE_PREFIX_LENGTH + 1] = (index ushr 16).toByte()
+        iv[NONCE_PREFIX_LENGTH + 2] = (index ushr 8).toByte()
+        iv[NONCE_PREFIX_LENGTH + 3] = index.toByte()
+        return iv
+    }
+
+    /**
+     * 每块的 AAD = version(1) || 块序号(4 BE) || isFinal(1)。
+     *
+     * 把序号和「是不是最后一块」绑进认证：任何重排、丢块、截断（最后一块本应 isFinal=1，
+     * 截断后解密侧会把倒数第二块当成末块 → AAD 对不上 → 认证失败）都会被 GCM 直接拒掉。
+     */
+    private fun chunkAad(index: Int, isFinal: Boolean): ByteArray = byteArrayOf(
+        VERSION_CHUNKED.toByte(),
+        (index ushr 24).toByte(),
+        (index ushr 16).toByte(),
+        (index ushr 8).toByte(),
+        index.toByte(),
+        if (isFinal) 1 else 0,
+    )
+
+    private fun writeIntBE(out: java.io.OutputStream, v: Int) {
+        out.write((v ushr 24) and 0xff)
+        out.write((v ushr 16) and 0xff)
+        out.write((v ushr 8) and 0xff)
+        out.write(v and 0xff)
+    }
+
+    /** 读 4 字节大端。返回 null = 干净的 EOF（一个字节都没读到）；-1 = 读到一半（损坏）。 */
+    private fun readIntBE(ins: java.io.InputStream): Int? {
+        val b = ByteArray(4)
+        val first = ins.read(b, 0, 1)
+        if (first < 0) return null
+        var got = first
+        while (got < 4) {
+            val n = ins.read(b, got, 4 - got)
+            if (n < 0) return -1
+            got += n
+        }
+        return ((b[0].toInt() and 0xff) shl 24) or ((b[1].toInt() and 0xff) shl 16) or
+            ((b[2].toInt() and 0xff) shl 8) or (b[3].toInt() and 0xff)
+    }
+
+    /**
+     * 分块加密：明文文件 → version=2 的 DCA1 容器。每块独立一次 AES-GCM，内存只占一个分块，
+     * 任意大小都不 OOM（这正是替代 [encryptArchiveToFile] 的原因）。[chunkSize] 仅自检时调小。
+     */
+    fun encryptArchiveChunkedToFile(plain: File, output: File, password: String) =
+        encryptChunked(plain, output, password, CHUNK_PLAIN_SIZE)
+
+    private fun encryptChunked(plain: File, output: File, password: String, chunkSize: Int) {
+        require(password.isNotEmpty()) { "加密密码不能为空" }
+        require(chunkSize > 0) { "块大小必须为正" }
+        val salt = ByteArray(SALT_LENGTH).also { random.nextBytes(it) }
+        val prefix = ByteArray(NONCE_PREFIX_LENGTH).also { random.nextBytes(it) }
+        val key = SecretKeySpec(deriveKey(password, salt), AES_ALGORITHM)
+        val total = plain.length()
+        // 块数：空文件也产出 1 个（空明文）末块，好让解密侧永远能读到 isFinal=1
+        val chunkCount = if (total == 0L) 1 else ((total + chunkSize - 1L) / chunkSize).toInt()
+        val buffer = ByteArray(chunkSize)
+        var readTotal = 0L
+        BufferedOutputStream(FileOutputStream(output), STREAM_BUFFER).use { out ->
+            val header = ByteArray(CHUNK_HEADER_LENGTH)
+            writeMagic(header, ARCHIVE_MAGIC)
+            header[VERSION_OFFSET] = VERSION_CHUNKED.toByte()
+            System.arraycopy(salt, 0, header, SALT_OFFSET, SALT_LENGTH)
+            System.arraycopy(prefix, 0, header, SALT_OFFSET + SALT_LENGTH, NONCE_PREFIX_LENGTH)
+            val csOff = SALT_OFFSET + SALT_LENGTH + NONCE_PREFIX_LENGTH
+            header[csOff] = (chunkSize ushr 24).toByte()
+            header[csOff + 1] = (chunkSize ushr 16).toByte()
+            header[csOff + 2] = (chunkSize ushr 8).toByte()
+            header[csOff + 3] = chunkSize.toByte()
+            out.write(header)
+            BufferedInputStream(FileInputStream(plain), STREAM_BUFFER).use { ins ->
+                var index = 0
+                while (index < chunkCount) {
+                    var filled = 0
+                    while (filled < chunkSize) {
+                        val n = ins.read(buffer, filled, chunkSize - filled)
+                        if (n < 0) break
+                        filled += n
+                    }
+                    readTotal += filled.toLong()
+                    val isFinal = index == chunkCount - 1
+                    val cipher = Cipher.getInstance(TRANSFORMATION)
+                    cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, chunkIv(prefix, index)))
+                    cipher.updateAAD(chunkAad(index, isFinal))
+                    val ct = cipher.doFinal(buffer, 0, filled) // ct = filled + TAG_LENGTH
+                    writeIntBE(out, ct.size)
+                    out.write(ct)
+                    index++
+                }
+            }
+        }
+        // 与旧路一致：读到的字节数必须与文件长度对得上，否则当场失败而不是留个能开却缺数据的包
+        if (readTotal != total) {
+            output.delete()
+            throw IllegalStateException("只读到 $readTotal 字节，而文件是 $total 字节")
+        }
+    }
+
+    /** 分块解密：version=2 的 DCA1 容器 → 明文文件。密码错/被改/被截断一律返回 false。 */
+    private fun decryptChunked(
+        ins: java.io.InputStream,
+        output: File,
+        password: String,
+        salt: ByteArray,
+        prefix: ByteArray,
+        chunkSize: Int,
+    ): Boolean {
+        if (chunkSize <= 0) return false
+        val key = SecretKeySpec(deriveKey(password, salt), AES_ALGORITHM)
+        BufferedOutputStream(FileOutputStream(output), STREAM_BUFFER).use { out ->
+            var index = 0
+            var len = readIntBE(ins) ?: return false // 一个块都没有 = 非法（空明文也有一块）
+            while (true) {
+                if (len <= 0 || len < TAG_LENGTH || len > chunkSize + TAG_LENGTH) return false
+                val ct = ByteArray(len)
+                var got = 0
+                while (got < len) {
+                    val n = ins.read(ct, got, len - got)
+                    if (n < 0) return false
+                    got += n
+                }
+                // 前瞻下一块长度：干净 EOF ⇒ 当前是末块；否则当前非末块且拿到了下一块长度
+                val nextLen = readIntBE(ins)
+                if (nextLen == -1) return false // 读到半个长度头 = 损坏
+                val isFinal = nextLen == null
+                val cipher = Cipher.getInstance(TRANSFORMATION)
+                cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, chunkIv(prefix, index)))
+                cipher.updateAAD(chunkAad(index, isFinal))
+                val pt = cipher.doFinal(ct) // AAD/tag 不符抛 AEADBadTagException → 外层 runCatching → false
+                if (pt.isNotEmpty()) out.write(pt)
+                if (isFinal) break
+                len = nextLen ?: return false
+                index++
+            }
+        }
+        return true
+    }
 
     /** 封一个容器：随机 salt/iv，head 49 字节按固定偏移拼好，密文跟在后面。 */
     private fun seal(magic: String, plaintext: ByteArray, password: String): ByteArray {
