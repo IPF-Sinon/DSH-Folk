@@ -331,8 +331,8 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Added a Backup encryption password field to the WebDAV cloud-backup settings. It is stored in DSH credentials (separate from the WebDAV password) so scheduled and on-startup backups can encrypt too. When encryption is on but no password is set, backups now fail with a clear message instead of silently producing an unencrypted archive.</item>
-        <item>Cloud backup now retries with backoff on WebDAV rate-limiting (HTTP 429/503), honoring Retry-After. Fixes "read upstream manifest failed: HTTP 429" seen on self-hosted WebDAV (OpenList) and providers like Nutstore after deleting remote files.</item>
+        <item>Pre-installed plugins now auto-update when the app updates: on each new app version, the cloud-backup plugin (dsh-folk-cloud) is reinstalled from its latest code so fixes ship without a manual reinstall.</item>
+        <item>Cloud-backup plugin page: added a Backup encryption password field (previously only in the app), and backup tiers now show the name and description on two lines instead of one cramped line.</item>
 </string-array>
 
     

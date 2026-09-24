@@ -314,8 +314,8 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>WebDAV 云备份设置里新增「备份加密口令」输入框。口令存到 DSH 凭据（与 WebDAV 口令分开），让定时/启动后的自动备份也能加密。开启了加密却没设口令时，备份会明确报错，不再静默产出未加密的包。</item>
-        <item>云备份遇到 WebDAV 限流（HTTP 429/503）时改为按 Retry-After 退避重试。修复自建 WebDAV（OpenList）及坚果云等在删除远端文件后出现的「读取上游清单失败：HTTP 429」。</item>
+        <item>预装插件随 App 更新自动更新：每次 App 升级后，会把云备份插件 dsh-folk-cloud 按最新代码重装一次，修复无需手动重装即可到位。</item>
+        <item>云备份插件页：新增「备份加密口令」输入框（此前只有 App 里有），备份档位改为名称与描述分两行显示，不再挤在一行。</item>
 </string-array>
 
     

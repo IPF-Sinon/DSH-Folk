@@ -1611,46 +1611,11 @@ object DshRuntime {
             }
             for (pkg in missing) {
                 logInfo(R.string.dsh_log_seeding, pkg)
-                var out = runCatching {
-                    DshPluginRepo.install(
-                        seedSpec(pkg),
-                        onLine = { line -> appendLog(line) },
-                        fallbackTgz = seedFallbackTgz(pkg),
-                    )
-                }.getOrElse { str(R.string.dsh_log_seed_exception, it.message ?: it.javaClass.simpleName) }
-                var code = exitCodeOf(out)
-
-                // pnpm 拦下依赖的构建脚本时 **不是**「装不上」，而是「等人点头」：
-                // 它以退出码 1 结束，于是 dsh 不 reconcile bundles，插件躺在 node_modules 里
-                // 却进不了 profile 的 bundles —— 界面上就是「预装了但未生效」（1.7.6 的
-                // dsh-file-upload 正是这样：它的传递依赖 sharp / tesseract.js 带 install 脚本）。
-                //
-                // 交互式 `pnpm approve-builds` 在容器里跑不了，而预装发生在启动路径上、
-                // 根本没有人可问，所以这里自动放行**这一次预装自己拉进来的**构建脚本并重试。
-                // 放行范围仅限 pnpm 点名的那几个包，不是全局开关。
-                if (code != 0) {
-                    val pending = DshPluginRepo.pendingBuildApproval(out)
-                    if (pending.isNotEmpty()) {
-                        logInfo(R.string.dsh_log_seed_builds_blocked, joinForLog(pending))
-                        out = runCatching {
-                            DshPluginRepo.install(
-                                seedSpec(pkg),
-                                onLine = { line -> appendLog(line) },
-                                allowBuilds = pending,
-                                fallbackTgz = seedFallbackTgz(pkg),
-                            )
-                        }.getOrElse { str(R.string.dsh_log_seed_retry_exception, it.message ?: it.javaClass.simpleName) }
-                        code = exitCodeOf(out)
-                    }
-                }
+                val code = installSeedPkgWithApproval(pkg)
                 if (code == 0) {
                     logInfo(R.string.dsh_log_seed_done, pkg)
                 } else {
                     logWarn(R.string.dsh_log_seed_failed, pkg)
-                    // 只补一句可行动的话，不在这里修 rootfs：pnpm 由运行时自带。
-                    // 旧运行时（0.1.2-r2 带的是 pnpm 12 那个无 shebang 的 shim）会让 dsh
-                    // 的 spawnSync 直接 ENOENT，报的就是这一行 —— 用户唯一的出路是更新运行时。
-                    if (out.contains(DshPluginRepo.NO_PNPM)) logWarn(R.string.dsh_log_missing_pnpm)
                 }
             }
             persistSeeded(attempted + todo)
@@ -1658,6 +1623,10 @@ object DshRuntime {
             refreshRootfsSize()
             _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
         }
+
+        // 随 App 更新刷新预装插件：App 版本名一变，就把当前已装的预装插件（github: 规格）
+        // 重装一次以跟上最新代码（见 KEY_SEED_APP_VERSION）。用户要求「更新后自动更新预装 cloud 插件」。
+        applySeedAppUpgrade(p, installed, shadowed)
 
         // 装后兜底（每次预装路径都跑，包括 todo 为空时 —— 运行时升级把上游内置能力
         // 带进来后，历史预装包也可能变成冲突源）：按实际读到的 entry id 找重复，
@@ -1713,6 +1682,77 @@ object DshRuntime {
         prefs().edit()
             .putString(DshEnv.KEY_SEEDED_PLUGINS, names.distinct().joinToString(","))
             .apply()
+    }
+
+    /**
+     * 装一个预装包，并自动处理 pnpm「拦下构建脚本、等人点头」的情况（预装路径没人可问）。
+     *
+     * pnpm 拦下依赖的构建脚本时 **不是**「装不上」，而是以退出码 1 结束、dsh 不 reconcile
+     * bundles，插件躺在 node_modules 里却进不了 profile（界面上就是「预装了但未生效」，
+     * 1.7.6 的 dsh-file-upload 因传递依赖 sharp/tesseract.js 带 install 脚本正是如此）。
+     * 交互式 `pnpm approve-builds` 在容器里跑不了，所以这里自动放行**本次预装自己拉进来的**
+     * 那几个包的构建脚本并重试（范围仅限 pnpm 点名的，不是全局开关）。返回最终退出码。
+     */
+    private suspend fun installSeedPkgWithApproval(pkg: String): Int {
+        var out = runCatching {
+            DshPluginRepo.install(
+                seedSpec(pkg),
+                onLine = { line -> appendLog(line) },
+                fallbackTgz = seedFallbackTgz(pkg),
+            )
+        }.getOrElse { str(R.string.dsh_log_seed_exception, it.message ?: it.javaClass.simpleName) }
+        var code = exitCodeOf(out)
+        if (code != 0) {
+            val pending = DshPluginRepo.pendingBuildApproval(out)
+            if (pending.isNotEmpty()) {
+                logInfo(R.string.dsh_log_seed_builds_blocked, joinForLog(pending))
+                out = runCatching {
+                    DshPluginRepo.install(
+                        seedSpec(pkg),
+                        onLine = { line -> appendLog(line) },
+                        allowBuilds = pending,
+                        fallbackTgz = seedFallbackTgz(pkg),
+                    )
+                }.getOrElse { str(R.string.dsh_log_seed_retry_exception, it.message ?: it.javaClass.simpleName) }
+                code = exitCodeOf(out)
+            }
+        }
+        // 只补一句可行动的话，不在这里修 rootfs：pnpm 由运行时自带。旧运行时那个无 shebang
+        // 的 pnpm shim 会让 dsh 的 spawnSync 直接 ENOENT，报的就是这一行 —— 出路是更新运行时。
+        if (code != 0 && out.contains(DshPluginRepo.NO_PNPM)) logWarn(R.string.dsh_log_missing_pnpm)
+        return code
+    }
+
+    /**
+     * 随 App 更新刷新预装插件：App 版本名（[me.bmax.apatch.BuildConfig.VERSION_NAME]）一变，
+     * 就把**当前已装**的预装插件用 `github:` 规格重装一次，跟上最新代码（见 [DshEnv.KEY_SEED_APP_VERSION]）。
+     *
+     * 只碰当前已装、且不在 shadowed（上游已内置、不该装）里的预装包：用户主动卸掉的不会被复活，
+     * 缺失的首装由上面的 missing 循环负责。装完记下版本，同一版本不再重复（每个 App 版本至多刷一轮）。
+     * 重装失败不影响已装的旧版本（install 失败不会卸载），只落一行日志。
+     */
+    private suspend fun applySeedAppUpgrade(
+        p: android.content.SharedPreferences,
+        installed: Set<String>,
+        shadowed: Set<String>,
+    ) {
+        val appNow = me.bmax.apatch.BuildConfig.VERSION_NAME
+        if (p.getString(DshEnv.KEY_SEED_APP_VERSION, null) == appNow) return
+        val refresh = SEED_PLUGINS.filter { it in installed && it !in shadowed }
+        if (refresh.isNotEmpty()) {
+            _state.update {
+                it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_plugin_seeding))
+            }
+            for (pkg in refresh) {
+                logInfo(R.string.dsh_log_seed_app_upgrade, pkg, appNow)
+                val code = installSeedPkgWithApproval(pkg)
+                if (code == 0) logInfo(R.string.dsh_log_seed_done, pkg) else logWarn(R.string.dsh_log_seed_failed, pkg)
+            }
+            refreshRootfsSize()
+            _state.update { it.copy(phase = DshPhase.NOT_READY, progress = 1f) }
+        }
+        // 无论有没有要刷的，都记下这个版本已处理过（避免每次开机重判）
+        p.edit().putString(DshEnv.KEY_SEED_APP_VERSION, appNow).apply()
     }
 
     /**
