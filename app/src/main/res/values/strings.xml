@@ -331,8 +331,8 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed: restoring a backup that contains a large theme (e.g. a video wallpaper, around 137MB) failed with a backup-integrity error on dsh-folk/theme.zip. The theme is now restored by the app itself and pulled out of the archive before the config-manager plugin processes the rest, so it no longer hits the plugin 100MB per-entry limit.</item>
-        <item>Cloud-backup plugin (0.4.1, auto-updated): the progress dialog no longer shows black text on a dark box for light-theme users — it now uses a self-consistent light/dark color pair so it is readable under any theme.</item>
+        <item>Fixed: opening the Web UI in an external browser (Chrome) bounced to a dsh authentication-required screen, while typing the address by hand worked. Root cause: the dsh session cookie is SameSite=Strict, which Chrome withholds on app-launched navigations and on the reload button. The app now relaxes that cookie to SameSite=Lax in the runtime before start (loopback-only, so this is safe), so external browsers sign in on the first open.</item>
+        <item>A test runtime built on dsh 0.1.7-rc.2 is now available on the test runtime channel (off by default) for those who want to try the newer harness.</item>
 </string-array>
 
     

@@ -3125,6 +3125,9 @@ object DshRuntime {
         _state.update { it.copy(webToken = null) }
 
         if (lanEnabled()) patchLanHost()
+        // 让外部浏览器（App 用 Intent 拉起的 Chrome）也能一次登进 dsh web：把会话 cookie 的
+        // SameSite=Strict 放宽为 Lax（见 [patchBrowserCookieSameSite]）。每次启动前幂等重打。
+        patchBrowserCookieSameSite()
 
         val port = port()
         val lan = lanEnabled()
@@ -3238,6 +3241,53 @@ object DshRuntime {
             target.writeText(patched, StandardCharsets.UTF_8)
             logInfo(R.string.dsh_log_lan_patched)
         }
+    }
+
+    /**
+     * 让外部浏览器也能一次登进 dsh web：把会话 cookie 的 `SameSite=Strict` 放宽为 `Lax`。
+     *
+     * dsh 的浏览器会话认证（dsh-client-connection 的 `authorizeIndex`）在 `?token=` 校验通过后，
+     * 用一个 303 重定向到 `/` 并下发会话 cookie，属性是 `HttpOnly; SameSite=Strict`。而 App 用
+     * `Intent(ACTION_VIEW)` 拉起外部 Chrome，属于「外部/非第一方发起的顶层导航」——Chrome 对
+     * `SameSite=Strict` 的 cookie 在这种导航（以及随后的 303 跳转、刷新按钮）上一律**不带**，
+     * 于是服务端收不到 cookie → 回 401「authentication required; reopen the URL…」。用户手动在
+     * 地址栏回车是第一方导航，`Strict` 才会带上，所以「手打能进、Intent/刷新不行」。
+     *
+     * 放宽成 `Lax`：顶层 GET 导航都会带 cookie（正好覆盖上面三种失败场景），跨站子请求/POST
+     * 仍被挡住 —— 对一个只绑 `127.0.0.1` 的本地服务是安全且恰当的取舍。只改这一个属性，不碰
+     * token/cookie 的签名逻辑，桌面端与内置 WebUI 都不受影响。
+     *
+     * 与 [patchLanHost] 同一路子：每次启动前幂等改 rootfs 里那份被服务端加载的源码；升级运行时
+     * 会带来未打补丁的新副本，所以不能只打一次。
+     */
+    private fun patchBrowserCookieSameSite() {
+        var patched = 0
+        for (t in clientConnectionIndexFiles()) {
+            val src = runCatching { t.readText(StandardCharsets.UTF_8) }.getOrNull() ?: continue
+            if (!src.contains("HttpOnly; SameSite=Strict")) continue
+            val out = src.replace("HttpOnly; SameSite=Strict", "HttpOnly; SameSite=Lax")
+            if (out != src && runCatching { t.writeText(out, StandardCharsets.UTF_8) }.isSuccess) patched++
+        }
+        if (patched > 0) logInfo(R.string.dsh_log_cookie_samesite_patched, patched)
+    }
+
+    /**
+     * rootfs 里所有 `@deepseek-ai/dsh-client-connection/lib/index.js`（认证逻辑所在）：
+     * dsh 全局安装目录下顶层 hoist 的一份，外加 `@deepseek-ai` 下各包各自 nested 的一份。
+     * 有界枚举，不深走整棵 node_modules。
+     */
+    private fun clientConnectionIndexFiles(): List<File> {
+        val out = ArrayList<File>()
+        val scope = File(
+            DshEnv.rootfs(appContext),
+            "usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai",
+        )
+        File(scope, "dsh-client-connection/lib/index.js").let { if (it.isFile) out.add(it) }
+        scope.listFiles()?.forEach { pkg ->
+            File(pkg, "node_modules/@deepseek-ai/dsh-client-connection/lib/index.js")
+                .let { if (it.isFile) out.add(it) }
+        }
+        return out
     }
 
     /**

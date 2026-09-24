@@ -925,6 +925,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_log_lan_on">局域网访问已开启: http://%1$s:%2$d（局域网内均可访问，请确认网络可信）</string>
     <string name="dsh_log_lan_on_no_ip">局域网访问已开启，但未能获取本机局域网 IP</string>
     <string name="dsh_log_lan_patched">已为当前运行时强制开放局域网访问</string>
+    <string name="dsh_log_cookie_samesite_patched">已把网页会话 cookie 放宽为 SameSite=Lax（%1$d 处），让外部浏览器也能登录</string>
     <string name="dsh_log_lan_off">局域网访问已关闭，仅监听 127.0.0.1</string>
     <string name="dsh_log_ready">服务已就绪: http://127.0.0.1:%1$d/</string>
     <string name="dsh_log_token_waiting">正在等 WebUI 认证 token（服务先监听、带 token 的地址后打印）</string>

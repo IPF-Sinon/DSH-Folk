@@ -945,6 +945,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_log_lan_on">LAN access is ON: http://%1$s:%2$d — reachable from the whole network, make sure you trust it</string>
     <string name="dsh_log_lan_on_no_ip">LAN access is ON, but the local IP could not be determined</string>
     <string name="dsh_log_lan_patched">LAN access was force-enabled for this runtime</string>
+    <string name="dsh_log_cookie_samesite_patched">Relaxed the web session cookie to SameSite=Lax in %1$d file(s) so external browsers can sign in</string>
     <string name="dsh_log_lan_off">LAN access is OFF, listening on 127.0.0.1 only</string>
     <string name="dsh_log_ready">Service is ready: http://127.0.0.1:%1$d/</string>
     <string name="dsh_log_token_waiting">Waiting for the WebUI authentication token (the server listens before the token line is printed)</string>

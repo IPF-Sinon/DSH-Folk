@@ -314,8 +314,8 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>修复：恢复带大体积主题（如视频壁纸，约 137MB）的备份时报「备份完整性校验失败: dsh-folk/theme.zip」。现在外观改由 App 自己恢复，并在交给配置管理插件处理其余内容之前先把它从压缩包里拎出去，不再撞上插件 100MB 的单条目上限。</item>
-        <item>云备份插件（0.4.1，随预装自动更新）：进度弹窗不再让浅色主题用户看到「深色底 + 黑字」而读不清——改用自成一套的深/浅配色，任何主题下都清晰可读。</item>
+        <item>修复：用外部浏览器（Chrome）打开 WebUI 会被弹到 dsh 认证墙，而手动在地址栏敲网址却能进。根因是 dsh 的会话 cookie 是 SameSite=Strict，Chrome 对「App 拉起的导航」和「刷新按钮」都不带这枚 cookie。现在 App 会在启动前把运行时里这枚 cookie 放宽为 SameSite=Lax（仅绑 127.0.0.1，安全），外部浏览器第一次打开就能登录。</item>
+        <item>新增一份基于 dsh 0.1.7-rc.2 的测试运行时，已发布到测试运行时通道（默认关闭），想尝鲜更新版内核的可自行开启。</item>
 </string-array>
 
     
