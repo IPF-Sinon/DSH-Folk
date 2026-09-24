@@ -280,7 +280,7 @@ object DshRuntime {
      * 满足要求的新版本；已达标的不动。要求版本必须与插件仓 `package.json` 的版本对齐：插件发了
      * 需要 App 一并到位的改动，就抬插件版本、再把这里的要求版本同步上来。
      */
-    private val SEED_MIN_VERSIONS = mapOf("dsh-folk-cloud" to "0.3.0")
+    private val SEED_MIN_VERSIONS = mapOf("dsh-folk-cloud" to "0.4.0")
 
     /**
      * 预装包 → 正式 release tgz 直链的兜底表（钉死版本）。

@@ -331,7 +331,9 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Backup page: the DSH configuration-backup card now detects state the same way as the cloud-backup card. Instead of a single spinning "unavailable", it tells apart plugin-not-installed / plugin-disabled / DSH-not-running and offers the matching button (Install / Enable and restart / Start DSH).</item>
+        <item>Cloud-backup plugin (0.4.0, auto-updated with the app): the progress dialog is redesigned with step stages, a byte-level upload progress bar, live logs and animation. It now follows automatic/background syncs too — the settings page polls status, so even after a page refresh you still see a sync in progress.</item>
+        <item>Cloud-backup history: each version now has a Delete button (permanently removes that backup from the cloud, with confirmation). Removed the redundant "Restore from upstream" button since per-version restore already covers it.</item>
+        <item>Backup page: the DSH configuration-backup card now detects state the same way as the cloud-backup card — telling apart plugin-not-installed / plugin-disabled / DSH-not-running with the matching button (Install / Enable and restart / Start DSH).</item>
 </string-array>
 
     
