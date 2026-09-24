@@ -971,6 +971,19 @@ object DshPluginRepo {
     }
 
     /**
+     * 启动不变量入口：把 [ensureGitCa] 从「只在 App 装 git 源插件时跑」提升为「每次启动前跑」。
+     *
+     * 为什么必须在启动时重跑：CA 配置那行写在 `/root/.gitconfig`，而它**不在跨运行时更新的
+     * 保留清单**里（保留的是 `root/.dsh`/`root/.local`/`.l2s`），所以更新运行时后这行就没了
+     * （PEM 在 `/root/.dsh` 下还在）。此后只要 dsh 自身 reconcile profile 依赖、或 App 的启动
+     * 自愈跑 `dsh plugin`（都不走 [installGitSpec] 那条会调 [ensureGitCa] 的路径）去 https 克隆
+     * `github:` 插件，git 就撞「一份根证书都没有」（CAfile: none → server certificate
+     * verification failed）。在服务启动前无条件重设，任何 git 路径都拿得到 CA。幂等且很快
+     * （PEM 已在就只重写一行配置）。运行时侧也会把 CA bundle 直接烤进 rootfs 作双保险。
+     */
+    fun ensureGitCaAtStartup() = ensureGitCa {}
+
+    /**
      * 给容器全局 git 配 `insteadOf`，把 github 流量重写到 [prefix]（空串=清空重写）。
      *
      * 写全局是**必须**的：pnpm 在自己的子进程里 fork git，命令行传不进去，只有

@@ -314,8 +314,7 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>修复：用外部浏览器（Chrome）打开 WebUI 会被弹到 dsh 认证墙，而手动在地址栏敲网址却能进。根因是 dsh 的会话 cookie 是 SameSite=Strict，Chrome 对「App 拉起的导航」和「刷新按钮」都不带这枚 cookie。现在 App 会在启动前把运行时里这枚 cookie 放宽为 SameSite=Lax（仅绑 127.0.0.1，安全），外部浏览器第一次打开就能登录。</item>
-        <item>新增一份基于 dsh 0.1.7-rc.2 的测试运行时，已发布到测试运行时通道（默认关闭），想尝鲜更新版内核的可自行开启。</item>
+        <item>修复：更新容器运行时后，安装/更新插件报 git 证书错误（server certificate verification failed，CAfile: none）。原因：运行时 rootfs 不带 CA 根证书，容器 git 走 https 一直靠 App 写进容器 git 配置的一份 CA，而更新运行时会把那份配置清掉（证书文件本身还在）。现在 App 每次启动都会重新写回该 CA 配置，运行时也把 CA 根证书直接烤进 rootfs，跨运行时更新后用 https 装插件都不再受影响。</item>
 </string-array>
 
     

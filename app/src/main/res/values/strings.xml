@@ -331,8 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed: opening the Web UI in an external browser (Chrome) bounced to a dsh authentication-required screen, while typing the address by hand worked. Root cause: the dsh session cookie is SameSite=Strict, which Chrome withholds on app-launched navigations and on the reload button. The app now relaxes that cookie to SameSite=Lax in the runtime before start (loopback-only, so this is safe), so external browsers sign in on the first open.</item>
-        <item>A test runtime built on dsh 0.1.7-rc.2 is now available on the test runtime channel (off by default) for those who want to try the newer harness.</item>
+        <item>Fixed: after updating the container runtime, installing or updating plugins failed with a git TLS error (server certificate verification failed, CAfile: none). Cause: the runtime rootfs ships no CA bundle, so git over https relied on a CA config the app wrote to the container git config, and a runtime update wipes that config while the certificate file survives. The app now re-applies the git CA on every start, and the runtime now bakes the CA bundle into the rootfs, so plugin installs over https keep working across runtime updates.</item>
 </string-array>
 
     

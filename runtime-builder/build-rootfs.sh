@@ -36,7 +36,7 @@ RELEASE_CHANNEL="${RELEASE_CHANNEL:-stable}"       # stable | beta
 #
 # 加 amd64 支持时**不递增**：arm64 的 rootfs 内容一个字节都没变，递增只会让所有
 # 存量用户收到一次「有新运行时」的无意义提示。amd64 是全新资产，自带独立 metadata。
-ROOTFS_REV="${ROOTFS_REV:-4}"
+ROOTFS_REV="${ROOTFS_REV:-5}"
 WORK="${WORK:-/tmp/dsh-runtime}"
 OUT="${OUT:-$PWD/out}"
 
@@ -418,6 +418,22 @@ test -x "$ROOTFS/usr/lib/git-core/git-remote-https" \
   || { echo "!! 缺少 git-remote-https（https 克隆会失败）"; exit 1; }
 test -x "$ROOTFS/usr/bin/perl" || { echo "!! 缺少 perl"; exit 1; }
 echo "    git 已就绪"
+
+# CA 根证书 bundle：ubuntu-base 不含 ca-certificates，容器 git 走 https 一份根证书都没有
+# （CAfile: none → server certificate verification failed）。此前只靠 App 侧 ensureGitCa 往
+# /root/.gitconfig 写 http.sslCAInfo 兜底，但运行时更新会清掉 /root/.gitconfig，dsh 自身
+# reconcile/自愈跑的 git 就撞无 CA。这里把构建机（同为 Ubuntu、同一套 Mozilla 根证书）现成的
+# bundle 直接放进标准路径，让容器 git/openssl/curl 原生就能校验 https，不依赖任何运行期配置。
+# 纯 PEM 文本，架构无关。
+echo "==> [5b/9] 安装 CA 根证书 bundle"
+test -s /etc/ssl/certs/ca-certificates.crt || { echo "!! 构建机缺 CA bundle"; exit 1; }
+install -D -m 0644 /etc/ssl/certs/ca-certificates.crt "$ROOTFS/etc/ssl/certs/ca-certificates.crt"
+# openssl 默认查 /usr/lib/ssl/cert.pem（Ubuntu 上指向上面那个文件）；补一个软链，确保
+# git 的 libcurl 无需 env/config 也能找到。绝对目标在 proot 下按 rootfs 根解析，正确。
+install -d "$ROOTFS/usr/lib/ssl"
+ln -sf /etc/ssl/certs/ca-certificates.crt "$ROOTFS/usr/lib/ssl/cert.pem"
+test -s "$ROOTFS/etc/ssl/certs/ca-certificates.crt"
+echo "    CA bundle 就绪（$(wc -c < "$ROOTFS/etc/ssl/certs/ca-certificates.crt") 字节）"
 
 echo "==> [6/9] 检查动态库依赖闭合"
 # 「文件存在 + 是 ELF」这种自检拦不住缺库（r1 就是这么放过去的），

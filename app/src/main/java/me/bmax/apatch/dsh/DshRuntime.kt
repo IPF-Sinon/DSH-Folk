@@ -3128,6 +3128,10 @@ object DshRuntime {
         // 让外部浏览器（App 用 Intent 拉起的 Chrome）也能一次登进 dsh web：把会话 cookie 的
         // SameSite=Strict 放宽为 Lax（见 [patchBrowserCookieSameSite]）。每次启动前幂等重打。
         patchBrowserCookieSameSite()
+        // git 的 CA 配置写在 /root/.gitconfig，更新运行时会把它清掉（PEM 在 /root/.dsh 下还在），
+        // 之后 dsh 自身 reconcile / 启动自愈跑 `dsh plugin` 去 https 克隆 github: 插件就会撞
+        // 「无 CA」（CAfile: none）。启动前无条件重设，见 DshPluginRepo.ensureGitCaAtStartup。
+        DshPluginRepo.ensureGitCaAtStartup()
 
         val port = port()
         val lan = lanEnabled()
