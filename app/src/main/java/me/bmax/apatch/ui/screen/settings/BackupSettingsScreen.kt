@@ -152,6 +152,9 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var pluginAbsent by rememberSaveable { mutableStateOf(false) }
     // 用户点「重新检测」时 +1，让下面那个 LaunchedEffect 再跑一遍
     var pluginProbe by rememberSaveable { mutableStateOf(0) }
+    // DSH 配置备份卡片的三态引导信号（与云备份卡片对齐）：装没装 / 被停用，直接查容器插件目录。
+    var dshConfigInstalled by remember { mutableStateOf<Boolean?>(null) }
+    var dshConfigDisabled by remember { mutableStateOf(false) }
     val pluginViewModel = viewModel<DshPluginViewModel>()
 
     LaunchedEffect(pluginProbe) {
@@ -162,11 +165,14 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
         val st = withTimeoutOrNull(STATUS_PROBE_TIMEOUT_MS) {
             withContext(Dispatchers.IO) { DshConfigBackup.status(context) }
         }
-        val installed = withContext(Dispatchers.IO) {
-            runCatching {
-                DshPluginRepo.listInstalled().any { it.pkg == DSH_CONFIG_MANAGER_PKG }
-            }.getOrDefault(true)
-        }
+        // 装没装/被停用：与云备份卡片同一套判定 —— 直接查容器插件目录（DshPluginRepo），
+        // 不需要 DSH 在跑，也不受 HTTP 探活超时影响。查询失败时当作「装了」，宁可少给一个
+        // 「去安装」也不误导用户以为插件丢了。
+        val configList = withContext(Dispatchers.IO) { runCatching { DshPluginRepo.listInstalled() } }
+        val configEntry = configList.getOrNull()?.firstOrNull { it.pkg == DSH_CONFIG_MANAGER_PKG }
+        dshConfigInstalled = if (configList.isSuccess) configEntry != null else true
+        dshConfigDisabled = configEntry?.disabled == true
+        val installed = dshConfigInstalled == true
         // 只有明确拿到 ready=true 才算就绪：null（检测中）与超时都不放行按钮。
         pluginReady = st?.ready == true
         pluginAbsent = st?.ready != true && !installed
@@ -450,6 +456,15 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                     pluginReady = pluginReady,
                     pluginDetail = pluginDetail,
                     pluginAbsent = pluginAbsent,
+                    // DSH 配置备份卡片三态引导（与云备份卡片同一套判定）。
+                    dshConfigInstalled = dshConfigInstalled,
+                    dshConfigDisabled = dshConfigDisabled,
+                    onEnableDshConfigPlugin = {
+                        // 启用只改注册表，需重启 DSH 让插件树重载；等启用真正写完再重启。
+                        pluginViewModel.setDisabled(DSH_CONFIG_MANAGER_PKG, false) {
+                            DshRuntime.restart()
+                        }
+                    },
                     onRecheckPlugin = { pluginProbe++ },
                     onGoInstallPlugin = { navigator.navigate(DshPluginStoreScreenDestination) },
                     onInstallRescueCli = { pluginViewModel.installRescueCli() },

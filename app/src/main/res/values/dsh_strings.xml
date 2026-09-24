@@ -253,6 +253,9 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_backup_password_summary">When set, the whole archive is encrypted with AES-256-GCM. The same password is required to import it.</string>
     <string name="dsh_backup_needs_running">DSH must be running before configuration can be exported or imported.</string>
     <string name="dsh_backup_plugin_missing">dsh-config-manager is not installed in the runtime. Install it from the plugin store first.</string>
+    <string name="dsh_backup_plugin_disabled">The dsh-config-manager plugin is disabled.</string>
+    <string name="dsh_backup_plugin_enable">Enable and restart DSH</string>
+    <string name="dsh_backup_dsh_stopped">DSH service is not running, so configuration backup cannot read or write.</string>
     <string name="dsh_backup_exporting">Exporting…</string>
     <string name="dsh_backup_importing">Importing…</string>
     <string name="dsh_backup_open_dir_failed">Could not open the folder; it is at Download/DSH-Folk.</string>

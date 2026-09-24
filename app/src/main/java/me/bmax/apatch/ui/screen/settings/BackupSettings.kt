@@ -230,6 +230,16 @@ fun BackupSettingsContent(
     /** 插件版本（就绪时显示），或未就绪的原因。 */
     pluginDetail: String = "",
     onGoInstallPlugin: () -> Unit = {},
+    /**
+     * DSH 配置备份卡片的三态引导信号（与云备份卡片同一套判定，直接查容器插件目录，
+     * 不需要 DSH 在跑）：null = 还在检测；false = dsh-config-manager 没装 → 去安装；
+     * [dshConfigDisabled] = true → 已停用 → 启用并重启；再看 [dshRunning] → 启动 DSH；
+     * 都过之后才由 [pluginReady] 决定「就绪显版本 / 探活中 / 未就绪给原因」。
+     */
+    dshConfigInstalled: Boolean? = null,
+    dshConfigDisabled: Boolean = false,
+    /** 启用 dsh-config-manager 并重启 DSH（启用只改注册表，需重启才生效）。 */
+    onEnableDshConfigPlugin: () -> Unit = {},
     /** 在容器内安装独立的救急 CLI（与插件是两回事，见卡片说明）。 */
     onInstallRescueCli: () -> Unit = {},
     onOpenTerminal: () -> Unit = {},
@@ -300,11 +310,14 @@ fun BackupSettingsContent(
                         }
                     }
 
-                    // 插件状态行：这一页的所有能力都建立在它之上
+                    // 插件状态行：这一页的所有能力都建立在它之上。
+                    // 判定次序与云备份卡片完全一致：没装（文件系统可确定，与 DSH 无关）→
+                    // 被停用 → DSH 没跑 → 探活/就绪。这样「插件装着、只是 DSH 没起来」不再被
+                    // 一句笼统的「未就绪」盖掉，而是给出「启动 DSH」这一步能走的按钮。
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        when (pluginReady) {
-                            null -> {
+                        when {
+                            dshConfigInstalled == null -> {
                                 CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                                 Spacer(Modifier.width(8.dp))
                                 Text(
@@ -313,28 +326,62 @@ fun BackupSettingsContent(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            true -> Text(
+                            dshConfigInstalled == false -> Column {
+                                Text(
+                                    text = stringResource(R.string.dsh_backup_plugin_missing),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                TextButton(onClick = onGoInstallPlugin) {
+                                    Text(stringResource(R.string.dsh_backup_plugin_install))
+                                }
+                            }
+                            dshConfigDisabled -> Column {
+                                Text(
+                                    text = stringResource(R.string.dsh_backup_plugin_disabled),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                TextButton(onClick = onEnableDshConfigPlugin) {
+                                    Text(stringResource(R.string.dsh_backup_plugin_enable))
+                                }
+                            }
+                            !dshRunning -> Column {
+                                Text(
+                                    text = stringResource(R.string.dsh_backup_dsh_stopped),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                TextButton(onClick = onStartDsh) {
+                                    Text(stringResource(R.string.dsh_bk_cloud_start_dsh))
+                                }
+                            }
+                            pluginReady == true -> Text(
                                 text = stringResource(R.string.dsh_backup_plugin_ready, pluginDetail),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary,
                             )
-                            false -> Column {
+                            pluginReady == null -> {
+                                // 装着、启用着、DSH 也在跑，只是这次回环探活还没回话：转圈等它，
+                                // 不当成「未就绪」——否则会把一个其实健康的插件说成坏的。
+                                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(R.string.dsh_backup_plugin_checking),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            else -> Column {
+                                // 装着、启用着、DSH 在跑，探活却失败：给插件自己说的原因（未授权、
+                                // 非 JSON…）+ 重新检测，而不是指人去重装一个装好的插件。
                                 Text(
                                     text = stringResource(R.string.dsh_backup_plugin_not_ready, pluginDetail),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error,
                                 )
-                                // 只有**确认插件不在**时才让人去装：DSH 没起来、或插件拒绝了这次
-                                // 请求（例如未授权）也会走到这里，那时候把人指去重装一个装好的
-                                // 插件，是纯粹的误导 —— 用户会以为插件丢了。
-                                if (pluginAbsent) {
-                                    TextButton(onClick = onGoInstallPlugin) {
-                                        Text(stringResource(R.string.dsh_backup_plugin_install))
-                                    }
-                                } else {
-                                    TextButton(onClick = onRecheckPlugin) {
-                                        Text(stringResource(R.string.dsh_backup_plugin_retry))
-                                    }
+                                TextButton(onClick = onRecheckPlugin) {
+                                    Text(stringResource(R.string.dsh_backup_plugin_retry))
                                 }
                             }
                         }

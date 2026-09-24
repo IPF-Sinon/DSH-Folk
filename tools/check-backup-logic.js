@@ -332,16 +332,23 @@ ok(/val err = o\.optString\("error"\)/.test(backup) && /error = err,/.test(backu
   "status() 把插件自己的 error 带出来（以前只读 ready，原因全丢）");
 ok(/status\.error\.ifEmpty \{ pluginMissing \}/.test(screen),
   "导出前的检查显示插件给的真实原因，而不是一律说「DSH 没起来」");
-ok(/DshPluginRepo\.listInstalled\(\)\.any \{ it\.pkg == DSH_CONFIG_MANAGER_PKG \}/.test(screen),
+ok(/DshPluginRepo\.listInstalled\(\)/.test(screen) &&
+  /firstOrNull \{ it\.pkg == DSH_CONFIG_MANAGER_PKG \}/.test(screen),
   "「装没装」由应用侧直接查容器插件目录（不需要 DSH 在跑）");
 ok(/pluginAbsent = st\?\.ready != true && !installed/.test(screen),
   "只有「没就绪（含检测超时）**且** 确实没装」才算缺失");
-ok(/if \(pluginAbsent\) \{[\s\S]{0,200}onGoInstallPlugin/.test(content),
-  "「去安装插件」只在确认缺失时出现");
+// 检测逻辑对齐云备份卡片：装没装/被停用/DSH 没跑 各有确定的引导按钮，
+// 而不是把一切塞进一句「未就绪」。安装按钮只在**确认没装**（dshConfigInstalled == false）时出现。
+ok(/dshConfigInstalled == false -> Column \{[\s\S]{0,400}onGoInstallPlugin/.test(content),
+  "「去安装插件」只在确认缺失（dshConfigInstalled == false）时出现");
+ok(/dshConfigDisabled -> Column \{[\s\S]{0,400}onEnableDshConfigPlugin/.test(content),
+  "插件被停用给「启用并重启」（与云备份卡片一致）");
+ok(/!dshRunning -> Column \{[\s\S]{0,400}onStartDsh/.test(content),
+  "DSH 没跑给「启动 DSH」（与云备份卡片一致）");
 ok(/onRecheckPlugin/.test(content) && /onRecheckPlugin = \{ pluginProbe\+\+ \}/.test(screen) &&
   /LaunchedEffect\(pluginProbe\)/.test(screen),
-  "其它情况给的是「重新检测」而不是「去安装」");
-ok(/getOrDefault\(true\)/.test(screen),
+  "装着、启用着、DSH 在跑却探活失败时给的是「重新检测」而不是「去安装」");
+ok(/if \(configList\.isSuccess\) configEntry != null else true/.test(screen),
   "查不到插件清单时当作「装了」—— 宁可少给一个按钮，也不要指错路");
 
 console.log("─ 5e. 排查通道：每一步都记账、日志一键复制、报告里带上日志");

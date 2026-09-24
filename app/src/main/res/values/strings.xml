@@ -331,10 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed out-of-memory when backing up with a theme applied. Large archives (a themed backup can be 100+ MB) are now encrypted in bounded chunks instead of all at once, so backup no longer crashes. Existing backups still restore normally.</item>
-        <item>Cloud backup plugin: backup / restore / sync (including automatic runs) now show a blocking progress dialog, so you can see it is working and cannot double-tap by mistake.</item>
-        <item>Cloud backup plugin: you can now restore any historical version from the commit list, not just the latest upstream backup.</item>
-        <item>Cloud backup plugin: removed a duplicated Restore from upstream button.</item>
+        <item>Backup page: the DSH configuration-backup card now detects state the same way as the cloud-backup card. Instead of a single spinning "unavailable", it tells apart plugin-not-installed / plugin-disabled / DSH-not-running and offers the matching button (Install / Enable and restart / Start DSH).</item>
 </string-array>
 
     

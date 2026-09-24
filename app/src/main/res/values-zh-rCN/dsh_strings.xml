@@ -235,6 +235,9 @@
     <string name="dsh_backup_password_summary">填写后整包用 AES-256-GCM 加密，导入时需要同一密码。</string>
     <string name="dsh_backup_needs_running">导出/导入配置前需要先启动 DSH。</string>
     <string name="dsh_backup_plugin_missing">运行时里没有 dsh-config-manager，请先从插件商店安装。</string>
+    <string name="dsh_backup_plugin_disabled">dsh-config-manager 插件已被停用。</string>
+    <string name="dsh_backup_plugin_enable">启用并重启 DSH</string>
+    <string name="dsh_backup_dsh_stopped">DSH 服务未运行，无法读写配置备份。</string>
     <string name="dsh_backup_exporting">正在导出…</string>
     <string name="dsh_backup_importing">正在导入…</string>
     <string name="dsh_backup_open_dir_failed">打不开目录，文件在 Download/DSH-Folk。</string>
