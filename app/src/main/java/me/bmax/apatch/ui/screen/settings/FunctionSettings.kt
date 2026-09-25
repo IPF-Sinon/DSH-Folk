@@ -150,12 +150,15 @@ fun FunctionSettingsContent(
     raceRuntime: Boolean,
     /** 勾选/取消某个通道（channel 取 [DshRuntime.RACE_PLUGINS] 等）。 */
     onRaceChannelChange: (String, Boolean) -> Unit,
-    /** 运行时下载源：DshSource.SOURCE_* 之一。 */
-    downloadSource: String,
-    onDownloadSourceChange: (String) -> Unit,
+    /** 竞速通道里勾选的镜像线路（id 取自 DshSource.allSourceIds()）。 */
+    raceMirrors: Set<String>,
+    onRaceMirrorToggle: (String, Boolean) -> Unit,
+    /** 自定义 metadata 地址（弹窗里的「自定义源」一项；勾上才用）。 */
+    customSourceEnabled: Boolean,
+    onCustomSourceToggle: (Boolean) -> Unit,
     customMetaUrl: String,
     onCustomMetaUrlChange: (String) -> Unit,
-    /** 已解析的生效源（auto 时是测速结果）。 */
+    /** 已解析的生效源（竞速时是测速结果）。 */
     effectiveSource: String,
     speedTesting: Boolean,
     /** 测速结果行，已格式化好。 */
@@ -612,6 +615,16 @@ fun FunctionSettingsContent(
                     raceAppUpdate = raceAppUpdate,
                     raceRuntime = raceRuntime,
                     onChannelChange = onRaceChannelChange,
+                    mirrors = raceMirrors,
+                    onMirrorToggle = onRaceMirrorToggle,
+                    customSourceEnabled = customSourceEnabled,
+                    onCustomSourceToggle = onCustomSourceToggle,
+                    customMetaUrl = customMetaUrl,
+                    onCustomMetaUrlChange = onCustomMetaUrlChange,
+                    speedTesting = speedTesting,
+                    speedResults = speedResults,
+                    effectiveSource = effectiveSource,
+                    onSpeedTest = onSpeedTest,
                     onDismiss = { showRaceDialog = false },
                 )
             }
@@ -689,89 +702,6 @@ fun FunctionSettingsContent(
                         summary = stringResource(R.string.dsh_webui_compat_off_desc),
                         onSelect = { onWebCompatModeChange(DshWebCompat.MODE_OFF) },
                     )
-                }
-            }
-        }
-
-        // ───────── 运行时下载源 ─────────
-        item(key = "function_download_source", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.CloudDownload, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_source_section),
-                        summary = stringResource(R.string.dsh_source_summary),
-                    )
-                    Spacer(Modifier.height(12.dp))
-
-                    RuntimeOption(
-                        selected = downloadSource == DshSource.SOURCE_AUTO,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_source_auto),
-                        summary = stringResource(R.string.dsh_source_auto_desc),
-                        onSelect = { onDownloadSourceChange(DshSource.SOURCE_AUTO) },
-                    )
-                    // 线路清单从 DshSource 派生（唯一事实来源）：加一条线路不必改这里，
-                    // 也不会出现「测速会用到、但手动选不到」的线路。
-                    for (src in DshSource.fixedSources() + DshSource.SOURCE_CUSTOM) {
-                        RuntimeOption(
-                            selected = downloadSource == src,
-                            enabled = true,
-                            title = stringResource(sourceLabelRes(src)),
-                            summary = "",
-                            onSelect = { onDownloadSourceChange(src) },
-                        )
-                    }
-
-                    AnimatedVisibility(visible = downloadSource == DshSource.SOURCE_CUSTOM) {
-                        OutlinedTextField(
-                            value = customMetaUrl,
-                            onValueChange = onCustomMetaUrlChange,
-                            label = { Text(stringResource(R.string.dsh_source_custom_hint)) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(
-                            R.string.dsh_source_effective,
-                            stringResource(sourceLabelRes(effectiveSource)),
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedButton(onClick = onSpeedTest, enabled = !speedTesting) {
-                            Text(
-                                stringResource(
-                                    if (speedTesting) R.string.dsh_source_testing
-                                    else R.string.dsh_source_speedtest
-                                )
-                            )
-                        }
-                        if (speedTesting) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        }
-                    }
-
-                    if (speedResults.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        for (line in speedResults) {
-                            Text(
-                                text = line,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -2159,10 +2089,15 @@ private fun channelLabelRes(channel: String): Int = when (channel) {
 }
 
 /**
- * 竞速通道的通道勾选弹窗（长按卡片打开）。
+ * 竞速通道弹窗（长按卡片打开）：选通道 + 选镜像源 + 测速。
  *
- * 勾中的通道走「先测速再下载」的竞速线路，没勾的一律直连；总开关关掉时这里所有勾选都不生效
- * （所以关着时把整组置灰，免得用户以为勾了没用）。
+ * 三件事在这里收口（用户 2026-09-25 定）：
+ * 1. **通道**：勾中的通道走竞速，没勾的一律直连；总开关关掉时所有勾选都不生效（整组置灰）。
+ *    运行时那一条同时取代了原来的「运行时下载源」卡片 —— 不再有第二处能设下载源。
+ * 2. **镜像源**：多选、默认全选，三条通道**共用这一份**。没勾的既不被测速也不被使用；
+ *    一条都不勾就是「只直连 github」。另有「自定义源」一项，填自己的 metadata 地址。
+ * 3. **测速**：就地跑一轮，把每条线路的延迟/吞吐显示在它自己那一行上 —— 勾选与实测同屏，
+ *    用户才能判断该留哪几条。
  */
 @Composable
 private fun RaceChannelDialog(
@@ -2171,6 +2106,16 @@ private fun RaceChannelDialog(
     raceAppUpdate: Boolean,
     raceRuntime: Boolean,
     onChannelChange: (String, Boolean) -> Unit,
+    mirrors: Set<String>,
+    onMirrorToggle: (String, Boolean) -> Unit,
+    customSourceEnabled: Boolean,
+    onCustomSourceToggle: (Boolean) -> Unit,
+    customMetaUrl: String,
+    onCustomMetaUrlChange: (String) -> Unit,
+    speedTesting: Boolean,
+    speedResults: List<DshSource.SpeedResult>,
+    effectiveSource: String,
+    onSpeedTest: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val channels = listOf(
@@ -2182,7 +2127,12 @@ private fun RaceChannelDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.dsh_race_dialog_title)) },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 Text(
                     text = stringResource(R.string.dsh_race_dialog_message),
                     style = MaterialTheme.typography.bodyMedium,
@@ -2204,7 +2154,7 @@ private fun RaceChannelDialog(
                     ) {
                         Checkbox(
                             checked = checked,
-                            onCheckedChange = { onChannelChange(id, it) },
+                            onCheckedChange = { onChannelChange(id, !checked) },
                             enabled = masterEnabled,
                         )
                         Spacer(Modifier.width(8.dp))
@@ -2216,12 +2166,147 @@ private fun RaceChannelDialog(
                         )
                     }
                 }
+
                 if (!masterEnabled) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = stringResource(R.string.dsh_race_master_off_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.dsh_race_mirrors_title),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.dsh_race_mirrors_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                for (id in DshSource.allSourceIds()) {
+                    val checked = id in mirrors
+                    // 测速结果贴在对应那一行上：勾选与实测同屏，用户才知道该留哪几条
+                    val result = speedResults.firstOrNull { it.source == id }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = checked,
+                                enabled = masterEnabled,
+                                role = Role.Checkbox,
+                                onClick = { onMirrorToggle(id, !checked) },
+                            )
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { onMirrorToggle(id, !checked) },
+                            enabled = masterEnabled,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = stringResource(DshSource.labelRes(id)),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (masterEnabled) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                            )
+                            if (result != null) {
+                                val latency = result.latencyMs
+                                val detail = when {
+                                    latency == null -> stringResource(R.string.dsh_race_mirror_unreachable)
+                                    result.speedKBps > 0.0 -> String.format(
+                                        stringResource(R.string.dsh_race_mirror_measured_speed),
+                                        latency.toInt(),
+                                        result.speedKBps.toInt(),
+                                    )
+                                    else -> String.format(
+                                        stringResource(R.string.dsh_race_mirror_measured_latency),
+                                        latency.toInt(),
+                                    )
+                                }
+                                Text(
+                                    text = detail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedButton(onClick = onSpeedTest, enabled = !speedTesting) {
+                        Text(
+                            stringResource(
+                                if (speedTesting) R.string.dsh_source_testing
+                                else R.string.dsh_source_speedtest
+                            )
+                        )
+                    }
+                    if (!speedTesting) {
+                        Text(
+                            text = stringResource(
+                                R.string.dsh_source_effective,
+                                stringResource(DshSource.labelRes(effectiveSource)),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = customSourceEnabled,
+                            enabled = masterEnabled,
+                            role = Role.Checkbox,
+                            onClick = { onCustomSourceToggle(!customSourceEnabled) },
+                        )
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = customSourceEnabled,
+                        onCheckedChange = { onCustomSourceToggle(!customSourceEnabled) },
+                        enabled = masterEnabled,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = stringResource(R.string.dsh_race_custom_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (masterEnabled) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                        )
+                        Text(
+                            text = stringResource(R.string.dsh_race_custom_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (customSourceEnabled) {
+                    OutlinedTextField(
+                        value = customMetaUrl,
+                        onValueChange = onCustomMetaUrlChange,
+                        label = { Text(stringResource(R.string.dsh_source_custom_hint)) },
+                        singleLine = true,
+                        enabled = masterEnabled,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }

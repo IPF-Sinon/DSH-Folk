@@ -316,8 +316,6 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_log_empty">No log yet. Tap Start to install and run DeepSeek Harness.</string>
     <string name="dsh_term_exited">Session ended (exit code %1$d)</string>
     <string name="dsh_term_start_failed">Terminal failed to start: %1$s</string>
-    <string name="dsh_source_section">Runtime download source</string>
-    <string name="dsh_source_summary">Where the Linux rootfs is downloaded from on first start</string>
     <string name="dsh_source_auto">Automatic (pick fastest)</string>
     <string name="dsh_source_auto_desc">Measure latency and throughput, then keep the best for 24 h</string>
     <string name="dsh_source_github">GitHub direct</string>
@@ -334,9 +332,6 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_source_effective">In effect: %1$s</string>
     <string name="dsh_source_speedtest">Run speed test</string>
     <string name="dsh_source_testing">Testing…</string>
-    <string name="dsh_source_result">%1$s: %2$d ms · %3$s</string>
-    <string name="dsh_source_result_unreachable">%1$s: unreachable</string>
-    <string name="dsh_source_no_speed">not measured</string>
     <string name="dsh_plugin_install">Install</string>
     <string name="dsh_plugin_installed">Installed</string>
     <string name="dsh_plugin_no_npm">Not on npm — tap to open the repository and follow its install steps</string>
@@ -634,6 +629,13 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_race_channel_app">App update</string>
     <string name="dsh_race_channel_runtime">Runtime update</string>
     <string name="dsh_race_master_off_hint">The master switch is off, so no channel races and everything connects directly.</string>
+    <string name="dsh_race_mirrors_title">Mirror routes</string>
+    <string name="dsh_race_mirrors_hint">All selected by default. Unchecked routes are neither measured nor used; with none selected only GitHub direct is used.</string>
+    <string name="dsh_race_custom_title">Custom source</string>
+    <string name="dsh_race_custom_desc">Use your own metadata.json URL (runtime updates only)</string>
+    <string name="dsh_race_mirror_unreachable">unreachable</string>
+    <string name="dsh_race_mirror_measured_latency">%1$d ms</string>
+    <string name="dsh_race_mirror_measured_speed">%1$d ms · %2$d KB/s</string>
 
     <!-- 预装插件标签 -->
     <string name="dsh_plugin_seeded_label">Preinstalled</string>

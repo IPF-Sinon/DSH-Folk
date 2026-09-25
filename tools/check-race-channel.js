@@ -118,13 +118,22 @@ console.log('check-race-channel: 通过');
     'proxyPrefix 必须从 MIRRORS 反查（不能各写一份 when）');
   want(/val src = MIRRORS\.firstOrNull \{ url\.startsWith\(it\.second\) \}/.test(src),
     'downloadRank 必须从 MIRRORS 反查：新加的线路否则会被当成「未测速」排在最后');
-  want(/MIRRORS\.map \{ \(src, prefix\) -> src to "\$prefix\$meta" \}/.test(src),
-    'speedTest 的候选必须从 MIRRORS 派生（加线路就自动纳入测速）');
+  want(/activeMirrors\(\)\.map \{ \(src, prefix\) -> src to "\$prefix\$meta" \}/.test(src) &&
+    /private fun activeMirrors\(\): List<Pair<String, String>>/.test(src),
+    'speedTest 的候选必须来自 activeMirrors()（= 勾选过的线路，加线路只改 MIRRORS）');
   want(/DshSource\.allProxyPrefixes\(\)/.test(repos),
     '插件清 git 重写必须用 DshSource.allProxyPrefixes()（否则漏清新前缀）');
   want(!/GH_MIRROR_PREFIXES/.test(repos), '插件里不该再留第二份前缀清单（GH_MIRROR_PREFIXES）');
-  want(/DshSource\.fixedSources\(\)/.test(settings2),
-    '下载渠道列表必须从 DshSource.fixedSources() 派生，避免「测速会用到但手动选不到」');
+  want(/for \(id in DshSource\.allSourceIds\(\)\)/.test(settings2),
+    '弹窗的镜像勾选必须按 DshSource.allSourceIds() 渲染（加线路自动出现）');
+  want(/DshSource\.setEnabledMirrors\(/.test(fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt'), 'utf8')),
+    '勾选必须写回 DshSource.setEnabledMirrors');
+  want(!/function_download_source/.test(settings2),
+    '旧的「运行时下载源」卡片必须已移除（下载源只能在竞速弹窗里设，两处设就会互相打架）');
+  want(/fun enabledMirrors\(\): Set<String>/.test(src) && /private fun activeMirrors\(\)/.test(src),
+    'DshSource 必须按勾选过滤候选（enabledMirrors/activeMirrors）');
+  want(/SOURCE_GHPROXY_MAIN to "https:\/\/gh-proxy\.org\/"/.test(src) && /private fun migrateLegacySourceChoice/.test(src),
+    '新增线路必须在 MIRRORS 里，且老固定源选择要有迁移（不许把用户的明确选择悄悄重置成全选）');
 // 下载候选必须收敛到 DshSource.proxyCandidates（各消费点不许再写死两条线路）
   const dshRuntime = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt'), 'utf8');
   const appUpdater2 = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/util/AppUpdater.kt'), 'utf8');

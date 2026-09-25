@@ -331,7 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed proroot failing to start after a runtime update: the native addon loader copied its binaries through a hard link and then deleted the source, which on devices without hard-link support left an unloadable symlink behind and killed startup with a native binding error. The container now loads those binaries in place; proot was already unaffected because its path translation happened to resolve the same link.</item>
+        <item>The runtime download source card is gone: the race channel now owns it. Long press the race channel card to pick the channels, then tick which mirror routes may be used (all ticked by default, shared by every channel) and run a speed test right there, with each route showing its own latency and throughput. Unticked routes are neither measured nor used, and ticking none falls back to GitHub direct. A custom metadata URL is available as one of the entries. Your previous fixed source choice is carried over into the new ticks instead of being reset.</item>
 </string-array>
 
     

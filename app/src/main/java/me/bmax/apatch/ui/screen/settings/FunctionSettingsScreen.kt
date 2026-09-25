@@ -173,12 +173,16 @@ internal fun DshSettingsScreen(
     var verifyAfterInstall by rememberSaveable {
         mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, true))
     }
-    var downloadSource by rememberSaveable { mutableStateOf(DshSource.setting(context)) }
+    // 竞速通道里勾选的镜像线路（三条通道共用这一份，见 DshSource.enabledMirrors）
+    var raceMirrors by rememberSaveable { mutableStateOf(DshSource.enabledMirrors()) }
+    // 「自定义源」= 用用户自己的 metadata 地址（DshSource.SOURCE_CUSTOM），其余情况一律 auto
+    var customSourceEnabled by rememberSaveable { mutableStateOf(DshSource.setting(context) == DshSource.SOURCE_CUSTOM) }
     var customMetaUrl by rememberSaveable { mutableStateOf(DshSource.customMetaUrl(context)) }
-    // 生效源：auto 时是缓存/测速结果。解析要走网络，所以只在 IO 线程算，初值用设置值兜底。
-    var effectiveSource by rememberSaveable { mutableStateOf(downloadSource) }
+    // 生效源：竞速时是测速/缓存结果。解析要走网络，所以只在 IO 线程算，初值用设置值兜底。
+    var effectiveSource by rememberSaveable { mutableStateOf(DshSource.setting(context)) }
     var speedTesting by rememberSaveable { mutableStateOf(false) }
-    var speedResults by rememberSaveable { mutableStateOf(listOf<String>()) }
+    // 存的是测速**原始结果**而不是拼好的字符串：展示全在竞速弹窗里（每条线路贴在自己那一行）
+    var speedResults by remember { mutableStateOf<List<DshSource.SpeedResult>>(emptyList()) }
     var adbPairCode by rememberSaveable { mutableStateOf("") }
     var adbPairPort by rememberSaveable { mutableStateOf("") }
     var adbConnectPort by rememberSaveable { mutableStateOf("") }
@@ -367,18 +371,6 @@ internal fun DshSettingsScreen(
     // 已装版本从运行时状态读（同一份 prefs，下载成功时写入）
     val runtimeState by DshRuntime.state.collectAsStateWithLifecycle()
 
-    val noSpeedText = stringResource(R.string.dsh_source_no_speed)
-    val resultFmt = stringResource(R.string.dsh_source_result)
-    val unreachableFmt = stringResource(R.string.dsh_source_result_unreachable)
-    val sourceNames = DshSource.let {
-        mapOf(
-            DshSource.SOURCE_AUTO to stringResource(R.string.dsh_source_auto),
-            DshSource.SOURCE_GITHUB to stringResource(R.string.dsh_source_github),
-            DshSource.SOURCE_GHPROXY_CF to stringResource(R.string.dsh_source_ghproxy_cf),
-            DshSource.SOURCE_GHPROXY_AXISNOW to stringResource(R.string.dsh_source_ghproxy_axisnow),
-            DshSource.SOURCE_CUSTOM to stringResource(R.string.dsh_source_custom),
-        )
-    }
 
     // proroot 的可用性要读它自己的目录，放 IO 线程算一次即可。
     var prorootAvailable by rememberSaveable { mutableStateOf(false) }
@@ -646,14 +638,25 @@ internal fun DshSettingsScreen(
                             DshRuntime.RACE_RUNTIME -> raceRuntime = on
                         }
                     },
-                    downloadSource = downloadSource,
-                    onDownloadSourceChange = { src ->
-                        downloadSource = src
-                        DshSource.setSetting(context, src)
-                        if (src != DshSource.SOURCE_AUTO) effectiveSource = src
-                        else scope.launch(Dispatchers.IO) {
+                    raceMirrors = raceMirrors,
+                    onRaceMirrorToggle = { id, on ->
+                        val next = if (on) raceMirrors + id else raceMirrors - id
+                        raceMirrors = next
+                        DshSource.setEnabledMirrors(next)
+                        // 勾选变了，生效源就不再有效：重解析一次（会用到刚写下的勾选）
+                        scope.launch(Dispatchers.IO) {
                             val r = runCatching { DshSource.resolve(context.applicationContext) }
-                                .getOrDefault(src)
+                                .getOrDefault(effectiveSource)
+                            withContext(Dispatchers.Main) { effectiveSource = r }
+                        }
+                    },
+                    customSourceEnabled = customSourceEnabled,
+                    onCustomSourceToggle = { on ->
+                        customSourceEnabled = on
+                        DshSource.setSetting(context, if (on) DshSource.SOURCE_CUSTOM else DshSource.SOURCE_AUTO)
+                        scope.launch(Dispatchers.IO) {
+                            val r = runCatching { DshSource.resolve(context.applicationContext) }
+                                .getOrDefault(if (on) DshSource.SOURCE_CUSTOM else DshSource.SOURCE_AUTO)
                             withContext(Dispatchers.Main) { effectiveSource = r }
                         }
                     },
@@ -669,35 +672,13 @@ internal fun DshSettingsScreen(
                         speedTesting = true
                         scope.launch(Dispatchers.IO) {
                             val results = runCatching { DshSource.speedTest() }.getOrDefault(emptyList())
-                            val lines = results
-                                .sortedBy { it.estimatedMs }
-                                .map { r ->
-                                    val latency = r.latencyMs
-                                    if (latency == null) {
-                                        // 不可达：不拼延迟数字，直接一句话（老实现用 -1 占位，
-                                        // 渲染成「延迟 -1 ms · 不可达」，读起来像出了别的错）
-                                        String.format(unreachableFmt, sourceNames[r.source] ?: r.source)
-                                    } else {
-                                        val speed = if (r.speedKBps > 0.0) {
-                                            String.format("%.0f KB/s", r.speedKBps)
-                                        } else {
-                                            noSpeedText
-                                        }
-                                        String.format(
-                                            resultFmt,
-                                            sourceNames[r.source] ?: r.source,
-                                            latency.toInt(),
-                                            speed,
-                                        )
-                                    }
-                                }
                             val picked = runCatching {
                                 DshSource.pickBest(results, context.applicationContext)
                             }.getOrDefault(effectiveSource)
                             withContext(Dispatchers.Main) {
-                                speedResults = lines
+                                speedResults = results
                                 speedTesting = false
-                                if (downloadSource == DshSource.SOURCE_AUTO) effectiveSource = picked
+                                effectiveSource = picked
                             }
                         }
                     },

@@ -382,6 +382,14 @@ object DshEnv {
     /** 竞速通道：运行时更新（rootfs 与 metadata 下载）。 */
     const val KEY_RACE_RUNTIME = "race_channel_runtime"
 
+    /**
+     * 竞速通道里**启用哪些镜像线路**（JSON 数组，存 [DshSource] 的源 id；默认/缺失 = 全选）。
+     *
+     * 三条通道共用这一份勾选（用户 2026-09-25 定）：勾了的线路才参与测速与竞速，没勾的既不
+     * 会被测速、也不会被下载。空数组是合法状态 —— 那表示「一条镜像都不用，只直连」。
+     */
+    const val KEY_RACE_MIRRORS = "race_mirrors"
+
     /** 宿主事实文件（JSON），由 App 写、dsh-folk-host 插件读。 */
     fun hostFacts(ctx: Context): File = File(dshHome(ctx), "host-facts.json")
 }

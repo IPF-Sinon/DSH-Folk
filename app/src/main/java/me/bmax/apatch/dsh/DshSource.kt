@@ -7,6 +7,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.net.URL
 import me.bmax.apatch.R
+import org.json.JSONArray
 
 /**
  * 运行时下载源解析与测速（移植 DSHM SourceManager 的思路，简化为三候选 + 自定义）。
@@ -59,6 +60,62 @@ object DshSource {
      */
     fun allProxyPrefixes(): List<String> = MIRRORS.map { it.second } + ""
 
+    /** 全部线路 id（顺序即 MIRRORS 顺序）——竞速通道弹窗按它渲染勾选列表。 */
+    fun allSourceIds(): List<String> = MIRRORS.map { it.first }
+
+    /**
+     * 当前启用的镜像线路（竞速通道弹窗里勾选的那些）。缺失 = 全选；空 = 一条都不用（只直连）。
+     *
+     * 用户设定（2026-09-25）：镜像勾选**三条通道共用一份** —— 勾了的才参与测速与竞速，
+     * 没勾的既不会被测速、也不会被下载。所以这里返回的集合同时决定测速范围与下载候选。
+     *
+     * 首次读取（pref 不存在）时做一次**老设置迁移**：以前「运行时下载源」卡片里的固定选择
+     * 会被翻译成对应的勾选，而不是被无声重置成全选 —— 用户当初明确选了某条线路，升级后
+     * 不该变成「随便挑一条最快的」。
+     */
+    fun enabledMirrors(): Set<String> {
+        val prefs = runCatching { prefs() }.getOrNull() ?: return allSourceIds().toSet()
+        val raw = prefs.getString(KEY_RACE_MIRRORS, null)
+            ?: return migrateLegacySourceChoice(prefs).also {
+                prefs.edit().putString(KEY_RACE_MIRRORS, JSONArray(it.toList()).toString()).apply()
+            }
+        val parsed = runCatching {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { id -> id.isNotEmpty() } }
+        }.getOrNull() ?: return allSourceIds().toSet()
+        // 只保留仍然存在的线路（线路下线后旧勾选不该把候选集算错）
+        return parsed.filter { it in allSourceIds() }.toSet()
+    }
+
+    /** 写回勾选（落盘的就是集合本身，空集合也照存 —— 那是「只直连」的合法表达）。 */
+    fun setEnabledMirrors(ids: Collection<String>) {
+        val known = ids.filter { it in allSourceIds() }.distinct()
+        prefs().edit().putString(KEY_RACE_MIRRORS, JSONArray(known).toString()).apply()
+    }
+
+    /**
+     * 老「运行时下载源」的固定选择 → 镜像勾选（只在第一次读勾选时跑一次）。
+     *
+     * - 选过某条镜像线路 → 只勾那条（他的意图就是「走这条」）；
+     * - 选过直连 github → 全不勾（意图是「别绕」）；
+     * - auto / custom / 从没设过 → 全选（竞速的默认语义）。
+     */
+    private fun migrateLegacySourceChoice(prefs: android.content.SharedPreferences): Set<String> {
+        val legacy = prefs.getString(KEY_SOURCE, SOURCE_AUTO) ?: SOURCE_AUTO
+        return when (legacy) {
+            SOURCE_GITHUB -> emptySet()
+            SOURCE_CUSTOM -> allSourceIds().toSet()
+            in allSourceIds() -> setOf(legacy)
+            else -> allSourceIds().toSet()
+        }
+    }
+
+    /** 参与竞速的镜像线路（id → 前缀），顺序同上表。 */
+    private fun activeMirrors(): List<Pair<String, String>> {
+        val on = enabledMirrors()
+        return MIRRORS.filter { it.first in on }
+    }
+
     /** 手动选源时可选的固定线路（不含 auto 与 custom）。 */
     fun fixedSources(): List<String> = listOf(SOURCE_GITHUB) + MIRRORS.map { it.first }
 
@@ -73,7 +130,8 @@ object DshSource {
      */
     fun proxyCandidates(url: String): List<String> {
         if (!url.startsWith("https://github.com/")) return listOf(url)
-        return (MIRRORS.map { it.second + url } + url).distinct().sortedBy { downloadRank(it) }
+        // 只用**勾选过**的线路 + 直连原址（未勾选的一律不给候选，见 [enabledMirrors]）
+        return (activeMirrors().map { it.second + url } + url).distinct().sortedBy { downloadRank(it) }
     }
 
     private const val CACHE_TTL_MS = 24 * 60 * 60 * 1000L
@@ -329,6 +387,17 @@ object DshSource {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
 
+    /**
+     * 不带 Context 的偏好入口（给镜像勾选这类「调用点拿不到 ctx」的地方用）。
+     *
+     * 走全局 application context：本对象现有 API 全是不带 ctx 的同步方法（[rankedSources]、
+     * [proxyCandidates]、[speedTest] 会被插件安装、APK 下载、运行时下载三处调用），为读一个
+     * 偏好把它们全改成 suspend/带 ctx 不划算。[APApplication] 在 App 启动时就绑定，读到未
+     * 初始化时下面调用点都做了兜底（返回全选 → 行为退化成改动前的样子，不是崩）。
+     */
+    private fun prefs(): android.content.SharedPreferences =
+        me.bmax.apatch.apApp.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
+
     fun setting(ctx: Context): String = prefs(ctx).getString(KEY_SOURCE, SOURCE_AUTO) ?: SOURCE_AUTO
 
     fun setSetting(ctx: Context, source: String) {
@@ -416,10 +485,12 @@ object DshSource {
      */
     fun rankedSources(force: Boolean = false): List<String> {
         val results = if (!force && resultsFresh()) lastResults else speedTest()
+        // 只保留勾选的线路（+ 直连 github，它不在勾选列表里、永远是兜底那条）
+        val on = enabledMirrors()
         val ranked = results
             .sortedBy { it.estimatedMs }
             .map { it.source }
-            .filter { it != SOURCE_CUSTOM && it != SOURCE_AUTO }
+            .filter { it == SOURCE_GITHUB || it in on }
         if (ranked.isEmpty() || ranked.none { s -> results.any { it.source == s && it.reachable } }) {
             return FALLBACK_ORDER
         }
@@ -481,7 +552,8 @@ object DshSource {
         val meta = metaUrl()
         val probe = speedProbeUrl()
         // 候选＝每条镜像线路 + 直连 github（垫底）。清单从 MIRRORS 派生，加线路只改一处。
-        val candidates = MIRRORS.map { (src, prefix) -> src to "$prefix$meta" } +
+        // 只测勾选过的线路：没勾的既不该占用测速时间，也不该出现在测速结果里
+        val candidates = activeMirrors().map { (src, prefix) -> src to "$prefix$meta" } +
             (SOURCE_GITHUB to meta)
         // 延迟探测**并行**：候选从 3 条涨到 6 条，串行最坏要等 6×6s 超时；并行把这段钉在单次超时量级。
         // 这条路径在用户点「安装插件」时是同步等待的（测速服务端结论带 10 分钟缓存），不能拖。
