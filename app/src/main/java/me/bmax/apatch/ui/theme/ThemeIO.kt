@@ -46,6 +46,16 @@ internal object ThemeIO {
     private const val FONT_FILENAME = "font.ttf"
     private const val KEY_STR = "FolkPatchThemeSecretKey2025"
     private val importMutex = Mutex()
+
+    /**
+     * 串行化「主题导出」这条通路的暂存目录使用。
+     *
+     * [exportTheme] 与 [measureThemeZip] 共用 `cacheDir/theme_export`，且都在开头
+     * `deleteRecursively()`、结尾再删一次 —— 两者并发时（云备份面板一边量大小、一边真的导出）
+     * 会互相删掉对方的暂存内容，表现为「导出成功但 zip 只有几 KB」这种极难复现的错。
+     */
+    private val exportMutex = Mutex()
+
     private var activeImportKey: String? = null
     private var activeImportDeferred: CompletableDeferred<Boolean>? = null
 
@@ -55,7 +65,61 @@ internal object ThemeIO {
         return SecretKeySpec(bytes, "AES")
     }
 
-    suspend fun exportTheme(context: Context, uri: Uri, metadata: ThemeMetadata): Boolean {
+    suspend fun exportTheme(context: Context, uri: Uri, metadata: ThemeMetadata): Boolean =
+        exportThemeTo(context, metadata) { context.contentResolver.openOutputStream(uri) }
+
+    /**
+     * 量一次「主题包」有多大，**不落盘**。
+     *
+     * 云备份的「是否包括应用主题」开关要按主题包大小自动给默认值（超过 5MB 默认不勾，
+     * 免得同步包被音乐/字体/视频背景撑爆），所以需要一个「现在这个主题打进包有多大」的数字。
+     *
+     * 走的是**同一条导出通路**（同样的暂存、同样的加密 + zip），只是把最后的 zip 写进一个
+     * 只计数、不留内容的流里：
+     * - 不重复一份「主题里有哪些文件」的清单，测量口径不会和真导出漂移；
+     * - 加密后再压缩本来就压不动，所以写不写盘对结果没有影响，省掉一次几十 MB 的落盘。
+     *
+     * 返回字节数；失败返回 -1（调用方据此显示「检测不到」而不是「0 B」）。
+     */
+    suspend fun measureThemeZip(context: Context, metadata: ThemeMetadata): Long {
+        val counter = CountingOutputStream()
+        val ok = exportThemeTo(context, metadata) { counter }
+        return if (ok) counter.count else -1L
+    }
+
+    /**
+     * [exportTheme] / [measureThemeZip] 的共同入口：把主题打包写进 [sink] 给的流。
+     *
+     * 锁只在这里拿一次（kotlinx 的 [Mutex] 不可重入，调用方别再自己拿一遍）。
+     * [sink] 返回 null（打不开目标）时整体失败，与原来 `openOutputStream(uri)?.use {}` 的语义一致。
+     */
+    private suspend fun exportThemeTo(
+        context: Context,
+        metadata: ThemeMetadata,
+        sink: () -> java.io.OutputStream?,
+    ): Boolean = exportMutex.withLock {
+        exportThemeBody(context, metadata, sink)
+    }
+
+    /** 只计字节、不留内容：测量主题包大小时用它接住 zip 输出。 */
+    private class CountingOutputStream : java.io.OutputStream() {
+        var count: Long = 0L
+            private set
+
+        override fun write(b: Int) {
+            count++
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            count += len
+        }
+    }
+
+    private suspend fun exportThemeBody(
+        context: Context,
+        metadata: ThemeMetadata,
+        sink: () -> java.io.OutputStream?,
+    ): Boolean {
         return withContext(Dispatchers.IO) {
             val cacheDir = File(context.cacheDir, "theme_export")
             if (cacheDir.exists()) cacheDir.deleteRecursively()
@@ -389,8 +453,8 @@ internal object ThemeIO {
                     }
                 }
 
-                // 10. Encrypt and Zip to Uri
-                context.contentResolver.openOutputStream(uri)?.use { os ->
+                // 10. Encrypt and Zip to Uri（或测量用的计数流，见 [measureThemeZip]）
+                sink()?.use { os ->
                     // Init Cipher
                     val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
                     val iv = ByteArray(16).also { SecureRandom().nextBytes(it) }

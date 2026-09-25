@@ -28,7 +28,13 @@ import org.json.JSONObject
  */
 internal object DshCloudAppData {
 
-    /** 出一份含软件数据的整包。请求体：`{tier,includeSessions,encrypt,password,outDir}`。 */
+    /** 主题包大小的进程内缓存时长：面板每次打开都会问，不必每次重新打包测量。 */
+    private const val THEME_SIZE_CACHE_MS = 5 * 60 * 1000L
+
+    /** 最近一次量到的 (主题包字节数, 时刻)；null 表示还没量过。 */
+    @Volatile private var themeSizeCache: Pair<Long, Long>? = null
+
+    /** 出一份含软件数据的整包。请求体：`{tier,includeSessions,encrypt,password,outDir,includeTheme}`。 */
     fun export(ctx: Context, body: JSONObject): Pair<Int, String> {
         val tier = body.optString("tier")
         val scope = scopeForTier(tier)
@@ -61,6 +67,8 @@ internal object DshCloudAppData {
             scope = scope,
             sessions = if (body.optBoolean("includeSessions", false)) SessionPick.ALL else SessionPick.NONE,
             password = if (encrypt) password else "",
+            // 插件没带这个字段时按 true（老版本插件的行为就是含主题），带了就听它的。
+            includeTheme = if (body.has("includeTheme")) body.optBoolean("includeTheme", true) else true,
         )
         val result = runCatching {
             runBlocking { DshConfigBackup.exportArchive(ctx, plan) }
@@ -121,6 +129,39 @@ internal object DshCloudAppData {
             .put("ok", result.ok)
             .put("message", result.message)
             .put("needsRestart", if (result.needsRestart) 1 else 0)
+            .toString()
+    }
+
+    /**
+     * 主题包信息（给云备份面板的「是否包括应用主题」开关用）。
+     *
+     * `sizeBytes` 是**真打一遍主题包**量出来的（[DshConfigBackup.measureThemeZipBytes]，与导出同一通路、
+     * 不落盘），不是估算 —— 开关的默认值、以及用户看到的「当前主题包大小」都得是那个真数。
+     *
+     * 代价是每次量都要走一遍加密 + 压缩（几十 MB 的字体/音乐主题在百毫秒到秒级），所以这里带
+     * [THEME_SIZE_CACHE_MS] 的进程内缓存：插件的云备份面板每次打开都会问一次，不该每次重算。
+     * 用户改完主题想立刻看新大小，可带 `force=true`（插件目前不传，缓存过期自然会刷新）。
+     *
+     * 量不出来（主题读取失败）时 `sizeBytes` 为 -1、`defaultInclude` 仍给 true —— 不能因为量不出来
+     * 就把用户的主题悄悄排除在备份之外。
+     */
+    fun themeInfo(ctx: Context, force: Boolean): Pair<Int, String> {
+        val now = System.currentTimeMillis()
+        val cached = themeSizeCache
+        val size = if (!force && cached != null && now - cached.second < THEME_SIZE_CACHE_MS) {
+            cached.first
+        } else {
+            val measured = runBlocking { DshConfigBackup.measureThemeZipBytes(ctx) }
+            themeSizeCache = measured to now
+            measured
+        }
+        val limit = DshConfigBackup.THEME_SIZE_LIMIT_BYTES
+        return 200 to JSONObject()
+            .put("ok", true)
+            .put("exists", size > 0L)
+            .put("sizeBytes", size)
+            .put("limitBytes", limit)
+            .put("defaultInclude", size <= 0L || size <= limit)
             .toString()
     }
 

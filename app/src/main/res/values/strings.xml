@@ -331,7 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Five GitHub mirror routes are now available: the gh-proxy main site, v4, v6, the Fastly CDN node and AxisNow. Every route is measured before use, and the download channel list lets you pick one by hand. The extra routes also back up runtime and app downloads, so a single dead route no longer blocks an update.</item>
+        <item>Cloud backup can now include your app theme: a switch under the scopes that contain app data shows the current theme archive size and is turned off by default when that archive exceeds 5 MB (a large theme would blow up the sync package). The theme archive is only measured and the switch only shown for scopes that include app data, and the default is computed automatically even on a fresh configuration. Requires cloud-backup plugin 0.5.0, which the app now seeds as the minimum version.</item>
 </string-array>
 
     

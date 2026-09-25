@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.BuildConfig
 import me.bmax.apatch.R
+import me.bmax.apatch.ui.theme.ThemeIO
 import me.bmax.apatch.ui.theme.ThemeManager
 import me.bmax.apatch.util.BackupLogManager
 import me.bmax.apatch.util.appString
@@ -92,6 +93,10 @@ object DshConfigBackup {
     private const val DSH_BACKUP_EXPORTS_DIR = "/root/.dsh/dsh-config-manager/exports/"
 
     private const val IN_MEMORY_ENCRYPT_LIMIT = 16L * 1024 * 1024
+
+    /** 主题包大小上限：超过它，「包含应用主题」默认不勾（用户仍可手动勾上）。 */
+    const val THEME_SIZE_LIMIT_BYTES = 5L * 1024 * 1024
+
 
     /**
      * 手机上备份文件的落地目录（尽力而为的兜底）。
@@ -322,7 +327,9 @@ object DshConfigBackup {
         // `file://` 指向，文件本身在 filesDir。所以它单独打一个主题包进包（见
         // [DshBackupArchive.THEME]），走的是既有的主题导出通路，不另造一套。
         // 具名传 onLine：它前面还有一个带默认值的 fileName，位置传参会跳不过去。
-        val theme = if (plan.includesAppData) exportThemeZip(ctx, stage, onLine = onLine) else null
+        // 主题只在「含软件数据 + 没关掉主题开关」时导出；关掉时包里就没有 theme.zip，
+        // 恢复侧 matching 地什么也不做（见 restoreThemeZip 的 ABSENT 分支）。
+        val theme = if (plan.wantsTheme) exportThemeZip(ctx, stage, onLine = onLine) else null
         val secrets = if (plan.password.isEmpty()) {
             null
         } else {
@@ -474,6 +481,31 @@ object DshConfigBackup {
      * 与软件设置都已经在包里了。这里失败只记一笔日志并返回 null，导出结果里会如实写出
      * 「不含外观」，而不是安静地少带一半东西。
      */
+    /**
+     * 打进包里的主题包元信息。
+     *
+     * 抽出来是为了让 [measureThemeZipBytes] 量到的字节数与真导出**完全一致** —— 元信息会写进
+     * 主题包内的 theme.json，两边若各写一份，量出来的大小就永远差一点。
+     */
+    private fun themeMetadata(ctx: Context): ThemeManager.ThemeMetadata = ThemeManager.ThemeMetadata(
+        name = ctx.appString(R.string.dsh_bk_theme_name),
+        type = "phone",
+        version = BuildConfig.VERSION_NAME,
+        author = "DSH-Folk",
+        description = ctx.appString(R.string.dsh_bk_theme_desc),
+    )
+
+    /**
+     * 量一次主题包有多大（字节）。失败返回 -1。
+     *
+     * 云备份的「是否包括应用主题」开关要按大小自动给默认值（超过 [THEME_SIZE_LIMIT_BYTES] 默认不勾，
+     * 免得同步包被字体/音乐/视频背景撑爆），所以需要一个「现在这个主题打进包有多大」的数字。
+     * 走的是与导出同一条通路（同暂存、同加密、同 zip），只是输出写进计数流、不落盘 ——
+     * 加密后的数据本来就压不动，落盘对结果没有影响，省掉一次几十 MB 的写入。
+     */
+    suspend fun measureThemeZipBytes(ctx: Context): Long =
+        ThemeIO.measureThemeZip(ctx, themeMetadata(ctx))
+
     private suspend fun exportThemeZip(
         ctx: Context,
         stage: File,
@@ -486,17 +518,7 @@ object DshConfigBackup {
         return try {
             onLine(ctx.appString(R.string.dsh_bk_step_theme_export))
             // exportTheme 内部自己切到 IO，并先清空它自己的暂存目录再写。
-            val ok = ThemeManager.exportTheme(
-                ctx,
-                Uri.fromFile(out),
-                ThemeManager.ThemeMetadata(
-                    name = ctx.appString(R.string.dsh_bk_theme_name),
-                    type = "phone",
-                    version = BuildConfig.VERSION_NAME,
-                    author = "DSH-Folk",
-                    description = ctx.appString(R.string.dsh_bk_theme_desc),
-                ),
-            )
+            val ok = ThemeManager.exportTheme(ctx, Uri.fromFile(out), themeMetadata(ctx))
             val bytes = out.length()
             trace(ctx, "theme-export ok=" + ok + " bytes=" + bytes)
             if (ok && out.isFile && bytes > 0L) out else null

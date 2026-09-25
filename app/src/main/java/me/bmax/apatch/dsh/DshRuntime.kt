@@ -280,7 +280,10 @@ object DshRuntime {
      * 满足要求的新版本；已达标的不动。要求版本必须与插件仓 `package.json` 的版本对齐：插件发了
      * 需要 App 一并到位的改动，就抬插件版本、再把这里的要求版本同步上来。
      */
-    private val SEED_MIN_VERSIONS = mapOf("dsh-folk-cloud" to "0.4.1")
+    // 0.5.0：云备份面板加了「包含应用主题」开关（按主题包大小自动默认），需要 App 侧的
+    // /cloud/appdata/theme 端点与导出的 includeTheme 参数配合；老插件不会传该参数，
+    // App 侧按 true 兜底，所以只是「拿不到新功能」，不会出错。
+    private val SEED_MIN_VERSIONS = mapOf("dsh-folk-cloud" to "0.5.0")
 
     /**
      * 预装包 → 正式 release tgz 直链的兜底表（钉死版本）。
@@ -292,7 +295,7 @@ object DshRuntime {
      */
     private val SEED_FALLBACK_TGZ = mapOf(
         "dsh-folk-cloud" to
-            "https://github.com/IPF-Sinon/dsh-folk-cloud/releases/download/v0.1.0/dsh-folk-cloud-0.1.0.tgz",
+            "https://github.com/IPF-Sinon/dsh-folk-cloud/releases/download/v0.5.0/dsh-folk-cloud-0.5.0.tgz",
     )
 
     /** 取某个预装包的安装 spec（默认即包名）。 */

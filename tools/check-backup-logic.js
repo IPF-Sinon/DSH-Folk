@@ -40,6 +40,7 @@ const SRC_WIZARD_MODEL = "app/src/main/java/me/bmax/apatch/dsh/DshImportWizard.k
 const SRC_APPDATA = "app/src/main/java/me/bmax/apatch/dsh/DshAppData.kt";
 const SRC_ARCHIVE = "app/src/main/java/me/bmax/apatch/dsh/DshBackupArchive.kt";
 const SRC_APPDATA_SNAPSHOT = "app/src/main/java/me/bmax/apatch/dsh/DshAppDataSnapshot.kt";
+const SRC_THEME_IO = "app/src/main/java/me/bmax/apatch/ui/theme/ThemeIO.kt";
 
 let n = 0;
 let bad = 0;
@@ -761,9 +762,50 @@ ok(/DshPluginRepo\.install\(\s*\n?\s*seedSpec\(pkg\)/.test(runtime),
   "预装用 seedSpec(pkg) 取安装规格（账本仍按包名记）");
 // 1.9.2.6：git 全线路失败时，预装带上 tgz 兜底直链（钉死版本，绕开 git）
 ok(/fun seedFallbackTgz\(pkg[^\n]*\)/.test(runtime) &&
-  /releases\/download\/v0\.1\.0\/dsh-folk-cloud-0\.1\.0\.tgz/.test(runtime) &&
+  /releases\/download\/v0\.5\.0\/dsh-folk-cloud-0\.5\.0\.tgz/.test(runtime) &&
   /fallbackTgz = seedFallbackTgz\(pkg\)/.test(runtime),
   "预装把 tgz 兜底直链传给 install（git 全失败时用）");
+
+// ── 1.9.2.22：云备份「是否包括应用主题」开关（配合插件 0.5.0）──
+// 这条链路的要点是「口径一致」：插件问大小的那个数、界面上显示的那个数、真正打进包的主题，
+// 必须是同一份东西；否则会出现「显示 4MB 却默认不含」或「勾了却没打进去」这种自相矛盾。
+{
+  const archive = fs.readFileSync(SRC_ARCHIVE, "utf8");
+  const backup = fs.readFileSync(SRC_BACKUP, "utf8");
+  const cloud = fs.readFileSync(SRC_CLOUD_APPDATA, "utf8");
+  const bridge = fs.readFileSync(SRC_FSBRIDGE, "utf8");
+  const themeIo = fs.readFileSync(SRC_THEME_IO, "utf8");
+
+  ok(/val includesTheme: Boolean = true/.test(archive) &&
+    /val wantsTheme: Boolean get\(\) = includesAppData && includesTheme/.test(archive),
+    "ExportPlan 有 includesTheme，且 wantsTheme = 含软件数据 且 没关掉主题");
+  ok(/if \(plan\.wantsTheme && theme != null/.test(archive),
+    "打包时按 wantsTheme 决定要不要写主题条目");
+  ok(/val theme = if \(plan\.wantsTheme\) exportThemeZip\(/.test(backup),
+    "导出侧按 wantsTheme 决定要不要产出 theme.zip（关掉时包里就没有它）");
+  ok(/fun measureThemeZipBytes\(/.test(backup) && /val THEME_SIZE_LIMIT_BYTES = 5L \* 1024 \* 1024/.test(backup),
+    "有主题包大小度量与 5MB 上限常量");
+  // 口径一致：导出与度量必须共用同一份元信息，否则量出来的数与真导出永远差一点
+  ok(/private fun themeMetadata\(ctx: Context\): ThemeManager\.ThemeMetadata/.test(backup) &&
+    /ThemeManager\.exportTheme\(ctx, Uri\.fromFile\(out\), themeMetadata\(ctx\)\)/.test(backup) &&
+    /ThemeIO\.measureThemeZip\(ctx, themeMetadata\(ctx\)\)/.test(backup),
+    "导出与度量共用 themeMetadata（否则「显示的大小」与「打进包的大小」不是一个数）");
+  ok(/includeTheme = if \(body\.has\("includeTheme"\)\).*true/.test(cloud),
+    "补包导出读插件传来的 includeTheme（缺席按 true 兜底，兼容老插件）");
+  ok(/fun themeInfo\(ctx: Context, force: Boolean\)/.test(cloud) &&
+    /\.put\("defaultInclude", size <= 0L \|\| size <= limit\)/.test(cloud),
+    "补包接口有 themeInfo，且给出按上限算的 defaultInclude");
+  ok(/\/cloud\/appdata\/theme/.test(bridge) && /DshCloudAppData\.themeInfo\(ctx, force =/.test(bridge),
+    "桥注册了 GET /cloud/appdata/theme 并按 force 参数透传");
+  // 度量必须复用导出的那条通路（同一份加密+zip），而不是另写一份「主题里有哪些文件」的清单
+  ok(/fun measureThemeZip\(context: Context, metadata: ThemeMetadata\): Long/.test(themeIo) &&
+    /private suspend fun exportThemeTo\(/.test(themeIo) &&
+    /sink\(\)\?\.use \{ os ->/.test(themeIo),
+    "ThemeIO 的度量与导出共用同一条打包通路（计数流接住 zip 输出，不落盘）");
+  const locks = (themeIo.match(/exportMutex\.withLock/g) || []).length;
+  ok(locks === 1,
+    `exportMutex 只在一处加锁（实际 ${locks} 处）：kotlinx 的 Mutex 不可重入，度量里再拿一次会自锁`);
+}
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

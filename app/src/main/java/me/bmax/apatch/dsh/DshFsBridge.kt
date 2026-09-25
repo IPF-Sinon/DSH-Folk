@@ -161,7 +161,7 @@ object DshFsBridge {
                     path.startsWith("/native/") -> dispatchNative(method, path, params)
                     // 云备份补包接口：dsh-folk-cloud 插件经此请 App 出/收含软件数据的整包。
                     // 与 /fs、/native 共用同一 token 与回环守卫 —— 能调到这里 = 容器内可信代码。
-                    path.startsWith("/cloud/") -> dispatchCloud(method, path, input, headers)
+                    path.startsWith("/cloud/") -> dispatchCloud(method, path, params, input, headers)
                     method == "GET" && path == "/health" -> handleHealth()
                     method == "GET" && path == "/list" -> handleList(params)
                     method == "GET" && path == "/stat" -> handleStat(params["path"])
@@ -198,13 +198,15 @@ object DshFsBridge {
     }
 
     /**
-     * 云备份补包端点族（`/cloud/appdata/` 下的 status / export / restore）。
+     * 云备份补包端点族（`/cloud/appdata/` 下的 status / theme / export / restore）。
      *
      * 软件数据（Android `SharedPreferences` + 外观资源）住在 App 的私有目录，容器内的
      * dsh-folk-cloud 插件物理上够不到 —— 只能反过来请 App 帮忙。这里把 App 已有的
      * 「导出整包 / 导入整包」通路（[DshConfigBackup]）包一层 HTTP 暴露给插件：
      *
      * - `GET  /cloud/appdata/status`  → `{available:true}`（插件据此判断含软件数据的档位能不能跑）；
+     * - `GET  /cloud/appdata/theme`   → `{exists,sizeBytes,limitBytes,defaultInclude}`，给「是否包括
+     *   应用主题」开关算默认值、并把当前主题包大小显示出来（`?force=1` 跳过 5 分钟缓存重测）；
      * - `POST /cloud/appdata/export`  → App 出一份含软件数据的整包，回 `{file,size}`；
      * - `POST /cloud/appdata/restore` → App 把插件下载好的包恢复回本机，回 `{ok,message,needsRestart}`。
      *
@@ -214,6 +216,7 @@ object DshFsBridge {
     private fun dispatchCloud(
         method: String,
         path: String,
+        query: Map<String, String>,
         input: InputStream,
         headers: Map<String, String>,
     ): Pair<Int, String>? {
@@ -221,6 +224,8 @@ object DshFsBridge {
         return when {
             method == "GET" && path == "/cloud/appdata/status" ->
                 200 to JSONObject().put("available", true).toString()
+            method == "GET" && path == "/cloud/appdata/theme" ->
+                DshCloudAppData.themeInfo(ctx, force = query["force"] == "1" || query["force"] == "true")
             method == "POST" && path == "/cloud/appdata/export" ->
                 DshCloudAppData.export(ctx, readJsonBody(input, headers))
             method == "POST" && path == "/cloud/appdata/restore" ->

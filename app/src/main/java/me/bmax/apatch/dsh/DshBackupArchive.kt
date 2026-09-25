@@ -59,11 +59,22 @@ data class ExportPlan(
     val scope: BackupScope = BackupScope.BOTH,
     val sessions: SessionPick = SessionPick.NONE,
     val password: String = "",
+    /**
+     * 含软件数据的档位里，是否把**外观主题包**（[DshBackupArchive.THEME]，即 theme.zip）也打进去。
+     *
+     * 主题包可能很大（自定义字体、音乐、视频背景动辄几十 MB），会显著撑大要上传的同步包，
+     * 所以云备份面板给了开关：默认按大小自动（超过 [DshConfigBackup.THEME_SIZE_LIMIT_BYTES] 就不勾）。
+     * 不含软件数据的档位本来就没有主题，此开关无意义。
+     */
+    val includesTheme: Boolean = true,
 ) {
     val includesDsh: Boolean get() = scope != BackupScope.APP_ONLY
     // 只有「仅 DSH」两档不含 App 数据；DSH_VAULT 同样是纯 DSH，故也排除
     val includesAppData: Boolean get() = scope != BackupScope.DSH_ONLY && scope != BackupScope.DSH_VAULT
     val includesVault: Boolean get() = scope == BackupScope.BOTH_VAULT || scope == BackupScope.DSH_VAULT
+
+    /** 真正要把主题打进包的条件：含软件数据 **且** 用户/自动没关掉它。 */
+    val wantsTheme: Boolean get() = includesAppData && includesTheme
 
     /** 含 vault 却没设密码 = 非法组合，导出前必须挡住。 */
     val valid: Boolean get() = !includesVault || password.isNotEmpty()
@@ -366,7 +377,7 @@ object DshBackupArchive {
             // 3b) 外观主题包。与软件数据同进退（都属于「App 自己的东西」那一档），但走的是
             //     资源文件那条路 —— 理由见 [THEME] 的说明。空文件不写：一个 0 字节的
             //     theme.zip 会让导入侧以为「有外观」却解不出任何东西。
-            if (plan.includesAppData && theme != null && theme.isFile && theme.length() > 0L) {
+            if (plan.wantsTheme && theme != null && theme.isFile && theme.length() > 0L) {
                 sums[THEME] = copyInto(zos, theme, THEME)
                 stats = stats.copy(theme = true, themeBytes = theme.length())
             }
