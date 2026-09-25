@@ -96,3 +96,62 @@ if (errors.length) {
   process.exit(1);
 }
 console.log('check-race-channel: 通过');
+
+// ── 镜像线路清单的单一事实来源（2026-09-25 扩充到 5 条线路后补的门禁）──
+// 线路清单散成三份（测速候选、下载排序、清 git 重写）是这类改动最容易踩的坑：
+// 加了线路却忘了进 downloadRank，速度排序就退化成「没测过」；忘了进清键清单，
+// 旧前缀的 insteadOf 会留在 .gitconfig 里继续生效。
+{
+  const fs2 = require('fs');
+  const p2 = require('path');
+  const rootDir = p2.resolve(__dirname, '..');
+  const src = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshSource.kt'), 'utf8');
+  const repos = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshPluginRepo.kt'), 'utf8');
+  const settings2 = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt'), 'utf8');
+  const builder = fs2.readFileSync(p2.join(rootDir, 'runtime-builder/build-rootfs.sh'), 'utf8');
+  const extra = [];
+  const want = (c, m) => { if (!c) extra.push(m); };
+
+  want(/private val MIRRORS: List<Pair<String, String>> = listOf\(/.test(src),
+    'DshSource 必须用 MIRRORS 作为线路清单的唯一事实来源');
+  want(/fun proxyPrefix\(source: String\): String =\s*\n?\s*MIRRORS\.firstOrNull/.test(src),
+    'proxyPrefix 必须从 MIRRORS 反查（不能各写一份 when）');
+  want(/val src = MIRRORS\.firstOrNull \{ url\.startsWith\(it\.second\) \}/.test(src),
+    'downloadRank 必须从 MIRRORS 反查：新加的线路否则会被当成「未测速」排在最后');
+  want(/MIRRORS\.map \{ \(src, prefix\) -> src to "\$prefix\$meta" \}/.test(src),
+    'speedTest 的候选必须从 MIRRORS 派生（加线路就自动纳入测速）');
+  want(/DshSource\.allProxyPrefixes\(\)/.test(repos),
+    '插件清 git 重写必须用 DshSource.allProxyPrefixes()（否则漏清新前缀）');
+  want(!/GH_MIRROR_PREFIXES/.test(repos), '插件里不该再留第二份前缀清单（GH_MIRROR_PREFIXES）');
+  want(/DshSource\.fixedSources\(\)/.test(settings2),
+    '下载渠道列表必须从 DshSource.fixedSources() 派生，避免「测速会用到但手动选不到」');
+// 下载候选必须收敛到 DshSource.proxyCandidates（各消费点不许再写死两条线路）
+  const dshRuntime = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt'), 'utf8');
+  const appUpdater2 = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/util/AppUpdater.kt'), 'utf8');
+  const updateChecker = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/util/UpdateChecker.kt'), 'utf8');
+  want(/fun proxyCandidates\(url: String\): List<String>/.test(src), '缺 DshSource.proxyCandidates');
+  want(/DshSource\.proxyCandidates\(meta\.url\)/.test(dshRuntime),
+    '运行时下载必须用 DshSource.proxyCandidates（只认 metadata.mirrors 会让新增线路永远用不上）');
+  want(/DshSource\.proxyCandidates\(status\.apkUrl\)/.test(appUpdater2),
+    'APK 下载必须用 DshSource.proxyCandidates');
+  want(/DshSource\.proxyCandidates\(url\)/.test(updateChecker),
+    'APK 校验值获取必须跟 APK 走同一批候选');
+
+  want(/fun <T> probeAllInParallel\(/.test(src),
+    '6 条线路的延迟探测必须并行（串行最坏要等 6 次超时）');
+
+  // metadata 的 mirrors 要覆盖同一批线路（老版本 App 也靠它回退）
+  const prefixes = (src.match(/SOURCE_GHPROXY_\w+ to "(https:\/\/[^"]+)"/g) || [])
+    .map((l) => l.match(/"(https:\/\/[^"]+)"/)[1]);
+  want(prefixes.length >= 5, `MIRRORS 线路数应 ≥5，实际 ${prefixes.length}`);
+  for (const pre of prefixes) {
+    want(builder.includes(pre), `runtime-builder 的 metadata mirrors 缺线路 ${pre}`);
+  }
+
+  if (extra.length) {
+    console.error('check-race-channel FAILED (mirror sources):');
+    for (const e of extra) console.error('  ✗ ' + e);
+    process.exit(1);
+  }
+  console.log(`check-race-channel: 镜像线路清单一致（${prefixes.length} 条）`);
+}

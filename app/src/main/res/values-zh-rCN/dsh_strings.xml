@@ -303,8 +303,14 @@
     <string name="dsh_source_auto">自动（测速选优）</string>
     <string name="dsh_source_auto_desc">测延迟与吞吐，结果缓存 24 小时</string>
     <string name="dsh_source_github">GitHub 直连</string>
-    <string name="dsh_source_ghproxy_cf">gh-proxy（Cloudflare）</string>
+    <string name="dsh_source_ghproxy_cf">gh-proxy（v6，v4/v6）</string>
     <string name="dsh_source_ghproxy_axisnow">gh-proxy（AxisNow）</string>
+    <string name="dsh_source_ghproxy_main">gh-proxy（主站）</string>
+    <string name="dsh_source_ghproxy_main_desc">gh-proxy 主站，Cloudflare 全球分发。</string>
+    <string name="dsh_source_ghproxy_v4">gh-proxy（v4）</string>
+    <string name="dsh_source_ghproxy_v4_desc">Cloudflare IPv4 优选节点。</string>
+    <string name="dsh_source_ghproxy_cdn">gh-proxy（Fastly CDN）</string>
+    <string name="dsh_source_ghproxy_cdn_desc">Fastly CDN 边缘节点。</string>
     <string name="dsh_source_custom">自定义镜像</string>
     <string name="dsh_source_custom_hint">metadata.json 地址</string>
     <string name="dsh_source_effective">当前生效：%1$s</string>

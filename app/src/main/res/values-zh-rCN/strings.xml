@@ -314,8 +314,7 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>「插件镜像」开关升级为竞速通道：先测速、再走最快线路下载。长按卡片可勾选哪些通道使用它（插件安装与更新、应用更新、运行时更新）；没勾选的一律直连，总开关关闭则全部不生效。插件安装/更新现在也竞速 npm 源，npm 插件不再干等官方源。</item>
-        <item>测速结果会在一段时间内复用，测不出结果时插件线路与下载都有兜底顺序；插件页改成进入时先按上次缓存立刻显示版本、再后台刷新，不再每次进页面都干等一整轮网络请求。</item>
+        <item>GitHub 镜像线路扩到五条：gh-proxy 主站、v4、v6、Fastly CDN 节点与 AxisNow。全部先测速再选用，下载渠道里也能手动指定；新增线路同时作为运行时与应用的下载回退，单条线路挂掉不再卡住更新。</item>
 </string-array>
 
     

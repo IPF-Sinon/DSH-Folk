@@ -2,6 +2,9 @@ package me.bmax.apatch.dsh
 
 import android.content.Context
 import java.net.HttpURLConnection
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.net.URL
 import me.bmax.apatch.R
 
@@ -20,7 +23,58 @@ object DshSource {
     const val SOURCE_GITHUB = "github"
     const val SOURCE_GHPROXY_CF = "ghproxy_cf"
     const val SOURCE_GHPROXY_AXISNOW = "ghproxy_axisnow"
+
+    /** gh-proxy 主站（CF，v4 全球分发）。2026-09-25 实测 git/Range 均可用。 */
+    const val SOURCE_GHPROXY_MAIN = "ghproxy_main"
+
+    /** gh-proxy v4 优选（仅 IPv4 智能解析）。2026-09-25 实测可用。 */
+    const val SOURCE_GHPROXY_V4 = "ghproxy_v4"
+
+    /** gh-proxy Fastly CDN 线路（v4）。2026-09-25 实测可用。 */
+    const val SOURCE_GHPROXY_CDN = "ghproxy_cdn"
     const val SOURCE_CUSTOM = "custom"
+
+    /**
+     * 全部镜像线路（源 id → 前缀），**唯一事实来源**。
+     *
+     * 三件事都从这里派生，避免三份清单各改各的：测速候选（[speedTest]）、下载排序（[downloadRank]）、
+     * 以及插件安装清 git 重写时要覆盖的前缀（见 [allProxyPrefixes]）。加一条线路只改这一处。
+     *
+     * 2026-09-25 全量实测（git ls-remote 3/3 通过、release 资产 Range 206、codeload tarball 可取）：
+     * 五条线路能力都够用；其中主站/v4/CDN 是新纳入的，AxisNow 与 v6 是原有的。
+     */
+    private val MIRRORS: List<Pair<String, String>> = listOf(
+        SOURCE_GHPROXY_AXISNOW to "https://axisnow.gh-proxy.org/",
+        SOURCE_GHPROXY_CF to "https://v6.gh-proxy.org/",
+        SOURCE_GHPROXY_V4 to "https://v4.gh-proxy.org/",
+        SOURCE_GHPROXY_CDN to "https://cdn.gh-proxy.org/",
+        SOURCE_GHPROXY_MAIN to "https://gh-proxy.org/",
+    )
+
+    /**
+     * 全部线路前缀，含空串 = 直连 github（垫底）。
+     *
+     * 插件安装用它来**清 git 重写**：之前配过哪条线路的 `insteadOf` 就必须能清掉哪条，
+     * 否则换顺序后旧前缀会留在 `.gitconfig` 里继续生效。
+     */
+    fun allProxyPrefixes(): List<String> = MIRRORS.map { it.second } + ""
+
+    /** 手动选源时可选的固定线路（不含 auto 与 custom）。 */
+    fun fixedSources(): List<String> = listOf(SOURCE_GITHUB) + MIRRORS.map { it.first }
+
+    /**
+     * 一条 github 直链的**全部**下载候选（各线路前缀 + 直连原址），按测速结论排序。
+     *
+     * 为什么需要它：原来下载候选只来自 metadata.json 的 `mirrors` 数组，而老运行时里只写了
+     * v6 + axisnow 两条 —— 后来新增的线路永远排不进去。改从 [MIRRORS] 派生后，线路清单扩到几条，
+     * 下载回退就有几条。非 github 直链（自定义源、第三方镜像）原样返回。
+     *
+     * **竞速通道关掉时不要调它**：那种情况下用户要的是「直连」，调用方自己拼原址。
+     */
+    fun proxyCandidates(url: String): List<String> {
+        if (!url.startsWith("https://github.com/")) return listOf(url)
+        return (MIRRORS.map { it.second + url } + url).distinct().sortedBy { downloadRank(it) }
+    }
 
     private const val CACHE_TTL_MS = 24 * 60 * 60 * 1000L
     private const val CONNECT_TIMEOUT_MS = 3_000
@@ -203,11 +257,8 @@ object DshSource {
     /** 吞吐测速目标（Range 拉前 1MB）：打本机真正会下载的那个 rootfs。 */
     private fun speedProbeUrl(): String = runtimeBase() + "rootfs" + assetSuffix() + ".tar.gz"
 
-    fun proxyPrefix(source: String): String = when (source) {
-        SOURCE_GHPROXY_CF -> "https://v6.gh-proxy.org/"
-        SOURCE_GHPROXY_AXISNOW -> "https://axisnow.gh-proxy.org/"
-        else -> ""
-    }
+    fun proxyPrefix(source: String): String =
+        MIRRORS.firstOrNull { it.first == source }?.second ?: ""
 
     /**
      * 源 id → 字符串资源 id。**界面与启动日志共用这一份**。
@@ -225,6 +276,9 @@ object DshSource {
         SOURCE_GITHUB -> R.string.dsh_source_github
         SOURCE_GHPROXY_CF -> R.string.dsh_source_ghproxy_cf
         SOURCE_GHPROXY_AXISNOW -> R.string.dsh_source_ghproxy_axisnow
+        SOURCE_GHPROXY_MAIN -> R.string.dsh_source_ghproxy_main
+        SOURCE_GHPROXY_V4 -> R.string.dsh_source_ghproxy_v4
+        SOURCE_GHPROXY_CDN -> R.string.dsh_source_ghproxy_cdn
         SOURCE_CUSTOM -> R.string.dsh_source_custom
         else -> R.string.dsh_source_auto
     }
@@ -338,12 +392,8 @@ object DshSource {
      * 顺序 —— 没测过不代表不好，但也不该抢在实测最快的源前面。
      */
     fun downloadRank(url: String): Long {
-        val src = when {
-            url.startsWith("https://v6.gh-proxy.org/") -> SOURCE_GHPROXY_CF
-            url.startsWith("https://axisnow.gh-proxy.org/") -> SOURCE_GHPROXY_AXISNOW
-            url.startsWith("https://github.com/") -> SOURCE_GITHUB
-            else -> return UNRANKED_WEIGHT
-        }
+        val src = MIRRORS.firstOrNull { url.startsWith(it.second) }?.first
+            ?: if (url.startsWith("https://github.com/")) SOURCE_GITHUB else return UNRANKED_WEIGHT
         val r = lastResults.firstOrNull { it.source == src } ?: return UNRANKED_WEIGHT
         return r.estimatedMs
     }
@@ -422,12 +472,15 @@ object DshSource {
     fun speedTest(): List<SpeedResult> {
         val meta = metaUrl()
         val probe = speedProbeUrl()
-        val candidates = listOf(
-            SOURCE_GHPROXY_AXISNOW to "https://axisnow.gh-proxy.org/$meta",
-            SOURCE_GHPROXY_CF to "https://v6.gh-proxy.org/$meta",
-            SOURCE_GITHUB to meta,
-        )
-        val latency = candidates.map { (src, url) -> SpeedResult(src, probeLatency(url)) }
+        // 候选＝每条镜像线路 + 直连 github（垫底）。清单从 MIRRORS 派生，加线路只改一处。
+        val candidates = MIRRORS.map { (src, prefix) -> src to "$prefix$meta" } +
+            (SOURCE_GITHUB to meta)
+        // 延迟探测**并行**：候选从 3 条涨到 6 条，串行最坏要等 6×6s 超时；并行把这段钉在单次超时量级。
+        // 这条路径在用户点「安装插件」时是同步等待的（测速服务端结论带 10 分钟缓存），不能拖。
+        val latency = probeAllInParallel(candidates.size) { i ->
+            val (src, url) = candidates[i]
+            SpeedResult(src, probeLatency(url))
+        }
         // 只在**可达**的源里挑最快的两个做吞吐测速：不可达的没有延迟可比，
         // 把它塞进 top2 只会浪费一次注定失败的拉取。
         val top = latency
@@ -442,6 +495,28 @@ object DshSource {
         lastResults = results
         lastResultsAt = System.currentTimeMillis()
         return results
+    }
+
+    /**
+     * 把 [count] 个探测并行跑完，保持下标顺序返回。
+     *
+     * 用线程池而不是协程：本对象全是同步 API（[resolve]/[rankedSources] 会在非 suspend 上下文被调），
+     * 为了并行把整条链路改成 suspend 得不偿失。探测本身是纯阻塞 IO，线程池正合适。
+     */
+    private fun <T> probeAllInParallel(count: Int, block: (Int) -> T): List<T> {
+        if (count <= 1) return (0 until count).map(block)
+        val pool = Executors.newFixedThreadPool(count) { r ->
+            Thread(r, "dsh-source-probe").apply { isDaemon = true }
+        }
+        return try {
+            val futures = (0 until count).map { i -> pool.submit(Callable { block(i) }) }
+            futures.map { it.get(PROBE_POOL_TIMEOUT_MS, TimeUnit.MILLISECONDS) }
+        } catch (_: Exception) {
+            // 并行拿不到结果就退回串行 —— 宁可慢，不能把「测速」变成「测不出来」
+            (0 until count).map(block)
+        } finally {
+            pool.shutdownNow()
+        }
     }
 
     /**

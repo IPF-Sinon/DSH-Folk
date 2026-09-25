@@ -331,8 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>The plugin mirror switch became a race channel: it now measures the routes first and then downloads over the fastest one. Long press the card to choose which channels use it (plugin install and update, app update, runtime update); unchecked channels always connect directly, and turning the master switch off disables all of them. Plugin installs and updates now also race npm registries, so npm plugins stop waiting on the official registry.</item>
-        <item>Speed test results are reused for a while, and both the plugin page and the routing fall back to sane defaults when nothing can be measured. The plugin page now shows the last known versions immediately on entry and refreshes in the background instead of making you wait for a full round of network requests every time.</item>
+        <item>Five GitHub mirror routes are now available: the gh-proxy main site, v4, v6, the Fastly CDN node and AxisNow. Every route is measured before use, and the download channel list lets you pick one by hand. The extra routes also back up runtime and app downloads, so a single dead route no longer blocks an update.</item>
 </string-array>
 
     

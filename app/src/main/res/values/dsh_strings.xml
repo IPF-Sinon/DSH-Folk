@@ -321,8 +321,14 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_source_auto">Automatic (pick fastest)</string>
     <string name="dsh_source_auto_desc">Measure latency and throughput, then keep the best for 24 h</string>
     <string name="dsh_source_github">GitHub direct</string>
-    <string name="dsh_source_ghproxy_cf">gh-proxy (Cloudflare)</string>
+    <string name="dsh_source_ghproxy_cf">gh-proxy (v6, v4/v6)</string>
     <string name="dsh_source_ghproxy_axisnow">gh-proxy (AxisNow)</string>
+    <string name="dsh_source_ghproxy_main">gh-proxy (main site)</string>
+    <string name="dsh_source_ghproxy_main_desc">gh-proxy main site, global Cloudflare delivery.</string>
+    <string name="dsh_source_ghproxy_v4">gh-proxy (v4)</string>
+    <string name="dsh_source_ghproxy_v4_desc">Cloudflare IPv4-only optimized node.</string>
+    <string name="dsh_source_ghproxy_cdn">gh-proxy (Fastly CDN)</string>
+    <string name="dsh_source_ghproxy_cdn_desc">Fastly CDN edge nodes.</string>
     <string name="dsh_source_custom">Custom mirror</string>
     <string name="dsh_source_custom_hint">metadata.json URL</string>
     <string name="dsh_source_effective">In effect: %1$s</string>

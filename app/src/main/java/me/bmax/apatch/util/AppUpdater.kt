@@ -85,14 +85,18 @@ object AppUpdater {
         }
 
         val prefix = DshSource.proxyPrefix(source)
-        val candidates = listOfNotNull(
-            if (prefix.isNotEmpty() && status.apkUrl.startsWith("https://github.com/")) {
-                prefix + status.apkUrl
-            } else {
-                null
-            },
-            status.apkUrl,
-        ).distinct()
+        val preferred = if (prefix.isNotEmpty() && status.apkUrl.startsWith("https://github.com/")) {
+            prefix + status.apkUrl
+        } else {
+            null
+        }
+        // 竞速开着：把**全部**已知线路也放进候选（按测速结论排序），某条线路挂了还能换下一条；
+        // 关掉时只走直连/手选那一条 + 原址，不再自动绕别的线路（用户要求「未勾选＝直连」）。
+        val candidates = if (raceEnabled()) {
+            DshSource.proxyCandidates(status.apkUrl)
+        } else {
+            listOfNotNull(preferred, status.apkUrl).distinct()
+        }
 
         for ((i, url) in candidates.withIndex()) {
             Log.i(TAG, "downloading [${i + 1}/${candidates.size}] $url")

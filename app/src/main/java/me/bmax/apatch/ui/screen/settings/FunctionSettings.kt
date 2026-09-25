@@ -711,12 +711,9 @@ fun FunctionSettingsContent(
                         summary = stringResource(R.string.dsh_source_auto_desc),
                         onSelect = { onDownloadSourceChange(DshSource.SOURCE_AUTO) },
                     )
-                    for (src in listOf(
-                        DshSource.SOURCE_GHPROXY_AXISNOW,
-                        DshSource.SOURCE_GHPROXY_CF,
-                        DshSource.SOURCE_GITHUB,
-                        DshSource.SOURCE_CUSTOM,
-                    )) {
+                    // 线路清单从 DshSource 派生（唯一事实来源）：加一条线路不必改这里，
+                    // 也不会出现「测速会用到、但手动选不到」的线路。
+                    for (src in DshSource.fixedSources() + DshSource.SOURCE_CUSTOM) {
                         RuntimeOption(
                             selected = downloadSource == src,
                             enabled = true,

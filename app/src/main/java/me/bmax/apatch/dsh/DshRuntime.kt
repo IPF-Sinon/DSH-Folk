@@ -2600,11 +2600,17 @@ object DshRuntime {
      */
     private fun downloadWithFallback(meta: DshMeta, target: File): Boolean {
         val prefix = DshSource.proxyPrefix(runtimeSource(appContext))
-        val raw = listOf(meta.url) + meta.mirrors
-        val candidates = (
-            if (prefix.isEmpty()) raw
-            else raw.map { if (it.startsWith("https://github.com/")) prefix + it else it } + raw
-            ).distinct().sortedBy { DshSource.downloadRank(it) }
+        val candidates = if (raceEnabled(RACE_RUNTIME)) {
+            // 竞速：候选＝全部已知线路 × 官方直链（按测速结论排序），再加 metadata 里发布方给的备选。
+            // 早先候选只来自 metadata.mirrors，老运行时里只写了两条，新增线路就永远用不上。
+            (DshSource.proxyCandidates(meta.url) + meta.mirrors)
+                .distinct().sortedBy { DshSource.downloadRank(it) }
+        } else {
+            // 不竞速：只走当前选定的那一条（手选源，或 auto 退化成直连 github）+ 原址/发布方备选，
+            // 顺序保持发布方原样，不按测速排序。
+            val preferred = if (prefix.isEmpty()) emptyList() else listOf(prefix + meta.url)
+            (preferred + listOf(meta.url) + meta.mirrors).distinct()
+        }
         for ((i, url) in candidates.withIndex()) {
             logInfo(R.string.dsh_log_source_try, i + 1, candidates.size, url)
             _state.update {

@@ -226,14 +226,9 @@ object DshPluginRepo {
      *
      * 顺序现在由 [DshSource.rankedSources] 按测速结论给出（见 [installGitSpec]）；但 [clearGitRewrite]
      * 必须无条件把这些前缀配过的 insteadOf 全清掉，否则换了顺序之后旧前缀的键会留在 `.gitconfig`
-     * 里继续生效。前缀直接拼在 github URL 前（gh-proxy 的约定就是 `<prefix>https://github.com/...`，
-     * 连 git 的 smart-HTTP clone 也支持）。前两条与运行时下载复用同一组 gh-proxy 线路（见 [DshSource]）。
+     * 里继续生效。清单本身来自 [DshSource.allProxyPrefixes]（唯一事实来源），加线路不必改这里。
      */
-    private val GH_MIRROR_PREFIXES = listOf(
-        "https://v6.gh-proxy.org/",
-        "https://axisnow.gh-proxy.org/",
-        "",
-    )
+    private fun ghMirrorPrefixes(): List<String> = DshSource.allProxyPrefixes()
 
     /** git 的 insteadOf 键里那段被重写的源，覆盖 github 的几种等价写法。 */
     private val GIT_REWRITE_BASES = listOf(
@@ -1157,7 +1152,7 @@ object DshPluginRepo {
     /** 清掉上面配的所有 github insteadOf 重写（幂等，节点不存在时静默返回）。 */
     private fun clearGitRewrite() {
         val cmds = buildString {
-            for (prefix in GH_MIRROR_PREFIXES) {
+            for (prefix in ghMirrorPrefixes()) {
                 if (prefix.isEmpty()) continue
                 for (base in GIT_REWRITE_BASES) {
                     append("git config --global --unset-all \"url.$prefix$base.insteadOf\" 2>/dev/null; ")

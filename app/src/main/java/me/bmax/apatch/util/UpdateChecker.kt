@@ -288,13 +288,13 @@ object UpdateChecker {
      */
     private suspend fun fetchSha256(url: String): String {
         if (url.isEmpty()) return ""
-        val candidates = buildList {
-            add(url)
-            if (url.startsWith("https://github.com/")) {
-                add(DshSource.proxyPrefix(DshSource.SOURCE_GHPROXY_CF) + url)
-                add(DshSource.proxyPrefix(DshSource.SOURCE_GHPROXY_AXISNOW) + url)
-            }
-        }.distinct()
+        // 校验值必须跟 APK 走同一批候选：原来只写死 v6 + axisnow 两条（新增线路永远排不进去，
+        // 线路一挂这里就先失败）。竞速关掉时只取原址，与「未勾选＝直连」一致。
+        val candidates = if (AppUpdater.raceEnabled()) {
+            DshSource.proxyCandidates(url)
+        } else {
+            listOf(url)
+        }
         for (c in candidates) {
             val body = FolkApiClient.fetchJson(c, ttlMs = 30 * 60 * 1000L, maxRetries = 0)
                 .getOrNull().orEmpty()

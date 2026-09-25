@@ -493,7 +493,10 @@ cat > "$OUT/metadata${ASSET_SUFFIX}.json" <<EOF
   "sizeBytes": ${SIZE},
   "mirrors": [
     "https://v6.gh-proxy.org/${ASSET}",
-    "https://axisnow.gh-proxy.org/${ASSET}"
+    "https://axisnow.gh-proxy.org/${ASSET}",
+    "https://v4.gh-proxy.org/${ASSET}",
+    "https://cdn.gh-proxy.org/${ASSET}",
+    "https://gh-proxy.org/${ASSET}"
   ],
   "arch": "${ANDROID_ABI}",
   "dsh": "${DSH_REAL_VERSION}",
