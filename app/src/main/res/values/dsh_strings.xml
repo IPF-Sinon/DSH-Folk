@@ -555,6 +555,8 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_bk_sessions_foreign_workspace">Imported sessions keep the backup\'s original workspace label, so they appear under that label in the WebUI session list.</string>
 
     <!-- 插件启用/停用开关 -->
+    <string name="dsh_plugin_toggle_state_unknown">Cannot read this plugin’s entry id, so it cannot be toggled. Try “Rebuild plugin dependencies” and refresh.</string>
+    <string name="dsh_plugin_refresh_failed">Failed to refresh the plugin list: %1$s</string>
     <string name="dsh_plugin_disabled_label">Stopped</string>
     <string name="dsh_plugin_toggle_on">Enable plugin</string>
     <string name="dsh_plugin_toggle_off">Disable plugin</string>

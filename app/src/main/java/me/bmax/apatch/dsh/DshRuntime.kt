@@ -283,7 +283,26 @@ object DshRuntime {
     // 0.5.0：云备份面板加了「包含应用主题」开关（按主题包大小自动默认），需要 App 侧的
     // /cloud/appdata/theme 端点与导出的 includeTheme 参数配合；老插件不会传该参数，
     // App 侧按 true 兜底，所以只是「拿不到新功能」，不会出错。
-    private val SEED_MIN_VERSIONS = mapOf("dsh-folk-cloud" to "0.5.0")
+    //
+    // dsh-config-manager 0.1.64（用户 2026-09-25 指定）：会话跨机恢复与凭据回填那一批修复
+    // （上游 issue #45）。对我们尤其关键的三条：
+    //   ① sessions 进了分区注册表（applyOrder 14），导入执行阶段会**真的写会话文件**并做归位/
+    //      登记 —— 所以 App 侧必须把会话计划项从交给它的计划里剔除，由 App 独占会话
+    //      （见 DshConfigBackup：以前插件不执行 sessions，我们独占是为了绕开静默丢弃；现在
+    //      是**有意独占**，不剔除就会两边都写）；
+    //   ② /plan 与 /analyze 认 decryptPassword，不传就会把「只存在于 secrets.enc、未被
+    //      credentialsStatus 声明」的凭据从计划里漏掉（真机反馈「导入密钥没生效」）；
+    //   ③ 会用 manifest 的 sourceHome 自动生成跨机基础路径重定基规则，App 侧据此同时给
+    //      /plan 的 pathMappings 与自己的会话归组脚本传映射（见 DshBackupArchive/DshSessionGroup）。
+    //
+    // dshmarket 1.65.1 / dsh-web-mobile 3.0.3（用户 2026-09-25 指定）：直接列为要求版本，
+    // 已装且低于它的机器会在启动时随预装升级流程拉到这两个版本。
+    private val SEED_MIN_VERSIONS = mapOf(
+        "dsh-folk-cloud" to "0.5.0",
+        "dsh-config-manager" to "0.1.64",
+        "dshmarket" to "1.65.1",
+        "dsh-web-mobile" to "3.0.3",
+    )
 
     /**
      * 预装包 → 正式 release tgz 直链的兜底表（钉死版本）。

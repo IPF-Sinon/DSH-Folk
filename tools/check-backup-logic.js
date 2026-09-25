@@ -39,6 +39,7 @@ const SRC_WIZARD_SCREEN = "app/src/main/java/me/bmax/apatch/ui/screen/settings/R
 const SRC_WIZARD_MODEL = "app/src/main/java/me/bmax/apatch/dsh/DshImportWizard.kt";
 const SRC_APPDATA = "app/src/main/java/me/bmax/apatch/dsh/DshAppData.kt";
 const SRC_ARCHIVE = "app/src/main/java/me/bmax/apatch/dsh/DshBackupArchive.kt";
+const SRC_SESSION_GROUP = "app/src/main/assets/dsh-session-group.cjs";
 const SRC_APPDATA_SNAPSHOT = "app/src/main/java/me/bmax/apatch/dsh/DshAppDataSnapshot.kt";
 const SRC_THEME_IO = "app/src/main/java/me/bmax/apatch/ui/theme/ThemeIO.kt";
 
@@ -652,9 +653,9 @@ ok(/var excluded by rememberSaveable \{ mutableStateOf<Set<String>>\(emptySet\(\
   "取消勾选的项记成「排除集」（而不是选中集），没显示出来的条目不会被静默丢掉");
 ok(/excludedItems = excluded/.test(wizardScreen) && /excludedItems: Set<String> = emptySet\(\)/.test(backup),
   "排除集一路传到 import()");
-ok(/if \(excludedItems\.isNotEmpty\(\)\) \{/.test(backup) &&
+ok(/item\.optString\("id"\) in excludedItems/.test(backup) &&
   /planObj\.put\("items", kept\)/.test(backup) &&
-  /trace\(ctx, "import-plan-filtered removed="/.test(backup),
+  /"import-plan-filtered sessions="/.test(backup),
   "执行前按排除集过滤 plan.items，并把「去掉了几条」记进日志");
 // 冲突项不提供勾选框：它不是「要不要导入」，而是「哪一边说了算」，下一步会逐条问。
 // 两处表达同一件事会互相矛盾。
@@ -807,6 +808,45 @@ ok(/fun seedFallbackTgz\(pkg[^\n]*\)/.test(runtime) &&
   const locks = (themeIo.match(/exportMutex\.withLock/g) || []).length;
   ok(locks === 1,
     `exportMutex 只在一处加锁（实际 ${locks} 处）：kotlinx 的 Mutex 不可重入，度量里再拿一次会自锁`);
+}
+
+console.log("\n\u2500 对齐 dsh-config-manager 0.1.64：凭据/会话/跨机路径");
+{
+  const sessGroup = fs.readFileSync(SRC_SESSION_GROUP, "utf8");
+  const codeBackup = code(backup);
+  // 凭据：/analyze 与 /plan 在已知密码时必须带 decryptPassword，否则只存在于 secrets.enc、
+  // 未被 credentialsStatus 声明的凭据不会进计划，导入时被静默丢掉（真机：导入密钥没生效）。
+  const analyzeCalls = (codeBackup.match(/"\/analyze"/g) || []).length;
+  const planCalls = (codeBackup.match(/"\/plan"/g) || []).length;
+  ok(analyzeCalls >= 2 && planCalls >= 2,
+    `/analyze 与 /plan 都在（预检 + 导入各一处；实测 analyze=${analyzeCalls} plan=${planCalls}）`);
+  const dpCount = (codeBackup.match(/put\("decryptPassword", password\)/g) || []).length;
+  ok(dpCount >= 4,
+    `/analyze 与 /plan 的四处调用都要在已知密码时带 decryptPassword（实测 ${dpCount} 处；含 execute 的 opts 那处不计入这里的 4）`);
+  ok(/if \(password\.isNotEmpty\(\)\) put\("decryptPassword", password\)/.test(codeBackup),
+    "decryptPassword 必须条件式带上（不加密的包 password 为空，不能凭空塞空串）");
+
+  // 会话独占：会话计划项必须按 adapter == "sessions" 从交给插件的计划里剔除（结构化判据，
+  // 不是猜 id 前缀）——0.1.64 起插件 execute 会真的写会话，不剔除就双写/覆盖 App 归好的组。
+  ok(/item\.optString\("adapter"\) == "sessions"/.test(codeBackup),
+    "导入必须按 adapter == sessions 剔除会话计划项（App 独占会话恢复）");
+  ok(!/APPLY_ORDER[\s\S]{0,40}只有 12 个分区/.test(backup),
+    "KDoc 不得再断言「sessions 不在 APPLY_ORDER、被静默丢弃」——0.1.64 已把 sessions 纳入执行，" +
+    "留着过期结论会诱使后人删掉剔除逻辑");
+
+  // 跨机基础路径重定基：从 manifest.sourceHome 生成，判据是「绝对路径且不同」，传给归组脚本。
+  ok(/fun readManifest\(zip: File\): JSONObject\?/.test(archive),
+    "DshBackupArchive 缺 readManifest（跨机重定基要读 manifest.sourceHome）");
+  ok(/fun manifestRebases\(plainZip: File\)/.test(backup) &&
+    /optString\("sourceHome"\)/.test(codeBackup),
+    "DshConfigBackup 缺 manifestRebases（按 sourceHome 生成跨机重定基）");
+  ok(/from == to/.test(codeBackup) && /isAbs\(from\)/.test(codeBackup),
+    "manifestRebases 的判据必须是「绝对路径且去尾分隔符后不相等」（同机/旧包不重定基）");
+  ok(/groupRestoredSessions\(ctx, r\.paths, rebases = rebases/.test(codeBackup),
+    "归组调用没有把 sourceHome 重定基传下去（rebases = rebases）");
+  // 归组脚本侧：--rebase 是前缀（段边界）而不是精确匹配，且不误伤同前缀兄弟目录。
+  ok(/case "--rebase"/.test(sessGroup) && /startsWith\(from \+ "\/"\)/.test(sessGroup),
+    "dsh-session-group.cjs 的 --rebase 必须按段边界前缀匹配（from + / ）");
 }
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);

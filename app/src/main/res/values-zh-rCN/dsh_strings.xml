@@ -537,6 +537,8 @@
     <string name="dsh_bk_sessions_foreign_workspace">导入的会话沿用备份里的原工作区标签，在 WebUI 会话列表中以该标签显示。</string>
 
     <!-- 插件启用/停用开关 -->
+    <string name="dsh_plugin_toggle_state_unknown">读不到该插件的 entry id，无法切换（可先「重建插件依赖」再刷新）</string>
+    <string name="dsh_plugin_refresh_failed">刷新插件列表失败：%1$s</string>
     <string name="dsh_plugin_disabled_label">已停用</string>
     <string name="dsh_plugin_toggle_on">启用插件</string>
     <string name="dsh_plugin_toggle_off">停用插件</string>

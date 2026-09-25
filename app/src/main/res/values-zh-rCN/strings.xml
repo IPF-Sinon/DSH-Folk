@@ -314,7 +314,9 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>插件安装日志恢复显示 pnpm 的进度行（约每秒一行，不再整类丢掉）：装得慢的时候能看见 resolved/downloaded/added 的计数在走。完全相同的计数不重复打，含 missing 的那种行仍然不显示。</item>
+        <item>插件页停用/启用后开关状态有时不更新、找不出规律：现在切换后开关立刻翻转，并发刷新不再被丢弃（写盘之后一定会再读一次盘），刷新失败也会明确提示，而不是看起来「刷新不管用」。</item>
+        <item>备份恢复对齐了新版配置管理器：加密备份里的密钥（含未在状态清单里声明的那些）现在能真正回填；跨设备恢复时会按备份来源的基础路径把会话归位到本机对应的工作区。</item>
+        <item>预装插件升级名单更新：配置管理器 0.1.64、dshmarket 1.65.1、dsh-web-mobile 3.0.3，启动时会自动升到这些版本。</item>
 </string-array>
 
     

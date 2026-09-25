@@ -1,5 +1,6 @@
 package me.bmax.apatch.ui.viewmodel
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -27,6 +28,18 @@ class DshPluginViewModel : ViewModel() {
 
     var isRefreshing by mutableStateOf(false)
         private set
+
+    /**
+     * 上一次刷新失败的原因（成功时为空）。
+     *
+     * 为什么要有：容器读不出插件树时旧代码把 [isRefreshing] 永久留在 true，之后用户点刷新、
+     * 点切换全都静默无反应 —— 界面上看起来就是「刷新不管用、开关不动」。失败必须说出来。
+     */
+    var refreshError by mutableStateOf("")
+        private set
+
+    /** 刷新请求被合并的次数（见 [refresh]）：有请求在跑时置位，跑完补跑一次。 */
+    private var refreshQueued = false
 
     /** 已安装插件（含线上补齐信息）。 */
     var plugins by mutableStateOf<List<DshPlugin>>(emptyList())
@@ -207,33 +220,55 @@ class DshPluginViewModel : ViewModel() {
     /** [approveBuilds] 要重放的动作，由 [run] 在识别出拦截时登记。 */
     private var pendingRetry: ((List<String>) -> Unit)? = null
 
+    /**
+     * 拉已安装列表（+ 更新检查目录）。
+     *
+     * **并发请求合并而不是丢弃**：旧实现在 [isRefreshing] 为真时直接 return，于是「切换插件之后
+     * 那次刷新」只要和页面首次刷新/上一次刷新重叠就被静默丢掉，界面停在写入前的快照上 ——
+     * 真机表现就是「停用/启用后开关很久不变、过一会手动刷新又好了、被别的操作一碰又对上了」。
+     * 现在改成：有请求在跑就记一个待跑标志，跑完立刻补跑一次，保证「写入之后」一定有一次真读盘。
+     */
     fun refresh() {
-        if (isRefreshing) return
+        if (isRefreshing) {
+            refreshQueued = true
+            return
+        }
         isRefreshing = true
+        refreshError = ""
         viewModelScope.launch {
-            val installed = withContext(Dispatchers.IO) { DshPluginRepo.listInstalled() }
-            // 先把已安装列表放出来，网络慢时页面不空白
-            plugins = installed
-            if (disableUpdateCheck) {
-                // 关掉更新检查就不再拉线上目录：没有远端版本号，updatable 恒为 false
-                catalog = emptyList()
+            try {
+                val installed = withContext(Dispatchers.IO) { DshPluginRepo.listInstalled() }
+                // 先把已安装列表放出来，网络慢时页面不空白
+                plugins = installed
+                if (disableUpdateCheck) {
+                    // 关掉更新检查就不再拉线上目录：没有远端版本号，updatable 恒为 false
+                    catalog = emptyList()
+                    return@launch
+                }
+                val ctx = apApp
+                // 1) 先用上次的缓存渲染一遍：「有没有新版本可更新」立刻可见，不必干等一整轮网络
+                val cached = withContext(Dispatchers.IO) { DshPluginRepo.cachedCatalogRows(ctx) }
+                if (cached.isNotEmpty()) {
+                    catalog = cached
+                    plugins = mergeCatalog(installed, cached)
+                }
+                // 2) 再拉真目录并覆盖（同时把这份写回缓存，供下次进入页面用）
+                val online = withContext(Dispatchers.IO) { DshPluginRepo.fetchCatalogAndCache(ctx) }
+                if (online.isNotEmpty()) {
+                    catalog = online
+                    plugins = mergeCatalog(installed, online)
+                }
+            } catch (e: Exception) {
+                // 保留上一次的列表（比清空成「尚未安装任何插件」诚实），把原因交给界面显示
+                refreshError = e.message ?: e.javaClass.simpleName
+                Log.w(TAG, "refresh failed", e)
+            } finally {
                 isRefreshing = false
-                return@launch
+                if (refreshQueued) {
+                    refreshQueued = false
+                    refresh()
+                }
             }
-            val ctx = apApp
-            // 1) 先用上次的缓存渲染一遍：「有没有新版本可更新」立刻可见，不必干等一整轮网络
-            val cached = withContext(Dispatchers.IO) { DshPluginRepo.cachedCatalogRows(ctx) }
-            if (cached.isNotEmpty()) {
-                catalog = cached
-                plugins = mergeCatalog(installed, cached)
-            }
-            // 2) 再拉真目录并覆盖（同时把这份写回缓存，供下次进入页面用）
-            val online = withContext(Dispatchers.IO) { DshPluginRepo.fetchCatalogAndCache(ctx) }
-            if (online.isNotEmpty()) {
-                catalog = online
-                plugins = mergeCatalog(installed, online)
-            }
-            isRefreshing = false
         }
     }
 
@@ -350,6 +385,10 @@ class DshPluginViewModel : ViewModel() {
             { onLine ->
                 val ok = DshPluginRepo.setPluginDisabled(pkg, disabled, onLine)
                 if (ok) {
+                    // 乐观更新：写盘已经成功，开关立刻跟着动，不等那一轮读盘回来。
+                    // 随后的合并刷新会以文件为准再校正一次（写盘与读盘之间用户看到的一直是旧状态，
+                    // 真机反馈就是「开关很大概率不变、实际状态其实变了」）。
+                    plugins = plugins.map { if (it.pkg == pkg) it.copy(disabled = disabled) else it }
                     apApp.appString(R.string.dsh_plugin_toggle_restart_hint) +
                         "\n" + DshPluginRepo.EXIT_MARKER + " 0"
                 } else {
@@ -417,66 +456,75 @@ class DshPluginViewModel : ViewModel() {
     ) {
         if (installing) return
         viewModelScope.launch {
-            installing = true
-            installFailed = false
-            installTarget = target
-            installLog = emptyList()
-            // onLine 在容器输出的读线程上被调，不能直接写 Compose 状态，
-            // 所以绕回 viewModelScope（主调度器）再追加。
-            val append: (String) -> Unit = { line ->
-                viewModelScope.launch {
-                    if (line.startsWith(DshPluginRepo.EXIT_MARKER)) return@launch
-                    val next = installLog + line
-                    installLog = if (next.size > MAX_LOG_LINES) next.takeLast(MAX_LOG_LINES) else next
-                }
-            }
-            // 装之前先记下 bundles，装完的差集就是这次真正生效的新插件 ——
-            // 回滚必须用这个包名，不能用安装规格（github:owner/name 装出来的
-            // 包名跟规格根本不是一回事，拿规格 remove 会失败）
-            val before = if (verify) withContext(Dispatchers.IO) { DshPluginRepo.bundles() } else emptyList()
-            val raw = action(append)
-            var failed = looksFailed(raw)
-            var extra = ""
-
-            if (verify && !failed && verifyAfterInstall()) {
-                val reason = DshPluginRepo.verifyBoot(append)
-                if (reason != null) {
-                    failed = true
-                    val added = withContext(Dispatchers.IO) { DshPluginRepo.bundles() } - before.toSet()
-                    val victim = added.firstOrNull().orEmpty()
-                    val rolled = if (victim.isEmpty()) false else DshPluginRepo.rollback(victim, append)
-                    extra = if (rolled) {
-                        apApp.appString(R.string.dsh_plugin_rolled_back, victim, reason)
-                    } else {
-                        apApp.appString(R.string.dsh_plugin_verify_failed, reason)
+            try {
+                installing = true
+                installFailed = false
+                installTarget = target
+                installLog = emptyList()
+                // onLine 在容器输出的读线程上被调，不能直接写 Compose 状态，
+                // 所以绕回 viewModelScope（主调度器）再追加。
+                val append: (String) -> Unit = { line ->
+                    viewModelScope.launch {
+                        if (line.startsWith(DshPluginRepo.EXIT_MARKER)) return@launch
+                        val next = installLog + line
+                        installLog = if (next.size > MAX_LOG_LINES) next.takeLast(MAX_LOG_LINES) else next
                     }
-                    append("[DSH-Folk] $extra")
                 }
-            }
+                // 装之前先记下 bundles，装完的差集就是这次真正生效的新插件 ——
+                // 回滚必须用这个包名，不能用安装规格（github:owner/name 装出来的
+                // 包名跟规格根本不是一回事，拿规格 remove 会失败）
+                val before = if (verify) withContext(Dispatchers.IO) { DshPluginRepo.bundles() } else emptyList()
+                val raw = action(append)
+                var failed = looksFailed(raw)
+                var extra = ""
 
-            // 退出码标记是给程序看的，别显示给用户
-            val out = raw.lineSequence()
-                .filterNot { it.startsWith(DshPluginRepo.EXIT_MARKER) }
-                .joinToString("\n")
-                .trim()
-                .ifEmpty { raw }
-            lastOutput = if (extra.isEmpty()) out else "$extra\n$out"
-            installFailed = failed
-            installing = false
-            // 回滚过就等于什么都没装，不该提示重启；不动插件树的操作同样不提示
-            if (!failed && affectsPluginTree) needsRestart = true
-
-            // 失败原因是 pnpm 拦下构建脚本时，不把「失败」当终局：拿出包名问用户
-            if (failed && retryWithBuilds != null) {
-                val pending = DshPluginRepo.pendingBuildApproval(raw)
-                if (pending.isNotEmpty()) {
-                    pendingRetry = { allow -> retryWithBuilds(allow, onDone) }
-                    buildApproval = BuildApproval(packages = pending, target = target)
+                if (verify && !failed && verifyAfterInstall()) {
+                    val reason = DshPluginRepo.verifyBoot(append)
+                    if (reason != null) {
+                        failed = true
+                        val added = withContext(Dispatchers.IO) { DshPluginRepo.bundles() } - before.toSet()
+                        val victim = added.firstOrNull().orEmpty()
+                        val rolled = if (victim.isEmpty()) false else DshPluginRepo.rollback(victim, append)
+                        extra = if (rolled) {
+                            apApp.appString(R.string.dsh_plugin_rolled_back, victim, reason)
+                        } else {
+                            apApp.appString(R.string.dsh_plugin_verify_failed, reason)
+                        }
+                        append("[DSH-Folk] $extra")
+                    }
                 }
-            }
 
-            onDone(lastOutput)
-            refresh()
+                // 退出码标记是给程序看的，别显示给用户
+                val out = raw.lineSequence()
+                    .filterNot { it.startsWith(DshPluginRepo.EXIT_MARKER) }
+                    .joinToString("\n")
+                    .trim()
+                    .ifEmpty { raw }
+                lastOutput = if (extra.isEmpty()) out else "$extra\n$out"
+                installFailed = failed
+                installing = false
+                // 回滚过就等于什么都没装，不该提示重启；不动插件树的操作同样不提示
+                if (!failed && affectsPluginTree) needsRestart = true
+
+                // 失败原因是 pnpm 拦下构建脚本时，不把「失败」当终局：拿出包名问用户
+                if (failed && retryWithBuilds != null) {
+                    val pending = DshPluginRepo.pendingBuildApproval(raw)
+                    if (pending.isNotEmpty()) {
+                        pendingRetry = { allow -> retryWithBuilds(allow, onDone) }
+                        buildApproval = BuildApproval(packages = pending, target = target)
+                    }
+                }
+
+                onDone(lastOutput)
+                refresh()
+            } catch (e: Exception) {
+                // 任何一步抛异常都不能把 installing 留在 true —— 那会让之后所有安装/切换静默失效
+                installFailed = true
+                lastOutput = e.message ?: e.javaClass.simpleName
+                Log.w(TAG, "plugin action failed", e)
+            } finally {
+                installing = false
+            }
         }
     }
 
@@ -504,6 +552,8 @@ class DshPluginViewModel : ViewModel() {
     }
 
     private companion object {
+        const val TAG = "DshPluginVM"
+
         /** 安装日志保留行数上限：pnpm 能刷出上万行，全留会拖垮列表渲染。 */
         const val MAX_LOG_LINES = 400
     }

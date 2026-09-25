@@ -359,6 +359,48 @@ console.log("─ 6. 未 bootstrap 的注册表：交给 dsh 自己归组，不�
   }
 }
 
+console.log("\u2500 6b. 跨机基础路径前缀重定基（--rebase）");
+{
+  const rroot = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-rebase-"));
+  const realR = (rel) => { const abs = path.join(rroot, rel); fs.mkdirSync(abs, { recursive: true }); return fs.realpathSync(abs); };
+  const wsHarness = realR("harness");
+  const sr = realR("sessions");
+  const stg = realR("storages");
+  const reg = path.join(stg, "workspace.json");
+  const hdrR = (id, cwd) => JSON.stringify({ id, cwd, delegationDepth: 0 }) + "\n";
+  // 锚点会话：cwd 就是本机 harness → 让 projectKeyFor(harness) 解析出本机 projectKey 目录 pkH
+  const anchorAbs = path.join(sr, "pkH/seg-anchor/session.jsonl.zstd");
+  fs.mkdirSync(path.dirname(anchorAbs), { recursive: true });
+  fs.writeFileSync(anchorAbs, Buffer.concat([frame(hdrR("s-anchor", wsHarness)), frame("a\n")]));
+  // 恢复进来的源机会话：cwd 是导出机路径，落在源机 projectKey 目录 pkOld/
+  const rel = "pkOld/seg-r/session.jsonl.zstd";
+  const abs = path.join(sr, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, Buffer.concat([frame(hdrR("s-r", "/src/.dsh/harness")), frame("batch-r\n")]));
+  fs.writeFileSync(reg, JSON.stringify({
+    state: { initialized: true, workspaceIds: ["ws-h"], archivedSessionIds: [] },
+    workspaces: { "ws-h": { path: wsHarness, title: "harness", sessionIds: ["s-anchor"], createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z" } },
+  }, null, 2) + "\n");
+  const pf = path.join(rroot, "restored.txt");
+  fs.writeFileSync(pf, rel + "\n");
+  const runR = (extra) => {
+    const args = [HELPER, "--sessions-root", sr, "--registry", reg, "--paths-file", pf, ...extra];
+    let out = ""; try { out = execFileSync(process.execPath, args, { encoding: "utf8" }); } catch (e) { out = (e.stdout||"")+(e.stderr||""); }
+    const m = out.split("\n").find((l) => l.startsWith("DSH_GROUP_REPORT "));
+    return m ? JSON.parse(m.slice("DSH_GROUP_REPORT ".length)) : null;
+  };
+  const withRebase = runR(["--rebase", `/src/.dsh=${rroot}`, "--apply"]);
+  const doc = JSON.parse(fs.readFileSync(reg, "utf8"));
+  ok(withRebase && doc.workspaces["ws-h"].sessionIds.includes("s-r"), "--rebase 把源机会话按前缀重定基后归到 ws-h");
+  ok(withRebase && (withRebase.items || []).some((it) => it.id === "s-r" && it.how === "rebased"),
+    "归位方式标记为 rebased（走前缀重定基，而不是 basename 兜底推断）");
+  ok(withRebase && fs.existsSync(path.join(sr, "pkH/seg-r/session.jsonl.zstd")),
+    "会话文件从源机 projectKey 目录挪到本机 projectKey 目录（pkOld → pkH）");
+  const helperSrc = fs.readFileSync(HELPER, "utf8");
+  ok(/norm\.startsWith\(from \+ "\/"\)/.test(helperSrc), "rebaseCwd 只在段边界前缀匹配（不误伤同前缀兄弟目录）");
+  fs.rmSync(rroot, { recursive: true, force: true });
+}
+
 console.log("─ 7. 助手自身约定");
 {
   const src = fs.readFileSync(HELPER, "utf8");

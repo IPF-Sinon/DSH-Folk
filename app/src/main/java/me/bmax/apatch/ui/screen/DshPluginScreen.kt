@@ -289,12 +289,17 @@ private fun DshPluginList(
     val list = viewModel.filtered
     val builtInVisible = viewModel.search.isBlank() ||
         context.getString(R.string.dsh_host_plugin_name).contains(viewModel.search, ignoreCase = true)
-    var detail by remember { mutableStateOf<DshPlugin?>(null) }
+    // 只存 id，实体每次从列表取：装/卸/切换之后列表会刷新，
+    // 存快照的话详情面板里的开关会停在打开那一刻的状态（与商店页同一纪律）
+    var detailId by remember { mutableStateOf<String?>(null) }
+    val detail = detailId?.let { id ->
+        viewModel.plugins.firstOrNull { (it.pkg.ifEmpty { it.id }) == id }
+    }
 
     detail?.let { p ->
         DshPluginDetailSheet(
             plugin = p,
-            onDismiss = { detail = null },
+            onDismiss = { detailId = null },
             onInstall = { viewModel.install(p.pkg) },
             onUpdate = { viewModel.update(p.pkg) },
             onUninstall = { viewModel.uninstall(p.pkg) },
@@ -332,6 +337,16 @@ private fun DshPluginList(
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // 刷新失败要看得见：旧实现把失败吞掉，用户只看到「刷新不管用」
+        if (viewModel.refreshError.isNotEmpty()) {
+            item(key = "refresh-error") {
+                Text(
+                    text = stringResource(R.string.dsh_plugin_refresh_failed, viewModel.refreshError),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
         if (builtInVisible) {
             item(key = "builtin:dsh-folk-host") {
                 BuiltInHostPluginItem()
@@ -344,7 +359,7 @@ private fun DshPluginList(
                 onUpdate = { viewModel.update(plugin.pkg) },
                 onUninstall = { viewModel.uninstall(plugin.pkg) },
                 onToggle = { viewModel.setDisabled(plugin.pkg, !plugin.disabled) },
-                onOpenDetail = { detail = plugin },
+                onOpenDetail = { detailId = plugin.pkg.ifEmpty { plugin.id } },
             )
         }
         item { HomeBottomSpacer() }
@@ -481,6 +496,14 @@ private fun DshPluginItem(
                     checked = !plugin.disabled,
                     onCheckedChange = onToggle,
                     enabled = plugin.entryIds.isNotEmpty(),
+                )
+            }
+            // 开关灰着却不给原因，等于让用户以为「开关坏了」：说清是读不到 entry id
+            if (plugin.entryIds.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.dsh_plugin_toggle_state_unknown),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Text(

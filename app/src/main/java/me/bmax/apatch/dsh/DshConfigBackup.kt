@@ -853,8 +853,16 @@ object DshConfigBackup {
             )
         }
         onLine(ctx.appString(R.string.dsh_bk_step_analyzing))
-        val analyze = request("POST", "/analyze", JSONObject().put("zipPath", zipPath).toString())
-            ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_analyze_failed))
+        // 带上解密密码：整包由我们解开后交给插件的是明文包，但包内 security/secrets.enc 仍用
+        // 同一密码加密。0.1.64 起 /analyze 认 decryptPassword，据此把「只存在于 secrets.enc、
+        // 未被 credentialsStatus 声明」的凭据 ref 也算进可恢复集（真机反馈：不带密码这些密钥
+        // 导入不生效）。不加密的包 password 为空，行为不变。
+        val analyze = request(
+            "POST", "/analyze",
+            JSONObject().put("zipPath", zipPath)
+                .apply { if (password.isNotEmpty()) put("decryptPassword", password) }
+                .toString(),
+        ) ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_analyze_failed))
         trace(ctx, "import-uploaded zipPath=" + zipPath)
         val analyzeObj = runCatching { JSONObject(analyze) }.getOrNull()
             ?: return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_analyze_bad_json))
@@ -875,11 +883,14 @@ object DshConfigBackup {
         if (analyzeObj.optString("compatibility") == "unsupported") {
             return@withContext PreflightResult.Failed(ctx.appString(R.string.dsh_bk_incompatible))
         }
-        // 试规划：默认策略下未决策的冲突项保持 kind == "Conflict"，数一下就知道要不要问
+        // 试规划：默认策略下未决策的冲突项保持 kind == "Conflict"，数一下就知道要不要问。
+        // pathMappings 传空：0.1.64 插件会用 manifest.sourceHome 自动生成「导出机 home → 本机
+        // home」的重定基规则并作用于结构化分区，我们不必也不该重复传（会话由 App 独占归组）。
         val dryPlan = request(
             "POST", "/plan",
             JSONObject()
                 .put("zipPath", zipPath)
+                .apply { if (password.isNotEmpty()) put("decryptPassword", password) }
                 .put(
                     "decisions",
                     JSONObject().apply {
@@ -1769,8 +1780,13 @@ object DshConfigBackup {
         }
 
         onLine(ctx.appString(R.string.dsh_bk_step_analyzing))
-        val analyze = request("POST", "/analyze", JSONObject().put("zipPath", zipPath).toString())
-            ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_analyze_failed))
+        // decryptPassword 同预检：让插件把 secrets.enc 里的凭据算进可恢复集（见预检处注释）。
+        val analyze = request(
+            "POST", "/analyze",
+            JSONObject().put("zipPath", zipPath)
+                .apply { if (password.isNotEmpty()) put("decryptPassword", password) }
+                .toString(),
+        ) ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_analyze_failed))
         val analyzeObj = runCatching { JSONObject(analyze) }.getOrNull()
             ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_analyze_bad_json))
         val analyzeErr = analyzeObj.optString("error")
@@ -1804,30 +1820,45 @@ object DshConfigBackup {
         onLine(ctx.appString(R.string.dsh_bk_step_planning, strategy))
         val plan = request(
             "POST", "/plan",
-            JSONObject().put("zipPath", zipPath).put("decisions", decisions).toString(),
+            JSONObject().put("zipPath", zipPath)
+                .apply { if (password.isNotEmpty()) put("decryptPassword", password) }
+                .put("decisions", decisions)
+                .toString(),
         ) ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_plan_failed))
         val planObj = runCatching { JSONObject(plan) }.getOrNull()
             ?: return@withContext ImportResult(false, ctx.appString(R.string.dsh_bk_plan_bad_json))
         val planErr = planObj.optString("error")
         if (planErr.isNotEmpty()) return@withContext ImportResult(false, planErr)
 
-        // 用户在预览页取消勾选的项：直接从计划里剔除（排除式，见 excludedItems 的 KDoc）。
-        // 冲突项不在其中 —— 它由 decisions.resolutions 决定「哪一边说了算」，不是丢不丢。
-        if (excludedItems.isNotEmpty()) {
+        // 会话计划项一律从交给插件的计划里剔除：会话由 App 独占恢复 + 归组（见
+        // [restoreSessionsFromZip]）。判据是 adapter == "sessions"（结构化事实），不是靠猜
+        // id 前缀 —— 0.1.64 起插件的 execute 会**真的写会话文件并归位**，不剔除就会和 App
+        // 的会话恢复重复写、甚至把 App 归好的组又按插件那套覆盖一遍。老插件不执行会话，剔除
+        // 对它是空操作，所以一条路径覆盖所有版本。用户在预览页取消勾选的项一并按 id 剔除。
+        run {
             val arr = planObj.optJSONArray("items")
             val before = arr?.length() ?: 0
             val kept = JSONArray()
-            var removed = 0
+            var removedSessions = 0
+            var removedByUser = 0
             for (i in 0 until before) {
                 val item = arr?.optJSONObject(i) ?: continue
+                if (item.optString("adapter") == "sessions") {
+                    removedSessions++
+                    continue
+                }
                 if (item.optString("id") in excludedItems) {
-                    removed++
+                    removedByUser++
                     continue
                 }
                 kept.put(item)
             }
             planObj.put("items", kept)
-            trace(ctx, "import-plan-filtered removed=" + removed + " kept=" + kept.length() + " of=" + before)
+            trace(
+                ctx,
+                "import-plan-filtered sessions=" + removedSessions + " byUser=" + removedByUser +
+                    " kept=" + kept.length() + " of=" + before,
+            )
         }
 
         // 软件设置的导入前快照。
@@ -2044,16 +2075,25 @@ object DshConfigBackup {
             // workspace 域写都会把整份内存状态盖回盘，改动静默丢失 —— 停着改把这条归零。
             if (r.paths.isNotEmpty()) {
                 onLine(ctx.appString(R.string.dsh_bk_group_stage, r.paths.size))
+                // 跨机基础路径重定基：备份 manifest 里的 sourceHome（导出机 DSH home）≠ 本机容器
+                // home（/root/.dsh）时，把它作为前缀重定基传给归组助手 —— 插件已按同一 sourceHome
+                // 对 workspace.path 做过重定基，会话首帧 cwd 也要跟着改，否则 cwd（源机）与
+                // workspace.path（已重定基）对不上，会话全落单。sourceHome 缺失（旧包）→ 空列表，
+                // 助手行为与今天完全一致（不猜）。
+                val rebases = manifestRebases(plainZip)
+                if (rebases.isNotEmpty()) {
+                    trace(ctx, "session-rebase " + rebases.joinToString(";") { it.first + "=>" + it.second })
+                }
                 val report = runCatching {
                     // 「停机恢复」与「直接恢复」在这里分岔：两者都能生效（注册表启动才读盘），
                     // 区别只在于直接恢复时，用户接下来若在 WebUI 里动工作区，这次归组可能被
                     // dsh 的整份内存写回盖掉。所以推荐停机，但把选择权交给用户。
                     if (sessions == SessionImport.STOP) {
                         DshRuntime.withServiceStopped {
-                            DshSessionGroup.groupRestoredSessions(ctx, r.paths, onLine = onLine)
+                            DshSessionGroup.groupRestoredSessions(ctx, r.paths, rebases = rebases, onLine = onLine)
                         }
                     } else {
-                        DshSessionGroup.groupRestoredSessions(ctx, r.paths, onLine = onLine)
+                        DshSessionGroup.groupRestoredSessions(ctx, r.paths, rebases = rebases, onLine = onLine)
                     }
                 }.getOrNull()
                 val group = report ?: DshSessionGroup.Report(
@@ -2147,6 +2187,29 @@ object DshConfigBackup {
         )
     }
 
+    /** 容器内 DSH home（插件与 dsh 都用这个视角；rootfs/root/.dsh 的容器侧路径）。 */
+    private const val CONTAINER_DSH_HOME = "/root/.dsh"
+
+    /**
+     * 从备份 manifest 的 `sourceHome` 推出「导出机 home → 本机容器 home」的前缀重定基。
+     *
+     * 与 dsh-config-manager 0.1.64 的 `rebaseMapping` 同一判据：只在两侧都是**绝对路径**且
+     * **去尾分隔符后不相等**时生成一条；否则空列表（旧包没 sourceHome、或同机恢复 → 不重定基，
+     * 行为与改造前一致）。给会话归组助手用（[DshSessionGroup] 的 `--rebase`）。
+     */
+    private fun manifestRebases(plainZip: File): List<Pair<String, String>> {
+        val manifest = DshBackupArchive.readManifest(plainZip) ?: return emptyList()
+        val src = manifest.optString("sourceHome").trim()
+        if (src.isEmpty()) return emptyList()
+        fun strip(v: String) = v.replace('\\', '/').trimEnd('/')
+        fun isAbs(v: String) = v.startsWith("/") || Regex("^[a-zA-Z]:/").containsMatchIn(v)
+        val from = strip(src)
+        val to = strip(CONTAINER_DSH_HOME)
+        if (from.isEmpty() || to.isEmpty() || from == to) return emptyList()
+        if (!isAbs(from) || !isAbs(to)) return emptyList()
+        return listOf(from to to)
+    }
+
     /** [restoreSessionsFromZip] 的结果计数。 */
     data class SessionRestore(
         val restored: Int,
@@ -2164,15 +2227,19 @@ object DshConfigBackup {
     /**
      * 把备份包里的会话记录直接写进 `~/.dsh/sessions`。
      *
-     * ## 为什么不交给插件
+     * ## 为什么由 App 独占
      *
-     * dsh-config-manager 的导入执行阶段按一张固定的 `APPLY_ORDER` 遍历 adapter，
-     * 而那张表**只有 12 个分区**（settings/ui/providers/prompts/skills/agentPresets/
-     * agentInstructions/workspaces/pluginFiles/mcp/plugins/credentialsStatus）——
-     * `sessions` 不在其中。它的 analyze 会正确解析出 ZIP 里 `sessions/` 的文件、
-     * plan 也会把这些项算进去，但 execute 永远不会 apply 它们：**静默丢弃，连
-     * warning 都没有**。所以「导出勾了会话，导入却找不到历史聊天」不是参数问题，
-     * 传什么都救不回来。
+     * 历史原因：老版本 dsh-config-manager 的 `APPLY_ORDER` 不含 `sessions`，execute 会
+     * 把会话计划项**静默丢弃**（连 warning 都没有），所以会话只能我们自己恢复。
+     *
+     * 0.1.64 起这条已变：`sessions` 进了分区注册表（applyOrder 14），插件的 execute 会
+     * 真的写会话文件、按 `pathMappings` 改首帧 cwd 并归位、收尾再用官方 `attachSession`
+     * 登记。**但我们仍然独占会话**，且在 [import] 里按 `adapter == "sessions"` 把会话计划项
+     * 从交给插件的计划里剔除 —— 原因有二：① 插件的会话 execute 需要 dsh 运行时向它暴露一个
+     * 带 `readLogCwd`/`relocateDir`/`attachSession` 的会话 store，暴露不出来时它**静默
+     * 返回不写**（`store?.readLogCwd === undefined → return`），而 App 直接落盘一定成功；
+     * ② 两边都写会重复落盘、甚至把 App 归好的组按插件那套再覆盖一遍。所以由 App 独占是
+     * 「保证会话一定进得来」的稳妥选择，剔除对老插件是空操作、对新插件是必需。
      *
      * 而这件事我们自己做得到：会话就是纯文件
      * （`~/.dsh/sessions/<projectKey>/<sessionId>/session.jsonl.zstd`），

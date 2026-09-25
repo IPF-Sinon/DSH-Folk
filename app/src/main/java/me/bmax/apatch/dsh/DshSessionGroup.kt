@@ -144,17 +144,21 @@ object DshSessionGroup {
      *
      * @param relPaths 本次写进 sessions 树的会话相对路径（相对 sessions 根），来自
      *   [DshConfigBackup.restoreSessionsFromZip]；空列表直接返回，避免白跑一次容器。
-     * @param maps 源设备 cwd → 本机工作区路径 的显式映射（跨设备迁移时用）
+     * @param maps 源设备 cwd → 本机工作区路径 的显式映射（精确匹配单条 cwd；跨设备迁移时用）
+     * @param rebases 基础路径前缀重定基 oldHome → newHome（段边界匹配）：导出机 DSH home ≠
+     *   本机时用，把落在导出机基础路径之下的会话 cwd 换成本机路径（与插件对结构化分区做的
+     *   重定基同一口径）。来自 [DshBackupArchive.readManifest] 的 sourceHome。
      * @param onLine 助手输出的行进界面日志（在 IO 线程回调）
      */
     suspend fun groupRestoredSessions(
         ctx: Context,
         relPaths: List<String>,
         maps: List<Pair<String, String>> = emptyList(),
+        rebases: List<Pair<String, String>> = emptyList(),
         onLine: suspend (String) -> Unit = {},
     ): Report = withContext(Dispatchers.IO) {
         if (relPaths.isEmpty()) return@withContext Report(ok = true, skipped = "no sessions restored")
-        run(ctx, relPaths, maps, onLine)
+        run(ctx, relPaths, maps, rebases, onLine)
     }
 
     /**
@@ -171,14 +175,16 @@ object DshSessionGroup {
     suspend fun tidyAllSessions(
         ctx: Context,
         maps: List<Pair<String, String>> = emptyList(),
+        rebases: List<Pair<String, String>> = emptyList(),
         onLine: suspend (String) -> Unit = {},
-    ): Report = withContext(Dispatchers.IO) { run(ctx, null, maps, onLine) }
+    ): Report = withContext(Dispatchers.IO) { run(ctx, null, maps, rebases, onLine) }
 
     /** 跑一次助手；[relPaths] 为 null 表示扫全树。 */
     private suspend fun run(
         ctx: Context,
         relPaths: List<String>?,
         maps: List<Pair<String, String>>,
+        rebases: List<Pair<String, String>>,
         onLine: suspend (String) -> Unit,
     ): Report = withContext(Dispatchers.IO) {
         val tmpDir = DshEnv.tmpDir(ctx).apply { mkdirs() }
@@ -193,6 +199,9 @@ object DshSessionGroup {
             val mapArgs = maps
                 .filter { it.first.isNotBlank() && it.second.isNotBlank() }
                 .joinToString("") { " --map " + shellQuoted("${it.first}=${it.second}") }
+            val rebaseArgs = rebases
+                .filter { it.first.isNotBlank() && it.second.isNotBlank() && it.first != it.second }
+                .joinToString("") { " --rebase " + shellQuoted("${it.first}=${it.second}") }
             val cmd = buildString {
                 append("node /tmp/").append(ASSET)
                 append(" --sessions-root ").append(shellQuoted(SESSIONS_ROOT))
@@ -200,6 +209,7 @@ object DshSessionGroup {
                 // 不给 --paths-file 就是扫全树（助手侧据此决定处理范围）
                 if (relPaths != null) append(" --paths-file /tmp/").append(listFile.name)
                 append(mapArgs)
+                append(rebaseArgs)
                 append(" --apply 2>&1")
             }
 

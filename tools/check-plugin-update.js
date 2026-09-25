@@ -45,6 +45,30 @@ must(seedFn.length > 0, '找不到 installSeedPkgWithApproval()');
 must((seedFn.match(/DshPluginRepo\.VERSION_LATEST/g) || []).length >= 2,
   'installSeedPkgWithApproval() 的两次安装（首次 + 放行构建后重试）都要传 VERSION_LATEST');
 
+// 6. 插件页开关刷新（真机：停用/启用后开关很大概率不变、实际状态其实已变，找不出规律）。
+//    根因是并发刷新被静默丢弃 + 失败把 isRefreshing 永久挂 true + 详情面板持实体快照。
+must(vm.includes("refreshQueued = true"),
+  'refresh() 不再把并发请求排队补跑（refreshQueued）—— 切换后的那次刷新会被静默丢弃');
+must(/if \(refreshQueued\) \{[\s\S]{0,80}refreshQueued = false[\s\S]{0,40}refresh\(\)/.test(vm),
+  'refresh() 的 finally 没有「有待跑请求就补跑一次」—— 保证写盘之后一定有一次读盘');
+must(/refreshError by mutableStateOf/.test(vm),
+  'refresh() 失败不再上报（refreshError）—— 旧代码把失败吞掉，用户只看到「刷新不管用」');
+must(vm.includes("plugins = plugins.map { if (it.pkg == pkg) it.copy(disabled = disabled) else it }"),
+  'setDisabled() 成功后缺乐观更新 —— 开关要立刻翻转，不等那一轮读盘');
+// run()/refresh() 的 installing/isRefreshing 必须在 finally 里复位（异常不能让后续操作静默失效）
+must(/\} finally \{[\s\S]{0,60}installing = false[\s\S]{0,20}\}/.test(vm),
+  'run() 的 installing = false 不在 finally 里 —— 一次异常会让之后所有安装/切换静默失效');
+must(/\} finally \{[\s\S]{0,60}isRefreshing = false/.test(vm),
+  'refresh() 的 isRefreshing 复位不在 finally 里 —— 异常会把它永久挂 true');
+// 详情面板持 id 不持实体（否则面板里的开关停在打开那一刻）
+must(!/var detail by remember \{ mutableStateOf<DshPlugin\?>\(null\) \}/.test(screen),
+  '插件页详情面板仍持 DshPlugin 实体快照 —— 切换后面板里的开关不会跟着变');
+must(/var detailId by remember \{ mutableStateOf<String\?>\(null\) \}/.test(screen),
+  '插件页详情面板没有改成持 id（detailId）');
+// 开关灰着要给原因
+must(screen.includes("dsh_plugin_toggle_state_unknown"),
+  '开关因 entryIds 为空而灰掉时缺一句原因文案（dsh_plugin_toggle_state_unknown）');
+
 // 5. 说明性注释要在（这条修复的原理不写在代码里，后人一定会再踩）
 must(/Already up to date/.test(repo) || /空操作/.test(repo),
   'install() 上缺少「pnpm 对已声明依赖是空操作」的说明注释');

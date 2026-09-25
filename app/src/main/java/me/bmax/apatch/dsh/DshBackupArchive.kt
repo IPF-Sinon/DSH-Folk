@@ -167,6 +167,24 @@ object DshBackupArchive {
     fun pluginSections(): List<String> = DshConfigBackup.DEFAULT_SECTIONS
 
     /**
+     * 读归档里的 `manifest.json`（读不到返回 null）。
+     *
+     * 只读这一个条目（几十 KB），不整包流 —— 预检与导入都在大包上跑，多流一遍没有道理。
+     * 用途是跨机恢复的**基础路径重定基**：上游 0.1.64 起 manifest 会带 `sourceHome`
+     * （导出机的 DSH home），我们据此同时给插件的 pathMappings 与自己的会话归组脚本
+     * 一套映射（见 [DshConfigBackup]），把备份里那些「导出机绝对路径」改成本机路径。
+     * 旧包没有这个字段 → 返回的 JSONObject 里也没有，调用方**不猜**、保持原样导入。
+     */
+    fun readManifest(zip: File): JSONObject? = runCatching {
+        java.util.zip.ZipFile(zip).use { zf ->
+            val e = zf.getEntry(MANIFEST) ?: return@use null
+            zf.getInputStream(e).use { input ->
+                JSONObject(input.readBytes().toString(Charsets.UTF_8))
+            }
+        }
+    }.getOrNull()
+
+    /**
      * 取某个条目的长度（不存在返回 -1）。
      *
      * 走 `ZipFile`（只读中央目录），**不读条目内容**：预检时一个带会话的包可能上百兆，
