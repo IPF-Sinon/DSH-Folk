@@ -314,7 +314,7 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>竞速弹窗的测速改为测全部勾选线路（原来只给最快的两条测吞吐）：点一下先出所有延迟，然后各条线路的吞吐逐条填进它自己那一行，按钮旁显示进度。自动路径（装插件、更新运行时）仍然只测最快的两条，不会为此多等。</item>
+        <item>插件安装日志恢复显示 pnpm 的进度行（约每秒一行，不再整类丢掉）：装得慢的时候能看见 resolved/downloaded/added 的计数在走。完全相同的计数不重复打，含 missing 的那种行仍然不显示。</item>
 </string-array>
 
     

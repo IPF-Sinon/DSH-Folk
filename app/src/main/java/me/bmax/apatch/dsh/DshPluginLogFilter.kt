@@ -40,6 +40,9 @@ internal class DshPluginLogFilter {
     private val dependencyLines = mutableListOf<String>()
     private var doneLine = ""
     private var exitCode = 0
+    /** 最近一条已放行的进度行与其时间戳（进度行节流用）。 */
+    private var lastProgress = ""
+    private var lastProgressAt = 0L
 
     /** 一条原始输出行；该显示的交回 [emit]。 */
     fun accept(line: String, emit: (String) -> Unit) {
@@ -56,7 +59,13 @@ internal class DshPluginLogFilter {
                     accept(line, emit)
                 }
             }
-            trimmed.startsWith("Progress:") -> Unit
+            trimmed.startsWith("Progress:") -> {
+                // 进度行以前是整类丢掉的（防刷屏）。但装一个要几十秒的插件时它是唯一的实时反馈，
+                // 全丢就变成「点了安装，界面半天不动」。现在改成节流显示：计数没变不重复，
+                // 最快每 PROGRESS_MIN_GAP_MS 放一行，带 done 的收尾行一定放行。
+                // 含 missing 的行仍然不显示 —— 那不是进度，是「有东西没装上」，该由摘要/报错来讲。
+                if (!trimmed.contains("missing", ignoreCase = true) && acceptProgress(trimmed)) emit(line)
+            }
             trimmed.startsWith(DshPluginRepo.EXIT_MARKER) -> {
                 exitCode = trimmed.removePrefix(DshPluginRepo.EXIT_MARKER).trim().toIntOrNull() ?: 0
             }
@@ -86,7 +95,26 @@ internal class DshPluginLogFilter {
             trimmed.startsWith("Done in") ||
             trimmed.startsWith("dsh:")
 
+    /**
+     * 进度行的节流判据。
+     *
+     * 为什么不是原样全放：pnpm 在网络快时一秒能吐十几行，会把日志窗口里真正有用的行顶出去
+     * （installLog 只留最后 400 行）；为什么不是继续全丢：见调用点注释。
+     */
+    private fun acceptProgress(trimmed: String): Boolean {
+        val now = System.currentTimeMillis()
+        val done = trimmed.endsWith("done")
+        if (trimmed == lastProgress) return false
+        if (!done && now - lastProgressAt < PROGRESS_MIN_GAP_MS) return false
+        lastProgress = trimmed
+        lastProgressAt = now
+        return true
+    }
+
     private companion object {
         const val PEER_HEAD = "Issues with peer dependencies found"
+
+        /** 进度行最短间隔：约 1 秒一行，既看得见在动，又不至于刷屏。 */
+        const val PROGRESS_MIN_GAP_MS = 800L
     }
 }

@@ -736,9 +736,53 @@ console.log("─ 预装/安装日志降噪");
   // 用户现场：预装一个插件就铺一屏 pnpm peer WARN（missing peer cordis/react/…）
   // 与 Progress 刷屏，还有我们自己的 [DSH-Folk-exit] 0。那些 peer 本来就该是缺的
   // （由 dsh 运行时提供），不该按错误量级展示。
+  // 2026-09-25 用户反馈：Progress 行**别全丢**——它虽然刷屏，但也是装插件时唯一的实时进度，
+  // 全丢就变成「点了安装，界面半天不动」。于是改成节流显示（用户明确要求排除含 missing 的行）。
   ok(/Issues with peer dependencies found/.test(filter) && /inPeerBlock = true/.test(filter),
     "过滤 pnpm 的 peer 依赖 WARN 块");
-  ok(/trimmed\.startsWith\("Progress:"\) -> Unit/.test(filter), "丢掉 Progress 刷屏");
+  ok(/trimmed\.startsWith\("Progress:"\) -> \{/.test(filter) &&
+    /!trimmed\.contains\("missing", ignoreCase = true\) && acceptProgress\(trimmed\)\) emit\(line\)/.test(filter),
+    "Progress 行不再整类丢掉：节流后显示（含 missing 的行仍不显示）");
+  ok(/private fun acceptProgress\(trimmed: String\): Boolean/.test(filter) &&
+    /if \(trimmed == lastProgress\) return false/.test(filter),
+    "进度行必须去重（同样的计数不重复打）");
+  ok(/val done = trimmed\.endsWith\("done"\)[\s\S]{0,120}if \(!done && now - lastProgressAt < PROGRESS_MIN_GAP_MS\) return false/.test(filter) &&
+    /const val PROGRESS_MIN_GAP_MS = \d+L/.test(filter),
+    "进度行必须节流（最快约 1 秒一行），但带 done 的收尾行一定放行");
+  // 节流逻辑在 Node 里复刻一遍，确认「打太快会丢、done 一定过、重复不打」这三条真的成立
+  {
+    const GAP = 800;
+    const seen = (lines, stepMs) => {
+      let last = "", at = 0, out = [];
+      // 起点用一个大数：真实实现里 lastProgressAt 初值 0，而 now 是 epoch 毫秒，
+      // 所以第一条进度行必然放行（否则「点了安装先静默 800ms」）。
+      let t = 1_000_000;
+      for (const raw of lines) {
+        t += stepMs;
+        const trimmed = raw.trim();
+        const done = trimmed.endsWith("done");
+        if (trimmed === last) continue;
+        if (!done && t - at < GAP) continue;
+        last = trimmed;
+        at = t;
+        out.push(trimmed);
+      }
+      return out;
+    };
+    const fast = seen([
+      "Progress: resolved 1, reused 0, downloaded 0, added 0",
+      "Progress: resolved 20, reused 0, downloaded 3, added 0",
+      "Progress: resolved 44, reused 0, downloaded 9, added 20, done",
+    ], 100);
+    ok(fast.length === 2 && fast[fast.length - 1].endsWith("done"),
+      `打得再快也只在够间隔时放行，且 done 行一定过（实际 ${fast.length} 行：${JSON.stringify(fast)}）`);
+    const same = seen([
+      "Progress: resolved 44, reused 0, downloaded 0, added 0",
+      "Progress: resolved 44, reused 0, downloaded 0, added 0",
+      "Progress: resolved 44, reused 0, downloaded 0, added 0",
+    ], 5000);
+    ok(same.length === 1, `完全相同的进度行只显示一次（实际 ${same.length} 行）`);
+  }
   ok(/startsWith\(DshPluginRepo\.EXIT_MARKER\)/.test(filter) && /exitCode = trimmed\.removePrefix/.test(filter),
     "退出标记不再直接显示，改成记下退出码");
   ok(/startsWith\("dependencies:"\)/.test(filter) && /startsWith\("Done in"\)/.test(filter),
