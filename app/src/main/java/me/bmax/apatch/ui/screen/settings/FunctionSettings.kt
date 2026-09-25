@@ -162,7 +162,8 @@ fun FunctionSettingsContent(
     effectiveSource: String,
     speedTesting: Boolean,
     /** 测速结果行，已格式化好。 */
-    speedResults: List<String>,
+    /** 最近一次测速的原始结果（展示在弹窗里每条线路自己那一行上）。 */
+    speedResults: List<DshSource.SpeedResult>,
     onSpeedTest: () -> Unit,
     perm: PermissionManager.Status,
     onRefreshPerm: () -> Unit,

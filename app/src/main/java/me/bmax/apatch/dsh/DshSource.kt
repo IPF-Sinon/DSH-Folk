@@ -75,9 +75,9 @@ object DshSource {
      */
     fun enabledMirrors(): Set<String> {
         val prefs = runCatching { prefs() }.getOrNull() ?: return allSourceIds().toSet()
-        val raw = prefs.getString(KEY_RACE_MIRRORS, null)
+        val raw = prefs.getString(DshEnv.KEY_RACE_MIRRORS, null)
             ?: return migrateLegacySourceChoice(prefs).also {
-                prefs.edit().putString(KEY_RACE_MIRRORS, JSONArray(it.toList()).toString()).apply()
+                prefs.edit().putString(DshEnv.KEY_RACE_MIRRORS, JSONArray(it.toList()).toString()).apply()
             }
         val parsed = runCatching {
             val arr = JSONArray(raw)
@@ -90,7 +90,7 @@ object DshSource {
     /** 写回勾选（落盘的就是集合本身，空集合也照存 —— 那是「只直连」的合法表达）。 */
     fun setEnabledMirrors(ids: Collection<String>) {
         val known = ids.filter { it in allSourceIds() }.distinct()
-        prefs().edit().putString(KEY_RACE_MIRRORS, JSONArray(known).toString()).apply()
+        prefs().edit().putString(DshEnv.KEY_RACE_MIRRORS, JSONArray(known).toString()).apply()
     }
 
     /**
