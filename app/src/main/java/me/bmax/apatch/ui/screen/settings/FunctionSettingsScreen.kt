@@ -166,7 +166,10 @@ internal fun DshSettingsScreen(
     var a11yEnabled by remember { mutableStateOf(DshAutostart.a11yEnabled(context)) }
     var port by rememberSaveable { mutableStateOf(DshRuntime.port()) }
     var lanEnabled by rememberSaveable { mutableStateOf(DshRuntime.lanEnabled()) }
-    var ghMirrorEnabled by rememberSaveable { mutableStateOf(DshRuntime.pluginGhMirrorEnabled()) }
+    var raceMaster by rememberSaveable { mutableStateOf(DshRuntime.raceMasterEnabled()) }
+    var racePlugins by rememberSaveable { mutableStateOf(DshRuntime.raceEnabled(DshRuntime.RACE_PLUGINS)) }
+    var raceAppUpdate by rememberSaveable { mutableStateOf(DshRuntime.raceEnabled(DshRuntime.RACE_APP_UPDATE)) }
+    var raceRuntime by rememberSaveable { mutableStateOf(DshRuntime.raceEnabled(DshRuntime.RACE_RUNTIME)) }
     var verifyAfterInstall by rememberSaveable {
         mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, true))
     }
@@ -627,10 +630,21 @@ internal fun DshSettingsScreen(
                         lanEnabled = on
                         DshRuntime.setLanEnabled(on)
                     },
-                    ghMirrorEnabled = ghMirrorEnabled,
-                    onGhMirrorChange = { on ->
-                        ghMirrorEnabled = on
-                        DshRuntime.setPluginGhMirrorEnabled(on)
+                    raceMasterEnabled = raceMaster,
+                    onRaceMasterChange = { on ->
+                        raceMaster = on
+                        DshRuntime.setRaceMasterEnabled(on)
+                    },
+                    racePlugins = racePlugins,
+                    raceAppUpdate = raceAppUpdate,
+                    raceRuntime = raceRuntime,
+                    onRaceChannelChange = { channel, on ->
+                        DshRuntime.setRaceEnabled(channel, on)
+                        when (channel) {
+                            DshRuntime.RACE_PLUGINS -> racePlugins = on
+                            DshRuntime.RACE_APP_UPDATE -> raceAppUpdate = on
+                            DshRuntime.RACE_RUNTIME -> raceRuntime = on
+                        }
                     },
                     downloadSource = downloadSource,
                     onDownloadSourceChange = { src ->

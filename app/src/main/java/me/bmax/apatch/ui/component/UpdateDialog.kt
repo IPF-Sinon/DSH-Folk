@@ -265,10 +265,15 @@ fun UpdateDialog(
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text(stringResource(R.string.update_install)) }
 
-                        // 还没测速：先测速再让用户选渠道
+                        // 还没测速：先测速再让用户选渠道（竞速通道关掉时跳过测速，直接直连下载）
                         status?.canInstallInApp == true && results.isEmpty() -> Button(
                             onClick = {
                                 scope.launch {
+                                    if (!AppUpdater.raceEnabled()) {
+                                        // 竞速关闭：不测速、不给渠道可选，直接按直连下载
+                                        chosen = DshSource.SOURCE_GITHUB
+                                        return@launch
+                                    }
                                     phase = AppUpdater.Phase.Testing
                                     val r = AppUpdater.speedTest()
                                     results = r
@@ -284,7 +289,14 @@ fun UpdateDialog(
                             },
                             enabled = !busy,
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text(stringResource(R.string.update_in_app)) }
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (AppUpdater.raceEnabled()) R.string.update_in_app
+                                    else R.string.update_download_now
+                                )
+                            )
+                        }
 
                         // 已选渠道：开始下载
                         status?.canInstallInApp == true -> Button(

@@ -50,6 +50,23 @@ object DshSource {
 
     private const val SCORE_REF_BYTES = 100L * 1024 * 1024
 
+    /**
+     * 测速结果的复用窗口（与 [CACHE_TTL_MS] 那个 24h 的「自动源选择」缓存是两件事）。
+     *
+     * 24h 是给「下载 200MB 运行时」这种大件用的：结论稳定、重测代价高。而插件安装/更新是
+     * 即时操作，用户点完就在等 —— 只要 10 分钟内测过一次就直接复用，不再让他先等一轮探测。
+     */
+    private const val SPEED_RESULT_TTL_MS = 10 * 60 * 1000L
+
+    /** 测不出任何可达源时的兜底顺序：两条 gh-proxy 在前、直连 github 垫底。 */
+    private val FALLBACK_ORDER = listOf(SOURCE_GHPROXY_CF, SOURCE_GHPROXY_AXISNOW, SOURCE_GITHUB)
+
+    /** npm registry 候选：官方 + 国内镜像（npmmirror 是 npm 的完整同步镜像）。 */
+    private val NPM_REGISTRIES = listOf("https://registry.npmjs.org", "https://registry.npmmirror.com")
+
+    /** 探 registry 延迟用的包：存在且体量极小，两个 registry 都有。 */
+    private const val REGISTRY_PROBE_PKG = "dsh-config-manager"
+
     /** 未参与测速的候选（自定义源／第三方镜像）在下载排序里的权重：排在实测可达的源之后、不可达之前。 */
     private const val UNRANKED_WEIGHT = Long.MAX_VALUE / 2
 
@@ -88,6 +105,9 @@ object DshSource {
         memCache = null
         memCachedAt = 0L
         lastResults = emptyList()
+        lastResultsAt = 0L
+        registryCache = emptyList()
+        registryCacheAt = 0L
     }
 
     /**
@@ -238,6 +258,13 @@ object DshSource {
     /** 最近一次 [speedTest] 的结果，供下载 fallback 排序用（见 [downloadRank]）。 */
     @Volatile private var lastResults: List<SpeedResult> = emptyList()
 
+    /** [lastResults] 的产出时刻；用于 [rankedSources] 的复用窗口判定。 */
+    @Volatile private var lastResultsAt: Long = 0L
+
+    /** npm registry 的测速结论（见 [rankedNpmRegistries]）与其产出时刻。 */
+    @Volatile private var registryCache: List<String> = emptyList()
+    @Volatile private var registryCacheAt: Long = 0L
+
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
 
     fun setting(ctx: Context): String = prefs(ctx).getString(KEY_SOURCE, SOURCE_AUTO) ?: SOURCE_AUTO
@@ -321,6 +348,76 @@ object DshSource {
         return r.estimatedMs
     }
 
+    /**
+     * 按测速结论排好序的源 id（最快在前），供「竞速通道」用。
+     *
+     * 复用 [lastResults]：近期测过就直接用，不重复探测（装插件这种即时操作不该每次先等一轮
+     * 测速）。超过 [SPEED_RESULT_TTL_MS] 或还没测过才重新测。全部不可达时回退到
+     * [FALLBACK_ORDER] —— 那是「测不出来」的兜底顺序（先两条 gh-proxy、最后直连），
+     * 不回退就等于把用户的插件安装直接卡死。
+     */
+    fun rankedSources(force: Boolean = false): List<String> {
+        val results = if (!force && resultsFresh()) lastResults else speedTest()
+        val ranked = results
+            .sortedBy { it.estimatedMs }
+            .map { it.source }
+            .filter { it != SOURCE_CUSTOM && it != SOURCE_AUTO }
+        if (ranked.isEmpty() || ranked.none { s -> results.any { it.source == s && it.reachable } }) {
+            return FALLBACK_ORDER
+        }
+        // 不可达的源仍留在尾部：直连 github 常常是最后一条能成的路
+        return ranked.distinct()
+    }
+
+    /** [lastResults] 是否还在复用窗口内。 */
+    private fun resultsFresh(): Boolean {
+        val at = lastResultsAt
+        if (at == 0L || lastResults.isEmpty()) return false
+        return System.currentTimeMillis() - at < SPEED_RESULT_TTL_MS
+    }
+
+    /**
+     * npm registry 的候选，按测速结论排序（最快在前），最后一条永远是官方源。
+     *
+     * npm 规格的插件（dsh-config-manager / dsh-web-mobile 之类）走的是 pnpm，跟 gh-proxy
+     * 那套 git 重写毫无关系 —— 插件镜像开关对它们一直不起作用，国内装它们只能干等官方源。
+     * 这里测一次两个 registry，把最快的那个用 `--registry` 传给 pnpm（不改 .npmrc、不动 rootfs）。
+     * 结果同样带缓存：[registryCacheAt]，窗口内不重测。
+     *
+     * 兜底：官方源永远在列表里（镜像同步延迟/缺包时还能退回官方），且**全部探测失败时只回官方源**。
+     */
+    fun rankedNpmRegistries(ctx: Context, force: Boolean = false): List<String> {
+        val now = System.currentTimeMillis()
+        val cached = registryCache
+        if (!force && cached.isNotEmpty() && now - registryCacheAt < SPEED_RESULT_TTL_MS) return cached
+
+        val probed = NPM_REGISTRIES.map { reg -> reg to probeRegistryLatency(reg) }
+        val reachable = probed.filter { it.second != null }.sortedBy { it.second }
+        val order = (reachable.map { it.first } + NPM_REGISTRIES).distinct()
+        registryCache = order
+        registryCacheAt = now
+        return order
+    }
+
+    /** 探一个 npm registry 的延迟：拉某个一定存在的包的 latest 元数据头。不可达返回 null。 */
+    private fun probeRegistryLatency(registry: String): Long? {
+        val start = System.currentTimeMillis()
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = URL("$registry/$REGISTRY_PROBE_PKG/latest").openConnection() as HttpURLConnection
+            conn.connectTimeout = CONNECT_TIMEOUT_MS
+            conn.readTimeout = READ_TIMEOUT_MS
+            conn.instanceFollowRedirects = true
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("Accept", "application/json")
+            if (conn.responseCode in 200..399) System.currentTimeMillis() - start else null
+        } catch (_: Exception) {
+            null
+        } finally {
+            runCatching { conn?.disconnect() }
+        }
+    }
+
     /** 三候选源全部测一遍（延迟 + 对最优两个测吞吐）。同步阻塞，调用方放 IO 线程。 */
     fun speedTest(): List<SpeedResult> {
         val meta = metaUrl()
@@ -343,6 +440,7 @@ object DshSource {
             if (r.source !in top) r else r.copy(speedKBps = probeSpeed(proxyPrefix(r.source) + probe))
         }
         lastResults = results
+        lastResultsAt = System.currentTimeMillis()
         return results
     }
 

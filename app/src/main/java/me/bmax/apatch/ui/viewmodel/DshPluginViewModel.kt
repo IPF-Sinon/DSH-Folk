@@ -220,30 +220,51 @@ class DshPluginViewModel : ViewModel() {
                 isRefreshing = false
                 return@launch
             }
-            val online = withContext(Dispatchers.IO) { DshPluginRepo.fetchCatalog() }
-            catalog = online
-            // 目录按 npm 包名对齐已安装列表：dsh-market 的 id 与包名不一定相同
-            val byPkg = online.filter { it.pkg.isNotEmpty() }.associateBy { it.pkg }
-            val merged = installed.map { local ->
-                val remote = byPkg[local.pkg]
-                local.copy(
-                    id = remote?.id ?: local.id,
-                    name = remote?.name?.takeIf { it.isNotBlank() } ?: local.name,
-                    description = local.description.ifBlank { remote?.description ?: "" },
-                    author = local.author.ifBlank { remote?.author ?: "" },
-                    repo = remote?.repo ?: "",
-                    homepage = remote?.homepage ?: "",
-                    version = remote?.version?.takeIf { it.isNotBlank() } ?: local.version,
-                    downloads = remote?.downloads ?: -1L,
-                    stars = remote?.stars ?: -1L,
-                    likes = remote?.likes ?: -1L,
-                )
+            val ctx = apApp
+            // 1) 先用上次的缓存渲染一遍：「有没有新版本可更新」立刻可见，不必干等一整轮网络
+            val cached = withContext(Dispatchers.IO) { DshPluginRepo.cachedCatalogRows(ctx) }
+            if (cached.isNotEmpty()) {
+                catalog = cached
+                plugins = mergeCatalog(installed, cached)
             }
-            // 目录里查不到的本地插件（自建/私有包）也要显示版本与下载量
-            plugins = withContext(Dispatchers.IO) {
-                DshPluginRepo.enrich(merged.map { if (byPkg.containsKey(it.pkg)) it else it.copy(version = "") })
+            // 2) 再拉真目录并覆盖（同时把这份写回缓存，供下次进入页面用）
+            val online = withContext(Dispatchers.IO) { DshPluginRepo.fetchCatalogAndCache(ctx) }
+            if (online.isNotEmpty()) {
+                catalog = online
+                plugins = mergeCatalog(installed, online)
             }
             isRefreshing = false
+        }
+    }
+
+    /**
+     * 把目录行的展示字段与「远端最新版」并到已安装列表上。
+     *
+     * 目录按 npm 包名对齐已安装列表：dsh-market 的 id 与包名不一定相同。
+     */
+    private suspend fun mergeCatalog(
+        installed: List<DshPlugin>,
+        online: List<DshPlugin>,
+    ): List<DshPlugin> {
+        val byPkg = online.filter { it.pkg.isNotEmpty() }.associateBy { it.pkg }
+        val merged = installed.map { local ->
+            val remote = byPkg[local.pkg]
+            local.copy(
+                id = remote?.id ?: local.id,
+                name = remote?.name?.takeIf { it.isNotBlank() } ?: local.name,
+                description = local.description.ifBlank { remote?.description ?: "" },
+                author = local.author.ifBlank { remote?.author ?: "" },
+                repo = remote?.repo ?: "",
+                homepage = remote?.homepage ?: "",
+                version = remote?.version?.takeIf { it.isNotBlank() } ?: local.version,
+                downloads = remote?.downloads ?: -1L,
+                stars = remote?.stars ?: -1L,
+                likes = remote?.likes ?: -1L,
+            )
+        }
+        // 目录里查不到的本地插件（自建/私有包）也要显示版本与下载量
+        return withContext(Dispatchers.IO) {
+            DshPluginRepo.enrich(merged.map { if (byPkg.containsKey(it.pkg)) it else it.copy(version = "") })
         }
     }
 

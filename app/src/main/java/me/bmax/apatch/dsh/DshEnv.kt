@@ -362,14 +362,25 @@ object DshEnv {
     const val KEY_HOST_PROMPT = "host_prompt_enabled"
 
     /**
-     * 装 github/git 插件时是否走 gh-proxy 镜像线路（默认开）。
+     * 竞速通道的**总开关**（默认开）。键沿用原来的「插件镜像」键，老用户的选择不会丢。
      *
-     * 国内直连 github.com 的 git clone 常年握手失败，插件商店里过半条目是 `github:` 规格
-     * （见 [DshPluginRepo.install]），于是「装不上」。开着时先给容器的 git 配一层 insteadOf
-     * 重写，把 github 流量导到 gh-proxy 的几条线路，逐条回退、最后才直连 github 兜底。
-     * 关掉则一律直连 —— 给能直连 github 或有自己代理的用户留一条不被改写的干净路径。
+     * 语义（2026-09-25 由「插件镜像」升级而来）：开着时，被勾选的通道先用 [DshSource] 那套
+     * **测速**选出最快线路再走；关掉则所有通道一律直连，等于完全不介入。
+     *
+     * 原来它只管插件安装的 git 镜像；现在同时管三条通道，各自还有一个分开关
+     * （[KEY_RACE_PLUGINS] / [KEY_RACE_APP_UPDATE] / [KEY_RACE_RUNTIME]）：总开关关掉时
+     * 分开关一律不生效。
      */
-    const val KEY_PLUGIN_GH_MIRROR = "plugin_gh_mirror"
+    const val KEY_RACE_MASTER = "plugin_gh_mirror"
+
+    /** 竞速通道：插件安装/更新（git 线路 + npm registry 都按测速结果选）。 */
+    const val KEY_RACE_PLUGINS = "race_channel_plugins"
+
+    /** 竞速通道：应用更新（APK 下载）。 */
+    const val KEY_RACE_APP_UPDATE = "race_channel_app_update"
+
+    /** 竞速通道：运行时更新（rootfs 与 metadata 下载）。 */
+    const val KEY_RACE_RUNTIME = "race_channel_runtime"
 
     /** 宿主事实文件（JSON），由 App 写、dsh-folk-host 插件读。 */
     fun hostFacts(ctx: Context): File = File(dshHome(ctx), "host-facts.json")

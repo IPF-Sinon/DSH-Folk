@@ -176,6 +176,15 @@ object DshPluginRepo {
     private const val NPM_MIRROR_CN = "https://registry.npmmirror.com"
     private const val CATALOG_CACHE_FILE = "plugin-catalog.json"
 
+    /**
+     * 插件页「远端版本/下载量」那一层的磁盘缓存（见 [fetchCatalogAndCache]）。
+     *
+     * 与 [CATALOG_CACHE_FILE]（商店页的完整目录快照）是两份东西：这份是**插件页**用的小表
+     * （已装插件的远端版本 + 展示字段），进页面先渲染它、再后台刷新。
+     */
+    private const val UPDATE_CACHE_FILE = "plugin-update-rows.json"
+    private const val UPDATE_CACHE_VERSION = 1
+
     // tar 头布局：512 字节一块，name@0(100)、八进制 size@124(12)、type@156
     private const val TAR_BLOCK = 512
     private const val TAR_NAME_LEN = 100
@@ -213,12 +222,12 @@ object DshPluginRepo {
     private const val GIT_CA_FILE = "/root/.dsh/.git-ca.pem"
 
     /**
-     * 装 github/git 插件时给容器 git 套的镜像前缀，按顺序逐条试、失败换下一条。
+     * 已知的全部线路前缀（含空串 = 直连 github）——**只用来清重写**，不再决定尝试顺序。
      *
-     * 前缀直接拼在 github URL 前（gh-proxy 的约定就是 `<prefix>https://github.com/...`，
-     * 连 git 的 smart-HTTP clone 也支持）。空串 = 不改写、直连 github，永远作为最后一条
-     * 兜底：镜像全挂时能直连的用户仍装得上。前两条与运行时下载复用同一组 gh-proxy 线路
-     * （见 [DshSource]）。这只是 git 传输层的重写，不改任何 spec、不动 pnpm 解析。
+     * 顺序现在由 [DshSource.rankedSources] 按测速结论给出（见 [installGitSpec]）；但 [clearGitRewrite]
+     * 必须无条件把这些前缀配过的 insteadOf 全清掉，否则换了顺序之后旧前缀的键会留在 `.gitconfig`
+     * 里继续生效。前缀直接拼在 github URL 前（gh-proxy 的约定就是 `<prefix>https://github.com/...`，
+     * 连 git 的 smart-HTTP clone 也支持）。前两条与运行时下载复用同一组 gh-proxy 线路（见 [DshSource]）。
      */
     private val GH_MIRROR_PREFIXES = listOf(
         "https://v6.gh-proxy.org/",
@@ -289,6 +298,90 @@ object DshPluginRepo {
         enrich(base.map { p ->
             p.copy(installedVersion = installed[p.pkg]?.installedVersion ?: "")
         })
+    }
+
+    /**
+     * 拉真目录并落盘缓存（插件页后台刷新用）。
+     *
+     * 拉失败（断网/目录源挂了）时**不覆盖**旧缓存 —— 旧快照里的版本号仍然能告诉用户「有新版可装」，
+     * 比清空成「什么都不知道」有用。返回空列表表示这次没拉到，调用方应保留现有显示。
+     */
+    suspend fun fetchCatalogAndCache(ctx: Context): List<DshPlugin> = withContext(Dispatchers.IO) {
+        val rows = fetchCatalog()
+        if (rows.isNotEmpty()) {
+            runCatching { File(ctx.cacheDir, UPDATE_CACHE_FILE).writeText(rowsToJson(rows)) }
+                .onFailure { Log.w(TAG, "插件页缓存写入失败: ${it.message}") }
+        }
+        rows
+    }
+
+    /**
+     * 上次成功拉到的目录行（进入插件页时**先渲染这一份**，再去后台拉真数据）。
+     *
+     * 为什么必须有：插件页每次进来都要把整份目录 + 每包的远端版本/下载量/star 重新拉一遍，
+     * 慢的时候页面空着等好几秒。有了它，「有没有新版本可更新」立刻就能看到（可能略旧，随即被
+     * 后台刷新纠正）。缓存损坏/不存在都当没有，不抛。
+     */
+    fun cachedCatalogRows(ctx: Context): List<DshPlugin> =
+        runCatching {
+            val f = File(ctx.cacheDir, UPDATE_CACHE_FILE)
+            if (!f.isFile) emptyList() else rowsFromJson(f.readText())
+        }.getOrElse {
+            Log.w(TAG, "插件页缓存读取失败: ${it.message}")
+            emptyList()
+        }
+
+    /** 目录行 → JSON（只存展示与「可更新」判定要用的字段）。 */
+    private fun rowsToJson(rows: List<DshPlugin>): String {
+        val arr = JSONArray()
+        for (r in rows) {
+            arr.put(
+                JSONObject()
+                    .put("id", r.id)
+                    .put("pkg", r.pkg)
+                    .put("name", r.name)
+                    .put("version", r.version)
+                    .put("description", r.description)
+                    .put("author", r.author)
+                    .put("repo", r.repo)
+                    .put("homepage", r.homepage)
+                    .put("downloads", r.downloads)
+                    .put("stars", r.stars)
+                    .put("likes", r.likes)
+                    .put("category", r.category)
+            )
+        }
+        return JSONObject()
+            .put("version", UPDATE_CACHE_VERSION)
+            .put("at", System.currentTimeMillis())
+            .put("items", arr)
+            .toString()
+    }
+
+    /** [rowsToJson] 的逆操作；版本不匹配或字段缺失都当没有缓存。 */
+    private fun rowsFromJson(text: String): List<DshPlugin> {
+        val o = JSONObject(text)
+        if (o.optInt("version") != UPDATE_CACHE_VERSION) return emptyList()
+        val arr = o.optJSONArray("items") ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val r = arr.optJSONObject(i) ?: return@mapNotNull null
+            val id = r.optString("id")
+            if (id.isEmpty()) return@mapNotNull null
+            DshPlugin(
+                id = id,
+                pkg = r.optString("pkg"),
+                name = r.optString("name").ifEmpty { id },
+                version = r.optString("version"),
+                description = r.optString("description"),
+                author = r.optString("author"),
+                repo = r.optString("repo"),
+                homepage = r.optString("homepage"),
+                downloads = r.optLong("downloads", -1L),
+                stars = r.optLong("stars", -1L),
+                likes = r.optLong("likes", -1L),
+                category = r.optString("category"),
+            )
+        }
     }
 
     /**
@@ -919,19 +1012,50 @@ object DshPluginRepo {
             ensureGit(onLine)
             installGitSpec(spec, fallbackTgz, onLine)
         } else {
-            dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+            installRegistrySpec(spec, onLine)
         }
         out + repairIfLinkageBroken(onLine)
     }
 
     /**
-     * 装一个 git/github 规格：镜像开关开着就逐条镜像线路试，全失败再落 tgz 兜底。
+     * 装一个 npm（registry）规格：竞速开着就**先测速选 registry**，用 `--registry` 传给 pnpm。
+     *
+     * 为什么不写 `.npmrc`：那要动 rootfs 里的全局配置，而且换源得再改回来；`--registry` 只是这一次
+     * 命令的参数，失败就没了副作用（[DshRuntime.RACE_PLUGINS] 关掉时连这个参数都不传，行为与以前
+     * 完全一致）。npm 规格跟 gh-proxy 那套 git 重写毫无关系 —— 插件镜像开关从来管不到它们，
+     * 国内装 dsh-config-manager / dsh-web-mobile 只能干等官方源，这就是本条要解决的问题。
+     *
+     * 回退链：测速排序里的每条 registry 依次试（官方源永远在列表尾），全失败再用**不带 --registry**
+     * 的原命令试最后一次 —— 那是「用户自己在容器里配过源」的情形，不该被我们覆盖。
+     */
+    private suspend fun installRegistrySpec(spec: String, onLine: (String) -> Unit): String {
+        // 没绑定 context 就没法读测速缓存：退回原命令（等于竞速未生效），不冒险猜源
+        val ctx = DshRuntime.appContextOrNull()
+        if (ctx == null || !DshRuntime.raceEnabled(DshRuntime.RACE_PLUGINS)) {
+            return dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+        }
+        var last = ""
+        for (registry in DshSource.rankedNpmRegistries(ctx)) {
+            line(onLine, R.string.dsh_plug_log_npm_registry_try, registry)
+            last = dshPlugin("add ${importFlag()}--registry '$registry' '$spec'", 900_000, onLine)
+            if (exitOk(last)) return last
+        }
+        // 全部 registry 都没成：再按原命令试最后一次（不带 --registry，即用户自己在容器里配的源）
+        last = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+        return last
+    }
+
+    /**
+     * 装一个 git/github 规格：**按测速结论**逐条线路试，全失败再落 tgz 兜底。
      *
      * pnpm 对 `github:` 规格走 git 传输，而国内直连 github 的 clone 常年失败。这里在**不改
-     * spec、不动 pnpm 解析**的前提下，给容器 git 配一层 `insteadOf`，把 github 流量按顺序
-     * 导到 gh-proxy 的几条线路，某条装成（退出码 0）即返回；空前缀那条等于直连 github，
-     * 永远垫底。全部失败且给了 [fallbackTgz] 时，最后用 tgz 直链（纯 HTTP、绕开 git）再试
-     * 一次——直链本身也走一遍镜像前缀。镜像开关关掉则只按原样直连一次，不做任何重写。
+     * spec、不动 pnpm 解析**的前提下，给容器 git 配一层 `insteadOf`，把 github 流量导到线路前缀上，
+     * 某条装成（退出码 0）即返回；空前缀那条等于直连 github，兜底垫底。全部失败且给了 [fallbackTgz]
+     * 时，最后用 tgz 直链（纯 HTTP、绕开 git）再试一次——直链本身也走一遍线路前缀。
+     *
+     * 线路顺序来自 [DshSource.rankedSources]（测速最快在前，结果带缓存与兜底顺序）。竞速通道关掉
+     * （总开关或「插件」分开关）时，只按原样直连一次、不做任何重写，给能直连 github 的用户留一条
+     * 干净路径。
      */
     private suspend fun installGitSpec(
         spec: String,
@@ -939,22 +1063,23 @@ object DshPluginRepo {
         onLine: (String) -> Unit,
     ): String {
         ensureGitCa(onLine)
-        if (!DshRuntime.pluginGhMirrorEnabled()) {
+        if (!DshRuntime.raceEnabled(DshRuntime.RACE_PLUGINS)) {
             clearGitRewrite()
             return dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
         }
+        val prefixes = racePrefixes()
         var last = ""
-        for (prefix in GH_MIRROR_PREFIXES) {
+        for (prefix in prefixes) {
             applyGitRewrite(prefix)
             if (prefix.isNotEmpty()) line(onLine, R.string.dsh_plug_log_gh_mirror_try, prefix)
             else line(onLine, R.string.dsh_plug_log_gh_direct_try)
             last = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
             if (exitOk(last)) { clearGitRewrite(); return last }
         }
-        // git 全线路都没成：有 tgz 直链就绕开 git 再试（同样逐条镜像前缀）
+        // git 全线路都没成：有 tgz 直链就绕开 git 再试（同样按线路顺序）
         if (!fallbackTgz.isNullOrBlank()) {
             clearGitRewrite() // tgz 是纯 HTTP 下载，不需要（也不该）带 git 重写
-            for (prefix in GH_MIRROR_PREFIXES) {
+            for (prefix in prefixes) {
                 val url = prefix + fallbackTgz
                 line(onLine, R.string.dsh_plug_log_gh_tgz_try, url)
                 last = dshPlugin("add ${importFlag()}'$url'", 900_000, onLine)
@@ -964,6 +1089,15 @@ object DshPluginRepo {
         clearGitRewrite()
         return last
     }
+
+    /**
+     * 当前该按什么顺序试线路前缀（含空前缀 = 直连 github）。
+     *
+     * 测速结论不可用（全不可达/还没测过）时 [DshSource.rankedSources] 会给 [DshSource] 的
+     * 兜底顺序，所以这里不需要再兜一层。测速本身在 IO 线程上跑（调用方都在 withContext(IO) 里）。
+     */
+    private fun racePrefixes(): List<String> =
+        DshSource.rankedSources().map { DshSource.proxyPrefix(it) }
 
     /** 从安装输出判断这次是不是成功（退出码 0）。没有标记行按失败处理。 */
     private fun exitOk(out: String): Boolean =

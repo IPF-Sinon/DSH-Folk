@@ -620,8 +620,14 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <!-- 局域网访问 -->
     <string name="dsh_lan_title">LAN access</string>
     <string name="dsh_lan_summary">Expose the WebUI to other devices on the same network. Authentication is handled by the dsh login page.</string>
-    <string name="dsh_gh_mirror_title">GitHub plugin mirror</string>
-    <string name="dsh_gh_mirror_summary">Install github/git plugins through gh-proxy mirrors (gh-proxy → axisnow → direct GitHub). On by default; turn off to connect to GitHub directly if you can reach it or have your own proxy.</string>
+    <string name="dsh_race_title">Race channel (mirrors + speed test)</string>
+    <string name="dsh_race_summary">Picks the fastest route by measuring first. Long press to choose which channels use it.</string>
+    <string name="dsh_race_dialog_title">Race channel</string>
+    <string name="dsh_race_dialog_message">Checked channels measure first and then download over the fastest route. Unchecked ones connect directly. Turning the master switch off disables every channel.</string>
+    <string name="dsh_race_channel_plugins">Plugin install and update</string>
+    <string name="dsh_race_channel_app">App update</string>
+    <string name="dsh_race_channel_runtime">Runtime update</string>
+    <string name="dsh_race_master_off_hint">The master switch is off, so no channel races and everything connects directly.</string>
 
     <!-- 预装插件标签 -->
     <string name="dsh_plugin_seeded_label">Preinstalled</string>
@@ -1014,6 +1020,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_plug_log_git_repair">This plugin comes from a git source and git is unavailable in the container; repairing it now (apt, may take a few minutes)…</string>
     <string name="dsh_plug_log_git_fixed">git repaired</string>
     <string name="dsh_plug_log_gh_mirror_try">Trying GitHub mirror %1$s …</string>
+    <string name="dsh_plug_log_npm_registry_try">Trying npm registry %1$s …</string>
     <string name="dsh_plug_log_git_ca">Configured git CA certificates (from Node\'s trust store)</string>
     <string name="dsh_plug_log_gh_direct_try">Mirrors failed; trying a direct GitHub connection …</string>
     <string name="dsh_plug_log_gh_tgz_try">git failed on every route; falling back to the tarball %1$s …</string>

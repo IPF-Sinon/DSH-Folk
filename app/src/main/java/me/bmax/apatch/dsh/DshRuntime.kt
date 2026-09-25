@@ -918,6 +918,12 @@ object DshRuntime {
     /** Context 是否已绑定。未绑定时所有读接口给默认值而不是抛异常。 */
     private val ready: Boolean get() = ::appContext.isInitialized
 
+    /**
+     * 已绑定的 application context（给同在 dsh 包里的兄弟对象用，如 [DshPluginRepo] 要拿它读
+     * 竞速通道的测速缓存）。未绑定返回 null —— 调用方自己决定怎么处理，不要在这里抛。
+     */
+    fun appContextOrNull(): Context? = if (ready) appContext else null
+
     fun attach(context: Context) {
         init(context)
         val installed = DshEnv.isRuntimeInstalled(appContext)
@@ -1044,15 +1050,47 @@ object DshRuntime {
         prefs().edit().putBoolean(DshEnv.KEY_LAN, enabled).apply()
     }
 
-    // ────────────────────────── 插件安装镜像线路 ──────────────────────────
+    // ────────────────────────── 竞速通道（镜像/测速） ──────────────────────────
 
-    /** 装 github/git 插件是否走 gh-proxy 镜像线路（默认开）。见 [DshPluginRepo.install]。 */
-    fun pluginGhMirrorEnabled(): Boolean =
-        !ready || prefs().getBoolean(DshEnv.KEY_PLUGIN_GH_MIRROR, true)
+    /** 竞速通道的三个通道 id（见 [raceEnabled]）。 */
+    const val RACE_PLUGINS = "plugins"
+    const val RACE_APP_UPDATE = "app_update"
+    const val RACE_RUNTIME = "runtime"
 
-    fun setPluginGhMirrorEnabled(enabled: Boolean) {
+    /** 竞速通道**总开关**（默认开）。关掉时 [raceEnabled] 一律返回 false。 */
+    fun raceMasterEnabled(): Boolean =
+        !ready || prefs().getBoolean(DshEnv.KEY_RACE_MASTER, true)
+
+    fun setRaceMasterEnabled(enabled: Boolean) {
         if (!ready) return
-        prefs().edit().putBoolean(DshEnv.KEY_PLUGIN_GH_MIRROR, enabled).apply()
+        prefs().edit().putBoolean(DshEnv.KEY_RACE_MASTER, enabled).apply()
+    }
+
+    /**
+     * 某个通道是否启用竞速（总开关 + 该通道分开关，两者都开才生效）。
+     *
+     * 分开关默认开：老用户此前的行为就是「能加速就加速」，升级后不该悄悄变慢。
+     */
+    fun raceEnabled(channel: String): Boolean {
+        if (!raceMasterEnabled()) return false
+        val key = when (channel) {
+            RACE_PLUGINS -> DshEnv.KEY_RACE_PLUGINS
+            RACE_APP_UPDATE -> DshEnv.KEY_RACE_APP_UPDATE
+            RACE_RUNTIME -> DshEnv.KEY_RACE_RUNTIME
+            else -> return false
+        }
+        return !ready || prefs().getBoolean(key, true)
+    }
+
+    fun setRaceEnabled(channel: String, enabled: Boolean) {
+        if (!ready) return
+        val key = when (channel) {
+            RACE_PLUGINS -> DshEnv.KEY_RACE_PLUGINS
+            RACE_APP_UPDATE -> DshEnv.KEY_RACE_APP_UPDATE
+            RACE_RUNTIME -> DshEnv.KEY_RACE_RUNTIME
+            else -> return
+        }
+        prefs().edit().putBoolean(key, enabled).apply()
     }
 
     // ────────────────────────── 应用启动行为 ──────────────────────────
@@ -2212,7 +2250,9 @@ object DshRuntime {
                 message = str(R.string.dsh_msg_fetching_meta),
             )
         }
-        if (DshSource.setting(appContext) == DshSource.SOURCE_AUTO) {
+        if (DshSource.setting(appContext) == DshSource.SOURCE_AUTO &&
+            raceEnabled(RACE_RUNTIME)
+        ) {
             logInfo(R.string.dsh_log_speedtest_start)
             val results = DshSource.speedTest()
             for (r in results.sortedBy { it.estimatedMs }) {
@@ -2333,7 +2373,28 @@ object DshRuntime {
         refreshRootfsSize()
     }
 
-    private fun fetchMeta(): DshMeta? = fetchMetaFrom(DshSource.effectiveMetaUrl(appContext))
+    private fun fetchMeta(): DshMeta? = fetchMetaFrom(runtimeMetaUrl())
+
+    /**
+     * 运行时通道当前生效的下载源。
+     *
+     * 竞速**关掉**（总开关或「运行时」分开关）时不再测速：用户若在「下载渠道」里明确指定过某个源，
+     * 就按他指定的走（那是手选、不是竞速）；只有 `auto`（= 交给竞速决定）才退化为直连 GitHub。
+     */
+    private fun runtimeSource(ctx: Context): String {
+        val setting = DshSource.setting(ctx)
+        if (!raceEnabled(RACE_RUNTIME)) {
+            return if (setting == DshSource.SOURCE_AUTO) DshSource.SOURCE_GITHUB else setting
+        }
+        return DshSource.resolve(ctx)
+    }
+
+    /** 当前该拉的 metadata.json 地址（自定义源仍走它自己的 URL）。 */
+    private fun runtimeMetaUrl(): String {
+        val src = runtimeSource(appContext)
+        if (src == DshSource.SOURCE_CUSTOM) return DshSource.effectiveMetaUrl(appContext)
+        return DshSource.proxyPrefix(src) + DshSource.metaUrl()
+    }
 
     /**
      * 拉一份 metadata.json 并解析。失败（断网 / 404 / JSON 坏了）返回 null。
@@ -2538,7 +2599,7 @@ object DshRuntime {
      * `sortedBy` 是稳定排序，所以同权重（含未参与测速的自定义源）保持原相对顺序。
      */
     private fun downloadWithFallback(meta: DshMeta, target: File): Boolean {
-        val prefix = DshSource.proxyPrefix(DshSource.resolve(appContext))
+        val prefix = DshSource.proxyPrefix(runtimeSource(appContext))
         val raw = listOf(meta.url) + meta.mirrors
         val candidates = (
             if (prefix.isEmpty()) raw

@@ -142,7 +142,7 @@ object SettingsRegistry {
             add(SettingEntry("function_auto_open_webui", R.string.dsh_auto_open_webui, R.string.dsh_auto_open_webui_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_port", R.string.dsh_port_title, R.string.dsh_port_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_lan", R.string.dsh_lan_title, R.string.dsh_lan_summary, SettingCategory.FUNCTION))
-            add(SettingEntry("function_gh_mirror", R.string.dsh_gh_mirror_title, R.string.dsh_gh_mirror_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_gh_mirror", R.string.dsh_race_title, R.string.dsh_race_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_webui_mode", R.string.dsh_webui_mode, R.string.dsh_webui_mode_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_webui_compat", R.string.dsh_webui_compat_section, category = SettingCategory.FUNCTION))
             add(SettingEntry("function_download_source", R.string.dsh_source_section, R.string.dsh_source_summary, SettingCategory.FUNCTION))

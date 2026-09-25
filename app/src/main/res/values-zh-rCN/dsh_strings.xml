@@ -602,8 +602,14 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <!-- 局域网访问 -->
     <string name="dsh_lan_title">局域网访问</string>
     <string name="dsh_lan_summary">开启后同一局域网的设备可访问 WebUI（鉴权由 dsh 登录页负责）</string>
-    <string name="dsh_gh_mirror_title">GitHub 插件镜像线路</string>
-    <string name="dsh_gh_mirror_summary">装 github/git 插件时走 gh-proxy 镜像（gh-proxy → axisnow → 直连 GitHub）。默认开；能直连 GitHub 或有自己的代理可关掉，改为直连不改写。</string>
+    <string name="dsh_race_title">竞速通道（镜像 + 测速）</string>
+    <string name="dsh_race_summary">先测速再走最快线路。长按卡片可选择哪些通道使用它。</string>
+    <string name="dsh_race_dialog_title">竞速通道</string>
+    <string name="dsh_race_dialog_message">勾选的通道会先测速、再走最快线路下载；没勾选的一律直连。总开关关闭时所有通道都不生效。</string>
+    <string name="dsh_race_channel_plugins">插件安装与更新</string>
+    <string name="dsh_race_channel_app">应用更新</string>
+    <string name="dsh_race_channel_runtime">运行时更新</string>
+    <string name="dsh_race_master_off_hint">总开关已关闭，所有通道都不走竞速、一律直连。</string>
 
     <!-- 预装插件标签 -->
     <string name="dsh_plugin_seeded_label">预装</string>
@@ -993,6 +999,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_plug_log_git_repair">这个插件来自 git 源，容器里的 git 不可用，正在修复（apt，可能要几分钟）…</string>
     <string name="dsh_plug_log_git_fixed">git 已修复</string>
     <string name="dsh_plug_log_gh_mirror_try">正在试 GitHub 镜像线路 %1$s …</string>
+    <string name="dsh_plug_log_npm_registry_try">正在试 npm 源 %1$s …</string>
     <string name="dsh_plug_log_git_ca">已给 git 配置 CA 根证书（取自 Node 信任库）</string>
     <string name="dsh_plug_log_gh_direct_try">镜像都没成，改用直连 GitHub 再试 …</string>
     <string name="dsh_plug_log_gh_tgz_try">git 全线路失败，回落到离线包 %1$s …</string>

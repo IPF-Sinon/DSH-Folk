@@ -165,6 +165,7 @@ jobs:
           node tools/check-wizard-gate.js
           node tools/check-cookie-samesite.js
           node tools/check-plugin-update.js
+          node tools/check-race-channel.js
           node tools/check-imports.js $(find app/src/main/java -name "*.kt")
 
       # release 包必须真签名。缺任何一项就硬失败 —— 悄悄用 debug key 签出一个

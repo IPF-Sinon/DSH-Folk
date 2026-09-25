@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -139,9 +141,15 @@ fun FunctionSettingsContent(
     /** 局域网访问开关（默认关；开则 dsh web 绑 0.0.0.0）。 */
     lanEnabled: Boolean,
     onLanChange: (Boolean) -> Unit,
-    /** 装 github/git 插件是否走 gh-proxy 镜像线路（默认开）。 */
-    ghMirrorEnabled: Boolean,
-    onGhMirrorChange: (Boolean) -> Unit,
+    /** 竞速通道**总开关**（默认开）。关掉时三条通道一律直连，分开关的勾选都不生效。 */
+    raceMasterEnabled: Boolean,
+    onRaceMasterChange: (Boolean) -> Unit,
+    /** 竞速通道：被勾选的通道（总开关关掉时不生效）。 */
+    racePlugins: Boolean,
+    raceAppUpdate: Boolean,
+    raceRuntime: Boolean,
+    /** 勾选/取消某个通道（channel 取 [DshRuntime.RACE_PLUGINS] 等）。 */
+    onRaceChannelChange: (String, Boolean) -> Unit,
     /** 运行时下载源：DshSource.SOURCE_* 之一。 */
     downloadSource: String,
     onDownloadSourceChange: (String) -> Unit,
@@ -584,16 +592,29 @@ fun FunctionSettingsContent(
             )
         }
 
-        // ───────── GitHub 插件镜像线路 ─────────
+        // ───────── 竞速通道（镜像/测速）─────────
+        // 长按卡片出通道勾选弹窗：勾了的通道走测速竞速，没勾的一律直连；总开关关掉则全部不生效。
         item(key = "function_gh_mirror", visible = !permissionOnly) {
+            var showRaceDialog by remember { mutableStateOf(false) }
             ToggleSettingCard(
                 flat = flat,
                 icon = Icons.Filled.CloudDownload,
-                title = stringResource(R.string.dsh_gh_mirror_title),
-                description = stringResource(R.string.dsh_gh_mirror_summary),
-                checked = ghMirrorEnabled,
-                onCheckedChange = onGhMirrorChange,
+                title = stringResource(R.string.dsh_race_title),
+                description = stringResource(R.string.dsh_race_summary),
+                checked = raceMasterEnabled,
+                onLongClick = { showRaceDialog = true },
+                onCheckedChange = onRaceMasterChange,
             )
+            if (showRaceDialog) {
+                RaceChannelDialog(
+                    masterEnabled = raceMasterEnabled,
+                    racePlugins = racePlugins,
+                    raceAppUpdate = raceAppUpdate,
+                    raceRuntime = raceRuntime,
+                    onChannelChange = onRaceChannelChange,
+                    onDismiss = { showRaceDialog = false },
+                )
+            }
         }
 
         // ───────── Web 界面打开方式 ─────────
@@ -2138,4 +2159,78 @@ private fun channelLabelRes(channel: String): Int = when (channel) {
     RuntimeVersion.CHANNEL_STABLE -> R.string.dsh_runtime_channel_stable
     RuntimeVersion.CHANNEL_BETA -> R.string.dsh_runtime_channel_beta
     else -> R.string.dsh_runtime_channel_archive
+}
+
+/**
+ * 竞速通道的通道勾选弹窗（长按卡片打开）。
+ *
+ * 勾中的通道走「先测速再下载」的竞速线路，没勾的一律直连；总开关关掉时这里所有勾选都不生效
+ * （所以关着时把整组置灰，免得用户以为勾了没用）。
+ */
+@Composable
+private fun RaceChannelDialog(
+    masterEnabled: Boolean,
+    racePlugins: Boolean,
+    raceAppUpdate: Boolean,
+    raceRuntime: Boolean,
+    onChannelChange: (String, Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val channels = listOf(
+        Triple(DshRuntime.RACE_PLUGINS, R.string.dsh_race_channel_plugins, racePlugins),
+        Triple(DshRuntime.RACE_APP_UPDATE, R.string.dsh_race_channel_app, raceAppUpdate),
+        Triple(DshRuntime.RACE_RUNTIME, R.string.dsh_race_channel_runtime, raceRuntime),
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dsh_race_dialog_title)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.dsh_race_dialog_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                channels.forEach { (id, labelRes, checked) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = checked,
+                                enabled = masterEnabled,
+                                role = Role.Checkbox,
+                                onClick = { onChannelChange(id, !checked) },
+                            )
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { onChannelChange(id, it) },
+                            enabled = masterEnabled,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(labelRes),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (masterEnabled) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                        )
+                    }
+                }
+                if (!masterEnabled) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_race_master_off_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+        },
+    )
 }

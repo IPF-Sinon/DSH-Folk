@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import me.bmax.apatch.dsh.DshDownloader
 import me.bmax.apatch.dsh.DshSource
+import me.bmax.apatch.dsh.DshRuntime
 
 /**
  * 应用内更新：多渠道测速 → 下载 → 校验 → 唤起系统安装器。
@@ -44,6 +45,13 @@ object AppUpdater {
     suspend fun speedTest(): List<DshSource.SpeedResult> = withContext(Dispatchers.IO) {
         DshSource.speedTest().sortedBy { it.estimatedMs }
     }
+
+    /**
+     * 竞速通道是否作用于「应用更新」（总开关 + 该通道分开关，见 [DshRuntime.raceEnabled]）。
+     *
+     * 关掉时不测速、不给渠道可选，直接走 GitHub 直连 —— 界面据此换按钮文案，并跳过 [speedTest]。
+     */
+    fun raceEnabled(): Boolean = DshRuntime.raceEnabled(DshRuntime.RACE_APP_UPDATE)
 
     /**
      * 下载并校验。
