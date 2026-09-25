@@ -90,6 +90,21 @@ must(/fun cachedCatalogRows\(/.test(repo) && /fun fetchCatalogAndCache\(/.test(r
 must(/cachedCatalogRows\(ctx\)[\s\S]{0,400}fetchCatalogAndCache\(ctx\)/.test(vm),
   'DshPluginViewModel.refresh 必须先渲染缓存、再拉真数据（顺序不能反）');
 
+// ── 测速的两条路径必须分开：自动要快，手动要全 ──
+must(/fun speedTest\(\s*\n?\s*probeAll: Boolean = false,/.test(source),
+  'speedTest 必须有 probeAll 开关（自动路径不为好看的表格多等十几秒，手动路径必须给全）');
+must(/\.take\(2\)\.map \{ it\.source \}\.toSet\(\)/.test(source),
+  '自动路径（probeAll=false）仍只给最快的两条测吞吐');
+must(/for \(r in reachable\) \{[\s\S]{0,220}probeSpeed\(proxyPrefix\(r\.source\) \+ probe\)/.test(source),
+  '手动路径必须对每条可达线路逐条测吞吐（不能并行：并行互相抢带宽，测出来的数全是错的）');
+must(/DshSource\.speedTest\(probeAll = true\)/.test(screen),
+  '弹窗的测速按钮必须走全量（probeAll = true）');
+must(/onProgress\?\.invoke\(acc\)/.test(source) && /lastResults = acc/.test(source),
+  '全量测速要逐条回调进度，并且中途就更新 lastResults（提前关窗也该留下结论）');
+must(/dsh_race_testing_progress/.test(settings),
+  '测速中要显示吞吐进度（全量十来秒，没进度像个死按钮）');
+
+
 if (errors.length) {
   console.error('check-race-channel FAILED:');
   for (const e of errors) console.error('  ✗ ' + e);

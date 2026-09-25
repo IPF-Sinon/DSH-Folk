@@ -2255,7 +2255,20 @@ private fun RaceChannelDialog(
                             )
                         )
                     }
-                    if (!speedTesting) {
+                    if (speedTesting) {
+                        // 进度就地报：手动测速是全量逐条测吞吐，没进度的话十来秒像个死按钮
+                        val measured = speedResults.count { it.speedKBps > 0.0 }
+                        val reachable = speedResults.count { it.reachable }
+                        Text(
+                            text = if (reachable > 0) {
+                                stringResource(R.string.dsh_race_testing_progress, measured, reachable)
+                            } else {
+                                stringResource(R.string.dsh_source_testing)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
                         Text(
                             text = stringResource(
                                 R.string.dsh_source_effective,

@@ -331,7 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>The runtime download source card is gone: the race channel now owns it. Long press the race channel card to pick the channels, then tick which mirror routes may be used (all ticked by default, shared by every channel) and run a speed test right there, with each route showing its own latency and throughput. Unticked routes are neither measured nor used, and ticking none falls back to GitHub direct. A custom metadata URL is available as one of the entries. Your previous fixed source choice is carried over into the new ticks instead of being reset.</item>
+        <item>The race dialog speed test now measures every selected route instead of only the two fastest: all latencies appear right away, then each route fills in its own throughput one after another, with progress shown on the button row. The automatic paths keep measuring only the two fastest, so installing a plugin or updating the runtime does not wait on extra probes.</item>
 </string-array>
 
     

@@ -629,6 +629,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_race_channel_app">App update</string>
     <string name="dsh_race_channel_runtime">Runtime update</string>
     <string name="dsh_race_master_off_hint">The master switch is off, so no channel races and everything connects directly.</string>
+    <string name="dsh_race_testing_progress">Testing throughput %1$d/%2$d</string>
     <string name="dsh_race_mirrors_title">Mirror routes</string>
     <string name="dsh_race_mirrors_hint">All selected by default. Unchecked routes are neither measured nor used; with none selected only GitHub direct is used.</string>
     <string name="dsh_race_custom_title">Custom source</string>

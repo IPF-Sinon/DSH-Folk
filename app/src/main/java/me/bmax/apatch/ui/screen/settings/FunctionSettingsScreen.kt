@@ -671,7 +671,13 @@ internal fun DshSettingsScreen(
                     onSpeedTest = {
                         speedTesting = true
                         scope.launch(Dispatchers.IO) {
-                            val results = runCatching { DshSource.speedTest() }.getOrDefault(emptyList())
+                            // 手动测速：全部线路都测吞吐，并且每条测完就回报一次（先延迟后吞吐，
+                            // 逐条填进弹窗里各自那一行），用户不用对着「测速中」干等十几秒
+                            val results = runCatching {
+                                DshSource.speedTest(probeAll = true) { partial ->
+                                    scope.launch(Dispatchers.Main.immediate) { speedResults = partial }
+                                }
+                            }.getOrDefault(emptyList())
                             val picked = runCatching {
                                 DshSource.pickBest(results, context.applicationContext)
                             }.getOrDefault(effectiveSource)

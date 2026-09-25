@@ -611,6 +611,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_race_channel_app">应用更新</string>
     <string name="dsh_race_channel_runtime">运行时更新</string>
     <string name="dsh_race_master_off_hint">总开关已关闭，所有通道都不走竞速、一律直连。</string>
+    <string name="dsh_race_testing_progress">吞吐测速 %1$d/%2$d</string>
     <string name="dsh_race_mirrors_title">镜像线路</string>
     <string name="dsh_race_mirrors_hint">默认全选。没勾选的线路既不测速也不使用；一条都不勾时只走直连 GitHub。</string>
     <string name="dsh_race_custom_title">自定义源</string>

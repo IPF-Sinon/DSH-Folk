@@ -547,8 +547,22 @@ object DshSource {
         }
     }
 
-    /** 三候选源全部测一遍（延迟 + 对最优两个测吞吐）。同步阻塞，调用方放 IO 线程。 */
-    fun speedTest(): List<SpeedResult> {
+    /**
+     * 所有候选源测一遍（延迟 + 吞吐）。同步阻塞，调用方放 IO 线程。
+     *
+     * @param probeAll 是否给**每条可达线路**都测吞吐。
+     *   自动路径（装插件 / 下载运行时）传 false：它只关心「谁最快」，给最快的两条测吞吐就够，
+     *   其余是陪跑 —— 而这条路径是**同步等待**的，不能为了一张好看的表格多等十几秒。
+     *   用户在竞速弹窗里手动点「测速」时传 true：那时候他要的就是每条线路的真实速度，
+     *   而且有进度回调兜着（先出全部延迟，再按延迟从快到慢逐条填吞吐）。
+     * @param onProgress 进度回调（可能在工作线程上被调用，UI 侧自己切主线程）：
+     *   probeAll 时先回调一次「只有延迟」的结果，之后每测完一条线路的吞吐再回调一次。
+     *   中途也会更新 [lastResults] —— 用户看两眼就关掉弹窗，结论也该留下。
+     */
+    fun speedTest(
+        probeAll: Boolean = false,
+        onProgress: ((List<SpeedResult>) -> Unit)? = null,
+    ): List<SpeedResult> {
         val meta = metaUrl()
         val probe = speedProbeUrl()
         // 候选＝每条镜像线路 + 直连 github（垫底）。清单从 MIRRORS 派生，加线路只改一处。
@@ -561,14 +575,25 @@ object DshSource {
             val (src, url) = candidates[i]
             SpeedResult(src, probeLatency(url))
         }
-        // 只在**可达**的源里挑最快的两个做吞吐测速：不可达的没有延迟可比，
-        // 把它塞进 top2 只会浪费一次注定失败的拉取。
-        val top = latency
-            .filter { it.reachable }
-            .sortedBy { it.latencyMs!! }
-            .take(2)
-            .map { it.source }
-            .toSet()
+        // 只在**可达**的源里挑：不可达的没有延迟可比，也没有吞吐可测（注定失败的拉取纯浪费时间）。
+        // 按延迟从快到慢排：手动全量测速时，最有用的那几条先出结果。
+        val reachable = latency.filter { it.reachable }.sortedBy { it.latencyMs!! }
+        if (probeAll) {
+            // 先把「只有延迟」的结果交出去，界面立刻满屏有数，不用干等吞吐
+            var acc = latency
+            lastResults = acc
+            lastResultsAt = System.currentTimeMillis()
+            onProgress?.invoke(acc)
+            for (r in reachable) {
+                val speed = probeSpeed(proxyPrefix(r.source) + probe)
+                acc = acc.map { if (it.source == r.source) it.copy(speedKBps = speed) else it }
+                lastResults = acc
+                lastResultsAt = System.currentTimeMillis()
+                onProgress?.invoke(acc)
+            }
+            return acc
+        }
+        val top = reachable.take(2).map { it.source }.toSet()
         val results = latency.map { r ->
             if (r.source !in top) r else r.copy(speedKBps = probeSpeed(proxyPrefix(r.source) + probe))
         }
