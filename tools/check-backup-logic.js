@@ -790,7 +790,9 @@ ok(/fun seedFallbackTgz\(pkg[^\n]*\)/.test(runtime) &&
     /ThemeManager\.exportTheme\(ctx, Uri\.fromFile\(out\), themeMetadata\(ctx\)\)/.test(backup) &&
     /ThemeIO\.measureThemeZip\(ctx, themeMetadata\(ctx\)\)/.test(backup),
     "导出与度量共用 themeMetadata（否则「显示的大小」与「打进包的大小」不是一个数）");
-  ok(/includeTheme = if \(body\.has\("includeTheme"\)\).*true/.test(cloud),
+  ok(/includesTheme = if \(body\.has\("includeTheme"\)\).*true/.test(cloud),
+    "调用处用 includesTheme=（ExportPlan 的形参名）：这里写成 JSON 字段名 includeTheme 会在编译期就报 No parameter with name");
+  ok(/includesTheme = if \(body\.has\("includeTheme"\)\).*true/.test(cloud),
     "补包导出读插件传来的 includeTheme（缺席按 true 兜底，兼容老插件）");
   ok(/fun themeInfo\(ctx: Context, force: Boolean\)/.test(cloud) &&
     /\.put\("defaultInclude", size <= 0L \|\| size <= limit\)/.test(cloud),

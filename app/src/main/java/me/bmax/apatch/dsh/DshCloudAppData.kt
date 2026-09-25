@@ -68,7 +68,8 @@ internal object DshCloudAppData {
             sessions = if (body.optBoolean("includeSessions", false)) SessionPick.ALL else SessionPick.NONE,
             password = if (encrypt) password else "",
             // 插件没带这个字段时按 true（老版本插件的行为就是含主题），带了就听它的。
-            includeTheme = if (body.has("includeTheme")) body.optBoolean("includeTheme", true) else true,
+            // 注意形参名是 includesTheme（ExportPlan 的字段名），JSON 字段才是 includeTheme。
+            includesTheme = if (body.has("includeTheme")) body.optBoolean("includeTheme", true) else true,
         )
         val result = runCatching {
             runBlocking { DshConfigBackup.exportArchive(ctx, plan) }
