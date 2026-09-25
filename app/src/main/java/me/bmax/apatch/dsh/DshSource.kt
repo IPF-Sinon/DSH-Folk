@@ -105,6 +105,14 @@ object DshSource {
     private const val SCORE_REF_BYTES = 100L * 1024 * 1024
 
     /**
+     * 并行延迟探测里，单个探测最多等多久。
+     *
+     * 比单次探测自身的 connect+read 超时略宽松（3s+3s）：并行只是把等待叠在一起，不该因为调度
+     * 抖动把本来能成的探测判死。真超时了 [probeAllInParallel] 会退回串行，不会变成「测不出来」。
+     */
+    private const val PROBE_POOL_TIMEOUT_MS = 12_000L
+
+    /**
      * 测速结果的复用窗口（与 [CACHE_TTL_MS] 那个 24h 的「自动源选择」缓存是两件事）。
      *
      * 24h 是给「下载 200MB 运行时」这种大件用的：结论稳定、重测代价高。而插件安装/更新是
