@@ -811,5 +811,25 @@ ok(/dsh_native_off_hint_kept">[^<]*%1\$d/.test(nativeZh) && /dsh_native_off_hint
 ok(/保留/.test(nativeZh),
   "说明里明确写了档位是保留而不是清空（否则用户会以为关掉就把配置丢了）");
 
+// ── 原生插件加载器：不许让它在无硬链接设备上走 materialize（link+unlink）──
+// 真机事故（dsh 0.1.7-rc.2 + r5 运行时 + proroot）：loader 把 .node 物化到 /tmp 缓存时用
+// link() 建目标、随后删掉源文件；容器里 link() 被 --link2symlink 改写，于是缓存里留下一个
+// 加载不了的符号链接（-> /.l2s/...tmp0001），dsh 启动即
+// "No usable native binding found for node-addon-require-builtin-linux-arm64-gnu"。
+// 这个开关必须放在 applyEnv（所有 exec 路径共用）里，而不是只加在 startServer 那一处。
+{
+  const runtime = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8");
+  const envFn = (runtime.match(/private fun applyEnv\(pb: ProcessBuilder\) \{[\s\S]*?\n    \}/) || [""])[0];
+  ok(envFn.length > 0, "找到 applyEnv（容器环境构造的唯一入口）");
+  ok(/env\["NARB_DISABLE_NATIVE_CACHE"\] = "1"/.test(envFn),
+    "applyEnv 里设了 NARB_DISABLE_NATIVE_CACHE=1（否则 loader 会走 link+unlink 物化，无硬链接设备上必挂）");
+  ok(/applyEnv\(pb\)/.test(runtime) || /applyEnv\(probe\)/.test(runtime),
+    "applyEnv 确实被各 exec 路径调用");
+  // 只设一次、别在别处重复设（重复意味着有人以为要按运行时分支）
+  // 只看**赋值**次数（注释里提到这个名字是正常的，别把文档算进去）
+  const assigns = (runtime.match(/env\["NARB_DISABLE_NATIVE_CACHE"\] = "1"/g) || []).length;
+  ok(assigns === 1, `NARB_DISABLE_NATIVE_CACHE 只赋值一次（实际 ${assigns} 次）：按运行时分支设两处只会漏掉一条 exec 路径`);
+}
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

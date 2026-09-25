@@ -331,7 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Cloud backup can now include your app theme: a switch under the scopes that contain app data shows the current theme archive size and is turned off by default when that archive exceeds 5 MB (a large theme would blow up the sync package). The theme archive is only measured and the switch only shown for scopes that include app data, and the default is computed automatically even on a fresh configuration. Requires cloud-backup plugin 0.5.0, which the app now seeds as the minimum version.</item>
+        <item>Fixed proroot failing to start after a runtime update: the native addon loader copied its binaries through a hard link and then deleted the source, which on devices without hard-link support left an unloadable symlink behind and killed startup with a native binding error. The container now loads those binaries in place; proot was already unaffected because its path translation happened to resolve the same link.</item>
 </string-array>
 
     

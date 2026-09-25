@@ -1333,6 +1333,27 @@ object DshRuntime {
             }
         }
         runCatching { rt.applyEnv(env, appContext.filesDir, libDir, DshEnv.tmpDir(appContext)) }
+        // 别让 dsh 的原生插件加载器把 .node 二进制「materialize」一遍。
+        //
+        // node-addon-native-custom-loader 的 materializedNativeBinaryPath() 是这么干的：
+        //   读源文件 → 写一份 temp → link(temp, destination) → 删掉 temp
+        // 在无硬链接设备上容器里的 link() 被 --link2symlink 改写，destination 于是成了符号链接
+        // （真身被挪进 rootfs/.l2s），temp 一删，那份链接就指向了加载不了的东西。真机实测
+        // （dsh 0.1.7-rc.2 + r5 运行时，proroot）：
+        //   /tmp/node-addon-native-custom-loader-0/native-cache/.../linux-arm64-gnu-napi-v9.node
+        //     -> /.l2s/.l2s..linux-arm64-gnu-napi-v9.node.<pid>.<hex>.tmp0001
+        // 内层报错是 "Invalid or unexpected token"（Node 把那个路径当 JS 解析了），外层表现为
+        // `No usable native binding found for node-addon-require-builtin-linux-arm64-gnu`，
+        // dsh 启动即失败。proot 因为路径翻译恰好还能解析同一个链接，所以只在 proroot 下暴露。
+        //
+        // 为什么以前不犯：materialize 只在缓存里**没有**这条记录时才做（命中且哈希一致就直接用）。
+        // 运行时更新会换掉整个 rootfs，而 rootfs/tmp 不在 DshEnv.PRESERVED_PATHS 里 —— 缓存一清空，
+        // 每次启动都要重来一遍这个链接把戏，于是稳定失败。
+        //
+        // 关掉缓存后加载器直接从包路径 require（真机实测 NARB_DISABLE_NATIVE_CACHE=1 可加载），
+        // 既没有 link/unlink、也没有那层链接间接；代价只是少一次到短路径的物化复制 ——
+        // 在 Linux 上本来也没有 Windows 那种路径长度/杀软扫描的理由。
+        env["NARB_DISABLE_NATIVE_CACHE"] = "1"
         // guest 侧环境：PATH 必须覆盖，否则继承 Android 的 /system/bin 找不到 bash 工具链
         env["HOME"] = "/root"
         env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
