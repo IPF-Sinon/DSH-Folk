@@ -272,7 +272,7 @@ object DshConfigBackup {
         val stage = File(ctx.getExternalFilesDir(null) ?: ctx.cacheDir, "config-backup").apply { mkdirs() }
         trace(
             ctx,
-            "start scope=" + plan.scope + " sessions=" + plan.sessions +
+            "start scope=" + plan.scope + " sessions=" + plan.sessionLimit +
                 " password=" + (if (plan.password.isEmpty()) "no" else "yes") +
                 " vault=" + plan.includesVault + " appdata=" + plan.includesAppData,
         )
@@ -1053,14 +1053,11 @@ object DshConfigBackup {
 
     /** 导入时会话怎么处理 —— 就是用户在弹窗里选的那一项。 */
     enum class SessionImport {
-        /** 只恢复配置，不动会话。 */
+        /** 只恢复配置，不动会话（会话计划项从交给插件的计划里剔除）。 */
         SKIP,
 
-        /** 在 dsh 运行中直接写入（重启 dsh 后生效）。 */
-        DIRECT,
-
-        /** 先停服务再写（推荐：写完之后不会被任何工作区操作盖掉）。 */
-        STOP,
+        /** 恢复会话：会话计划项保留，交给插件在 /execute 里写文件 + 改首帧 cwd + 归位 + 登记。 */
+        RESTORE,
     }
 
     /**
@@ -1676,9 +1673,9 @@ object DshConfigBackup {
      *        （它自己的「重试失败项」就是 `executeImportPlan(zip, {...plan, items: subset})`），
      *        所以这里直接过滤计划项，不需要插件额外配合。
      * @param password 加密备份的解锁密码
-     * @param sessions 包里带着会话时怎么办（[SessionImport]）：跳过、在 dsh 运行中直接
-     *        写入，还是先停服务再写。会话记录**必须由我们自己做**，原因见 [restoreSessionsFromZip]。
-     * @param onLine 阶段进度（上传/分析/计划/执行/会话/软件数据）。
+     * @param sessions 会话怎么办（[SessionImport]）：RESTORE = 保留在计划里交给插件恢复+归位，
+     *        SKIP = 从计划里剔除会话项。0.1.64 起会话由插件完整处理（写文件/改 cwd/归位/登记）。
+     * @param onLine 阶段进度（上传/分析/计划/执行/软件数据）。
      */
     suspend fun import(
         ctx: Context,
@@ -1688,7 +1685,7 @@ object DshConfigBackup {
         rollbackOnError: Boolean = true,
         excludedItems: Set<String> = emptySet(),
         password: String = "",
-        sessions: SessionImport = SessionImport.SKIP,
+        sessions: SessionImport = SessionImport.RESTORE,
         /**
          * [preflightImport] 的结果。给了就用它已上传好的路径与已解好的明文包，不再传第二遍
          * —— 冲突与会话的询问都发生在预检之后，大包不能被传两次。
@@ -1830,11 +1827,12 @@ object DshConfigBackup {
         val planErr = planObj.optString("error")
         if (planErr.isNotEmpty()) return@withContext ImportResult(false, planErr)
 
-        // 会话计划项一律从交给插件的计划里剔除：会话由 App 独占恢复 + 归组（见
-        // [restoreSessionsFromZip]）。判据是 adapter == "sessions"（结构化事实），不是靠猜
-        // id 前缀 —— 0.1.64 起插件的 execute 会**真的写会话文件并归位**，不剔除就会和 App
-        // 的会话恢复重复写、甚至把 App 归好的组又按插件那套覆盖一遍。老插件不执行会话，剔除
-        // 对它是空操作，所以一条路径覆盖所有版本。用户在预览页取消勾选的项一并按 id 剔除。
+        // 会话恢复交给插件（0.1.64 起 sessions 进了执行清单，SessionsAdapter 会真的写会话
+        // 文件、按 pathMappings 改首帧 cwd、用自带的 projectKeyOf 算目标目录并归位、收尾再用
+        // 官方 attachSession 登记 —— 连 App 根本算不出的目标 projectKey 哈希它都能算）。所以
+        // App 不再自己恢复/归组会话，只在**用户选择不恢复**时按 adapter == "sessions" 把会话
+        // 计划项剔除（结构化判据，不猜 id 前缀）。用户在预览页取消勾选的项一并按 id 剔除。
+        val dropSessions = sessions == SessionImport.SKIP
         run {
             val arr = planObj.optJSONArray("items")
             val before = arr?.length() ?: 0
@@ -1843,7 +1841,7 @@ object DshConfigBackup {
             var removedByUser = 0
             for (i in 0 until before) {
                 val item = arr?.optJSONObject(i) ?: continue
-                if (item.optString("adapter") == "sessions") {
+                if (dropSessions && item.optString("adapter") == "sessions") {
                     removedSessions++
                     continue
                 }
@@ -1881,12 +1879,16 @@ object DshConfigBackup {
             put("rollbackOnError", rollbackOnError)
             if (password.isNotEmpty()) put("decryptPassword", password)
         }
-        // 补建缺失的工作区目录：必须赶在插件 /execute 之前。插件写工作区记录时会对
-        // 路径 realpath，目录不存在就只留一条非致命警告（§34.17），而 App 的会话归组
-        // 随后按 workspace.json 匹配 cwd —— 目录没建起来，会话就只能落单
-        // （现场就是「会话归组：0/1 条进入工作区，1 条没有对应的工作区」）。
-        // 凭据能不能恢复，取决于包里有没有真凭据原文（导出时勾没勾「含 vault」）。
-        // 插件那句「不在本机 vault」说的是它的**本机镜像**，跨机必然缺 —— 两件事分开说。
+        // 补建缺失的工作区目录：必须赶在插件 /execute 之前。插件写工作区记录时会对路径
+        // realpath，目录不存在就只留一条非致命警告（§34.17）；插件随后归位会话时也按
+        // workspace.json 匹配 cwd —— 目录没建起来，会话就只能落单。
+        //
+        // 凭据现在**完全交给插件**：opts 里的 decryptPassword（上面）让插件自己解 secrets.enc、
+        // 把包里的凭据（含只在 refs 块里、未在 credentialsStatus 声明的那些）收成计划项并回填。
+        // 早先 App 还会自己解密再把值经 secretInputs 转交插件（老插件读不到 refs 块的兜底），
+        // 0.1.64 起这条已冗余（executeImportPlan 里 decryptedCredentials 优先于 secretInputs），
+        // 故删除，避免两处各解一遍同一个 secrets.enc。这里只保留一次只读扫描，用于结果页那句
+        // 「归档里带了 N 条凭据 / 只是占位」的说明 —— 那是读包告知，不参与写入。
         val secretsInfo = secretsInfoInZip(plainZip, password)
         trace(
             ctx,
@@ -1896,14 +1898,6 @@ object DshConfigBackup {
                 " decrypted=" + secretsInfo.decrypted +
                 " keys=" + secretsInfo.keys.size,
         )
-        // 把包里的凭据值直接交给插件（见 credentialRefs 的注释：插件自己只看 YAML 顶层项，
-        // 取不到 refs 块里这一段，于是「勾了含 vault 也照样让你重填」）。
-        if (secretsInfo.refs.isNotEmpty()) {
-            val inputs = JSONObject()
-            for ((k, v) in secretsInfo.refs) inputs.put(k, v)
-            opts.put("secretInputs", inputs)
-            trace(ctx, "import-secrets-handoff refs=" + secretsInfo.refs.keys.joinToString(","))
-        }
         var notesForDirs = ""
         // 诊断直通日志：这条链路一旦静默失效（判据写错时一个路径都读不到），报告里就只剩
         // 插件那条 ENOENT 警告，完全看不出「本来可以补建却没有」。回调不是 suspend
@@ -2054,56 +2048,10 @@ object DshConfigBackup {
         val needsRestart = execObj.optBoolean("needsRestart", planObj.optBoolean("needsRestart", false))
         val ok = execObj.optBoolean("ok", failed == 0) && rollback == null
 
-        // 会话记录必须在插件跑完之后再补：插件失败会整体回滚，先写会话就会留下
-        // 一堆没有对应配置的孤立会话。回滚发生时干脆不写。
-        var sessionNote = ""
-        if (sessions != SessionImport.SKIP && rollback == null) {
-            onLine(ctx.appString(R.string.dsh_bk_step_sessions))
-            val r = restoreSessionsFromZip(ctx, plainZip)
-            sessionNote = when {
-                r.restored > 0 -> ctx.appString(R.string.dsh_bk_sessions_restored, r.restored, r.skipped) +
-                    "\n" + ctx.appString(R.string.dsh_bk_sessions_foreign_workspace)
-                r.skipped > 0 -> ctx.appString(R.string.dsh_bk_sessions_all_present, r.skipped)
-                else -> ctx.appString(R.string.dsh_bk_sessions_none)
-            }
-            if (r.failed > 0) {
-                sessionNote += "\n" + ctx.appString(R.string.dsh_bk_sessions_failed, r.failed)
-            }
-            // 会话文件只是「放进去了」；dsh 的分组只在注册表首次 bootstrap 时做一次，
-            // 之后进来的会话一律显示「未分组」且 GUI 没有归组入口 —— 所以这里补上归组。
-            // 运行中改注册表也能生效（启动才读盘），但「改完之后、重启之前」任何一次
-            // workspace 域写都会把整份内存状态盖回盘，改动静默丢失 —— 停着改把这条归零。
-            if (r.paths.isNotEmpty()) {
-                onLine(ctx.appString(R.string.dsh_bk_group_stage, r.paths.size))
-                // 跨机基础路径重定基：备份 manifest 里的 sourceHome（导出机 DSH home）≠ 本机容器
-                // home（/root/.dsh）时，把它作为前缀重定基传给归组助手 —— 插件已按同一 sourceHome
-                // 对 workspace.path 做过重定基，会话首帧 cwd 也要跟着改，否则 cwd（源机）与
-                // workspace.path（已重定基）对不上，会话全落单。sourceHome 缺失（旧包）→ 空列表，
-                // 助手行为与今天完全一致（不猜）。
-                val rebases = manifestRebases(plainZip)
-                if (rebases.isNotEmpty()) {
-                    trace(ctx, "session-rebase " + rebases.joinToString(";") { it.first + "=>" + it.second })
-                }
-                val report = runCatching {
-                    // 「停机恢复」与「直接恢复」在这里分岔：两者都能生效（注册表启动才读盘），
-                    // 区别只在于直接恢复时，用户接下来若在 WebUI 里动工作区，这次归组可能被
-                    // dsh 的整份内存写回盖掉。所以推荐停机，但把选择权交给用户。
-                    if (sessions == SessionImport.STOP) {
-                        DshRuntime.withServiceStopped {
-                            DshSessionGroup.groupRestoredSessions(ctx, r.paths, rebases = rebases, onLine = onLine)
-                        }
-                    } else {
-                        DshSessionGroup.groupRestoredSessions(ctx, r.paths, rebases = rebases, onLine = onLine)
-                    }
-                }.getOrNull()
-                val group = report ?: DshSessionGroup.Report(
-                    failure = ctx.appString(R.string.dsh_bk_group_service_failed),
-                )
-                sessionNote += "\n" + group.summary(ctx)
-                val detail = group.details()
-                if (detail.isNotEmpty()) sessionNote += "\n" + detail
-            }
-        }
+        // 会话不再由 App 恢复/归组：0.1.64 起插件在 /execute 阶段完整处理会话（写文件 → 按
+        // pathMappings 改首帧 cwd → 用自带 projectKeyOf 算目标目录并归位 → attachSession 登记）。
+        // 用户选「恢复会话」时会话计划项已保留在交给插件的计划里，结果随其它计划项一起出现在
+        // 下面的 executed 汇总里；选「不恢复」时它们已在计划阶段被剔除。这里不再有 App 侧动作。
 
         // 软件数据：插件不认识它，一直由我们自己带、自己放回（见 [DshAppData]）。
         // 插件整体回滚时不动它：配置都没落地，先把设置写进去只会让本机处于一个
@@ -2155,7 +2103,6 @@ object DshConfigBackup {
         val detail = buildString {
             append(notes)
             if (appNote.isNotEmpty()) append("◧ ").append(appNote).append('\n')
-            if (sessionNote.isNotEmpty()) append("↺ ").append(sessionNote)
         }
         // 把导入前的软件设置挂到这次导入的回滚快照上（key 就是插件给的快照 id）。
         // 失败不打断导入：设置的回退点少一份，不该让整次导入失败。
@@ -2186,134 +2133,6 @@ object DshConfigBackup {
             privilegeSkipped = privilegeSkipped,
         )
     }
-
-    /** 容器内 DSH home（插件与 dsh 都用这个视角；rootfs/root/.dsh 的容器侧路径）。 */
-    private const val CONTAINER_DSH_HOME = "/root/.dsh"
-
-    /**
-     * 从备份 manifest 的 `sourceHome` 推出「导出机 home → 本机容器 home」的前缀重定基。
-     *
-     * 与 dsh-config-manager 0.1.64 的 `rebaseMapping` 同一判据：只在两侧都是**绝对路径**且
-     * **去尾分隔符后不相等**时生成一条；否则空列表（旧包没 sourceHome、或同机恢复 → 不重定基，
-     * 行为与改造前一致）。给会话归组助手用（[DshSessionGroup] 的 `--rebase`）。
-     */
-    private fun manifestRebases(plainZip: File): List<Pair<String, String>> {
-        val manifest = DshBackupArchive.readManifest(plainZip) ?: return emptyList()
-        val src = manifest.optString("sourceHome").trim()
-        if (src.isEmpty()) return emptyList()
-        fun strip(v: String) = v.replace('\\', '/').trimEnd('/')
-        fun isAbs(v: String) = v.startsWith("/") || Regex("^[a-zA-Z]:/").containsMatchIn(v)
-        val from = strip(src)
-        val to = strip(CONTAINER_DSH_HOME)
-        if (from.isEmpty() || to.isEmpty() || from == to) return emptyList()
-        if (!isAbs(from) || !isAbs(to)) return emptyList()
-        return listOf(from to to)
-    }
-
-    /** [restoreSessionsFromZip] 的结果计数。 */
-    data class SessionRestore(
-        val restored: Int,
-        val skipped: Int,
-        val failed: Int,
-        /**
-         * 本次真正落盘的文件（相对 sessions 根）。
-         *
-         * 归组助手只处理「这次恢复进来的」会话，所以必须把清单传给它 —— 让它去扫全树的话，
-         * 用户本来就故意留在「未分组」里的会话也会被它动。
-         */
-        val paths: List<String> = emptyList(),
-    )
-
-    /**
-     * 把备份包里的会话记录直接写进 `~/.dsh/sessions`。
-     *
-     * ## 为什么由 App 独占
-     *
-     * 历史原因：老版本 dsh-config-manager 的 `APPLY_ORDER` 不含 `sessions`，execute 会
-     * 把会话计划项**静默丢弃**（连 warning 都没有），所以会话只能我们自己恢复。
-     *
-     * 0.1.64 起这条已变：`sessions` 进了分区注册表（applyOrder 14），插件的 execute 会
-     * 真的写会话文件、按 `pathMappings` 改首帧 cwd 并归位、收尾再用官方 `attachSession`
-     * 登记。**但我们仍然独占会话**，且在 [import] 里按 `adapter == "sessions"` 把会话计划项
-     * 从交给插件的计划里剔除 —— 原因有二：① 插件的会话 execute 需要 dsh 运行时向它暴露一个
-     * 带 `readLogCwd`/`relocateDir`/`attachSession` 的会话 store，暴露不出来时它**静默
-     * 返回不写**（`store?.readLogCwd === undefined → return`），而 App 直接落盘一定成功；
-     * ② 两边都写会重复落盘、甚至把 App 归好的组按插件那套再覆盖一遍。所以由 App 独占是
-     * 「保证会话一定进得来」的稳妥选择，剔除对老插件是空操作、对新插件是必需。
-     *
-     * 而这件事我们自己做得到：会话就是纯文件
-     * （`~/.dsh/sessions/<projectKey>/<sessionId>/session.jsonl.zstd`），
-     * 而 `~/.dsh` 就在应用私有目录里（[DshEnv.dshHome]），直接落盘即可。
-     *
-     * ## 冲突与安全
-     *
-     * - 已存在的目标文件**跳过不覆盖**：会话日志是只追加的不可变流，同 id 即同会话，
-     *   覆盖只会丢掉本机更新的那部分。这也让重复导入天然幂等。
-     * - 逐段校验 ZIP 内路径（拒绝空段、`.`、`..`、绝对路径、反斜杠），再用
-     *   canonicalPath 二次确认落点仍在目标目录内 —— ZIP 是不可信输入，
-     *   `../` 条目能写到应用私有目录的任何地方。
-     * - 单个文件失败只计数，不中断整轮。
-     */
-    suspend fun restoreSessionsFromZip(ctx: Context, zip: File): SessionRestore =
-        withContext(Dispatchers.IO) {
-            val base = File(DshEnv.dshHome(ctx), "sessions")
-            if (!base.isDirectory && !base.mkdirs()) {
-                return@withContext SessionRestore(0, 0, 1)
-            }
-            val baseCanon = runCatching { base.canonicalPath }.getOrNull()
-                ?: return@withContext SessionRestore(0, 0, 1)
-            var restored = 0
-            var skipped = 0
-            var failed = 0
-            val written = mutableListOf<String>()
-            runCatching {
-                java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
-                    while (true) {
-                        val entry = zis.nextEntry ?: break
-                        val rel = safeSessionRel(entry.name)
-                        if (rel == null) {
-                            // 不是会话条目（别的分区/目录项）不算跳过；真正被拒的路径才计数
-                            if (entry.name.startsWith(SESSION_PREFIX) && !entry.isDirectory) skipped++
-                            zis.closeEntry()
-                            continue
-                        }
-                        // 会话目录里的 session.lock 是**运行时状态**（「这个会话正在被写」的
-                        // 标记），不是会话数据：跨机恢复一份别人的锁没有意义，而且后面的归组
-                        // 步骤会把它当成一个会话去解析 —— 0 字节解不出 zstd 帧，于是真机上出现
-                        // 「15 个会话文件里 6 个不可读」，还把 6 个锁文件挪出了 sessions 树。
-                        if (isSessionRuntimeState(rel)) {
-                            zis.closeEntry()
-                            continue
-                        }
-                        val dest = File(base, rel)
-                        val destCanon = runCatching { dest.canonicalPath }.getOrNull()
-                        if (destCanon == null || !destCanon.startsWith(baseCanon + File.separator)) {
-                            skipped++
-                            zis.closeEntry()
-                            continue
-                        }
-                        if (dest.exists()) {
-                            skipped++
-                            zis.closeEntry()
-                            continue
-                        }
-                        val wrote = runCatching {
-                            dest.parentFile?.mkdirs()
-                            dest.outputStream().use { out -> zis.copyTo(out) }
-                            true
-                        }.getOrDefault(false)
-                        if (wrote) {
-                            restored++
-                            written += rel
-                        } else {
-                            failed++
-                        }
-                        zis.closeEntry()
-                    }
-                }
-            }.onFailure { failed++ }
-            SessionRestore(restored, skipped, failed, written)
-        }
 
     /** 会话文件在导出 ZIP 内的目录前缀（插件 SECTION_FILE_PREFIXES.sessions）。 */
     private const val SESSION_PREFIX = "sessions/"

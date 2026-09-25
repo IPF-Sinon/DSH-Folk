@@ -65,7 +65,8 @@ internal object DshCloudAppData {
 
         val plan = ExportPlan(
             scope = scope,
-            sessions = if (body.optBoolean("includeSessions", false)) SessionPick.ALL else SessionPick.NONE,
+            // 云备份是「全量或不带」——插件那边只有 includeSessions 布尔开关，映射成 -1(全部)/0(不带)
+            sessionLimit = if (body.optBoolean("includeSessions", false)) -1 else 0,
             password = if (encrypt) password else "",
             // 插件没带这个字段时按 true（老版本插件的行为就是含主题），带了就听它的。
             // 注意形参名是 includesTheme（ExportPlan 的字段名），JSON 字段才是 includeTheme。

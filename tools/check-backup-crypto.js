@@ -198,29 +198,27 @@ ok(/DshBackupCrypto\.encryptArchiveChunkedToFile\(merged, finalFile, plan\.passw
 ok(!/DshConfigBackup\.sections\(/.test(exportBody), '旧的分区拼装入口不再被导出使用');
 
 /* --------------------------------------------------------- 6. 导入管线 */
-section('6. 导入管线：容器自己解、会话三模式、软件数据自己放回');
+section('6. 导入管线：容器自己解、会话交插件、软件数据自己放回');
 ok(/DshBackupCrypto\.isArchiveBlobFile\(zip\)/.test(backupKt), '先按 magic 判断是不是加密容器');
 ok(/DshBackupCrypto\.decryptArchiveToFile\(zip, plain, password\)/.test(backupKt), '由 App 侧解密');
 ok(!/decrypt-archive/.test(backupKt), '不再调用插件的 /decrypt-archive');
-ok(/enum class SessionImport/.test(backupKt), '会话三模式存在');
-ok(/if \(sessions == SessionImport\.STOP\)/.test(backupKt), '停机恢复与直接恢复在归组处分岔');
-ok(
-  /DshRuntime\.withServiceStopped \{\s*\n\s*DshSessionGroup\.groupRestoredSessions/.test(backupKt),
-  '停机模式仍然把归组包在 withServiceStopped 里',
-);
+ok(/enum class SessionImport/.test(backupKt), 'SessionImport 存在');
+// 会话恢复交给插件（0.1.64 起 sessions 进执行清单，自带 projectKeyOf 归位）：只剩两模式
+// RESTORE / SKIP，App 不再有 STOP/DIRECT 的写盘时机分岔，也不再自己归组。
+ok(!/SessionImport\.STOP/.test(backupKt) && !/SessionImport\.DIRECT/.test(backupKt),
+  'SessionImport 收成 RESTORE / SKIP（STOP / DIRECT 已退役）');
+ok(!/groupRestoredSessions/.test(backupKt) && !/restoreSessionsFromZip/.test(backupKt),
+  'App 不再自己恢复/归组会话（交给插件）');
 ok(/DshAppData\.apply\(ctx, data\)/.test(backupKt) && /DshAppData\.mergeAudit\(ctx, plainZip\)/.test(backupKt), '导入时恢复软件数据与审计记录');
 ok(/if \(!hasDshSections\(plainZip\)\)/.test(backupKt), '纯软件数据包短路（不去打扰插件）');
 ok(/if \(plainZip != zip\) plainZip\.delete\(\)/.test(backupKt), '解出来的明文中间产物用完即删（里面有凭据）');
 ok(/suspend fun countSessionsForPrompt\(/.test(backupKt), '有导入前的会话探测入口');
 ok(/fun countSessionsInZip\(/.test(backupKt), '有本地会话计数');
 
-/* ---------------------- 6b. 「跳过会话」只跳过会话，别的照常导入 ---------------------- */
+/* ---------------------- 6b. 「不恢复会话」只剔除会话计划项，别的照常导入 ---------------------- */
 
 /**
  * 取「从某个标记起的那个 {…} 块」的字符区间（大括号配对）。
- *
- * 用它才能断言「某段代码在不在这个守卫里面」—— 纯文本包含判断做不到这件事，而
- * 「跳过会话」一旦被写成在外面 return，用户在设备上看到的就是「选了跳过，整包都没导入」。
  */
 function braceSpan(src, marker) {
   const i = src.indexOf(marker);
@@ -238,18 +236,17 @@ function braceSpan(src, marker) {
   return null;
 }
 
-const sessionsSpan = braceSpan(backupKt, 'if (sessions != SessionImport.SKIP && rollback == null)');
-ok(sessionsSpan !== null, '会话写入仍然只由 sessions 模式守卫');
-if (sessionsSpan) {
-  const appDataAt = backupKt.indexOf('DshAppData.readFromZip(plainZip)', sessionsSpan[1]);
-  ok(appDataAt > sessionsSpan[1], '软件数据恢复在会话守卫**之外**（选跳过时它照样执行）');
+// 「不恢复会话」= 把会话计划项从交给插件的计划里剔除，而不是取消整包导入
+ok(/val dropSessions = sessions == SessionImport\.SKIP/.test(backupKt),
+  '「不恢复会话」门控在 dropSessions = sessions == SKIP 上');
+ok(/if \(dropSessions && item\.optString\("adapter"\) == "sessions"\)/.test(backupKt),
+  '只有 dropSessions 时才按 adapter == sessions 剔除会话计划项；否则会话保留给插件');
+{
   const execAt = backupKt.indexOf('"/execute"');
-  ok(execAt >= 0 && execAt < sessionsSpan[0], '插件的 analyze/plan/execute 在会话写入之前、且不受它守卫（跳过会话不影响配置导入）');
+  const appDataAt = backupKt.indexOf('DshAppData.readFromZip(plainZip)');
+  ok(execAt >= 0 && appDataAt >= 0,
+    '插件的 analyze/plan/execute 与软件数据恢复都不受会话选择守卫（不恢复会话不影响配置/软件数据导入）');
 }
-ok(
-  /sessions != SessionImport\.SKIP && rollback == null/.test(backupKt),
-  '跳过 = 不写会话，而不是不导入',
-);
 
 // 界面侧：只有探测到会话才弹框；三个选项（含跳过）都走同一条导入
 const screenSrc = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettingsScreen.kt');
@@ -264,12 +261,12 @@ if (decideSpan) {
   const body = wizardSrc.slice(decideSpan[0], decideSpan[1]);
   ok(/if \(sessions > 0\) \{/.test(body), '只有包里有会话才画「会话怎么处理」那一段');
   ok(/if \(conflicts\.isNotEmpty\(\)\) \{/.test(body), '只有检测到冲突才画冲突逐条决策那一段');
-  // 「跳过会话数据」必须仍然导入：决策步只是收集答案，真正的开跑在 wizardRun。
+  // 「不恢复会话」必须仍然导入其余内容：决策步只是收集答案，真正的开跑在 wizardRun。
   ok(/onSessionChoice\(DshConfigBackup\.SessionImport\.SKIP\)/.test(body),
-    '「跳过会话数据」是一个正常的选项，不是取消导入');
-  for (const mode of ['STOP', 'DIRECT', 'SKIP']) {
+    '「不恢复会话」是一个正常的选项，不是取消导入');
+  for (const mode of ['RESTORE', 'SKIP']) {
     ok(new RegExp('onSessionChoice\\(DshConfigBackup\\.SessionImport\\.' + mode + '\\)').test(body),
-      '三个会话选项共用一个回调：' + mode);
+      '两个会话选项共用一个回调：' + mode);
   }
 }
 ok(/sessions = sessionChoice\(\) \?: DshConfigBackup\.SessionImport\.SKIP/.test(wizardScreenSrc),
@@ -459,7 +456,7 @@ for (const f of uiFiles) {
   src = src.replace(/DshCloudBackup\.saveConfig\([\s\S]*?\n\s*\)/g, '');
   ok(!/includeSessions\s*=/.test(src), `${path.basename(f)} 里不再传旧的 includeSessions 导出开关`);
 }
-ok(/SessionImport\./.test(wizardScreenSrc), '导入界面接上了三模式');
+ok(/SessionImport\./.test(wizardScreenSrc), '导入界面接上了会话选择');
 ok(
   /ExportPlan\(/.test(uiFiles.map(read).join('\n')),
   '导出界面接上了 ExportPlan（内容层构造、屏幕层执行都算）',

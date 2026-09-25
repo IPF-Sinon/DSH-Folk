@@ -26,6 +26,8 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +42,6 @@ import me.bmax.apatch.dsh.DshBackupArchive
 import me.bmax.apatch.dsh.DshCloudBackup
 import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.dsh.ExportPlan
-import me.bmax.apatch.dsh.SessionPick
 import me.bmax.apatch.ui.theme.BackupConfig
 import me.bmax.apatch.util.BackupLogManager
 import androidx.compose.foundation.layout.size
@@ -70,17 +71,6 @@ private val SCOPE_OPTIONS = listOf(
     ScopeOption(BackupScope.DSH_VAULT, R.string.dsh_bk_scope_dsh_vault, R.string.dsh_bk_scope_dsh_vault_summary),
     ScopeOption(BackupScope.BOTH, R.string.dsh_bk_scope_both, R.string.dsh_bk_scope_both_summary),
     ScopeOption(BackupScope.BOTH_VAULT, R.string.dsh_bk_scope_vault, R.string.dsh_bk_scope_vault_summary),
-)
-
-/** 会话数量的五个档位（枚举顺序即滑块顺序，默认 NONE）。 */
-private data class SessionOption(val pick: SessionPick, val label: Int)
-
-private val SESSION_OPTIONS = listOf(
-    SessionOption(SessionPick.NONE, R.string.dsh_bk_sessions_pick_none),
-    SessionOption(SessionPick.P5, R.string.dsh_bk_sessions_pick_p5),
-    SessionOption(SessionPick.P20, R.string.dsh_bk_sessions_pick_p20),
-    SessionOption(SessionPick.P50, R.string.dsh_bk_sessions_pick_p50),
-    SessionOption(SessionPick.ALL, R.string.dsh_bk_sessions_pick_all),
 )
 
 /** 密码强度四档的文案资源（下标即档位）。 */
@@ -258,15 +248,14 @@ fun BackupSettingsContent(
     // 档位存索引而不是枚举：滑块拖动是连续值，Dialog 内用预览值（scopePreview），
     // 确认了才写回正式值（scopeIndex）—— 含 vault 那档还要先过一道警告框。
     var scopeIndex by rememberSaveable { mutableStateOf(3) } // 默认 BOTH（新增 DSH_VAULT 档后 BOTH 移到 index 3）
-    var sessionIndex by rememberSaveable { mutableStateOf(0) } // 默认 NONE
+    var sessionLimit by rememberSaveable { mutableStateOf(0) } // 默认 0 = 不带会话
     var showScopeDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var showSessionsDialog by remember { mutableStateOf(false) }
     var showVaultWarnDialog by remember { mutableStateOf(false) }
     var scopePreview by remember { mutableStateOf(2) }
-    var sessionPreview by remember { mutableStateOf(0) }
-    // 本机（设备上）的会话总数，给「共 N 个」用。文件遍历放 IO 做一次并缓存，
-    // 拿不到就干脆不显示 —— 不为它新造字符串。
+    var sessionPreview by remember { mutableStateOf("0") } // 数字输入框的编辑态（字符串，确认时再解析）
+    // 本机（设备上）的会话总数：既给「共 N 个」显示，也当数字输入的上限。文件遍历放 IO 做一次并缓存。
     var localSessionCount by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(Unit) {
         localSessionCount = withContext(Dispatchers.IO) {
@@ -276,8 +265,9 @@ fun BackupSettingsContent(
 
     val scopeOption = SCOPE_OPTIONS[scopeIndex.coerceIn(0, SCOPE_OPTIONS.lastIndex)]
     val currentScope = scopeOption.scope
-    val sessionOption = SESSION_OPTIONS[sessionIndex.coerceIn(0, SESSION_OPTIONS.lastIndex)]
-    val currentPick = sessionOption.pick
+    // 会话选择上限 = 本机真实会话数；数字超出会被夹到这个上限（避免「只有 3 个却选了几十」）。
+    val sessionMax = localSessionCount ?: 0
+    val currentSessionLimit = sessionLimit.coerceIn(0, sessionMax)
 
     SplicedColumnGroup(flat = flat, highlightKey = highlightKey) {
         // DSH 配置备份 —— 直接复用容器内 dsh-config-manager 的导出格式，保证与桌面端互通
@@ -867,7 +857,7 @@ fun BackupSettingsContent(
     if (showExportDialog) {
         val exportPlan = ExportPlan(
             scope = currentScope,
-            sessions = currentPick,
+            sessionLimit = currentSessionLimit,
             password = dshPassword,
         )
         AlertDialog(
@@ -919,14 +909,14 @@ fun BackupSettingsContent(
                             }
                         }
 
-                        // ── 导出内容：会话数量（仅软件数据的包里没有 DSH 会话，滑块不显示）──
+                        // ── 导出内容：会话数量（仅软件数据的包里没有 DSH 会话，不显示）──
                         if (currentScope != BackupScope.APP_ONLY) {
                             Spacer(Modifier.height(4.dp))
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable(enabled = !dshBusy) {
-                                        sessionPreview = sessionIndex
+                                        sessionPreview = currentSessionLimit.toString()
                                         showSessionsDialog = true
                                     }
                                     .padding(vertical = 10.dp),
@@ -940,7 +930,14 @@ fun BackupSettingsContent(
                                     )
                                     Spacer(Modifier.height(2.dp))
                                     Text(
-                                        text = stringResource(sessionOption.label),
+                                        text = when {
+                                            currentSessionLimit <= 0 ->
+                                                stringResource(R.string.dsh_bk_sessions_pick_none)
+                                            sessionMax > 0 && currentSessionLimit >= sessionMax ->
+                                                stringResource(R.string.dsh_bk_sessions_pick_all)
+                                            else ->
+                                                stringResource(R.string.dsh_bk_sessions_pick_recent, currentSessionLimit)
+                                        },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -1098,30 +1095,46 @@ fun BackupSettingsContent(
         )
     }
 
-    // ── 会话数量滑块 ──
+    // ── 会话数量：数字输入（上限 = 本机真实会话数）──
     if (showSessionsDialog) {
-        val preview = SESSION_OPTIONS[sessionPreview.coerceIn(0, SESSION_OPTIONS.lastIndex)]
+        val parsed = sessionPreview.toIntOrNull()?.coerceIn(0, sessionMax) ?: 0
         AlertDialog(
             onDismissRequest = { showSessionsDialog = false },
             title = { Text(stringResource(R.string.dsh_bk_sessions_title)) },
             text = {
                 Column {
                     Text(
-                        text = stringResource(preview.label),
+                        text = stringResource(R.string.dsh_bk_sessions_total, sessionMax),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Slider(
-                        value = sessionPreview.toFloat(),
-                        onValueChange = { sessionPreview = it.toInt() },
-                        valueRange = 0f..SESSION_OPTIONS.lastIndex.toFloat(),
-                        steps = SESSION_OPTIONS.lastIndex - 1,
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = sessionPreview,
+                        onValueChange = { input ->
+                            // 只留数字，且不超过本机会话上限 —— 上限对不上正是要修的那个尴尬
+                            val digits = input.filter { it.isDigit() }.take(6)
+                            val clamped = digits.toIntOrNull()?.coerceIn(0, sessionMax)
+                            sessionPreview = clamped?.toString() ?: ""
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        supportingText = {
+                            Text(
+                                text = when {
+                                    parsed <= 0 -> stringResource(R.string.dsh_bk_sessions_pick_none)
+                                    sessionMax > 0 && parsed >= sessionMax ->
+                                        stringResource(R.string.dsh_bk_sessions_pick_all)
+                                    else -> stringResource(R.string.dsh_bk_sessions_pick_recent, parsed)
+                                },
+                            )
+                        },
                     )
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     showSessionsDialog = false
-                    sessionIndex = sessionPreview.coerceIn(0, SESSION_OPTIONS.lastIndex)
+                    sessionLimit = sessionPreview.toIntOrNull()?.coerceIn(0, sessionMax) ?: 0
                 }) {
                     Text(stringResource(android.R.string.ok))
                 }

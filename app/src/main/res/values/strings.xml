@@ -331,8 +331,10 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>The plugin page toggle sometimes did not reflect enable/disable changes with no clear pattern: the switch now flips immediately, concurrent refreshes are no longer dropped (a read always follows a write), and refresh failures are shown instead of silently looking broken.</item>
-        <item>Backup restore aligns with the newer config manager: keys inside encrypted backups (including those not declared in the status list) are now actually restored, and cross-device restore relocates sessions to the matching local workspace by rebasing the backup source base path.</item>
+        <item>The plugin page toggle sometimes did not reflect enable/disable changes with no clear pattern: the switch now flips immediately, concurrent refreshes are no longer dropped (a read always follows a write), and refresh failures are shown.</item>
+        <item>Session restore is now fully handled by the config manager plugin: it writes, relocates by session-directory algorithm and registers sessions under the right workspace, so App no longer moves them itself and cross-device relocation is more accurate. The restore wizard session option is simplified to restore / do not restore.</item>
+        <item>Keys inside encrypted backups are now restored directly by the plugin (including those not declared in the status list); App no longer decrypts and hands them over a second time.</item>
+        <item>The export session count changed from fixed tiers to a number input whose upper bound matches the real local session count, so you no longer see a limit far above how many sessions exist.</item>
         <item>Preinstalled plugin upgrade list updated: config manager 0.1.64, dshmarket 1.65.1, dsh-web-mobile 3.0.3, upgraded automatically on startup.</item>
 </string-array>
 

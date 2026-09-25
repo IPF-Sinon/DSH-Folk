@@ -125,7 +125,6 @@ for (const key of [
   "dsh_bk_step_analyzing",
   "dsh_bk_step_planning",
   "dsh_bk_step_executing",
-  "dsh_bk_step_sessions",
 ]) {
   ok(backup.includes("R.string." + key), "导入进度含 " + key);
 }
@@ -486,7 +485,7 @@ const zh = fs.readFileSync('app/src/main/res/values-zh-rCN/dsh_strings.xml', 'ut
 ok(/导出时没勾「含 vault」/.test(zh) && /这是导出时的选择，不是导入出了错/.test(zh),
   "空占位那条解释清「不可恢复的原因在导出侧」，不让人以为导入坏了");
 
-console.log("─ 5i. 凭据值必须真的交回插件（refs 块在 YAML 里是嵌套的）");
+console.log("─ 5i. 凭据交给插件用 decryptPassword，App 不再自己经 secretInputs 转交（去重）");
 // 实测容器的 .credentials.yaml 形状：
 //   version: 1
 //   records:
@@ -494,24 +493,23 @@ console.log("─ 5i. 凭据值必须真的交回插件（refs 块在 YAML 里是
 //   refs:
 //     RJK66_API_KEY: sk-…
 //     DEEPSEEK_API_KEY: sk-…
-// 而插件收集凭据时只看**顶层字符串项**（Object.entries + typeof v === 'string'），
-// refs 是对象 → 整段跳过 → 「明明勾了含 vault、包里也有原文，导入时照样让你重填」。
-// 插件留的另一条通道：MissingSecret.applyItem 是
-//   ctx.secretInputs[ref] ?? decryptedCredentials?.get(ref) → credentials.set(ref, value)
-// 所以 App 必须把 refs 里的值经 opts.secretInputs 喂回去。
+// 老插件收集凭据只看**顶层字符串项**，读不到嵌套的 refs 块，所以 App 曾经自己解密再把值
+// 经 opts.secretInputs 喂回去。0.1.64（issue #45 修复）起插件认 decryptPassword：自己解
+// secrets.enc、把 refs 块里的凭据也收成 MissingSecret 计划项并回填，且 applyItem 里
+// decryptedCredentials 优先于 secretInputs。于是 App 的 secretInputs 转交纯属重复（两处
+// 各解一遍同一个 secrets.enc），本轮删除，凭据恢复完全交给插件。
+ok(/if \(password\.isNotEmpty\(\)\) put\("decryptPassword", password\)/.test(code(backup)),
+  "opts 里带 decryptPassword（已知密码时）—— 让插件自己解 secrets.enc 并回填凭据");
+ok(!/opts\.put\("secretInputs"/.test(code(backup)),
+  "App 不再经 opts.secretInputs 转交凭据值（decryptPassword 已覆盖，避免两处各解一遍）");
+ok(!/import-secrets-handoff/.test(backup),
+  "凭据转交的日志也一并删除（没有这条动作了）");
+// secretsInfoInZip 仍保留一次**只读**扫描，仅用于结果页那句「归档里带了 N 条凭据 / 只是占位」
 ok(/private fun credentialRefs\(yaml: String\): Map<String, String>/.test(backup),
-  "有 credentialRefs：从 YAML 里取出 ref → 值");
-ok(/block == REFS_BLOCK/.test(backup) && /private const val REFS_BLOCK = "refs"/.test(backup),
-  "认顶层 refs: 块（实测容器就是这么放的）");
-ok(/ENV_KEY\.matches\(key\)/.test(backup) && /\^\[A-Z\]\[A-Z0-9_\]\*\$/.test(backup),
-  "顶层标量只认 env 风格键名（version: 1 这类不混进来）");
-ok(/opts\.put\("secretInputs", inputs\)/.test(backup) &&
-  /for \(\(k, v\) in secretsInfo\.refs\) inputs\.put\(k, v\)/.test(backup),
-  "经 /execute 的 opts.secretInputs 交给插件（正是它 applyItem 认的那条路）");
-ok(/import-secrets-handoff refs=/.test(backup), "交接动作进日志");
+  "credentialRefs 仍在：结果页要按它数「归档里带了几条凭据」（只读告知，不参与写入）");
 ok(/val refs: Map<String, String> = emptyMap\(\)/.test(backup) &&
   /keys = refs\.keys\.toList\(\)/.test(backup),
-  "SecretsInfo 同时带出键与值");
+  "SecretsInfo 仍带出键（供告知用）");
 
 console.log("─ 5j. 插件没就绪时按钮不许可点（null 是「还不知道」，不是「允许」）");
 // 原来的判据是 `pluginReady != false`：检测中（null）会被放行，用户一进页面就能点导出，
@@ -717,8 +715,8 @@ ok(/val copied = runCatching \{ src\.copyTo\(target, overwrite = true\) \}\.isSu
   "不再丢弃 copyTo 的结果（原来 runCatching 的返回值没人看）");
 
 console.log("─ 7. 既有能力不许被这次改动碰坏");
-ok(/safeSessionRel\(entry\.name\)/.test(backup) && /canonicalPath/.test(backup),
-  "会话恢复的 ZIP 路径穿越校验还在");
+ok(/val rel = safeSessionRel\(e\.name\)/.test(backup) && /isSessionRuntimeState/.test(backup),
+  "会话条目的路径/运行时状态判定还在（countSessionsInZip 数会话、导出挑会话都靠它）");
 ok(/SESSION_PREFIX = "sessions\/"/.test(backup), "会话条目前缀判定还在");
 ok(/put\("includeSecrets", false\)/.test(backup), "导出仍然不带凭据");
 ok(/if \(Build\.VERSION\.SDK_INT <= Build\.VERSION_CODES\.R\)/.test(backup),
@@ -812,7 +810,6 @@ ok(/fun seedFallbackTgz\(pkg[^\n]*\)/.test(runtime) &&
 
 console.log("\n\u2500 对齐 dsh-config-manager 0.1.64：凭据/会话/跨机路径");
 {
-  const sessGroup = fs.readFileSync(SRC_SESSION_GROUP, "utf8");
   const codeBackup = code(backup);
   // 凭据：/analyze 与 /plan 在已知密码时必须带 decryptPassword，否则只存在于 secrets.enc、
   // 未被 credentialsStatus 声明的凭据不会进计划，导入时被静默丢掉（真机：导入密钥没生效）。
@@ -826,27 +823,30 @@ console.log("\n\u2500 对齐 dsh-config-manager 0.1.64：凭据/会话/跨机路
   ok(/if \(password\.isNotEmpty\(\)\) put\("decryptPassword", password\)/.test(codeBackup),
     "decryptPassword 必须条件式带上（不加密的包 password 为空，不能凭空塞空串）");
 
-  // 会话独占：会话计划项必须按 adapter == "sessions" 从交给插件的计划里剔除（结构化判据，
-  // 不是猜 id 前缀）——0.1.64 起插件 execute 会真的写会话，不剔除就双写/覆盖 App 归好的组。
-  ok(/item\.optString\("adapter"\) == "sessions"/.test(codeBackup),
-    "导入必须按 adapter == sessions 剔除会话计划项（App 独占会话恢复）");
+  // 会话归插件：会话恢复交给插件（0.1.64 起 sessions 进执行清单、自带 projectKeyOf 归位）。
+  // App 只在**用户选不恢复**（SessionImport.SKIP）时按 adapter == "sessions" 剔除会话计划项。
+  ok(/val dropSessions = sessions == SessionImport\.SKIP/.test(codeBackup),
+    "会话剔除必须门控在「用户选不恢复」上（dropSessions = sessions == SKIP）");
+  ok(/if \(dropSessions && item\.optString\("adapter"\) == "sessions"\)/.test(codeBackup),
+    "只有 dropSessions 时才按 adapter == sessions 剔除；否则会话保留在计划里交给插件");
+  ok(!/restoreSessionsFromZip/.test(backup),
+    "App 不再自己恢复会话（restoreSessionsFromZip 已删）—— 会话恢复交给插件");
+  ok(!/groupRestoredSessions/.test(backup),
+    "App 不再自己归组恢复的会话（groupRestoredSessions 已删）");
+  // SessionImport 收成两值：RESTORE / SKIP（去掉了 DIRECT / STOP 那套 App 侧写盘时机）
+  ok(/enum class SessionImport \{[\s\S]{0,200}RESTORE[\s\S]{0,80}SKIP|enum class SessionImport \{[\s\S]{0,200}SKIP[\s\S]{0,80}RESTORE/.test(backup) &&
+    !/SessionImport\.STOP|SessionImport\.DIRECT/.test(backup),
+    "SessionImport 收成 RESTORE / SKIP 两值（DIRECT / STOP 已随 App 独占会话退役）");
   ok(!/APPLY_ORDER[\s\S]{0,40}只有 12 个分区/.test(backup),
-    "KDoc 不得再断言「sessions 不在 APPLY_ORDER、被静默丢弃」——0.1.64 已把 sessions 纳入执行，" +
-    "留着过期结论会诱使后人删掉剔除逻辑");
+    "KDoc 不得再断言「sessions 不在 APPLY_ORDER、被静默丢弃」——0.1.64 已把 sessions 纳入执行");
 
-  // 跨机基础路径重定基：从 manifest.sourceHome 生成，判据是「绝对路径且不同」，传给归组脚本。
-  ok(/fun readManifest\(zip: File\): JSONObject\?/.test(archive),
-    "DshBackupArchive 缺 readManifest（跨机重定基要读 manifest.sourceHome）");
-  ok(/fun manifestRebases\(plainZip: File\)/.test(backup) &&
-    /optString\("sourceHome"\)/.test(codeBackup),
-    "DshConfigBackup 缺 manifestRebases（按 sourceHome 生成跨机重定基）");
-  ok(/from == to/.test(codeBackup) && /isAbs\(from\)/.test(codeBackup),
-    "manifestRebases 的判据必须是「绝对路径且去尾分隔符后不相等」（同机/旧包不重定基）");
-  ok(/groupRestoredSessions\(ctx, r\.paths, rebases = rebases/.test(codeBackup),
-    "归组调用没有把 sourceHome 重定基传下去（rebases = rebases）");
-  // 归组脚本侧：--rebase 是前缀（段边界）而不是精确匹配，且不误伤同前缀兄弟目录。
-  ok(/case "--rebase"/.test(sessGroup) && /startsWith\(from \+ "\/"\)/.test(sessGroup),
-    "dsh-session-group.cjs 的 --rebase 必须按段边界前缀匹配（from + / ）");
+  // 导出会话数量：任意整数（数字输入），不再是固定档位 SessionPick
+  ok(!/enum class SessionPick/.test(archive) && /val sessionLimit: Int/.test(archive),
+    "ExportPlan.sessionLimit 是整数（数字输入取代固定档位 SessionPick）");
+  ok(/fun pickSessions\(ctx: Context, limit: Int\)/.test(archive),
+    "pickSessions 按整数 limit 挑会话（0=不带 / -1=全部 / N=取前 N）");
+  ok(/coerceIn\(0, sessionMax\)/.test(fs.readFileSync('app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettings.kt', 'utf8')),
+    "导出面板把会话数字夹在 [0, 本机会话数] —— 上限对应真实会话数（不再出现『只有 3 个却能选几十』）");
 }
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);

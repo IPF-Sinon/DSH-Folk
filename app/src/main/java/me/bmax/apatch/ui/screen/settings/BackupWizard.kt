@@ -743,21 +743,14 @@ private fun WizardDecideStep(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
-            // 推荐项（停机恢复）放最上面：三种写法都能生效，区别只在「接下来若在 WebUI 里
-            // 动工作区，这次归组会不会被 dsh 的内存写回盖掉」。所以默认不选，但推荐摆第一。
+            // 会话恢复由插件完整处理（写文件 + 改首帧 cwd + 归位 + 登记），所以只剩两选：
+            // 恢复 / 不恢复。默认恢复。
             SessionChoiceRow(
-                title = stringResource(R.string.dsh_bk_sessions_ask_stop),
-                note = stringResource(R.string.dsh_bk_sessions_ask_stop_note),
+                title = stringResource(R.string.dsh_bk_sessions_ask_restore),
+                note = stringResource(R.string.dsh_bk_sessions_ask_restore_note),
                 recommended = true,
-                selected = sessionChoice == DshConfigBackup.SessionImport.STOP,
-                onClick = { onSessionChoice(DshConfigBackup.SessionImport.STOP) },
-            )
-            Spacer(Modifier.height(8.dp))
-            SessionChoiceRow(
-                title = stringResource(R.string.dsh_bk_sessions_ask_direct),
-                note = stringResource(R.string.dsh_bk_sessions_ask_direct_note),
-                selected = sessionChoice == DshConfigBackup.SessionImport.DIRECT,
-                onClick = { onSessionChoice(DshConfigBackup.SessionImport.DIRECT) },
+                selected = sessionChoice == DshConfigBackup.SessionImport.RESTORE,
+                onClick = { onSessionChoice(DshConfigBackup.SessionImport.RESTORE) },
             )
             Spacer(Modifier.height(8.dp))
             SessionChoiceRow(
@@ -926,8 +919,7 @@ private fun WizardConfirmStep(
                 stringResource(R.string.dsh_bk_wiz_sessions_value),
                 stringResource(
                     when (sessionChoice ?: DshConfigBackup.SessionImport.SKIP) {
-                        DshConfigBackup.SessionImport.STOP -> R.string.dsh_bk_wiz_sessions_stop
-                        DshConfigBackup.SessionImport.DIRECT -> R.string.dsh_bk_wiz_sessions_direct
+                        DshConfigBackup.SessionImport.RESTORE -> R.string.dsh_bk_wiz_sessions_restore
                         DshConfigBackup.SessionImport.SKIP -> R.string.dsh_bk_wiz_sessions_skip
                     },
                 ),

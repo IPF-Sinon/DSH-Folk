@@ -120,8 +120,8 @@ fun RestoreWizardScreen(
     var encrypted by rememberSaveable { mutableStateOf(stagedEncrypted) }
     var password by rememberSaveable { mutableStateOf("") }
     var showPassword by rememberSaveable { mutableStateOf(false) }
-    /** 会话处理方式（[DshConfigBackup.SessionImport] 的 name；null = 用户还没选）。 */
-    var session by rememberSaveable { mutableStateOf<String?>(null) }
+    /** 会话处理方式（[DshConfigBackup.SessionImport] 的 name）。默认恢复（用户 2026-09-26）。 */
+    var session by rememberSaveable { mutableStateOf<String?>(DshConfigBackup.SessionImport.RESTORE.name) }
     var strategy by rememberSaveable { mutableStateOf(DshConfigBackup.STRATEGY_MERGE) }
     var rollback by rememberSaveable { mutableStateOf(true) }
     /** 逐条冲突决策：计划项 id → keepCurrent / useImported（值就是插件协议值）。 */

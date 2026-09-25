@@ -1085,9 +1085,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_sessions_title">导出会话数量</string>
     <string name="dsh_bk_sessions_total">本机共 %1$d 个会话</string>
     <string name="dsh_bk_sessions_pick_none">不导出</string>
-    <string name="dsh_bk_sessions_pick_p5">最近 5 个</string>
-    <string name="dsh_bk_sessions_pick_p20">最近 20 个</string>
-    <string name="dsh_bk_sessions_pick_p50">最近 50 个</string>
+    <string name="dsh_bk_sessions_pick_recent">最近 %1$d 个</string>
     <string name="dsh_bk_sessions_pick_all">全部</string>
     <string name="dsh_bk_pw_title">加密密码</string>
     <string name="dsh_bk_pw_hint">留空则不加密</string>
@@ -1102,10 +1100,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_sessions_ask_message">这个归档里有 %1$d 个会话文件。</string>
     <string name="dsh_bk_sessions_ask_skip">跳过会话数据</string>
     <string name="dsh_bk_sessions_ask_skip_note">其余内容照常导入</string>
-    <string name="dsh_bk_sessions_ask_direct">直接恢复</string>
-    <string name="dsh_bk_sessions_ask_direct_note">在 dsh 运行中写入，重启 dsh 后可见</string>
-    <string name="dsh_bk_sessions_ask_stop">停机恢复</string>
-    <string name="dsh_bk_sessions_ask_stop_note">推荐：写完之后不会被任何操作覆盖</string>
+    <string name="dsh_bk_sessions_ask_restore">恢复会话</string>
+    <string name="dsh_bk_sessions_ask_restore_note">由插件写入、按 cwd 归位并登记到对应工作区</string>
     <string name="dsh_bk_appdata_restored">已恢复软件数据（%1$d 项）</string>
     <string name="dsh_bk_appdata_none">这个归档不含软件数据</string>
     <string name="dsh_bk_audit_merged">原生权限记录并入 %1$d 行</string>
@@ -1221,8 +1217,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_wiz_use_imported">用包里的</string>
     <string name="dsh_bk_wiz_confirm_hint">确认一下摘要再开始。开始之前会先留一个回滚点。</string>
     <string name="dsh_bk_wiz_sessions_value">会话</string>
-    <string name="dsh_bk_wiz_sessions_stop">先停服务再写</string>
-    <string name="dsh_bk_wiz_sessions_direct">运行中直接写</string>
+    <string name="dsh_bk_wiz_sessions_restore">恢复</string>
     <string name="dsh_bk_wiz_sessions_skip">跳过</string>
     <string name="dsh_bk_wiz_conflict_tally">%1$d 条保留本机、%2$d 条用包里的、%3$d 条按策略</string>
     <string name="dsh_bk_wiz_conflict_strategy">其余按哪个策略</string>

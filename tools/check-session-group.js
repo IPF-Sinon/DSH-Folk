@@ -359,48 +359,6 @@ console.log("─ 6. 未 bootstrap 的注册表：交给 dsh 自己归组，不�
   }
 }
 
-console.log("\u2500 6b. 跨机基础路径前缀重定基（--rebase）");
-{
-  const rroot = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-rebase-"));
-  const realR = (rel) => { const abs = path.join(rroot, rel); fs.mkdirSync(abs, { recursive: true }); return fs.realpathSync(abs); };
-  const wsHarness = realR("harness");
-  const sr = realR("sessions");
-  const stg = realR("storages");
-  const reg = path.join(stg, "workspace.json");
-  const hdrR = (id, cwd) => JSON.stringify({ id, cwd, delegationDepth: 0 }) + "\n";
-  // 锚点会话：cwd 就是本机 harness → 让 projectKeyFor(harness) 解析出本机 projectKey 目录 pkH
-  const anchorAbs = path.join(sr, "pkH/seg-anchor/session.jsonl.zstd");
-  fs.mkdirSync(path.dirname(anchorAbs), { recursive: true });
-  fs.writeFileSync(anchorAbs, Buffer.concat([frame(hdrR("s-anchor", wsHarness)), frame("a\n")]));
-  // 恢复进来的源机会话：cwd 是导出机路径，落在源机 projectKey 目录 pkOld/
-  const rel = "pkOld/seg-r/session.jsonl.zstd";
-  const abs = path.join(sr, rel);
-  fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, Buffer.concat([frame(hdrR("s-r", "/src/.dsh/harness")), frame("batch-r\n")]));
-  fs.writeFileSync(reg, JSON.stringify({
-    state: { initialized: true, workspaceIds: ["ws-h"], archivedSessionIds: [] },
-    workspaces: { "ws-h": { path: wsHarness, title: "harness", sessionIds: ["s-anchor"], createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z" } },
-  }, null, 2) + "\n");
-  const pf = path.join(rroot, "restored.txt");
-  fs.writeFileSync(pf, rel + "\n");
-  const runR = (extra) => {
-    const args = [HELPER, "--sessions-root", sr, "--registry", reg, "--paths-file", pf, ...extra];
-    let out = ""; try { out = execFileSync(process.execPath, args, { encoding: "utf8" }); } catch (e) { out = (e.stdout||"")+(e.stderr||""); }
-    const m = out.split("\n").find((l) => l.startsWith("DSH_GROUP_REPORT "));
-    return m ? JSON.parse(m.slice("DSH_GROUP_REPORT ".length)) : null;
-  };
-  const withRebase = runR(["--rebase", `/src/.dsh=${rroot}`, "--apply"]);
-  const doc = JSON.parse(fs.readFileSync(reg, "utf8"));
-  ok(withRebase && doc.workspaces["ws-h"].sessionIds.includes("s-r"), "--rebase 把源机会话按前缀重定基后归到 ws-h");
-  ok(withRebase && (withRebase.items || []).some((it) => it.id === "s-r" && it.how === "rebased"),
-    "归位方式标记为 rebased（走前缀重定基，而不是 basename 兜底推断）");
-  ok(withRebase && fs.existsSync(path.join(sr, "pkH/seg-r/session.jsonl.zstd")),
-    "会话文件从源机 projectKey 目录挪到本机 projectKey 目录（pkOld → pkH）");
-  const helperSrc = fs.readFileSync(HELPER, "utf8");
-  ok(/norm\.startsWith\(from \+ "\/"\)/.test(helperSrc), "rebaseCwd 只在段边界前缀匹配（不误伤同前缀兄弟目录）");
-  fs.rmSync(rroot, { recursive: true, force: true });
-}
-
 console.log("─ 7. 助手自身约定");
 {
   const src = fs.readFileSync(HELPER, "utf8");
@@ -546,47 +504,31 @@ console.log("─ 10. dsh 新格式的文件名（session.v3.jsonl.zstd）");
   ok(v3Header.id === "s-v" && v3Header.cwd === v3Ws, "header 已改写为目标工作区路径");
 }
 
-console.log("─ 8. App 侧接线（session 恢复后必须走停机 → 归组 → 起服务）");
+console.log("─ 8. App 侧接线（会话恢复归插件；DshSessionGroup 只剩存量整理）");
 {
   const backup = fs.readFileSync(SRC_DB, "utf8");
-  const runtime = fs.readFileSync(SRC_RT, "utf8");
   const group = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshSessionGroup.kt", "utf8");
   ok(/dsh-session-group\.cjs/.test(group), "DshSessionGroup 引用 assets 里的助手");
   ok(/DSH_GROUP_REPORT /.test(group), "App 按固定前缀解析助手报告");
   ok(/SESSIONS_ROOT = "\/root\/.dsh\/sessions"/.test(group) && /REGISTRY = "\/root\/.dsh\/storages\/workspace.json"/.test(group),
     "容器内路径与会话/注册表位置一致");
-  ok(/withServiceStopped/.test(backup), "DshConfigBackup 用「停服务时执行」包住归组");
-  ok(/DshSessionGroup\.groupRestoredSessions\(ctx, r\.paths/.test(backup), "只归组本次恢复的那些会话（r.paths）");
-  ok(
-    /data class SessionRestore\([\s\S]{0,500}val paths: List<String>/.test(backup),
-    "restoreSessionsFromZip 交出写盘清单",
-  );
-  ok(/withServiceStopped/.test(runtime), "DshRuntime 提供「停服务时执行」的原语");
-  ok(
-    /stopServer\(\)[\s\S]{0,400}startAndAwait\(\)/.test(runtime),
-    "该原语内部先停后起（异常也必须恢复服务）",
-  );
-  ok(/restoreSessionsFromZip/.test(backup), "会话落盘函数仍在（归组在它之后）");
-  // 恢复时不许把 session.lock 这类运行时文件带进来：它会被归组助手当成会话解析
-  // （0 字节解不出 zstd 帧），真机上正是「15 个会话文件里 6 个不可读」的来源
-  ok(/isSessionRuntimeState\(rel\)/.test(backup), "恢复会话时跳过运行时状态文件");
-  ok(
-    /private fun isSessionRuntimeState[\s\S]{0,400}?endsWith\("\.lock"\)[\s\S]{0,200}?endsWith\("\.tmp"\)/.test(backup),
-    "运行时状态文件判据覆盖 .lock 与 .tmp",
-  );
-  ok(
-    /isSessionRuntimeState\(rel\)[\s\S]{0,200}?zis\.closeEntry\(\)[\s\S]{0,80}?continue[\s\S]{0,400}?val dest = File\(base, rel\)/.test(backup),
-    "跳过发生在写盘之前（先判再写）",
-  );
+  // 会话恢复交给插件（0.1.64 起 sessions 进执行清单，自带 projectKeyOf 归位）：
+  // App 不再自己落盘/归组恢复的会话，这两个函数应当已删除。
+  ok(!/restoreSessionsFromZip/.test(backup),
+    "App 不再自己恢复会话（restoreSessionsFromZip 已删）");
+  ok(!/groupRestoredSessions/.test(group) && !/groupRestoredSessions/.test(backup),
+    "App 不再自己归组恢复的会话（groupRestoredSessions 已删）");
+  ok(!/--rebase/.test(group) && !/rebases/.test(group),
+    "会话归组脚本的跨机重定基（--rebase）已回退（跨机归位由插件的 projectKeyOf 负责）");
   // 报告里的明细必须带路径：真机上出现过 6 条没有文件名的「cannot parse the first zstd frame」
   ok(/optString\("path"\)\.ifEmpty \{ v\.optString\("from"\) \}/.test(group), "报告解析优先取 path/from");
   ok(/groupedSessions/.test(group) && /dsh_bk_group_files/.test(group), "摘要区分会话数与日志文件数");
 
-  // 归组回调必须是 suspend：DshConfigBackup.import 的 onLine 是 suspend 的，
-  // 少写一个 suspend 就是一次编译失败（beta run 34764596409 就是这么挂的）
+  // 归组回调必须是 suspend：少写一个 suspend 就是一次编译失败（beta run 34764596409 就是这么挂的）。
+  // 现在只剩一个公开入口（tidyAllSessions）+ 私有 run，共 2 处。
   ok(
-    (group.match(/onLine: suspend \(String\) -> Unit/g) || []).length === 3,
-    "两个公开入口 + 私有 run 的 onLine 都是 suspend 回调",
+    (group.match(/onLine: suspend \(String\) -> Unit/g) || []).length === 2,
+    "一个公开入口（tidyAllSessions）+ 私有 run 的 onLine 都是 suspend 回调",
   );
   ok(/pending \+= trimmed/.test(group), "助手输出先缓冲再发出（execRootfsStreaming 的回调不是挂起上下文）");
 

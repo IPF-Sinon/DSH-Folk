@@ -40,8 +40,7 @@
  *
  *   node dsh-session-group.cjs --sessions-root <dir> --registry <workspace.json>
  *        [--paths-file <file>]        # 本次恢复的会话相对路径（每行一个）；省略=扫全树
- *        [--map <cwd>=<targetPath>]...  # 源设备 cwd → 本机工作区路径（精确匹配单条 cwd）
- *        [--rebase <oldHome>=<newHome>]...  # 基础路径前缀重定基（段边界匹配，可多条）
+ *        [--map <cwd>=<targetPath>]...  # 源设备 cwd → 本机工作区路径
  *        [--apply]                    # 不加则只出计划，不写盘
  *
  * 退出码：0 成功（含「无需要归组的」）；1 参数/环境错误；2 应用后自校验失败并已回滚。
@@ -70,7 +69,7 @@ const ZSTD_MAGIC = 0xfd2fb528;
 /* ────────────────────────────── 参数 ────────────────────────────── */
 
 function parseArgs(argv) {
-  const out = { maps: [], rebases: [], apply: false };
+  const out = { maps: [], apply: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     switch (a) {
@@ -78,7 +77,6 @@ function parseArgs(argv) {
       case "--registry": out.registry = argv[++i]; break;
       case "--paths-file": out.pathsFile = argv[++i]; break;
       case "--map": out.maps.push(argv[++i]); break;
-      case "--rebase": out.rebases.push(argv[++i]); break;
       case "--apply": out.apply = true; break;
       default:
         if (a.startsWith("--")) throw new Error(`unknown option ${a}`);
@@ -446,31 +444,6 @@ async function main() {
     if (eq > 0) maps.set(m.slice(0, eq), m.slice(eq + 1));
   }
 
-  // 基础路径前缀重定基（与 dsh-config-manager 0.1.64 的 rebaseMapping 同一口径）：
-  // 导出机 DSH home ≠ 本机时，把落在导出机基础路径之下的会话 cwd 换成「本机基础路径 + 同一
-  // 后缀」。插件已对结构化分区（workspaces.path 等）做了同样的重定基，会话首帧 cwd 也必须跟着
-  // 改，否则归组时 cwd（源机）与 workspace.path（已重定基）对不上，会话全落单。
-  // 只在段边界匹配（/opt/.dsh 不误伤 /opt/.dsh-extra），两侧都去尾部分隔符。
-  const rebases = [];
-  for (const r of args.rebases) {
-    const eq = r.lastIndexOf("=");
-    if (eq <= 0) continue;
-    const strip = (v) => v.replace(/\\/g, "/").replace(/\/+$/, "");
-    const from = strip(r.slice(0, eq));
-    const to = strip(r.slice(eq + 1));
-    if (from && to && from !== to) rebases.push({ from, to });
-  }
-  // cwd 命中某条 rebase 前缀 → 返回重定基后的路径；都不命中返回原值。
-  const rebaseCwd = (cwd) => {
-    if (typeof cwd !== "string" || cwd === "") return cwd;
-    const norm = cwd.replace(/\\/g, "/");
-    for (const { from, to } of rebases) {
-      if (norm === from) return to;
-      if (norm.startsWith(from + "/")) return to + norm.slice(from.length);
-    }
-    return cwd;
-  };
-
   const pathToId = new Map();
   const baselineIds = new Map(); // basename -> [workspaceId]
   for (const [id, rec] of Object.entries(table)) {
@@ -558,23 +531,6 @@ async function main() {
           targetId = pathToId.get(c);
           targetPath = c;
           how = "mapped";
-        }
-      }
-      // 基础路径前缀重定基：源机 cwd 落在导出机 DSH home 之下时，换成本机 home + 同后缀，
-      // 再与本机工作区路径比一遍（插件已对 workspace.path 做过同样重定基，两边这才对得上）。
-      if (targetId === null && rebases.length) {
-        const rebased = rebaseCwd(cwd);
-        if (rebased !== cwd) {
-          const c = canonical(rebased);
-          if (c !== null && pathToId.has(c)) {
-            targetId = pathToId.get(c);
-            targetPath = c;
-            how = "rebased";
-          } else if (pathToId.has(rebased)) {
-            targetId = pathToId.get(rebased);
-            targetPath = rebased;
-            how = "rebased";
-          }
         }
       }
       if (targetId === null) {

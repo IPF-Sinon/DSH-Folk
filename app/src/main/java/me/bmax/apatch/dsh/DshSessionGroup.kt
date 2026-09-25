@@ -140,34 +140,11 @@ object DshSessionGroup {
     }
 
     /**
-     * 归组本次恢复的会话。
-     *
-     * @param relPaths 本次写进 sessions 树的会话相对路径（相对 sessions 根），来自
-     *   [DshConfigBackup.restoreSessionsFromZip]；空列表直接返回，避免白跑一次容器。
-     * @param maps 源设备 cwd → 本机工作区路径 的显式映射（精确匹配单条 cwd；跨设备迁移时用）
-     * @param rebases 基础路径前缀重定基 oldHome → newHome（段边界匹配）：导出机 DSH home ≠
-     *   本机时用，把落在导出机基础路径之下的会话 cwd 换成本机路径（与插件对结构化分区做的
-     *   重定基同一口径）。来自 [DshBackupArchive.readManifest] 的 sourceHome。
-     * @param onLine 助手输出的行进界面日志（在 IO 线程回调）
-     */
-    suspend fun groupRestoredSessions(
-        ctx: Context,
-        relPaths: List<String>,
-        maps: List<Pair<String, String>> = emptyList(),
-        rebases: List<Pair<String, String>> = emptyList(),
-        onLine: suspend (String) -> Unit = {},
-    ): Report = withContext(Dispatchers.IO) {
-        if (relPaths.isEmpty()) return@withContext Report(ok = true, skipped = "no sessions restored")
-        run(ctx, relPaths, maps, rebases, onLine)
-    }
-
-    /**
      * 把树上**所有**还没归属的会话归回工作区。
      *
-     * 为什么要单独开一个入口：归组原先只发生在「导入会话」那一刻，而
-     * [DshConfigBackup.restoreSessionsFromZip] 遇到已存在的文件是**跳过**的。
-     * 于是旧版本导入过的那批会话（正是「全是未分组」的那批）再导入多少次都不会被
-     * 重新处理 —— 用户需要一个能主动整理的动作，而不是删掉文件重导。
+     * 为什么要有这个入口：会话恢复本身已交给插件（导入时插件会写文件+归位+登记），但
+     * 历史上（旧插件时代）App 自己写进来、又没归组的那批会话仍留在「未分组」里。用户需要
+     * 一个能主动整理存量的动作，而不是删掉文件重导 —— 这是面向存量的维护工具。
      *
      * 注意这是全树扫描：用户故意留在「未分组」里的会话也会被按 cwd 归回它所属的工作区。
      * 想看清单可以先不写盘（助手支持预览），这里直接执行并在结果里逐条列出。
@@ -175,16 +152,14 @@ object DshSessionGroup {
     suspend fun tidyAllSessions(
         ctx: Context,
         maps: List<Pair<String, String>> = emptyList(),
-        rebases: List<Pair<String, String>> = emptyList(),
         onLine: suspend (String) -> Unit = {},
-    ): Report = withContext(Dispatchers.IO) { run(ctx, null, maps, rebases, onLine) }
+    ): Report = withContext(Dispatchers.IO) { run(ctx, null, maps, onLine) }
 
     /** 跑一次助手；[relPaths] 为 null 表示扫全树。 */
     private suspend fun run(
         ctx: Context,
         relPaths: List<String>?,
         maps: List<Pair<String, String>>,
-        rebases: List<Pair<String, String>>,
         onLine: suspend (String) -> Unit,
     ): Report = withContext(Dispatchers.IO) {
         val tmpDir = DshEnv.tmpDir(ctx).apply { mkdirs() }
@@ -199,9 +174,6 @@ object DshSessionGroup {
             val mapArgs = maps
                 .filter { it.first.isNotBlank() && it.second.isNotBlank() }
                 .joinToString("") { " --map " + shellQuoted("${it.first}=${it.second}") }
-            val rebaseArgs = rebases
-                .filter { it.first.isNotBlank() && it.second.isNotBlank() && it.first != it.second }
-                .joinToString("") { " --rebase " + shellQuoted("${it.first}=${it.second}") }
             val cmd = buildString {
                 append("node /tmp/").append(ASSET)
                 append(" --sessions-root ").append(shellQuoted(SESSIONS_ROOT))
@@ -209,7 +181,6 @@ object DshSessionGroup {
                 // 不给 --paths-file 就是扫全树（助手侧据此决定处理范围）
                 if (relPaths != null) append(" --paths-file /tmp/").append(listFile.name)
                 append(mapArgs)
-                append(rebaseArgs)
                 append(" --apply 2>&1")
             }
 

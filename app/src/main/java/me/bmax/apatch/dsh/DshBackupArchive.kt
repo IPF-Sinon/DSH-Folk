@@ -40,14 +40,6 @@ enum class BackupScope {
  * [limit] 为 -1 表示全部。会话是备份里最大的一块（真机上 6 个会话就 300 KB 起），
  * 而「只要最近几个」是最常见的诉求，所以它值得一个滑块而不是开关。
  */
-enum class SessionPick(val limit: Int) {
-    NONE(0),
-    P5(5),
-    P20(20),
-    P50(50),
-    ALL(-1),
-}
-
 /**
  * 一次导出用户选了什么。
  *
@@ -57,7 +49,14 @@ enum class SessionPick(val limit: Int) {
  */
 data class ExportPlan(
     val scope: BackupScope = BackupScope.BOTH,
-    val sessions: SessionPick = SessionPick.NONE,
+    /**
+     * 带走多少个会话：0 = 不带，-1 = 全部，N(>0) = 按最近活动排序取前 N 个。
+     *
+     * 从「五个固定档位（SessionPick）」改成任意整数（用户 2026-09-26）：真机上常见「只有 3 个
+     * 会话、滑块却能拖到几十」这种上限对不上的尴尬。导出面板改用数字输入，上限 = 本机真实
+     * 会话数（[DshBackupArchive.sessionCount]）。
+     */
+    val sessionLimit: Int = 0,
     val password: String = "",
     /**
      * 含软件数据的档位里，是否把**外观主题包**（[DshBackupArchive.THEME]，即 theme.zip）也打进去。
@@ -167,24 +166,6 @@ object DshBackupArchive {
     fun pluginSections(): List<String> = DshConfigBackup.DEFAULT_SECTIONS
 
     /**
-     * 读归档里的 `manifest.json`（读不到返回 null）。
-     *
-     * 只读这一个条目（几十 KB），不整包流 —— 预检与导入都在大包上跑，多流一遍没有道理。
-     * 用途是跨机恢复的**基础路径重定基**：上游 0.1.64 起 manifest 会带 `sourceHome`
-     * （导出机的 DSH home），我们据此同时给插件的 pathMappings 与自己的会话归组脚本
-     * 一套映射（见 [DshConfigBackup]），把备份里那些「导出机绝对路径」改成本机路径。
-     * 旧包没有这个字段 → 返回的 JSONObject 里也没有，调用方**不猜**、保持原样导入。
-     */
-    fun readManifest(zip: File): JSONObject? = runCatching {
-        java.util.zip.ZipFile(zip).use { zf ->
-            val e = zf.getEntry(MANIFEST) ?: return@use null
-            zf.getInputStream(e).use { input ->
-                JSONObject(input.readBytes().toString(Charsets.UTF_8))
-            }
-        }
-    }.getOrNull()
-
-    /**
      * 取某个条目的长度（不存在返回 -1）。
      *
      * 走 `ZipFile`（只读中央目录），**不读条目内容**：预检时一个带会话的包可能上百兆，
@@ -270,8 +251,8 @@ object DshBackupArchive {
     /**
      * 会话根目录（容器里的 `~/.dsh/sessions` 在设备上的落点）。
      *
-     * 与 [DshConfigBackup.restoreSessionsFromZip] 用的是同一个根：App 直接读写这份树，
-     * 不经过插件的 HTTP 接口 —— 插件只负责「DSH 配置分区」那一半。
+     * 导出侧按它挑会话进包（[pickSessions]）；存量整理（[DshSessionGroup.tidyAllSessions]）也
+     * 读它。会话的**恢复**已交给插件，App 不再直接往这份树里写。
      */
     fun sessionsRoot(ctx: Context): File = File(DshEnv.dshHome(ctx), "sessions")
 
@@ -286,8 +267,8 @@ object DshBackupArchive {
      * `session.v3.jsonl.zstd` 两份（dsh 升格式时留下的），只挑其中一份会让恢复后的会话
      * 缺一半历史。所以选中一个目录就把它的日志全部带走。
      */
-    fun pickSessions(ctx: Context, pick: SessionPick): List<File> {
-        if (pick.limit == 0) return emptyList()
+    fun pickSessions(ctx: Context, limit: Int): List<File> {
+        if (limit == 0) return emptyList()
         val root = sessionsRoot(ctx)
         val dirs = root.listFiles()?.filter { it.isDirectory }?.flatMap { project ->
             project.listFiles()?.filter { it.isDirectory }?.toList() ?: emptyList()
@@ -296,11 +277,11 @@ object DshBackupArchive {
             val files = payloads(dir)
             if (files.isEmpty()) null else dir to files.maxOf { it.lastModified() }
         }.sortedByDescending { it.second }
-        return if (pick.limit < 0) withTime.map { it.first } else withTime.take(pick.limit).map { it.first }
+        return if (limit < 0) withTime.map { it.first } else withTime.take(limit).map { it.first }
     }
 
-    /** 会话树里一共有多少个会话（界面上显示「最近 N 个 / 共 M 个」用）。 */
-    fun sessionCount(ctx: Context): Int = pickSessions(ctx, SessionPick.ALL).size
+    /** 会话树里一共有多少个会话（界面上显示「最近 N 个 / 共 M 个」、数字输入上限用）。 */
+    fun sessionCount(ctx: Context): Int = pickSessions(ctx, -1).size
 
     /**
      * 组装备份包。
@@ -327,7 +308,7 @@ object DshBackupArchive {
         onNote: (String) -> Unit = {},
     ): MergeStats {
         require(plan.valid) { "含 vault 的备份必须设置密码" }
-        val sessionDirs = if (plan.includesDsh) pickSessions(ctx, plan.sessions) else emptyList()
+        val sessionDirs = if (plan.includesDsh) pickSessions(ctx, plan.sessionLimit) else emptyList()
         val sessionFiles = sessionDirs.flatMap { payloads(it) }
         var stats = MergeStats(sessions = sessionDirs.size, sessionFiles = sessionFiles.size)
 
