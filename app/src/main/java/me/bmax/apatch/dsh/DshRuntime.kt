@@ -1703,9 +1703,13 @@ object DshRuntime {
      * 那几个包的构建脚本并重试（范围仅限 pnpm 点名的，不是全局开关）。返回最终退出码。
      */
     private suspend fun installSeedPkgWithApproval(pkg: String): Int {
+        // 显式 `@latest`：预装包门禁（[applySeedVersionUpgrade]）就是靠这次重装把版本顶上去的，
+        // 而 pnpm 对已声明过的 registry 依赖，`add <裸包名>` 是空操作 → 门禁会静默失效。
+        // git 规格（dsh-folk-cloud）由 DshPluginRepo.install 忽略版本、按裸规格重新解析最新提交。
         var out = runCatching {
             DshPluginRepo.install(
                 seedSpec(pkg),
+                DshPluginRepo.VERSION_LATEST,
                 onLine = { line -> appendLog(line) },
                 fallbackTgz = seedFallbackTgz(pkg),
             )
@@ -1718,6 +1722,7 @@ object DshRuntime {
                 out = runCatching {
                     DshPluginRepo.install(
                         seedSpec(pkg),
+                        DshPluginRepo.VERSION_LATEST,
                         onLine = { line -> appendLog(line) },
                         allowBuilds = pending,
                         fallbackTgz = seedFallbackTgz(pkg),

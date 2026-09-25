@@ -331,7 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed: after updating the container runtime, installing or updating plugins failed with a git TLS error (server certificate verification failed, CAfile: none). Cause: the runtime rootfs ships no CA bundle, so git over https relied on a CA config the app wrote to the container git config, and a runtime update wipes that config while the certificate file survives. The app now re-applies the git CA on every start, and the runtime now bakes the CA bundle into the rootfs, so plugin installs over https keep working across runtime updates.</item>
+        <item>Fixed: the plugin page update button reported success but the version never changed. Cause: adding an already-declared npm dependency by bare name is a no-op in pnpm, and the declared ranges were carets, so a major release could never be reached. Update now installs the package explicitly at its latest version and rewrites the range, which also lets major upgrades through. The same fix makes the bundled-plugin minimum-version gate actually upgrade npm packages.</item>
 </string-array>
 
     

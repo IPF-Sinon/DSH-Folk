@@ -296,7 +296,7 @@ private fun DshPluginList(
             plugin = p,
             onDismiss = { detail = null },
             onInstall = { viewModel.install(p.pkg) },
-            onUpdate = { viewModel.install(p.pkg) },
+            onUpdate = { viewModel.update(p.pkg) },
             onUninstall = { viewModel.uninstall(p.pkg) },
             onToggle = { viewModel.setDisabled(p.pkg, !p.disabled) },
             onOpenRepo = { openPluginRepo(context, p) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },
@@ -341,7 +341,7 @@ private fun DshPluginList(
             DshPluginItem(
                 plugin = plugin,
                 showMoreInfo = viewModel.showMoreInfo,
-                onUpdate = { viewModel.install(plugin.pkg) },
+                onUpdate = { viewModel.update(plugin.pkg) },
                 onUninstall = { viewModel.uninstall(plugin.pkg) },
                 onToggle = { viewModel.setDisabled(plugin.pkg, !plugin.disabled) },
                 onOpenDetail = { detail = plugin },

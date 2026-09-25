@@ -104,6 +104,7 @@ jobs:
           node tools/check-backup-crypto.js
           node tools/check-wizard-gate.js
           node tools/check-cookie-samesite.js
+          node tools/check-plugin-update.js
           node tools/check-imports.js $(find app/src/main/java -name "*.kt")
 
       # 与 build.yml 的 release job 同一套校验：缺任何一项就硬失败。

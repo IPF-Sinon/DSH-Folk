@@ -301,6 +301,18 @@ class DshPluginViewModel : ViewModel() {
         )
     }
 
+    /**
+     * 插件页「更新」：显式取 npm 最新版（[DshPluginRepo.VERSION_LATEST]）。
+     *
+     * 不能走 [install] 的裸包名：pnpm 对**已声明过**的 registry 依赖，`add <裸包名>` 是空操作
+     * （实测打印 "Already up to date"，版本与声明范围都不动）——真机「点更新→日志正常→版本不变」
+     * 就是这个原因；显式 `@latest` 才会重新解析并改写范围（顺带越过 `^2.4.1` 这类 caret 天花板，
+     * 3.0.0 这种 major 升级才进得来）。git 规格的裸规格本来就会重新解析到最新提交，[install] 会
+     * 原样保留。
+     */
+    fun update(pkg: String, onDone: (String) -> Unit = {}) =
+        install(pkg, DshPluginRepo.VERSION_LATEST, onDone)
+
     fun uninstall(pkg: String, onDone: (String) -> Unit = {}) {
         run(pkg, { DshPluginRepo.uninstall(pkg, it) }, onDone)
     }

@@ -188,6 +188,14 @@ object DshPluginRepo {
     private const val PROFILE_DIR = "/root/.dsh/profiles/web"
 
     /**
+     * 「装 npm 最新版」的显式版本标记（见 [install]）。
+     *
+     * 必须显式，不能靠空串走裸包名：pnpm 对**已声明过**的 registry 依赖，`add <裸包名>` 是空操作。
+     * 插件页的「更新」与预装包的最低版本门禁都用它。
+     */
+    const val VERSION_LATEST = "latest"
+
+    /**
      * git **能力**已验证过的标记（不只是「git 这个文件在」）。
      *
      * 带 v2 后缀让 v1.5–v1.7 写过的旧标记自动失效：那时只探 `command -v git`，
@@ -883,6 +891,18 @@ object DshPluginRepo {
         return if (ref.isNotEmpty() && nameRe.matches(ref)) "$owner/$name#$ref" else "$owner/$name"
     }
 
+    /**
+     * 装/更新一个插件。
+     *
+     * **[version] 传 [VERSION_LATEST] 才是「更新」的正确姿势**：`dsh plugin … add` 只是把参数
+     * 原样转给 pnpm，而对**已声明过**的 registry 依赖，`pnpm add <裸包名>` 是**空操作**
+     * （实测 pnpm 11：打印 "Already up to date"，已装版本与 package.json 里的范围都不动）。
+     * 真机症状就是「点更新→日志一切正常→版本不变」。显式 `@latest` 才会重新解析并改写范围 ——
+     * 这一步还顺带越过 caret 天花板：声明成 `^2.4.1` 时 3.0.0 永远进不来。
+     *
+     * git 规格（`github:`/`git+`）不接 `@版本`（要跟 ref 得写 `#ref`），而且裸规格本来就会重新
+     * 解析到默认分支最新提交（实测 pnpm 11：0.3.0 → 0.4.1），所以原样保留。
+     */
     suspend fun install(
         pkg: String,
         version: String = "",
@@ -893,8 +913,8 @@ object DshPluginRepo {
         if (pkg.isBlank()) return@withContext str(R.string.dsh_plug_log_no_pkg_install)
         if (allowBuilds.isNotEmpty()) DshRuntime.allowProfileBuilds(allowBuilds, onLine)
         val resolved = resolveSpec(pkg, onLine)
-        val spec = if (version.isBlank()) resolved else "$resolved@$version"
-        val isGit = spec.startsWith("github:") || spec.startsWith("git+")
+        val isGit = resolved.startsWith("github:") || resolved.startsWith("git+")
+        val spec = if (isGit || version.isBlank()) resolved else "$resolved@$version"
         val out = if (isGit) {
             ensureGit(onLine)
             installGitSpec(spec, fallbackTgz, onLine)

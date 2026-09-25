@@ -314,7 +314,7 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>修复：更新容器运行时后，安装/更新插件报 git 证书错误（server certificate verification failed，CAfile: none）。原因：运行时 rootfs 不带 CA 根证书，容器 git 走 https 一直靠 App 写进容器 git 配置的一份 CA，而更新运行时会把那份配置清掉（证书文件本身还在）。现在 App 每次启动都会重新写回该 CA 配置，运行时也把 CA 根证书直接烤进 rootfs，跨运行时更新后用 https 装插件都不再受影响。</item>
+        <item>修复：插件页点更新显示成功、版本却一直不变。原因是 pnpm 对已声明过的 npm 依赖，用裸包名安装是空操作，且声明用的是 caret 范围，跨大版本永远进不来。现在更新会显式按最新版重装并改写范围，大版本升级也能装上；预装包的最低版本门禁对 npm 包同样不再空转。</item>
 </string-array>
 
     
