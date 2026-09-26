@@ -98,6 +98,11 @@ must(/PluginCategory\("wsl"/.test(repo),
   '分类清单缺 wsl（上游已 23 类），那类插件在 App 里没有 tab');
 must(/plugin\.redLines\.isNotEmpty\(\)/.test(store),
   '商店卡片没有安全红线徽标');
+const source = read('app/src/main/java/me/bmax/apatch/dsh/DshSource.kt');
+must(/fun mirrorImageUrl\(url: String\)/.test(source),
+  'DshSource 缺 mirrorImageUrl —— 截图直链在国内拉不到');
+must(/model = DshSource\.mirrorImageUrl\(url\)/.test(detail),
+  '详情页截图没走镜像改写（raw.githubusercontent 国内直连空白）');
 must(/plugin\.redLines\.forEach/.test(detail) && /dsh_plugin_caps_disclaimer/.test(detail),
   '详情页没有列出安全红线 + 「收录≠背书」免责说明');
 must(/fallbackTgz = p\.tarball/.test(store) || /fallbackTgz = plugin\.tarball/.test(store),

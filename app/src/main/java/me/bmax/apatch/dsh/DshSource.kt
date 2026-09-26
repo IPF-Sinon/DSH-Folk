@@ -134,6 +134,24 @@ object DshSource {
         return (activeMirrors().map { it.second + url } + url).distinct().sortedBy { downloadRank(it) }
     }
 
+    /**
+     * 插件截图直链的镜像改写：`raw.githubusercontent.com` / `github.com` 图床在国内基本连不上，
+     * Coil 直接拉会一直空白。这里套一层**测速最快的已勾选线路**前缀（gh-proxy 系同样代理 raw 域），
+     * 交给 Coil 加载单个 URL —— 截图是非关键内容，取最优一条即可，失败就空白，不做多候选回退。
+     *
+     * 没勾选任何线路（用户选「只直连」→ [activeMirrors] 为空）或非 github 图床时原样返回，
+     * 尊重用户的直连选择、也不给第三方图床平白套前缀。
+     */
+    fun mirrorImageUrl(url: String): String {
+        val isGh = url.startsWith("https://raw.githubusercontent.com/") ||
+            url.startsWith("https://github.com/") ||
+            url.startsWith("https://user-images.githubusercontent.com/")
+        if (!isGh) return url
+        val mirrors = activeMirrors()
+        if (mirrors.isEmpty()) return url
+        return mirrors.map { it.second + url }.minByOrNull { downloadRank(it) } ?: url
+    }
+
     private const val CACHE_TTL_MS = 24 * 60 * 60 * 1000L
     private const val CONNECT_TIMEOUT_MS = 3_000
     private const val READ_TIMEOUT_MS = 3_000

@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshPlugin
+import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.ui.screen.formatCount
 
 /**
@@ -171,7 +172,8 @@ fun DshPluginDetailSheet(
                 ) {
                     plugin.screenshots.take(8).forEach { url ->
                         AsyncImage(
-                            model = url,
+                            // 截图多是 raw.githubusercontent 直链，国内直连拉不到 → 套最快镜像线路
+                            model = DshSource.mirrorImageUrl(url),
                             contentDescription = null,
                             modifier = Modifier
                                 .height(160.dp)

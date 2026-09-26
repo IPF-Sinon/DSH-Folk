@@ -314,11 +314,7 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>插件商店对齐上游 dsh-market：卡片与详情页显示每个插件的权限能力与「安全红线」（读凭据+联网、安装期执行代码、明文 http、访问云元数据 IP 等上游每日扫描结果），详情页新增截图预览与下载量统计窗口。红线只是事实披露、非官方认证。</item>
-        <item>修复插件商店卡片「可更新」一直不显示的问题（改用目录内联的最新版本号）。</item>
-        <item>新增「WSL 与 Windows 互操作」分类标签。</item>
-        <item>github 源插件若有作者预编译包，安装时用它做兜底，更快更稳。</item>
-        <item>整理 README：把深入实现说明按主题拆到 docs/ 下，README 顶部加目录跳转。</item>
+        <item>修复插件详情页的截图在国内加载不出来（空白）的问题：截图直链改走测速最快的镜像线路（与安装下载同一套 gh 镜像），选「只直连」时保持原直连。</item>
 </string-array>
 
     
