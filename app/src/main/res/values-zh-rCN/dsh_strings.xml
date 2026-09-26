@@ -440,6 +440,11 @@
     <string name="dsh_runtime_clean_confirm_title">确认删除运行时数据？</string>
     <string name="dsh_runtime_clean_confirm_text">这会删除现有会话、已装插件、DSH 配置及插件依赖数据，然后安装全新运行时。此操作无法撤销。</string>
     <string name="dsh_runtime_clean_confirm_go">删除数据并重装</string>
+    <!-- 运行时替换前的「建议先备份」提示 -->
+    <string name="dsh_runtime_backup_advice_title">建议先备份</string>
+    <string name="dsh_runtime_backup_advice_text">该运行时操作会替换整个 rootfs，部分缓存不会保留、出问题也不易回退，建议先导出一份备份。</string>
+    <string name="dsh_runtime_backup_advice_export">导出备份</string>
+    <string name="dsh_runtime_backup_advice_continue">继续</string>
     <string name="dsh_plugin_builtin_label">内置</string>
     <string name="dsh_host_plugin_name">安卓原生权限桥提示词</string>
     <string name="dsh_host_plugin_version">DSH-Folk 内置 · 不可卸载</string>
@@ -654,6 +659,25 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_storage_cap_desc">通过 dsh-fs 读写整个共享存储（/sdcard）。Android 规定这项只能在系统设置页里授予。</string>
     <string name="dsh_storage_need_perm">尚未授予「所有文件访问」，点这里去系统设置开启</string>
     <string name="dsh_storage_granted">已授予「所有文件访问」</string>
+
+    <!-- ── 文件访问范围（黑白名单，挂载层生效） ── -->
+    <string name="dsh_fs_scope_title">文件访问范围</string>
+    <string name="dsh_fs_scope_desc">用白名单 / 黑名单细化容器能访问哪些手机目录。</string>
+    <string name="dsh_fs_access_title">文件访问范围</string>
+    <string name="dsh_fs_access_intro">这些名单改的是容器的挂载本身，因此整个运行时（dsh、插件、终端）都受约束，而不只是受控文件接口。改动需重启 DSH 才生效。</string>
+    <string name="dsh_fs_allow_header">白名单（只允许这些目录；留空＝全部允许）</string>
+    <string name="dsh_fs_deny_header">黑名单（禁止这些目录，优先于白名单）</string>
+    <string name="dsh_fs_add_dir">添加目录</string>
+    <string name="dsh_fs_remove">移除</string>
+    <string name="dsh_fs_empty_allow">未设置——放行整棵共享存储，再按黑名单扣除。</string>
+    <string name="dsh_fs_empty_deny">空——不禁止任何目录。</string>
+    <string name="dsh_fs_restart_needed">名单改动需重启 DSH 才生效。</string>
+    <string name="dsh_fs_restart_now">重启 DSH</string>
+    <string name="dsh_fs_reset_deny_default">恢复默认黑名单</string>
+    <string name="dsh_fs_picker_title">选择目录</string>
+    <string name="dsh_fs_picker_choose">选择此目录</string>
+    <string name="dsh_fs_picker_need_perm">需要「所有文件访问」权限才能浏览目录。</string>
+    <string name="dsh_fs_picker_up">..（上一级）</string>
 
     <!-- ── 媒体与麦克风分项 ── -->
     <string name="dsh_native_cap_media">媒体库</string>

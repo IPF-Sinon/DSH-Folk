@@ -157,8 +157,30 @@ object DshEnv {
     /** 文件桥回环 token（随机生成，写进容器内配置文件供 dsh-fs 使用）。 */
     const val KEY_FS_TOKEN = "fs_bridge_token"
 
+    /**
+     * 手机文件访问白名单目录（JSON 数组，相对 /sdcard 的相对路径）。
+     *
+     * 非空即视为「只放行这些目录」（白名单模式）；缺失 / 空数组 = 不设白名单（放行整棵树，
+     * 再按黑名单扣）。改动需重启容器才生效（bind 挂载在启动那一刻定死）。见 [DshFileAccess]。
+     */
+    const val KEY_FS_ALLOW_DIRS = "fs_allow_dirs"
+
+    /**
+     * 手机文件访问黑名单目录（JSON 数组，相对 /sdcard）。
+     *
+     * **缺失**＝用默认（相册类目录，见 [DshFileAccess.DEFAULT_DENY]）；**显式空数组**＝用户
+     * 清空了黑名单（谁都不禁）。黑名单优先于白名单。改动需重启容器才生效。
+     */
+    const val KEY_FS_DENY_DIRS = "fs_deny_dirs"
+
     /** 容器内文件桥配置（JSON：port + token），由 App 写、dsh-fs 读。 */
     fun fsBridgeConfig(ctx: Context): File = File(dshHome(ctx), "fs-bridge.json")
+
+    /**
+     * 用来「盖住」被禁目录的空目录（bind 一个空目录到被禁的容器路径上 = 容器只看到空文件夹）。
+     * 保持为空；[DshFileAccess] 组装挂载时用它做遮蔽源。
+     */
+    fun fsMaskDir(ctx: Context): File = File(ctx.filesDir, "fs-mask-empty")
 
     /**
      * 容器体积（字节）的缓存值。

@@ -458,6 +458,11 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_runtime_clean_confirm_title">Delete runtime data?</string>
     <string name="dsh_runtime_clean_confirm_text">This deletes existing sessions, installed plugins, DSH configuration, and plugin dependency data before installing a fresh runtime. This cannot be undone.</string>
     <string name="dsh_runtime_clean_confirm_go">Delete data and reinstall</string>
+    <!-- 运行时替换前的「建议先备份」提示 -->
+    <string name="dsh_runtime_backup_advice_title">Back up first?</string>
+    <string name="dsh_runtime_backup_advice_text">This runtime operation replaces the whole rootfs. Some caches are not preserved and problems are hard to undo, so exporting a backup first is recommended.</string>
+    <string name="dsh_runtime_backup_advice_export">Export backup</string>
+    <string name="dsh_runtime_backup_advice_continue">Continue</string>
     <string name="dsh_plugin_builtin_label">Built-in</string>
     <string name="dsh_host_plugin_name">Android native capability bridge prompt</string>
     <string name="dsh_host_plugin_version">Built into DSH-Folk · cannot be uninstalled</string>
@@ -672,6 +677,25 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_storage_cap_desc">Read and write the whole of shared storage (/sdcard) through dsh-fs. Android requires this to be granted on a system settings page.</string>
     <string name="dsh_storage_need_perm">All files access not granted — tap to open system settings</string>
     <string name="dsh_storage_granted">All files access granted</string>
+
+    <!-- ── 文件访问范围（黑白名单，挂载层生效） ── -->
+    <string name="dsh_fs_scope_title">File access scope</string>
+    <string name="dsh_fs_scope_desc">Refine which phone folders the container can reach, with allow / deny lists.</string>
+    <string name="dsh_fs_access_title">File access scope</string>
+    <string name="dsh_fs_access_intro">These lists change the container mount itself, so the whole runtime (dsh, plugins, terminal) is affected — not just the controlled file interface. Changes take effect after DSH restarts.</string>
+    <string name="dsh_fs_allow_header">Allow list (only these folders; empty = allow everything)</string>
+    <string name="dsh_fs_deny_header">Deny list (block these; takes priority over the allow list)</string>
+    <string name="dsh_fs_add_dir">Add folder</string>
+    <string name="dsh_fs_remove">Remove</string>
+    <string name="dsh_fs_empty_allow">Not set — the whole shared storage is allowed, minus the deny list.</string>
+    <string name="dsh_fs_empty_deny">Empty — nothing is blocked.</string>
+    <string name="dsh_fs_restart_needed">List changes take effect only after DSH restarts.</string>
+    <string name="dsh_fs_restart_now">Restart DSH</string>
+    <string name="dsh_fs_reset_deny_default">Restore default deny list</string>
+    <string name="dsh_fs_picker_title">Choose folder</string>
+    <string name="dsh_fs_picker_choose">Choose this folder</string>
+    <string name="dsh_fs_picker_need_perm">All files access is required to browse folders.</string>
+    <string name="dsh_fs_picker_up">.. (up one level)</string>
 
     <!-- ── 媒体与麦克风分项 ── -->
     <string name="dsh_native_cap_media">Media library</string>

@@ -240,34 +240,12 @@ fun BackupSettingsContent(
 
     val showWebDavDialog = remember { mutableStateOf(false) }
 
-    // 导出密码框的「显示密码」开关，默认密文。WebDAV 那个框在它自己的对话框函数里，
-    // 状态也声明在那里 —— 两个框各自独立，不共用一个状态。
-    var showExportPassword by rememberSaveable { mutableStateOf(false) }
-
     // ── 导出选项：数据范围 / 会话数量 / 加密密码 ──
-    // 档位存索引而不是枚举：滑块拖动是连续值，Dialog 内用预览值（scopePreview），
-    // 确认了才写回正式值（scopeIndex）—— 含 vault 那档还要先过一道警告框。
+    // 档位与会话数是持久选择（rememberSaveable），跨「打开导出弹窗」保留；弹窗本身与其内部的
+    // 预览/子对话框状态都收在可复用组件 [BackupExportOptionsDialog] 里。
     var scopeIndex by rememberSaveable { mutableStateOf(3) } // 默认 BOTH（新增 DSH_VAULT 档后 BOTH 移到 index 3）
     var sessionLimit by rememberSaveable { mutableStateOf(0) } // 默认 0 = 不带会话
-    var showScopeDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
-    var showSessionsDialog by remember { mutableStateOf(false) }
-    var showVaultWarnDialog by remember { mutableStateOf(false) }
-    var scopePreview by remember { mutableStateOf(2) }
-    var sessionPreview by remember { mutableStateOf("0") } // 数字输入框的编辑态（字符串，确认时再解析）
-    // 本机（设备上）的会话总数：既给「共 N 个」显示，也当数字输入的上限。文件遍历放 IO 做一次并缓存。
-    var localSessionCount by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(Unit) {
-        localSessionCount = withContext(Dispatchers.IO) {
-            runCatching { DshBackupArchive.sessionCount(context) }.getOrNull()
-        }
-    }
-
-    val scopeOption = SCOPE_OPTIONS[scopeIndex.coerceIn(0, SCOPE_OPTIONS.lastIndex)]
-    val currentScope = scopeOption.scope
-    // 会话选择上限 = 本机真实会话数；数字超出会被夹到这个上限（避免「只有 3 个却选了几十」）。
-    val sessionMax = localSessionCount ?: 0
-    val currentSessionLimit = sessionLimit.coerceIn(0, sessionMax)
 
     SplicedColumnGroup(flat = flat, highlightKey = highlightKey) {
         // DSH 配置备份 —— 直接复用容器内 dsh-config-manager 的导出格式，保证与桌面端互通
@@ -855,297 +833,22 @@ fun BackupSettingsContent(
     // 范围 / 会话 / 密码都收在这里，页面上只剩两个动作按钮。里面的「数据范围」「会话数量」
     // 两行又会各自再开一个滑块对话框（叠在它上面 —— 组合顺序在前的在下）。
     if (showExportDialog) {
-        val exportPlan = ExportPlan(
-            scope = currentScope,
-            sessionLimit = currentSessionLimit,
+        BackupExportOptionsDialog(
+            dshBusy = dshBusy,
+            scopeIndex = scopeIndex,
+            onScopeIndexChange = { scopeIndex = it },
+            sessionLimit = sessionLimit,
+            onSessionLimitChange = { sessionLimit = it },
             password = dshPassword,
-        )
-        AlertDialog(
-            onDismissRequest = { showExportDialog = false },
-            title = { Text(stringResource(R.string.dsh_bk_export_dialog_title)) },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    Text(
-                        text = stringResource(R.string.dsh_backup_export_summary),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                        // ── 导出内容：数据范围 ──
-                        // 滑块式设置项（照日志窗口那套交互）：一行显示当前档位，点开是对话框内
-                        // Slider 拖动即时更新文案。确认含 vault 那档之前先弹警告（那里有凭据原文）。
-                        Spacer(Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(enabled = !dshBusy) {
-                                    scopePreview = scopeIndex
-                                    showScopeDialog = true
-                                }
-                                .padding(vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.dsh_bk_scope_title),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(scopeOption.label),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    text = stringResource(scopeOption.summary),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-
-                        // ── 导出内容：会话数量（仅软件数据的包里没有 DSH 会话，不显示）──
-                        if (currentScope != BackupScope.APP_ONLY) {
-                            Spacer(Modifier.height(4.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(enabled = !dshBusy) {
-                                        sessionPreview = currentSessionLimit.toString()
-                                        showSessionsDialog = true
-                                    }
-                                    .padding(vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(R.string.dsh_bk_sessions_title),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    Spacer(Modifier.height(2.dp))
-                                    Text(
-                                        text = when {
-                                            currentSessionLimit <= 0 ->
-                                                stringResource(R.string.dsh_bk_sessions_pick_none)
-                                            sessionMax > 0 && currentSessionLimit >= sessionMax ->
-                                                stringResource(R.string.dsh_bk_sessions_pick_all)
-                                            else ->
-                                                stringResource(R.string.dsh_bk_sessions_pick_recent, currentSessionLimit)
-                                        },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    localSessionCount?.let { count ->
-                                        Text(
-                                            text = stringResource(R.string.dsh_bk_sessions_total, count),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // ── 加密密码：随机生成 + 实时强度；含 vault 时必填 ──
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = dshPassword,
-                                onValueChange = onDshPasswordChange,
-                                label = { Text(stringResource(R.string.dsh_bk_pw_title)) },
-                                singleLine = true,
-                                enabled = !dshBusy,
-                                // 眼睛：默认密文，点一下显示明文 —— 输错一次不必整条重打
-                                visualTransformation = if (showExportPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    IconButton(onClick = { showExportPassword = !showExportPassword }) {
-                                        Icon(
-                                            imageVector = if (showExportPassword) Icons.Filled.VisibilityOff else Icons.Outlined.Visibility,
-                                            contentDescription = stringResource(
-                                                if (showExportPassword) R.string.dsh_pw_hide else R.string.dsh_pw_show,
-                                            ),
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            OutlinedButton(
-                                onClick = { onDshPasswordChange(randomPassword()) },
-                                enabled = !dshBusy,
-                            ) {
-                                Text(stringResource(R.string.dsh_bk_pw_random))
-                            }
-                        }
-                        val strength = passwordStrength(dshPassword)
-                        // 含 vault 的两档（BOTH_VAULT / DSH_VAULT）都强制密码
-                        val vaultNeedsPassword =
-                            (currentScope == BackupScope.BOTH_VAULT || currentScope == BackupScope.DSH_VAULT) &&
-                                dshPassword.isEmpty()
-                        Text(
-                            text = when {
-                                vaultNeedsPassword -> stringResource(R.string.dsh_bk_pw_required)
-                                strength < 0 -> stringResource(R.string.dsh_bk_pw_hint)
-                                else -> stringResource(
-                                    R.string.dsh_bk_pw_strength,
-                                    stringResource(PASSWORD_STRENGTH_LABELS[strength]),
-                                )
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (vaultNeedsPassword) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    // 含 vault 却没密码时 plan.valid == false：不允许点确认
-                    enabled = exportPlan.valid,
-                    onClick = {
-                        showExportDialog = false
-                        onDshExport(exportPlan)
-                    },
-                ) {
-                    Text(stringResource(R.string.dsh_bk_export_dialog_confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showExportDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
+            onPasswordChange = onDshPasswordChange,
+            onDismiss = { showExportDialog = false },
+            onConfirm = { plan ->
+                showExportDialog = false
+                onDshExport(plan)
             },
         )
     }
 
-    // ── 数据范围滑块：预览档位即时更新文案，确认才写回 ──
-    if (showScopeDialog) {
-        val preview = SCOPE_OPTIONS[scopePreview.coerceIn(0, SCOPE_OPTIONS.lastIndex)]
-        AlertDialog(
-            onDismissRequest = { showScopeDialog = false },
-            title = { Text(stringResource(R.string.dsh_bk_scope_title)) },
-            text = {
-                Column {
-                    Text(
-                        text = stringResource(preview.summary),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Slider(
-                        value = scopePreview.toFloat(),
-                        onValueChange = { scopePreview = it.toInt() },
-                        valueRange = 0f..SCOPE_OPTIONS.lastIndex.toFloat(),
-                        steps = SCOPE_OPTIONS.lastIndex - 1,
-                    )
-                    Text(
-                        text = stringResource(preview.label),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showScopeDialog = false
-                    val next = scopePreview.coerceIn(0, SCOPE_OPTIONS.lastIndex)
-                    val nextScope = SCOPE_OPTIONS[next].scope
-                    val nextHasVault =
-                        nextScope == BackupScope.BOTH_VAULT || nextScope == BackupScope.DSH_VAULT
-                    if (nextHasVault && next != scopeIndex) {
-                        // 含 vault 会把凭据原文带进包里：确认选中之前先让用户过目警告
-                        showVaultWarnDialog = true
-                    } else {
-                        scopeIndex = next
-                    }
-                }) {
-                    Text(stringResource(android.R.string.ok))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showScopeDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
-    }
-
-    // ── 含 vault 档的警告：确认才真正选中，取消保持原档位 ──
-    if (showVaultWarnDialog) {
-        AlertDialog(
-            onDismissRequest = { showVaultWarnDialog = false },
-            title = { Text(stringResource(R.string.dsh_bk_scope_vault_warn_title)) },
-            text = { Text(stringResource(R.string.dsh_bk_scope_vault_warn_message)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showVaultWarnDialog = false
-                    scopeIndex = scopePreview.coerceIn(0, SCOPE_OPTIONS.lastIndex)
-                }) {
-                    Text(stringResource(R.string.dsh_bk_scope_vault_warn_ok))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showVaultWarnDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
-    }
-
-    // ── 会话数量：数字输入（上限 = 本机真实会话数）──
-    if (showSessionsDialog) {
-        val parsed = sessionPreview.toIntOrNull()?.coerceIn(0, sessionMax) ?: 0
-        AlertDialog(
-            onDismissRequest = { showSessionsDialog = false },
-            title = { Text(stringResource(R.string.dsh_bk_sessions_title)) },
-            text = {
-                Column {
-                    Text(
-                        text = stringResource(R.string.dsh_bk_sessions_total, sessionMax),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = sessionPreview,
-                        onValueChange = { input ->
-                            // 只留数字，且不超过本机会话上限 —— 上限对不上正是要修的那个尴尬
-                            val digits = input.filter { it.isDigit() }.take(6)
-                            val clamped = digits.toIntOrNull()?.coerceIn(0, sessionMax)
-                            sessionPreview = clamped?.toString() ?: ""
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        supportingText = {
-                            Text(
-                                text = when {
-                                    parsed <= 0 -> stringResource(R.string.dsh_bk_sessions_pick_none)
-                                    sessionMax > 0 && parsed >= sessionMax ->
-                                        stringResource(R.string.dsh_bk_sessions_pick_all)
-                                    else -> stringResource(R.string.dsh_bk_sessions_pick_recent, parsed)
-                                },
-                            )
-                        },
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSessionsDialog = false
-                    sessionLimit = sessionPreview.toIntOrNull()?.coerceIn(0, sessionMax) ?: 0
-                }) {
-                    Text(stringResource(android.R.string.ok))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSessionsDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
-    }
 
     if (showWebDavDialog.value) {
         WebDavConfigDialog(showWebDavDialog, onSaved = onCloudRefresh)
@@ -1503,5 +1206,325 @@ fun BackupLogDialog(showDialog: MutableState<Boolean>, onDismiss: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+/**
+ * 可复用的「导出选项」对话框：数据范围 / 会话数量 / 加密密码，确认后交出一个完整 [ExportPlan]。
+ *
+ * 从备份页里抽出来单独成组件，好让**运行时操作前的「建议先备份」提示**也能就地打开同一套导出
+ * 流程（见 FunctionSettingsScreen 的运行时更新提示），而不是各写一份。
+ *
+ * 持久选择（[scopeIndex] / [sessionLimit] / [password]）由调用方持有、受控传入，跨「打开弹窗」
+ * 保留；弹窗内部的预览态与三个子对话框（范围滑块 / 含 vault 警告 / 会话数字输入）状态都收在这里。
+ */
+@Composable
+fun BackupExportOptionsDialog(
+    dshBusy: Boolean,
+    scopeIndex: Int,
+    onScopeIndexChange: (Int) -> Unit,
+    sessionLimit: Int,
+    onSessionLimitChange: (Int) -> Unit,
+    password: String,
+    onPasswordChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: (ExportPlan) -> Unit,
+) {
+    val context = LocalContext.current
+    var showScopeDialog by remember { mutableStateOf(false) }
+    var showVaultWarnDialog by remember { mutableStateOf(false) }
+    var showSessionsDialog by remember { mutableStateOf(false) }
+    var showExportPassword by rememberSaveable { mutableStateOf(false) }
+    var scopePreview by remember { mutableStateOf(scopeIndex) }
+    var sessionPreview by remember { mutableStateOf(sessionLimit.toString()) }
+    var localSessionCount by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(Unit) {
+        localSessionCount = withContext(Dispatchers.IO) {
+            runCatching { DshBackupArchive.sessionCount(context) }.getOrNull()
+        }
+    }
+
+    val scopeOption = SCOPE_OPTIONS[scopeIndex.coerceIn(0, SCOPE_OPTIONS.lastIndex)]
+    val currentScope = scopeOption.scope
+    val sessionMax = localSessionCount ?: 0
+    val currentSessionLimit = sessionLimit.coerceIn(0, sessionMax)
+
+    val exportPlan = ExportPlan(
+        scope = currentScope,
+        sessionLimit = currentSessionLimit,
+        password = password,
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dsh_bk_export_dialog_title)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = stringResource(R.string.dsh_backup_export_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // ── 数据范围 ──
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !dshBusy) {
+                            scopePreview = scopeIndex
+                            showScopeDialog = true
+                        }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.dsh_bk_scope_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = stringResource(scopeOption.label),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = stringResource(scopeOption.summary),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                // ── 会话数量（仅软件数据的包里没有 DSH 会话，不显示）──
+                if (currentScope != BackupScope.APP_ONLY) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !dshBusy) {
+                                sessionPreview = currentSessionLimit.toString()
+                                showSessionsDialog = true
+                            }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_bk_sessions_title),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = when {
+                                    currentSessionLimit <= 0 ->
+                                        stringResource(R.string.dsh_bk_sessions_pick_none)
+                                    sessionMax > 0 && currentSessionLimit >= sessionMax ->
+                                        stringResource(R.string.dsh_bk_sessions_pick_all)
+                                    else ->
+                                        stringResource(R.string.dsh_bk_sessions_pick_recent, currentSessionLimit)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            localSessionCount?.let { count ->
+                                Text(
+                                    text = stringResource(R.string.dsh_bk_sessions_total, count),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+                // ── 加密密码 ──
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = onPasswordChange,
+                        label = { Text(stringResource(R.string.dsh_bk_pw_title)) },
+                        singleLine = true,
+                        enabled = !dshBusy,
+                        visualTransformation = if (showExportPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showExportPassword = !showExportPassword }) {
+                                Icon(
+                                    imageVector = if (showExportPassword) Icons.Filled.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = stringResource(
+                                        if (showExportPassword) R.string.dsh_pw_hide else R.string.dsh_pw_show,
+                                    ),
+                                )
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = { onPasswordChange(randomPassword()) },
+                        enabled = !dshBusy,
+                    ) {
+                        Text(stringResource(R.string.dsh_bk_pw_random))
+                    }
+                }
+                val strength = passwordStrength(password)
+                val vaultNeedsPassword =
+                    (currentScope == BackupScope.BOTH_VAULT || currentScope == BackupScope.DSH_VAULT) &&
+                        password.isEmpty()
+                Text(
+                    text = when {
+                        vaultNeedsPassword -> stringResource(R.string.dsh_bk_pw_required)
+                        strength < 0 -> stringResource(R.string.dsh_bk_pw_hint)
+                        else -> stringResource(
+                            R.string.dsh_bk_pw_strength,
+                            stringResource(PASSWORD_STRENGTH_LABELS[strength]),
+                        )
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (vaultNeedsPassword) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = exportPlan.valid,
+                onClick = { onConfirm(exportPlan) },
+            ) {
+                Text(stringResource(R.string.dsh_bk_export_dialog_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        },
+    )
+
+    // ── 数据范围滑块 ──
+    if (showScopeDialog) {
+        val preview = SCOPE_OPTIONS[scopePreview.coerceIn(0, SCOPE_OPTIONS.lastIndex)]
+        AlertDialog(
+            onDismissRequest = { showScopeDialog = false },
+            title = { Text(stringResource(R.string.dsh_bk_scope_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(preview.summary),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Slider(
+                        value = scopePreview.toFloat(),
+                        onValueChange = { scopePreview = it.toInt() },
+                        valueRange = 0f..SCOPE_OPTIONS.lastIndex.toFloat(),
+                        steps = SCOPE_OPTIONS.lastIndex - 1,
+                    )
+                    Text(
+                        text = stringResource(preview.label),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showScopeDialog = false
+                    val next = scopePreview.coerceIn(0, SCOPE_OPTIONS.lastIndex)
+                    val nextScope = SCOPE_OPTIONS[next].scope
+                    val nextHasVault =
+                        nextScope == BackupScope.BOTH_VAULT || nextScope == BackupScope.DSH_VAULT
+                    if (nextHasVault && next != scopeIndex) {
+                        showVaultWarnDialog = true
+                    } else {
+                        onScopeIndexChange(next)
+                    }
+                }) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showScopeDialog = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
+    // ── 含 vault 档警告 ──
+    if (showVaultWarnDialog) {
+        AlertDialog(
+            onDismissRequest = { showVaultWarnDialog = false },
+            title = { Text(stringResource(R.string.dsh_bk_scope_vault_warn_title)) },
+            text = { Text(stringResource(R.string.dsh_bk_scope_vault_warn_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showVaultWarnDialog = false
+                    onScopeIndexChange(scopePreview.coerceIn(0, SCOPE_OPTIONS.lastIndex))
+                }) {
+                    Text(stringResource(R.string.dsh_bk_scope_vault_warn_ok))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showVaultWarnDialog = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
+    // ── 会话数量：数字输入（上限 = 本机真实会话数）──
+    if (showSessionsDialog) {
+        val parsed = sessionPreview.toIntOrNull()?.coerceIn(0, sessionMax) ?: 0
+        AlertDialog(
+            onDismissRequest = { showSessionsDialog = false },
+            title = { Text(stringResource(R.string.dsh_bk_sessions_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.dsh_bk_sessions_total, sessionMax),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = sessionPreview,
+                        onValueChange = { input ->
+                            val digits = input.filter { it.isDigit() }.take(6)
+                            val clamped = digits.toIntOrNull()?.coerceIn(0, sessionMax)
+                            sessionPreview = clamped?.toString() ?: ""
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        supportingText = {
+                            Text(
+                                text = when {
+                                    parsed <= 0 -> stringResource(R.string.dsh_bk_sessions_pick_none)
+                                    sessionMax > 0 && parsed >= sessionMax ->
+                                        stringResource(R.string.dsh_bk_sessions_pick_all)
+                                    else -> stringResource(R.string.dsh_bk_sessions_pick_recent, parsed)
+                                },
+                            )
+                        },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSessionsDialog = false
+                    onSessionLimitChange(sessionPreview.toIntOrNull()?.coerceIn(0, sessionMax) ?: 0)
+                }) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSessionsDialog = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
     }
 }

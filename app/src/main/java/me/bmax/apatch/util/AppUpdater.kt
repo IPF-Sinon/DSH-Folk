@@ -41,9 +41,18 @@ object AppUpdater {
         data class Failed(val reason: String) : Phase
     }
 
-    /** 各渠道测速结果，按「估算耗时」升序，第一个即推荐。 */
-    suspend fun speedTest(): List<DshSource.SpeedResult> = withContext(Dispatchers.IO) {
-        DshSource.speedTest().sortedBy { it.estimatedMs }
+    /**
+     * 各渠道测速结果，按「估算耗时」升序，第一个即推荐。
+     *
+     * [onProgress] 非空时**逐条回报**：先给出全部延迟，随后按延迟从快到慢逐条补上吞吐
+     * （probeAll=true）。界面据此「先显示最快测完的那条完整结果，其余测完再一一补上」，
+     * 用户不用对着「测速中」干等到全部结束（每条回报都在 IO 线程调用）。
+     */
+    suspend fun speedTest(
+        onProgress: ((List<DshSource.SpeedResult>) -> Unit)? = null,
+    ): List<DshSource.SpeedResult> = withContext(Dispatchers.IO) {
+        DshSource.speedTest(probeAll = onProgress != null, onProgress = onProgress)
+            .sortedBy { it.estimatedMs }
     }
 
     /**

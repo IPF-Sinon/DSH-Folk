@@ -11,6 +11,8 @@ import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -53,6 +55,7 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.NavGraphs
 import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.FileAccessScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
@@ -64,7 +67,9 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.AdbBridge
 import me.bmax.apatch.dsh.ContainerRuntime
 import me.bmax.apatch.dsh.DshAutostart
+import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.dsh.DshEnv
+import me.bmax.apatch.dsh.ExportPlan
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
@@ -453,6 +458,8 @@ internal fun DshSettingsScreen(
     }
 
     var pendingFullControl by remember { mutableStateOf<DshNativeBridge.Cap?>(null) }
+    // 运行时替换（重装/切版本/导入）前的「建议先备份」拦截：不为 null 时先弹提示，用户选「继续」才跑
+    var pendingRuntimeOp by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     Scaffold(
         topBar = {
@@ -770,6 +777,7 @@ internal fun DshSettingsScreen(
                     allFilesGranted = allFilesGranted,
                     onRequestCapPermission = { cap -> requestCapPermission(cap) },
                     onOpenAllFilesSettings = { openAllFilesSettings() },
+                    onOpenFileAccess = { navigator.navigate(FileAccessScreenDestination) },
                     runtimeInstalled = runtimeInstalled,
                     runtimeVersion = runtimeState.runtimeVersion ?: "",
                     appUpdateRequired = runtimeState.appUpdateRequired,
@@ -778,10 +786,13 @@ internal fun DshSettingsScreen(
                         navigator.navigate(GeneralSettingsScreenDestination("general_check_update"))
                     },
                     onReinstallRuntime = { preserve ->
-                        DshRuntime.reinstallRuntime(preserve)
-                        navigator.navigate(HomeScreenDestination) {
-                            popUpTo(NavGraphs.root)
-                            launchSingleTop = true
+                        // 会替换整个 rootfs（rootfs/tmp 等不在保留清单）——先弹「建议备份」，用户决定后再跑
+                        pendingRuntimeOp = {
+                            DshRuntime.reinstallRuntime(preserve)
+                            navigator.navigate(HomeScreenDestination) {
+                                popUpTo(NavGraphs.root)
+                                launchSingleTop = true
+                            }
                         }
                     },
                     runtimeCheckRevision = runtimeCheckRevision,
@@ -789,11 +800,13 @@ internal fun DshSettingsScreen(
                     onCheckRuntimeUpdate = { DshRuntime.checkRuntimeUpdate() },
                     onListRuntimeVersions = { DshRuntime.listRuntimeVersions() },
                     onSwitchRuntimeVersion = { entry ->
-                        DshRuntime.switchRuntimeVersion(entry, true)
-                        // 与重装同理：下载/解压的进度在首页，切版本后立刻回首页看着它走
-                        navigator.navigate(HomeScreenDestination) {
-                            popUpTo(NavGraphs.root)
-                            launchSingleTop = true
+                        pendingRuntimeOp = {
+                            DshRuntime.switchRuntimeVersion(entry, true)
+                            // 与重装同理：下载/解压的进度在首页，切版本后立刻回首页看着它走
+                            navigator.navigate(HomeScreenDestination) {
+                                popUpTo(NavGraphs.root)
+                                launchSingleTop = true
+                            }
                         }
                     },
                     onImportRuntime = {
@@ -917,7 +930,9 @@ internal fun DshSettingsScreen(
                             context.contentResolver.openInputStream(candidate.uri)!!.use { input ->
                                 file.outputStream().use { input.copyTo(it) }
                             }
-                        }.onSuccess { DshRuntime.importRuntime(file, preserveData = true) }
+                        }.onSuccess {
+                            pendingRuntimeOp = { DshRuntime.importRuntime(file, preserveData = true) }
+                        }
                             .onFailure { file.delete() }
                     }
                 }) { Text(stringResource(R.string.dsh_runtime_import_confirm)) }
@@ -928,8 +943,113 @@ internal fun DshSettingsScreen(
         )
     }
 
+    // 运行时替换前的「建议先备份」：复用备份页的导出组件，用户可先导出再继续
+    pendingRuntimeOp?.let { op ->
+        RuntimeBackupAdviceDialog(
+            onContinue = {
+                pendingRuntimeOp = null
+                op()
+            },
+            onCancel = { pendingRuntimeOp = null },
+        )
+    }
+
     // 重建插件依赖的实时日志（与插件页共用同一套对话框）
     PluginProgressHost(pluginViewModel)
+}
+
+/**
+ * 运行时替换（重装 / 切版本 / 导入）前的「建议先备份」提示。
+ *
+ * 这些操作会换掉整个 rootfs（且 `rootfs/tmp` 等不在保留清单），出问题不易回退，所以先提示。
+ * 「导出备份」就地打开备份页同一套导出组件（[BackupExportOptionsDialog]），导完仍留在本框，
+ * 用户再点「继续」跑真正的运行时操作；导出走 [DshConfigBackup.exportArchive]（与备份页同一通路）。
+ */
+@Composable
+private fun RuntimeBackupAdviceDialog(
+    onContinue: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showExport by remember { mutableStateOf(false) }
+    var scopeIndex by rememberSaveable { mutableStateOf(3) }
+    var sessionLimit by rememberSaveable { mutableStateOf(0) }
+    var password by remember { mutableStateOf("") }
+    var exporting by remember { mutableStateOf(false) }
+    var exportMsg by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(R.string.dsh_runtime_backup_advice_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.dsh_runtime_backup_advice_text))
+                if (exportMsg.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = exportMsg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onContinue, enabled = !exporting) {
+                Text(stringResource(R.string.dsh_runtime_backup_advice_continue))
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { showExport = true }, enabled = !exporting) {
+                    Text(stringResource(R.string.dsh_runtime_backup_advice_export))
+                }
+                TextButton(onClick = onCancel, enabled = !exporting) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        },
+    )
+
+    if (showExport) {
+        BackupExportOptionsDialog(
+            dshBusy = exporting,
+            scopeIndex = scopeIndex,
+            onScopeIndexChange = { scopeIndex = it },
+            sessionLimit = sessionLimit,
+            onSessionLimitChange = { sessionLimit = it },
+            password = password,
+            onPasswordChange = { password = it },
+            onDismiss = { showExport = false },
+            onConfirm = { plan ->
+                showExport = false
+                exporting = true
+                exportMsg = context.getString(R.string.dsh_backup_exporting)
+                scope.launch(Dispatchers.IO) {
+                    val status = DshConfigBackup.status(context)
+                    val text = if (!status.ready) {
+                        status.error.ifEmpty { context.getString(R.string.dsh_backup_plugin_missing) }
+                    } else {
+                        val r = DshConfigBackup.exportArchive(
+                            context,
+                            plan,
+                            onLine = { line -> withContext(Dispatchers.Main) { exportMsg = line } },
+                        )
+                        if (!r.ok) r.message else {
+                            val loc = r.location.ifBlank { r.file?.absolutePath ?: "" }
+                            r.file?.takeIf { it.absolutePath != r.location }?.delete()
+                            "${r.message}\n$loc"
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        exportMsg = text
+                        exporting = false
+                    }
+                }
+            },
+        )
+    }
 }
 
 private data class RuntimeImportCandidate(val uri: Uri, val name: String, val size: Long)

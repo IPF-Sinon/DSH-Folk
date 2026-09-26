@@ -277,30 +277,34 @@ const runDef = (wizardScreen.match(/fun runImport\(\)/g) || []).length;
 ok(anDef === 1 && runDef === 1,
   "向导仍是单一预检/开跑入口（analyze " + anDef + " / runImport " + runDef + "）");
 
-console.log("─ 5b. 导出/导入：页面上只有动作，内容都在弹窗里问");
+console.log("─ 5b. 导出/导入：页面上只有动作，内容都在可复用弹窗组件里问");
 const contentSrc2 = content; // 顶部已经读过这一份
 ok(/onClick = \{ showExportDialog = true \}/.test(contentSrc2),
   "页面上的「导出」只是打开弹窗，不再直接开跑");
-const exportDialog = braceSpan(contentSrc2, 'if (showExportDialog) {');
-ok(exportDialog !== null, "有「导出什么」弹窗");
+// 导出选项已抽成可复用组件 BackupExportOptionsDialog（运行时「建议先备份」提示也复用它），
+// 页面上的 if (showExportDialog) 只负责调用它。
+ok(/BackupExportOptionsDialog\(/.test(contentSrc2),
+  "页面用可复用的 BackupExportOptionsDialog 组件（不再内联一整套导出 UI）");
+const exportDialog = braceSpan(contentSrc2, 'fun BackupExportOptionsDialog(');
+ok(exportDialog !== null, "有可复用的「导出选项」弹窗组件");
 if (exportDialog) {
   const dialogBody = contentSrc2.slice(exportDialog[0], exportDialog[1]);
-  ok(/ExportPlan\(/.test(dialogBody), "导出计划（范围/会话/密码）在弹窗里组装");
+  ok(/ExportPlan\(/.test(dialogBody), "导出计划（范围/会话/密码）在组件里组装");
   ok(/dsh_bk_scope_title/.test(dialogBody) && /dsh_bk_sessions_title/.test(dialogBody),
-    "范围与会话两档都在弹窗里（页面上没有）");
+    "范围与会话两档都在组件里（页面上没有）");
   ok(/dsh_bk_pw_title/.test(dialogBody) && /dsh_bk_pw_random/.test(dialogBody),
-    "密码框与随机生成也在弹窗里");
+    "密码框与随机生成也在组件里");
   ok(/enabled = exportPlan\.valid/.test(dialogBody), "含 vault 却没密码时确认键禁用");
-  ok(/verticalScroll/.test(dialogBody), "弹窗内容可滚动（小屏不会被截断）");
+  ok(/verticalScroll/.test(dialogBody), "组件内容可滚动（小屏不会被截断）");
+  // 主对话框必须组合在两个子对话框之前，否则子对话框会叠在它下面点不到
+  const mainAt = dialogBody.indexOf('AlertDialog(');
+  const scopeAt = dialogBody.indexOf('// ── 数据范围滑块');
+  ok(mainAt >= 0 && scopeAt > mainAt, "主导出弹窗组合在子对话框之前（子对话框才叠得上去）");
 }
-// 弹窗必须组合在两个滑块对话框之前，否则滑块会叠在它下面点不到
-const exportAt = contentSrc2.indexOf('if (showExportDialog)');
-const scopeAt = contentSrc2.indexOf('// ── 数据范围滑块');
-ok(exportAt > 0 && scopeAt > exportAt, "导出弹窗组合在滑块对话框之前（滑块才叠得上去）");
-// 页面上的导出说明搬进弹窗了，页面上不再有它
+// 页面上的导出说明搬进组件了，页面上（调用点之前）不再有它
 ok(
-  !/^\s+Text\(\s*$[\s\S]{0,200}dsh_backup_export_summary/m.test(contentSrc2.split('if (showExportDialog)')[0]),
-  "页面上的导出说明已挪进弹窗（页面上不再重复一大段）",
+  !/^\s+Text\(\s*$[\s\S]{0,200}dsh_backup_export_summary/m.test(contentSrc2.split('BackupExportOptionsDialog(')[0]),
+  "页面上的导出说明已挪进组件（页面上不再重复一大段）",
 );
 
 console.log("─ 5c. 导入密码：留空即按「没加密」解析（现在是向导的第一步）");

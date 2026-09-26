@@ -5,6 +5,7 @@ import android.provider.DocumentsContract
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.FolderOpen
@@ -203,6 +205,8 @@ fun FunctionSettingsContent(
     onRequestCapPermission: (DshNativeBridge.Cap) -> Unit,
     /** 跳「所有文件访问」的系统设置页。 */
     onOpenAllFilesSettings: () -> Unit,
+    /** 打开「细化文件访问范围（黑白名单）」子页。 */
+    onOpenFileAccess: () -> Unit = {},
     /**
      * 运行时是否已安装。
      *
@@ -1406,6 +1410,33 @@ fun FunctionSettingsContent(
                             TextButton(onClick = onOpenAllFilesSettings) {
                                 Text(stringResource(R.string.dsh_storage_need_perm))
                             }
+                        }
+
+                        // 细化：黑白名单目录（真正生效在挂载层，改完需重启容器）
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenFileAccess() }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.dsh_fs_scope_title),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    text = stringResource(R.string.dsh_fs_scope_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Filled.ChevronRight,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
 
                         Spacer(Modifier.height(8.dp))

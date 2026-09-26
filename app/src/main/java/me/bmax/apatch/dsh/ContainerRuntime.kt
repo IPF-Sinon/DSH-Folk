@@ -44,16 +44,29 @@ interface ContainerRuntime {
     fun prepare()
 
     companion object {
-        /** 两个运行时共用的 bind 列表。 */
+        /**
+         * 非存储类 bind（两个运行时共用、与黑白名单无关）。
+         *
+         * 共享存储（`/storage/emulated/0` → `/sdcard` 等）**不在这里**：它按用户的文件访问
+         * 黑白名单动态组装，见 [DshFileAccess.storageBinds]。
+         */
         val BINDS: Array<Array<String>> = arrayOf(
             arrayOf("/dev"),
             arrayOf("/dev/urandom", "/dev/random"),
             arrayOf("/proc"),
             arrayOf("/sys"),
             arrayOf("/proc/self/fd", "/dev/fd"),
-            arrayOf("/storage/emulated/0", "/sdcard"),
-            arrayOf("/storage/emulated/0", "/storage/emulated/0"),
         )
+
+        /**
+         * 共享存储的 bind 对（host:guest），已套用黑白名单。空目录遮蔽源在 [DshEnv.fsMaskDir]，
+         * 这里顺带确保它存在。两个运行时共用同一份组装逻辑。
+         */
+        fun storageBinds(ctx: Context): List<Pair<String, String>> {
+            val mask = DshEnv.fsMaskDir(ctx)
+            mask.mkdirs()
+            return DshFileAccess.storageBinds(ctx, mask.absolutePath)
+        }
     }
 
     /** 现有实现：Termux proot，APK 内置。 */
@@ -77,6 +90,11 @@ interface ContainerRuntime {
             for (b in BINDS) {
                 argv.add("-b")
                 argv.add(if (b.size == 1) b[0] else "${b[0]}:${b[1]}")
+            }
+            // 共享存储按黑白名单动态挂：整棵树/白名单目录在前，被禁目录用空目录盖在后（覆盖前者）
+            for ((host, guest) in storageBinds(ctx)) {
+                argv.add("-b")
+                argv.add("$host:$guest")
             }
             return argv
         }
@@ -125,6 +143,11 @@ interface ContainerRuntime {
             for (b in BINDS) {
                 argv.add("-b")
                 argv.add(if (b.size == 1) "${b[0]}:${b[0]}" else "${b[0]}:${b[1]}")
+            }
+            // 共享存储按黑白名单动态挂（与 proot 同一份组装）：被禁目录用空目录遮蔽
+            for ((host, guest) in storageBinds(ctx)) {
+                argv.add("-b")
+                argv.add("$host:$guest")
             }
             val shm = DshEnv.shmDir(ctx)
             shm.mkdirs()

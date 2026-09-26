@@ -275,9 +275,17 @@ fun UpdateDialog(
                                         return@launch
                                     }
                                     phase = AppUpdater.Phase.Testing
-                                    val r = AppUpdater.speedTest()
-                                    results = r
-                                    chosen = r.firstOrNull { it.reachable }?.source
+                                    // 逐条回报：先满屏出延迟，最快测完吞吐的那条排到最前，其余陆续补上。
+                                    // 展示顺序＝「已测出吞吐的按估算耗时最快在前 → 只有延迟的按延迟 → 不可达垫底」，
+                                    // 并把选择停在当前最快的可达渠道上（用户可在测速途中就点下载）。
+                                    val r = AppUpdater.speedTest { partial ->
+                                        val ordered = partial.sortedBy { rankKey(it) }
+                                        results = ordered
+                                        val best = ordered.firstOrNull { it.reachable }?.source
+                                        if (best != null) chosen = best
+                                    }
+                                    results = r.sortedBy { rankKey(it) }
+                                    chosen = results.firstOrNull { it.reachable }?.source
                                     phase = if (chosen == null) {
                                         AppUpdater.Phase.Failed(
                                             context.getString(R.string.update_all_channels_down)
@@ -334,4 +342,18 @@ fun UpdateDialog(
     LaunchedEffect(needPermission) {
         if (needPermission && AppUpdater.canInstall(context)) needPermission = false
     }
+}
+
+/**
+ * 测速结果的展示排序键：越小越靠前。
+ *
+ * 让「最快测完吞吐的那条完整结果」排到最前，其余按测完程度依次补上：
+ * ① 已测出吞吐（reachable 且 speedKBps>0）——按估算耗时 estimatedMs 升序；
+ * ② 只测出延迟、吞吐还没回来——排在已完成之后，按延迟升序；
+ * ③ 不可达——垫底。
+ */
+private fun rankKey(r: me.bmax.apatch.dsh.DshSource.SpeedResult): Long = when {
+    !r.reachable -> Long.MAX_VALUE
+    r.speedKBps > 0.0 -> r.estimatedMs
+    else -> 4_000_000_000L + (r.latencyMs ?: 0L)
 }
