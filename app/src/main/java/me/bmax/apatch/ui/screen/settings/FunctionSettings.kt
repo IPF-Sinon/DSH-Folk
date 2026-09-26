@@ -1749,6 +1749,7 @@ internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.FULL_SCREEN_NOTIFY -> R.string.dsh_native_cap_full_screen_notify
     DshNativeBridge.Cap.TOAST -> R.string.dsh_native_cap_toast
     DshNativeBridge.Cap.VIBRATE -> R.string.dsh_native_cap_vibrate
+    DshNativeBridge.Cap.TORCH -> R.string.dsh_native_cap_torch
     DshNativeBridge.Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard
     DshNativeBridge.Cap.INTENT -> R.string.dsh_native_cap_intent
     DshNativeBridge.Cap.DEVICE -> R.string.dsh_native_cap_device
@@ -1789,6 +1790,7 @@ internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.FULL_SCREEN_NOTIFY -> R.string.dsh_native_cap_full_screen_notify_desc
     DshNativeBridge.Cap.TOAST -> R.string.dsh_native_cap_toast_desc
     DshNativeBridge.Cap.VIBRATE -> R.string.dsh_native_cap_vibrate_desc
+    DshNativeBridge.Cap.TORCH -> R.string.dsh_native_cap_torch_desc
     DshNativeBridge.Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard_desc
     DshNativeBridge.Cap.INTENT -> R.string.dsh_native_cap_intent_desc
     DshNativeBridge.Cap.DEVICE -> R.string.dsh_native_cap_device_desc
@@ -1864,6 +1866,7 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
             DshNativeBridge.Cap.FULL_SCREEN_NOTIFY,
             DshNativeBridge.Cap.TOAST,
             DshNativeBridge.Cap.VIBRATE,
+            DshNativeBridge.Cap.TORCH,
             DshNativeBridge.Cap.CLIPBOARD,
             DshNativeBridge.Cap.INTENT,
             // TTS 放这一组：它做的是「对着这台设备发声」，和 toast / 振动同类 ——

@@ -634,6 +634,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_cap_toast_desc">在屏幕上弹一条短提示</string>
     <string name="dsh_native_cap_vibrate">振动</string>
     <string name="dsh_native_cap_vibrate_desc">最长 3 秒的振动</string>
+    <string name="dsh_native_cap_torch">手电筒</string>
+    <string name="dsh_native_cap_torch_desc">把摄像头闪光灯当电筒开或关</string>
     <string name="dsh_native_cap_clipboard">剪贴板</string>
     <string name="dsh_native_cap_clipboard_desc">读写剪贴板。读取只在应用处于前台时有效。</string>
     <string name="dsh_native_cap_intent">分享与打开链接</string>
@@ -686,11 +688,16 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_err_cap_unavailable">能力「%1$s」当前不可用</string>
     <string name="dsh_native_err_missing_param">缺 %1$s</string>
     <string name="dsh_native_err_no_service">拿不到 %1$s</string>
+    <string name="dsh_native_err_internal">处理请求时发生内部错误：%1$s</string>
     <string name="dsh_native_err_notify_failed">发送通知失败：%1$s</string>
     <string name="dsh_native_err_vibrate_failed">振动失败：%1$s</string>
     <string name="dsh_native_err_clipboard_write">写剪贴板失败：%1$s</string>
     <string name="dsh_native_err_clipboard_background">读剪贴板需要应用处于前台，请让用户先切回 DSH-Folk</string>
     <string name="dsh_native_err_scheme">只支持 http/https</string>
+    <string name="dsh_native_err_bad_number">不是可拨打的电话号码</string>
+    <string name="dsh_native_err_bad_torch_state">state 必须是 on 或 off</string>
+    <string name="dsh_native_err_torch_no_flash">此设备没有摄像头闪光灯</string>
+    <string name="dsh_native_err_torch_failed">切换手电筒失败：%1$s</string>
     <string name="dsh_native_err_bad_url">url 无法解析</string>
     <string name="dsh_native_err_start_failed">拉起失败：%1$s</string>
     <string name="dsh_native_err_activity_background">拉起界面需要应用处于前台，请让用户先切回 DSH-Folk</string>

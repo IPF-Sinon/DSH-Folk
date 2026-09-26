@@ -361,7 +361,8 @@ internal object DshTts {
             } else {
                 500 to DshNativeBridge.err(
                     DshNativeBridge.str(ctx, R.string.dsh_native_err_tts_no_engine),
-                    "no_engine",
+                    // 与能力可用性检查用同一个原因 id，别让同一状态出现两种叫法
+                    "no_tts_engine",
                 )
             }
         }

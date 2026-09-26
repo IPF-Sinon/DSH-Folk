@@ -97,6 +97,8 @@ object DshNativeBridge {
         FULL_SCREEN_NOTIFY("full_screen_notify"),
         TOAST("toast"),
         VIBRATE("vibrate"),
+        /** 手电筒：把摄像头闪光灯当电筒开/关。不需要任何权限（CameraManager.setTorchMode）。 */
+        TORCH("torch"),
         CLIPBOARD("clipboard"),
         /** 分享面板与「打开链接/文件」共用一项：两者都是拉起外部 Activity。 */
         INTENT("intent"),
@@ -366,7 +368,7 @@ object DshNativeBridge {
 
     /** 只有同时存在安全可用的读、写操作时才显示第三档。 */
     fun supportsWrite(cap: Cap): Boolean = when (cap) {
-        Cap.NOTIFY, Cap.FULL_SCREEN_NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.CLIPBOARD, Cap.INTENT,
+        Cap.NOTIFY, Cap.FULL_SCREEN_NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.TORCH, Cap.CLIPBOARD, Cap.INTENT,
         Cap.MIC, Cap.CAMERA, Cap.TTS, Cap.CALENDAR, Cap.VOLUME, Cap.SETTINGS,
         Cap.SMS, Cap.SHELL, Cap.A11Y -> true
         else -> false
@@ -376,7 +378,7 @@ object DshNativeBridge {
     // （[PrivilegedShell.denyReason]）与严格程度上（[PrivPolicy.needsConfirm]）。
 
     fun supportsRead(cap: Cap): Boolean = when (cap) {
-        Cap.TOAST, Cap.VIBRATE, Cap.FULL_SCREEN_NOTIFY, Cap.INTENT, Cap.MIC, Cap.CAMERA -> false
+        Cap.TOAST, Cap.VIBRATE, Cap.TORCH, Cap.FULL_SCREEN_NOTIFY, Cap.INTENT, Cap.MIC, Cap.CAMERA -> false
         else -> true
     }
 
@@ -517,8 +519,11 @@ object DshNativeBridge {
      * 与「用户开没开」分开：通知项开着但系统通知权限没给时，要能说出是后者。
      */
     private fun availability(ctx: Context, cap: Cap): Pair<Boolean, String> = when (cap) {
+        // 「能用」是宽松判据（有任一子操作的权限即可）：发通知要 POST，读/清系统通知要通知监听
+        // 访问权 —— 两者独立。只查 POST 会把「只开了监听、用 read 档读通知」误判成不可用。
+        // 每次调用具体需要哪一项，由 osGap 按档位精确把关（在此之前）。
         Cap.NOTIFY ->
-            if (PermissionUtils.hasNotificationPermission(ctx)) true to ""
+            if (PermissionUtils.hasNotificationPermission(ctx) || DshNotificationListener.connected()) true to ""
             else false to "no_notification_permission"
         Cap.FULL_SCREEN_NOTIFY ->
             if (!PermissionUtils.hasNotificationPermission(ctx)) false to "no_notification_permission"
@@ -527,6 +532,9 @@ object DshNativeBridge {
             else true to ""
         Cap.VIBRATE ->
             if (vibrator(ctx)?.hasVibrator() == true) true to "" else false to "no_vibrator"
+        // 有些设备（平板/模拟器）没有闪光灯：那是设备属性，不是瞬时错误，别让 agent 反复重试
+        Cap.TORCH ->
+            if (hasTorch(ctx)) true to "" else false to "no_torch"
         // 只要有一类媒体可读就算可用：用户可能只给了照片。具体缺哪一类由
         // /native/media/list 的 granted 字段说明，不在这里一刀切成不可用。
         Cap.MEDIA ->
@@ -574,8 +582,11 @@ object DshNativeBridge {
         Cap.USAGE ->
             if (PermissionUtils.hasUsageStatsPermission(ctx)) true to ""
             else false to "no_usage_permission"
+        // 「能用」是宽松判据：只读短信要 READ_SMS，只发短信要 SEND_SMS —— 任一在即可用。
+        // 只查 READ_SMS 会把「只发送」这个明确提供的档位永久判成不可用（发送其实只需 SEND_SMS）。
+        // 每次调用具体需要读还是写，由 osGap 按档位精确把关。
         Cap.SMS ->
-            if (PermissionUtils.hasSmsPermission(ctx)) true to ""
+            if (PermissionUtils.hasSmsReadPermission(ctx) || PermissionUtils.hasSmsSendPermission(ctx)) true to ""
             else false to "no_sms_permission"
         // 特权命令能不能用，取决于用户有没有选一条通道、以及那条通道是不是已经就绪。
         // 未就绪（root 还没验过、Shizuku 还没授权、ADB 还没配对）要回**精确原因**：
@@ -600,6 +611,11 @@ object DshNativeBridge {
     /** 平板与模拟器常常没有电话功能，那时 TelephonyManager 的字段全是空的。 */
     private fun hasTelephony(ctx: Context): Boolean = runCatching {
         ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+    }.getOrDefault(false)
+
+    /** 设备有没有可当电筒的闪光灯。能力可用性判断用。 */
+    private fun hasTorch(ctx: Context): Boolean = runCatching {
+        ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH)
     }.getOrDefault(false)
 
     // ────────────────────────── 分发 ──────────────────────────
@@ -768,7 +784,8 @@ object DshNativeBridge {
         // 事回答两次。配额本身有三分钟寿命，所以留着也不会变成长期授权。
         spendOnce(ctx, cap, method, path, params)
 
-        val result = when {
+        val result = runCatching {
+            when {
             method == "POST" && path == "/native/shell" -> shellExec(ctx, params)
             method == "GET" && path == "/native/a11y/tree" -> a11yExec(ctx, "tree", params)
             method == "POST" && path == "/native/a11y/tap" -> a11yExec(ctx, "tap", params)
@@ -776,6 +793,7 @@ object DshNativeBridge {
             method == "POST" && path == "/native/a11y/swipe" -> a11yExec(ctx, "swipe", params)
             method == "POST" && path == "/native/a11y/text" -> a11yExec(ctx, "text", params)
             method == "POST" && path == "/native/a11y/global" -> a11yExec(ctx, "global", params)
+            method == "GET" && path == "/native/a11y/screenshot" -> a11yExec(ctx, "screenshot", params)
             method == "POST" && path == "/native/notify" -> notify(ctx, params)
             method == "DELETE" && path == "/native/notify" -> cancelNotify(ctx, params)
             method == "GET" && path == "/native/notify/list" -> notificationList(ctx, params)
@@ -783,10 +801,12 @@ object DshNativeBridge {
             method == "POST" && path == "/native/notify/full-screen" -> fullScreenNotify(ctx, params)
             method == "POST" && path == "/native/toast" -> toast(ctx, params)
             method == "POST" && path == "/native/vibrate" -> vibrate(ctx, params)
+            method == "POST" && path == "/native/torch" -> DshSystemCtl.torchSet(ctx, params)
             method == "POST" && path == "/native/clipboard" -> clipboardSet(ctx, params)
             method == "GET" && path == "/native/clipboard" -> clipboardGet(ctx)
             method == "POST" && path == "/native/share" -> share(ctx, params)
             method == "POST" && path == "/native/open" -> open(ctx, params)
+            method == "POST" && path == "/native/dial" -> dial(ctx, params)
             method == "GET" && path == "/native/device" -> device(ctx)
             method == "GET" && path == "/native/media/list" -> mediaList(ctx, params)
             method == "GET" && path == "/native/media/read" -> mediaRead(ctx, params)
@@ -828,6 +848,12 @@ object DshNativeBridge {
                 DshPersonalData.smsList(ctx, params)
             method == "POST" && path == "/native/sms/send" -> smsSend(ctx, params)
             else -> methodNotAllowed(ctx, method, path)
+            }
+        }.getOrElse { e ->
+            // 端点处理器抛异常（未 runCatching 的那几个）：回一个带原因的 500，并且**照常审计**，
+            // 否则这条调用在记录里凭空消失。
+            Log.w(TAG, "native endpoint threw $method $path: ${e.message}")
+            500 to err(str(ctx, R.string.dsh_native_err_internal, e.message ?: ""), "internal")
         }
         audit(ctx, method, path, params, cap, reason, result, privAuditExtra(ctx, cap, privDecision))
         return result
@@ -927,6 +953,7 @@ object DshNativeBridge {
                         ?: return 400 to err(str(ctx, R.string.dsh_native_err_a11y_bad_args), "bad_args")
                     DshA11y.global(act)
                 }
+                "screenshot" -> DshA11y.screenshot(ctx)
                 else -> JSONObject().put("ok", false).put("reason", "unknown_action")
             }
         } catch (e: Throwable) {
@@ -977,6 +1004,7 @@ object DshNativeBridge {
             Cap.FULL_SCREEN_NOTIFY -> R.string.dsh_native_cap_full_screen_notify
             Cap.TOAST -> R.string.dsh_native_cap_toast
             Cap.VIBRATE -> R.string.dsh_native_cap_vibrate
+            Cap.TORCH -> R.string.dsh_native_cap_torch
             Cap.CLIPBOARD -> R.string.dsh_native_cap_clipboard
             Cap.INTENT -> R.string.dsh_native_cap_intent
             Cap.DEVICE -> R.string.dsh_native_cap_device
@@ -1039,8 +1067,9 @@ object DshNativeBridge {
         "/native/notify/full-screen" -> Cap.FULL_SCREEN_NOTIFY
         "/native/toast" -> Cap.TOAST
         "/native/vibrate" -> Cap.VIBRATE
+        "/native/torch" -> Cap.TORCH
         "/native/clipboard" -> Cap.CLIPBOARD
-        "/native/share", "/native/open" -> Cap.INTENT
+        "/native/share", "/native/open", "/native/dial" -> Cap.INTENT
         "/native/device" -> Cap.DEVICE
         "/native/media/list", "/native/media/read" -> Cap.MEDIA
         "/native/mic/record" -> Cap.MIC
@@ -1066,7 +1095,8 @@ object DshNativeBridge {
         "/native/a11y/click",
         "/native/a11y/swipe",
         "/native/a11y/text",
-        "/native/a11y/global" -> Cap.A11Y
+        "/native/a11y/global",
+        "/native/a11y/screenshot" -> Cap.A11Y
         else -> null
     }
 
@@ -1395,6 +1425,9 @@ object DshNativeBridge {
                 .put("fullCommand", auditCommand(method, path, params, reason, maskSensitive = false))
                 .put("capability", cap.id)
                 .put("access", access(ctx, cap).id)
+                // 实际生效的档位：含「仅本次」提升。持久档是 off、靠一次性授权放行的调用，
+                // 只看 access 会记成 off，看不出「谁批准了这次」——审计的意义正在于此。
+                .put("effectiveAccess", effectiveAccess(ctx, cap).id)
                 .put("reason", reason)
                 .put("status", response.first)
                 .put("result", auditResult(response.second))
@@ -1702,8 +1735,9 @@ object DshNativeBridge {
         val msg = text(params["text"])
             ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "text"), "missing_text")
         // Toast 必须有 Looper；桥接线程没有
-        onMain { me.bmax.apatch.util.ui.showToast(ctx, msg) }
-        return 200 to okJson()
+        val done = onMain { me.bmax.apatch.util.ui.showToast(ctx, msg) }
+        return if (done) 200 to okJson()
+        else 500 to err(str(ctx, R.string.dsh_native_err_no_service, "UI"), "timeout")
     }
 
     private fun vibrate(ctx: Context, params: Map<String, String>): Pair<Int, String> {
@@ -1740,12 +1774,14 @@ object DshNativeBridge {
             ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "text"), "missing_text")
         val label = text(params["label"]) ?: "DSH"
         var failure: String? = null
-        onMain {
+        val done = onMain {
             runCatching {
                 clipboard(ctx)?.setPrimaryClip(ClipData.newPlainText(label, value))
                     ?: run { failure = "no_service" }
             }.onFailure { e -> failure = e.message ?: "set_failed" }
         }
+        // 主线程被卡住没跑完：按失败处理，别回一个「写成功了」的假 200
+        if (!done && failure == null) failure = "timeout"
         val f = failure
         return if (f == null) 200 to okJson()
         else 500 to err(str(ctx, R.string.dsh_native_err_clipboard_write, f), "clipboard_failed")
@@ -1758,7 +1794,7 @@ object DshNativeBridge {
         }
         var value: String? = null
         var present = false
-        onMain {
+        val done = onMain {
             runCatching {
                 val clip = clipboard(ctx)?.primaryClip
                 if (clip != null && clip.itemCount > 0) {
@@ -1767,6 +1803,8 @@ object DshNativeBridge {
                 }
             }.onFailure { e -> Log.w(TAG, "读剪贴板失败: ${e.message}") }
         }
+        // 主线程卡住没读到：不能回 empty:true（那正是被禁止的「假装剪贴板是空的」）
+        if (!done) return 500 to err(str(ctx, R.string.dsh_native_err_no_service, "UI"), "timeout")
         return 200 to JSONObject()
             .put("ok", true)
             .put("empty", !present)
@@ -1805,8 +1843,24 @@ object DshNativeBridge {
         return startChooser(ctx, Intent(Intent.ACTION_VIEW, uri))
     }
 
-    private fun startChooser(ctx: Context, intent: Intent): Pair<Int, String> =
-        runCatching {
+    /**
+     * 把号码填进系统拨号盘（[Intent.ACTION_DIAL]），**不拨出**——是否按下通话键由用户决定。
+     *
+     * 因此不需要 CALL_PHONE 权限，与 share/open 同属 INTENT 能力、同样要求前台（弹出的是系统
+     * 拨号界面，没有前台就没人看得见）。只接受拨号盘认得的字符，避免把任意 tel: 负载塞进去。
+     */
+    private fun dial(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val number = text(params["number"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "number"), "missing_number")
+        if (!number.matches(Regex("[0-9+()#*,\\-. ]{1,40}"))) {
+            return 400 to err(str(ctx, R.string.dsh_native_err_bad_number), "bad_number")
+        }
+        if (!isForeground(ctx)) return backgroundActivityDenied(ctx)
+        val uri = android.net.Uri.fromParts("tel", number, null)
+        return startChooser(ctx, Intent(Intent.ACTION_DIAL, uri))
+    }
+
+    private fun startChooser(ctx: Context, intent: Intent): Pair<Int, String> =        runCatching {
             ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             200 to okJson()
         }.getOrElse { e ->
@@ -2190,11 +2244,17 @@ object DshNativeBridge {
         info.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
     }.getOrDefault(false)
 
-    /** 在主线程跑一段并等它结束（有超时，不让桥接线程被 UI 卡死）。 */
-    internal fun onMain(block: () -> Unit) {
+    /**
+     * 在主线程跑一段并等它结束（有超时，不让桥接线程被 UI 卡死）。
+     *
+     * @return true 表示 block 在超时内真的跑完了；false 表示主线程被卡住、[MAIN_WAIT_MS] 内没跑完
+     *   —— 调用方**必须**按失败处理，否则会出现「剪贴板假装是空的」「toast 假装发了」这类
+     *   本类契约明令禁止的静默假成功。
+     */
+    internal fun onMain(block: () -> Unit): Boolean {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             block()
-            return
+            return true
         }
         val latch = CountDownLatch(1)
         Handler(Looper.getMainLooper()).post {
@@ -2204,7 +2264,7 @@ object DshNativeBridge {
                 latch.countDown()
             }
         }
-        runCatching { latch.await(MAIN_WAIT_MS, TimeUnit.MILLISECONDS) }
+        return runCatching { latch.await(MAIN_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrDefault(false)
     }
 
     /** 文本参数：空串归为「没给」，并截断到 [MAX_TEXT_LEN]。 */

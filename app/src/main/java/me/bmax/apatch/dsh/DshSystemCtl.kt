@@ -2,6 +2,8 @@ package me.bmax.apatch.dsh
 
 import android.app.NotificationManager
 import android.content.Context
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.os.Build
 import android.provider.Settings
@@ -347,8 +349,50 @@ internal object DshSystemCtl {
         else -> "unknown"
     }
 
-    // ────────────────────────── 安装权限 ──────────────────────────
+    // ────────────────────────── 手电筒 ──────────────────────────
 
+    /**
+     * 把闪光灯当电筒开/关（[CameraManager.setTorchMode]）。
+     *
+     * 不需要任何 Android 权限，也不占用相机预览；挑第一颗带闪光灯的摄像头即可。开着不会
+     * 自动关，所以响应里回报当前状态，让 agent 能说清「我把它打开/关上了」。
+     */
+    fun torchSet(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val on = when (params["state"]?.lowercase()) {
+            "on", "1", "true" -> true
+            "off", "0", "false" -> false
+            else -> return 400 to DshNativeBridge.err(
+                DshNativeBridge.str(ctx, R.string.dsh_native_err_bad_torch_state),
+                "bad_state",
+            )
+        }
+        val mgr = ctx.getSystemService(CameraManager::class.java)
+            ?: return 500 to DshNativeBridge.err(
+                DshNativeBridge.str(ctx, R.string.dsh_native_err_no_service, "CameraManager"),
+                "no_service",
+            )
+        val camId = runCatching {
+            mgr.cameraIdList.firstOrNull {
+                mgr.getCameraCharacteristics(it).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            }
+        }.getOrNull()
+            ?: return 404 to DshNativeBridge.err(
+                DshNativeBridge.str(ctx, R.string.dsh_native_err_torch_no_flash),
+                "no_torch",
+            )
+        return runCatching {
+            mgr.setTorchMode(camId, on)
+            200 to JSONObject().put("ok", true).put("on", on).toString()
+        }.getOrElse { e ->
+            Log.w(TAG, "切换手电筒失败: ${e.message}")
+            500 to DshNativeBridge.err(
+                DshNativeBridge.str(ctx, R.string.dsh_native_err_torch_failed, e.message ?: ""),
+                "torch_failed",
+            )
+        }
+    }
+
+    // ────────────────────────── 安装权限 ──────────────────────────
     /**
      * 「允许安装未知应用」的状态。
      *

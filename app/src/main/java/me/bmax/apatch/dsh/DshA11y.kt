@@ -2,12 +2,18 @@ package me.bmax.apatch.dsh
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
+import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -214,9 +220,79 @@ internal object DshA11y {
      * 里悄悄发生。
      */
     fun riskOf(action: String): PrivRisk = when (action.lowercase()) {
-        "tree" -> PrivRisk.READONLY
+        "tree", "screenshot" -> PrivRisk.READONLY
         "text", "global" -> PrivRisk.DANGEROUS
         else -> PrivRisk.WRITE
+    }
+
+    /** 截屏等待上限：takeScreenshot 是异步回调，别让桥接线程无限期挂着。 */
+    private const val SCREENSHOT_TIMEOUT_MS = 4000L
+
+    /**
+     * 截取当前屏幕（[AccessibilityService.takeScreenshot]，Android 11+）。
+     *
+     * 与 media/camera 一样：字节落进容器 `/tmp` 暂存区，回**容器内路径**而不是把二进制塞回
+     * JSON。安全窗口（锁屏 / 标了 FLAG_SECURE 的界面）系统会拒绝，回 capture_failed_* ——
+     * 那是系统在挡，不是 bug。回调在主执行器上跑，用闩锁等它、超时按失败处理。
+     */
+    fun screenshot(ctx: Context): JSONObject {
+        val svc = service() ?: return fail("no_a11y_service")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return fail("unsupported_os")
+        val latch = CountDownLatch(1)
+        var bitmap: Bitmap? = null
+        var reason: String? = null
+        runCatching {
+            svc.takeScreenshot(
+                Display.DEFAULT_DISPLAY,
+                ctx.mainExecutor,
+                object : AccessibilityService.TakeScreenshotCallback {
+                    override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
+                        try {
+                            val hb = result.hardwareBuffer
+                            val wrapped = Bitmap.wrapHardwareBuffer(hb, result.colorSpace)
+                            // 复制成软件位图再压缩：硬件缓冲不能直接 PNG 编码，且随后要 close
+                            bitmap = wrapped?.copy(Bitmap.Config.ARGB_8888, false)
+                            wrapped?.recycle()
+                            hb.close()
+                            if (bitmap == null) reason = "decode_failed"
+                        } catch (e: Throwable) {
+                            reason = "decode_failed"
+                        } finally {
+                            latch.countDown()
+                        }
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        reason = "capture_failed_$errorCode"
+                        latch.countDown()
+                    }
+                },
+            )
+        }.onFailure {
+            reason = "capture_failed"
+            latch.countDown()
+        }
+        if (!latch.await(SCREENSHOT_TIMEOUT_MS, TimeUnit.MILLISECONDS)) return fail("timeout")
+        val bmp = bitmap ?: return fail(reason ?: "capture_failed")
+        val width = bmp.width
+        val height = bmp.height
+        val dir = DshNativeBridge.stageDir(ctx)
+        val out = File(dir, "shot_${System.currentTimeMillis()}.png")
+        val written = runCatching {
+            FileOutputStream(out).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            true
+        }.getOrDefault(false)
+        bmp.recycle()
+        if (!written) {
+            runCatching { out.delete() }
+            return fail("write_failed")
+        }
+        DshNativeBridge.trimStage(dir)
+        return JSONObject()
+            .put("ok", true)
+            .put("path", DshNativeBridge.stageGuestPath(out.name))
+            .put("width", width)
+            .put("height", height)
     }
 
     private fun findAll(root: AccessibilityService, target: String, className: String?): List<AccessibilityNodeInfo> {

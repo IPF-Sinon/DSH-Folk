@@ -652,6 +652,8 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_native_cap_toast_desc">Show a short on-screen message</string>
     <string name="dsh_native_cap_vibrate">Vibration</string>
     <string name="dsh_native_cap_vibrate_desc">Vibrate for up to 3 seconds</string>
+    <string name="dsh_native_cap_torch">Flashlight</string>
+    <string name="dsh_native_cap_torch_desc">Turn the camera flash on or off as a torch</string>
     <string name="dsh_native_cap_clipboard">Clipboard</string>
     <string name="dsh_native_cap_clipboard_desc">Read and write the clipboard. Reading only works while the app is in the foreground.</string>
     <string name="dsh_native_cap_intent">Share and open links</string>
@@ -704,11 +706,16 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_native_err_cap_unavailable">Capability “%1$s” is currently unavailable</string>
     <string name="dsh_native_err_missing_param">Missing %1$s</string>
     <string name="dsh_native_err_no_service">Could not obtain %1$s</string>
+    <string name="dsh_native_err_internal">Internal error while handling the request: %1$s</string>
     <string name="dsh_native_err_notify_failed">Could not post the notification: %1$s</string>
     <string name="dsh_native_err_vibrate_failed">Vibration failed: %1$s</string>
     <string name="dsh_native_err_clipboard_write">Could not write the clipboard: %1$s</string>
     <string name="dsh_native_err_clipboard_background">Reading the clipboard needs the app in the foreground — ask the user to switch back to DSH-Folk</string>
     <string name="dsh_native_err_scheme">Only http/https is supported</string>
+    <string name="dsh_native_err_bad_number">Not a dialable phone number</string>
+    <string name="dsh_native_err_bad_torch_state">state must be on or off</string>
+    <string name="dsh_native_err_torch_no_flash">This device has no camera flash</string>
+    <string name="dsh_native_err_torch_failed">Could not toggle the flashlight: %1$s</string>
     <string name="dsh_native_err_bad_url">The url could not be parsed</string>
     <string name="dsh_native_err_start_failed">Could not start the activity: %1$s</string>
     <string name="dsh_native_err_activity_background">Opening a UI needs the app in the foreground — ask the user to switch back to DSH-Folk</string>

@@ -54,11 +54,16 @@ protectionLevel 是 `signature|appop`，应用申请不到）。没授予时上�
 ```
 dsh-native notify <标题> [正文] [--id N] [--ongoing]
 dsh-native notify-cancel [--id N]
+dsh-native notify-list [--limit N]                    # 读活跃系统通知
+dsh-native notify-dismiss <key>|--all                 # 清系统通知（需通知完全控制）
+dsh-native notify-full-screen <标题> [正文]            # 紧急全屏提醒
 dsh-native toast <文本>
+dsh-native torch <on|off>                # 把摄像头闪光灯当电筒开/关
 dsh-native vibrate [--ms N] [--amplitude 1..255]
 dsh-native clip get | clip set <文本> [--label L]
 dsh-native share <文本> [--title T]
 dsh-native open <https 链接>
+dsh-native dial <号码>                    # 把号码填进拨号盘，由用户按通话键
 dsh-native device
 dsh-native network                       # 连接类型 / 是否真能上网 / 是否计费 / WiFi 信号
 dsh-native phone                         # 运营商 / 制式 / SIM / 通话状态
@@ -78,12 +83,15 @@ dsh-native ringer <normal|vibrate|silent>
 dsh-native settings | settings brightness <1..100> [--auto 0|1] | settings timeout <ms>
 dsh-native settings rotation <0|1>
 dsh-native install                       # 这台机器允不允许安装未知应用
+dsh-native usage list [--days N] [--limit N]          # 最近应用前台使用统计
+dsh-native sms list [--limit N] | sms send <号码> <文本>   # 读短信 / 发短信
 dsh-native shell [--su] [--timeout ms] [--] <命令>   # 走你选的权限通道执行（见下）
 dsh-native a11y tree [--depth N] [--max N]        # 读当前屏幕的节点树
 dsh-native a11y click <文字或 id> [--class C] [--index N]
 dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
 dsh-native a11y text <文字> [--target <文字或 id>]
-dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen>
+dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>
+dsh-native a11y screenshot               # 截当前屏幕，PNG 落在 /tmp、JSON 里回路径
 dsh-native caps                          # 查当前哪些能力开着、能不能用
 dsh-native elevate <能力> <read|write|read_write|control> --reason <理由> [--command <命令>]
 ```

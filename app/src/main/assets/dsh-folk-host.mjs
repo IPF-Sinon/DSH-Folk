@@ -50,6 +50,7 @@ const CAP_USAGE = {
   ],
   toast: ['dsh-native toast <text>                                # brief on-screen message'],
   vibrate: ['dsh-native vibrate [--ms N] [--amplitude 1..255]      # vibrate, 3000ms max'],
+  torch: ['dsh-native torch <on|off>                              # camera flash as a flashlight'],
   clipboard: [
     'dsh-native clip get                                    # read the clipboard (foreground only)',
     'dsh-native clip set <text> [--label L]                 # write the clipboard',
@@ -57,6 +58,7 @@ const CAP_USAGE = {
   intent: [
     'dsh-native share <text> [--title T]                    # bring up the system share sheet',
     'dsh-native open <https URL>                            # hand a link to the system browser',
+    'dsh-native dial <number>                               # put a number in the dialer (user presses call)',
   ],
   device: ['dsh-native device                                      # model / Android version / battery'],
   media: [
@@ -69,12 +71,12 @@ const CAP_USAGE = {
   ],
   tts: [
     'dsh-native tts say <text> [--lang zh-CN] [--rate 0.1..3] [--pitch 0.5..2]  # read aloud, waits until done',
-    'dsh-native tts file <text> [--lang L]                  # synthesise a wav into /tmp, returns its path',
+    'dsh-native tts file <text> [--lang L] [--rate 0.1..3] [--pitch 0.5..2]  # synthesise a wav into /tmp, returns its path',
     'dsh-native tts voices                                  # which languages/voices this device can actually read',
   ],
   calendar: [
     'dsh-native calendar list [--days N] [--limit N]        # upcoming events, repeats expanded',
-    'dsh-native calendar add <title> --start <epochMs> [--minutes N] [--location L]',
+    'dsh-native calendar add <title> --start <epochMs> [--end <epochMs>] [--minutes N] [--location L] [--description D]',
   ],
   contacts: [
     'dsh-native contacts list [--q name-or-number] [--limit N]  # names and numbers, read only',
@@ -115,7 +117,8 @@ const CAP_USAGE = {
     'dsh-native a11y tap <x> <y> [--ms N]            # tap a coordinate from a tree you just read',
     'dsh-native a11y swipe <x1> <y1> <x2> <y2> [--ms N]',
     'dsh-native a11y text <text> [--target <text-or-id>]  # type into an editable field',
-    'dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen>',
+    'dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>',
+    'dsh-native a11y screenshot                      # capture the current screen; copies a PNG into /tmp, returns its path',
   ],
   shell: [
     'dsh-native shell [--su] [--timeout ms] [--] <command...>   # run through the privileged channel',
@@ -143,12 +146,18 @@ const CAP_CAVEAT = {
     'available:false with reason no_vibrator — that is a property of the device, not a transient ' +
     'error, so do not retry. Vibration is silent feedback: it only reaches the user if the phone is ' +
     'on them.',
+  torch:
+    'Not every device has a camera flash: tablets and some phones report available:false with ' +
+    'reason no_torch — a device property, not a transient error, so do not retry. It stays on until ' +
+    'you turn it off (nothing reverts it for the user), so pair every `torch on` with a later ' +
+    '`torch off` and say what you left it as.',
   clipboard:
     'Clipboard reads are subject to Android background limits: 409 not_foreground when the app is ' +
     'not in the foreground. That is a state, not an error — do not retry.',
   intent:
-    'Sharing and opening links start an Activity, so they too need the app in the foreground; ' +
-    'the background answer is 409 not_foreground.',
+    'Sharing, opening links and dialling all start an Activity, so they need the app in the ' +
+    'foreground; the background answer is 409 not_foreground. `dial` only fills the dialer — the ' +
+    'user still presses call — so it never places a call on its own.',
   media:
     'media get does NOT stream bytes back: it copies the file into the container and returns a path ' +
     'under /tmp, which you then read with ordinary file tools. Media permission is per type on ' +
@@ -443,8 +452,10 @@ function render(f) {
   };
   if (!bridgeOn) {
     lines.push(
-      '`dsh-native` can borrow the host to post notifications, show a toast, vibrate, use the ' +
-        'clipboard, open a share sheet or link, read device info and network state, read sensors, ' +
+      '`dsh-native` can borrow the host to post notifications, show a toast, vibrate, toggle the ' +
+        'flashlight, use the ' +
+        'clipboard, open a share sheet or link, put a number in the dialer, read device info and ' +
+        'network state, read sensors, ' +
         'read the media library, take a photo, record audio, speak text aloud, read location, ' +
         'calendar and contacts, ' +
         'and change volume or system settings — but the master switch is currently **off**, so ' +
@@ -485,8 +496,8 @@ function render(f) {
     for (const cap of usable) {
       const access = capAccess[cap];
       for (const line of CAP_USAGE[cap]) {
-        const writeCommand = / notify |notify-cancel|notify-dismiss|notify-full-screen| clip set | calendar add | volume set | ringer | settings (brightness|timeout|rotation)| sms send | toast | vibrate | share | open | mic record | camera photo | tts (say|file)/.test(' ' + line);
-        const readCommand = /notify-list| clip get | calendar list | sms list | tts voices/.test(line);
+        const writeCommand = / notify |notify-cancel|notify-dismiss|notify-full-screen| clip set | calendar add | volume set | ringer | settings (brightness|timeout|rotation)| sms send | toast | vibrate | torch | share | open | dial | mic record | camera photo | tts (say|file)/.test(' ' + line);
+        const readCommand = /notify-list| clip get | calendar list | sms list | tts voices|a11y screenshot/.test(line);
         if ((access === 'read_write') || (access === 'control') || (access === 'write' && writeCommand) ||
             (access === 'read' && !writeCommand) || (!readCommand && !writeCommand)) lines.push(line);
       }

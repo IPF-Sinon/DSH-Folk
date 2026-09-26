@@ -603,9 +603,11 @@ object DshRuntime {
           '  notify-full-screen <title> [body]            # urgent full-screen alert',
           '  toast <text>',
           '  vibrate [--ms N] [--amplitude 1..255]',
+          '  torch <on|off>                             # camera flash as a flashlight',
           '  clip get | clip set <text> [--label L]',
           '  share <text> [--title T]',
           '  open <https URL>',
+          '  dial <number>                              # fills the dialer; user presses call',
           '  device',
           '  media list [--type image|video|audio] [--q name] [--limit N]',
           '  media get <id> [--type image|video|audio]   # lands in /tmp; JSON carries path',
@@ -640,7 +642,8 @@ object DshRuntime {
           '  a11y tap <x> <y> [--ms N]',
           '  a11y swipe <x1> <y1> <x2> <y2> [--ms N]',
           '  a11y text <text> [--target <text-or-id>]',
-          '  a11y global <back|home|recents|notifications|quick_settings|lock_screen>',
+          '  a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>',
+          '  a11y screenshot                            # capture the screen; lands in /tmp, JSON carries path',
           '      Put -- before the command if it contains its own --flags.',
           '  caps                                       # access, accessOptions, once, pending, lastElevation',
           '  elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]',
@@ -731,6 +734,8 @@ object DshRuntime {
                 say(await req('POST', '/native/a11y/text' + q({ text: a[1], target: opt.target })));
               } else if (act === 'global' && a[1]) {
                 say(await req('POST', '/native/a11y/global' + q({ action: a[1] })));
+              } else if (act === 'screenshot') {
+                say(await req('GET', '/native/a11y/screenshot'));
               } else {
                 console.error(USAGE);
                 process.exitCode = 1;
@@ -757,6 +762,9 @@ object DshRuntime {
               say(await req('POST', '/native/toast' + q({ text: a[0] })));
             } else if (cmd === 'vibrate') {
               say(await req('POST', '/native/vibrate' + q({ ms: opt.ms, amplitude: opt.amplitude })));
+            } else if (cmd === 'torch') {
+              if (a[0] !== 'on' && a[0] !== 'off') { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/native/torch' + q({ state: a[0] })));
             } else if (cmd === 'clip') {
               if (a[0] === 'get') {
                 say(await req('GET', '/native/clipboard'));
@@ -790,6 +798,9 @@ object DshRuntime {
             } else if (cmd === 'open') {
               if (!a[0]) { console.error(USAGE); process.exit(1); }
               say(await req('POST', '/native/open' + q({ url: a[0] })));
+            } else if (cmd === 'dial') {
+              if (!a[0]) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/native/dial' + q({ number: a[0] })));
             } else if (cmd === 'camera') {
               if (a[0] === 'photo') {
                 say(await req('POST', '/native/camera/photo' + q({
