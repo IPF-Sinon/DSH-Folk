@@ -314,7 +314,7 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>修复备份/恢复完成页出现两个重复「立即重启」按钮的问题，现在只保留一个。</item>
+        <item>软件更新测速改为不再阻塞：测速期间就能选择渠道并点「开始下载」，拿到任一条可达结果即可开下，点下载会自动取消剩余测速；关闭竞速时「直连下载」也会立即开始。</item>
 </string-array>
 
     

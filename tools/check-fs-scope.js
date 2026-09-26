@@ -76,7 +76,7 @@ ok(/fun RuntimeBackupAdviceDialog\(/.test(fnScreen) &&
 ok(/DshConfigBackup\.exportArchive\(/.test(fnScreen),
   "导出走与备份页同一条通路 exportArchive");
 
-console.log("\u2500 #2 软件更新测速：逐条补，最快测完的先出");
+console.log("\u2500 #2 软件更新测速：逐条补，最快测完的先出，且不阻塞选择/下载");
 ok(/suspend fun speedTest\(\s*onProgress/.test(appUpdater) &&
   /DshSource\.speedTest\(probeAll = onProgress != null, onProgress = onProgress\)/.test(appUpdater),
   "AppUpdater.speedTest 支持逐条回报（probeAll + onProgress）");
@@ -87,6 +87,14 @@ ok(/private fun rankKey\(/.test(updDialog) && /r\.speedKBps > 0\.0 -> r\.estimat
   "排序键让「已测出吞吐」的按估算耗时最快在前");
 ok(/onProgress\?\.invoke\(acc\)/.test(dshSource),
   "DshSource.speedTest 逐条回调仍在（组件依赖它）");
+// 关键：测速期间不锁死选择/下载——busy 只含下载/校验，测速用独立 testing 标志
+ok(/var testing by remember \{ mutableStateOf\(false\) \}/.test(updDialog) &&
+  /var speedJob by remember/.test(updDialog),
+  "测速用独立的 testing/speedJob 状态（不并进 busy）");
+ok(/val busy = phase is AppUpdater\.Phase\.Downloading \|\|\s*\n\s*phase is AppUpdater\.Phase\.Verifying/.test(updDialog),
+  "busy 只含下载/校验，不含测速（测速不锁选择与下载）");
+ok(/speedJob\?\.cancel\(\)\s*\n\s*testing = false/.test(updDialog),
+  "点「开始下载」会取消剩余测速、用当前选中线路直接下");
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

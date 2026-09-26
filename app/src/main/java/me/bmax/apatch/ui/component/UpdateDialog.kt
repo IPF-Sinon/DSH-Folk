@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshDownloader
@@ -54,9 +55,14 @@ fun UpdateDialog(
     var results by remember { mutableStateOf<List<DshSource.SpeedResult>>(emptyList()) }
     var chosen by remember { mutableStateOf<String?>(null) }
     var needPermission by remember { mutableStateOf(false) }
+    // 测速是否在跑（与下载/校验分开）：测速期间只是「结果在陆续补」，
+    // 不该把渠道选择与「开始下载」也一起锁死——用户拿到任一条可达结果就能选、能下。
+    var testing by remember { mutableStateOf(false) }
+    var speedJob by remember { mutableStateOf<Job?>(null) }
 
-    val busy = phase is AppUpdater.Phase.Testing ||
-        phase is AppUpdater.Phase.Downloading ||
+    // 「硬忙」＝下载 / 校验：这两步才真正独占、要锁住所有按钮与关闭。
+    // 测速**不算**硬忙：它逐条出结果，边测边可选可下（点了下载就取消剩余测速）。
+    val busy = phase is AppUpdater.Phase.Downloading ||
         phase is AppUpdater.Phase.Verifying
 
     BasicAlertDialog(
@@ -268,34 +274,44 @@ fun UpdateDialog(
                         // 还没测速：先测速再让用户选渠道（竞速通道关掉时跳过测速，直接直连下载）
                         status?.canInstallInApp == true && results.isEmpty() -> Button(
                             onClick = {
-                                scope.launch {
-                                    if (!AppUpdater.raceEnabled()) {
-                                        // 竞速关闭：不测速、不给渠道可选，直接按直连下载
-                                        chosen = DshSource.SOURCE_GITHUB
-                                        return@launch
+                                if (!AppUpdater.raceEnabled()) {
+                                    // 竞速关闭：不测速、不给渠道可选，直接按直连下载
+                                    chosen = DshSource.SOURCE_GITHUB
+                                    scope.launch {
+                                        AppUpdater.downloadAndVerify(
+                                            context, status, DshSource.SOURCE_GITHUB,
+                                        ) { phase = it }
                                     }
-                                    phase = AppUpdater.Phase.Testing
-                                    // 逐条回报：先满屏出延迟，最快测完吞吐的那条排到最前，其余陆续补上。
-                                    // 展示顺序＝「已测出吞吐的按估算耗时最快在前 → 只有延迟的按延迟 → 不可达垫底」，
-                                    // 并把选择停在当前最快的可达渠道上（用户可在测速途中就点下载）。
-                                    val r = AppUpdater.speedTest { partial ->
-                                        val ordered = partial.sortedBy { rankKey(it) }
-                                        results = ordered
-                                        val best = ordered.firstOrNull { it.reachable }?.source
-                                        if (best != null) chosen = best
-                                    }
-                                    results = r.sortedBy { rankKey(it) }
-                                    chosen = results.firstOrNull { it.reachable }?.source
-                                    phase = if (chosen == null) {
-                                        AppUpdater.Phase.Failed(
-                                            context.getString(R.string.update_all_channels_down)
-                                        )
-                                    } else {
-                                        AppUpdater.Phase.Idle
+                                    return@Button
+                                }
+                                testing = true
+                                phase = AppUpdater.Phase.Testing
+                                // 逐条回报：先满屏出延迟，最快测完吞吐的那条排到最前，其余陆续补上。
+                                // 展示顺序＝「已测出吞吐的按估算耗时最快在前 → 只有延迟的按延迟 → 不可达垫底」，
+                                // 并把选择停在当前最快的可达渠道上——用户不必等全部测完，拿到任一条就能选、能下。
+                                speedJob = scope.launch {
+                                    try {
+                                        val r = AppUpdater.speedTest { partial ->
+                                            val ordered = partial.sortedBy { rankKey(it) }
+                                            results = ordered
+                                            val best = ordered.firstOrNull { it.reachable }?.source
+                                            if (best != null && chosen == null) chosen = best
+                                        }
+                                        results = r.sortedBy { rankKey(it) }
+                                        if (chosen == null) chosen = results.firstOrNull { it.reachable }?.source
+                                        phase = if (results.none { it.reachable }) {
+                                            AppUpdater.Phase.Failed(
+                                                context.getString(R.string.update_all_channels_down)
+                                            )
+                                        } else {
+                                            AppUpdater.Phase.Idle
+                                        }
+                                    } finally {
+                                        testing = false
                                     }
                                 }
                             },
-                            enabled = !busy,
+                            enabled = !busy && !testing,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(
@@ -306,10 +322,12 @@ fun UpdateDialog(
                             )
                         }
 
-                        // 已选渠道：开始下载
+                        // 已选渠道：开始下载（测速可能还在跑——先取消剩余测速，用当前选中的线路直接下）
                         status?.canInstallInApp == true -> Button(
                             onClick = {
                                 val src = chosen ?: return@Button
+                                speedJob?.cancel()
+                                testing = false
                                 scope.launch {
                                     AppUpdater.downloadAndVerify(context, status, src) { phase = it }
                                 }

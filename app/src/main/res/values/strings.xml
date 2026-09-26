@@ -331,7 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed the backup/restore result screen showing two duplicate Restart now buttons; only one remains.</item>
+        <item>Software update speed test no longer blocks: you can pick a channel and tap Download during the test, starting as soon as any reachable result arrives (tapping Download cancels the remaining probes); with race disabled, direct download now starts immediately.</item>
 </string-array>
 
     
