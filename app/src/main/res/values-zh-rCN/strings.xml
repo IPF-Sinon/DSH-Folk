@@ -314,9 +314,7 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>运行时更新、重装、切换版本、导入前会先提示「建议先备份」，并可就地打开与备份页同一套导出流程，导完再继续。</item>
-        <item>软件更新测速改为逐条呈现：最先测完的线路先显示延迟与速度并可立即选用，其余测完再一一补上，不用干等全部结束。</item>
-        <item>新增「文件访问范围」：可用白名单/黑名单细化容器能访问哪些手机目录，默认禁止相册类目录（DCIM、Pictures、Movies、Android/media）。它改的是容器挂载本身，对 dsh、插件、终端一并生效，改动需重启 DSH。</item>
+        <item>修复备份/恢复完成页出现两个重复「立即重启」按钮的问题，现在只保留一个。</item>
 </string-array>
 
     

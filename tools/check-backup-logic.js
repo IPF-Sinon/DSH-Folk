@@ -104,6 +104,12 @@ const archive = fs.readFileSync(SRC_ARCHIVE, "utf8");
 console.log("─ 1. 导入后的收尾：needsRestart 必须驱动一个真的动作");
 ok(/val needsRestart: Boolean = false/.test(backup),
   "ImportResult 带 needsRestart（不再只是文案）");
+// 恢复完成结果页只能有一个「立即重启」按钮：曾经「需重启」清单组自带一个按钮，
+// 底部动作行又有一个，出现两个重复重启按钮（用户反馈）。现在按钮只在底部动作行出现一次。
+ok((wizard.match(/dsh_plugin_restart_now/g) || []).length === 1,
+  "结果页只有一个「立即重启」按钮（不再重复两个）");
+ok(!/action = stringResource\(R\.string\.dsh_plugin_restart_now\) to onRestart/.test(wizard),
+  "「需重启」下一步清单组不再自带重启按钮（与其它下一步组一致，纯清单）");
 ok(/needsRestart = needsRestart,/.test(backup),
   "构造时把插件的 needsRestart 透出来");
 ok(/restartItems = restartItems,/.test(backup) && /missingSecrets = missingSecrets,/.test(backup) &&

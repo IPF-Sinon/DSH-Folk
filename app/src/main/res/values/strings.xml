@@ -331,9 +331,7 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Before a runtime update, reinstall, version switch or import, a back-up-first prompt appears, and you can open the same export flow the backup page uses right there, then continue.</item>
-        <item>Software update speed test now streams: the first channel to finish shows its latency and speed and can be picked immediately, and the rest fill in as they complete instead of waiting for everything.</item>
-        <item>New File access scope: allow / deny lists refine which phone folders the container can reach, blocking album folders by default (DCIM, Pictures, Movies, Android/media). It changes the container mount itself so dsh, plugins and the terminal are all affected; changes take effect after DSH restarts.</item>
+        <item>Fixed the backup/restore result screen showing two duplicate Restart now buttons; only one remains.</item>
 </string-array>
 
     

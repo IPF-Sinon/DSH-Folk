@@ -1030,12 +1030,13 @@ private fun WizardResultStep(
         // 「下一步」清单：需重启 / 缺凭据 / 没处理的项，各自成组。
         // 这些以前只藏在整段日志里，用户看到「导入完成」就以为没事了。
         if (r.needsRestart) {
+            // 「需要重启」这组只列清单、不带按钮 —— 与下面其它「下一步」分组一致；
+            // 真正的「立即重启」按钮只在底部动作行出现一次（曾经这里也放了一个，导致两个重复按钮）。
             ResultGroup(
                 title = stringResource(R.string.dsh_bk_wiz_next_restart),
                 items = r.restartItems.ifEmpty {
                     listOf(stringResource(R.string.dsh_bk_wiz_next_restart_generic))
                 },
-                action = stringResource(R.string.dsh_plugin_restart_now) to onRestart,
             )
         }
         if (r.theme == "restored") {
@@ -1100,7 +1101,6 @@ private fun WizardResultStep(
 private fun ResultGroup(
     title: String,
     items: List<String>,
-    action: Pair<String, () -> Unit>? = null,
 ) {
     Spacer(Modifier.height(12.dp))
     Text(
@@ -1116,10 +1116,6 @@ private fun ResultGroup(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 2.dp),
         )
-    }
-    if (action != null) {
-        Spacer(Modifier.height(6.dp))
-        Button(onClick = action.second) { Text(action.first) }
     }
 }
 
