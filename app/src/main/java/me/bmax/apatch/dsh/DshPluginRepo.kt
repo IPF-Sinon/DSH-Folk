@@ -820,7 +820,12 @@ object DshPluginRepo {
      */
     suspend fun pluginEntries(includeCore: Boolean = false): Map<String, List<String>> =
         withContext(Dispatchers.IO) {
-        val skipCore = if (includeCore) "" else "if(n.startsWith('@deepseek-ai/'))continue;"
+        // 跳过 @deepseek-ai/ 作用域的**核心**包（不该被用户停用），但**放行实验插件**
+        // （`@deepseek-ai/dsh-experimental-*`，如 dsh-experimental-auto-review）：它们是随 dsh
+        // 自带、面向用户的**可选开关**，也在 profile.bundles 里、自带 dsh.bundle.patch(entry id)，
+        // 却因为整段 @deepseek-ai/ 一律跳过而 entryIds 恒空→插件页开关变灰、报「读不到 entry id」。
+        val skipCore = if (includeCore) "" else
+            "if(n.startsWith('@deepseek-ai/')&&n.indexOf('dsh-experimental')<0)continue;"
         val script = "const fs=require('fs'),path=require('path');" +
             YAML_REQUIRE_JS + ";" +
             "const dir=process.argv[2];" +

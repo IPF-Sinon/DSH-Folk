@@ -69,6 +69,14 @@ must(/var detailId by remember \{ mutableStateOf<String\?>\(null\) \}/.test(scre
 must(screen.includes("dsh_plugin_toggle_state_unknown"),
   '开关因 entryIds 为空而灰掉时缺一句原因文案（dsh_plugin_toggle_state_unknown）');
 
+// 实验插件（@deepseek-ai/dsh-experimental-*，如 dsh-experimental-auto-review）是随 dsh 自带、
+// 面向用户的可选开关：pluginEntries(includeCore=false) 不能把它们连同核心包一起按 @deepseek-ai/
+// 整段跳过，否则 entryIds 恒空、插件页开关灰掉报「读不到 entry id」。
+must(/n\.indexOf\('dsh-experimental'\)<0\)continue;/.test(repo),
+  'pluginEntries 仍把 @deepseek-ai/dsh-experimental-* 一起跳过 —— 实验插件开关会永久变灰');
+must(!/if\(n\.startsWith\('@deepseek-ai\/'\)\)continue;/.test(repo),
+  'pluginEntries 还在无差别跳过整个 @deepseek-ai/ 作用域（实验插件也被误伤）');
+
 // 5. 说明性注释要在（这条修复的原理不写在代码里，后人一定会再踩）
 must(/Already up to date/.test(repo) || /空操作/.test(repo),
   'install() 上缺少「pnpm 对已声明依赖是空操作」的说明注释');
