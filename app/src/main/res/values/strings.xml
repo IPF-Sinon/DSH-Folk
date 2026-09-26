@@ -331,8 +331,8 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>The plugin store now aligns with upstream dsh-market: cards and the detail sheet show each plugin&apos;s capabilities and "safety red-lines" (reads credentials + network, runs code at install time, plaintext http, cloud-metadata IPs — from the upstream daily scan), and the detail sheet adds a screenshot preview and download-count window. Red-lines are factual disclosure, not an endorsement.</item>
-        <item>Fixed the store card never showing "updatable" (now uses the catalog&apos;s inlined latest version).</item>
+        <item>The plugin store now aligns with upstream dsh-market: cards and the detail sheet show the capabilities and "safety red-lines" of each plugin (reads credentials + network, runs code at install time, plaintext http, cloud-metadata IPs — from the upstream daily scan), and the detail sheet adds a screenshot preview and download-count window. Red-lines are factual disclosure, not an endorsement.</item>
+        <item>Fixed the store card never showing "updatable" (now uses the catalog inlined latest version).</item>
         <item>Added a "WSL &amp; Windows Interop" category tab.</item>
         <item>GitHub-source plugins with an author-prebuilt package now use it as an install fallback for a faster, more reliable install.</item>
         <item>Tidied the README: deep-dive notes are split by topic under docs/, with a table of contents at the top.</item>
