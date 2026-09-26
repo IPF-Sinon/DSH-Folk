@@ -75,6 +75,15 @@ jobs:
           # baseVersionCode()、tools/check-changelog.js 是同一条规则 —— 三处脱钩会让测试版的
           # versionCode 落在正式版的错误一侧。最终 APK 号是 CODE*10+ABI 偏移（app/build.gradle.kts）。
           if [ -n "$REV" ]; then CODE=$((CODE + REV)); fi
+          # 下限＝当前正式版基准号 baseVersionCode()：正式版可能被手动抬高（1.9.5 显式定为
+          # 10950，公式只给 10905），若 beta 仍按公式推导就会低于已发正式版，装了正式版的用户
+          # 撞 INSTALL_FAILED_VERSION_DOWNGRADE。取 max(公式号, 基准号) 保证测试版号永远盖得过
+          # 最近一个正式版（相同号可覆盖安装；先后由名字里的 -beta.N 与 App 的 compareVersions 区分）。
+          BASE=$(grep -oE 'fun baseVersionCode\(\): Int = [0-9]+' build.gradle.kts | grep -oE '[0-9]+$' | head -1)
+          if [ -n "$BASE" ] && [ "$CODE" -lt "$BASE" ]; then
+            echo "::notice::versionCode $CODE 低于基准 $BASE，抬到基准以免降级"
+            CODE=$BASE
+          fi
           NAME="${TARGET}-beta.${GITHUB_RUN_NUMBER}"
           echo "name=$NAME"   >> "$GITHUB_OUTPUT"
           echo "code=$CODE"   >> "$GITHUB_OUTPUT"

@@ -130,7 +130,7 @@ if (baseName && baseCode) {
   // （测试版 1.9.2.34-beta.101 的 vc 已是 10936，公式给正式版 1.9.5 只有 10905 会被系统当降级、
   // 装了 beta 的用户无法覆盖更新）。所以只要求 ≥ 公式下限、且不小于本项目已发布过的最高号。
   // 注意：手动抬高后，后续走 beta.yml 公式推导的测试版号可能低于它，需要人工确认单调递增。
-  const PUBLISHED_FLOOR = 10936; // 已发布过的最高 versionCode（1.9.2.34-beta.101）
+  const PUBLISHED_FLOOR = 10950; // 已发布过的最高 versionCode（正式版 1.9.5）
   ok(floor !== null && Number(baseCode[1]) >= floor && Number(baseCode[1]) >= PUBLISHED_FLOOR,
     `baseVersionCode() 不低于公式下限且盖过已发布最高号（${baseName[1]} → 下限 ${floor} / 已发 ${PUBLISHED_FLOOR}，实际 ${baseCode[1]}）`);
 }
