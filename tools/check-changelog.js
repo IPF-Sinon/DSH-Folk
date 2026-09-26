@@ -121,13 +121,18 @@ if (baseName && baseCode) {
   // 四段式（补丁版）= 前三位算出的号 + 第四段：1.8.2.1 → 10803、1.9.2.1 → 10903、1.9.2.2 → 10904。
   // 必须**大于**它修补的那个正式版，否则 App 内更新检查认不出、系统也可能拒绝覆盖
   // （相同号允许覆盖，但「比它大」才是我们想要的语义）。
-  const expect = parts.length === 3
+  const floor = parts.length === 3
     ? parts[0] * 10000 + parts[1] * 100 + parts[2]
     : parts.length === 4
       ? parts[0] * 10000 + parts[1] * 100 + parts[2] + parts[3]
       : null;
-  ok(expect !== null && expect === Number(baseCode[1]),
-    `baseVersionCode() 与版本名对应（${baseName[1]} → 期望 ${expect}，实际 ${baseCode[1]}）`);
+  // 公式值是**下限**：正式版可以显式抬高 versionCode，以便盖过此前测试版线里已用掉的号
+  // （测试版 1.9.2.34-beta.101 的 vc 已是 10936，公式给正式版 1.9.5 只有 10905 会被系统当降级、
+  // 装了 beta 的用户无法覆盖更新）。所以只要求 ≥ 公式下限、且不小于本项目已发布过的最高号。
+  // 注意：手动抬高后，后续走 beta.yml 公式推导的测试版号可能低于它，需要人工确认单调递增。
+  const PUBLISHED_FLOOR = 10936; // 已发布过的最高 versionCode（1.9.2.34-beta.101）
+  ok(floor !== null && Number(baseCode[1]) >= floor && Number(baseCode[1]) >= PUBLISHED_FLOOR,
+    `baseVersionCode() 不低于公式下限且盖过已发布最高号（${baseName[1]} → 下限 ${floor} / 已发 ${PUBLISHED_FLOOR}，实际 ${baseCode[1]}）`);
 }
 
 // CI 覆盖必须存在：没有它，测试版工作流传的 -P 会被静默忽略，

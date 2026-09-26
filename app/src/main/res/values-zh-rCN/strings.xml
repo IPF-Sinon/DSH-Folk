@@ -314,8 +314,13 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>修复插件详情页的截图在国内加载不出来（空白）的问题：截图直链改走测速最快的镜像线路（与安装下载同一套 gh 镜像），选「只直连」时保持原直连。</item>
-</string-array>
+        <item>正式版：汇总自上个正式版以来的改进。</item>
+        <item>下载镜像从 2 条扩到 5 条并支持多线路竞速与逐线路测速，运行时/插件/应用更新更快更稳。</item>
+        <item>修复无硬链接设备上 proroot 起不来、以及 x86 上「运行方式」误显示的问题。</item>
+        <item>插件商店对齐上游 dsh-market：显示权限能力与安全红线、截图预览、下载量窗口，修复「可更新」不显示；新增 WSL 分类；github 源插件支持预编译包兜底安装。</item>
+        <item>新增云备份插件（支持含应用主题、WebDAV 同步）；备份页仅在插件就绪时显示功能按钮，导出可选是否含主题。</item>
+        <item>修复插件截图在国内加载不出来：截图直链改走最快镜像线路。</item>
+    </string-array>
 
     
 

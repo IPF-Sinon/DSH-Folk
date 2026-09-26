@@ -331,8 +331,13 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed plugin screenshots not loading (blank) on some networks: screenshot links now go through the fastest mirror line (the same gh mirrors as install downloads); direct connection is kept when you choose direct-only.</item>
-</string-array>
+        <item>Stable release: a roundup of improvements since the last stable version.</item>
+        <item>Download mirrors expanded from 2 to 5 with multi-line racing and per-line speed tests, making runtime / plugin / app updates faster and more reliable.</item>
+        <item>Fixed proroot failing to start on hard-link-less devices, and the wrong runtime mode shown on x86.</item>
+        <item>Plugin store aligned with upstream dsh-market: shows capabilities and safety red-lines, screenshot preview and a download-count window, and fixes "updatable" not appearing; added a WSL category; github-source plugins can fall back to a prebuilt package.</item>
+        <item>Added a cloud-backup plugin (with optional app theme and WebDAV sync); the backup page only shows action buttons when the plugin is ready, and export can optionally include the theme.</item>
+        <item>Fixed plugin screenshots not loading on some networks: screenshot links now go through the fastest mirror line.</item>
+    </string-array>
 
     
 
