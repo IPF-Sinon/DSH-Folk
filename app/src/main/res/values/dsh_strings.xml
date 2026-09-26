@@ -1207,6 +1207,11 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_step_theme_export">Packaging the appearance (background, font, music, sound)…</string>
     <string name="dsh_bk_theme_name">DSH-Folk backup appearance</string>
     <string name="dsh_bk_theme_desc">Appearance exported together with the software-data backup (background, font, music, sound)</string>
+    <string name="dsh_bk_export_theme_title">Include app appearance</string>
+    <string name="dsh_bk_export_theme_measuring">Measuring appearance size…</string>
+    <string name="dsh_bk_export_theme_sub">Background, font, music, sound — about %1$s</string>
+    <string name="dsh_bk_export_theme_sub_over">About %1$s — over 5 MB, off by default (you can turn it on)</string>
+    <string name="dsh_bk_export_theme_sub_unknown">Background, font, music, sound</string>
     <string name="dsh_bk_out_theme">appearance %1$s</string>
     <string name="dsh_bk_theme_restored">appearance restored</string>
     <string name="dsh_bk_theme_absent">this archive carries no appearance (made by an older version, or without software data)</string>

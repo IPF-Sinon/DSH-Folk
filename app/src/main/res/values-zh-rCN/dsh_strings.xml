@@ -1185,6 +1185,11 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_step_theme_export">正在打包外观（背景、字体、音乐、音效）…</string>
     <string name="dsh_bk_theme_name">DSH-Folk 备份外观</string>
     <string name="dsh_bk_theme_desc">随软件数据备份一起导出的外观（背景、字体、音乐、音效）</string>
+    <string name="dsh_bk_export_theme_title">包含应用主题</string>
+    <string name="dsh_bk_export_theme_measuring">正在计算主题大小…</string>
+    <string name="dsh_bk_export_theme_sub">背景 / 字体 / 音乐 / 音效，约 %1$s</string>
+    <string name="dsh_bk_export_theme_sub_over">约 %1$s，超过 5 MB，默认不包含（可手动开启）</string>
+    <string name="dsh_bk_export_theme_sub_unknown">背景 / 字体 / 音乐 / 音效</string>
     <string name="dsh_bk_out_theme">外观 %1$s</string>
     <string name="dsh_bk_theme_restored">外观已恢复</string>
     <string name="dsh_bk_theme_absent">这份包不含外观（旧版本导出的，或者导出时没带软件数据）</string>

@@ -57,7 +57,6 @@ import me.bmax.apatch.dsh.DshAppDataSnapshot
 import me.bmax.apatch.dsh.DshPluginRepo
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshPhase
-import me.bmax.apatch.dsh.DshSessionGroup
 import me.bmax.apatch.util.BackupLogManager
 import me.bmax.apatch.ui.component.DshPluginProgressDialog
 import me.bmax.apatch.ui.screen.PluginProgressHost
@@ -123,8 +122,6 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     var snapshotBusy by remember { mutableStateOf(false) }
     var snapshotMessage by remember { mutableStateOf("") }
     // 整理未分组会话（全树扫描；停机做，改动不会被 dsh 的整份写回盖掉）
-    var groupBusy by remember { mutableStateOf(false) }
-    var groupMessage by remember { mutableStateOf("") }
 
     // 进度对话框：复用插件页那套（进度条 + 逐行日志 + 结束后「重启服务」）。
     // pnpm 装插件要几分钟，只在结束时弹一条 snackbar 的话，中途界面毫无反馈。
@@ -204,7 +201,6 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
     val openDirFailed = stringResource(R.string.dsh_backup_open_dir_failed)
     val remoteEmpty = stringResource(R.string.dsh_backup_remote_empty)
     val snapshotTarget = stringResource(R.string.dsh_bk_snapshot_title)
-    val tidyTarget = stringResource(R.string.dsh_bk_tidy_sessions)
     val clipboard = LocalClipboardManager.current
 
     Scaffold(
@@ -373,45 +369,6 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         pluginViewModel.setDisabled(DSH_FOLK_CLOUD_PKG, false) {
                             cloudBusy = false
                             DshRuntime.restart()
-                        }
-                    },
-                    groupBusy = groupBusy,
-                    groupMessage = groupMessage,
-                    onTidySessions = {
-                        groupBusy = true
-                        groupMessage = ""
-                        runVisible = true
-                        runTarget = tidyTarget
-                        runLines = emptyList()
-                        runRunning = true
-                        runFailed = false
-                        // 归组只改注册表、不动插件树，但仍需重启才在界面生效
-                        runNeedsRestart = true
-                        scope.launch(Dispatchers.IO) {
-                            val r = runCatching {
-                                DshRuntime.withServiceStopped {
-                                    DshSessionGroup.tidyAllSessions(context) { line ->
-                                        withContext(Dispatchers.Main) { runLines = runLines + line }
-                                    }
-                                }
-                            }.getOrNull()
-                            val report = r ?: DshSessionGroup.Report(
-                                failure = context.getString(R.string.dsh_bk_group_service_failed),
-                            )
-                            val text = buildString {
-                                append(report.summary(context))
-                                val detail = report.details()
-                                if (detail.isNotEmpty()) append("\n").append(detail)
-                            }
-                            BackupLogManager.log("tidy sessions grouped=${report.grouped} of ${report.total}")
-                            withContext(Dispatchers.Main) {
-                                groupBusy = false
-                                groupMessage = text
-                                runRunning = false
-                                runFailed = report.failure.isNotEmpty()
-                                runNeedsRestart = report.grouped > 0
-                                runLines = runLines + text
-                            }
                         }
                     },
                     snapshots = snapshots,

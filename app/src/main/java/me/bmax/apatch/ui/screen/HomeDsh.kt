@@ -142,9 +142,9 @@ fun HomeScreenDsh(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Outlined.Layers,
                 title = stringResource(R.string.dsh_run_mode),
-                value = if (DshRuntime.runtimeId() == "proroot") "proroot" else "proot",
+                value = if (DshRuntime.effectiveRuntimeId() == "proroot") "proroot" else "proot",
                 subtitle = stringResource(
-                    if (DshRuntime.runtimeId() == "proroot") R.string.dsh_mode_proroot_desc
+                    if (DshRuntime.effectiveRuntimeId() == "proroot") R.string.dsh_mode_proroot_desc
                     else R.string.dsh_mode_proot_desc
                 ),
                 onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },

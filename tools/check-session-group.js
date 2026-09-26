@@ -532,15 +532,16 @@ console.log("─ 8. App 侧接线（会话恢复归插件；DshSessionGroup 只�
   );
   ok(/pending \+= trimmed/.test(group), "助手输出先缓冲再发出（execRootfsStreaming 的回调不是挂起上下文）");
 
-  // 旧版本导入进来的会话：文件已存在 → 再导入会被跳过，必须有一个主动整理入口
+  // 「整理未分组会话」按钮已按用户要求移除：会话恢复整体交给插件后，这个手动整理入口不再需要。
+  // DshSessionGroup / 助手脚本保留为可复用工具（仍受本门禁助手夹具保护），但界面不再暴露它。
   const content = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettings.kt", "utf8");
   const screen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupSettingsScreen.kt", "utf8");
-  ok(/DshSessionGroup\.tidyAllSessions/.test(screen), "界面调用 DshSessionGroup.tidyAllSessions（全树整理入口）");
+  ok(!/onTidySessions/.test(content) && !/dsh_bk_tidy_sessions/.test(content),
+    "备份页不再有「整理未分组会话」按钮（已按用户要求移除）");
+  ok(!/DshSessionGroup\.tidyAllSessions\(context\)/.test(screen) && !/onTidySessions/.test(screen),
+    "界面不再接线 tidyAllSessions（按钮已移除）");
   ok(/relPaths: List<String>\?/.test(group) && /if \(relPaths != null\) append\(" --paths-file/.test(group),
     "不给 --paths-file 即扫全树（助手侧据此决定范围）");
-  ok(/dsh_bk_tidy_sessions/.test(content) && /onTidySessions/.test(content), "备份页有「整理未分组会话」按钮");
-  ok(/onTidySessions = \{[\s\S]{0,1200}withServiceStopped/.test(screen), "整理动作在服务停止时执行");
-  ok(/DshSessionGroup\.tidyAllSessions\(context\)/.test(screen), "界面调的是 tidyAllSessions（全树）");
 
   // 助手侧：没给 --paths-file 时必须扫全树
   const helper = fs.readFileSync(HELPER, "utf8");

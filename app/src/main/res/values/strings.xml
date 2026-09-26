@@ -331,7 +331,10 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Fixed dsh-bundled experimental plugins (e.g. dsh-experimental-auto-review) showing a greyed toggle with "cannot read entry id"; these @deepseek-ai/dsh-experimental-* plugins can now be toggled normally.</item>
+        <item>The backup page DSH-config card now mirrors the cloud card: export/import/open-dir buttons appear only when the plugin is detected ready; otherwise only the matching guidance button is shown.</item>
+        <item>Removed the now-obsolete Tidy ungrouped sessions button (session restore is fully handled by the config-manager plugin).</item>
+        <item>Fixed the home screen still showing proroot on x86 devices where proot is locked; it now shows the runtime actually running.</item>
+        <item>The software backup export dialog now has an Include app appearance switch, matching the cloud logic: off by default when the theme exceeds 5 MB, on when smaller; toggle manually anytime.</item>
 </string-array>
 
     

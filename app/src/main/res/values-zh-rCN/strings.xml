@@ -314,7 +314,10 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>修复随 dsh 自带的实验插件（如 dsh-experimental-auto-review）在插件页开关变灰、报「读不到 entry id 无法切换」的问题——现在这类 @deepseek-ai/dsh-experimental-* 插件可正常开关。</item>
+        <item>备份页「DSH 配置备份」卡片对齐云备份卡片：只有检测到插件正常就绪时才显示导出/导入/打开目录按钮，未装/被停用/DSH 没跑时只给对应的引导按钮。</item>
+        <item>移除已无用的「整理未分组会话」按钮（会话恢复已整体交给配置管理器插件）。</item>
+        <item>修复 x86 设备上锁定 proot 后，主页「运行方式」仍显示 proroot 的问题，现在显示实际在跑的运行时。</item>
+        <item>软件备份导出弹窗新增「包含应用主题」开关，与云备份逻辑一致：主题超过 5 MB 默认不含、小于则默认含，可手动切换。</item>
 </string-array>
 
     

@@ -220,7 +220,10 @@ fun ProvideDshHomeState(content: @Composable () -> Unit) {
             port = runtime.port,
             webUrl = runtime.webUrl,
             installed = runtime.installed,
-            runtimeId = DshRuntime.runtimeId(),
+            // 显示「实际在跑的」运行时，而不是用户的偏好：proroot 只出 arm64，x86_64 上
+            // 用户选了 proroot 也实际回落到 proot（见 DshRuntime.effectiveRuntimeId），
+            // 首页那张「运行方式」小卡必须反映真相，否则 x86 上会一直显示 proroot。
+            runtimeId = DshRuntime.effectiveRuntimeId(),
             appUpdateRequired = runtime.appUpdateRequired,
             requiredAppVersion = runtime.requiredAppVersion,
             rootfsSizeBytes = runtime.rootfsSizeBytes,

@@ -184,10 +184,6 @@ fun BackupSettingsContent(
     pluginAbsent: Boolean = false,
     /** 重新检测插件/DSH 状态。 */
     onRecheckPlugin: () -> Unit = {},
-    /** 会话归组：是否在跑（走停机 → 归组 → 起服务，见 DshRuntime.withServiceStopped）。 */
-    groupBusy: Boolean = false,
-    groupMessage: String = "",
-    onTidySessions: () -> Unit = {},
     snapshots: List<DshConfigBackup.Snapshot> = emptyList(),
     snapshotBusy: Boolean = false,
     snapshotMessage: String = "",
@@ -355,64 +351,32 @@ fun BackupSettingsContent(
                         }
                     }
 
-                    Spacer(Modifier.height(10.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedButton(onClick = onTidySessions, enabled = !groupBusy && pluginReady == true) {
-                            Text(stringResource(R.string.dsh_bk_tidy_sessions))
-                        }
-                        if (groupBusy) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        }
-                    }
-                    Text(
-                        text = stringResource(R.string.dsh_bk_tidy_sessions_summary),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (groupMessage.isNotBlank()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = groupMessage,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 200.dp)
-                                .verticalScroll(rememberScrollState()),
-                        )
-                    }
-
-                    // 冲突策略不再在这里事先选：导入时会先读一遍包，只有真的检测到冲突
-                    // 才弹窗问（见 BackupSettingsScreen 的冲突对话框）。
-
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // 插件未就绪时禁用，而不是让用户点了再收一条报错。
-                        // **只有明确 ready=true 才放行**：`null` 是「还不知道」，此前它被当成
-                        // 「不确定就别拦」放过去，结果是一进页面就能点导出 —— 用户按下按钮的
-                        // 那一刻插件可能根本没启动，收到的错误还与他刚做的操作对不上号。
-                        // 探活本身有 15 秒请求超时 + 20 秒界面兜底，等待是有终点的。
-                        val canRun = !dshBusy && pluginReady == true
-                        Button(
-                            // 导出什么（范围 / 会话 / 密码）都在弹窗里选，页面上只有这两个动作
-                            onClick = { showExportDialog = true },
-                            enabled = canRun,
+                    // 学云备份卡片：只有插件**确实就绪**（pluginReady==true）才露出导出/导入/打开目录
+                    // 这几个功能按钮；没装 / 被停用 / DSH 没跑 / 还在探活时，上面的状态行已经给了对应
+                    // 的引导按钮（安装 / 启用 / 启动 DSH / 重新检测），这里就不再摆一排灰按钮。
+                    if (pluginReady == true) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(stringResource(R.string.dsh_backup_export))
-                        }
-                        OutlinedButton(onClick = onDshImport, enabled = canRun) {
-                            Text(stringResource(R.string.dsh_backup_import))
-                        }
-                        TextButton(onClick = onDshOpenDir) {
-                            Text(stringResource(R.string.dsh_backup_open_dir))
-                        }
-                        if (dshBusy) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            val canRun = !dshBusy
+                            Button(
+                                // 导出什么（范围 / 会话 / 密码）都在弹窗里选，页面上只有这两个动作
+                                onClick = { showExportDialog = true },
+                                enabled = canRun,
+                            ) {
+                                Text(stringResource(R.string.dsh_backup_export))
+                            }
+                            OutlinedButton(onClick = onDshImport, enabled = canRun) {
+                                Text(stringResource(R.string.dsh_backup_import))
+                            }
+                            TextButton(onClick = onDshOpenDir) {
+                                Text(stringResource(R.string.dsh_backup_open_dir))
+                            }
+                            if (dshBusy) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            }
                         }
                     }
 
@@ -1244,15 +1208,35 @@ fun BackupExportOptionsDialog(
         }
     }
 
+    // 「包含应用主题」：与云备份插件同一套按大小自动给默认值的逻辑——真打一遍主题包量出字节数，
+    // 超过 THEME_SIZE_LIMIT_BYTES（5MB）默认不含、否则默认含；量不出来（读取失败）当作可含。
+    // 用户手动拨动后不再被自动默认覆盖。仅在导出包含软件数据的档位下有意义。
+    var themeBytes by remember { mutableStateOf<Long?>(null) }
+    var themeMeasured by remember { mutableStateOf(false) }
+    var includeTheme by remember { mutableStateOf(true) }
+    var themeUserTouched by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val bytes = withContext(Dispatchers.IO) {
+            runCatching { DshConfigBackup.measureThemeZipBytes(context) }.getOrNull()
+        }
+        themeBytes = bytes
+        themeMeasured = true
+        if (!themeUserTouched) {
+            includeTheme = bytes == null || bytes <= 0L || bytes <= DshConfigBackup.THEME_SIZE_LIMIT_BYTES
+        }
+    }
+
     val scopeOption = SCOPE_OPTIONS[scopeIndex.coerceIn(0, SCOPE_OPTIONS.lastIndex)]
     val currentScope = scopeOption.scope
     val sessionMax = localSessionCount ?: 0
     val currentSessionLimit = sessionLimit.coerceIn(0, sessionMax)
 
+    // includesTheme 只在包含软件数据的档位下才生效（DSH_ONLY/DSH_VAULT 天然不含主题）
     val exportPlan = ExportPlan(
         scope = currentScope,
         sessionLimit = currentSessionLimit,
         password = password,
+        includesTheme = includeTheme,
     )
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1340,6 +1324,40 @@ fun BackupExportOptionsDialog(
                                 )
                             }
                         }
+                    }
+                }
+                // ── 是否包含应用主题（仅含软件数据的档位显示）──
+                if (currentScope != BackupScope.DSH_ONLY && currentScope != BackupScope.DSH_VAULT) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_bk_export_theme_title),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            val sizeText = themeBytes?.let { b ->
+                                if (b <= 0L) null else String.format("%.1f MB", b / 1048576.0)
+                            }
+                            Text(
+                                text = when {
+                                    !themeMeasured -> stringResource(R.string.dsh_bk_export_theme_measuring)
+                                    sizeText == null -> stringResource(R.string.dsh_bk_export_theme_sub_unknown)
+                                    themeBytes!! > DshConfigBackup.THEME_SIZE_LIMIT_BYTES ->
+                                        stringResource(R.string.dsh_bk_export_theme_sub_over, sizeText)
+                                    else ->
+                                        stringResource(R.string.dsh_bk_export_theme_sub, sizeText)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = includeTheme,
+                            onCheckedChange = { themeUserTouched = true; includeTheme = it },
+                            enabled = !dshBusy,
+                        )
                     }
                 }
                 // ── 加密密码 ──
