@@ -17,6 +17,19 @@ DSH-Folk 把 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)�
 
 不需要 root，也不需要 Termux。有 root / Shizuku / 无线 ADB 时会自动利用，用于放宽某些受限操作。
 
+## 目录
+
+- [预览](#预览)
+- [现在能做什么](#现在能做什么)
+- [环境要求](#环境要求)
+- [安装](#安装)
+- [运行时管理](#运行时管理)
+- [深入了解](#深入了解)
+- [项目结构](#项目结构)
+- [致谢](#致谢) · [许可证](#许可证) · [友情链接](#友情链接) · [交流](#交流)
+
+深入的实现说明拆到了 `docs/` 下，按主题分文件（见 [深入了解](#深入了解)）。
+
 ## 预览
 
 <div align="center">
@@ -35,21 +48,17 @@ DSH-Folk 把 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)�
 | --- | --- |
 | **主页** | 一键启动 / 停止 / 重启 DSH，显示运行阶段、Web UI 地址、当前运行方式与权限通道，带可复制的启动日志 |
 | **终端** | 容器内的真 PTY 终端（基于 Termux 的 `terminal-view`），直接 `bash` 进容器 |
-| **插件** | 管理容器里 DSH 的插件，展示 npm 周下载量、GitHub star 与 dsh-market 点赞；内置插件商店（下载完整目录后本地搜索，2600+ 条），支持本地 .tgz 安装。装完会用临时端口验证一次插件树能否加载，不通过自动卸载 |
+| **插件** | 管理容器里 DSH 的插件，展示 npm 周下载量、GitHub star 与 dsh-market 点赞；内置插件商店（下载完整目录后本地搜索，4000+ 条），显示上游扫描出的能力与安全红线，支持本地 .tgz 安装。装完会用临时端口验证一次插件树能否加载，不通过自动卸载 |
 | **设置** | 常规 / 外观 / 行为 / 功能 / 安全 / 备份 / 插件 / 多媒体，界面主题体系沿用 FolkPatch（`theme.json` 完全兼容） |
 
 主题商店的入口在 **设置 → 外观** 页右上角；主题存档（`.fpt`）的导出与导入在商店页顶栏。
 
 界面语言在 **设置 → 常规 → 语言** 里选，与系统语言无关（还有几套「风味」皮：魔法大厅 / 圣光之殿 /
-后厨操作台 / 主世界 / 仙府主殿，只能从这里进）。**启动日志、通知栏、Toast 与两个桥的报错都跟着这一项走**，
-不是跟着系统语言 —— Android 在 13 以下把应用内语言只作用于 Activity，所以这些非 Activity 的文案都经
-`LocaleCtx` 取一份按应用内语言解析的 Context（见 `app/src/main/java/me/bmax/apatch/util/LocaleCtx.kt`）。
-bugreport 的 `basic.txt` 里同时记 `AppLocale` 与 `SystemLocale`，好判断一份日志是哪种语言写的。
+后厨操作台 / 主世界 / 仙府主殿，只能从这里进）。启动日志、通知栏、Toast 与两个桥的报错都跟着这一项走，
+不是跟着系统语言。
 
-**配置备份**与 DSH 桌面端的 `dsh-config-manager` 插件使用**同一套导出格式**（走它的回环 HTTP API，不是另写一份 ZIP 打包器），
-所以手机上导出的 zip 能直接在电脑上导入，反之亦然。默认导出 settings / ui / providers / plugins / mcp / prompts /
-skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentialsStatus / self，
-不导 sessions（会话记录体积能到几百 MB）；凭据值不导出，可选整包 AES-256-GCM 加密。
+**配置备份**与 DSH 桌面端的 `dsh-config-manager` 插件使用同一套导出格式，手机上导出的 zip 能直接在电脑上导入，反之亦然；
+凭据值默认不导出，可选整包 AES-256-GCM 加密。为什么中间那一段要由软件侧做，见 [备份为什么要由软件侧加密](docs/backup.md)。
 
 ## 环境要求
 
@@ -59,45 +68,16 @@ skills / agentPresets / agentInstructions / workspaces / pluginFiles / credentia
 - 存储空间建议预留 2 GB 以上
 
 首次启动下载完运行时后会自动预装四个插件：`dsh-web-mobile`（移动端适配）、`dshmarket`（WebUI 内的插件市场）、
-`dsh-config-manager`（**配置备份功能的依赖**，设置里的导出/导入走它的回环 API）、
-`dsh-file-upload`（拖拽上传 / 文档转 Markdown / 图片 OCR / 语音输入）。
-这一步会多花几分钟；失败不影响启动，之后可以在插件商店里手动装。
-预装清单按包名逐个记账，所以从旧版本升级上来会自动补装新增的那几个。
+`dsh-config-manager`（**配置备份功能的依赖**）、`dsh-file-upload`（拖拽上传 / 文档转 Markdown / 图片 OCR / 语音输入）。
+失败不影响启动，之后可以在插件商店里手动装；预装清单按包名逐个记账，从旧版本升级上来会自动补装新增的那几个。
 
-应用自身的更新可以在 设置 → 常规 → 检查更新 里完成：它会对三条下载渠道（GitHub 直连 / 两个 gh-proxy）
-测延迟与吞吐，下载支持断点续传，装之前必须通过 release 附带的 `.sha256` 校验 —— 校验不过一律不装。
+root / Shizuku / 无线 ADB 都是**可选**的，并且**默认不启用**。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）
+与已授权的 Shizuku / Sui，自身不打任何内核补丁、不安装 su、不内置 Shizuku Server。要用就去
+**设置 → 安全 → 权限通道 → 首选通道** 选一条（或选「自动」按 root > Shizuku > 无线 ADB 挑）。
 
-root / Shizuku / 无线 ADB 都是**可选**的，并且**默认不启用**。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）与已授权的 Shizuku / Sui，
-自身不打任何内核补丁、不安装 su、不内置 Shizuku Server。
-
-「特权」默认是**未启用**。要用就去 **设置 → 安全 → 权限通道 → 首选通道** 选一条（或选「自动」按
-root > Shizuku > 无线 ADB 挑）；从旧版本升级上来的用户如果此前授权过 root，会自动迁移到「自动」。
-
-选通道有两件事会跟着变：
-
-- **App 自己**用它：硬件监控里几项 `/proc` 读取、bugreport 里的 dmesg/tombstones 段、首页的重启菜单。
-  容器本身不需要 root（proot/proroot 从来不需要）。
-- **容器里的 AI** 也能用它了 —— 通过 `dsh-native shell` 由 App 代跑（见下）。以前特权只在 App 内部用，
-  容器侧唯一那条通路连提示词里都没提过，等于没有。
-
-**严格程度**（同一张卡里）决定「用之前要不要问你」，默认**严格**：
-
-| 档 | 行为 |
-|---|---|
-| 严格（默认） | 每次特权调用都弹窗；弹窗没有「以后都允许」，只有「允许本次」 |
-| 一般 | 只读命令（`getprop` / `dumpsys` / `ls` 这类）直接跑；会改设备状态的每次问你 |
-| 宽松 | 档位内的命令直接跑，只有危险命令（卸载、重启、清数据、往输入框打字）才问 |
-
-弹窗里显示的是**通道 + 身份 + 命令原文**：要判断的不是「给不给 root」，而是「要不要让 uid 0 跑这条命令」。
-AI 只有在真的探测到通道时才会被告知「有特权可用、能提到什么级别」——没有通道时提示词里不提这件事，
-免得它去建议用户开一个这台设备上根本不存在的东西。
-
-配对成功后容器里多出一个 `adb-shell` 命令（以 shell / uid 2000 身份在设备上执行）。默认只放行只读命令
-（`getprop` / `dumpsys` / `ls` / `cat` 之类）；写操作和 `--su` 提权要在 **设置 → 安全 → 无线 ADB** 里分别打开开关，
-没打开时命令会被拒绝并提示开关位置。
-
-AI 平时不必直接用它 —— `dsh-native shell` 选中这条通道时会转发给它，于是那两把锁**依旧生效**
-（宿主不会替 AI 绕过脚本自己的关卡）。
+选了通道后，App 自己（硬件监控、bugreport 的 dmesg/tombstones、重启菜单）与**容器里的 AI**（经 `dsh-native shell` 由 App 代跑）
+都能用它；容器本身不需要 root。严格程度决定「用之前要不要问你」，默认**严格**（每次特权调用都弹窗）。
+完整的权限模型、无线 ADB 的两把锁、AI 能通过桥调到宿主的哪些能力，见 [容器里能调宿主的什么](docs/host-bridges.md)。
 
 ## 安装
 
@@ -112,497 +92,43 @@ AI 平时不必直接用它 —— `dsh-native shell` 选中这条通道时会�
 也可以到 [Actions](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml) 取开发构建：
 选一次成功的运行，下载 `dsh-folk-debug-*` 或 `dsh-folk-release-*` 工件。
 
-### 测试版通道
+**测试版通道**：应用测试版在 **设置 → 常规 → 接受测试版更新** 打开后才会连预发布版一起看（默认关闭）；
+容器运行时的测试版是独立开关（**设置 → 功能 → 运行时 → 接受测试版运行时更新**），两者互不影响。
+测试版 / 正式版怎么发布、为什么这么发（release 变体、versionCode 约定、不用 Actions artifact 等），见
+[构建与发布内幕](docs/dev-notes.md)。
 
-应用测试版在 **设置 → 常规 → 接受测试版更新** 打开之后，检查更新会连预发布版一起看，界面上会给它打一个
-「测试版」标记。默认关闭。
+应用自身的更新在 **设置 → 常规 → 检查更新** 里完成：它会对下载渠道（GitHub 直连 / gh-proxy 镜像）测延迟与吞吐，
+下载支持断点续传，装之前必须通过 release 附带的 `.sha256` 校验 —— 校验不过一律不装。
 
-容器运行时的测试版是独立通道：在 **设置 → 功能 → 运行时 → 接受测试版运行时更新** 打开后，运行时检查会改用
-`runtime-beta-latest` 滚动通道；默认关闭，测试版可能不稳定。它与上面的应用测试版开关互不影响。
-更省事的办法是长按运行时卡上的 **更新** 直接列出所有已发布的运行时版本（正式通道、测试通道、历史版本），
-点一行就切过去 —— 升到测试版、退回某个具体版本都走同一个入口，不必先改通道开关再等检查。
-
-### 运行时管理
+## 运行时管理
 
 **设置 → 功能 → 运行时** 那张卡：
 
 - **更新**：一个按钮三种用法。没有检测到更新时点它就是「检查更新」；检测到更新时点它会先弹确认框
-  （说明目标版本与保留的数据），确认后才开始下载；**长按**则列出仓库里所有运行时版本，可任意切换
-  （降级也行）。要求比当前 App 更新的版本在列表里标出并直接指路去更新应用 —— 那种包装上连容器都起不来。
+  （说明目标版本与保留的数据），确认后才开始下载；**长按**则列出仓库里所有运行时版本，可任意切换（降级也行）。
+  要求比当前 App 更新的版本会标出并直接指路去更新应用 —— 那种包装上连容器都起不来。
 - **重装**：重新下载当前通道的最新运行时，可选保留或清空会话、插件、配置与依赖数据。
 - **导入**：安装本地 tar.gz（可信来源），会先显示文件名与体积供确认。
-- **自动检查更新**：独立开关，默认**开**。开启后应用启动即自动检查运行时更新，发现新版本才提示；
-  下载仍需手动确认。它与「应用更新」检测并行进行，但**弹窗排队**：若应用更新检测还在进行、
-  或应用更新弹窗已经弹出，运行时的提示会压后，等前者结束（已最新 / 失败）或用户关掉弹窗后再弹，
-  避免两个「有更新」的弹窗叠在一起。
+- **自动检查更新**：独立开关，默认**开**。开启后应用启动即自动检查运行时更新，发现新版本才提示；下载仍需手动确认。
+  它与「应用更新」检测并行，但弹窗排队，避免两个「有更新」的弹窗叠在一起。
 
-预装插件时 pnpm 会刷一屏 `missing peer …` 警告，这是**预期的**：`@deepseek-ai/dsh-*`、`react`
-这些 peer 由 dsh 自己解析，从不装进 profile 的 `node_modules`（装进去反而会与宿主版本打架）。
+日志里 `dsh web: http://127.0.0.1:3080/?token=…` 那行是打开 WebUI 用的令牌，等同于这个实例的密码
+（局域网访问默认关闭，只在本机可达）—— 贴日志求助前记得把它删掉。
+
+预装插件时 pnpm 会刷一屏 `missing peer …` 警告，这是**预期的**（`@deepseek-ai/dsh-*`、`react` 这些 peer 由 dsh 自己解析）；
 判断预装成没成看每个插件末尾的「预装完成 <包名>」与 `[DSH-Folk-exit] 0`，不是看这些警告。
+运行时构建、rootfs 工作流、`minAppVersion` 门槛等内幕见 [构建与发布内幕](docs/dev-notes.md)。
 
-日志里 `dsh web: http://127.0.0.1:3080/?token=…` 那行是给 App 打开 WebUI 用的令牌，等同于这个实例
-的密码（局域网访问默认关闭，所以只在本机可达）—— 贴日志求助前记得把它删掉。
+## 深入了解
 
-容器里的 pnpm 固定 10.x，运行时构建时就把 `update-notifier=false` 写进 npmrc：pnpm 自己那句
-「Update available! 10.x → 12.x」会把用户引向 `pnpm add -g pnpm`，而 12.x 正是因为没有可执行的
-启动器而被撤掉的那个版本。
+按主题拆到 `docs/` 下：
 
-应用测试版由 **Build DSH-Folk beta** 工作流发布（`workflow_dispatch`，填一个目标版本号如 `1.8.1`），
-tag 形如 `v1.8.1-beta.7`，标了 GitHub 的 prerelease。几个刻意的选择：
-
-- **测试版用 release 变体 + 正式版的签名**，不是 debug 包。debug 变体的包名是
-  `top.funcun.folkpatch.debug`（一个能与正式版共存的独立应用），装上它不是「升级」而是多一个
-  图标；debug 签名也压根覆盖不了正式版。测试版必须能原地替换正式版，否则这条通道毫无意义。
-- **versionCode 用目标正式版的号**（`1.8.1` → `10801`），不加 beta 偏移。它必须大于当前正式版
-  （否则 `compareVersions` 判成不更新，用户永远收不到提示），又不能大于将来那个正式版（否则正式版
-  发出来时装不回去）。AOSP 的 `PackageManagerServiceUtils.checkDowngrade` 只在 `after < before`
-  时拒绝安装，相等是允许的 —— 「与目标正式版同号」正好落在两个约束的交集里。区分先后靠版本**名**
-  里的 `-beta.N`，`compareVersions` 认它，且正式版 > 预发布版。
-- **不用 Actions 的 artifact**。artifact 的下载地址需要认证（匿名 `GET .../artifacts/<id>/zip`
-  返回 401，而列表接口 200），产物还是 zip 包、30 天后过期。要让应用能匿名下载、断点续传、按
-  sha256 校验，只有 release 资产这一条路。
-- 关掉开关时按**两道**判断排除测试版：`prerelease` 标记，以及 tag 里的预发布后缀。漏一道的代价是
-  所有人都被推上测试通道，而那正是这个开关要防的事。
-- 开着开关时**先查列表再查 `releases/latest`**。后者定义上跳过 prerelease，先问它会拿到正式版、
-  判定「已是最新」直接返回，列表根本没机会被看一眼 —— 开关看起来毫无作用。
-
-APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出包：在 Actions 里手动触发 **Build DSH-Folk**
-（`workflow_dispatch`，可选 debug / release / both）。release 需要在仓库 secrets 里配置
-`KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PRIVATE_PASSWORD`；
-缺任何一项会**直接构建失败**而不是退回调试签名 —— 一个用 debug key 签出来的「release」装得上、看着正常，
-但和正式包签名不同、之后无法覆盖升级，比构建失败危险得多。构建末尾还有一道签名自检拦住这种情况。
-
-容器运行时由另一个工作流 **Build DSH runtime rootfs** 生成（可选 `arch=both / arm64 / amd64`），
-产物发布到滚动 tag `runtime-latest`：arm64 是 `rootfs.tar.gz` + `metadata.json`，
-x86_64 是 `rootfs-x86_64.tar.gz` + `metadata-x86_64.json`（arm64 沿用无后缀的旧名以兼容存量版本）。
-应用按本机架构读取对应的 `metadata*.json` 决定下载什么。
-
-这个工作流还有一个 `release_tag` 输入（留空则按通道推导）：版本列表里那两个只在历史里存在的老 tag
-（`runtime-beta`、`runtime-0.1.1-rc.2`）就是用它**原地重发**的 —— 同一个 tag 换内容对已装用户不可检测，
-但「列表里点进去装出来的是当年那个坏掉的运行时」显然比什么都不做更糟。重发后版本串的 r 号会变，
-装过旧内容的用户因此至少能看到一次更新提示。
-
-运行时可以在 `metadata.json` 里声明 `minAppVersion`（构建时从 `build.gradle.kts` 的基准版本自动取，
-`workflow_dispatch` 也可手动覆盖）：低于该版本的应用会先被要求更新软件，而不是下载一个装不上的运行时。
-已装运行时的要求会持久化，App 升级后自动放行；空字段 = 无要求，兼容旧 metadata。
-
-## 更新说明
-
-升级之后第一次打开会弹一次「本次更新」，列出这一版改了什么。它和首启引导**共用同一个对话框壳**
-（`PagedInfoDialog`）：两者要的东西完全一样，两套壳会立刻开始各自漂移。
-
-内容是**本地资源**（`R.array.changelog_items`）而不是 GitHub release 正文：release 正文说的是
-「有一个新版本，它讲了这些」，而这里要说的是「你现在跑的这一版改了什么」—— 用户此刻可能在飞机上，
-所以必须离线可用。
-
-两个对话框互斥，且首启引导会顺手把当前版本记成「更新说明已弹过」：刚装上的人要的是「这是什么应用」，
-不是「本次更新」，而两个对话框叠在一起会互相盖住按钮。
-
-版本号写在三处（`build.gradle.kts` 的基准、`util/Changelog.kt` 的 `VERSION`、那份条目文案），
-`tools/check-changelog.js` 把它们钉在一起。运行时另有兜底：版本不符就不弹 —— 拿上一版的内容配上
-新版本号是一句自信的假话，比什么都不显示糟得多。但那个兜底意味着**新版本的用户什么都看不到**，
-而没人会发现，所以真正的防线是那个检查器。
-
-同一批源码自检里还有 `tools/check-kotlin-comments.js`：Kotlin 的块注释**可以嵌套**，
-所以在 KDoc 里写一个包含块注释起始标记的文本（例如作用域通配写法）会打开一层嵌套注解，
-而那行 KDoc 自己的收尾标记只关掉内层 —— **外层一直开着，把它后面所有代码都吃掉**，
-编译器报出来的却是一片「unresolved reference」，定位代价极高（本项目真的踩过一次，
-靠一次完整 CI 构建才发现）。这个检查器按字符遍历全部 Kotlin 文件，确认字符串、
-模板与注释都正确闭合。两者都接在 `build.yml` 与 `beta.yml` 的编译之前。
-
-## 开机自启
-
-**设置 → 功能 → 开机自启** 里三条路径挑一条。分三条不是为了凑数：Android 官方那条广播在国产
-ROM 上基本不可靠，而另两条各有各的代价，得让用户自己权衡。
-
-| 方式 | 需要什么 | 可靠性 |
-| --- | --- | --- |
-| **开机广播** | 什么都不需要 | 取决于 ROM。MIUI / ColorOS / EMUI 等会把不在「自启动管理」白名单里的应用的 `BOOT_COMPLETED` 直接丢掉，而那个名单只能由用户在系统设置里勾 |
-| **无障碍服务** | 在系统里打开一个无障碍开关 | 高。系统开机后会主动 bind 无障碍服务，被杀之后还会重新 bind，且不受白名单约束 |
-| **开机脚本** | root | 最高。脚本放进 root 管理器的 `service.d`，完全绕开上述所有机制 |
-
-无障碍那一条是在**借用**无障碍框架，所以做到了最小：`DshAutostartService` 的事件回调是空的，
-配置里刻意**没有** `canRetrieveWindowContent`（那一位才是「能读取你屏幕上的内容」的来源），
-订阅的事件类型也只有最低频的 `typeWindowStateChanged` —— 一个都不订阅在部分 ROM 上会被判成无效
-服务而不显示。它存在的唯一理由是「会被系统重新 bind」这个事实。
-
-Android 13 起旁加载安装的应用会被「受限设置」挡住，那个无障碍开关是灰的、点了没反应；界面上写了
-怎么解（应用信息页 → ⋮ → 允许受限设置），不写清楚的话用户只会以为功能坏了。
-
-脚本那一条要注意 `service.d` 跑在 `late_start`，那时系统远没启动完：`am` 可能还不接受命令，而应用
-的数据分区要等首次解锁才挂上。脚本因此先等 `sys.boot_completed`，再重试十次 —— 不去猜「用户解锁了
-没有」，因为没有一个属性在所有 ROM 上都可靠。等待与重试都有次数上限，超了就安静退出：一个卡住的
-开机脚本会一直占着一个 root 进程。
-
-三条路径最后都汇聚到 `DshAutostart.trigger`，由它检查「当前选的是不是这一条」。所以切走模式之后，
-留在设备上的旧脚本、或者用户忘了关的无障碍服务，都不会再偷偷拉起东西（切走时也会主动删脚本）。
-运行时还没下载时一律不启动 —— 否则开机自动跑 120 MB 流量。
-
-**系统里会看到两个 DSH-Folk 的无障碍开关**，它们不是同一件事：上面这个（`DshAutostartService`）只为了
-「被系统 bind」，刻意没有读屏权限；剩下那个（`DshA11yService`）是原生能力桥的 **无障碍能力**用的，
-配置里打开了 `canRetrieveWindowContent`。分成两个是因为：当初为了开机自启而打开无障碍的用户，
-不该在毫无察觉的情况下把「能读你屏幕上的内容」一起交出去。两者互不影响，各自可以单独关掉。
-
-**是否同时拉起容器**是独立的一项。开：容器跟着起来，开机后直接能用。关：只出现通知、进程预热，
-点一下就开始，不占开机那几秒 CPU 也不常驻一份 Node 内存。对「只想随手能用」的人来说后者才是对的。
-
-
-### 采集日志时的文件归属
-
-发送日志（bugreport）里的采集文件**全部先由应用建好空文件**，再交给 root shell 写入
-（`dmesg > 文件`、`tar -czf 文件`）。原因是一次真机崩溃：root 建的文件属主是 root，应用随后
-自己去裁剪 dmesg 就是 EACCES；而崩溃发生在清理临时目录之前，root 文件留在原地，用户再点一次
-还是崩，只能清应用数据才能恢复。预先建好之后 root 的写入只是截断，属主与权限都不变；旧版本遗留的
-root 文件靠「删除只需要目录写权限」自动清掉。新增采集项时**必须**把它加进那份预创建清单 ——
-`tools/check-bugreport-files.js` 会在 CI 里拦住漏掉的那一个（这类错误只在「有 root + 选了时间
-窗口」的真机上暴露，编译与本地都看不见）。
-
-归档**打包前会脱敏**：dsh 服务端把带 token 的启动地址打进了自己的日志，应用原样收进 `dsh.log`，
-而这份归档是要发给别人的 —— 那个 token 等于这台设备上 DSH 的入口。同理还有 getprop 里的设备
-稳定标识（`persist.netd.stable_secret` 这类）。这些都是逐行替换成占位符，其余诊断内容不动。
-
-**时间窗口是真的按窗口裁的**，但要知道哪些项裁得了：有时间的（logcat / dmesg / 各崩溃转储目录）
-按窗口过滤，快照类（props / mounts / cpuinfo / packages / defconfig）没有时间维度，永远原样收。
-而 `kallsyms`（内核符号表，压缩后仍占归档六成以上）只在窗口内**真的有崩溃转储**时才收 ——
-
-同一条 `check-text-clipping` 还管着界面：Compose 的 `Text` 拿到**有界高度**又不给
-`verticalScroll` 时，多出来的行是直接裁掉的 —— 不报错、没有省略号、预览里的短文案也看不出
-来。更新提示框的 release 正文就踩过这个坑（用户看到「更新内容显示不全」）。这类问题只有
-换成长文案才暴露，所以交给检查器盯而不是靠肉眼。
-
-归档里的日志有三份来源：应用收的 dsh **stdout**（`dsh.log`，起服务时轮转，上一次运行的留在
-`dsh-prev.log`）、容器里 dsh 自己写的 `*.log`（`dsh-home-logs.txt`，逐文件限长），以及 WebView
-页面报错（同时进 logcat 和这份日志）。只有第一份是不够的：起服务会清空它，重启之后再采集就
-看不到重启之前的错误。
-
-会话恢复时**不带走 `session.lock`**：那是「这个会话正在被写」的运行时标记，跨机恢复没有
-意义；更要紧的是归组助手会把它当会话去解析（0 字节解不出 zstd 帧），真机上因此出现
-「15 个会话文件里 6 个不可读」，还把这 6 个锁文件挪出了会话目录。
-判据以前是「dropbox 目录里有任何文件」，于是 `SYSTEM_BOOT` 这种每次开机都会写的条目让它几乎
-必然命中；实测一份「最近 10 分钟、开机 134 秒」的报告里 4.3 MB 的符号表就是这么进来的。
-窗口」的真机上暴露，编译与本地都看不见）。
-## 备份为什么要由软件侧加密
-
-配置备份的内容仍然由容器里的 `dsh-config-manager` 插件产出（它最清楚 `~/.dsh` 里什么是配置），
-但**喂给它的东西和它交出来的东西之间，中间那一段由 App 自己做**：
-
-1. 让插件导出一份**明文** ZIP，且明确**不要** `sessions` 分区；
-2. App 在本地把选中的会话、自己的设置与原生权限记录、外观主题包、以及（选了 vault 时）凭据补进这个包；
-3. 有密码时，由 App 做整包容器加密（`DCA1`：`magic+version+salt(16)+iv(12)+tag(16)+密文`，
-   scrypt N=16384/r=8/p=1 + AES-256-GCM）。
-
-之所以不能反过来（让插件加密），是因为它一旦被要求加密就直接产出最终容器 —— App 再也没有机会
-往包里放东西，于是「只导出最近 5 个会话」和「把 App 设置一起带走」都不可能实现。而按上面这个
-顺序产出的包与插件自己的格式**逐字节一致**，所以插件内恢复、桌面端 `dsh-config-manager` 恢复
-都照旧能用；导入时也由 App 先解开容器再交给插件，插件只看到普通明文包。
-
-两条容易写错、后果又看不出来的地方，用检查器钉住：
-
-- **checksums 必须重算**：插件导入时会逐条 SHA-256 校验 `integrity/checksums.json`，补过包却不
-  重算，整包会被直接拒绝；表覆盖除 `manifest.json` 与表自身外的全部条目。
-- **`encrypted=true` 就必须有 `security/secrets.enc`**：插件的导入侧在「声明加密但解不出凭据」
-  时直接拒绝执行，所以不含 vault 但设了密码时，也要写一个**空内容**的占位（插件自己也是这么做的）。
-
-加密实现（自己写的 scrypt + 手写的 PBKDF2，因为 `PBEKeySpec` 的 char→字节编码跨实现不统一）
-拿**插件自己产出的向量**做自检：一段 scrypt 向量 + 一段真实的 DCA1 容器。自检不过就拒绝导出 ——
-一个谁都打不开的备份比没有备份更糟，而这种错误在 App 侧完全看不出来（包生成了、大小正常、
-密码也对，只是插件和桌面端都解不开）。`tools/check-backup-crypto.js` 会用 Node 的标准库把这两条
-向量再独立复算一遍。
-
-界面上的取舍：导出内容四档（仅软件数据 / 仅 DSH 数据 / 两者都带【默认】/ 含 vault【危险，先警告】）、
-会话数量五档（不导出【默认】/ 最近 5 / 20 / 50 / 全部），密码留空即不加密，但含 vault 时必须加密。
-**导入走一个向导**，阶段与容器里 dsh-config-manager 的导入向导一致：选择 → 分析 → 预览与决策 →
-确认 → 正在恢复 → 完成。预览会摆出包里有什么（分区、插件、凭据条数、路径问题）与这次会改动多少项；
-包里有会话就问会话怎么处理（跳过 / 直接恢复 / 停机恢复），检测到冲突就**逐条**问「保留本机还是用包里的」，
-没列完的冲突由全局策略决定；确认页可选「任一项失败就整体回滚」（插件侧是 `=== true` 的严格判断，
-所以这个参数永远显式传）。结果页把还需要处理的东西分组列出：要重启的、仍缺凭据的、失败或跳过的。
-两处**故意不做**：路径映射（App 已在导入前补建缺失的工作区目录）与凭据补录（包里没原文就补不出来）。
-
-「软件数据」= App 的 `SharedPreferences`（`config` + `dshfolk` 两份文件）+ `audit/*.jsonl`
-+ 外观主题包 `dsh-folk/theme.zip`，并且**不带密钥**：`webdav_*` 整组、名字像 password/token/secret
-的键、以及 `app_initialized`（带过去会让新设备跳过首次初始化）。`dshfolk` 里还有三类键按设计排除：
-预装账本（`seed_*`，记的是「这台机器发生过什么」）、本机运行时状态（`runtime_version`、
-`proroot_fail_streak`、`rootfs_size_bytes`）、以及提权项（权限通道、严格程度、原生桥开关与能力档位）——
-换台机器恢复一份备份，不该由备份替用户决定把 root/Shizuku/ADB 或 SMS/SHELL 这些能力打开。
-被跳过的条数会如实报出来（其中提权项单独点名）。
-外观（背景图/视频背景/字体/音乐/音效）是 `filesDir` 里的资源文件，prefs 里只有文件名与 `file://` 指向，
-所以它走**主题导出通路**整份打包进包、恢复时用主题导入放回（会重写 URI、破 Coil 缓存、刷 UI）。
-恢复顺序固定为 插件 → App 数据 → 主题：两边都会写外观参数，主题后落地才是与导出时一致的那份。
-
-**回滚点（快照）也要能带回软件设置。** 插件侧的快照按 `SECTION_IDS` 采集，覆盖的是 `~/.dsh` 下的
-分区，而 App 的设置住在 Android 的 `SharedPreferences`（`config` / `dshfolk`）与 `filesDir` 里的
-外观资源文件里 —— **插件物理上够不到**。所以只靠插件快照，「恢复快照」只会把 DSH 配置退回去，
-软件设置停在导入后的样子。App 侧因此自己做了一份：导入执行**之前**把当前软件设置（同一套
-`app-data.json` + `theme.zip` 格式）拍下来，等插件返回快照 id 后挂到那个 id 下
-（`filesDir/appdata-snapshots/<id>/`，最多留 10 份）。恢复快照时弹窗里有一个默认勾选的
-「同时回退软件设置」，回退顺序与导入一致（插件 → App 数据 → 主题）；删除快照会连带清掉这份副本。
-与备份同一套排除规则：密钥、设备与运行时状态、提权项都不带、不回滚。
-
-**WebDAV 云备份整个交给 `dsh-folk-cloud` 插件（1.9.2.5 起）。** 早先 App 自己用 okhttp + 手写
-PROPFIND 传 zip，能力只有「整包上传/下载」：没有增量、没有上游历史、也没有「上游被别的设备
-更新了」这个概念。现在这套逻辑搬进一个专门的插件：它自建 WebDAV 客户端、自维护一份 manifest
-（`<地址>/dsh-folk/index.json`，记录每次备份的时间/整包哈希/档位），按**内容哈希**判断上游有没有
-更新、去重，上游与本机都改动时**停下来问用户**（不自动合并）。触发方式：定时 N 分钟 / DSH 启动后 /
-手动。它依赖 `dsh-config-manager` 出 DSH 分区数据，靠 App 的补包接口（见下一节的 `/cloud/appdata/`）
-取软件数据与外观。
-
-App 这边**不再自己传 zip**：备份页的「云备份」区块只是这个插件的**薄前端** —— 仅在检测到该插件时
-出现，显示状态、开一个配置弹窗（写插件的 `/api/dsh-folk-cloud/config`）、给「立即同步 / 从上游恢复」
-两个触发按钮。几条边界：**WebDAV 设置只存插件一份**（地址/用户名/远端目录落插件配置，口令走 DSH
-凭据），App 从插件读回填；**口令永不回传**，配置框里留空 = 保持插件已存的那个；`dsh-config-manager`
-缺席时插件会明说「DSH 数据备不了」；含软件数据的档位在 App 补包接口不可用时**自动回退**到不含软件
-数据的档位（界面标出实际档位）。完整设置（档位、加密、触发间隔）在插件自己的 dsh web「云备份」页里。
-
-备份档位共五档：`仅 DSH`、`仅 DSH + vault`（1.9.2.5 新增，含凭据原文、强制加密）、`仅软件数据`、
-`软件 + DSH`、`软件 + DSH + vault`。含 `vault` 的两档都会把凭据原文带进包里，必须加密。
-
-## 容器里能调宿主的什么
-
-容器内除了 dsh 本体，还有两个由 App 落盘的命令，都走同一个只绑 `127.0.0.1` 的回环桥（带随机 token，
-其它 App 读不到本应用私有目录，也就拿不到 token）：
-
-`dsh-fs` —— 受控访问共享存储（根目录固定 `/sdcard`，路径逐段校验 + canonical 二次确认，防符号链接逃逸）：
-
-```
-dsh-fs list [路径] [--recursive] [--maxDepth N] [--limit N]
-dsh-fs stat <路径>
-dsh-fs read <路径> [--offset N] [--length N]     # 二进制写到 stdout
-dsh-fs write <本地文件> [远端路径] [--append]
-dsh-fs rm <路径> [-r]
-dsh-fs mv <源> <目标>
-dsh-fs cp <源> <目标> [--overwrite]
-dsh-fs mkdir <路径>
-dsh-fs find <路径> --glob '*.log' [--maxDepth N] [--limit N]
-dsh-fs space [路径]
-dsh-fs health
-```
-
-Android 规定读写整个共享存储要「所有文件访问」，而这一项**只能**在系统设置页里授予（它的
-protectionLevel 是 `signature|appop`，应用申请不到）。没授予时上面每条命令都回
-`403 no_storage`，`dsh-fs health` 会如实报 `storageGranted: false`；去
-**设置 → 安全 → 原生能力 → 共享存储** 点一下就能跳到那个系统页面。
-顺带说明：`/storage/emulated/0` 本来就 bind mount 进了容器，普通 `read`/`write`/`glob` 常常够用，
-这个桥的价值是**窄而可审计**的那条路径，不是访问本身。
-
-同一个回环桥上还有一组**云备份补包端点**（`/cloud/appdata/status`、`/cloud/appdata/export`、
-`/cloud/appdata/restore`），供 `dsh-folk-cloud` 插件在做**含软件数据**的备份/恢复时反向请 App 帮忙：
-软件数据（Android `SharedPreferences` 与外观资源）住在 App 私有目录、容器内的插件够不到，只能由 App
-出/收整包（复用备份页那条导出/导入通路）。它们与 `dsh-fs`/`dsh-native` 共用同一 token 与回环守卫 ——
-能调到这里就等于容器内可信代码；旧版 App 没有这组端点时，插件会自动回退到不含软件数据的档位。
-
-`dsh-native` —— 借 App 之手调原生能力，共 24 项，**默认整体关闭**：要在 **设置 → 安全 → 原生能力**
-里打开总开关，再逐项勾选。界面按「这项能力动的是什么」分四组，越往下越该慎重。
-**总开关关着的时候，这一页只显示总开关与一行说明**（并告诉你还有多少项档位留在那里）：分项、
-共享存储与 CLI 提示整块收起 —— 关着还摊一屏开关墙，既读不出「现在什么都不通」，也读不出
-「档位是保留而不是清空」。档位本身留在 prefs 里，重新打开开关即全部恢复。
-
-```
-与设备交互   notify / full_screen_notify / toast / vibrate / clipboard / intent（分享与打开链接）/ tts（语音合成）
-读设备状态   device / network / phone / sensors
-个人数据     media / camera / mic / location / calendar / contacts / sms / a11y（无障碍）
-更改系统状态 volume / settings / install / usage / shell（特权命令）
-```
-
-命令：
-
-```
-dsh-native notify <标题> [正文] [--id N] [--ongoing]
-dsh-native notify-cancel [--id N]
-dsh-native toast <文本>
-dsh-native vibrate [--ms N] [--amplitude 1..255]
-dsh-native clip get | clip set <文本> [--label L]
-dsh-native share <文本> [--title T]
-dsh-native open <https 链接>
-dsh-native device
-dsh-native network                       # 连接类型 / 是否真能上网 / 是否计费 / WiFi 信号
-dsh-native phone                         # 运营商 / 制式 / SIM / 通话状态
-dsh-native sensors list | sensors read <id>
-dsh-native media list [--type image|video|audio] [--q 名字] [--limit N]
-dsh-native media get <id> [--type image|video|audio]
-dsh-native camera photo [--facing back|front] [--max N]
-dsh-native tts say <文本> [--lang zh-CN] [--rate 0.1..3] [--pitch 0.5..2]
-dsh-native tts file <文本> [--lang L]    # 合成成 wav 落在 /tmp
-dsh-native tts voices                    # 这台设备能读哪些语言
-dsh-native mic record [--ms N]
-dsh-native location [--maxAge ms] [--wait ms]
-dsh-native calendar list [--days N] | calendar add <标题> --start <epochMs> [--minutes N]
-dsh-native contacts list [--q 名字或号码] [--limit N]
-dsh-native volume | volume set <0..100> [--stream music|ring|alarm|notification|call|system]
-dsh-native ringer <normal|vibrate|silent>
-dsh-native settings | settings brightness <1..100> [--auto 0|1] | settings timeout <ms>
-dsh-native settings rotation <0|1>
-dsh-native install                       # 这台机器允不允许安装未知应用
-dsh-native shell [--su] [--timeout ms] [--] <命令>   # 走你选的权限通道执行（见下）
-dsh-native a11y tree [--depth N] [--max N]        # 读当前屏幕的节点树
-dsh-native a11y click <文字或 id> [--class C] [--index N]
-dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
-dsh-native a11y text <文字> [--target <文字或 id>]
-dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen>
-dsh-native caps                          # 查当前哪些能力开着、能不能用
-dsh-native elevate <能力> <read|write|read_write|control> --reason <理由> [--command <命令>]
-```
-
-### 特权命令（`shell`）
-
-这一项让容器里的 AI 真正用上你选的通道：App 代它执行，它自己不获得任何特权。三条通道的差别只在「谁执行」：
-
-| 通道 | 身份 | 实现 |
-| --- | --- | --- |
-| root | uid 0 | 常驻 su shell |
-| Shizuku | uid 0（Sui/root 模式）或 2000（adb 模式） | 送到 Shizuku 进程里的用户服务执行（`newProcess` 的返回类型是库内部可见的，应用侧编译不过） |
-| 无线 ADB | 2000，`--su` 才到 0 | 转发给容器内那条脚本，于是它的两把锁照样生效 |
-
-档位只有两档有意义：**读**只放行诊断类命令（与容器内脚本共用**同一张白名单**，`tools/check-native-logic.js`
-会断言两边逐字一致），**读写**才能改设备状态。严格程度决定要不要问（见前文），每一次调用都写进审计，
-记录里带上走的哪条通道、拿到的身份、当时的严格程度，以及这次是用户点过头还是自动放行的。
-**「选了通道」和「通道能用」是两件事**，提示词把两件都告诉 agent：选了 root 但还没点过「刷新权限」时
-它是「已选择，还差一步」（`root_unverified`），而不是「这台设备没有特权」—— 后者会让它连试都不试。
-root 的「已验证」不再需要用户手动点一次：应用启动时会自己验（已经授权过的就是静默的，不弹框），
-只有真没授权过的人才会看到那一次系统框，被拒之后一天内也不会再自动试 —— 免得每次开 App 都弹。
-真正拦住的只有三种可以提前判定的情况：root 没验过（还允许试，调用那一刻才弹 su 授权框）、
-Shizuku 没授权、无线 ADB 没配对。用户把通道设成 root、点「刷新权限」、或者刚给 Shizuku 授权，
-这三个时刻都会立刻重写容器侧的宿主事实 —— 少写一处，用户就会遇到「我明明开了 root，它好像不知道」，
-而那段提示词是按事实渲染的。`dsh-native caps` 里带**只读命令清单**与通道是否就绪：严格档下
-猜错一次就要用户多点一下，清单只有一份（与宿主判定同源），所以不会出现「提示词说只读、宿主说不是」。
-
-
-返回值里带 `exit` 与 `stdout`/`stderr`（超 64 KB 截断）；跑不成的情况用状态码分开：
-`403` 通道不允许（`no_channel` / `adb_write_disabled` / `root_unavailable` …）、`504` 超时被丢弃、
-`429` 已有一条在执行。这些全是**状态**而不是暂时性错误，提示词里写明不要重试。
-
-### 无障碍（`a11y`）
-
-读当前屏幕的节点树，或对它点按、滑动、输入、返回桌面。目标是**用户此刻正在看的界面**，不是本应用 ——
-所以「读」与「写」的差别比别的能力大得多，而且需要用户在系统设置里单独打开那个无障碍开关
-（未打开时 `caps` 报 `available:false` + `no_a11y_service`）。
-
-读屏优先按文字或 view id 定位再点，而不是记坐标：坐标跨设备跨分辨率都不通用，读树时把 `bounds` 一并返回。
-节点自己常常 `clickable=false`（真正接点击的是父容器），所以点击会往上找可点祖先；找不到才退回按中心坐标
-点一次。安全窗口（锁屏、密码框）系统不给节点，这时明确回 `no_window`，而不是让人以为是自己写错了。
-
-**权限不够时，能力调用自己就是申请**：桥不会立刻回 403，而是**把这次调用挂住**，同时在 App 里弹窗；
-用户答应就地执行这条命令、把真实结果还给 agent，用户拒绝（或 60 秒不处理）这次调用就以失败结束。
-agent 因此不需要「先申请、再调一次」，也不会出现「申请成功了但调用还是失败」这种半途状态。
-
-弹窗给用户三个选择 —— **允许**（级别落盘、长期生效）、**仅本次**（只放行这**一次**调用，用完自动收回，
-设置里的开关不动）、**拒绝**（关掉弹窗等同拒绝）。档位本来就够、只是按严格程度要用户点头的那种弹窗
-（特权命令与无障碍动作）只有 **允许本次** 与 **拒绝** 两个按钮：长期授权与「下次还要问」直接冲突。弹窗正文里**原文照显这次要执行的命令**（等宽、可选中
-复制）：用户要判断的从来不是「camera=write 要不要给」，而是「它接下来到底要做什么」。命令由桥从这次调用
-本身重建，agent 不需要额外带 —— 显式的 `dsh-native elevate` 才需要 `--command` 来告诉用户「我打算做什么」。
-
-几个刻意的约束：
-
-- **60 秒不处理按拒绝算**。弹窗挂着不答会永久占住「同时只允许一份待处理申请」那个名额，后面的申请只剩
-  409；有时限之后，最坏情况退化成「这次没成」，而不是「这条通道从此废了」。
-- 因为有时限，弹窗必须真的能被看见：它同时挂在主界面与 **WebUI 的 Activity** 上。只挂主界面的话，用户
-  正看着 WebUI，申请被压在下面 —— 表现是「AI 申请完毫无反应」，然后静默超时算他拒绝。
-- **第二段弹窗：Android 层还差权限。** 用户点了「允许」只解决 App 层那一半；相机、麦克风、通知、
-  「修改系统设置」这些是 Android 自己的权限，缺了照样执行不了。这时弹第二段，说清缺哪一项，需要跳系统
-  设置页的就给一个「去系统设置」按钮，用户切回应用时**自动复查**；用户点「我知道了」或这一段超时，这次
-  调用就以 `no_android_permission` 结束（而不是假装成功）。这一段给足 5 分钟 —— 用户正在系统页里找开关。
-- 「仅本次」只买一次调用，且三分钟后自动失效；只有真的执行到设备的那次调用才会花掉它 —— 因为缺系统权限
-  而失败的那次不花（否则用户要为同一件事回答两次）。
-- 申请状态仍是可查的（`dsh-native caps` 的 `pending` / `once` / `lastElevation`）：阻塞期间 agent 正等着，
-  这些字段主要用于插件与排查。提示词里写清了「被拒绝 / 超时 / Android 层缺权限就不要重问」。
-
-```
-```
-
-勾上一项就会立刻申请它缺的权限；被永久拒绝之后不再弹空窗，而是直接跳系统设置页 —— 那种情况下
-`launch` 会立即回调、界面毫无反应，用户只会以为按钮坏了。三项走的是**特殊权限**（`settings` 要
-「修改系统设置」、`volume` 的静音与勿扰下调音量要「勿扰访问」、`install` 是「安装未知应用」），
-它们 `requestPermissions()` 永远拿不到，只能跳系统页，所以那三行提示的措辞也不同：说的是
-「点这里打开系统页」而不是「点这里授权」。
-
-`tts` 是这批能力里唯一**刻意不要求前台**的一项。相机在后台只能拿到黑帧、剪贴板在后台恒返回 null，
-所以那些能力后台一律回 `409 not_foreground`；而朗读恰恰相反 —— 手机在口袋里、用户没看屏幕的时候，
-「让 agent 说一声」才有意义。它调的是系统自带的引擎（国行多是讯飞或小米的，海外是 Google 的），
-不打包任何合成模型；设备上没装引擎时 `caps` 会如实报 `available:false` + `no_tts_engine`。
-`tts voices` 存在的理由是**能不能读中文取决于设备**：海外精简 ROM 经常没有中文音库，agent 只能问，
-猜不出来。朗读是同步等到读完才返回的 —— 否则 agent 紧接着再调一次，两句话会互相打断。
-
-`media get` / `camera photo` / `mic record` / `tts file` **都不回二进制**：字节落进容器的 `/tmp/dsh-native/`，
-回一个容器内路径，agent 用普通文件工具读，只保留最新 32 个。容器 rootfs 是本应用私有目录，写它
-不需要任何存储权限，也少一次 base64 膨胀。
-
-几处只有真机上才会发现的取舍：
-
-- **相机**无预览直接出图（拉起系统相机等于让用户自己按快门，那不是「agent 拍一张」）。要丢掉前
-  5 帧等自动曝光收敛 —— 单发一张 `STILL_CAPTURE` 在多数机型上就是一张黑图。
-- **录音与拍照**固定要求前台：Android 后台录音只给**静音**、后台开相机只给**黑帧**，两者都不报错。
-  与其交一份废数据，不如直接 `409 not_foreground`。
-- **位置**先用缓存点位（响应里 `fresh: false`），只有过期了才唤醒 GNSS —— 室内主动定位可能几十秒
-  无果。Android 12 起用户可以只给「大致位置」，那时坐标被系统模糊到公里级，响应里 `precise: false`
-  说明这一点，界面上也单独一行提示，而不是当成缺权限反复索要。
-- **亮度与音量**收的是百分比：不同机型的原始量程差别很大（媒体常见 15 档、通话 5 档），让 agent
-  先查一次 max 再算是多余的往返。亮度不接受 0（全黑屏幕用户没法自己调回来），音量接受。
-  自动亮度开着时写入会在几秒内被系统覆盖，所以响应里带 `autoBrightness` 提醒。
-- **每个写操作都返回改动前后的值**：改完不会有人替用户恢复，agent 至少要能说清自己改了什么。
-- **传感器**这一项不因缺权限而不可用：加速度、光、气压等都不需要权限，只有心率（`BODY_SENSORS`）
-  与计步（`ACTIVITY_RECOGNITION`）要，缺了就从列表里消失并在 `needPermission` 里列出。
-- **通讯录只读**，也只返回姓名与号码。**电话**只给网络环境，没有拨号、短信、IMEI —— 拨号真要做，
-  正确形式是 `ACTION_DIAL`（号码填进拨号盘、由用户按下通话键），那属于已有的 `intent` 能力。
-- **网络**的带宽是系统**估值**不是实测，字段名里带 `estimated` 就是为了别被当测速结果；
-  `validated: false` + `connected: true` 是门户认证那种「连上了但上不了网」。
-
-分项而不是一个总开关，是因为容器里同时跑着用户自己装的第三方插件，它们共享同一个 token —— 「能调这个接口」
-等价于「容器内任何代码都能调」。读剪贴板、拉起分享/链接、录音、拍照都受 Android 的后台限制约束，
-应用不在前台时会返回 `409 not_foreground` 而不是假装成功。
-
-两个桥的报错都是**双份**的：`error` 是跟随应用语言的人话（给用户看），`reason` 是稳定的机器码（给 agent 判断）。
-用户把手机切成英文不会改变程序行为。
-
-agent 默认**不知道**这些东西存在（dsh 上游没有 Android 宿主的概念）。App 会往容器里装一个单文件
-cordis 插件，往 dsh 的系统提示词里加一段说明：宿主是什么机型/系统、`/sdcard` 已经挂进来了、有
-`dsh-fs` / `dsh-native` 这两个命令、此刻**哪些**能力真的开着、缺哪些系统权限、设备语言是什么、以及提权是不是关的。
-勾掉哪一项，下一轮对话里那一项就从提示词里消失，agent 不会再去调一个注定 403 的接口。
-每项还附一句最容易踩错的地方 —— 日历的时间戳是毫秒、位置可能被模糊到公里级、带宽是估值不是测速、
-自动亮度会覆盖刚写入的亮度。
-那段本身是英文的（与 dsh 自带的各段一致，避免给模型的输出语言添偏置），设备语言只作为一条**事实**告诉它。
-提示词里还写清了「自助提权」这套流程：怎么申请、弹窗有哪三个选项、同一时刻只能有一份待处理申请、
-多久不答算拒绝、以及去 `dsh-native caps` 的哪个字段看申请的下文（`pending` / `once` / `lastElevation`）。
-少了这些，模型只会拿到一个 403 的 `reason`，然后靠猜决定「该等」还是「该换个办法」。
-不想让它知道就在 **插件 → 安卓原生权限桥提示词** 关闭这个置顶的“内置”插件；它不可卸载，关闭后提示词段落会渲染为空。
-
-## 它是怎么跑起来的
-
-```
-DSH-Folk (Android app)                      ← 按 ABI 拆包：arm64-v8a / x86_64
-  └─ proot / proroot                        ← 打包在 APK 里的可执行 .so
-       └─ Ubuntu 24.04 rootfs               ← 首次启动时在线下载（arm64 或 x86_64）
-            ├─ python3                       ← 无线 ADB 配对用，已预装
-            ├─ git                            ← git 源插件用，已预装
-            └─ Node.js 24 + @deepseek-ai/dsh
-                 └─ dsh web --port 3080      ← 默认只监听 127.0.0.1
-                      └─ 手机浏览器 / 应用内打开
-```
-
-几个不得不这么做的地方：
-
-- Android 的 `app_data_file` 带 **noexec**，只有 `nativeLibraryDir` 里的 `.so` 可执行，所以 proot / proroot 以 `.so` 形式打包进 APK。
-- proroot 只有 arm64 版本（[上游](https://github.com/coderredlab/proroot) 只发布 arm64-v8a），所以 x86_64 设备上运行方式固定为 proot，
-  设置里那一项会禁选并说明原因。
-- 部分设备的私有目录禁止 `link(2)`（真机实测报 `AccessDeniedException`），应用会先探测硬链接是否可用，不可用时给 proot 加 `--link2symlink`；
-  proroot 则无条件启用它。而 pnpm 正是用 `link()` 从内容存储装包 —— 链接一旦被改写成符号链接，
-  Node 的 `require.resolve` 做 realpath 就会解析进内容存储的扁平哈希目录，插件声明的 `./lib/client.cjs` 再也拼不出来
-  （表现是装完插件 `dsh web` 报 `MissingClientBundleError`）。所以这种环境下会给 profile 的 `pnpm-workspace.yaml`
-  写上 `packageImportMethod: copy`，让 pnpm 复制真实文件。代价是内容存储的去重失效，容器体积会大一些。
-- `dsh plugin` 只负责调 pnpm，PATH 上没有 pnpm 就直接 exit 127。运行时因此固定带自包含的
-  `pnpm@10.34.5`（不跟 `latest`：pnpm 12 的 npm 包改成了依赖 postinstall 下载原生二进制的启动器，
-  与异架构构建必须使用的 `--ignore-scripts` 冲突），按 `package.json.bin` 重建 `/usr/local/bin`
-  下的链接，并在打包前用 `node bin/pnpm.cjs --version` 自检 —— 这一层只由运行时负责，App 不再
-  在设备上给 rootfs 打补丁（那只会把「运行时是坏的」藏起来）。修复版以 r3 重新发布在**两个**通道上，
-  所以存量用户（含仍停在 0.1.2-r2 的 stable 用户）能直接更新运行时脱困，不必重装。
-- 插件目录里超过一半的条目是 `github:owner/name` 安装规格，pnpm 解析它要 `git ls-remote`，所以 git 也预装进了 rootfs。
-  注意 rootfs 是用 `dpkg-deb -x` 纯解包装出来的（不跑 maintainer script —— 它们要在目标架构上执行），
-  **dpkg 的依赖关系没人替我们解** —— 包列表写漏一个传递依赖，构建期一切正常，到设备上 exec 那一刻才报
-  `cannot find libxxx.so.N`。所以构建末尾有一步 `check-elf-closure.js`：从 git-core / perl 扩展 / python3
-  出发递归解析 ELF 的 `DT_NEEDED`，任何 SONAME 找不到提供者就让构建失败（并断言入口是目标架构）。
-- `dsh web` 默认只绑定回环地址；配置备份走的也是同一个回环 HTTP 接口。局域网访问是设置里一个默认关闭的开关。
-- **1.9.0 把 dsh 0.1.5 推上正式通道**（`runtime-latest` = `0.1.5-rc.1-ubuntunoble-r4`，要求 App ≥ 1.9.0）。
-  测试通道此前已经在同一份 rootfs 上跑了一整轮 beta，但**测试人数不足**：升级 dsh 会改写会话与插件数据，
-  而 App 侧保留的那几条路径（`root/.dsh`、`root/.local`、`.l2s`）只保得住文件、保不住上游格式变化。
-  所以更新运行时前请先备份 —— 更新说明弹窗的第一句就是这句警示，用错误色显示。
+- [容器里能调宿主的什么（dsh-fs / dsh-native）](docs/host-bridges.md) —— 两个回环桥、24 项原生能力、特权命令（`shell`）、无障碍（`a11y`）与自助提权流程
+- [备份为什么要由软件侧加密](docs/backup.md) —— 导出/导入格式、`DCA1` 容器、快照回退软件设置、WebDAV 云备份插件、五档档位
+- [开机自启](docs/autostart.md) —— 开机广播 / 无障碍 / 开机脚本三条路径的取舍，以及两个无障碍开关分别是什么
+- [日志采集与脱敏](docs/logs.md) —— bugreport 的文件归属、脱敏、时间窗口裁剪与 `session.lock` 处理
+- [它是怎么跑起来的](docs/architecture.md) —— proot/proroot、rootfs、link2symlink、pnpm、ELF 闭包等运行链细节
+- [构建与发布内幕](docs/dev-notes.md) —— 应用/运行时的发布工作流、测试版通道机制、更新说明为什么是本地资源
 
 ## 项目结构
 
@@ -614,6 +140,7 @@ app/src/main/java/me/bmax/apatch/
   ui/screen/settings/   设置各分页
 runtime-builder/        容器 rootfs 构建脚本（在 CI 上跑）+ 动态库闭包检查
 .github/workflows/      build.yml（APK） + runtime.yml（rootfs）
+docs/                   分主题的深入实现说明
 ```
 
 内部包名保留 `me.bmax.apatch`（applicationId 是 `top.funcun.dshfolk`）：
@@ -639,7 +166,7 @@ DSH-Folk 的 UI 直接复用 FolkPatch，容器与运行时交付思路来自 DS
 
 ## 友情链接
 
-LINUX DO 开源社区 | [linux.do](https://linux.do) 
+LINUX DO 开源社区 | [linux.do](https://linux.do)
 
 ## 交流
 

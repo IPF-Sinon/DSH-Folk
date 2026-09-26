@@ -314,10 +314,11 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
-        <item>备份页「DSH 配置备份」卡片对齐云备份卡片：只有检测到插件正常就绪时才显示导出/导入/打开目录按钮，未装/被停用/DSH 没跑时只给对应的引导按钮。</item>
-        <item>移除已无用的「整理未分组会话」按钮（会话恢复已整体交给配置管理器插件）。</item>
-        <item>修复 x86 设备上锁定 proot 后，主页「运行方式」仍显示 proroot 的问题，现在显示实际在跑的运行时。</item>
-        <item>软件备份导出弹窗新增「包含应用主题」开关，与云备份逻辑一致：主题超过 5 MB 默认不含、小于则默认含，可手动切换。</item>
+        <item>插件商店对齐上游 dsh-market：卡片与详情页显示每个插件的权限能力与「安全红线」（读凭据+联网、安装期执行代码、明文 http、访问云元数据 IP 等上游每日扫描结果），详情页新增截图预览与下载量统计窗口。红线只是事实披露、非官方认证。</item>
+        <item>修复插件商店卡片「可更新」一直不显示的问题（改用目录内联的最新版本号）。</item>
+        <item>新增「WSL 与 Windows 互操作」分类标签。</item>
+        <item>github 源插件若有作者预编译包，安装时用它做兜底，更快更稳。</item>
+        <item>整理 README：把深入实现说明按主题拆到 docs/ 下，README 顶部加目录跳转。</item>
 </string-array>
 
     

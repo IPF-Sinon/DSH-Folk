@@ -293,7 +293,7 @@ object DshRuntime {
     //   ② /plan 与 /analyze 认 decryptPassword，不传就会把「只存在于 secrets.enc、未被
     //      credentialsStatus 声明」的凭据从计划里漏掉（真机反馈「导入密钥没生效」）；
     //   ③ 会用 manifest 的 sourceHome 自动生成跨机基础路径重定基规则，App 侧据此同时给
-    //      /plan 的 pathMappings 与自己的会话归组脚本传映射（见 DshBackupArchive/DshSessionGroup）。
+    //      /plan 的 pathMappings 传映射（见 DshBackupArchive）。
     //
     // dshmarket 1.65.1 / dsh-web-mobile 3.0.3（用户 2026-09-25 指定）：直接列为要求版本，
     // 已装且低于它的机器会在启动时随预装升级流程拉到这两个版本。

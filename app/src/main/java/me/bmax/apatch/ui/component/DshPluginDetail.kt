@@ -10,9 +10,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
@@ -156,6 +160,86 @@ fun DshPluginDetailSheet(
                 Text(text = plugin.description, style = MaterialTheme.typography.bodyMedium)
             }
 
+            // 截图（上游目录自带的 screenshots[]，通常是 raw.githubusercontent 直链）：横向滑动预览。
+            if (plugin.screenshots.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    plugin.screenshots.take(8).forEach { url ->
+                        AsyncImage(
+                            model = url,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .height(160.dp)
+                                .clip(RoundedCornerShape(10.dp)),
+                            contentScale = ContentScale.FillHeight,
+                        )
+                    }
+                }
+            }
+
+            // 权限与安全：上游每日扫描出的能力与红线。红线非空时用错误色底强调；
+            // 明确标注「收录 ≠ 背书」，避免被误读成官方认证。
+            if (plugin.capabilities.isNotEmpty() || plugin.redLines.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                val hasRed = plugin.redLines.isNotEmpty()
+                Surface(
+                    color = if (hasRed) MaterialTheme.colorScheme.errorContainer
+                    else MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.dsh_plugin_caps_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (hasRed) MaterialTheme.colorScheme.onErrorContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (plugin.capabilities.isNotEmpty()) {
+                            Text(
+                                text = plugin.capabilities.joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (hasRed) MaterialTheme.colorScheme.onErrorContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        plugin.redLines.forEach { r ->
+                            Text(
+                                text = "⚠ $r",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                        if (plugin.capabilityCheckedAt.isNotEmpty()) {
+                            Text(
+                                text = stringResource(
+                                    R.string.dsh_plugin_caps_checked,
+                                    plugin.capabilityCheckedAt.substringBefore('T'),
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (hasRed) MaterialTheme.colorScheme.onErrorContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.dsh_plugin_caps_disclaimer),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (hasRed) MaterialTheme.colorScheme.onErrorContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.height(2.dp))
             DetailRow(stringResource(R.string.dsh_plugin_field_pkg), plugin.pkg.ifEmpty { plugin.id })
             if (plugin.version.isNotEmpty()) {
@@ -166,6 +250,18 @@ fun DshPluginDetailSheet(
             }
             if (plugin.category.isNotEmpty()) {
                 DetailRow(stringResource(R.string.dsh_plugin_field_category), plugin.category)
+            }
+            // 下载量语境：上游是滚动窗口统计，标出窗口区间与最后核对日期，避免把裸数字当实时值。
+            if (plugin.downloadsCheckedAt.isNotEmpty() && plugin.downloadsStart.isNotEmpty()) {
+                DetailRow(
+                    stringResource(R.string.dsh_plugin_field_downloads),
+                    stringResource(
+                        R.string.dsh_plugin_downloads_ctx,
+                        plugin.downloadsStart,
+                        plugin.downloadsEnd,
+                        plugin.downloadsCheckedAt,
+                    ),
+                )
             }
             val repo = plugin.homepage.ifEmpty { plugin.repo }
             if (repo.isNotEmpty()) {

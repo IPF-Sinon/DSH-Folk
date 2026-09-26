@@ -331,10 +331,11 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>The backup page DSH-config card now mirrors the cloud card: export/import/open-dir buttons appear only when the plugin is detected ready; otherwise only the matching guidance button is shown.</item>
-        <item>Removed the now-obsolete Tidy ungrouped sessions button (session restore is fully handled by the config-manager plugin).</item>
-        <item>Fixed the home screen still showing proroot on x86 devices where proot is locked; it now shows the runtime actually running.</item>
-        <item>The software backup export dialog now has an Include app appearance switch, matching the cloud logic: off by default when the theme exceeds 5 MB, on when smaller; toggle manually anytime.</item>
+        <item>The plugin store now aligns with upstream dsh-market: cards and the detail sheet show each plugin&apos;s capabilities and "safety red-lines" (reads credentials + network, runs code at install time, plaintext http, cloud-metadata IPs — from the upstream daily scan), and the detail sheet adds a screenshot preview and download-count window. Red-lines are factual disclosure, not an endorsement.</item>
+        <item>Fixed the store card never showing "updatable" (now uses the catalog&apos;s inlined latest version).</item>
+        <item>Added a "WSL &amp; Windows Interop" category tab.</item>
+        <item>GitHub-source plugins with an author-prebuilt package now use it as an install fallback for a faster, more reliable install.</item>
+        <item>Tidied the README: deep-dive notes are split by topic under docs/, with a table of contents at the top.</item>
 </string-array>
 
     

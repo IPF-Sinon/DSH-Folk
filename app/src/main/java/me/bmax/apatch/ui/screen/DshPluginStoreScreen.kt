@@ -171,8 +171,8 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
         DshPluginDetailSheet(
             plugin = p,
             onDismiss = { detailId = null },
-            onInstall = { viewModel.install(p.addSpec) },
-            onUpdate = { viewModel.install(p.addSpec) },
+            onInstall = { viewModel.install(p.addSpec, fallbackTgz = p.tarball) },
+            onUpdate = { viewModel.install(p.addSpec, fallbackTgz = p.tarball) },
             onUninstall = { viewModel.uninstall(p.pkg) },
             onToggle = { viewModel.setDisabled(p.pkg, !p.disabled) },
             onOpenRepo = { openPluginRepo(context, p) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },
@@ -254,7 +254,7 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
             StoreStatusLine(viewModel)
             StoreGrid(
                 viewModel = viewModel,
-                onInstall = { spec -> viewModel.install(spec) },
+                onInstall = { plugin -> viewModel.install(plugin.addSpec, fallbackTgz = plugin.tarball) },
                 onOpenDetail = { detailId = it.id },
                 onOpenRepo = { openPluginRepo(context, it) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },
             )
@@ -343,7 +343,7 @@ private fun CategoryRow(viewModel: DshPluginViewModel) {
 @Composable
 private fun StoreGrid(
     viewModel: DshPluginViewModel,
-    onInstall: (String) -> Unit,
+    onInstall: (DshPlugin) -> Unit,
     onOpenDetail: (DshPlugin) -> Unit,
     onOpenRepo: (DshPlugin) -> Unit,
 ) {
@@ -388,7 +388,7 @@ private fun StoreGrid(
                         plugin = plugin,
                         // 已装状态由 storeItems 统一补齐，瓦片与详情页判据一致
                         installed = plugin.installed,
-                        onInstall = { onInstall(plugin.addSpec) },
+                        onInstall = { onInstall(plugin) },
                         onOpenRepo = { onOpenRepo(plugin) },
                         onOpenDetail = { onOpenDetail(plugin) },
                     )
@@ -481,6 +481,15 @@ private fun StorePluginTile(
                         text = "v${plugin.version}",
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                // 安全红线：上游每日扫描出的告警（读凭据+联网 / 安装期执行代码 / 明文 http 等）。
+                // 只是事实披露、非认证；点进详情看原文。
+                if (plugin.redLines.isNotEmpty()) {
+                    ModuleLabel(
+                        text = "⚠ " + stringResource(R.string.dsh_plugin_redline_badge, plugin.redLines.size),
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
                     )
                 }
             }

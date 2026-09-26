@@ -190,7 +190,7 @@ const server = http.createServer((req, res) => {
     "分发的命令都写进了 USAGE" + (undocumented.length ? " → 漏写 " + undocumented.join(",") : ""));
 
   // README 同样是用户会照着敲的地方
-  const readme = fs.readFileSync("README.md", "utf8");
+  const readme = fs.readFileSync("docs/host-bridges.md", "utf8");
   const inReadme = new Set([...readme.matchAll(/^dsh-native ([a-z-]+)/gm)].map((m) => m[1]));
   const rdMissing = [...dispatched].filter((c) => !inReadme.has(c));
   ok(rdMissing.length === 0,

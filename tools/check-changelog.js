@@ -282,7 +282,7 @@ ok(/sha256sum/.test(betaYml),
 // 更新说明为什么是本地资源。读者按 README 去改代码时，错的文档比没有文档更贵。
 console.log("\n── README ──");
 {
-  const rd = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
+  const rd = fs.readFileSync(path.join(ROOT, "docs/dev-notes.md"), "utf8");
   ok(/接受测试版更新/.test(rd), "README 写了那个开关的位置");
   ok(/release 变体/.test(rd), "README 说明测试版为什么不用 debug 包");
   ok(/401/.test(rd), "README 记下 artifact 下载要认证这个事实（否则下一个人会再试一次）");

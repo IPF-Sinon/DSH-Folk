@@ -219,7 +219,7 @@ console.log("\n── 与 1.8.0 的兼容 ──");
 // 文档少写一条方式，等于那条路径不存在：没人会去翻源码找自启动怎么配。
 console.log("\n── README ──");
 {
-  const rd = fs.readFileSync("README.md", "utf8");
+  const rd = fs.readFileSync("docs/autostart.md", "utf8");
   const from = rd.indexOf("## 开机自启");
   const sec = from < 0 ? "" : rd.slice(from, rd.indexOf("\n## ", from + 4));
   ok(sec.length > 0, "README 有「开机自启」一节");

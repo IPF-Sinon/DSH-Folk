@@ -170,22 +170,7 @@
     <string name="dsh_output">Output</string>
 
     <!-- 备份：对齐 dsh-config-manager 导出格式 -->
-    <string name="dsh_bk_tidy_sessions">Tidy ungrouped sessions</string>
-    <string name="dsh_bk_tidy_sessions_summary">Puts sessions that are already on disk but not inside any workspace back where they belong, by path (the service stops briefly). This is how sessions imported by an earlier version get grouped: importing again will not reprocess files that already exist.</string>
     <string name="dsh_bk_group_stage">Putting %1$d sessions back into their workspaces (stopping briefly first so the change cannot be overwritten)…</string>
-    <string name="dsh_bk_group_done">Sessions grouped: %1$d of %2$d are inside a workspace</string>
-    <string name="dsh_bk_group_files">", %1$d session log files in total"</string>
-    <string name="dsh_bk_group_ignored">", %1$d non-session files ignored (session.lock and friends)"</string>
-    <string name="dsh_bk_group_rewritten">, %1$d of them had their recorded path rewritten</string>
-    <string name="dsh_bk_group_inferred">, %1$d inferred from the directory name (please double-check)</string>
-    <string name="dsh_bk_group_ungrouped">, %1$d have no matching workspace</string>
-    <string name="dsh_bk_group_unreadable">, %1$d session files are unreadable</string>
-    <string name="dsh_bk_group_problems">, %1$d registry checks failed</string>
-    <string name="dsh_bk_group_rolled_back">; the workspace registry was rolled back</string>
-    <string name="dsh_bk_group_skipped">Session grouping skipped: %1$s</string>
-    <string name="dsh_bk_group_failed">Session grouping failed: %1$s</string>
-    <string name="dsh_bk_group_service_failed">the service could not be stopped/started, so nothing was grouped</string>
-    <string name="dsh_bk_group_no_output">the grouping helper produced no output</string>
     <string name="dsh_bk_step_uploading">Uploading %1$s</string>
     <string name="dsh_bk_step_analyzing">Analyzing the archive…</string>
     <string name="dsh_bk_step_planning">Building the plan (conflict handling: %1$s)…</string>
@@ -340,6 +325,12 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_plugin_field_latest">Latest</string>
     <string name="dsh_plugin_field_installed">Installed</string>
     <string name="dsh_plugin_field_category">Category</string>
+    <string name="dsh_plugin_field_downloads">Downloads</string>
+    <string name="dsh_plugin_downloads_ctx">%1$s to %2$s, checked %3$s</string>
+    <string name="dsh_plugin_redline_badge">%1$d safety flags</string>
+    <string name="dsh_plugin_caps_title">Capabilities &amp; safety</string>
+    <string name="dsh_plugin_caps_checked">Scanned %1$s</string>
+    <string name="dsh_plugin_caps_disclaimer">Facts from the upstream automated scan. Listing is not an official endorsement or certification.</string>
     <string name="dsh_plugin_field_repo">Repository</string>
     <!-- 安装进度对话框 -->
     <string name="dsh_plugin_working_on">Working on %1$s…</string>
@@ -493,6 +484,7 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_plugin_cat_session">Session &amp; Messages</string>
     <string name="dsh_plugin_cat_memory">Memory</string>
     <string name="dsh_plugin_cat_tools">Tools &amp; Capabilities</string>
+    <string name="dsh_plugin_cat_wsl">WSL &amp; Windows Interop</string>
     <string name="dsh_plugin_cat_browser">Browser &amp; Web</string>
     <string name="dsh_plugin_cat_vision">Vision &amp; Multimodal</string>
     <string name="dsh_plugin_cat_voice">Voice &amp; Audio</string>

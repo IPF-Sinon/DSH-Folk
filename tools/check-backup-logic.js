@@ -39,7 +39,6 @@ const SRC_WIZARD_SCREEN = "app/src/main/java/me/bmax/apatch/ui/screen/settings/R
 const SRC_WIZARD_MODEL = "app/src/main/java/me/bmax/apatch/dsh/DshImportWizard.kt";
 const SRC_APPDATA = "app/src/main/java/me/bmax/apatch/dsh/DshAppData.kt";
 const SRC_ARCHIVE = "app/src/main/java/me/bmax/apatch/dsh/DshBackupArchive.kt";
-const SRC_SESSION_GROUP = "app/src/main/assets/dsh-session-group.cjs";
 const SRC_APPDATA_SNAPSHOT = "app/src/main/java/me/bmax/apatch/dsh/DshAppDataSnapshot.kt";
 const SRC_THEME_IO = "app/src/main/java/me/bmax/apatch/ui/theme/ThemeIO.kt";
 

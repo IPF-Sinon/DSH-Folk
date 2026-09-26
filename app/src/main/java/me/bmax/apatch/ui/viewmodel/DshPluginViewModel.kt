@@ -339,17 +339,18 @@ class DshPluginViewModel : ViewModel() {
         }
     }
 
-    fun install(pkg: String, version: String = "", onDone: (String) -> Unit = {}) {
+    fun install(pkg: String, version: String = "", fallbackTgz: String = "", onDone: (String) -> Unit = {}) {
+        val tgz = fallbackTgz.takeIf { it.isNotBlank() }
         run(
             pkg,
-            { DshPluginRepo.install(pkg, version, it) },
+            { DshPluginRepo.install(pkg, version, it, fallbackTgz = tgz) },
             onDone,
             verify = true,
             // 被 pnpm 拦下构建脚本时，把「放行后重试」记成待确认动作
             retryWithBuilds = { allow, cb ->
                 run(
                     pkg,
-                    { DshPluginRepo.install(pkg, version, it, allowBuilds = allow) },
+                    { DshPluginRepo.install(pkg, version, it, allowBuilds = allow, fallbackTgz = tgz) },
                     cb,
                     verify = true,
                 )
@@ -367,7 +368,7 @@ class DshPluginViewModel : ViewModel() {
      * 原样保留。
      */
     fun update(pkg: String, onDone: (String) -> Unit = {}) =
-        install(pkg, DshPluginRepo.VERSION_LATEST, onDone)
+        install(pkg, DshPluginRepo.VERSION_LATEST, onDone = onDone)
 
     fun uninstall(pkg: String, onDone: (String) -> Unit = {}) {
         run(pkg, { DshPluginRepo.uninstall(pkg, it) }, onDone)

@@ -2140,9 +2140,8 @@ object DshConfigBackup {
     /**
      * 会话目录里的**运行时状态**文件：锁、临时文件、点开头的东西。
      *
-     * 它们不是会话数据，恢复时不该带走：一份别机的锁在本机没有任何意义，而它会被
-     * [DshSessionGroup] 当成会话去解析 —— 0 字节解析不出 zstd 帧，报「不可读」并把它
-     * 挪出 sessions 树（真机上 6 个会话文件报错的根因）。
+     * 它们不是会话数据，恢复时不该带走：一份别机的锁在本机没有任何意义，而 0 字节的
+     * 状态文件解析不出 zstd 帧，会被误当成「不可读的会话」（真机上 6 个会话文件报错的根因）。
      */
     private fun isSessionRuntimeState(rel: String): Boolean {
         val name = rel.substringAfterLast('/')

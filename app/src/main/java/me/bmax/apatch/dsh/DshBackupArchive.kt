@@ -153,7 +153,6 @@ object DshBackupArchive {
     /**
      * 会话日志文件名：`session.jsonl.zstd`（旧）与 `session.v3.jsonl.zstd`（新格式）都算。
      *
-     * 与容器侧归组助手用同一条判据（`dsh-session-group.cjs` 的 `SESSION_FILE_RE`）——
      * 写死一个名字会让新格式的会话在「最近 N 个」里被整批漏掉，而它们恰恰是设备上升级
      * dsh 之后才有的那些。
      */
@@ -251,8 +250,7 @@ object DshBackupArchive {
     /**
      * 会话根目录（容器里的 `~/.dsh/sessions` 在设备上的落点）。
      *
-     * 导出侧按它挑会话进包（[pickSessions]）；存量整理（[DshSessionGroup.tidyAllSessions]）也
-     * 读它。会话的**恢复**已交给插件，App 不再直接往这份树里写。
+     * 导出侧按它挑会话进包（[pickSessions]）。会话的**恢复**已交给插件，App 不再直接往这份树里写。
      */
     fun sessionsRoot(ctx: Context): File = File(DshEnv.dshHome(ctx), "sessions")
 

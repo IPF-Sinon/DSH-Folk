@@ -158,7 +158,6 @@ jobs:
           node tools/check-native-caps.js
           node tools/check-web-shim.js
           node tools/check-backup-logic.js
-          node tools/check-session-group.js
           node tools/check-bugreport-files.js
           node tools/check-text-clipping.js
           node tools/check-backup-crypto.js

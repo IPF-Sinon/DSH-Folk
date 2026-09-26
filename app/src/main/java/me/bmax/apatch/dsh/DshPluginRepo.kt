@@ -78,6 +78,34 @@ data class DshPlugin(
      * 只作展示标签，不参与安装/停用逻辑。
      */
     val seeded: Boolean = false,
+    /**
+     * 上游目录扫描出的能力清单（`capabilities[]`），10 类之一：
+     * fs-read / fs-write / env / network / llm / shell / dynamic-code /
+     * host-runtime / credentials / subagent。空表示目录没给（不代表没有）。
+     */
+    val capabilities: List<String> = emptyList(),
+    /**
+     * 上游目录的安全红线（`capabilityRedLines[]`），是**人读的告警原文**，如
+     * 「reads credentials/secrets AND has network access」「runs code at install time
+     * (postinstall)」「uses plaintext http:// to …」。非空即应在卡面/安装框醒目提示。
+     * 上游明确「收录 ≠ 背书」，这不是认证、只是事实披露。
+     */
+    val redLines: List<String> = emptyList(),
+    /** 能力/红线的扫描时间（`capabilityCheckedAt`，ISO 串）。 */
+    val capabilityCheckedAt: String = "",
+    /** 截图 URL 列表（`screenshots[]`，通常是 raw.githubusercontent 直链）。 */
+    val screenshots: List<String> = emptyList(),
+    /**
+     * 作者预编译的 release tgz 直链（`tarball`）。github-only 插件有它时可绕开 git clone
+     * 直接装 tgz（更快、更稳）。作为安装的 tgz 兜底传给 [install]。
+     */
+    val tarball: String = "",
+    /** 下载量统计窗口起（`downloadsStart`，YYYY-MM-DD）。 */
+    val downloadsStart: String = "",
+    /** 下载量统计窗口止（`downloadsEnd`，YYYY-MM-DD）。 */
+    val downloadsEnd: String = "",
+    /** 下载量最后核对日期（`downloadsCheckedAt`，YYYY-MM-DD）。 */
+    val downloadsCheckedAt: String = "",
 ) {
     val installed: Boolean get() = installedVersion.isNotEmpty()
 
@@ -475,6 +503,7 @@ object DshPluginRepo {
         PluginCategory("session", R.string.dsh_plugin_cat_session),
         PluginCategory("memory", R.string.dsh_plugin_cat_memory),
         PluginCategory("tools", R.string.dsh_plugin_cat_tools),
+        PluginCategory("wsl", R.string.dsh_plugin_cat_wsl),
         PluginCategory("browser", R.string.dsh_plugin_cat_browser),
         PluginCategory("vision", R.string.dsh_plugin_cat_vision),
         PluginCategory("voice", R.string.dsh_plugin_cat_voice),
@@ -584,6 +613,17 @@ object DshPluginRepo {
         null
     }.getOrNull()
 
+    /** JSONArray → 干净的字符串列表（跳过空串 / JSON null）。 */
+    private fun jsonStrings(arr: org.json.JSONArray?): List<String> {
+        if (arr == null) return emptyList()
+        val out = ArrayList<String>(arr.length())
+        for (i in 0 until arr.length()) {
+            val s = arr.optString(i)
+            if (s.isNotEmpty() && s != "null") out.add(s)
+        }
+        return out
+    }
+
     /** 解析目录 JSON。结构不对（比如取到一个 HTML 错误页）时返回 null，让调用方换源。 */
     private fun parseCatalog(text: String?, offline: Boolean): PluginCatalog? = runCatching {
         if (text.isNullOrBlank()) return@runCatching null
@@ -627,6 +667,18 @@ object DshPluginRepo {
                 // 目录自带这两个数字，商店列表不必再逐包打 npm / GitHub API
                 stars = if (o.isNull("stars")) -1L else o.optLong("stars", -1L),
                 downloads = if (o.isNull("downloads")) -1L else o.optLong("downloads", -1L),
+                // 目录已内联最新 npm 版本（2238/4353 条有）：商店卡片据此算「可更新」，
+                // 已安装页也优先用它、省掉逐包打 registry。语义是「远端最新版」。
+                version = o.optString("version").takeIf { it.isNotEmpty() && it != "null" } ?: "",
+                // 能力/红线：上游每日扫描的结果，安全信息的来源
+                capabilities = jsonStrings(o.optJSONArray("capabilities")),
+                redLines = jsonStrings(o.optJSONArray("capabilityRedLines")),
+                capabilityCheckedAt = o.optString("capabilityCheckedAt"),
+                screenshots = jsonStrings(o.optJSONArray("screenshots")),
+                tarball = o.optString("tarball").takeIf { it.isNotEmpty() && it != "null" } ?: "",
+                downloadsStart = o.optString("downloadsStart"),
+                downloadsEnd = o.optString("downloadsEnd"),
+                downloadsCheckedAt = o.optString("downloadsCheckedAt"),
                 // 没登记 npm 的条目用 install 命令里的 github: 规格安装
                 installSpec = o.optString("install").substringAfterLast(' ').ifEmpty { npm },
             )

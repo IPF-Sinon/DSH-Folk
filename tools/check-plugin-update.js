@@ -32,7 +32,7 @@ must(/val spec = if \(isGit \|\| version\.isBlank\(\)\) resolved else "\$resolve
   'install() 的 spec 组装被改：git 规格会被拼上 @版本（无效规格），或非空 version 不再拼 @');
 
 // 3. 插件页「更新」走 update()（= 显式 @latest），不能退回裸包名的 install()
-must(/fun update\(pkg: String, onDone: \(String\) -> Unit = \{\}\) =\s*\n?\s*install\(pkg, DshPluginRepo\.VERSION_LATEST, onDone\)/.test(vm),
+must(/fun update\(pkg: String, onDone: \(String\) -> Unit = \{\}\) =\s*\n?\s*install\(pkg, DshPluginRepo\.VERSION_LATEST, onDone = onDone\)/.test(vm),
   'ViewModel.update() 不再显式传 VERSION_LATEST —— pnpm 会把它当空操作');
 must(/onUpdate = \{ viewModel\.update\(/.test(screen),
   '插件页 onUpdate 没有走 viewModel.update()（退回裸包名 install 就又是空操作）');
@@ -76,6 +76,32 @@ must(/n\.indexOf\('dsh-experimental'\)<0\)continue;/.test(repo),
   'pluginEntries 仍把 @deepseek-ai/dsh-experimental-* 一起跳过 —— 实验插件开关会永久变灰');
 must(!/if\(n\.startsWith\('@deepseek-ai\/'\)\)continue;/.test(repo),
   'pluginEntries 还在无差别跳过整个 @deepseek-ai/ 作用域（实验插件也被误伤）');
+
+// 6. 对齐上游 dsh-market：目录已内联的字段必须被消费（安全红线/能力/version/tarball/截图）。
+//    依据：awesome-dsh-plugin.com/plugins.json 每条现带 capabilities[]、capabilityRedLines[]、
+//    version、tarball、screenshots[]、downloads{Start,End,CheckedAt}。
+const detail = read('app/src/main/java/me/bmax/apatch/ui/component/DshPluginDetail.kt');
+const store = read('app/src/main/java/me/bmax/apatch/ui/screen/DshPluginStoreScreen.kt');
+must(/val capabilities: List<String>/.test(repo) && /val redLines: List<String>/.test(repo),
+  'DshPlugin 缺 capabilities / redLines 字段（上游安全披露没接进来）');
+must(/redLines = jsonStrings\(o\.optJSONArray\("capabilityRedLines"\)\)/.test(repo),
+  'parseCatalog 没读 capabilityRedLines —— 相对上游是安全能力倒退');
+must(/capabilities = jsonStrings\(o\.optJSONArray\("capabilities"\)\)/.test(repo),
+  'parseCatalog 没读 capabilities');
+must(/version = o\.optString\("version"\)/.test(repo),
+  'parseCatalog 没读目录内联的 version —— 商店卡片「可更新」会恒 false');
+must(/tarball = o\.optString\("tarball"\)/.test(repo),
+  'parseCatalog 没读 tarball（github-only 插件失去预编译秒装/兜底）');
+must(/screenshots = jsonStrings\(o\.optJSONArray\("screenshots"\)\)/.test(repo),
+  'parseCatalog 没读 screenshots');
+must(/PluginCategory\("wsl"/.test(repo),
+  '分类清单缺 wsl（上游已 23 类），那类插件在 App 里没有 tab');
+must(/plugin\.redLines\.isNotEmpty\(\)/.test(store),
+  '商店卡片没有安全红线徽标');
+must(/plugin\.redLines\.forEach/.test(detail) && /dsh_plugin_caps_disclaimer/.test(detail),
+  '详情页没有列出安全红线 + 「收录≠背书」免责说明');
+must(/fallbackTgz = p\.tarball/.test(store) || /fallbackTgz = plugin\.tarball/.test(store),
+  '安装没有把目录的 tarball 作为 tgz 兜底传给 install');
 
 // 5. 说明性注释要在（这条修复的原理不写在代码里，后人一定会再踩）
 must(/Already up to date/.test(repo) || /空操作/.test(repo),
