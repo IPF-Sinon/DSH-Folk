@@ -158,6 +158,15 @@ object DshEnv {
     const val KEY_FS_TOKEN = "fs_bridge_token"
 
     /**
+     * 共享存储挂载总开关（默认开）。
+     *
+     * 开＝把 /sdcard 按黑白名单挂进容器、且 dsh-fs 桥受理请求（同样受黑白名单约束）；
+     * 关＝**既不挂载、dsh-fs 也拒绝**，容器彻底看不到手机文件。挂载在容器启动那一刻定死，
+     * 改这个开关（及黑白名单）后**容器侧要重启 dsh 才生效**；dsh-fs 侧立即生效。
+     */
+    const val KEY_STORAGE_MOUNT = "storage_mount"
+
+    /**
      * 手机文件访问白名单目录（JSON 数组，相对 /sdcard 的相对路径）。
      *
      * 非空即视为「只放行这些目录」（白名单模式）；缺失 / 空数组 = 不设白名单（放行整棵树，

@@ -69,6 +69,7 @@ import me.bmax.apatch.dsh.ContainerRuntime
 import me.bmax.apatch.dsh.DshAutostart
 import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.dsh.DshEnv
+import me.bmax.apatch.dsh.DshFileAccess
 import me.bmax.apatch.dsh.ExportPlan
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
@@ -224,6 +225,7 @@ internal fun DshSettingsScreen(
     var allFilesGranted by remember {
         mutableStateOf(PermissionUtils.hasAllFilesAccess(context))
     }
+    var storageMount by remember { mutableStateOf(DshFileAccess.mountEnabled(context)) }
 
     /**
      * 跳某项特殊权限的系统设置页。
@@ -778,6 +780,12 @@ internal fun DshSettingsScreen(
                     onRequestCapPermission = { cap -> requestCapPermission(cap) },
                     onOpenAllFilesSettings = { openAllFilesSettings() },
                     onOpenFileAccess = { navigator.navigate(FileAccessScreenDestination) },
+                    mountEnabled = storageMount,
+                    onSetMount = { on ->
+                        storageMount = on
+                        DshFileAccess.setMountEnabled(context, on)
+                        DshHostPrompt.writeFacts(context)
+                    },
                     runtimeInstalled = runtimeInstalled,
                     runtimeVersion = runtimeState.runtimeVersion ?: "",
                     appUpdateRequired = runtimeState.appUpdateRequired,

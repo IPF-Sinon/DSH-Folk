@@ -653,6 +653,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_storage_cap_desc">通过 dsh-fs 读写整个共享存储（/sdcard）。Android 规定这项只能在系统设置页里授予。</string>
     <string name="dsh_storage_need_perm">尚未授予「所有文件访问」，点这里去系统设置开启</string>
     <string name="dsh_storage_granted">已授予「所有文件访问」</string>
+    <string name="dsh_storage_mount_hint">把 /sdcard 挂进容器并开放 dsh-fs（两者都受黑白名单约束）。长按可编辑黑白名单目录。</string>
+    <string name="dsh_storage_restart_hint">改动此开关或黑白名单后，容器挂载需重启 dsh 才生效（dsh-fs 立即生效）。</string>
 
     <!-- ── 文件访问范围（黑白名单，挂载层生效） ── -->
     <string name="dsh_fs_scope_title">文件访问范围</string>
@@ -906,6 +908,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">尚未授予「所有文件访问」，请在 设置 → 功能 → 共享存储 里开启</string>
+    <string name="dsh_fs_err_storage_off">共享存储已关闭，请在 设置 → 功能 → 共享存储 里开启</string>
     <string name="dsh_fs_err_loopback_only">仅允许回环访问</string>
     <string name="dsh_fs_err_bad_token">token 不匹配</string>
     <string name="dsh_fs_err_unknown_endpoint">未知端点 %1$s %2$s</string>

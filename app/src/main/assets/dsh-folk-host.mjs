@@ -329,38 +329,74 @@ function render(f) {
   lines.push('');
   lines.push('## Shared storage');
   lines.push('');
-  lines.push(
-    "The phone's shared storage is bind-mounted into the container — `/sdcard` and " +
-      '`/storage/emulated/0` are both it, and ordinary read/write/glob/grep and shell commands work ' +
-      'on it directly. Prefer those when you need to touch user files.'
-  );
-  if (f.fsBridge === true) {
-    lines.push('');
+  if (f.storageMounted !== true) {
     lines.push(
-      'A `dsh-fs` command also goes through the host with a narrower, audited surface (every path ' +
-        'segment validated, symlinks cannot escape the root). It is easier for a few things:'
+      "The phone's shared storage is currently NOT mounted (the Shared-storage switch is off), so " +
+        '`/sdcard` does not exist in the container and `dsh-fs` refuses every file endpoint with ' +
+        '`reason: "storage_off"`. You cannot read the user\u2019s phone files right now. If you need ' +
+        'them, tell the user ONCE to turn on **Settings \u203a Features \u203a Shared storage** (it takes ' +
+        'effect after dsh restarts), then carry on \u2014 do not retry in a loop.'
     );
-    lines.push('');
-    lines.push('```');
-    lines.push("dsh-fs find . --glob '*.log' [--maxDepth N] [--limit N]   # budgeted recursive search");
-    lines.push('dsh-fs list [path] [--recursive] [--maxDepth N] [--limit N]');
-    lines.push('dsh-fs space [path]                                        # free space');
-    lines.push('dsh-fs read <path> [--offset N] [--length N]               # paged read, binary to stdout');
-    lines.push('dsh-fs write <localFile> [remotePath] [--append]           # replaces the target only once complete');
-    lines.push('dsh-fs stat|mkdir|rm [-r]|mv|cp <path…>');
-    lines.push('dsh-fs health');
-    lines.push('```');
-    lines.push('');
-    lines.push('All paths are relative to `/sdcard`. Check `dsh-fs space` before writing: full phones are normal.');
   } else {
-    lines.push('');
     lines.push(
-      'The `dsh-fs` command exists but every file endpoint currently answers 403 ' +
-        '(`reason: "no_storage"`): Android requires "All files access", which has not been granted. ' +
-        'The bind mount above may still be readable, so try ordinary file tools first. If they also ' +
-        'fail, tell the user once to grant it in **Settings › Features › Shared storage** and move on ' +
-        '— do not retry dsh-fs in a loop.'
+      "The phone's shared storage is bind-mounted into the container \u2014 `/sdcard` and " +
+        '`/storage/emulated/0` are both it, and ordinary read/write/glob/grep and shell commands work ' +
+        'on it directly. Prefer those when you need to touch user files.'
     );
+    const denied = Array.isArray(f.storageDenied)
+      ? f.storageDenied.filter((x) => typeof x === 'string' && x)
+      : [];
+    const allowed = Array.isArray(f.storageAllowed)
+      ? f.storageAllowed.filter((x) => typeof x === 'string' && x)
+      : [];
+    if (allowed.length > 0) {
+      lines.push('');
+      lines.push(
+        'Only these directories are mounted (an allow-list); everything else under /sdcard is ' +
+          'absent, not empty: ' +
+          allowed.join(', ') +
+          '.'
+      );
+    }
+    if (denied.length > 0) {
+      lines.push('');
+      lines.push(
+        'These directories are deliberately hidden and read as empty/absent \u2014 a privacy choice, ' +
+          'not an error, so do not retry or route around it: ' +
+          denied.join(', ') +
+          '. `dsh-fs` obeys the same masking. (`dsh-native media` does NOT \u2014 it queries the system ' +
+          'media store, which is separate.)'
+      );
+    }
+    if (f.fsBridge === true) {
+      lines.push('');
+      lines.push(
+        'A `dsh-fs` command also goes through the host with a narrower, audited surface (every path ' +
+          'segment validated, symlinks cannot escape the root, same allow/deny masking as the mount). ' +
+          'It is easier for a few things:'
+      );
+      lines.push('');
+      lines.push('```');
+      lines.push("dsh-fs find . --glob '*.log' [--maxDepth N] [--limit N]   # budgeted recursive search");
+      lines.push('dsh-fs list [path] [--recursive] [--maxDepth N] [--limit N]');
+      lines.push('dsh-fs space [path]                                        # free space');
+      lines.push('dsh-fs read <path> [--offset N] [--length N]               # paged read, binary to stdout');
+      lines.push('dsh-fs write <localFile> [remotePath] [--append]           # replaces the target only once complete');
+      lines.push('dsh-fs stat|mkdir|rm [-r]|mv|cp <path…>');
+      lines.push('dsh-fs health');
+      lines.push('```');
+      lines.push('');
+      lines.push('All paths are relative to `/sdcard`. Check `dsh-fs space` before writing: full phones are normal.');
+    } else {
+      lines.push('');
+      lines.push(
+        'The `dsh-fs` command exists but every file endpoint currently answers 403 ' +
+          '(`reason: "no_storage"`): Android requires "All files access", which has not been granted. ' +
+          'The bind mount above may still be readable, so try ordinary file tools first. If they also ' +
+          'fail, tell the user once to grant it in **Settings \u203a Features \u203a Shared storage** and move on ' +
+          '— do not retry dsh-fs in a loop.'
+      );
+    }
   }
 
   // Native capabilities: list only what is genuinely on, and say what to do when it is not.

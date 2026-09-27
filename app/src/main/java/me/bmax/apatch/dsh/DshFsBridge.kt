@@ -260,7 +260,7 @@ object DshFsBridge {
 
     /** 返回 null 表示响应已直接写出（如 read 的二进制体）。 */
     private fun handleList(params: Map<String, String>): Pair<Int, String>? {
-        if (!checkStorageAccess()) return storageDenied()
+        storageGate()?.let { return it }
         val target = resolve(params["path"]) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_path), "bad_path")
         if (!target.exists()) return 404 to errorJson(str(R.string.dsh_fs_err_not_found), "not_found")
         val limit = clampInt(params["limit"], DEFAULT_LIST_LIMIT, 1, MAX_LIST_LIMIT)
@@ -299,7 +299,7 @@ object DshFsBridge {
     }
 
     private fun handleStat(rel: String?): Pair<Int, String>? {
-        if (!checkStorageAccess()) return storageDenied()
+        storageGate()?.let { return it }
         val target = resolve(rel) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_path), "bad_path")
         if (!target.exists()) return 404 to errorJson(str(R.string.dsh_fs_err_not_found), "not_found")
         return 200 to JSONObject().put("ok", true)
@@ -316,7 +316,7 @@ object DshFsBridge {
      *    `return null`（含义是「已自行响应」），于是客户端只看到 socket EOF。
      */
     private fun handleRead(params: Map<String, String>, out: OutputStream): Pair<Int, String>? {
-        if (!checkStorageAccess()) return storageDenied()
+        storageGate()?.let { return it }
         val target = resolve(params["path"]) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_path), "bad_path")
         if (!target.exists()) return 404 to errorJson(str(R.string.dsh_fs_err_not_found), "not_found")
         if (target.isDirectory) return 400 to errorJson(str(R.string.dsh_fs_err_is_dir), "is_dir")
@@ -374,7 +374,7 @@ object DshFsBridge {
         input: InputStream,
         headers: Map<String, String>,
     ): Pair<Int, String>? {
-        if (!checkStorageAccess()) return storageDenied()
+        storageGate()?.let { return it }
         val rel = params["path"]
         val target = resolve(rel) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_path), "bad_path")
         if (target.isDirectory) return 400 to errorJson(str(R.string.dsh_fs_err_is_dir), "is_dir")
@@ -415,7 +415,7 @@ object DshFsBridge {
     }
 
     private fun handleMkdir(rel: String?): Pair<Int, String>? {
-        if (!checkStorageAccess()) return storageDenied()
+        storageGate()?.let { return it }
         val target = resolve(rel) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_path), "bad_path")
         if (target.isFile) return 400 to errorJson(str(R.string.dsh_fs_err_file_exists), "file_exists")
         val ok = target.isDirectory || target.mkdirs()
@@ -429,7 +429,7 @@ object DshFsBridge {
      * 所以失败后回退到「复制 + 删除」，而不是直接把失败甩给调用方。
      */
     private fun handleMove(src: String?, dst: String?): Pair<Int, String>? {
-        if (!checkStorageAccess()) return storageDenied()
+        storageGate()?.let { return it }
         val s = resolve(src) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_arg, "src"), "bad_arg")
         val d = resolve(dst) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_arg, "dst"), "bad_arg")
         if (!s.exists()) return 404 to errorJson(str(R.string.dsh_fs_err_src_missing), "src_missing")
@@ -450,7 +450,7 @@ object DshFsBridge {
     }
 
     private fun handleCopy(params: Map<String, String>): Pair<Int, String>? {
-        if (!checkStorageAccess()) return storageDenied()
+        storageGate()?.let { return it }
         val s = resolve(params["src"]) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_arg, "src"), "bad_arg")
         val d = resolve(params["dst"]) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_arg, "dst"), "bad_arg")
         if (!s.exists()) return 404 to errorJson(str(R.string.dsh_fs_err_src_missing), "src_missing")
@@ -461,7 +461,7 @@ object DshFsBridge {
     }
 
     private fun handleDelete(params: Map<String, String>): Pair<Int, String>? {
-        if (!checkStorageAccess()) return storageDenied()
+        storageGate()?.let { return it }
         val target = resolve(params["path"]) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_path), "bad_path")
         // 不允许删根：那是「清空用户整个共享存储」，绝不该是一条 HTTP 请求能做到的事
         if (relativeOf(target).isEmpty()) return 400 to errorJson(str(R.string.dsh_fs_err_no_delete_root), "no_delete_root")
@@ -486,7 +486,7 @@ object DshFsBridge {
      * （灾难性回溯在这个进程里就是一次 ANR）。
      */
     private fun handleFind(params: Map<String, String>): Pair<Int, String>? {
-        if (!checkStorageAccess()) return storageDenied()
+        storageGate()?.let { return it }
         val base = resolve(params["path"]) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_path), "bad_path")
         if (!base.exists()) return 404 to errorJson(str(R.string.dsh_fs_err_not_found), "not_found")
         if (!base.isDirectory) return 400 to errorJson(str(R.string.dsh_fs_err_not_dir), "not_dir")
@@ -506,7 +506,7 @@ object DshFsBridge {
     }
 
     private fun handleSpace(rel: String?): Pair<Int, String>? {
-        if (!checkStorageAccess()) return storageDenied()
+        storageGate()?.let { return it }
         val target = resolve(rel) ?: return 400 to errorJson(str(R.string.dsh_fs_err_bad_path), "bad_path")
         val dir = if (target.isDirectory) target else target.parentFile ?: root
         val st = runCatching { StatFs(dir.absolutePath) }.getOrElse { e ->
@@ -533,11 +533,14 @@ object DshFsBridge {
      */
     private fun walk(base: File, maxDepth: Int, visit: (File) -> Boolean): Boolean {
         var budget = MAX_RECURSIVE_ENTRIES
+        val ctx = appCtx
         fun rec(dir: File, depth: Int): Boolean {
             val children = dir.listFiles() ?: return true
             for (f in children.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))) {
                 if (budget-- <= 0) return false
                 if (!within(f)) continue
+                // 黑白名单：遍历同样要遮蔽——否则 find / 递归 list 会把被禁目录里的文件路径带出来
+                if (ctx != null && !DshFileAccess.pathAllowed(ctx, relativeOf(f))) continue
                 if (!visit(f)) return false
                 if (f.isDirectory && depth < maxDepth && !isSymlink(f)) {
                     if (!rec(f, depth + 1)) return false
@@ -634,6 +637,21 @@ object DshFsBridge {
         403 to errorJson(str(R.string.dsh_fs_err_no_storage), "no_storage")
 
     /**
+     * 文件端点的统一准入：先看挂载总开关，再看「所有文件访问」权限。
+     *
+     * 挂载关＝容器侧根本不挂 /sdcard（见 [ContainerRuntime.storageBinds]），dsh-fs 这条桥
+     * 也必须一起拒，否则又成了绕过开关的后门（回 403 `storage_off`）。返回非空即应直接回该错误。
+     */
+    private fun storageGate(): Pair<Int, String>? {
+        val ctx = appCtx
+        if (ctx != null && !DshFileAccess.mountEnabled(ctx)) {
+            return 403 to errorJson(str(R.string.dsh_fs_err_storage_off), "storage_off")
+        }
+        storageGate()?.let { return it }
+        return null
+    }
+
+    /**
      * 取一条本地化文案。
      *
      * 这些串会经 `dsh-fs` 的输出出现在**用户**眼前，所以要跟随应用语言。
@@ -681,6 +699,13 @@ object DshFsBridge {
             if (normalized.isEmpty()) root.canonicalPath else File(root, normalized).canonicalPath
         }.getOrNull() ?: return null
         if (targetCanon != rootCanon && !targetCanon.startsWith(rootCanon + File.separator)) return null
+        // 黑白名单：桥的可见范围必须与挂载遮罩一致，否则又成了绕过名单的后门。命中黑名单 /
+        // 落在白名单外的路径一律当「不可达」处理（与越界同样返回 null）。
+        val ctx = appCtx
+        if (ctx != null) {
+            val rel = if (targetCanon == rootCanon) "" else targetCanon.substring(rootCanon.length + 1)
+            if (!DshFileAccess.pathAllowed(ctx, rel)) return null
+        }
         return File(targetCanon)
     }
 

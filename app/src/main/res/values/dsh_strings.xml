@@ -671,6 +671,8 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_storage_cap_desc">Read and write the whole of shared storage (/sdcard) through dsh-fs. Android requires this to be granted on a system settings page.</string>
     <string name="dsh_storage_need_perm">All files access not granted — tap to open system settings</string>
     <string name="dsh_storage_granted">All files access granted</string>
+    <string name="dsh_storage_mount_hint">Mount /sdcard into the container and expose dsh-fs (both obey the allow/deny lists). Long-press to edit the allow/deny directories.</string>
+    <string name="dsh_storage_restart_hint">Changes to this switch or the allow/deny lists take effect in the container mount only after restarting dsh (dsh-fs applies them immediately).</string>
 
     <!-- ── 文件访问范围（黑白名单，挂载层生效） ── -->
     <string name="dsh_fs_scope_title">File access scope</string>
@@ -924,6 +926,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
 
     <!-- ── 文件桥错误（会出现在 dsh-fs 的输出里，用户看得到）── -->
     <string name="dsh_fs_err_no_storage">All files access is not granted — enable it in Settings › Features › Shared storage</string>
+    <string name="dsh_fs_err_storage_off">Shared storage is turned off — enable it in Settings › Features › Shared storage</string>
     <string name="dsh_fs_err_loopback_only">Loopback access only</string>
     <string name="dsh_fs_err_bad_token">Token mismatch</string>
     <string name="dsh_fs_err_unknown_endpoint">Unknown endpoint %1$s %2$s</string>

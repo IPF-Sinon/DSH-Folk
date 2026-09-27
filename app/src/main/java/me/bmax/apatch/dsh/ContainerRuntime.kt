@@ -63,6 +63,8 @@ interface ContainerRuntime {
          * 这里顺带确保它存在。两个运行时共用同一份组装逻辑。
          */
         fun storageBinds(ctx: Context): List<Pair<String, String>> {
+            // 挂载总开关关：一条存储 bind 都不给，容器彻底看不到 /sdcard（dsh-fs 侧另有拦截）
+            if (!DshFileAccess.mountEnabled(ctx)) return emptyList()
             val mask = DshEnv.fsMaskDir(ctx)
             mask.mkdirs()
             return DshFileAccess.storageBinds(ctx, mask.absolutePath)

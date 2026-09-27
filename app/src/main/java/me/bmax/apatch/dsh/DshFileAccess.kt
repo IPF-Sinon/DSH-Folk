@@ -76,9 +76,37 @@ object DshFileAccess {
     }
 
     /** [child] 是否等于 [parent] 或落在其下（按目录段边界，不误伤 Pictures2 这种同前缀兄弟）。 */
-    private fun isUnderOrEqual(child: String, parent: String): Boolean {
+    internal fun isUnderOrEqual(child: String, parent: String): Boolean {
         if (child == parent) return true
         return child.startsWith("$parent/")
+    }
+
+    /** 共享存储挂载总开关（默认开）。关＝不挂载 + dsh-fs 也拒绝。 */
+    fun mountEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean(DshEnv.KEY_STORAGE_MOUNT, true)
+
+    fun setMountEnabled(ctx: Context, on: Boolean) {
+        prefs(ctx).edit().putBoolean(DshEnv.KEY_STORAGE_MOUNT, on).apply()
+    }
+
+    /**
+     * 某个相对 /sdcard 的路径在当前黑白名单下是否放行——供 [DshFsBridge] 用，使桥的可见范围
+     * 与挂载遮罩**语义一致**（这是把「假隔离」补成真隔离的关键：桥不再绕过名单）。
+     *
+     * 判据（与 [storageBinds] 对齐）：
+     * - 命中黑名单（等于或落在某被禁目录之下）→ 拒。
+     * - 无白名单 → 其余全放行。
+     * - 有白名单：根（空串）放行（供列根，逐项再判）；否则要么落在某白名单目录内/相等、
+     *   要么是某白名单目录的祖先（可下钻）才放行。
+     */
+    fun pathAllowed(ctx: Context, relative: String): Boolean {
+        val rel = relative.trim().replace('\\', '/').trim('/')
+        val deny = denyDirs(ctx)
+        if (deny.any { isUnderOrEqual(rel, it) }) return false
+        val allow = allowDirs(ctx)
+        if (allow.isEmpty()) return true
+        if (rel.isEmpty()) return true
+        return allow.any { a -> isUnderOrEqual(rel, a) || isUnderOrEqual(a, rel) }
     }
 
     /** 当前白名单（已规整）。空 = 未设白名单。 */

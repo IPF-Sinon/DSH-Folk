@@ -69,7 +69,7 @@ object DshHostPrompt {
      * 读一遍 assets 再全量覆盖。版本号存在 prefs 里，与 rootfs 无关 —— 重装运行时后
      * 文件没了但版本号还在，所以 [ensureInstalled] 另外检查文件是否真的存在。
      */
-    private const val PLUGIN_REV = 10
+    private const val PLUGIN_REV = 11
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =
@@ -177,7 +177,12 @@ object DshHostPrompt {
                 .put("containerRuntime", DshRuntime.effectiveRuntimeId())
                 // 桥进程一直在，但没有「所有文件访问」时每个文件端点都回 403 ——
                 // 提示词必须说清是哪一种，否则 agent 会拿着 dsh-fs 一路撞 403。
-                .put("fsBridge", PermissionUtils.hasAllFilesAccess(ctx))
+                // 挂载总开关关时：容器不挂 /sdcard，dsh-fs 也拒（storageMounted=false）。
+                .put("storageMounted", DshFileAccess.mountEnabled(ctx))
+                .put("fsBridge", DshFileAccess.mountEnabled(ctx) && PermissionUtils.hasAllFilesAccess(ctx))
+                // 被遮蔽 / 只放行的目录（相对 /sdcard）：让 agent 知道哪些目录读不到而非以为空
+                .put("storageDenied", JSONArray(DshFileAccess.denyDirs(ctx)))
+                .put("storageAllowed", JSONArray(DshFileAccess.allowDirs(ctx)))
                 .put("nativeBridge", nativeOn)
                 .put("nativeCaps", caps)
                 .put("nativeOnce", once)

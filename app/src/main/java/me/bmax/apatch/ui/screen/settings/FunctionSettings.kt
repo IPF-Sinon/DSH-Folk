@@ -27,12 +27,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.CloudDownload
@@ -207,6 +205,9 @@ fun FunctionSettingsContent(
     onOpenAllFilesSettings: () -> Unit,
     /** 打开「细化文件访问范围（黑白名单）」子页。 */
     onOpenFileAccess: () -> Unit = {},
+    /** 共享存储挂载总开关（挂载 /sdcard + dsh-fs 桥，两者都受黑白名单约束）。 */
+    mountEnabled: Boolean = true,
+    onSetMount: (Boolean) -> Unit = {},
     /**
      * 运行时是否已安装。
      *
@@ -1369,14 +1370,18 @@ fun FunctionSettingsContent(
                             }
                         }
 
-                        // ── 共享存储 ──
-                        // 与上面的分项同列而不另开一张卡：对用户来说「让 agent 读写手机文件」
-                        // 和「让 agent 发通知」是同一类决定。但它**不是** Cap：MANAGE_EXTERNAL_STORAGE
-                        // 的 protectionLevel 是 signature|appop，requestPermissions() 申请不到，
-                        // 只能跳系统设置页，所以没有开关、只有状态与入口。
+                        // ── 共享存储（挂载 /sdcard） ──
+                        // 一个开关同时管两件事：容器 bind 挂载 + dsh-fs 桥（两者都受黑白名单约束）。
+                        // 关＝容器彻底看不到 /sdcard。长按整行进黑白名单设置。改动需重启 dsh 才在
+                        // 挂载层生效（dsh-fs 侧立即生效）。
                         HorizontalDivider(Modifier.padding(vertical = 12.dp))
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = { onSetMount(!mountEnabled) },
+                                    onLongClick = onOpenFileAccess,
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
@@ -1385,57 +1390,33 @@ fun FunctionSettingsContent(
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                                 Text(
-                                    text = stringResource(R.string.dsh_storage_cap_desc),
+                                    text = stringResource(R.string.dsh_storage_mount_hint),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Spacer(Modifier.width(8.dp))
-                            Icon(
-                                imageVector = if (allFilesGranted) Icons.Filled.CheckCircle
-                                else Icons.Filled.Warning,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = if (allFilesGranted) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.error,
+                            ExpressiveSwitch(
+                                checked = mountEnabled,
+                                onCheckedChange = onSetMount,
                             )
                         }
-                        if (allFilesGranted) {
-                            Text(
-                                text = stringResource(R.string.dsh_storage_granted),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else {
-                            TextButton(onClick = onOpenAllFilesSettings) {
-                                Text(stringResource(R.string.dsh_storage_need_perm))
-                            }
-                        }
-
-                        // 细化：黑白名单目录（真正生效在挂载层，改完需重启容器）
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenFileAccess() }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
+                        if (mountEnabled) {
+                            if (allFilesGranted) {
                                 Text(
-                                    text = stringResource(R.string.dsh_fs_scope_title),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    text = stringResource(R.string.dsh_fs_scope_desc),
+                                    text = stringResource(R.string.dsh_storage_granted),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                            } else {
+                                TextButton(onClick = onOpenAllFilesSettings) {
+                                    Text(stringResource(R.string.dsh_storage_need_perm))
+                                }
                             }
-                            Icon(
-                                imageVector = Icons.Filled.ChevronRight,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            Text(
+                                text = stringResource(R.string.dsh_storage_restart_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
 
