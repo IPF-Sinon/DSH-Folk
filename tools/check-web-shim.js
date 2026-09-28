@@ -362,10 +362,13 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
   }
 
   // 静态侧：WebView 必须真的铺满整窗，只让键盘把它顶起来
-  const webViewModifier = webui.match(/AndroidView\(\s*modifier = Modifier([\s\S]{0,200}?)factory/);
+  const webViewModifier = webui.match(/AndroidView\(\s*modifier = Modifier([\s\S]{0,800}?)factory/);
   const modifierSrc = webViewModifier ? webViewModifier[1] : "";
   ok(/\.fillMaxSize\(\)/.test(modifierSrc), "WebView 铺满整窗");
-  ok(/\.imePadding\(\)/.test(modifierSrc), "键盘仍由 imePadding 让开");
+  // 键盘用 imeAnimationTarget（目标高度、一步到位）而非 imePadding（逐帧插值，WebView 117 上卡顿）
+  ok(/\.windowInsetsPadding\(WindowInsets\.imeAnimationTarget\)/.test(modifierSrc),
+    "键盘由 imeAnimationTarget 一步让开（非逐帧 imePadding）");
+  ok(!/\.imePadding\(\)/.test(modifierSrc), "不再用逐帧 imePadding（避免 WebView 逐帧重排卡顿）");
   ok(!/safeDrawing/.test(modifierSrc), "WebView 上不再用 safeDrawing 内边距（那会留出色带）");
   ok(/installInsetShim\(/.test(webui) && /!insetShimInstalled && isLoopback\(u\)/.test(webui),
     "装上与否分别有 document-start 与 onPageStarted 两条路径");

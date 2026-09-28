@@ -933,6 +933,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_fs_err_internal">Internal error: %1$s</string>
     <string name="dsh_fs_err_native_uninit">The native bridge is not initialised</string>
     <string name="dsh_fs_err_bad_path">Illegal path</string>
+    <string name="dsh_fs_err_no_access">Path is blocked by the shared-storage allow/deny list (not a wrong path)</string>
     <string name="dsh_fs_err_not_found">Path does not exist</string>
     <string name="dsh_fs_err_is_dir">Is a directory</string>
     <string name="dsh_fs_err_not_dir">Not a directory</string>

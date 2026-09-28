@@ -364,7 +364,9 @@ function render(f) {
         'These directories are deliberately hidden and read as empty/absent \u2014 a privacy choice, ' +
           'not an error, so do not retry or route around it: ' +
           denied.join(', ') +
-          '. `dsh-fs` obeys the same masking. (`dsh-native media` does NOT \u2014 it queries the system ' +
+          '. `dsh-fs` obeys the same masking and answers those paths with `reason: "no_access"` ' +
+          '(distinct from `bad_path` = a malformed path), so do not retry them. ' +
+          '(`dsh-native media` does NOT \u2014 it queries the system ' +
           'media store, which is separate.)'
       );
     }

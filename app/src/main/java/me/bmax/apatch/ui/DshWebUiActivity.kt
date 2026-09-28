@@ -37,12 +37,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.safeDrawing
@@ -222,7 +222,7 @@ private fun DshCompatShimDialog(
  * WebView 铺满整窗，系统栏后面是**网页自己的背景**；页面本体由 [insetShimScript] 注入的
  * `#root` 内边距让开这两片区域。targetSdk 35 起系统强制 edge-to-edge，Android 侧给
  * WebView 留内边距的老做法只会得到两条主题底色带（手势条上下各一条，正是用户报的
- * 「底部留白」）。键盘例外：那一段仍由 `imePadding()` 让开，见 onCreate 里的注释。
+ * 「底部留白」）。键盘例外：那一段由 `windowInsetsPadding(imeAnimationTarget)` 一步让开，见 onCreate 里的注释。
  */
 class DshWebUiActivity : AppCompatActivity() {
 
@@ -349,9 +349,10 @@ class DshWebUiActivity : AppCompatActivity() {
                 val cssTop = toCss(insetTopPx)
                 val cssLeft = toCss(insetLeftPx)
                 val cssRight = toCss(insetRightPx)
-                // 键盘弹起时 WebView 已被 imePadding 抬到键盘上方（键盘本身盖住了手势条），
-                // 再让页面留一条就给键盘上方多垫一层空白
-                val cssBottom = if (WindowInsets.ime.getBottom(density) > 0) 0 else toCss(insetBottomPx)
+                // 键盘弹起时 WebView 会被抬到键盘上方（键盘本身盖住了手势条），再让页面留一条
+                // 就给键盘上方多垫一层空白。判据用 imeAnimationTarget（键盘的**目标**高度，动画一
+                // 开始就到位）而非 ime（逐帧插值），与下面 windowInsetsPadding 的抬升保持同步。
+                val cssBottom = if (WindowInsets.imeAnimationTarget.getBottom(density) > 0) 0 else toCss(insetBottomPx)
                 SideEffect {
                     cssInsetTop = cssTop
                     cssInsetRight = cssRight
@@ -375,8 +376,12 @@ class DshWebUiActivity : AppCompatActivity() {
                     AndroidView(
                         modifier = Modifier
                             .fillMaxSize()
-                            // 只有键盘要让开：左右上下的系统栏由页面用内边距避让
-                            .imePadding(),
+                            // 只有键盘要让开：左右上下的系统栏由页面用内边距避让。
+                            // 用 imeAnimationTarget 而非 imePadding：后者跟着输入法弹出动画**逐帧**
+                            // 改 WebView 高度，WebView 117 每帧重排又慢又卡，输入框「慢半拍才跟上」。
+                            // 目标高度让 WebView 只重排一次、一步抬到键盘上方（这是壳侧能做到的最优；
+                            // 逐帧跟随需 WebView M139 的 visual-viewport IME 支持，本机内核给不了）。
+                            .windowInsetsPadding(WindowInsets.imeAnimationTarget),
                         factory = { ctx ->
                             WebView(ctx).apply {
                                 layoutParams = ViewGroup.LayoutParams(

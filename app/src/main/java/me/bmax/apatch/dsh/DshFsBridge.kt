@@ -179,6 +179,14 @@ object DshFsBridge {
                 responded = true
                 result?.let { respondJson(s, it.first, it.second) }
             }.onFailure { e ->
+                if (!responded && e is DeniedPathException) {
+                    // 命中黑名单 / 落在白名单外：这是**策略拒绝**，不是崩溃，也不是路径写错。
+                    // 明确回 no_access，让容器里的 agent 一眼分清「被遮蔽」与「路径拼错(bad_path)」。
+                    runCatching {
+                        respondJson(s, 403, errorJson(str(R.string.dsh_fs_err_no_access), "no_access"))
+                    }
+                    return@onFailure
+                }
                 Log.w(TAG, "文件桥处理失败", e)
                 // 之前只记日志不回话，客户端只能看到 socket EOF，分不清「服务没起」和「请求崩了」。
                 // 诊断：把顶部若干栈帧一并回给调用方——StackOverflow 这类「栈里反复出现同一帧」
@@ -648,6 +656,9 @@ object DshFsBridge {
     private fun storageDenied(): Pair<Int, String> =
         403 to errorJson(str(R.string.dsh_fs_err_no_storage), "no_storage")
 
+    /** [resolve] 命中黑名单/白名单外时抛出：策略拒绝，外层回 403 `no_access`（区别于 bad_path）。 */
+    private class DeniedPathException : Exception()
+
     /**
      * 文件端点的统一准入：先看挂载总开关，再看「所有文件访问」权限。
      *
@@ -712,11 +723,12 @@ object DshFsBridge {
         }.getOrNull() ?: return null
         if (targetCanon != rootCanon && !targetCanon.startsWith(rootCanon + File.separator)) return null
         // 黑白名单：桥的可见范围必须与挂载遮罩一致，否则又成了绕过名单的后门。命中黑名单 /
-        // 落在白名单外的路径一律当「不可达」处理（与越界同样返回 null）。
+        // 落在白名单外的路径不是「非法」（bad_path）而是「被策略拒」——抛 DeniedPathException，
+        // 由外层统一回 403 no_access，与「路径拼错」区分开。
         val ctx = appCtx
         if (ctx != null) {
             val rel = if (targetCanon == rootCanon) "" else targetCanon.substring(rootCanon.length + 1)
-            if (!DshFileAccess.pathAllowed(ctx, rel)) return null
+            if (!DshFileAccess.pathAllowed(ctx, rel)) throw DeniedPathException()
         }
         return File(targetCanon)
     }
