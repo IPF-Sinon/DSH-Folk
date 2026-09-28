@@ -164,6 +164,18 @@ jobs:
             echo "::error::${line}"
           done
 
+      # R8 混淆映射：release 变体的崩溃栈（如 dsh-fs 的 StackOverflow）里全是 s.d0 之类的
+      # 混淆名，只有 mapping.txt 能把它翻回真实类/方法。beta.yml 改这一步不动 App 源码，
+      # 所以同一 commit 重建出的 mapping 与已发 beta 的混淆名一致，可用来解已有崩溃栈。
+      - name: Upload R8 mapping
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mapping-${{ github.sha }}
+          path: app/build/outputs/mapping/release/mapping.txt
+          retention-days: 30
+          if-no-files-found: warn
+
       # 命名必须带 ABI：App 端 pickApkAsset 按文件名里的 arm64-v8a / x86_64
       # 挑本机架构的包，名字里没有 ABI 会被当成旧的单包 release 而发错架构。
       - name: Collect APKs
