@@ -179,10 +179,22 @@ object DshFsBridge {
                 responded = true
                 result?.let { respondJson(s, it.first, it.second) }
             }.onFailure { e ->
-                Log.w(TAG, "文件桥处理失败: ${e.message}")
-                // 之前只记日志不回话，客户端只能看到 socket EOF，分不清「服务没起」和「请求崩了」
+                Log.w(TAG, "文件桥处理失败", e)
+                // 之前只记日志不回话，客户端只能看到 socket EOF，分不清「服务没起」和「请求崩了」。
+                // 诊断：把顶部若干栈帧一并回给调用方——StackOverflow 这类「栈里反复出现同一帧」
+                // 的故障，只看 message（如 "stack size 1038KB"）定位不到，必须看栈。
                 if (!responded) {
-                    runCatching { respondJson(s, 500, errorJson(str(R.string.dsh_fs_err_internal, e.message ?: ""), "internal")) }
+                    val trace = e.stackTrace.take(18).joinToString(" <- ") {
+                        "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}"
+                    }
+                    val body = JSONObject()
+                        .put("ok", false)
+                        .put("reason", "internal")
+                        .put("error", str(R.string.dsh_fs_err_internal, e.message ?: ""))
+                        .put("exception", e.javaClass.simpleName)
+                        .put("trace", trace)
+                        .toString()
+                    runCatching { respondJson(s, 500, body) }
                 }
             }
         }
