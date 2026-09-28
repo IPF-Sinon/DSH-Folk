@@ -659,7 +659,7 @@ object DshFsBridge {
         if (ctx != null && !DshFileAccess.mountEnabled(ctx)) {
             return 403 to errorJson(str(R.string.dsh_fs_err_storage_off), "storage_off")
         }
-        storageGate()?.let { return it }
+        if (!checkStorageAccess()) return storageDenied()
         return null
     }
 
