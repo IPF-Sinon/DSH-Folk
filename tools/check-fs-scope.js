@@ -44,6 +44,34 @@ ok(/GUEST_ALIASES = listOf\("\/sdcard", "\/storage\/emulated\/0"\)/.test(fa),
 ok(/fun storageBinds\(/.test(fa) && /maskPath to "\$alias\/\$d"/.test(fa),
   "被禁目录用空目录（maskPath）盖在容器路径上");
 
+console.log("\u2500 #3b 工作区挂载：把手机存储额外映到 /root/workspace 下");
+ok(/const val WORKSPACE_GUEST = "\/root\/workspace"/.test(env),
+  "DshEnv 有 WORKSPACE_GUEST 常量（工作区挂载目的根）");
+ok(/const val KEY_WS_MOUNT\b/.test(env) && /const val KEY_WS_MOUNTS\b/.test(env),
+  "DshEnv 有工作区挂载子开关键与映射列表键");
+ok(/fun wsMountEnabled\(/.test(fa) && /getBoolean\(DshEnv\.KEY_WS_MOUNT, false\)/.test(fa),
+  "工作区挂载子开关默认关（false）");
+ok(/fun workspaceMounts\(/.test(fa) && /fun setWorkspaceMounts\(/.test(fa),
+  "工作区映射有读写入口");
+ok(/DEFAULT_WS_MOUNTS[\s\S]{0,60}WsMount\("", "sdcard"\)/.test(fa),
+  "默认映射 = 整棵 /sdcard → /root/workspace/sdcard");
+ok(/fun normalizeDest\(/.test(fa) && /it != "\.\." /.test(fa),
+  "dest 规整禁止 .. 越界");
+ok(/fun workspaceBinds\(/.test(fa) &&
+  /if \(!wsMountEnabled\(ctx\)\) return emptyList\(\)/.test(fa),
+  "workspaceBinds 在子开关关时返回空表");
+ok(/if \(deny\.any \{ isUnderOrEqual\(src, it\) \}\) continue/.test(fa),
+  "工作区映射：src 命中黑名单整条跳过");
+ok(/maskPath to "\$guestBase\/\$\{relUnder\(d, src\)\}"/.test(fa) &&
+  /maskPath to "\$guest\/\$\{relUnder\(d, a\)\}"/.test(fa),
+  "工作区映射：被禁子目录仍用空目录遮蔽（无/有白名单两条路径都遮）");
+ok(/fun contains\(base: String, child: String\)/.test(fa) && /base\.isEmpty\(\) \|\| isUnderOrEqual\(child, base\)/.test(fa),
+  "contains 把空 src 视为 /sdcard 根（包含一切）——空 src 也能正确遮罩/圈定白名单");
+ok(/if \(deny\.any \{ isUnderOrEqual\(a, it\) \}\) continue/.test(fa),
+  "工作区映射有白名单时黑名单优先：被黑名单盖掉的白名单目录不映");
+ok(/val guestBase = "\$\{DshEnv\.WORKSPACE_GUEST\}\/\$\{m\.dest\}"/.test(fa),
+  "工作区映射的 guest 路径落在 WORKSPACE_GUEST 下");
+
 console.log("\u2500 #3 ContainerRuntime：存储绑定改为动态、两个运行时都用");
 ok(!/arrayOf\("\/storage\/emulated\/0"/.test(cr),
   "BINDS 里不再写死共享存储（改由 DshFileAccess 动态组装）");
@@ -51,6 +79,10 @@ ok(/fun storageBinds\(ctx: Context\)/.test(cr) && /DshFileAccess\.storageBinds\(
   "ContainerRuntime.storageBinds 代理到 DshFileAccess");
 ok((cr.match(/for \(\(host, guest\) in storageBinds\(ctx\)\)/g) || []).length === 2,
   "proot 与 proroot 两处 baseArgv 都追加了动态存储绑定");
+ok((cr.match(/for \(\(host, guest\) in workspaceBinds\(ctx\)\)/g) || []).length === 2,
+  "proot 与 proroot 两处 baseArgv 都追加了工作区挂载绑定");
+ok(/fun workspaceBinds\(ctx: Context\)/.test(cr) && /DshFileAccess\.workspaceBinds\(ctx/.test(cr),
+  "ContainerRuntime.workspaceBinds 代理到 DshFileAccess");
 ok(/fun fsMaskDir\(ctx: Context\): File/.test(env) &&
   /const val KEY_FS_ALLOW_DIRS/.test(env) && /const val KEY_FS_DENY_DIRS/.test(env),
   "DshEnv 有名单偏好键与空遮蔽目录");
@@ -61,6 +93,11 @@ ok(/DshFileAccess\.DEFAULT_DENY/.test(faScreen) && /dsh_fs_reset_deny_default/.t
   "支持一键恢复默认黑名单");
 ok(/DshRuntime\.restart\(\)/.test(faScreen) && /dsh_fs_restart_needed/.test(faScreen),
   "改动后提示需重启并给「重启 DSH」");
+ok(/dsh_ws_mount_header/.test(faScreen) && /DshFileAccess\.setWsMountEnabled\(/.test(faScreen) &&
+  /DshFileAccess\.setWorkspaceMounts\(/.test(faScreen),
+  "文件访问页有「挂载进工作区」段（子开关 + 映射列表）");
+ok(/wsMount != initialWsMount \|\| wsMounts\.toList\(\) != initialWsMounts/.test(faScreen),
+  "工作区挂载改动也纳入 dirty（触发需重启横幅）");
 ok(/onOpenFileAccess/.test(fn) && /FileAccessScreenDestination/.test(fnScreen),
   "权限页有入口跳到文件访问范围子页");
 

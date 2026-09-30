@@ -182,6 +182,27 @@ object DshEnv {
      */
     const val KEY_FS_DENY_DIRS = "fs_deny_dirs"
 
+    /** 容器内工作区（dsh 默认 cwd）。手机存储「挂进工作区」的目的路径以此为根。 */
+    const val WORKSPACE_GUEST = "/root/workspace"
+
+    /**
+     * 「在工作区中挂载手机存储」子开关（默认**关**）。
+     *
+     * 独立于 [KEY_STORAGE_MOUNT]：开启后把手机存储按 [KEY_WS_MOUNTS] 的映射额外 bind 到
+     * [WORKSPACE_GUEST] 下（默认 `/root/workspace/sdcard`），使 dsh Web UI 的工作区文件树里
+     * 直接能看到手机文件。仍**沿用**同一套黑白名单（[KEY_FS_ALLOW_DIRS] / [KEY_FS_DENY_DIRS]）。
+     * 挂载在容器启动那一刻定死，改这个开关或映射后**要重启 dsh 才生效**。
+     */
+    const val KEY_WS_MOUNT = "ws_mount"
+
+    /**
+     * 工作区挂载映射（JSON 数组，元素 `{ "src": <相对 /sdcard>, "dest": <相对 /root/workspace> }`）。
+     *
+     * `src` 空串 = 整棵 /sdcard；`dest` 是工作区下的子路径（禁止 `..` 越界，空则回落 `sdcard`）。
+     * **缺失 / 空数组** 且子开关开 → 用默认单条映射 `{src:"", dest:"sdcard"}`。见 [DshFileAccess]。
+     */
+    const val KEY_WS_MOUNTS = "ws_mounts"
+
     /** 容器内文件桥配置（JSON：port + token），由 App 写、dsh-fs 读。 */
     fun fsBridgeConfig(ctx: Context): File = File(dshHome(ctx), "fs-bridge.json")
 

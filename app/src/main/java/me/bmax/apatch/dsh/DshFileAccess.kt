@@ -2,6 +2,7 @@ package me.bmax.apatch.dsh
 
 import android.content.Context
 import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * 手机文件访问的黑白名单策略，直接作用在**容器 bind 挂载**这一层。
@@ -162,4 +163,127 @@ object DshFileAccess {
         }
         return out
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  工作区挂载：把手机存储按自定义映射额外 bind 到 /root/workspace 下
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /** 一条工作区挂载映射：把 /sdcard/[src] 挂到 /root/workspace/[dest]。src 空串 = 整棵 /sdcard。 */
+    data class WsMount(val src: String, val dest: String)
+
+    /** 默认映射：整棵 /sdcard → /root/workspace/sdcard。 */
+    val DEFAULT_WS_MOUNTS: List<WsMount> = listOf(WsMount("", "sdcard"))
+
+    /** 「在工作区中挂载手机存储」子开关（默认关）。 */
+    fun wsMountEnabled(ctx: Context): Boolean =
+        prefs(ctx).getBoolean(DshEnv.KEY_WS_MOUNT, false)
+
+    fun setWsMountEnabled(ctx: Context, on: Boolean) {
+        prefs(ctx).edit().putBoolean(DshEnv.KEY_WS_MOUNT, on).apply()
+    }
+
+    /**
+     * 规整 dest（工作区下的相对子路径）：转 `/`、去首尾 `/`、丢弃 `.`/`..` 段（禁止越界），
+     * 结果为空则回落 `sdcard`。
+     */
+    internal fun normalizeDest(input: String): String {
+        val segs = input.trim().replace('\\', '/').split('/')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && it != "." && it != ".." }
+        val joined = segs.joinToString("/")
+        return if (joined.isEmpty()) "sdcard" else joined
+    }
+
+    /**
+     * 当前工作区挂载映射（已规整）。缺失 / 空数组 → [DEFAULT_WS_MOUNTS]。
+     * src 按 [normalize] 规整（同黑白名单条目语义），dest 按 [normalizeDest] 规整；
+     * 按 dest 去重（同一目的只保留第一条，避免两条映射抢同一挂载点）。
+     */
+    fun workspaceMounts(ctx: Context): List<WsMount> {
+        val raw = prefs(ctx).getString(DshEnv.KEY_WS_MOUNTS, null)
+        val parsed: List<WsMount>? = if (raw == null) null else runCatching {
+            val a = JSONArray(raw)
+            (0 until a.length()).mapNotNull { i ->
+                val o = a.optJSONObject(i) ?: return@mapNotNull null
+                val src = normalize(listOf(o.optString("src", ""))).firstOrNull() ?: ""
+                val dest = normalizeDest(o.optString("dest", ""))
+                WsMount(src, dest)
+            }
+        }.getOrNull()
+        val list = parsed?.takeIf { it.isNotEmpty() } ?: DEFAULT_WS_MOUNTS
+        val seen = HashSet<String>()
+        return list.filter { seen.add(it.dest) }
+    }
+
+    fun setWorkspaceMounts(ctx: Context, list: List<WsMount>) {
+        val a = JSONArray()
+        val seen = HashSet<String>()
+        for (m in list) {
+            val src = normalize(listOf(m.src)).firstOrNull() ?: ""
+            val dest = normalizeDest(m.dest)
+            if (!seen.add(dest)) continue
+            a.put(JSONObject().put("src", src).put("dest", dest))
+        }
+        prefs(ctx).edit().putString(DshEnv.KEY_WS_MOUNTS, a.toString()).apply()
+    }
+
+    /**
+     * 组装工作区挂载的 bind 列表（host, guest），已套用黑白名单。子开关关 → 空表。
+     *
+     * 每条映射 `{src, dest}`（guestBase = `/root/workspace/<dest>`）：
+     * - src 命中黑名单（等于或落在某被禁目录之下）→ 整条跳过；
+     * - **无白名单**：把整个 `/storage/emulated/0[/src]` 映到 guestBase，再把落在 src 内部的
+     *   被禁子目录用空目录（[maskPath]）盖住（base 在前、mask 在后覆盖）；
+     * - **有白名单**（黑名单优先）：只映「落在 src 内」的白名单目录到 guestBase 下对应位置，
+     *   其余一律不进工作区——不因走了工作区这条路就绕过白名单（避免「假隔离」）。
+     */
+    fun workspaceBinds(ctx: Context, maskPath: String): List<Pair<String, String>> {
+        if (!wsMountEnabled(ctx)) return emptyList()
+        val allow = allowDirs(ctx)
+        val deny = denyDirs(ctx)
+        val out = ArrayList<Pair<String, String>>()
+        for (m in workspaceMounts(ctx)) {
+            val src = m.src
+            val guestBase = "${DshEnv.WORKSPACE_GUEST}/${m.dest}"
+            // src 本身被黑名单覆盖 → 整条不挂
+            if (deny.any { isUnderOrEqual(src, it) }) continue
+            if (allow.isEmpty()) {
+                // 无白名单：整个 src 映进来，再遮蔽落在 src 内部的被禁子目录
+                out.add(hostUnder(src) to guestBase)
+                for (d in deny) if (contains(src, d) && d != src) {
+                    out.add(maskPath to "$guestBase/${relUnder(d, src)}")
+                }
+            } else {
+                // 有白名单（黑名单优先）：只映「落在 src 内」的白名单目录
+                for (a in allow) {
+                    if (!contains(src, a)) continue                // a 不在这条映射范围内
+                    if (deny.any { isUnderOrEqual(a, it) }) continue // a 被黑名单盖掉
+                    val relA = relUnder(a, src)
+                    val guest = if (relA.isEmpty()) guestBase else "$guestBase/$relA"
+                    out.add(hostUnder(a) to guest)
+                    // a 内部的被禁子目录仍要遮蔽
+                    for (d in deny) if (isUnderOrEqual(d, a) && d != a) {
+                        out.add(maskPath to "$guest/${relUnder(d, a)}")
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    /** [base] 是否包含 [child]（base 空串 = /sdcard 根，包含一切）。 */
+    private fun contains(base: String, child: String): Boolean =
+        base.isEmpty() || isUnderOrEqual(child, base)
+
+    /** 宿主共享存储下某相对路径的绝对路径（空串 = 整棵 [HOST_ROOT]）。 */
+    private fun hostUnder(rel: String): String =
+        if (rel.isEmpty()) HOST_ROOT else "$HOST_ROOT/$rel"
+
+    /** [child] 相对 [parent] 的路径（child 落在 parent 内/相等；parent 空 = 相对 /sdcard 根）。 */
+    private fun relUnder(child: String, parent: String): String =
+        when {
+            parent.isEmpty() -> child
+            child == parent -> ""
+            else -> child.substring(parent.length + 1)
+        }
 }

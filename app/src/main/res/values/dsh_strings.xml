@@ -693,6 +693,16 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_fs_picker_need_perm">All files access is required to browse folders.</string>
     <string name="dsh_fs_picker_up">.. (up one level)</string>
 
+    <!-- ── Mount phone storage into the workspace ── -->
+    <string name="dsh_ws_mount_header">Mount into the workspace</string>
+    <string name="dsh_ws_mount_desc">Expose phone storage as a folder inside /root/workspace, so it shows up in the dsh workspace file tree. Off by default; still obeys the allow/deny lists above.</string>
+    <string name="dsh_ws_mount_empty">No mapping — add one to choose which phone folder appears where in the workspace.</string>
+    <string name="dsh_ws_mount_add">Add mapping</string>
+    <string name="dsh_ws_mount_note">Note: this folder lives on shared storage — it has no symlink/hardlink/exec bits, so do not put node_modules or git repos here (pnpm install / git / chmod +x will fail). It is for reading and writing plain files.</string>
+    <string name="dsh_ws_mount_dest_title">Where in the workspace</string>
+    <string name="dsh_ws_mount_dest_label">Folder under the workspace</string>
+    <string name="dsh_ws_mount_dest_hint">A subpath under /root/workspace. \"..\" is not allowed; leave the default to use /root/workspace/sdcard.</string>
+
     <!-- ── 媒体与麦克风分项 ── -->
     <string name="dsh_native_cap_media">Media library</string>
     <string name="dsh_native_cap_media_desc">List and fetch photos, videos and audio through MediaStore. Fetched files land in the container temp dir.</string>

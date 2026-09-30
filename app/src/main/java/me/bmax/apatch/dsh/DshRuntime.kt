@@ -3269,8 +3269,8 @@ object DshRuntime {
             append("export DSH_HOME=/root/.dsh && ")
             // 不让 dsh 拉系统浏览器：我们用 Intent 打开 WebUI
             append("export BROWSER=true && ")
-            append("mkdir -p /root/workspace 2>/dev/null; ")
-            append("cd /root/workspace && ")
+            append("mkdir -p ${DshEnv.WORKSPACE_GUEST} 2>/dev/null; ")
+            append("cd ${DshEnv.WORKSPACE_GUEST} && ")
             append("if command -v dsh >/dev/null 2>&1 && test -f \"\$(command -v dsh)\"; then ")
             // dsh 是 wrapper，先 readlink 出真正的 bin.js 再交给 node（才能带 --expose-internals）
             append("DSH_REAL=\$(readlink -f \"\$(command -v dsh)\" 2>/dev/null || command -v dsh); ")

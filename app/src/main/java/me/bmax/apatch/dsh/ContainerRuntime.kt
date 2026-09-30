@@ -69,6 +69,18 @@ interface ContainerRuntime {
             mask.mkdirs()
             return DshFileAccess.storageBinds(ctx, mask.absolutePath)
         }
+
+        /**
+         * 「在工作区中挂载手机存储」的 bind 对（host:guest），已套用黑白名单。子开关关 → 空表。
+         * 独立于 [storageBinds]：即使不改顶层 /sdcard 挂载，也能把手机存储额外映到
+         * [DshEnv.WORKSPACE_GUEST] 下。见 [DshFileAccess.workspaceBinds]。
+         */
+        fun workspaceBinds(ctx: Context): List<Pair<String, String>> {
+            if (!DshFileAccess.wsMountEnabled(ctx)) return emptyList()
+            val mask = DshEnv.fsMaskDir(ctx)
+            mask.mkdirs()
+            return DshFileAccess.workspaceBinds(ctx, mask.absolutePath)
+        }
     }
 
     /** 现有实现：Termux proot，APK 内置。 */
@@ -95,6 +107,11 @@ interface ContainerRuntime {
             }
             // 共享存储按黑白名单动态挂：整棵树/白名单目录在前，被禁目录用空目录盖在后（覆盖前者）
             for ((host, guest) in storageBinds(ctx)) {
+                argv.add("-b")
+                argv.add("$host:$guest")
+            }
+            // 「在工作区中挂载手机存储」：额外映到 /root/workspace 下（同样套黑白名单）
+            for ((host, guest) in workspaceBinds(ctx)) {
                 argv.add("-b")
                 argv.add("$host:$guest")
             }
@@ -148,6 +165,11 @@ interface ContainerRuntime {
             }
             // 共享存储按黑白名单动态挂（与 proot 同一份组装）：被禁目录用空目录遮蔽
             for ((host, guest) in storageBinds(ctx)) {
+                argv.add("-b")
+                argv.add("$host:$guest")
+            }
+            // 「在工作区中挂载手机存储」：额外映到 /root/workspace 下（与 proot 同一份组装）
+            for ((host, guest) in workspaceBinds(ctx)) {
                 argv.add("-b")
                 argv.add("$host:$guest")
             }
