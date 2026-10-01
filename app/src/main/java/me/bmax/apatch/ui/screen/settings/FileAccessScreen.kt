@@ -83,6 +83,8 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
     var pickerFor by remember { mutableStateOf<String?>(null) }
     // 工作区映射：选完 src 后填 dest 的挂起态
     var wsPendingSrc by remember { mutableStateOf<String?>(null) }
+    // 共享存储是否支持真硬链接（决定要不要提示「write 工具在此会失败」）。可在页内重新检测。
+    var storageLinkOk by remember { mutableStateOf(DshFileAccess.storageLinkSupported(context)) }
 
     val dirty = allow.toList() != initialAllow || deny.toList() != initialDeny ||
         wsMount != initialWsMount || wsMounts.toList() != initialWsMounts
@@ -218,6 +220,32 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
                             IconButton(onClick = { wsMounts.remove(m); persist() }) {
                                 Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.dsh_fs_remove))
                             }
+                        }
+                    }
+                }
+                // 共享存储不支持硬链接 → dsh 的 write 工具（写临时文件 + 原子 link）会失败。
+                // 这是探测出来的事实，不是开关：proot 的 --link2symlink 是全局的，按挂载点开不了，
+                // 而且它会破坏 pnpm。所以只如实提示，并给出可行替代做法。
+                if (!storageLinkOk) {
+                    Spacer(Modifier.height(8.dp))
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(
+                                text = stringResource(R.string.dsh_ws_mount_warn_title),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.dsh_ws_mount_warn_body),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            OutlinedButton(onClick = {
+                                DshFileAccess.resetStorageLinkProbe()
+                                storageLinkOk = DshFileAccess.storageLinkSupported(context)
+                            }) { Text(stringResource(R.string.dsh_ws_mount_recheck)) }
                         }
                     }
                 }

@@ -680,7 +680,10 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_ws_mount_desc">把手机存储作为一个文件夹映到 /root/workspace 下，在 dsh 工作区文件树里直接可见。默认关闭；仍沿用上面的黑白名单。</string>
     <string name="dsh_ws_mount_empty">暂无映射——添加一条，指定哪个手机目录挂到工作区的哪个位置。</string>
     <string name="dsh_ws_mount_add">添加映射</string>
-    <string name="dsh_ws_mount_note">注意：该文件夹位于共享存储，无符号/硬链接/可执行位，请勿在此放 node_modules 或 git 仓库（pnpm install / git / chmod +x 会失败），仅适合读写普通文件。</string>
+    <string name="dsh_ws_mount_note">注意：该文件夹位于共享存储，无符号/硬链接/可执行位。dsh 的 write 工具用「临时文件 + 原子 link」发布，在此会失败（EINVAL），请改用 edit 或 shell 重定向。请勿在此放 node_modules 或 git 仓库（pnpm install / git / chmod +x 会失败）。</string>
+    <string name="dsh_ws_mount_warn_title">此目录不支持原子写入</string>
+    <string name="dsh_ws_mount_warn_body">共享存储不支持硬链接，而 dsh 的 write 工具用 link() 发布新文件，因此在此写入会报 EINVAL。请改用 edit 或 shell 重定向；read 与 edit 正常。</string>
+    <string name="dsh_ws_mount_recheck">重新检测</string>
     <string name="dsh_ws_mount_dest_title">挂到工作区的哪里</string>
     <string name="dsh_ws_mount_dest_label">工作区下的目录</string>
     <string name="dsh_ws_mount_dest_hint">/root/workspace 下的子路径。不允许 \"..\"；留默认即挂到 /root/workspace/sdcard。</string>

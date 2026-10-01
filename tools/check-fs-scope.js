@@ -8,6 +8,10 @@ function ok(cond, msg) {
   else { bad++; console.log("  \u2717 " + msg); }
 }
 function read(p) { return fs.readFileSync(p, "utf8"); }
+/** 剥 Kotlin 注释：`must not appear` 类断言必须扫剥过的文本（文档里会提到被禁的写法）。 */
+function code(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+}
 
 const fa = read("app/src/main/java/me/bmax/apatch/dsh/DshFileAccess.kt");
 const cr = read("app/src/main/java/me/bmax/apatch/dsh/ContainerRuntime.kt");
@@ -71,6 +75,35 @@ ok(/if \(deny\.any \{ isUnderOrEqual\(a, it\) \}\) continue/.test(fa),
   "工作区映射有白名单时黑名单优先：被黑名单盖掉的白名单目录不映");
 ok(/val guestBase = "\$\{DshEnv\.WORKSPACE_GUEST\}\/\$\{m\.dest\}"/.test(fa),
   "工作区映射的 guest 路径落在 WORKSPACE_GUEST 下");
+
+console.log("\u2500 #3c 工作区挂载：共享存储不支持硬链接 → 探测并显著提示（不改挂载行为）");
+// 为什么单探一次：DshRuntime.hardlinkSupported 只探 rootfs（ext4→true），于是 proot 不加
+// --link2symlink；但链接能力是逐挂载点的。dsh write 工具用 link() 发布，共享存储
+// （sdcardfs/FUSE）上直接 EINVAL —— 挂进工作区后这个坑才暴露出来。
+ok(/fun storageLinkSupported\(ctx: Context\)/.test(fa),
+  "DshFileAccess 有共享存储硬链接探测 storageLinkSupported");
+ok(/getExternalFilesDir\(null\) \?: File\(HOST_ROOT\)/.test(fa) && /Files\.createLink\(/.test(fa),
+  "探针打在共享存储所在文件系统上（优先 App 专属外部目录、退回 HOST_ROOT）+ createLink");
+ok(/catch \(e: Throwable\) \{\s*\n\s*ok = false/.test(fa),
+  "探测异常（含无权限）一律判为不支持");
+ok(/storageLinkOk\?\.let \{ return it \}/.test(fa) && /@Volatile/.test(fa),
+  "探测结果有缓存，避免每次重组都探盘");
+ok(/fun resetStorageLinkProbe\(\)/.test(fa) && /storageLinkOk = null/.test(fa),
+  "有 resetStorageLinkProbe 供 UI 重新检测");
+// 明确不改挂载行为：proot 的 --link2symlink 是全局开关，按挂载点开不了，且会破坏 pnpm
+ok(!/link2symlink/.test(code(fa)),
+  "DshFileAccess 不碰 --link2symlink（只探测/提示，不改挂载）");
+ok(/if \(!hardlinkSupported\) argv\.add\("--link2symlink"\)/.test(cr),
+  "proot 的 --link2symlink 仍只由 rootfs 硬链接能力决定（本轮未改）");
+ok(/if \(!storageLinkOk\)/.test(faScreen),
+  "UI 在探测到不支持时显示显著警告");
+ok(/dsh_ws_mount_warn_title/.test(faScreen) && /dsh_ws_mount_warn_body/.test(faScreen),
+  "警告含标题与正文");
+ok(/DshFileAccess\.resetStorageLinkProbe\(\)/.test(faScreen) &&
+  /storageLinkOk = DshFileAccess\.storageLinkSupported\(context\)/.test(faScreen),
+  "「重新检测」清缓存后重探");
+ok(/dsh_ws_mount_note/.test(faScreen) && /dsh_ws_mount_recheck/.test(faScreen),
+  "常驻说明与「重新检测」按钮都在");
 
 console.log("\u2500 #3 ContainerRuntime：存储绑定改为动态、两个运行时都用");
 ok(!/arrayOf\("\/storage\/emulated\/0"/.test(cr),

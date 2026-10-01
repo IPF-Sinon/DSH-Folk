@@ -1,8 +1,11 @@
 package me.bmax.apatch.dsh
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.nio.file.Files
 
 /**
  * 手机文件访问的黑白名单策略，直接作用在**容器 bind 挂载**这一层。
@@ -286,4 +289,67 @@ object DshFileAccess {
             child == parent -> ""
             else -> child.substring(parent.length + 1)
         }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  共享存储的文件系统能力探测
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private const val TAG = "DshFileAccess"
+
+    /** [storageLinkSupported] 的缓存（null = 还没探过）。 */
+    @Volatile
+    private var storageLinkOk: Boolean? = null
+
+    /**
+     * 共享存储（[HOST_ROOT]）是否支持**真硬链接**。
+     *
+     * 为什么需要单独探一次：[DshRuntime.hardlinkSupported] 只探 **rootfs** 所在文件系统
+     * （ext4 → true），于是 proot 不加 `--link2symlink`；但链接能力是**逐挂载点**的。
+     * dsh 的 write 工具用 `link(临时文件, 目标)` 发布，而共享存储（sdcardfs/FUSE）不支持
+     * 硬链接 —— 一旦把手机存储挂进工作区（[workspaceBinds]），容器内就出现了指向「不支持
+     * 硬链接的文件系统」的可写路径，write 工具在那里直接报 `EINVAL: invalid argument, link`。
+     *
+     * 这是**探测**不是**开关**：proot 的 `--link2symlink` 是全局的，按挂载点开不了，而且它会
+     * 把所有 `link()` 改写成符号链接（反而制造悬空链接、破坏 pnpm，见
+     * [DshRuntime.linkBecomesSymlink]）。所以这里只把事实告诉用户（UI 显著警告），不改挂载。
+     *
+     * 无「所有文件访问」权限也**能**探：探针放在 App 专属外部目录（同一 emulated 卷）。只有
+     * 连那里都拿不到（外部存储未挂载等）才退回 [HOST_ROOT]；此时探针可能因权限失败而返回
+     * false，UI 的警告与权限提示并存，语义仍成立。
+     */
+    fun storageLinkSupported(ctx: Context): Boolean {
+        storageLinkOk?.let { return it }
+        synchronized(this) {
+            storageLinkOk?.let { return it }
+            // 探针放在 App 专属外部目录（同一 emulated 卷、无需「所有文件访问」权限），
+            // 避免因根目录不可写而**误报**「不支持」；拿不到时退回共享存储根。
+            // 链接能力是**按文件系统**的，探哪儿结论都一样。
+            val dir = ctx.getExternalFilesDir(null) ?: File(HOST_ROOT)
+            val src = File(dir, ".dshfolk-sdlinkprobe")
+            val dst = File(dir, ".dshfolk-sdlinkprobe.hl")
+            var ok = false
+            var detail = ""
+            try {
+                src.delete(); dst.delete()
+                Files.write(src.toPath(), byteArrayOf('o'.code.toByte(), 'k'.code.toByte()))
+                Files.createLink(dst.toPath(), src.toPath())
+                ok = dst.isFile && dst.length() == 2L
+                if (!ok) detail = "link() 成功但目标不可读"
+            } catch (e: Throwable) {
+                ok = false
+                detail = "${e.javaClass.simpleName}: ${e.message}"
+            } finally {
+                runCatching { src.delete() }
+                runCatching { dst.delete() }
+            }
+            Log.i(TAG, "共享存储硬链接=$ok${if (detail.isEmpty()) "" else "（$detail）"}")
+            storageLinkOk = ok
+            return ok
+        }
+    }
+
+    /** 清掉 [storageLinkSupported] 的缓存，供 UI「重新检测」用。 */
+    fun resetStorageLinkProbe() {
+        synchronized(this) { storageLinkOk = null }
+    }
 }

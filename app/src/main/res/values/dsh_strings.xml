@@ -698,7 +698,10 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_ws_mount_desc">Expose phone storage as a folder inside /root/workspace, so it shows up in the dsh workspace file tree. Off by default; still obeys the allow/deny lists above.</string>
     <string name="dsh_ws_mount_empty">No mapping — add one to choose which phone folder appears where in the workspace.</string>
     <string name="dsh_ws_mount_add">Add mapping</string>
-    <string name="dsh_ws_mount_note">Note: this folder lives on shared storage — it has no symlink/hardlink/exec bits, so do not put node_modules or git repos here (pnpm install / git / chmod +x will fail). It is for reading and writing plain files.</string>
+    <string name="dsh_ws_mount_note">Note: this folder lives on shared storage and has no symlink/hardlink/exec bits. The dsh write tool publishes a file through a temporary file plus an atomic link, so it fails here (EINVAL) — use edit or a shell redirect instead. Do not put node_modules or git repos here (pnpm install / git / chmod +x will fail).</string>
+    <string name="dsh_ws_mount_warn_title">This folder cannot do atomic writes</string>
+    <string name="dsh_ws_mount_warn_body">Shared storage has no hard links, and the dsh write tool publishes a new file with link(), so writing here fails with EINVAL. Use edit or a shell redirect instead; read and edit work normally.</string>
+    <string name="dsh_ws_mount_recheck">Re-check</string>
     <string name="dsh_ws_mount_dest_title">Where in the workspace</string>
     <string name="dsh_ws_mount_dest_label">Folder under the workspace</string>
     <string name="dsh_ws_mount_dest_hint">A subpath under /root/workspace. \"..\" is not allowed; leave the default to use /root/workspace/sdcard.</string>
