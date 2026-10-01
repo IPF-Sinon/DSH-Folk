@@ -183,6 +183,7 @@ object DshFileAccess {
 
     fun setWsMountEnabled(ctx: Context, on: Boolean) {
         prefs(ctx).edit().putBoolean(DshEnv.KEY_WS_MOUNT, on).apply()
+        DshHostPrompt.writeFacts(ctx.applicationContext)
     }
 
     /**
@@ -228,6 +229,7 @@ object DshFileAccess {
             a.put(JSONObject().put("src", src).put("dest", dest))
         }
         prefs(ctx).edit().putString(DshEnv.KEY_WS_MOUNTS, a.toString()).apply()
+        DshHostPrompt.writeFacts(ctx.applicationContext)
     }
 
     /**

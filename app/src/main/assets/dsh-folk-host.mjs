@@ -370,6 +370,38 @@ function render(f) {
           'media store, which is separate.)'
       );
     }
+
+    // Workspace mount: when the user has mapped phone storage into the workspace, tell the agent
+    // which paths those are, and that the write tool cannot publish there (no hardlinks on
+    // shared storage) — read/edit and shell redirection are the right tools for those files.
+    if (f.workspaceStorageMounted === true) {
+      const mappings = Array.isArray(f.workspaceStorageMappings)
+        ? f.workspaceStorageMappings
+            .map((m) => m && typeof m === 'object' ? m : null)
+            .filter(Boolean)
+        : [];
+      lines.push('');
+      lines.push('### Phone storage inside the workspace');
+      lines.push('');
+      if (mappings.length > 0) {
+        lines.push(
+          'The user has bind-mounted parts of the phone\u2019s shared storage into the workspace: ' +
+            mappings.map((m) => '`' + (m.src ? '/sdcard/' + m.src : '/sdcard') + '` \u2192 `/root/workspace/' + m.dest + '`').join(', ') +
+            '.'
+        );
+      }
+      if (f.storageHardlinkSupported === false) {
+        lines.push('');
+        lines.push(
+          'These mounted folders sit on shared storage (sdcardfs/FUSE), which has NO hard-link, symlink, or exec ' +
+            'bits. The dsh `write` tool publishes a file via a temp file plus an atomic link(), so writing inside ' +
+            'any of those folders FAILS with EINVAL. Do not retry `write` there and do not place node_modules, git ' +
+            'repos, or anything needing symlinks/exec bits in them. To create or change a file there, use the `edit` ' +
+            'tool (in-place) or a shell redirect (`cat > file …` / `printf … > file`), both of which work normally, ' +
+            'the same as `read` and `dsh-fs`.'
+        );
+      }
+    }
     if (f.fsBridge === true) {
       lines.push('');
       lines.push(

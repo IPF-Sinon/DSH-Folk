@@ -677,6 +677,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
 
     <!-- ── 在工作区中挂载手机存储 ── -->
     <string name="dsh_ws_mount_header">挂载进工作区</string>
+    <string name="dsh_ws_mount_source">源</string>
+    <string name="dsh_ws_mount_destination">目标</string>
     <string name="dsh_ws_mount_desc">把手机存储作为一个文件夹映到 /root/workspace 下，在 dsh 工作区文件树里直接可见。默认关闭；仍沿用上面的黑白名单。</string>
     <string name="dsh_ws_mount_empty">暂无映射——添加一条，指定哪个手机目录挂到工作区的哪个位置。</string>
     <string name="dsh_ws_mount_add">添加映射</string>

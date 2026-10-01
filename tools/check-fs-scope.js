@@ -96,14 +96,32 @@ ok(!/link2symlink/.test(code(fa)),
 ok(/if \(!hardlinkSupported\) argv\.add\("--link2symlink"\)/.test(cr),
   "proot 的 --link2symlink 仍只由 rootfs 硬链接能力决定（本轮未改）");
 ok(/if \(!storageLinkOk\)/.test(faScreen),
-  "UI 在探测到不支持时显示显著警告");
-ok(/dsh_ws_mount_warn_title/.test(faScreen) && /dsh_ws_mount_warn_body/.test(faScreen),
-  "警告含标题与正文");
+  "UI 在探测到不支持时显示紧凑警告");
+ok(/dsh_ws_mount_warn_title/.test(faScreen),
+  "紧凑警告只留一行标题（详细说明走宿主提示词，不占屏幕）");
+ok(!/dsh_ws_mount_warn_body/.test(faScreen),
+  "人类 UI 不再渲染大块警告正文（不再占一大块屏幕）");
 ok(/DshFileAccess\.resetStorageLinkProbe\(\)/.test(faScreen) &&
   /storageLinkOk = DshFileAccess\.storageLinkSupported\(context\)/.test(faScreen),
   "「重新检测」清缓存后重探");
 ok(/dsh_ws_mount_note/.test(faScreen) && /dsh_ws_mount_recheck/.test(faScreen),
   "常驻说明与「重新检测」按钮都在");
+ok(/dsh_ws_mount_source/.test(faScreen) && /dsh_ws_mount_destination/.test(faScreen),
+  "映射显示拆成「源/目标」两行，路径不再在窄屏中间被折行截断");
+
+const hostPrompt = read("app/src/main/java/me/bmax/apatch/dsh/DshHostPrompt.kt");
+const hostMjs = read("app/src/main/assets/dsh-folk-host.mjs");
+console.log("\u2500 #3d 宿主提示词：把工作区挂载与硬链接限制注入 AI（不落在大块 UI 里）");
+ok(/workspaceStorageMounted/.test(hostPrompt) && /workspaceStorageMappings/.test(hostPrompt) &&
+  /storageHardlinkSupported/.test(hostPrompt),
+  "host-facts 里写入工作区挂载状态/映射表/共享存储硬链接探测结果");
+ok(/if \(f\.workspaceStorageMounted === true\)/.test(hostMjs) &&
+  /storageHardlinkSupported === false/.test(hostMjs),
+  "宿主提示词仅在工作区挂载开且不支持硬链接时渲染工作区挂载段");
+ok(/### Phone storage inside the workspace/.test(hostMjs) && /EINVAL/.test(hostMjs),
+  "宿主提示词明说 write 工具会撞 EINVAL、推荐 edit/shell 重定向");
+ok(/PLUGIN_REV = 13/.test(hostPrompt),
+  "改插件内容时已把 PLUGIN_REV 抬到 13（让 ensureInstalled 重新落盘）");
 
 console.log("\u2500 #3 ContainerRuntime：存储绑定改为动态、两个运行时都用");
 ok(!/arrayOf\("\/storage\/emulated\/0"/.test(cr),

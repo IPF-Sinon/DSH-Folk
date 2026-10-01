@@ -211,49 +211,51 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
                         ) {
                             Icon(Icons.Filled.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "/sdcard/" + m.src + "  →  /root/workspace/" + m.dest,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.weight(1f),
-                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.dsh_ws_mount_source) + "  " +
+                                        (if (m.src.isEmpty()) "/sdcard" else "/sdcard/" + m.src),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontFamily = FontFamily.Monospace,
+                                )
+                                Text(
+                                    text = stringResource(R.string.dsh_ws_mount_destination) +
+                                        "  /root/workspace/" + m.dest,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             IconButton(onClick = { wsMounts.remove(m); persist() }) {
                                 Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.dsh_fs_remove))
                             }
                         }
                     }
                 }
-                // 共享存储不支持硬链接 → dsh 的 write 工具（写临时文件 + 原子 link）会失败。
-                // 这是探测出来的事实，不是开关：proot 的 --link2symlink 是全局的，按挂载点开不了，
-                // 而且它会破坏 pnpm。所以只如实提示，并给出可行替代做法。
+                // 详细限制注入 AI 的宿主提示词；这里给人类保留紧凑提醒，避免占满屏幕。
                 if (!storageLinkOk) {
-                    Spacer(Modifier.height(8.dp))
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(
-                                text = stringResource(R.string.dsh_ws_mount_warn_title),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(R.string.dsh_ws_mount_warn_body),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            OutlinedButton(onClick = {
-                                DshFileAccess.resetStorageLinkProbe()
-                                storageLinkOk = DshFileAccess.storageLinkSupported(context)
-                            }) { Text(stringResource(R.string.dsh_ws_mount_recheck)) }
-                        }
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.dsh_ws_mount_warn_title),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = {
+                            DshFileAccess.resetStorageLinkProbe()
+                            storageLinkOk = DshFileAccess.storageLinkSupported(context)
+                        }) { Text(stringResource(R.string.dsh_ws_mount_recheck)) }
                     }
                 }
                 Text(
                     text = stringResource(R.string.dsh_ws_mount_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = 2.dp),
                 )
                 TextButton(onClick = { pickerFor = "ws" }) {
                     Text(stringResource(R.string.dsh_ws_mount_add))

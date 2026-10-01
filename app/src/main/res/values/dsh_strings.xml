@@ -695,6 +695,8 @@ Updating Android System WebView from your app store is the proper fix.</string>
 
     <!-- ── Mount phone storage into the workspace ── -->
     <string name="dsh_ws_mount_header">Mount into the workspace</string>
+    <string name="dsh_ws_mount_source">Source</string>
+    <string name="dsh_ws_mount_destination">Target</string>
     <string name="dsh_ws_mount_desc">Expose phone storage as a folder inside /root/workspace, so it shows up in the dsh workspace file tree. Off by default; still obeys the allow/deny lists above.</string>
     <string name="dsh_ws_mount_empty">No mapping — add one to choose which phone folder appears where in the workspace.</string>
     <string name="dsh_ws_mount_add">Add mapping</string>

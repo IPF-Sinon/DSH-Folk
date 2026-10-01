@@ -69,7 +69,7 @@ object DshHostPrompt {
      * 读一遍 assets 再全量覆盖。版本号存在 prefs 里，与 rootfs 无关 —— 重装运行时后
      * 文件没了但版本号还在，所以 [ensureInstalled] 另外检查文件是否真的存在。
      */
-    private const val PLUGIN_REV = 12
+    private const val PLUGIN_REV = 13
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =
@@ -163,6 +163,15 @@ object DshHostPrompt {
             if (nativeOn) {
                 for ((cap, access) in DshNativeBridge.onceGrants()) once.put(cap.id, access.id)
             }
+            val workspaceStorageMounted = DshFileAccess.wsMountEnabled(ctx)
+            val workspaceStorageMappings = JSONArray()
+            if (workspaceStorageMounted) {
+                for (m in DshFileAccess.workspaceMounts(ctx)) {
+                    workspaceStorageMappings.put(
+                        JSONObject().put("src", m.src).put("dest", m.dest)
+                    )
+                }
+            }
             val json = JSONObject()
                 .put("promptEnabled", enabled(ctx))
                 .put("appVersion", BuildConfig.VERSION_NAME)
@@ -210,6 +219,11 @@ object DshHostPrompt {
                 .put("elevation", elevationJson(ctx))
                 // 严格程度：agent 据此决定要不要把一件事拆成十条命令（严格档下每条都会弹窗）
                 .put("privStrictness", PrivPolicy.of(ctx).id)
+                // 「挂载进工作区」：agent 必须知道这个挂载点位于共享存储（无硬链接），
+                // 否则会在 /root/workspace/sdcard 里反复用 write 工具撞 EINVAL。
+                .put("workspaceStorageMounted", workspaceStorageMounted)
+                .put("workspaceStorageMappings", workspaceStorageMappings)
+                .put("storageHardlinkSupported", DshFileAccess.storageLinkSupported(ctx))
                 // 无障碍服务：和相机一样属于「设备上有没有」的事实
                 .put("a11yService", DshA11y.connected())
                 .toString()
