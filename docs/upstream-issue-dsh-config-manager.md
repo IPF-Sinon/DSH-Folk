@@ -102,6 +102,36 @@ dsh-web-app 那 27 条裸行全部只带 `id` + `config`/`disabled`，用来**�
 本次的具体受害者是 DSH-Folk 的 `dsh-folk-host`：它一失效，容器里 agent 的**整段宿主环境
 提示词**（Android 原生能力桥、共享存储说明等）全部消失。
 
+### 更严重的一面：config-manager 自己的「激活行」也是裸行
+
+`ensureActivationRow`（`src/index.ts:480-488`）给**非 bundle 插件**写的激活行长这样：
+
+```ts
+const id = `pm-${slugOf(pkg)}`
+await patchFile.applyPatchChanges(PROFILE_PATCH_FILE, [
+  { lineId: id, raw: { id, name: pkg }, action: 'insert' },
+])
+```
+
+注意写进去的 `raw` 是 `{ id, name }` —— **裸行，没有 `insert` 外层**。而 dsh 的
+`composeEntries` 是 `applyEntryPatches([], …)`，**初始数据为空数组**，整个条目表只能由
+`insert` 建起来。所以这条「激活行」要想生效，前提是别处已经用 `insert` 建过
+`pm-<slug>` 这个 id。
+
+我们在 `@deepseek-ai/dsh-*` 全部官方包里搜过 `pm-` 的拼接（`pm-${`、`"pm-"` 等），
+**没有任何一处**会创建这种 id。也就是说这条激活行**必然被 dsh 判为 `entry not found` 并跳过**，
+非 bundle 插件实际上从未被它激活。作者注释里说的「仿 marketplace ensureRow」，
+官方 marketplace 侧也没有对应的裸行写法可仿。
+
+（我们机器上的实例：`/root/.dsh/cordis.patch.yml` 第 22-23 行就是
+
+```yaml
+- id: pm-dsh-settings-organizer
+  name: dsh-settings-organizer
+```
+
+——正是这条规则产出的，按上述分析它是惰性的。）
+
 ## 建议修法
 
 回写时**保留 `insert` 语义**，二选一：
@@ -224,6 +254,36 @@ official way — silently loses that plugin after an import:
 In our case the casualty was `dsh-folk-host`, a plugin that injects the host-environment section
 into the system prompt. Losing it removed the **entire** host section (Android native-capability
 tooling guidance, shared-storage rules, …) from the agent's system prompt.
+
+### Worse: dsh-config-manager's own "activation rows" are bare rows too
+
+`ensureActivationRow` (`src/index.ts:480-488`) writes this row for every non-bundle plugin:
+
+```ts
+const id = `pm-${slugOf(pkg)}`
+await patchFile.applyPatchChanges(PROFILE_PATCH_FILE, [
+  { lineId: id, raw: { id, name: pkg }, action: 'insert' },
+])
+```
+
+The `raw` value is `{ id, name }` — a **bare row, with no `insert` wrapper**. dsh composes via
+`composeEntries` = `applyEntryPatches([], …)`, i.e. it starts from an **empty array**; the whole
+entry table can only ever be created by `insert` blocks. So this row only takes effect if
+something else already created the id `pm-<slug>` via `insert`.
+
+We searched every official `@deepseek-ai/dsh-*` package for any construction of a `pm-` id
+(`pm-${`, `"pm-"`, …) and found **none**. Therefore this activation row is **always** skipped as
+`patch: entry pm-<slug> not found` — the mechanism never activates anything. The comment's claim
+of "mimicking the marketplace's ensureRow" has no counterpart on the official side either.
+
+(In our instance, `/root/.dsh/cordis.patch.yml` lines 22-23 are exactly such a row:
+
+```yaml
+- id: pm-dsh-settings-organizer
+  name: dsh-settings-organizer
+```
+
+— and by the above it is inert.)
 
 ## Proposed fix
 
