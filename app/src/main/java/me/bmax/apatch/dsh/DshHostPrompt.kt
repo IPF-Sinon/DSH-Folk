@@ -63,6 +63,14 @@ object DshHostPrompt {
     private const val HOME_PATCH_REL = "root/.dsh/cordis.patch.yml"
 
     /**
+     * 我们自己写的那句注释的**前缀**。
+     *
+     * 修复 patch 文件时按它把旧注释一并清掉，否则反复自愈会越堆越多；同时也是给用户看的
+     * 「这几行是 App 自动维护的」提示。
+     */
+    private const val OUR_COMMENT_PREFIX = "# DSH-Folk 宿主能力说明"
+
+    /**
      * 插件内容版本。
      *
      * 改了 [ASSET_NAME] 的内容就 +1：落盘按「版本不同才写」判断，否则每次引导都要
@@ -111,11 +119,35 @@ object DshHostPrompt {
     }
 
     /**
-     * 往 home 级 `cordis.patch.yml` 追加插件行（已存在则不动）。
+     * 保证 home 级 `cordis.patch.yml` 里有我们的插件行，**且形状正确**。
      *
      * 手写 YAML 而不是调容器里的 node/yaml：这一步在引导路径上，容器可能还没起来，
-     * 而要写的内容是两行定长文本。为了不破坏用户可能已有的内容，只做「读全文 → 判断
-     * 有没有我们的 id → 没有就追加」，绝不重写已有行。
+     * 而要写的内容是几行定长文本。为不破坏用户可能已有的内容，只动我们自己的那一条，
+     * 其余行原样保留。
+     *
+     * ## 为什么判据是**缩进**，而不是「文件里有没有我们的 id」
+     *
+     * dsh 的 patch 语义（`applyEntryPatches`，0.1.7-rc.2 与 0.2.0-rc.2 一致）：带
+     * `insert:` 的条目是**新增插件**，**不带 `insert:` 的条目是「patch 一个已存在的
+     * id」**：
+     *
+     * ```js
+     * if (insert) { data.push(...insert); continue; }
+     * const target = entryMap.get(id);
+     * if (!target) { warn("patch: entry %C not found", id); continue; }   // 静默跳过
+     * ```
+     *
+     * 所以只要外层 `- insert:` 被抹掉，我们那条就退化成「patch 一个不存在的 id」→ 被跳过
+     * → 插件永不加载 → 容器里的 agent 看不到任何宿主能力说明（连原生能力桥一起消失）。
+     *
+     * 现实里真会发生：`dsh-config-manager` 做 config import 时会把整个文件**重写**成扁平
+     * 条目表（它会留下一行 `# rewritten by dsh-config-manager import`），我们的
+     * `- insert:` 就此不见。而旧判据 `existing.contains("id: $ENTRY_ID")` 对压平后的行
+     * 照样成立，于是每次启动都判「已存在」，**永远修不回来**。
+     *
+     * 现在改用「我们的 id 行有没有缩进」判定：正确形状里它缩进在 `- insert:` 之下，
+     * 被压平时它顶格出现在第 0 列。发现顶格就整条摘掉重写 —— 每次起服务都会过一遍，
+     * 所以被外部工具压平后，下一次启动即自愈。
      *
      * 文件不存在时创建成一个合法的顶层 YAML 数组（dsh 的 parsePatchList 要求顶层是
      * 数组，否则**整个 profile 启动失败**）。
@@ -123,22 +155,55 @@ object DshHostPrompt {
     private fun ensurePatchRow(ctx: Context) {
         val f = File(DshEnv.rootfs(ctx), HOME_PATCH_REL)
         val existing = if (f.isFile) f.readText(StandardCharsets.UTF_8) else ""
-        // 判据用 id 而不是路径：将来路径变了也不会重复追加
-        if (existing.contains("id: $ENTRY_ID")) return
-        val row = buildString {
-            if (existing.isNotEmpty() && !existing.endsWith("\n")) append('\n')
-            append("# DSH-Folk 宿主能力说明（App 自动维护；删掉这两行即可停用）\n")
+        val idLine = "- id: $ENTRY_ID"
+        val lines = existing.split("\n")
+        val at = lines.indexOfFirst { it.trim() == idLine }
+        // 有缩进 = 它在 `- insert:` 之下，形状正确，不碰别人写的任何行
+        if (at >= 0 && lines[at].length != lines[at].trimStart().length) return
+
+        // 到这里有两种情况：完全没有我们的条目，或它被压平成了顶格条目。
+        // 后者不是「已存在」而是「坏条目」，必须摘掉重写；顺带清掉旧注释，免得反复叠加。
+        val kept = ArrayList<String>(lines.size + 4)
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            if (line.startsWith(OUR_COMMENT_PREFIX)) {
+                i++
+                continue
+            }
+            if (line.trim() == idLine) {
+                // 整条摘掉：它自己 + 紧随其后缩进更深的那些行（`name:` 等）
+                val base = line.length - line.trimStart().length
+                i++
+                while (i < lines.size && lines[i].isNotBlank() &&
+                    lines[i].length - lines[i].trimStart().length > base
+                ) {
+                    i++
+                }
+                continue
+            }
+            kept.add(line)
+            i++
+        }
+        while (kept.isNotEmpty() && kept.last().isBlank()) kept.removeAt(kept.size - 1)
+        val head = kept.joinToString("\n")
+        val body = buildString {
+            if (head.isNotEmpty()) append(head).append('\n')
+            append(OUR_COMMENT_PREFIX).append("（App 自动维护；删掉这几行即可停用）\n")
             append("- insert:\n")
             append("    - id: $ENTRY_ID\n")
             append("      name: $PLUGIN_GUEST_PATH\n")
         }
+        if (body == existing) return
         f.parentFile?.mkdirs()
         // 先写 .tmp 再 rename：这个文件坏掉会让 dsh 完全起不来，不能留半截
         val tmp = File(f.parentFile, f.name + ".tmp")
-        tmp.writeText(existing + row, StandardCharsets.UTF_8)
+        tmp.writeText(body, StandardCharsets.UTF_8)
         if (!tmp.renameTo(f)) {
             tmp.delete()
             android.util.Log.w(TAG, "写 cordis.patch.yml 失败（rename）")
+        } else {
+            android.util.Log.i(TAG, "cordis.patch.yml 已写：dsh-folk-host（insert 形状，at=$at）")
         }
     }
 

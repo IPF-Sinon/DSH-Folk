@@ -1375,49 +1375,57 @@ fun FunctionSettingsContent(
                         // 关＝容器彻底看不到 /sdcard。长按整行进黑白名单设置。改动需重启 dsh 才在
                         // 挂载层生效（dsh-fs 侧立即生效）。
                         HorizontalDivider(Modifier.padding(vertical = 12.dp))
-                        Row(
+                        // 长按进黑白名单要覆盖**整张卡片**：combinedClickable 原来只挂在标题 Row 上，
+                        // 而 `if (mountEnabled)` 里那几行（已授权提示 / 重启提示）在 Row 之外，
+                        // 于是卡片看着一大块、实际只有标题那一小块能长按。把 clickable 提到外层
+                        // Column，卡片范围内（按钮自身除外）都能长按。
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .combinedClickable(
                                     onClick = { onSetMount(!mountEnabled) },
                                     onLongClick = onOpenFileAccess,
                                 ),
-                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.dsh_storage_cap_title),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    text = stringResource(R.string.dsh_storage_mount_hint),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            ExpressiveSwitch(
-                                checked = mountEnabled,
-                                onCheckedChange = onSetMount,
-                            )
-                        }
-                        if (mountEnabled) {
-                            if (allFilesGranted) {
-                                Text(
-                                    text = stringResource(R.string.dsh_storage_granted),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            } else {
-                                TextButton(onClick = onOpenAllFilesSettings) {
-                                    Text(stringResource(R.string.dsh_storage_need_perm))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.dsh_storage_cap_title),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.dsh_storage_mount_hint),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
+                                Spacer(Modifier.width(8.dp))
+                                ExpressiveSwitch(
+                                    checked = mountEnabled,
+                                    onCheckedChange = onSetMount,
+                                )
                             }
-                            Text(
-                                text = stringResource(R.string.dsh_storage_restart_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            if (mountEnabled) {
+                                if (allFilesGranted) {
+                                    Text(
+                                        text = stringResource(R.string.dsh_storage_granted),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                } else {
+                                    TextButton(onClick = onOpenAllFilesSettings) {
+                                        Text(stringResource(R.string.dsh_storage_need_perm))
+                                    }
+                                }
+                                Text(
+                                    text = stringResource(R.string.dsh_storage_restart_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
 
                         Spacer(Modifier.height(8.dp))
