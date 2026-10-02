@@ -770,9 +770,25 @@ ok(/DshPluginRepo\.install\(\s*\n?\s*seedSpec\(pkg\)/.test(runtime),
   "预装用 seedSpec(pkg) 取安装规格（账本仍按包名记）");
 // 1.9.2.6：git 全线路失败时，预装带上 tgz 兜底直链（钉死版本，绕开 git）
 ok(/fun seedFallbackTgz\(pkg[^\n]*\)/.test(runtime) &&
-  /releases\/download\/v0\.5\.0\/dsh-folk-cloud-0\.5\.0\.tgz/.test(runtime) &&
+  /releases\/download\/v0\.6\.0\/dsh-folk-cloud-0\.6\.0\.tgz/.test(runtime) &&
   /fallbackTgz = seedFallbackTgz\(pkg\)/.test(runtime),
   "预装把 tgz 兜底直链传给 install（git 全失败时用）");
+// dsh 0.2.0 兼容：dsh-folk-cloud 0.5.0 的 peerDeps 只声明 ^0.1.0-rc.6，在 0.2.0-rc.2 上
+// 会被 dsh 的兼容闸门**整包跳过**（真机日志：skipping profile bundle "dsh-folk-cloud"，
+// 后果是云备份整个不可用）。0.6.0 放宽到 ^0.2.0-rc.1。种子最低版本必须跟着抬，
+// 否则已装 0.5.0 的机器判定「已达标」而永远不升级。
+ok(/"dsh-folk-cloud" to "0\.6\.0"/.test(runtime),
+  "dsh-folk-cloud 种子最低版本抬到 0.6.0（否则已装 0.5.0 的机器不会升级，云备份继续不可用）");
+// 种子最低版本只能抬到**同时兼容 0.1.x 与 0.2.x** 的版本：App 同时挂着 stable(0.1.7) 与
+// beta(0.2.0)，抬到只认 0.2.0 的版本会把 stable 用户升级成反被跳过的包。
+// dshmarket 1.66.8 的范围含 `^0.1.0-rc.7` 与 `^0.2.0-rc.1`，是双兼容的。
+ok(/"dshmarket" to "1\.66\.8"/.test(runtime),
+  "dshmarket 种子最低版本抬到 1.66.8（1.65.1 在 0.2.0 上会被兼容闸门跳过）");
+// dsh 0.2.0 的 `dsh web` 默认会去拉系统浏览器。真正的开关是 --no-open（0.1.7 起就有）；
+// `export BROWSER=true` 从来拦不住它 —— dsh web 用 npm 的 `open` 包（Linux 走 xdg-open），
+// 不读 BROWSER，只因容器里没有 xdg-open 尝试后静默失败才看不出区别。
+ok(/append\(" --no-open"\)/.test(runtime),
+  "启动命令无条件带 --no-open（否则 0.2.0 会去拉系统浏览器，BROWSER=true 拦不住）");
 
 // ── 1.9.2.22：云备份「是否包括应用主题」开关（配合插件 0.5.0）──
 // 这条链路的要点是「口径一致」：插件问大小的那个数、界面上显示的那个数、真正打进包的主题，

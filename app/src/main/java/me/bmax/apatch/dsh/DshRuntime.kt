@@ -295,12 +295,22 @@ object DshRuntime {
     //   ③ 会用 manifest 的 sourceHome 自动生成跨机基础路径重定基规则，App 侧据此同时给
     //      /plan 的 pathMappings 传映射（见 DshBackupArchive）。
     //
-    // dshmarket 1.65.1 / dsh-web-mobile 3.0.3（用户 2026-09-25 指定）：直接列为要求版本，
-    // 已装且低于它的机器会在启动时随预装升级流程拉到这两个版本。
+    // 种子最低版本 = 预装升级流程的「门槛」，低于它就在启动时被拉到这个版本。
+    //
+    // 纪律：**只能抬到同时兼容 0.1.x 与 0.2.x 的版本**。因为 App 同时挂着 stable(0.1.7)
+    // 与 beta(0.2.0) 两个运行时，抬到一个只认 0.2.0 的版本，会把 stable 用户升级到
+    // 反被 dsh 兼容闸门整包跳过的包 —— 那就从「云备份不可用」变成「插件市场不可用」。
+    //
+    // dshmarket 1.66.8：peerDeps 是 `^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2 || ^0.2.0-rc.1`
+    //   —— 0.1.x 与 0.2.x 都在范围内，是双兼容的，所以从 1.65.1 抬到它（0.2.0 上 1.65.1 会被
+    //   跳过；真机已由用户手动更新验证过 1.66.8 在 0.2.0 正常）。
+    // dsh-web-mobile 3.0.3：**上游最新就是它**，且范围明确 `<0.2.0`，没有双兼容版本可抬，
+    //   故保持不动。实测它在 0.2.0 上并未被跳过（它不是 profile bundle，不吃那道闸门）且 UI 正常。
+    // dsh-config-manager 0.1.64：范围本来就是 `>=0.1.0-rc.6 <0.3.0-0`，天然双兼容。
     private val SEED_MIN_VERSIONS = mapOf(
-        "dsh-folk-cloud" to "0.5.0",
+        "dsh-folk-cloud" to "0.6.0",
         "dsh-config-manager" to "0.1.64",
-        "dshmarket" to "1.65.1",
+        "dshmarket" to "1.66.8",
         "dsh-web-mobile" to "3.0.3",
     )
 
@@ -314,7 +324,7 @@ object DshRuntime {
      */
     private val SEED_FALLBACK_TGZ = mapOf(
         "dsh-folk-cloud" to
-            "https://github.com/IPF-Sinon/dsh-folk-cloud/releases/download/v0.5.0/dsh-folk-cloud-0.5.0.tgz",
+            "https://github.com/IPF-Sinon/dsh-folk-cloud/releases/download/v0.6.0/dsh-folk-cloud-0.6.0.tgz",
     )
 
     /** 取某个预装包的安装 spec（默认即包名）。 */
@@ -3264,10 +3274,16 @@ object DshRuntime {
         val opts = buildString {
             if (port != DshEnv.DEFAULT_PORT) append(" --port $port")
             if (lan) append(" --host 0.0.0.0")
+            // 不让 dsh 自己拉系统浏览器（我们用 Intent / WebView 打开 WebUI）。**这才是真开关**：
+            // dsh web 用 npm 的 `open` 包（Linux 上走 xdg-open），根本不读 BROWSER 环境变量，
+            // 所以下面那句 `export BROWSER=true` 从来没拦住过它 —— 只是容器里没有 xdg-open，
+            // 尝试后静默失败，看着像被拦住了。`--no-open` 从 0.1.7 起就有（已核对 0.1.7-rc.2 与
+            // 0.2.0-rc.2 的 dsh-web-app 选项表逐字一致），两个运行时都能无条件带。
+            append(" --no-open")
         }
         val cmd = buildString {
             append("export DSH_HOME=/root/.dsh && ")
-            // 不让 dsh 拉系统浏览器：我们用 Intent 打开 WebUI
+            // 兼容性保留：拦住可能读 BROWSER 的更老工具链（对 dsh web 本身无效，见上）。
             append("export BROWSER=true && ")
             append("mkdir -p ${DshEnv.WORKSPACE_GUEST} 2>/dev/null; ")
             append("cd ${DshEnv.WORKSPACE_GUEST} && ")
