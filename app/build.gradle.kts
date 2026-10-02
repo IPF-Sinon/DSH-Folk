@@ -6,6 +6,14 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 import java.io.File
 import java.io.FileInputStream
+import java.io.BufferedOutputStream
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+import javax.inject.Inject
+import org.gradle.jvm.toolchain.JavaLanguageVersion
+import org.gradle.jvm.toolchain.JavaToolchainService
+import org.gradle.process.ExecOperations
 
 plugins {
     alias(libs.plugins.agp.app)
@@ -282,3 +290,169 @@ dependencies {
 
     implementation(libs.materialKolor)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 虚拟屏服务端：把 displayserver/ 编成「只含 classes.dex 的 jar」并打进 assets
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 为什么必须是独立的 dex jar：服务端要以 `app_process` 在特权身份（root / shell）下运行，
+// 用的正是 INJECT_EVENTS 这类系统权限，不能寄居在 App 进程里。`app_process` 用 CLASSPATH
+// 加载，而 ART 只认 dex —— 所以 jar 里必须是 classes.dex，装普通 .class 没有意义。
+//
+// 为什么只收 13 个类：移植源（Operit 的 tools/shower）是把**整个 app 模块**打成了 jar，
+// 除了 classes.dex 还塞着 resources.arsc(408KB)、res/ 图片、四个 ABI 的
+// libandroidx.graphics.path.so 与 baseline profile —— 那是它那个用不到的 Compose 界面
+// 带进来的，对 app_process 全是死重量。我们只编服务端真正需要的类。
+//
+// 构建产物是 generated 目录，**不提交 git**：那样源码改了而 jar 没重编会静默发出一个
+// 旧服务端，正是本项目门禁要防的那类事故。
+
+val displayServerJarDir = layout.buildDirectory.dir("generated/displayServer")
+
+abstract class BuildDisplayServerJar : DefaultTask() {
+    @get:InputDirectory
+    abstract val serverSources: DirectoryProperty
+
+    /** 两端共享的 Binder 协议类：定义在 app 源码树里（App 与服务端都要用）。 */
+    @get:InputFiles
+    abstract val sharedSources: ConfigurableFileCollection
+
+    @get:Input abstract val compileSdkVersion: Property<Int>
+    @get:Input abstract val buildToolsVersion: Property<String>
+    @get:Input abstract val minSdkVersion: Property<Int>
+    @get:Input abstract val androidSdkPath: Property<String>
+
+    /** javac 的绝对路径。走 Java 21 工具链而不是守护进程自己的 JDK：本地开发者的 JDK
+     *  可能比 21 新很多，那会产出 build-tools 36 的 d8 不认识的 class 版本。 */
+    @get:Input abstract val javacPath: Property<String>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Inject abstract val execOps: ExecOperations
+
+    @TaskAction
+    fun build() {
+        val out = outputDir.get().asFile
+        val classesDir = File(out, "classes")
+        val dexDir = File(out, "dex")
+        val jarFile = File(out, "dsh-display-server.jar")
+        out.deleteRecursively()
+        classesDir.mkdirs()
+        dexDir.mkdirs()
+
+        val sdk = File(androidSdkPath.get())
+        val androidJar = File(sdk, "platforms/android-${compileSdkVersion.get()}/android.jar")
+        check(androidJar.isFile) { "找不到 android.jar：$androidJar（Android SDK = ${sdk.path}）" }
+        val d8 = File(sdk, "build-tools/${buildToolsVersion.get()}/d8")
+        check(d8.isFile) { "找不到 d8：$d8" }
+
+        val sources = buildList {
+            addAll(serverSources.get().asFile.walkTopDown().filter { it.extension == "java" }.toList())
+            addAll(sharedSources.files.filter { it.extension == "java" })
+        }
+        check(sources.isNotEmpty()) { "displayserver/ 下没有找到任何 .java 源码" }
+
+        // 1) javac。**不覆盖编译级别**：与 app 模块自己的 compileOptions(Java 21) 一致，
+        //    否则用更低的 target 去读新版 android.jar 会撞 "class file has wrong version"。
+        //    源码列表走 @argfile：Windows 与 Linux 都有命令行长度上限。
+        val argFile = File(out, "javac.args")
+        argFile.writeText(sources.joinToString("\n") { it.absolutePath } + "\n")
+        val javac = javacPath.get()
+        execOps.exec {
+            commandLine(
+                javac, "-encoding", "UTF-8", "-nowarn",
+                "-d", classesDir.absolutePath,
+                "-classpath", androidJar.absolutePath,
+                "@${argFile.absolutePath}",
+            )
+        }
+
+        // 2) d8：.class → classes.dex。--min-api 必须与 app 的 minSdk 一致，否则 dex 里会
+        //    留下运行时才炸的 API 引用（编译期看不出来）。
+        val classFiles = classesDir.walkTopDown().filter { it.extension == "class" }.map { it.absolutePath }.toList()
+        check(classFiles.isNotEmpty()) { "javac 没有产出任何 .class" }
+        execOps.exec {
+            commandLine(
+                listOf(
+                    d8.absolutePath, "--min-api", minSdkVersion.get().toString(),
+                    "--lib", androidJar.absolutePath,
+                    "--output", dexDir.absolutePath,
+                ) + classFiles,
+            )
+        }
+
+        // 3) 只装 classes.dex。夹带资源对 app_process 没有意义，只会让 APK 变大。
+        val dex = File(dexDir, "classes.dex")
+        check(dex.isFile) { "d8 没有产出 classes.dex" }
+        ZipOutputStream(BufferedOutputStream(FileOutputStream(jarFile))).use { zos ->
+            zos.putNextEntry(ZipEntry("classes.dex"))
+            dex.inputStream().use { it.copyTo(zos) }
+            zos.closeEntry()
+        }
+        logger.lifecycle(
+            "display server: ${jarFile.name} ${jarFile.length() / 1024}KB " +
+                "(dex ${dex.length() / 1024}KB, ${sources.size} 个源文件, min-api ${minSdkVersion.get()})",
+        )
+    }
+}
+
+/**
+ * Android SDK 位置。
+ *
+ * 不用 `android.sdkDirectory`：那是 AGP 内部 API，跨版本改过名。CI 里 setup-build-env 会
+ * 显式导出 ANDROID_HOME，本地开发者则习惯写在 local.properties —— 这两条覆盖了实际用法，
+ * 且都不依赖 AGP 的内部结构。
+ */
+val resolvedAndroidSdkPath: String by lazy {
+    val fromLocal = rootProject.file("local.properties").takeIf { it.isFile }?.let { f ->
+        Properties().apply { f.inputStream().use { load(it) } }.getProperty("sdk.dir")
+    }
+    fromLocal
+        ?: System.getenv("ANDROID_HOME")
+        ?: System.getenv("ANDROID_SDK_ROOT")
+        ?: error("找不到 Android SDK：在 local.properties 里写 sdk.dir，或设 ANDROID_HOME")
+}
+
+/**
+ * javac 位置：优先 Java 21 工具链（与 `java { toolchain }` 同一个来源），
+ * 拿不到就退回 Gradle 守护进程自己的 JDK。
+ *
+ * 这里在**配置期**解析、以字符串形式作为任务输入，而不是把 JavaToolchainService 注入任务：
+ * 后者不是文档化的注入目标，跨 Gradle 版本会变；而 `javaToolchains` 这个扩展访问器
+ * 与文件里已经在用的 `java { toolchain { ... } }` 来自同一个 java-base 插件。
+ */
+val resolvedJavacPath: String by lazy {
+    val toolchainJavac = runCatching {
+        javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
+            .get().metadata.installationPath.file("bin/javac").asFile
+    }.getOrNull()
+    val picked = toolchainJavac ?: File(System.getProperty("java.home"), "bin/javac")
+    logger.lifecycle(
+        "display server javac: ${picked.absolutePath}" +
+            if (toolchainJavac == null) "（Java 21 工具链不可用，退回守护进程 JDK —— 若 d8 报 class 版本不支持，就是这里）" else "",
+    )
+    picked.absolutePath
+}
+
+val buildDisplayServerJar = tasks.register<BuildDisplayServerJar>("buildDisplayServerJar") {
+    group = "build"
+    description = "把 displayserver/ 编成只含 classes.dex 的 jar，供 app_process 以特权身份加载"
+    serverSources.set(rootProject.layout.projectDirectory.dir("displayserver/src/main/java"))
+    sharedSources.from(
+        fileTree("src/main/java/me/bmax/apatch/display") {
+            include("IDisplayService.java", "IDisplayVideoSink.java", "DisplayBinderContainer.java")
+        },
+    )
+    compileSdkVersion.set(androidCompileSdkVersion)
+    buildToolsVersion.set(androidBuildToolsVersion)
+    minSdkVersion.set(androidMinSdkVersion)
+    androidSdkPath.set(resolvedAndroidSdkPath)
+    javacPath.set(resolvedJavacPath)
+    outputDir.set(displayServerJarDir)
+}
+
+android.sourceSets.getByName("main").assets.srcDir(displayServerJarDir.get().asFile)
+
+// assets 是各 variant 合并后再打包的，合并任务必须排在这个任务之后。
+tasks.matching { it.name.matches(Regex("merge.*Assets")) }.configureEach { dependsOn(buildDisplayServerJar) }

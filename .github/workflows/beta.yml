@@ -117,6 +117,7 @@ jobs:
           node tools/check-fs-scope.js
           node tools/check-host-prompt.js
           node tools/check-file-handoff.js
+          node tools/check-display-server.js
           node tools/check-imports.js $(find app/src/main/java -name "*.kt")
 
       # 与 build.yml 的 release job 同一套校验：缺任何一项就硬失败。
@@ -165,6 +166,12 @@ jobs:
           tail -40 gradle-build.log | while IFS= read -r line; do
             echo "::error::${line}"
           done
+
+      # 静态门禁只能证明**源码**对；这里证明**编出来的 jar** 对：只有 classes.dex 一个条目、
+      # dex 魔数正确、体量没有把 androidx/Compose 拖进来。装错格式的命令能起来、然后在真机上
+      # ClassNotFoundException —— 那一路只有真机才会暴露，所以在打包前先拦一次。
+      - name: Verify display server jar
+        run: node tools/check-display-server.js --jar app/build/generated/displayServer/dsh-display-server.jar
 
       # R8 混淆映射：release 变体的崩溃栈（如 dsh-fs 的 StackOverflow）里全是 s.d0 之类的
       # 混淆名，只有 mapping.txt 能把它翻回真实类/方法。beta.yml 改这一步不动 App 源码，
