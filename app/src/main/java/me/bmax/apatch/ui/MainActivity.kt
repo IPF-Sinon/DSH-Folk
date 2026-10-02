@@ -684,13 +684,22 @@ class MainActivity : AppCompatActivity() {
                 // 整个生命周期都收着这个 flow（不是只在开关打开时才收）：用户在设置里把
                 // 开关打开时，本次会话随后起来的服务也应当兑现 —— 否则「我明明打开了」
                 // 会一直不生效，直到下次启动应用。开关值在**状态跃迁的那一刻**才读。
+                //
+                // webUiAutoOpened 的作用是「就绪这一次已经开过了、别重复开」，所以它必须在
+                // 服务**离开 RUNNING 时清零**：否则它只覆盖本进程的第一次就绪，「停止再启动
+                // 第二次就不自动开页面了」。
                 val webUiAutoOpened = rememberSaveable { mutableStateOf(false) }
                 LaunchedEffect(Unit) {
                     DshRuntime.state
                         .map { it.phase }
                         .distinctUntilChanged()
                         .collect { phase ->
-                            if (phase != DshPhase.RUNNING) return@collect
+                            if (phase != DshPhase.RUNNING) {
+                                // 停止 / 重启 / 报错都算「这一轮结束」，重新武装，下次就绪再开。
+                                // distinctUntilChanged 保证这里只在**跃迁**上触发，不会反复打开。
+                                webUiAutoOpened.value = false
+                                return@collect
+                            }
                             if (webUiAutoOpened.value) return@collect
                             if (!DshRuntime.autoOpenWebUi()) return@collect
                             // 有外部文件正等着选用途：用户在弹窗里，不能把他甩走（关掉弹窗即解除，

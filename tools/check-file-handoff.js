@@ -73,6 +73,10 @@ ok(/if \(externalFilePending\.value\) return@collect/.test(main),
   "服务就绪自动开页面的 LaunchedEffect 在有外部文件待处理时短路（修 bug1 真正根因）");
 ok(/externalFilePending\.value = true/.test(main) && /externalFilePending\.value = false/.test(main),
   "解析到外部文件时置位、弹窗关闭时解除（自动开页面随之恢复）");
+// 「服务就绪后自动打开页面」的 once-guard 必须随服务离开 RUNNING 清零，
+// 否则它只覆盖本进程的第一次就绪：停止再启动第二次就不自动开页面了。
+ok(/if \(phase != DshPhase\.RUNNING\) \{[\s\S]{0,200}webUiAutoOpened\.value = false/.test(main),
+  "服务离开 RUNNING 时重新武装 webUiAutoOpened（不再一次就完）");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3) 弹窗行为：三选项 + 复制成功 toast + 提示词进剪贴板 + Web UI 只在用户点击时才开
