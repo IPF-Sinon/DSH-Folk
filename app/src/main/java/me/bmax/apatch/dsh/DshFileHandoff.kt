@@ -78,17 +78,17 @@ object DshFileHandoff {
     }
 
     /**
-     * 把已暂存的文件复制进某工作区目录。返回**容器内**的文件路径（拼提示词用）。
+     * 把文件内容流复制进某工作区目录。返回**容器内**的文件路径（拼提示词用）。
      * 重名不覆盖：追加 ` (n)`，不动用户已有的文件。
      */
-    fun copyInto(ctx: Context, staged: File, workspaceGuest: String, fileName: String): Result<String> = runCatching {
+    fun copyInto(ctx: Context, input: java.io.InputStream, workspaceGuest: String, fileName: String): Result<String> = runCatching {
         val guestBase = normalizeGuest(workspaceGuest)
         val hostDir = guestToHost(ctx, guestBase)
         if (!hostDir.exists() && !hostDir.mkdirs() && !hostDir.exists()) {
             throw java.io.IOException("cannot create workspace dir: ${hostDir.absolutePath}")
         }
         val target = dedupe(hostDir, sanitizeName(fileName))
-        staged.inputStream().use { input -> target.outputStream().use { out -> input.copyTo(out) } }
+        target.outputStream().use { out -> input.copyTo(out) }
         if (guestBase == "/") "/${target.name}" else "$guestBase/${target.name}"
     }
 

@@ -86,7 +86,6 @@ import androidx.navigation.compose.rememberNavController
 import com.ramcosta.composedestinations.generated.destinations.AppearanceSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.BackupSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.BehaviorSettingsScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.DshFileHandoffScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.DshTerminalScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.RestoreWizardScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
@@ -157,6 +156,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlin.system.exitProcess
 import me.bmax.apatch.util.UpdateChecker
 import me.bmax.apatch.ui.component.UpdateDialog
+import me.bmax.apatch.ui.component.DshFileHandoffDialog
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshBackupCrypto
@@ -187,7 +187,6 @@ import me.bmax.apatch.util.ui.rememberNavBarGlassLiquidState
 import me.bmax.apatch.util.ui.isRealTimeBlurAvailable
 import me.bmax.apatch.util.ui.isImeVisible
 import me.bmax.apatch.util.ui.showToast
-import java.io.File
 
 class MainActivity : AppCompatActivity() {
     private var isLoading = true
@@ -501,9 +500,8 @@ class MainActivity : AppCompatActivity() {
                 val themeImportMetadata = remember { mutableStateOf<ThemeManager.ThemeMetadata?>(null) }
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-                // 分享/以…打开进来的文件：先问「做什么用」，再分流到 恢复备份 / 导入主题 /
-                // 交给 DSH 处理（见 DshFileHandoffScreen）。原来写死只认 .fpt 主题。
-                val showUseChooser = remember { mutableStateOf(false) }
+                // 分享/以…打开进来的文件：弹用途选择弹窗（交给 DSH / 恢复备份 / 导入主题）。
+                // 「交给 DSH」全程在弹窗里完成（见 DshFileHandoffDialog），不再跳页/强行拉起 Web UI。
                 val pendingUri = remember { mutableStateOf<Uri?>(null) }
                 val pendingFileName = remember { mutableStateOf("") }
                 val uri = installUri
@@ -520,7 +518,6 @@ class MainActivity : AppCompatActivity() {
                     }
                     pendingUri.value = uri
                     pendingFileName.value = fileName
-                    showUseChooser.value = true
                     installUri = null
                 }
 
@@ -569,65 +566,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // 交给 DSH 处理：把文件落到独立暂存目录，进落地页选工作区。
-                fun startDsh(target: Uri, name: String) {
-                    scope.launch {
-                        loadingDialog.show()
-                        val staged = withContext(Dispatchers.IO) {
-                            runCatching {
-                                val dir = File(context.cacheDir, "dsh-handoff").apply { mkdirs() }
-                                val safe = me.bmax.apatch.dsh.DshFileHandoff.sanitizeName(name)
-                                val f = File(dir, safe)
-                                context.contentResolver.openInputStream(target)?.use { input ->
-                                    f.outputStream().use { out -> input.copyTo(out) }
-                                } ?: return@runCatching null
-                                f
-                            }.getOrNull()
-                        }
-                        loadingDialog.hide()
-                        if (staged == null) {
-                            showToast(context, context.getString(R.string.dsh_plugin_local_read_failed))
-                            return@launch
-                        }
-                        navigator.navigate(
-                            DshFileHandoffScreenDestination(
-                                stagedPath = staged.absolutePath,
-                                fileName = me.bmax.apatch.dsh.DshFileHandoff.sanitizeName(name),
-                            )
-                        )
-                    }
-                }
-
-                if (showUseChooser.value && pendingUri.value != null) {
-                    val target = pendingUri.value!!
-                    val name = pendingFileName.value
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { showUseChooser.value = false },
-                        title = { Text(stringResource(R.string.dsh_share_chooser_title)) },
-                        text = {
-                            Text(stringResource(R.string.dsh_share_chooser_message, name))
-                        },
-                        confirmButton = {
-                            Column {
-                                TextButton(onClick = {
-                                    showUseChooser.value = false
-                                    startDsh(target, name)
-                                }) { Text(stringResource(R.string.dsh_share_use_dsh)) }
-                                TextButton(onClick = {
-                                    showUseChooser.value = false
-                                    startBackup(target)
-                                }) { Text(stringResource(R.string.dsh_share_use_backup)) }
-                                TextButton(onClick = {
-                                    showUseChooser.value = false
-                                    startTheme(target)
-                                }) { Text(stringResource(R.string.dsh_share_use_theme)) }
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showUseChooser.value = false }) {
-                                Text(stringResource(android.R.string.cancel))
-                            }
-                        },
+                pendingUri.value?.let { target ->
+                    DshFileHandoffDialog(
+                        uri = target,
+                        fileName = pendingFileName.value,
+                        onDismiss = { pendingUri.value = null },
+                        onTheme = { startTheme(it) },
+                        onBackup = { startBackup(it) },
                     )
                 }
 

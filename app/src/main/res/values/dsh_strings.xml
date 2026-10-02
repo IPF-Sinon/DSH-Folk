@@ -1347,4 +1347,5 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_handoff_copied">Copied</string>
     <string name="dsh_handoff_prompt">Please handle this file in the workspace: %1$s</string>
     <string name="dsh_handoff_copy_failed">Copy failed: %1$s</string>
+    <string name="dsh_handoff_done_message">Copied to %1$s. The prompt is on the clipboard.</string>
 </resources>

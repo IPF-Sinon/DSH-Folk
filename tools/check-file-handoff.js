@@ -54,24 +54,30 @@ ok(/mimeType="\*\/\*"/.test(sendFilter), "SEND 过滤器收任意 MIME（*/*）"
 ok(/mimeType="\*\/\*"/.test(viewFilter) && /scheme="content"/.test(viewFilter), "VIEW 过滤器收任意 MIME 的 content");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2) MainActivity：用途选择弹窗 + 三条分流
+// 2) MainActivity：分享入口交给用途选择弹窗，恢复备份/导入主题分流回宿主
 // ─────────────────────────────────────────────────────────────────────────────
 const main = code(read("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt"));
-ok(/R\.string\.dsh_share_chooser_title/.test(main), "弹出用途选择框（dsh_share_chooser_title）");
-ok(/ThemeManager\.readThemeMetadata/.test(main), "分流①导入主题 → ThemeManager.readThemeMetadata");
-ok(/RestoreWizardScreenDestination/.test(main) && /DshConfigBackup\.stage/.test(main), "分流②恢复备份 → 暂存后进恢复向导");
-ok(/DshFileHandoffScreenDestination/.test(main) && /"dsh-handoff"/.test(main), "分流③交给 DSH → 暂存到 dsh-handoff 后进落地页");
+ok(/DshFileHandoffDialog\(/.test(main), "分享入口渲染用途选择弹窗 DshFileHandoffDialog");
+ok(/onTheme\s*=/.test(main) && /ThemeManager\.readThemeMetadata/.test(main), "导入主题分流 → ThemeManager.readThemeMetadata");
+ok(/onBackup\s*=/.test(main) && /DshConfigBackup\.stage/.test(main) && /RestoreWizardScreenDestination/.test(main), "恢复备份分流 → 暂存后进恢复向导");
 ok(!/fileName\.endsWith\("\.fpt"/.test(main), "已移除「只认 .fpt 自动导主题」的写死分支");
+ok(!/DshFileHandoffScreenDestination/.test(main), "不再跳独立落地页（已改成弹窗）");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3) 落地页行为：复制成功 toast + 提示词进剪贴板 + 开 Web UI；ERROR 不重试
+// 3) 弹窗行为：三选项 + 复制成功 toast + 提示词进剪贴板 + Web UI 只在用户点击时才开
 // ─────────────────────────────────────────────────────────────────────────────
-console.log("3) 落地页行为");
-const screen = code(read("app/src/main/java/me/bmax/apatch/ui/screen/settings/DshFileHandoffScreen.kt"));
-ok(/showToast\([^)]*R\.string\.dsh_handoff_copied/.test(screen), "复制成功后弹 toast（dsh_handoff_copied）");
-ok(/clipboard\.setText/.test(screen) && /R\.string\.dsh_handoff_prompt/.test(screen), "提示词写入剪贴板（dsh_handoff_prompt）");
-ok(/DshWebUi\.(openInApp|openExternal)/.test(screen), "最后打开 Web UI");
-ok(/requestedStart/.test(screen) && /DshPhase\.ERROR[\s\S]{0,40}Unit/.test(screen), "ERROR 态不反复 bootstrap（requestedStart 守卫 + ERROR 分支 no-op）");
+console.log("3) 用途选择弹窗行为");
+const dlg = code(read("app/src/main/java/me/bmax/apatch/ui/component/DshFileHandoffDialog.kt"));
+ok(/Dialog\(onDismissRequest/.test(dlg), "是弹窗（Dialog），不是整页");
+ok(/dsh_share_use_dsh/.test(dlg) && /dsh_share_use_backup/.test(dlg) && /dsh_share_use_theme/.test(dlg), "三个用途选项都在");
+ok(/DshFileHandoff\.copyInto/.test(dlg), "选工作区后复制文件进工作区");
+ok(/showToast\([^)]*R\.string\.dsh_handoff_copied/.test(dlg), "复制成功后弹 toast（dsh_handoff_copied）");
+ok(/clipboard\.setText/.test(dlg) && /R\.string\.dsh_handoff_prompt/.test(dlg), "提示词写入剪贴板（dsh_handoff_prompt）");
+// 复制成功进 DONE 步，而不是直接拉起 Web UI；openWeb 只挂在按钮 onClick 上。
+const onSuccess = dlg.slice(dlg.indexOf("onSuccess"), dlg.indexOf("onFailure"));
+ok(/step = "DONE"/.test(onSuccess) && !/openWeb\(\)/.test(onSuccess), "复制成功进完成步，不自动拉起 Web UI（修 bug1：不再把 App 挤到后台）");
+ok(/onClick = \{ openWeb\(\)/.test(dlg), "Web UI 改为用户在完成步点按钮才打开");
+ok(/requestedStart/.test(dlg) && /DshPhase\.ERROR/.test(dlg), "ERROR 态不反复 bootstrap（requestedStart 守卫）");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4) DshFileHandoff 源码里关键判据在场
