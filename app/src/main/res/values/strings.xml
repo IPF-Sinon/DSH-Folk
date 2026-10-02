@@ -331,12 +331,12 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Stable release: a roundup of improvements since the last stable version.</item>
-        <item>Download mirrors expanded from 2 to 5 with multi-line racing and per-line speed tests, making runtime / plugin / app updates faster and more reliable.</item>
-        <item>Fixed proroot failing to start on hard-link-less devices, and the wrong runtime mode shown on x86.</item>
-        <item>Plugin store aligned with upstream dsh-market: shows capabilities and safety red-lines, screenshot preview and a download-count window, and fixes "updatable" not appearing; added a WSL category; github-source plugins can fall back to a prebuilt package.</item>
-        <item>Added a cloud-backup plugin (with optional app theme and WebDAV sync); the backup page only shows action buttons when the plugin is ready, and export can optionally include the theme.</item>
-        <item>Fixed plugin screenshots not loading on some networks: screenshot links now go through the fastest mirror line.</item>
+        <item>Stable release: a roundup of improvements since 1.9.5, plus support for the dsh 0.2.0 runtime.</item>
+        <item>New share / open-with handling: pick what an incoming file is for — back up a file (or restore from one), import a theme, or hand it to DSH. Handing it over lets you pick a workspace: the file is copied into it and the prompt is put on your clipboard, or you can start a new session right there with the file already inserted.</item>
+        <item>New option to mount phone storage into a DSH workspace (its own sub-switch, off by default): once mounted, the agent can read and write the directories you choose. For directories that cannot do atomic writes, the model is told through the host prompt to use edit or the terminal instead, so write no longer fails silently.</item>
+        <item>dsh 0.2.0 runtime support: startup no longer tries to launch the system browser; the cloud-backup plugin moves to its 0.2.0-compatible release (0.5.0 is skipped wholesale by dsh on the new runtime, which left cloud backup unusable); the plugin-market seed version is raised to one compatible with both the old and the new runtime.</item>
+        <item>Fixed "auto-open the Web UI once the service is ready" only working on the first launch, and fixed the DSH page pushing the previous screen into the background when arriving from the share entry.</item>
+        <item>Fixed the host prompt disappearing entirely (a plugin patch row was flattened and stopped taking effect), plus several dsh-fs issues: rare stack overflow after changing the mount list, refusing to change no_access, and the on-screen keyboard covering the input.</item>
     </string-array>
 
     
