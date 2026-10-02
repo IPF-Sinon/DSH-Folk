@@ -61,7 +61,19 @@ public class Main {
     private static final String ACTION_BINDER_READY = "me.bmax.apatch.action.DISPLAY_BINDER_READY";
     private static final String EXTRA_BINDER_CONTAINER = "binder_container";
 
+    /**
+     * 交接校验用的一次性随机 token：宿主 App 启动本进程时经 argv 传进来，本进程把它塞进
+     * binder 交接广播，宿主只认带对 token 的那一条。
+     *
+     * <p>为什么必须有它：这条广播是**跨 uid** 送的（本进程是 root 或 shell），所以宿主的
+     * 接收器不能声明成 not-exported，任何 App 都能往它发一条携带自己 IBinder 的假广播。
+     * token 是宿主区分「真服务端」与「伪造者」的唯一依据。（Android 9+ 的 /proc 带 hidepid，
+     * 别的 App 读不到本进程的 cmdline，token 不会从那里泄漏。）
+     */
+    private static final String EXTRA_BINDER_TOKEN = "binder_token";
+
     private static volatile String sTargetPackageName;
+    private static volatile String sBinderToken;
 
     private static ArrayList<String> getTargetPackages() {
         ArrayList<String> packages = new ArrayList<>();
@@ -384,6 +396,10 @@ public class Main {
             sTargetPackageName = args[0].trim();
             logToFile("Using target package arg from args: " + sTargetPackageName, null);
         }
+        if (args != null && args.length > 1 && args[1] != null && !args[1].trim().isEmpty()) {
+            sBinderToken = args[1].trim();
+            logToFile("Using binder token from args (len=" + sBinderToken.length() + ")", null);
+        }
         try {
             prepareMainLooper();
             logToFile("prepareMainLooper ok", null);
@@ -551,6 +567,12 @@ public class Main {
                     } else {
                         logToFile("setVideoSink for unknown displayId: " + displayId, null);
                     }
+                }
+
+                @Override
+                public void ping() {
+                    // 唯一一个刻意不做任何事的方法：见 IDisplayService.ping 的注释。
+                    markClientActive();
                 }
             };
             logToFile("Skip ServiceManager.addService by design (Shizuku-style binder handoff)", null);
@@ -779,6 +801,7 @@ public class Main {
             Intent baseIntent = new Intent(ACTION_BINDER_READY);
             baseIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
             baseIntent.putExtra(EXTRA_BINDER_CONTAINER, new DisplayBinderContainer(service.asBinder()));
+            baseIntent.putExtra(EXTRA_BINDER_TOKEN, sBinderToken);
 
             ArrayList<String> targetPackages = getTargetPackages();
             if (targetPackages.isEmpty()) {

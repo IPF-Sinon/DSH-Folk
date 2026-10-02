@@ -48,6 +48,17 @@ public interface IDisplayService extends IInterface {
 
     void setVideoSink(int displayId, IBinder sink) throws RemoteException;
 
+    /**
+     * 心跳，没有任何副作用，只把服务端的空闲计时器推后。
+     *
+     * 服务端有个看门狗：既没有视频 sink、又 15 秒没有客户端活动，就 System.exit(0)。
+     * 那条规则对"App 死了别留下孤儿 root 进程"是对的，但对我们的主要用法
+     * （agent 截一张图 → 思考 → 再点一下）是错的：思考时间轻易超过 15 秒，服务端会在
+     * 中间自己退出。接口里其它方法都带副作用（ensureDisplay 会**再建一块屏**、
+     * tap 会真的点下去），都不能拿来当心跳，所以单独加这一个。
+     */
+    void ping() throws RemoteException;
+
     abstract class Stub extends Binder implements IDisplayService {
 
         private static final String DESCRIPTOR = "me.bmax.apatch.display.IDisplayService";
@@ -64,6 +75,7 @@ public interface IDisplayService extends IInterface {
         static final int TRANSACTION_injectKeyWithMeta = IBinder.FIRST_CALL_TRANSACTION + 10;
         static final int TRANSACTION_setVideoSink = IBinder.FIRST_CALL_TRANSACTION + 11;
         static final int TRANSACTION_injectTouchEvent = IBinder.FIRST_CALL_TRANSACTION + 12;
+        static final int TRANSACTION_ping = IBinder.FIRST_CALL_TRANSACTION + 13;
 
         public Stub() {
             attachInterface(this, DESCRIPTOR);
@@ -229,6 +241,12 @@ public interface IDisplayService extends IInterface {
                             deviceId,
                             edgeFlags
                     );
+                    reply.writeNoException();
+                    return true;
+                }
+                case TRANSACTION_ping: {
+                    data.enforceInterface(DESCRIPTOR);
+                    ping();
                     reply.writeNoException();
                     return true;
                 }
@@ -486,6 +504,20 @@ public interface IDisplayService extends IInterface {
                     data.writeInt(displayId);
                     data.writeStrongBinder(sink);
                     remote.transact(TRANSACTION_setVideoSink, data, reply, 0);
+                    reply.readException();
+                } finally {
+                    reply.recycle();
+                    data.recycle();
+                }
+            }
+
+            @Override
+            public void ping() throws RemoteException {
+                Parcel data = Parcel.obtain();
+                Parcel reply = Parcel.obtain();
+                try {
+                    data.writeInterfaceToken(DESCRIPTOR);
+                    remote.transact(TRANSACTION_ping, data, reply, 0);
                     reply.readException();
                 } finally {
                     reply.recycle();

@@ -188,7 +188,124 @@ for (const f of SHARED) {
   must(/Operit/.test(pi) && /LGPL/.test(pi), 'package-info.java 必须带上来源与许可说明');
 }
 
-// ── 8. 产物校验（编译之后跑）──
+// ── 8. Binder 协议：手写 AIDL 的三处必须齐全且一致 ──
+//
+// 这个协议是手写的（不是 aidl 生成的），加一个方法要同时改三个地方：接口声明、
+// TRANSACTION_* 常量、Stub.onTransact 的 case、Proxy 的实现。漏掉 onTransact 那一处的
+// 后果最阴：调用方拿到的是"事务没人接"，而不是编译错误 —— 比如漏掉 ping，
+// 表现就是服务端在 agent 思考时莫名其妙自己退出。
+{
+  const proto = read(`${APP_PROTO_DIR}/IDisplayService.java`);
+  const pCode = code(proto);
+  const ifaceAt = pCode.indexOf('public interface IDisplayService');
+  const stubAt = pCode.indexOf('abstract class Stub');
+  const proxyAt = pCode.indexOf('private static final class Proxy');
+  must(ifaceAt >= 0 && stubAt > ifaceAt && proxyAt > stubAt, 'IDisplayService.java 结构不完整（接口/Stub/Proxy 三段）');
+  if (ifaceAt >= 0 && stubAt > ifaceAt && proxyAt > stubAt) {
+    const iface = pCode.slice(ifaceAt, stubAt);
+    const proxy = pCode.slice(proxyAt);
+    const methods = [...iface.matchAll(/^\s*(?:void|int|boolean|String|byte\[\])\s+(\w+)\s*\(/gm)].map((m) => m[1]);
+    must(methods.length >= 13, `IDisplayService 只解析出 ${methods.length} 个方法，解析或文件有问题`);
+    must(methods.includes('ping'), 'IDisplayService 必须保留 ping（服务端空闲看门狗靠它续命）');
+    for (const m of methods) {
+      must(new RegExp(`TRANSACTION_${m}\\s*=`).test(pCode), `IDisplayService 缺少 TRANSACTION_${m} 常量`);
+      must(new RegExp(`case\\s+TRANSACTION_${m}\\s*:`).test(pCode), `IDisplayService 的 onTransact 缺少 ${m} 的分支`);
+      must(new RegExp(`\\b${m}\\s*\\(`).test(proxy), `IDisplayService 的 Proxy 缺少 ${m} 的实现`);
+    }
+    // 事务码不能重复：复制粘贴时最容易撞，撞了就是"调 A 跑到 B"
+    const codes = [...pCode.matchAll(/TRANSACTION_\w+\s*=\s*IBinder\.FIRST_CALL_TRANSACTION(?:\s*\+\s*(\d+))?/g)]
+      .map((m) => (m[1] === undefined ? 0 : Number(m[1])));
+    must(new Set(codes).size === codes.length, `TRANSACTION 码有重复：${codes.join(', ')}`);
+  }
+  const sink = code(read(`${APP_PROTO_DIR}/IDisplayVideoSink.java`));
+  must(/onVideoFrame\s*\(\s*byte\[\]/.test(sink), 'IDisplayVideoSink.onVideoFrame(byte[]) 签名被改了（服务端按这个签名回传帧）');
+  for (const f of ['IDisplayService', 'IDisplayVideoSink']) {
+    const src = code(read(`${APP_PROTO_DIR}/${f}.java`));
+    const d = src.match(/DESCRIPTOR\s*=\s*"([^"]+)"/);
+    must(!!d && d[1] === `me.bmax.apatch.display.${f}`,
+      `${f} 的 DESCRIPTOR 必须是 me.bmax.apatch.display.${f}，两端不一致会导致 transact 全部失败`);
+  }
+}
+
+// ── 9. App 侧 [DisplayServer.kt] 与服务端的约定必须逐字一致 ──
+//
+// 这些是跨进程的字符串契约，不一致时不会编译失败：广播收不到、或收得到但 token 对不上，
+// 表现都是"启动超时"，而真因藏在名字里。
+{
+  const kt = code(read('app/src/main/java/me/bmax/apatch/dsh/DisplayServer.kt'));
+  const java = code(read(`${SERVER_DIR}/Main.java`));
+  const actions = [
+    ['ACTION_BINDER_READY', '交接广播的 action'],
+    ['EXTRA_BINDER_CONTAINER', 'binder 容器 extra 的键'],
+    ['EXTRA_BINDER_TOKEN', 'token extra 的键'],
+  ];
+  for (const [name, what] of actions) {
+    const inKt = kt.match(new RegExp(`${name}\\s*=\\s*"([^"]+)"`));
+    const inJava = java.match(new RegExp(`${name}\\s*=\\s*"([^"]+)"`));
+    must(!!inKt && !!inJava && inKt[1] === inJava[1],
+      `${what}在 App 侧与服务端不一致：App=${inKt ? inKt[1] : '(缺)'}，服务端=${inJava ? inJava[1] : '(缺)'}`);
+  }
+  must(/me\.bmax\.apatch\.display\.Main/.test(kt) && /public\s+class\s+Main\b/.test(java),
+    'App 侧启动的入口类必须与服务端里的 Main 类同名');
+  must(/dsh-display-server\.jar/.test(kt) && /ZipEntry\("classes\.dex"\)/.test(read('app/build.gradle.kts')),
+    'App 侧读的 jar 名必须与构建产物的名字一致');
+  // 服务端侧的对应实现
+  must(/public\s+void\s+ping\s*\(/.test(java), '服务端的 Stub 必须实现 ping（否则事务没人接，看门狗照旧杀进程）');
+  must(/putExtra\(EXTRA_BINDER_TOKEN/.test(java), '服务端必须把 token 放进交接广播');
+  must(/args\.length\s*>\s*1/.test(java), '服务端必须从 argv[1] 读 token');
+  // App 侧的几个必须项，每一个都对应一类只在真机上才暴露的失败
+  must(/R\.string|RECEIVER_EXPORTED/.test(kt) && /RECEIVER_EXPORTED/.test(kt),
+    'App 侧在 API 33+ 必须用 RECEIVER_EXPORTED 注册：发送方是 root/shell，not-exported 收不到');
+  must(/classLoader\s*=\s*DisplayBinderContainer::class\.java\.classLoader/.test(kt),
+    'App 侧必须给 Intent 显式设置 classloader，否则跨进程还原 DisplayBinderContainer 会 ClassNotFoundException');
+  must(/"\[m\]/.test(kt), 'App 侧 pkill/pgrep 的模式必须带 [m] 括号，否则会连承载命令的 shell 一起杀掉');
+  must(/setsid/.test(kt), '启动命令必须处理 setsid（ADB 通道下 adbd 会清掉会话的进程组，后台子进程会被带走）');
+  must(/sha256/.test(kt), 'App 侧必须校验推送后的哈希（分块传输最典型的失败是静默截断）');
+}
+
+// ── 10. 括号配平（一个便宜的语法代理）──
+//
+// 没有本地 Android SDK 时 Java/Kotlin 一行都编不了，而手工插入方法最典型的失误就是
+// 吃掉一个收尾大括号 —— 那会在 CI 上变成一条与真因完全无关的报错。这里跳过字符串与
+// 注释后数括号，成本几乎为零。
+{
+  const balance = (src) => {
+    let d = 0;
+    let i = 0;
+    let inStr = null;
+    while (i < src.length) {
+      const c = src[i];
+      const n = src[i + 1];
+      if (inStr) {
+        if (c === '\\') { i += 2; continue; }
+        if (c === inStr) inStr = null;
+        i++;
+        continue;
+      }
+      if (c === '"' || c === "'") { inStr = c; i++; continue; }
+      if (c === '/' && n === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
+      if (c === '/' && n === '*') { i += 2; while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++; i += 2; continue; }
+      if (c === '{') d++;
+      else if (c === '}') { d--; if (d < 0) return -1; }
+      i++;
+    }
+    return d;
+  };
+  const files = [
+    `${APP_PROTO_DIR}/IDisplayService.java`,
+    `${APP_PROTO_DIR}/IDisplayVideoSink.java`,
+    `${APP_PROTO_DIR}/DisplayBinderContainer.java`,
+    'app/src/main/java/me/bmax/apatch/dsh/DisplayServer.kt',
+    `${SERVER_DIR}/Main.java`,
+  ];
+  for (const f of files) {
+    const b = balance(read(f));
+    must(b === 0, `${f} 的花括号不配平（差 ${b}）—— 大概率是插入方法时吃掉了收尾括号`);
+  }
+}
+
+// ── 11. 产物校验（编译之后跑）──
+
 function zipEntries(buf) {
   let eocd = -1;
   for (let i = buf.length - 22; i >= 0 && i > buf.length - 65558; i--) {
