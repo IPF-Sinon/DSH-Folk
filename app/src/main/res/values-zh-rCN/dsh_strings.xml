@@ -1305,4 +1305,24 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_bk_snapshot_appdata_absent">这份快照里没有软件设置（它是在开始记录设置之前创建的），所以只会回退 DSH 配置。</string>
     <string name="dsh_bk_snapshot_appdata_restored">软件设置与外观也已回退。</string>
     <string name="dsh_bk_snapshot_appdata_failed">DSH 配置已回退，但软件设置没能回退。</string>
+
+    <!-- 分享/以…打开 → 用途选择 -->
+    <string name="dsh_share_chooser_title">这个文件用来做什么？</string>
+    <string name="dsh_share_chooser_message">文件：%1$s</string>
+    <string name="dsh_share_use_dsh">交给 DSH 处理</string>
+    <string name="dsh_share_use_backup">恢复备份</string>
+    <string name="dsh_share_use_theme">导入主题</string>
+
+    <!-- 交给 DSH 处理 → 落地页 -->
+    <string name="dsh_handoff_title">交给 DSH 处理</string>
+    <string name="dsh_handoff_starting">正在启动 DSH…</string>
+    <string name="dsh_handoff_loading">正在读取工作区…</string>
+    <string name="dsh_handoff_pick">选择要放入文件的工作区</string>
+    <string name="dsh_handoff_file_label">文件：%1$s</string>
+    <string name="dsh_handoff_sessions_count">%1$d 个会话</string>
+    <string name="dsh_handoff_default_workspace">默认工作区</string>
+    <string name="dsh_handoff_empty">还没有工作区——选默认工作区即可开始新对话。</string>
+    <string name="dsh_handoff_copied">复制成功</string>
+    <string name="dsh_handoff_prompt">请处理工作区里的这个文件：%1$s</string>
+    <string name="dsh_handoff_copy_failed">复制失败：%1$s</string>
 </resources>

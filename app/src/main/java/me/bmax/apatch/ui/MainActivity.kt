@@ -86,7 +86,9 @@ import androidx.navigation.compose.rememberNavController
 import com.ramcosta.composedestinations.generated.destinations.AppearanceSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.BackupSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.BehaviorSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.DshFileHandoffScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.DshTerminalScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.RestoreWizardScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.LanguagePickerScreenDestination
@@ -157,6 +159,8 @@ import me.bmax.apatch.util.UpdateChecker
 import me.bmax.apatch.ui.component.UpdateDialog
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
 import me.bmax.apatch.dsh.DshEnv
+import me.bmax.apatch.dsh.DshBackupCrypto
+import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.dsh.DshPhase
 import me.bmax.apatch.dsh.HarnessService
 import me.bmax.apatch.dsh.DshRuntime
@@ -183,6 +187,7 @@ import me.bmax.apatch.util.ui.rememberNavBarGlassLiquidState
 import me.bmax.apatch.util.ui.isRealTimeBlurAvailable
 import me.bmax.apatch.util.ui.isImeVisible
 import me.bmax.apatch.util.ui.showToast
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
     private var isLoading = true
@@ -496,8 +501,11 @@ class MainActivity : AppCompatActivity() {
                 val themeImportMetadata = remember { mutableStateOf<ThemeManager.ThemeMetadata?>(null) }
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-                // DSH-Folk 只处理一种外部文件：.fpt 主题包。
-                // 原来的模块 zip 安装入口随内核补丁栈一起移除了。
+                // 分享/以…打开进来的文件：先问「做什么用」，再分流到 恢复备份 / 导入主题 /
+                // 交给 DSH 处理（见 DshFileHandoffScreen）。原来写死只认 .fpt 主题。
+                val showUseChooser = remember { mutableStateOf(false) }
+                val pendingUri = remember { mutableStateOf<Uri?>(null) }
+                val pendingFileName = remember { mutableStateOf("") }
                 val uri = installUri
                 val lastHandledExternalKey = rememberSaveable { mutableStateOf<String?>(null) }
                 LaunchedEffect(uri) {
@@ -510,21 +518,117 @@ class MainActivity : AppCompatActivity() {
                     val fileName = withContext(Dispatchers.IO) {
                         getFileName(context, uri)
                     }
-                    if (fileName.endsWith(".fpt", ignoreCase = true)) {
-                        themeImportUri.value = uri
-                        scope.launch {
-                            loadingDialog.show()
-                            val metadata = ThemeManager.readThemeMetadata(context, uri)
-                            loadingDialog.hide()
-                            if (metadata != null) {
-                                themeImportMetadata.value = metadata
-                                showThemeImportDialog.value = true
-                            } else {
-                                showToast(context, context.getString(R.string.settings_theme_import_failed))
-                            }
+                    pendingUri.value = uri
+                    pendingFileName.value = fileName
+                    showUseChooser.value = true
+                    installUri = null
+                }
+
+                // 导入主题：读元数据后弹主题导入确认框（与原 .fpt 流程一致）。
+                fun startTheme(target: Uri) {
+                    themeImportUri.value = target
+                    scope.launch {
+                        loadingDialog.show()
+                        val metadata = ThemeManager.readThemeMetadata(context, target)
+                        loadingDialog.hide()
+                        if (metadata != null) {
+                            themeImportMetadata.value = metadata
+                            showThemeImportDialog.value = true
+                        } else {
+                            showToast(context, context.getString(R.string.settings_theme_import_failed))
                         }
                     }
-                    installUri = null
+                }
+
+                // 恢复备份：把文件落到暂存目录（Uri 不能直接交给向导/HTTP），检测是否加密，
+                // 再进恢复向导——与向导内「选择文件」那条路行为一致。
+                fun startBackup(target: Uri) {
+                    scope.launch {
+                        loadingDialog.show()
+                        val staged = withContext(Dispatchers.IO) {
+                            runCatching {
+                                context.contentResolver.openInputStream(target)?.use { input ->
+                                    DshConfigBackup.stage(context, input, "import-${System.currentTimeMillis()}.zip")
+                                }
+                            }.getOrNull()
+                        }
+                        val encrypted = staged?.let {
+                            withContext(Dispatchers.IO) { DshBackupCrypto.isArchiveBlobFile(it) }
+                        } ?: false
+                        loadingDialog.hide()
+                        if (staged == null) {
+                            showToast(context, context.getString(R.string.dsh_plugin_local_read_failed))
+                            return@launch
+                        }
+                        navigator.navigate(
+                            RestoreWizardScreenDestination(
+                                stagedPath = staged.absolutePath,
+                                stagedEncrypted = encrypted,
+                            )
+                        )
+                    }
+                }
+
+                // 交给 DSH 处理：把文件落到独立暂存目录，进落地页选工作区。
+                fun startDsh(target: Uri, name: String) {
+                    scope.launch {
+                        loadingDialog.show()
+                        val staged = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val dir = File(context.cacheDir, "dsh-handoff").apply { mkdirs() }
+                                val safe = me.bmax.apatch.dsh.DshFileHandoff.sanitizeName(name)
+                                val f = File(dir, safe)
+                                context.contentResolver.openInputStream(target)?.use { input ->
+                                    f.outputStream().use { out -> input.copyTo(out) }
+                                } ?: return@runCatching null
+                                f
+                            }.getOrNull()
+                        }
+                        loadingDialog.hide()
+                        if (staged == null) {
+                            showToast(context, context.getString(R.string.dsh_plugin_local_read_failed))
+                            return@launch
+                        }
+                        navigator.navigate(
+                            DshFileHandoffScreenDestination(
+                                stagedPath = staged.absolutePath,
+                                fileName = me.bmax.apatch.dsh.DshFileHandoff.sanitizeName(name),
+                            )
+                        )
+                    }
+                }
+
+                if (showUseChooser.value && pendingUri.value != null) {
+                    val target = pendingUri.value!!
+                    val name = pendingFileName.value
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showUseChooser.value = false },
+                        title = { Text(stringResource(R.string.dsh_share_chooser_title)) },
+                        text = {
+                            Text(stringResource(R.string.dsh_share_chooser_message, name))
+                        },
+                        confirmButton = {
+                            Column {
+                                TextButton(onClick = {
+                                    showUseChooser.value = false
+                                    startDsh(target, name)
+                                }) { Text(stringResource(R.string.dsh_share_use_dsh)) }
+                                TextButton(onClick = {
+                                    showUseChooser.value = false
+                                    startBackup(target)
+                                }) { Text(stringResource(R.string.dsh_share_use_backup)) }
+                                TextButton(onClick = {
+                                    showUseChooser.value = false
+                                    startTheme(target)
+                                }) { Text(stringResource(R.string.dsh_share_use_theme)) }
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showUseChooser.value = false }) {
+                                Text(stringResource(android.R.string.cancel))
+                            }
+                        },
+                    )
                 }
 
                 if (showThemeImportDialog.value && themeImportMetadata.value != null) {

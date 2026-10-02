@@ -1327,4 +1327,24 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_bk_snapshot_appdata_absent">This snapshot carries no app settings (it was created before they were captured), so only the DSH configuration will be rolled back.</string>
     <string name="dsh_bk_snapshot_appdata_restored">App settings and appearance were rolled back too.</string>
     <string name="dsh_bk_snapshot_appdata_failed">The DSH configuration was rolled back, but the app settings could not be.</string>
+
+    <!-- 分享/以…打开 → 用途选择 -->
+    <string name="dsh_share_chooser_title">What is this file for?</string>
+    <string name="dsh_share_chooser_message">File: %1$s</string>
+    <string name="dsh_share_use_dsh">Let DSH handle it</string>
+    <string name="dsh_share_use_backup">Restore a backup</string>
+    <string name="dsh_share_use_theme">Import a theme</string>
+
+    <!-- 交给 DSH 处理 → 落地页 -->
+    <string name="dsh_handoff_title">Let DSH handle it</string>
+    <string name="dsh_handoff_starting">Starting DSH…</string>
+    <string name="dsh_handoff_loading">Reading workspaces…</string>
+    <string name="dsh_handoff_pick">Pick the workspace to drop the file into</string>
+    <string name="dsh_handoff_file_label">File: %1$s</string>
+    <string name="dsh_handoff_sessions_count">%1$d conversations</string>
+    <string name="dsh_handoff_default_workspace">Default workspace</string>
+    <string name="dsh_handoff_empty">No workspaces yet — pick the default workspace to start a new conversation.</string>
+    <string name="dsh_handoff_copied">Copied</string>
+    <string name="dsh_handoff_prompt">Please handle this file in the workspace: %1$s</string>
+    <string name="dsh_handoff_copy_failed">Copy failed: %1$s</string>
 </resources>
