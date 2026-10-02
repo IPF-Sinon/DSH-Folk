@@ -394,12 +394,11 @@
                 android:resource="@xml/dsh_a11y" />
         </service>
 
-        <!-- Shizuku 用户服务：由 Shizuku 在**它自己的进程**里实例化，命令因此以 Shizuku 的身份
-             执行（Sui/root 模式 uid 0，普通 adb 模式 2000）。应用侧不绑定它就什么也不会发生；
-             exported=false 且没有 intent-filter，外部无法启动它。见 DshShizukuShell 的 KDoc。 -->
-        <service
-            android:name=".dsh.DshShizukuShellService"
-            android:exported="false" />
+        <!-- Shizuku 用户服务**故意不在这里声明**。
+             Shizuku 的用户服务不是 Android 的绑定服务：它由 Shizuku 在自己的进程里用反射
+             实例化（官方 demo 的清单里同样没有这一项），所以没有框架服务可声明，类本身必须
+             是 Binder（IDshShellService.Stub）。见 DshShizukuShellService 的 KDoc。
+             上一版在这里声明成了 <service>，那正是它永远连不上的原因之一。 -->
 
     </application>
 

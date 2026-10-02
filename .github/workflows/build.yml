@@ -180,6 +180,7 @@ jobs:
           node tools/check-host-prompt.js
           node tools/check-file-handoff.js
           node tools/check-display-server.js
+          node tools/check-shizuku-user-service.js
           node tools/check-imports.js $(find app/src/main/java -name "*.kt")
 
       # release 包必须真签名。缺任何一项就硬失败 —— 悄悄用 debug key 签出一个

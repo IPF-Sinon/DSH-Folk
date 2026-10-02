@@ -7,6 +7,15 @@ package me.bmax.apatch.dsh;
 
 interface IDshShellService {
     /**
+     * Shizuku 服务器定义的「销毁」方法，事务号是它写死的 16777115（aidl 里写 16777114）。
+     *
+     * **必须原样声明**：Shizuku 停止用户服务时会调它做清理。少了它，那条事务没人应答，
+     * 而用户服务的进程又不会被自动杀掉（Shizuku 的文档明确写了这一点），于是每次换通道
+     * 都会留下一个以 shell/root 身份活着的进程。
+     */
+    void destroy() = 16777114;
+
+    /**
      * 在 Shizuku 的进程里执行一条命令并等它结束。
      *
      * 返回一个紧凑 JSON：{"exit":n,"stdout":"…","stderr":"…","timedOut":bool}。

@@ -24,6 +24,9 @@ internal object DshShizukuShell {
     /** 等 binder 连上的上限：Shizuku 要先 fork 进程再加载类，第一次可能要一两秒。 */
     private const val BIND_TIMEOUT_MS = 5_000L
 
+    /** 用户服务的稳定身份（见 [serviceArgs]）。改动它等于换一个服务，别动。 */
+    private const val USER_SERVICE_TAG = "dsh-shell"
+
     private val lock = Any()
 
     @Volatile private var remote: IDshShellService? = null
@@ -49,6 +52,11 @@ internal object DshShizukuShell {
             .processNameSuffix("dshshell")
             .debuggable(false)
             .version(1)
+            // 身份必须以 tag 为准，**不能依赖类名**：Shizuku 用 tag 判断"是不是同一个用户
+            // 服务"，没设时退回类名，而 release 变体开了 R8，类名可能被改。改成别的名字
+            // 会让 Shizuku 认为换了一个服务（把旧的销毁、再起一个新的），
+            // 而这里传的值一旦变更，同样等于"换了一个服务"——所以它是个不能随便动的常量。
+            .tag(USER_SERVICE_TAG)
             .also { args = it }
 
     /** 执行一条命令；连不上或调用失败都返回 null（调用方据此回 channel_lost）。 */

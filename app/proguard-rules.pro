@@ -26,6 +26,16 @@
 -keep class rikka.shizuku.ShizukuProvider { *; }
 -keep class moe.shizuku.api.BinderContainer { *; }
 
+# Shizuku 用户服务：由 Shizuku 在**它自己的进程**里反射实例化，应用侧没有任何静态引用，
+# 所以 R8 会把它当成没用的类删掉、或改掉类名与无参构造 —— 而在 release 里那表现出来
+# 只是"绑定永远超时"，跟权限页显示的"Shizuku 一切正常"互相矛盾，几乎无法自查。
+# 它也不能写进清单来"顺便"保住（用户服务不是框架服务，见 DshShizukuShellService 的 KDoc），
+# 所以必须在这里显式保留。
+-keep class me.bmax.apatch.dsh.DshShizukuShellService {
+    <init>();
+    *;
+}
+
 # Gson
 -keepattributes Signature
 -keepattributes *Annotation*
