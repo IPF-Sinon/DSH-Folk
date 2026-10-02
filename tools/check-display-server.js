@@ -142,13 +142,24 @@ for (const f of SHARED) {
   must(/javaToolchains\.launcherFor\s*\{\s*languageVersion\.set\(JavaLanguageVersion\.of\(21\)\)/.test(g),
     'javac 必须优先走 Java 21 工具链（用守护进程的 JDK 会产出 d8 不认识的 class 版本）');
   must(/javacPath\.set\(resolvedJavacPath\)/.test(g), '任务的 javacPath 必须绑定到解析出来的 javac');
-  // AGP 是懒加载平台的：它直到编译任务才去装 platforms;android-<compileSdk>，而本任务挂在
-  // 资源合并上、跑在那之前。少了这段兜底，CI 上会撞"找不到 android.jar"（实测过一次）。
-  must(/compileSdk 平台尚未安装，退回/.test(g),
-    '任务必须在 compileSdk 平台尚未安装时退回已有最高平台（AGP 懒加载导致资源合并跑在平台安装之前）');
-  must(/action\.yml/.test('.github/actions/setup-build-env/action.yml') &&
-    /Ensure compile SDK platform/.test(read('.github/actions/setup-build-env/action.yml')),
-    'setup-build-env 必须显式安装 compileSdk 平台（否则只能靠任务兜底，走进不确定的那条路）');
+  // 平台目录名有三种形态：android-34 / android-34-ext10（扩展级，不是给普通编译用的）/
+  // android-37.1（新的小版本号形态）。第一版只按 android-<compileSdk> 找，在 CI 上永远找不到
+  // —— 实测 runner 上 android-37 这个目录根本不存在，只有 37.0/37.1/37.2；更糟的是退回逻辑
+  // 把 "37.1".toIntOrNull() 解析成 null 直接丢掉，最终错误地退到 android-36。
+  //
+  // 断言必须盯**调用点**而不只是函数存在：函数留着、调用点改回旧写法，正是最可能发生的那种
+  // "看起来没删干净"的回归。
+  must(/Regex\("\^android-\(/.test(g) && /platformVersion\(d\.name\)\?\.let \{ \(major, minor\)/.test(g),
+    '平台目录名必须经 platformVersion() 解析后再用（只认 android-<主版本> 会漏掉 android-37.1）');
+  must(/filter \{ it\.first == wantSdk \}\.maxByOrNull \{ it\.second \}/.test(g),
+    '平台选择必须先按主版本精确匹配、再退回最高版本');
+  must(/if \(picked\.first != wantSdk\) \{/.test(g) && /没有 android-\$wantSdk 平台，退回/.test(g),
+    '退回时必须打日志说明用的是哪个平台，否则"用了更旧的 android.jar"这件事完全不可见');
+  // 平台也可能是**还没装**（AGP 是懒加载的：直到编译任务才去装，而本任务挂在资源合并上、
+  // 跑在那之前）。所以任务必须"有就用、没有就退回"，不能硬要求精确路径存在。
+  must(/check\(picked != null\)/.test(g), '平台一个都找不到时必须给出可执行的报错，而不是让 android.jar 路径空着');
+  must(/Ensure compile SDK platform/.test(read('.github/actions/setup-build-env/action.yml')),
+    'setup-build-env 必须显式确保 compileSdk 平台（否则只能靠任务兜底，走进不确定的那条路）');
   must(/d8\.absolutePath,\s*"--min-api",\s*minSdkVersion\.get\(\)\.toString\(\)/.test(g),
     'd8 的 --min-api 必须绑定到 app 的 minSdk（写死会与 app 漂移）');
   must(/ZipEntry\("classes\.dex"\)/.test(g), 'jar 里必须且只能装 classes.dex');
@@ -221,8 +232,13 @@ if (jarArgAt >= 0) {
         `jar 里应当只有 classes.dex 一个条目，实际：[${names.join(', ')}]`);
       for (const e of entries) {
         if (e.name !== 'classes.dex') continue;
-        must(e.uncompSize > 64 * 1024, `classes.dex 只有 ${e.uncompSize} 字节，不像编进了服务端（javac 是不是全失败了？）`);
-        must(e.uncompSize < 1.5 * 1024 * 1024, `classes.dex 有 ${(e.uncompSize / 1048576).toFixed(2)}MB —— 大概率把 androidx/Compose 拖进来了`);
+        // 实测基线：这 13 个服务端类编出来是 **58KB**（移植源那个 jar 里是 1112KB —— 因为它
+        // 把整个 app 模块连 Compose 一起打了进去）。上下界都留足余量，只拦两种极端：
+        // "javac 全失败、dex 是空壳" 与 "把一大坨库拖了进来"。第一版把下界写成 64KB，
+        // 结果把自己 58KB 的正常产物拦下来了（CI 上门禁自己失败）。
+        must(e.uncompSize > 24 * 1024, `classes.dex 只有 ${e.uncompSize} 字节，不像编进了服务端（javac 是不是全失败了？）`);
+        must(e.uncompSize < 512 * 1024,
+          `classes.dex 有 ${(e.uncompSize / 1024).toFixed(0)}KB —— 移植基线是 58KB，这个体量像是把 androidx/Compose 拖进来了`);
       }
       // dex 头部自检：magic "dex\n" + version
       const dexAt = (() => {

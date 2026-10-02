@@ -64,12 +64,16 @@ runs:
           echo "读不到 androidCompileSdkVersion，跳过"
           exit 0
         fi
-        if [ -f "$SDK/platforms/android-$PLATFORM/android.jar" ]; then
-          echo "已安装 platforms;android-$PLATFORM"
+        # 平台目录名不一定是 android-<主版本>：新 SDK 用小版本号（android-37.1），
+        # 还有扩展级（android-34-ext10）。只按 android-37 去判，会既看不到已有的
+        # android-37.1、又去装一个根本不存在的 packages;android-37 然后报错。
+        if ls "$SDK/platforms" 2>/dev/null | grep -qE "^android-${PLATFORM}(\.|$)"; then
+          echo "已有 platforms;android-${PLATFORM}（.x 也算）"
         else
           SDKMGR="$(find "$SDK/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
           if [ -n "$SDKMGR" ]; then
-            yes | "$SDKMGR" --sdk_root="$SDK" "platforms;android-$PLATFORM" > /dev/null || echo "::warning::装 platforms;android-$PLATFORM 失败，交给任务里的兜底"
+            yes | "$SDKMGR" --sdk_root="$SDK" "platforms;android-$PLATFORM" > /dev/null \
+              || echo "::warning::装 platforms;android-$PLATFORM 失败，交给 buildDisplayServerJar 里的兜底"
           fi
         fi
         ls "$SDK/platforms" 2>/dev/null || true
