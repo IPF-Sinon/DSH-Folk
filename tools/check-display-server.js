@@ -142,6 +142,13 @@ for (const f of SHARED) {
   must(/javaToolchains\.launcherFor\s*\{\s*languageVersion\.set\(JavaLanguageVersion\.of\(21\)\)/.test(g),
     'javac 必须优先走 Java 21 工具链（用守护进程的 JDK 会产出 d8 不认识的 class 版本）');
   must(/javacPath\.set\(resolvedJavacPath\)/.test(g), '任务的 javacPath 必须绑定到解析出来的 javac');
+  // AGP 是懒加载平台的：它直到编译任务才去装 platforms;android-<compileSdk>，而本任务挂在
+  // 资源合并上、跑在那之前。少了这段兜底，CI 上会撞"找不到 android.jar"（实测过一次）。
+  must(/compileSdk 平台尚未安装，退回/.test(g),
+    '任务必须在 compileSdk 平台尚未安装时退回已有最高平台（AGP 懒加载导致资源合并跑在平台安装之前）');
+  must(/action\.yml/.test('.github/actions/setup-build-env/action.yml') &&
+    /Ensure compile SDK platform/.test(read('.github/actions/setup-build-env/action.yml')),
+    'setup-build-env 必须显式安装 compileSdk 平台（否则只能靠任务兜底，走进不确定的那条路）');
   must(/d8\.absolutePath,\s*"--min-api",\s*minSdkVersion\.get\(\)\.toString\(\)/.test(g),
     'd8 的 --min-api 必须绑定到 app 的 minSdk（写死会与 app 漂移）');
   must(/ZipEntry\("classes\.dex"\)/.test(g), 'jar 里必须且只能装 classes.dex');

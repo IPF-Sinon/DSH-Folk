@@ -46,6 +46,34 @@ runs:
       shell: bash
       run: chmod +x gradlew
 
+    # 显式把 compileSdk 的平台装上。
+    #
+    # AGP 平时是**懒加载**：直到编译任务真的要用 bootclasspath 时它才去 sdkmanager 装平台。
+    # 而 `buildDisplayServerJar`（虚拟屏服务端，见 app/build.gradle.kts）挂在资源合并上、
+    # 跑在那之前，于是它去找 platforms/android-<compileSdk>/android.jar 时**平台上还没有**
+    # —— CI 上实测撞过一次，报的是"找不到 android.jar"，看上去像路径写错，其实是时序问题。
+    # 任务本身也做了兜底（退回已有最高平台），这里先装好是让构建走进确定的那条路。
+    # 装失败不当场失败：任务里的兜底会处理，而平台的可用性最终由编译任务自己兜。
+    - name: Ensure compile SDK platform
+      shell: bash
+      run: |
+        set -uo pipefail
+        SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+        PLATFORM=$(grep -oP 'androidCompileSdkVersion by extra\(\K[0-9]+' build.gradle.kts | head -1)
+        if [ -z "$PLATFORM" ]; then
+          echo "读不到 androidCompileSdkVersion，跳过"
+          exit 0
+        fi
+        if [ -f "$SDK/platforms/android-$PLATFORM/android.jar" ]; then
+          echo "已安装 platforms;android-$PLATFORM"
+        else
+          SDKMGR="$(find "$SDK/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | sort -V | tail -1)"
+          if [ -n "$SDKMGR" ]; then
+            yes | "$SDKMGR" --sdk_root="$SDK" "platforms;android-$PLATFORM" > /dev/null || echo "::warning::装 platforms;android-$PLATFORM 失败，交给任务里的兜底"
+          fi
+        fi
+        ls "$SDK/platforms" 2>/dev/null || true
+
     - uses: actions/cache@v4
       with:
         path: |

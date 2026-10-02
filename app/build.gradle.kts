@@ -342,8 +342,31 @@ abstract class BuildDisplayServerJar : DefaultTask() {
         dexDir.mkdirs()
 
         val sdk = File(androidSdkPath.get())
-        val androidJar = File(sdk, "platforms/android-${compileSdkVersion.get()}/android.jar")
-        check(androidJar.isFile) { "找不到 android.jar：$androidJar（Android SDK = ${sdk.path}）" }
+        // compileSdk 对应的平台**由 AGP 在编译任务里才懒加载安装**，而本任务挂在资源合并上、
+        // 跑在那之前（CI 上实测：平台上没装，任务就撞在这里）。所以就按"优先精确、否则退回
+        // 本机已有的最高版本平台"来取 android.jar —— 服务端刻意用的都是老 API（虚拟屏的标志位
+        // 甚至是硬编码位值，正是为了不依赖新 SDK 常量），编得过就够用；退回时会打日志说明。
+        val androidJar = run {
+            val exact = File(sdk, "platforms/android-${compileSdkVersion.get()}/android.jar")
+            if (exact.isFile) {
+                exact
+            } else {
+                val fallback = File(sdk, "platforms")
+                    .listFiles { f -> f.isDirectory && f.name.startsWith("android-") }
+                    ?.mapNotNull { d ->
+                        val v = d.name.removePrefix("android-").toIntOrNull()
+                        File(d, "android.jar").takeIf { it.isFile && v != null }?.let { v!! to it }
+                    }
+                    ?.maxByOrNull { it.first }
+                    ?.second
+                check(fallback != null) {
+                    "找不到任何可用的 android.jar：$exact 不存在，${File(sdk, "platforms")} 下也没有任何平台。" +
+                        "请先安装平台（sdkmanager \"platforms;android-${compileSdkVersion.get()}\"）"
+                }
+                logger.lifecycle("display server: compileSdk 平台尚未安装，退回 ${fallback.parentFile.name} 的 android.jar")
+                fallback
+            }
+        }
         val d8 = File(sdk, "build-tools/${buildToolsVersion.get()}/d8")
         check(d8.isFile) { "找不到 d8：$d8" }
 
