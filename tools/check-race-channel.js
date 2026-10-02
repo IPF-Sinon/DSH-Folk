@@ -105,6 +105,103 @@ must(/dsh_race_testing_progress/.test(settings),
   '测速中要显示吞吐进度（全量十来秒，没进度像个死按钮）');
 
 
+// ── 8. 精简版运行时通道：通道 × 口味 = 四个互不覆盖的滚动位置 ──
+//
+// 这一组守卫的不变量是「**两个正交开关**」：精简与测试必须能自由组合，不能被做成
+// 三选一的互斥项；四个 tag 也各自对应一个独立 release 位置，任何两个撞在一起都会
+// 让一份 rootfs 覆盖另一份（arm64 的旧名被顶掉那种事故）。
+{
+  const builder = read('runtime-builder/build-rootfs.sh');
+  const runtimeYml = read('.github/workflows/runtime.yml');
+  const stringsEn = read('app/src/main/res/values/dsh_strings.xml');
+  const stringsZh = read('app/src/main/res/values-zh-rCN/dsh_strings.xml');
+
+  for (const [constName, tag] of [
+    ['RUNTIME_STABLE_BASE', 'runtime-latest'],
+    ['RUNTIME_SLIM_BASE', 'runtime-slim-latest'],
+    ['RUNTIME_BETA_BASE', 'runtime-beta-latest'],
+    ['RUNTIME_SLIM_BETA_BASE', 'runtime-slim-beta-latest'],
+  ]) {
+    must(source.includes(`${constName} = RELEASE_DOWNLOAD_BASE + "${tag}/"`),
+      `DshSource 缺 ${constName}（应指向 ${tag}）`);
+  }
+
+  // 正交：runtimeBase() 必须同时读两个开关。只读一个 = 把精简与测试做成了互斥。
+  const baseAt = source.indexOf('private fun runtimeBase()');
+  const baseFn = baseAt < 0 ? '' : source.slice(baseAt, source.indexOf('\n    }', baseAt));
+  must(/acceptRuntimeSlim\(/.test(baseFn) && /acceptRuntimeBeta\(/.test(baseFn),
+    'runtimeBase() 必须同时读 acceptRuntimeSlim 与 acceptRuntimeBeta（两个正交开关，不是二选一）');
+  must(baseFn.includes('RUNTIME_SLIM_BETA_BASE') && baseFn.includes('RUNTIME_SLIM_BASE'),
+    'runtimeBase() 必须能落到精简版的两个 base 上');
+
+  // 两个 setter 都要清缓存：只清一个，旧通道的测速/metadata 结论会被套到新通道上
+  for (const fn of ['setAcceptRuntimeBeta', 'setAcceptRuntimeSlim']) {
+    const at = source.indexOf(`fun ${fn}(ctx: Context, on: Boolean)`);
+    const body = at < 0 ? '' : source.slice(at, source.indexOf('\n    }', at));
+    must(at >= 0, `DshSource 缺 ${fn}`);
+    must(/resetCaches\(\)/.test(body), `${fn} 必须调用 resetCaches()`);
+  }
+
+  for (const c of ['CHANNEL_SLIM', 'CHANNEL_SLIM_BETA']) {
+    must(runtime.includes(`const val ${c} = "`), `DshRuntime 缺 ${c} 常量`);
+  }
+  // channelOf 的判定顺序：必须先认 slim-beta 的全名，再退到 slim 前缀，
+  // 否则 runtime-slim-beta-latest 会被前缀规则吞掉、误判成「正式精简版」
+  const chanAt = runtime.indexOf('fun channelOf');
+  const chanFn = chanAt < 0 ? '' : runtime.slice(chanAt, runtime.indexOf('else -> CHANNEL_ARCHIVE', chanAt));
+  for (const t of ['runtime-latest', 'runtime-beta-latest', 'runtime-slim-latest', 'runtime-slim-beta-latest']) {
+    must(chanFn.includes(`"${t}"`), `channelOf 必须精确识别 ${t}`);
+  }
+  must(chanFn.indexOf('runtime-slim-beta-latest') < chanFn.indexOf('startsWith("runtime-slim")'),
+    'channelOf 必须先认 runtime-slim-beta-latest 再退到 runtime-slim 前缀（否则精简测试版被误判）');
+
+  // UI 接线
+  must(/var runtimeSlim by rememberSaveable \{ mutableStateOf\(DshSource\.acceptRuntimeSlim\(context\)\) \}/.test(screen),
+    '设置页必须读取精简开关');
+  must(/DshSource\.setAcceptRuntimeSlim\(context, on\)/.test(screen),
+    '设置页必须把精简开关写回 DshSource');
+  must(/runtimeSlim: Boolean/.test(settings) && /onRuntimeSlimChange: \(Boolean\) -> Unit/.test(settings),
+    'FunctionSettings 必须接精简开关的两个参数');
+  must(/LaunchedEffect\([^)]*runtimeSlim[^)]*\)/.test(settings),
+    '更新检查的 LaunchedEffect 必须带上 runtimeSlim（否则拨了开关不重查）');
+  must(/R\.string\.dsh_runtime_slim\b/.test(settings) && /R\.string\.dsh_runtime_channel_slim\b/.test(settings),
+    '运行时卡片与版本列表必须用精简版文案');
+
+  for (const [label, xml] of [['values', stringsEn], ['values-zh-rCN', stringsZh]]) {
+    for (const k of ['dsh_runtime_slim', 'dsh_runtime_slim_summary', 'dsh_runtime_channel_slim', 'dsh_runtime_channel_slim_beta']) {
+      must(xml.includes(`name="${k}"`), `${label} 缺字符串 ${k}`);
+    }
+  }
+
+  // 构建脚本：四组 tag 矩阵、口味变量、裁剪安全断言、metadata 的 flavor 字段
+  for (const [combo, tag] of [
+    ['stable/full', 'runtime-latest'],
+    ['beta/full', 'runtime-beta-latest'],
+    ['stable/slim', 'runtime-slim-latest'],
+    ['beta/slim', 'runtime-slim-beta-latest'],
+  ]) {
+    const at = builder.indexOf(`${combo})`);
+    const seg = at < 0 ? '' : builder.slice(at, at + 220);
+    must(at >= 0 && seg.includes(`CHANNEL_RELEASE_TAG="${tag}"`),
+      `build-rootfs.sh 的 tag 矩阵缺 ${combo} → ${tag}`);
+  }
+  must(builder.includes('RUNTIME_FLAVOR="${RUNTIME_FLAVOR:-full}"'), 'build-rootfs.sh 缺 RUNTIME_FLAVOR');
+  must(builder.includes('check-trim-safety.js'), 'slim 构建必须先跑 check-trim-safety.js（删除安全性断言）');
+  must(builder.includes('FLAVOR_SUFFIX') && builder.includes('"flavor": "${RUNTIME_FLAVOR}"'),
+    'metadata 必须带 flavor 字段，版本串必须带口味后缀');
+  // 裁剪必须留下 libreoffice 的包本身：dsh-skill-office 要解析它的 CLI 路径，
+  // dsh-office-to-pdf 要 import libreoffice-kit（两者都在用时才 resolveEngine）
+  must(builder.includes('libreoffice-kit-wasm/package.json'),
+    'slim 裁剪必须断言保留 libreoffice-kit-wasm/package.json（否则技能页路径解析会崩）');
+
+  must(runtimeYml.includes('flavor:') && runtimeYml.includes('options: [ full, slim ]'),
+    'runtime.yml 必须暴露 flavor 输入');
+  must(runtimeYml.includes('RUNTIME_FLAVOR: ${{ inputs.flavor }}'),
+    'runtime.yml 必须把 flavor 传给构建脚本');
+  must(/needs\.plan\.outputs\.default_tag/.test(runtimeYml),
+    'runtime.yml 的 build 与 publish 必须用同一份 tag 推导结果（各写一份会漂移）');
+}
+
 if (errors.length) {
   console.error('check-race-channel FAILED:');
   for (const e of errors) console.error('  ✗ ' + e);

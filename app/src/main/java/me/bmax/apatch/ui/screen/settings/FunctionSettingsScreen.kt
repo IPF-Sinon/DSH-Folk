@@ -115,6 +115,8 @@ internal fun DshSettingsScreen(
     val dshPrefs = context.getSharedPreferences(DshEnv.PREF, android.content.Context.MODE_PRIVATE)
 
     var runtimeBeta by rememberSaveable { mutableStateOf(DshSource.acceptRuntimeBeta(context)) }
+    // 精简版与测试版是两个正交开关（精简版一样有测试通道），所以不做成三选一
+    var runtimeSlim by rememberSaveable { mutableStateOf(DshSource.acceptRuntimeSlim(context)) }
     // 自动检查更新是运行时自己的开关（默认开），与 App 那个自动检查互不影响
     var runtimeAutoCheck by rememberSaveable { mutableStateOf(DshRuntime.autoCheckEnabled(context)) }
     var runtimeCheckRevision by rememberSaveable { mutableStateOf(0) }
@@ -829,6 +831,11 @@ internal fun DshSettingsScreen(
                     onRuntimeBetaChange = { on ->
                         runtimeBeta = on
                         DshSource.setAcceptRuntimeBeta(context, on)
+                    },
+                    runtimeSlim = runtimeSlim,
+                    onRuntimeSlimChange = { on ->
+                        runtimeSlim = on
+                        DshSource.setAcceptRuntimeSlim(context, on)
                     },
                     onRepairPlugins = { pluginViewModel.repairStore() },
                     repairBusy = pluginViewModel.installing,

@@ -111,9 +111,10 @@ data class RuntimeCheckResult(
 /**
  * 版本列表里的一项：某个 runtime release 的 metadata（本机架构那一份）。
  *
- * 存在的理由：滚动通道 tag 只有 `runtime-latest` / `runtime-beta-latest` 两个，
- * 光靠它们既看不到历史版本，也没法降级。长按「更新」时列出仓库里**所有**运行时
- * release，让用户自己挑版本（升级、降级、切通道）。
+ * 存在的理由：滚动通道 tag 只有 `runtime-latest` / `runtime-beta-latest` /
+ * `runtime-slim-latest` / `runtime-slim-beta-latest` 四个，光靠它们既看不到历史版本，
+ * 也没法降级。长按「更新」时列出仓库里**所有**运行时 release，让用户自己挑版本
+ * （升级、降级、切通道、切口味）。
  */
 data class RuntimeVersion(
     val version: String,
@@ -148,18 +149,34 @@ data class RuntimeVersion(
     companion object {
         const val CHANNEL_STABLE = "stable"
         const val CHANNEL_BETA = "beta"
+        /** 精简版（不含文档预览/转换）。与正式/测试是**两个正交维度**，所以各有一个通道值。 */
+        const val CHANNEL_SLIM = "slim"
+        const val CHANNEL_SLIM_BETA = "slim-beta"
         const val CHANNEL_ARCHIVE = "archive"
 
-        /** 列表排序权重：正式通道 → 测试通道 → 历史版本。 */
+        /** 列表排序权重：正式 → 精简 → 测试 → 精简测试 → 历史版本。 */
         fun channelRank(channel: String): Int = when (channel) {
             CHANNEL_STABLE -> 0
-            CHANNEL_BETA -> 1
-            else -> 2
+            CHANNEL_SLIM -> 1
+            CHANNEL_BETA -> 2
+            CHANNEL_SLIM_BETA -> 3
+            else -> 4
         }
 
-        /** tag → 通道。`runtime-latest` = 正式，其余 beta 前缀 = 测试，剩下的都是历史版本。 */
+        /**
+         * tag → 通道。
+         *
+         * 四个滚动 tag 各有确定的名字，先逐个精确匹配；后面几条前缀规则给「名字不那么
+         * 规整」的瘦身 tag 兜底。**顺序上必须先认带 beta 的**，否则
+         * `runtime-slim-beta-latest` 会被 `runtime-slim` 前缀吞掉、误判成正式精简版。
+         */
         fun channelOf(tag: String): String = when {
             tag == "runtime-latest" -> CHANNEL_STABLE
+            tag == "runtime-beta-latest" -> CHANNEL_BETA
+            tag == "runtime-slim-latest" -> CHANNEL_SLIM
+            tag == "runtime-slim-beta-latest" -> CHANNEL_SLIM_BETA
+            tag.startsWith("runtime-slim") && tag.contains("beta") -> CHANNEL_SLIM_BETA
+            tag.startsWith("runtime-slim") -> CHANNEL_SLIM
             tag.startsWith("runtime-beta") -> CHANNEL_BETA
             else -> CHANNEL_ARCHIVE
         }
@@ -2572,8 +2589,9 @@ object DshRuntime {
     /**
      * 列出仓库里**所有**可用的运行时版本（长按「更新」时用）。
      *
-     * 光靠通道 tag 拿不到历史版本 —— 滚动通道永远只有 `runtime-latest` 与
-     * `runtime-beta-latest` 两个位置，它们的内容会被就地覆盖，所以「回到上一版」
+     * 光靠通道 tag 拿不到历史版本 —— 滚动通道永远只有那四个位置
+     * （`runtime-latest` / `runtime-slim-latest` / `runtime-beta-latest` /
+     * `runtime-slim-beta-latest`），它们的内容会被就地覆盖，所以「回到上一版」
      * 只能靠带版本号的历史 release（`runtime-0.1.1-rc.2` 这种）。
      *
      * 数据来源是 Releases API（列 tag + 发布时间）加上每个 release 的 metadata
@@ -2622,10 +2640,15 @@ object DshRuntime {
             }
         }
 
-        // 通道兜底：API 不可达 / 限流烧完时，至少给人看当前两个通道
+        // 通道兜底：API 不可达 / 限流烧完时，至少给人看当前四个通道
         if (found.isEmpty()) {
             logWarn(R.string.dsh_log_version_list_fallback)
-            for (tag in listOf("runtime-latest", "runtime-beta-latest")) {
+            for (tag in listOf(
+                "runtime-latest",
+                "runtime-slim-latest",
+                "runtime-beta-latest",
+                "runtime-slim-beta-latest",
+            )) {
                 val meta = fetchMetaFrom(DshSource.releaseBase(tag) + "metadata$suffix.json") ?: continue
                 found[meta.version] = RuntimeVersion(
                     version = meta.version,

@@ -425,6 +425,8 @@
     <string name="dsh_runtime_import_confirm">我信任此来源并安装</string>
     <string name="dsh_runtime_beta">接受测试版运行时更新</string>
     <string name="dsh_runtime_beta_summary">使用独立的 runtime-beta-latest 滚动通道，测试版可能不稳定；默认关闭。</string>
+    <string name="dsh_runtime_slim">使用精简版运行时</string>
+    <string name="dsh_runtime_slim_summary">同一运行时的精简版：砍掉 TypeScript 类型声明、sourcemap、文档与测试夹具，以及负责文档预览/转换的 LibreOffice 引擎。下载体积约小 63MB。该版本无法进行文档预览与转换；与上面的测试版开关可自由组合。</string>
     <string name="dsh_runtime_preserve_question">是否保留会话、插件、配置及依赖数据？</string>
     <string name="dsh_runtime_preserve">保留数据</string>
     <string name="dsh_runtime_clean">不保留数据</string>
@@ -1089,7 +1091,9 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_runtime_versions_retry">重试</string>
     <string name="dsh_runtime_version_detail">dsh %1$s · node %2$s · %3$d MB</string>
     <string name="dsh_runtime_channel_stable">正式通道</string>
+    <string name="dsh_runtime_channel_slim">精简通道</string>
     <string name="dsh_runtime_channel_beta">测试通道</string>
+    <string name="dsh_runtime_channel_slim_beta">精简测试通道</string>
     <string name="dsh_runtime_channel_archive">历史版本</string>
     <string name="dsh_runtime_update_confirm_title">更新运行时？</string>
     <string name="dsh_runtime_switch_confirm_text">目标版本：%1$s\n\n会重新下载运行时并替换容器系统文件。现有会话、已装插件、ADB 密钥、DSH 配置及插件依赖数据都会保留；即使替换过程被中断，下次启动也会自动恢复暂存数据。开始前会先停止服务。</string>

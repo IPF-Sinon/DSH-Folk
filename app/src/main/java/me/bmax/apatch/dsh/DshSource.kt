@@ -213,12 +213,24 @@ object DshSource {
     private const val KEY_AUTO_SOURCE = "auto_source"
     private const val KEY_AUTO_SOURCE_AT = "auto_source_at"
 
-    /** 稳定版与测试版是两个互不复用 metadata / rootfs 的滚动发布位置。 */
     private const val RELEASE_DOWNLOAD_BASE =
         "https://github.com/IPF-Sinon/DSH-Folk/releases/download/"
+
+    /**
+     * 四个滚动发布位置 = **通道 × 口味**，互不复用 metadata / rootfs。
+     *
+     * 完整版与精简版是两份不同的 rootfs（精简版砍掉了类型声明、sourcemap、文档、测试
+     * 与 LibreOffice 的 wasm 引擎，产物约小 63MB），所以切换口味必然要重新下载一份；
+     * 反过来，任何一段版本串变了都会被 [DshRuntime.checkRuntimeUpdate] 判成「有更新」，
+     * 切换在哪个方向都能被提示到。
+     */
     private const val RUNTIME_STABLE_BASE = RELEASE_DOWNLOAD_BASE + "runtime-latest/"
     private const val RUNTIME_BETA_BASE = RELEASE_DOWNLOAD_BASE + "runtime-beta-latest/"
+    private const val RUNTIME_SLIM_BASE = RELEASE_DOWNLOAD_BASE + "runtime-slim-latest/"
+    private const val RUNTIME_SLIM_BETA_BASE = RELEASE_DOWNLOAD_BASE + "runtime-slim-beta-latest/"
     private const val KEY_RUNTIME_BETA = "runtime_accept_beta"
+    /** 精简版开关。与 [KEY_RUNTIME_BETA] 是**两个正交维度**：精简版同样有测试通道。 */
+    private const val KEY_RUNTIME_SLIM = "runtime_accept_slim"
 
     /**
      * 任意 runtime release tag 的资产前缀。
@@ -228,11 +240,18 @@ object DshSource {
      */
     fun releaseBase(tag: String): String = RELEASE_DOWNLOAD_BASE + tag + "/"
 
-    private fun runtimeBase(): String =
-        if (acceptRuntimeBeta(me.bmax.apatch.apApp)) RUNTIME_BETA_BASE else RUNTIME_STABLE_BASE
+    private fun runtimeBase(): String = when {
+        acceptRuntimeSlim(me.bmax.apatch.apApp) ->
+            if (acceptRuntimeBeta(me.bmax.apatch.apApp)) RUNTIME_SLIM_BETA_BASE else RUNTIME_SLIM_BASE
+        acceptRuntimeBeta(me.bmax.apatch.apApp) -> RUNTIME_BETA_BASE
+        else -> RUNTIME_STABLE_BASE
+    }
 
     fun acceptRuntimeBeta(ctx: Context): Boolean =
         ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE).getBoolean(KEY_RUNTIME_BETA, false)
+
+    fun acceptRuntimeSlim(ctx: Context): Boolean =
+        ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE).getBoolean(KEY_RUNTIME_SLIM, false)
 
     fun setAcceptRuntimeBeta(ctx: Context, on: Boolean) {
         prefs(ctx).edit()
@@ -240,6 +259,27 @@ object DshSource {
             .remove(KEY_AUTO_SOURCE)
             .remove(KEY_AUTO_SOURCE_AT)
             .apply()
+        resetCaches()
+    }
+
+    /**
+     * 切换精简版开关。
+     *
+     * 只改**选源**，不碰已装的 rootfs：用户点「更新运行时」时才真正下载另一份。
+     * 缓存必须一起清掉 —— 测速结果、metadata 与版本列表都是按「当前源」算出来的，
+     * 留着会把上一个通道的结论套到新通道上。
+     */
+    fun setAcceptRuntimeSlim(ctx: Context, on: Boolean) {
+        prefs(ctx).edit()
+            .putBoolean(KEY_RUNTIME_SLIM, on)
+            .remove(KEY_AUTO_SOURCE)
+            .remove(KEY_AUTO_SOURCE_AT)
+            .apply()
+        resetCaches()
+    }
+
+    /** 换通道/口味后的统一清理：测速结果、metadata、版本列表、registry 延迟缓存。 */
+    private fun resetCaches() {
         memCache = null
         memCachedAt = 0L
         lastResults = emptyList()

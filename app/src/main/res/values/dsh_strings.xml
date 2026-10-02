@@ -443,6 +443,8 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_runtime_import_confirm">Trust source and install</string>
     <string name="dsh_runtime_beta">Accept beta runtime updates</string>
     <string name="dsh_runtime_beta_summary">Use the separate runtime-beta-latest rolling channel. Beta builds may be unstable; off by default.</string>
+    <string name="dsh_runtime_slim">Use the slim runtime</string>
+    <string name="dsh_runtime_slim_summary">Slim build of the same runtime: drops TypeScript declarations, source maps, docs and test fixtures, plus the LibreOffice engine that powers document preview and conversion. About 63MB smaller to download. Document preview/convert will not work on it; combines with the beta switch above.</string>
     <string name="dsh_runtime_preserve_question">Preserve sessions, plugins, configuration and dependency data?</string>
     <string name="dsh_runtime_preserve">Preserve data</string>
     <string name="dsh_runtime_clean">Do not preserve data</string>
@@ -1110,7 +1112,9 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_runtime_versions_retry">Retry</string>
     <string name="dsh_runtime_version_detail">dsh %1$s · node %2$s · %3$d MB</string>
     <string name="dsh_runtime_channel_stable">Stable</string>
+    <string name="dsh_runtime_channel_slim">Slim</string>
     <string name="dsh_runtime_channel_beta">Beta</string>
+    <string name="dsh_runtime_channel_slim_beta">Slim beta</string>
     <string name="dsh_runtime_channel_archive">Archived</string>
     <string name="dsh_runtime_update_confirm_title">Update the runtime?</string>
     <string name="dsh_runtime_switch_confirm_text">Target version: %1$s\n\nThe runtime is downloaded again and the container system files are replaced. Existing sessions, installed plugins, ADB keys, DSH configuration and plugin dependency data are all kept; if the replacement is interrupted, the staged data is restored on the next start. The service is stopped first.</string>

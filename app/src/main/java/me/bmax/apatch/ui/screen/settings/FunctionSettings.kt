@@ -243,6 +243,9 @@ fun FunctionSettingsContent(
     onRuntimeAutoCheckChange: (Boolean) -> Unit,
     runtimeBeta: Boolean,
     onRuntimeBetaChange: (Boolean) -> Unit,
+    /** 精简版运行时（砍掉文档预览/转换等，产物约小 63MB）。与测试通道正交。 */
+    runtimeSlim: Boolean,
+    onRuntimeSlimChange: (Boolean) -> Unit,
     /** 重建 profile 插件依赖（清空 node_modules 后重装）。 */
     onRepairPlugins: () -> Unit,
     /** 重建正在进行中（与安装共用同一把锁）。 */
@@ -745,7 +748,7 @@ fun FunctionSettingsContent(
                     var confirmAfterCheck by remember { mutableStateOf(false) }
                     var updateConfirming by remember { mutableStateOf(false) }
                     var versionListOpen by remember { mutableStateOf(false) }
-                    LaunchedEffect(runtimeInstalled, runtimeVersion, runtimeBeta, runtimeCheckRevision) {
+                    LaunchedEffect(runtimeInstalled, runtimeVersion, runtimeBeta, runtimeSlim, runtimeCheckRevision) {
                         if (!runtimeInstalled) {
                             latest = null
                             return@LaunchedEffect
@@ -864,6 +867,15 @@ fun FunctionSettingsContent(
                         description = stringResource(R.string.dsh_runtime_beta_summary),
                         checked = runtimeBeta,
                         onCheckedChange = onRuntimeBetaChange,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ToggleSettingCard(
+                        flat = true,
+                        icon = Icons.Filled.CloudDownload,
+                        title = stringResource(R.string.dsh_runtime_slim),
+                        description = stringResource(R.string.dsh_runtime_slim_summary),
+                        checked = runtimeSlim,
+                        onCheckedChange = onRuntimeSlimChange,
                     )
                     if (updateConfirming) {
                         AlertDialog(
@@ -2105,10 +2117,12 @@ private fun RuntimeVersionRow(
     }
 }
 
-/** 通道标签文案：正式通道 / 测试通道 / 历史版本。 */
+/** 通道标签文案：正式 / 精简 / 测试 / 精简测试 / 历史版本。 */
 private fun channelLabelRes(channel: String): Int = when (channel) {
     RuntimeVersion.CHANNEL_STABLE -> R.string.dsh_runtime_channel_stable
+    RuntimeVersion.CHANNEL_SLIM -> R.string.dsh_runtime_channel_slim
     RuntimeVersion.CHANNEL_BETA -> R.string.dsh_runtime_channel_beta
+    RuntimeVersion.CHANNEL_SLIM_BETA -> R.string.dsh_runtime_channel_slim_beta
     else -> R.string.dsh_runtime_channel_archive
 }
 

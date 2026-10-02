@@ -19,11 +19,17 @@ on:
         type: choice
         options: [ both, arm64, amd64 ]
       channel:
-        description: 'Release channel (stable → runtime-latest, beta → runtime-beta-latest)'
+        description: 'Release channel (stable / beta)'
         required: false
         default: 'stable'
         type: choice
         options: [ stable, beta ]
+      flavor:
+        description: 'Runtime flavor: full = 含文档预览/转换；slim = 精简版（砍类型声明/sourcemap/文档/测试与 LibreOffice，产物约小 63MB）'
+        required: false
+        default: 'full'
+        type: choice
+        options: [ full, slim ]
       release_tag:
         description: 'Override the release tag to publish to (default: runtime-latest / runtime-beta-latest from channel). Used to republish historical runtime tags.'
         required: false
@@ -49,8 +55,24 @@ jobs:
     outputs:
       arches: ${{ steps.set.outputs.arches }}
       min_app: ${{ steps.minapp.outputs.min_app_version }}
+      default_tag: ${{ steps.tag.outputs.default_tag }}
     steps:
       - uses: actions/checkout@v5
+
+      # 通道 × 口味 → 滚动 tag。四个组合各占一个互不覆盖的 release 位置。
+      # 集中算一次，避免下面 build / publish 两处各写一份三元表达式（那样两边漂移时
+      # 会出现「构建发到 runtime-latest、上传发到 runtime-slim-latest」这种半截状态）。
+      - id: tag
+        run: |
+          case "${{ inputs.channel }}/${{ inputs.flavor }}" in
+            stable/full) T=runtime-latest ;;
+            beta/full)   T=runtime-beta-latest ;;
+            stable/slim) T=runtime-slim-latest ;;
+            beta/slim)   T=runtime-slim-beta-latest ;;
+            *) echo "::error::unknown channel/flavor: ${{ inputs.channel }}/${{ inputs.flavor }}"; exit 1 ;;
+          esac
+          echo "default_tag=$T" >> "$GITHUB_OUTPUT"
+          echo "release tag: $T"
 
       # 运行时要求的最低 App 版本：输入优先，留空则取仓库 build.gradle.kts 的
       # baseVersionName() —— 运行时与 App 同源发布时要求自动对齐，不会漂移。
@@ -100,8 +122,9 @@ jobs:
           NODE_VER: ${{ inputs.node_version }}
           TARGET_ARCH: ${{ matrix.arch }}
           OUT: ${{ github.workspace }}/out
-          RELEASE_TAG: ${{ inputs.release_tag != '' && inputs.release_tag || (inputs.channel == 'beta' && 'runtime-beta-latest' || 'runtime-latest') }}
+          RELEASE_TAG: ${{ inputs.release_tag != '' && inputs.release_tag || needs.plan.outputs.default_tag }}
           RELEASE_CHANNEL: ${{ inputs.channel }}
+          RUNTIME_FLAVOR: ${{ inputs.flavor }}
           MIN_APP_VERSION: ${{ needs.plan.outputs.min_app }}
         run: bash runtime-builder/build-rootfs.sh
 
@@ -134,7 +157,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARCH: ${{ matrix.arch }}
-          RELEASE_TAG: ${{ inputs.release_tag != '' && inputs.release_tag || (inputs.channel == 'beta' && 'runtime-beta-latest' || 'runtime-latest') }}
+          RELEASE_TAG: ${{ inputs.release_tag != '' && inputs.release_tag || needs.plan.outputs.default_tag }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" \

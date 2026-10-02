@@ -21,6 +21,19 @@ DSH_VERSION="${DSH_VERSION:-latest}"
 PNPM_VERSION="${PNPM_VERSION:-10.34.5}"
 TARGET_ARCH="${TARGET_ARCH:-arm64}"                # arm64 | amd64
 RELEASE_CHANNEL="${RELEASE_CHANNEL:-stable}"       # stable | beta
+# 运行时口味：full = 完整版（含文档预览/转换），slim = 精简版。
+#
+# 精简版砍掉三块**只用开发时才需要、或只服务文档转换**的内容，实测压缩后共省
+# 约 63MB（产物 232MB → 约 169MB）：
+#   1) 纯类型声明 *.d.ts/*.d.mts/*.d.cts  —— 只有 TS 编译器读，运行时零引用
+#   2) sourcemap *.map                    —— 没装 source-map-support，运行时不读
+#   3) LibreOffice 的 soffice.wasm/.data   —— 文档预览与转换（44.6MB，是大头）
+# 外加文档 *.md 与 test/docs/example 目录（约 3.7MB）。
+#
+# 为什么删除是安全的，以及它是怎么被验证的，见 [3b/9] 那一段和
+# runtime-builder/check-trim-safety.js —— 那份脚本把「没有任何运行时入口指向将被
+# 删掉的文件」变成构建期断言，而不是靠这次分析的正确性。
+RUNTIME_FLAVOR="${RUNTIME_FLAVOR:-full}"           # full | slim
 
 # rootfs 自身的修订号，**改动 rootfs 内容时必须递增**。
 #
@@ -56,17 +69,33 @@ OUT="${OUT:-$PWD/out}"
 # 所以只要运行时与 App 同源，要求就自动对齐，不需要人工维护一个会漂移的常量。
 MIN_APP_VERSION="${MIN_APP_VERSION:-}"
 
-case "$RELEASE_CHANNEL" in
-  stable)
-    VERSION_CHANNEL_SUFFIX=""
+# 通道 × 口味 → 滚动 tag 与版本后缀。四种组合各占一个互不覆盖的 release 位置。
+#
+# 后缀顺序是「口味在前、通道在后」，好处是 **`-beta` 永远留在末尾**：今天任何按
+# 「串尾是不是 -beta」判断测试通道的东西，对四个变体都仍然成立。
+#   stable/full → 0.2.0-rc.2-ubuntunoble-r6
+#   beta/full   → 0.2.0-rc.2-ubuntunoble-r6-beta
+#   stable/slim → 0.2.0-rc.2-ubuntunoble-r6-slim
+#   beta/slim   → 0.2.0-rc.2-ubuntunoble-r6-slim-beta
+case "$RELEASE_CHANNEL/$RUNTIME_FLAVOR" in
+  stable/full)
+    VERSION_CHANNEL_SUFFIX=""; FLAVOR_SUFFIX=""
     CHANNEL_RELEASE_TAG="runtime-latest"
     ;;
-  beta)
-    VERSION_CHANNEL_SUFFIX="-beta"
+  beta/full)
+    VERSION_CHANNEL_SUFFIX="-beta"; FLAVOR_SUFFIX=""
     CHANNEL_RELEASE_TAG="runtime-beta-latest"
     ;;
+  stable/slim)
+    VERSION_CHANNEL_SUFFIX=""; FLAVOR_SUFFIX="-slim"
+    CHANNEL_RELEASE_TAG="runtime-slim-latest"
+    ;;
+  beta/slim)
+    VERSION_CHANNEL_SUFFIX="-beta"; FLAVOR_SUFFIX="-slim"
+    CHANNEL_RELEASE_TAG="runtime-slim-beta-latest"
+    ;;
   *)
-    echo "!! RELEASE_CHANNEL 只支持 stable / beta，收到 $RELEASE_CHANNEL" >&2
+    echo "!! RELEASE_CHANNEL 只支持 stable / beta，RUNTIME_FLAVOR 只支持 full / slim；收到 $RELEASE_CHANNEL / $RUNTIME_FLAVOR" >&2
     exit 2
     ;;
 esac
@@ -107,6 +136,7 @@ case "$TARGET_ARCH" in
 esac
 
 echo "==> 目标架构 $TARGET_ARCH（ubuntu=$UBUNTU_ARCH · node=linux-$NODE_ARCH · abi=$ANDROID_ABI）"
+echo "    通道 $RELEASE_CHANNEL / 口味 $RUNTIME_FLAVOR → tag $CHANNEL_RELEASE_TAG"
 
 ROOTFS="$WORK/rootfs"
 mkdir -p "$WORK" "$OUT"
@@ -277,6 +307,49 @@ done
 NOTIFIER="$(cd "$ROOTFS" && HOME="$ROOTFS/root" node "$PNPM_PKG/$PNPM_BIN_REL" config get update-notifier 2>/dev/null | tr -d '\r')"
 [ "$NOTIFIER" = "false" ] || { echo "!! pnpm 没有读到 update-notifier=false（读到 ${NOTIFIER}）" >&2; exit 1; }
 echo "    pnpm 升级提示已关闭（update-notifier=false，由 pnpm 自己确认）"
+
+if [ "$RUNTIME_FLAVOR" = "slim" ]; then
+  echo "==> [3b/9] 精简：删掉「只服务开发」与「只服务文档转换」的内容"
+  # 先做**安全性断言**，再动手删。判据是「有没有任何 Node 运行时会解析到的入口指向
+  # 即将被删的文件」——只有这个判据能证明删了之后运行时还起得来。把它做成脚本而不是
+  # 相信一次人工分析的结论：dsh 换版本就可能改入口指向，那时这里会立刻失败，
+  # 而不是让用户拿到一份起不来的 rootfs。
+  node "$(dirname "$0")/check-trim-safety.js" "$DSH_ENTRY/node_modules"
+
+  NM="$DSH_ENTRY/node_modules"
+  NM_BEFORE="$(du -sm "$NM" | cut -f1)"
+  # 1) 纯类型声明：只有 TS 编译器读
+  find "$NM" \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \) -delete
+  # 2) sourcemap：没装 source-map-support，运行时不读（代价只是栈回溯不映射源码）
+  find "$NM" -name '*.map' -delete
+  # 3) 文档
+  find "$NM" -name '*.md' -delete
+  # 4) 测试/示例/文档目录
+  find "$NM" -type d \( -name test -o -name tests -o -name __tests__ -o -name example -o -name examples -o -name docs \) \
+    -prune -exec rm -rf {} +
+  # 5) LibreOffice 的 wasm 引擎与数据（文档预览/转换，是精简里最大的一块，约 44.6MB）。
+  #    只删 assets，**保留包本身**：dsh-skill-office 要从它解析 CLI 路径、
+  #    dsh-office-to-pdf 要 import libreoffice-kit，而两者都在**真正转换时**才
+  #    resolveEngine()（见 libreoffice-kit/lib/index.js:1702 与
+  #    dsh-office-to-pdf/lib/index.js:599 的 createConverter 惰性创建），
+  #    所以缺 assets 的表现是「转换时报错」，不是 dsh 起不来。
+  rm -f "$NM/@deepseek-ai/libreoffice-kit-wasm/assets/soffice.wasm" \
+        "$NM/@deepseek-ai/libreoffice-kit-wasm/assets/soffice.data"
+
+  # 自检：删干净了，且**没删过头**
+  LEFT_TS="$(find "$NM" \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \) | wc -l)"
+  LEFT_MAP="$(find "$NM" -name '*.map' | wc -l)"
+  [ "$LEFT_TS" -eq 0 ] || { echo "!! 还剩 $LEFT_TS 个类型声明"; exit 1; }
+  [ "$LEFT_MAP" -eq 0 ] || { echo "!! 还剩 $LEFT_MAP 个 sourcemap"; exit 1; }
+  test ! -e "$NM/@deepseek-ai/libreoffice-kit-wasm/assets/soffice.wasm" \
+    || { echo "!! soffice.wasm 没删掉"; exit 1; }
+  test -f "$NM/@deepseek-ai/libreoffice-kit-wasm/package.json" \
+    || { echo "!! libreoffice-kit-wasm 的 package.json 被误删（dsh-skill-office 要解析它）"; exit 1; }
+  test -f "$NM/@deepseek-ai/libreoffice-kit/lib/index.js" \
+    || { echo "!! libreoffice-kit 被误删"; exit 1; }
+  test -f "$DSH_ENTRY/${DSH_BIN_REL}" || { echo "!! 精简把 dsh 入口删了"; exit 1; }
+  echo "    node_modules ${NM_BEFORE}MB → $(du -sm "$NM" | cut -f1)MB"
+fi
 
 echo "==> [4/9] 安装 python3（无线 ADB 配对依赖）"
 # 无线 ADB 配对（AdbBridge / adb-pair.py）需要容器内的 python3，
@@ -543,7 +616,7 @@ else
 fi
 cat > "$OUT/metadata${ASSET_SUFFIX}.json" <<EOF
 {
-  "version": "${DSH_REAL_VERSION}-ubuntu${UBUNTU_RELEASE}-r${ROOTFS_REV}${VERSION_CHANNEL_SUFFIX}",
+  "version": "${DSH_REAL_VERSION}-ubuntu${UBUNTU_RELEASE}-r${ROOTFS_REV}${FLAVOR_SUFFIX}${VERSION_CHANNEL_SUFFIX}",
   "url": "${ASSET}",
   "sha256": "${SHA}",
   "sizeBytes": ${SIZE},
@@ -555,6 +628,7 @@ cat > "$OUT/metadata${ASSET_SUFFIX}.json" <<EOF
     "https://gh-proxy.org/${ASSET}"
   ],
   "arch": "${ANDROID_ABI}",
+  "flavor": "${RUNTIME_FLAVOR}",
   "dsh": "${DSH_REAL_VERSION}",
   "nodeVersion": "${NODE_VER}",${MIN_APP_LINE}
   "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
