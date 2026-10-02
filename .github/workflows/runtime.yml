@@ -1,5 +1,7 @@
 name: Build DSH runtime rootfs
-run-name: Build DSH runtime (${{ inputs.channel }} / ${{ inputs.arch }})
+# 带上 flavor：同一通道的完整版与精简版是两个不同的 release 位置，
+# run 名字不带口味时两次运行在列表里完全重名，看不出哪次发了哪一份。
+run-name: Build DSH runtime (${{ inputs.channel }} / ${{ inputs.flavor }} / ${{ inputs.arch }})
 
 on:
   workflow_dispatch:
@@ -132,7 +134,7 @@ jobs:
         run: |
           ls -la out
           {
-            echo "### DSH runtime (${{ matrix.arch }})"
+            echo "### DSH runtime (${{ matrix.arch }} / ${{ inputs.flavor }})"
             echo
             echo '```json'
             cat out/metadata*.json
