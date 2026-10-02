@@ -337,6 +337,7 @@
         <item>dsh 0.2.0 runtime support: startup no longer tries to launch the system browser; the cloud-backup plugin moves to its 0.2.0-compatible release (0.5.0 is skipped wholesale by dsh on the new runtime, which left cloud backup unusable); the plugin-market seed version is raised to one compatible with both the old and the new runtime.</item>
         <item>Fixed "auto-open the Web UI once the service is ready" only working on the first launch, and fixed the DSH page pushing the previous screen into the background when arriving from the share entry.</item>
         <item>Fixed the host prompt disappearing entirely (a plugin patch row was flattened and stopped taking effect), plus several dsh-fs issues: rare stack overflow after changing the mount list, refusing to change no_access, and the on-screen keyboard covering the input.</item>
+        <item>New slim-runtime channel: a "Use the slim runtime" switch (independent of the beta switch, so the two combine freely) selects runtime-slim-latest. The slim build drops TypeScript declarations, source maps, docs, test fixtures and the LibreOffice engine — about 63MB less to download (169MB vs 232MB) — at the cost of document preview and conversion.</item>
     </string-array>
 
     
