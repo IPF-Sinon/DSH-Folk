@@ -98,8 +98,16 @@ must(!/override\s+fun\s+onBind/.test(code(svc)),
 must(/override\s+fun\s+exec\(/.test(svc), "必须实现 exec（应用侧唯一的调用入口）");
 
 console.log("── destroy：Shizuku 的保留事务 ──");
-// 少了它，解绑时那条事务没人应答；而用户服务的进程不会被自动杀掉，
-// 于是每换一次通道就留下一个以 shell/root 身份活着的进程。
+// AIDL 的规则：要么所有方法都带显式 id，要么都不带。destroy 的 id 是 Shizuku 定死的、
+// 省不掉，所以 exec 也必须带 —— 漏了会在 CI 上炸成 :app:compileDebugAidl FAILED：
+// "You must either assign id's to all methods or to none of them."（实测踩过一次）
+{
+  const decls = aidl.match(/^\s*(?:String|void|int|boolean|long)\s+\w+\s*\([^)]*\)\s*(?:=\s*\d+\s*)?;/gm) || [];
+  const withoutId = decls.filter((d) => !/=\s*\d+\s*;/.test(d));
+  must(decls.length >= 2, `AIDL 里解析出 ${decls.length} 个方法声明（预期至少 destroy 与 exec）`);
+  must(withoutId.length === 0,
+    `AIDL 带了显式 id 就必须每个方法都带，这些没带：${withoutId.map((d) => d.trim()).join(" / ")}`);
+}
 must(/void\s+destroy\(\)\s*=\s*16777114\s*;/.test(aidl),
   "AIDL 必须声明 Shizuku 的保留方法 destroy() = 16777114");
 must(!/destroy\(\)\s*=\s*16777115/.test(aidl),

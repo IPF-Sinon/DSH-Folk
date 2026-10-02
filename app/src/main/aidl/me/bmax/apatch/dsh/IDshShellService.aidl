@@ -24,6 +24,9 @@ interface IDshShellService {
      *
      * 超时也由服务侧执行（destroyForcibly）：binder 调用是同步阻塞的，应用侧要么等到底，
      * 要么放弃等待 —— 放弃等待不会让那条命令停下来。
+     *
+     * 这里的显式 id 不是可选的：AIDL 的规则是「要么所有方法都带 id，要么都不带」，而 destroy
+     * 的 id 由 Shizuku 定死、省不掉。漏了这一处会在 CI 上表现为 :app:compileDebugAidl FAILED。
      */
-    String exec(String command, int timeoutMs);
+    String exec(String command, int timeoutMs) = 1;
 }
