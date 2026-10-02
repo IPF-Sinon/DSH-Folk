@@ -39,7 +39,7 @@ jobs:
     name: Build and publish beta
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -171,7 +171,7 @@ jobs:
       # 所以同一 commit 重建出的 mapping 与已发 beta 的混淆名一致，可用来解已有崩溃栈。
       - name: Upload R8 mapping
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mapping-${{ github.sha }}
           path: app/build/outputs/mapping/release/mapping.txt
@@ -251,7 +251,7 @@ jobs:
             --latest=false \
             DSH-Folk-*.apk DSH-Folk-*.apk.sha256
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dsh-folk-beta-${{ github.sha }}
           path: |
