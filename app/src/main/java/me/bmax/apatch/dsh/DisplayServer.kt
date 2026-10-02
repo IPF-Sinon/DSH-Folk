@@ -94,6 +94,43 @@ object DisplayServer {
 
     fun isRunning(): Boolean = service != null
 
+    // ── 会话 ───────────────────────────────────────────────────────────────
+
+    /** 一块已建好的虚拟屏。 */
+    data class Session(val displayId: Int, val width: Int, val height: Int, val dpi: Int)
+
+    /**
+     * 当前会话的虚拟屏 id（0 = 还没有会话）。
+     *
+     * 会话状态**只此一份**：HTTP 工具面（[DshDisplay]）与预览界面都从这里取，免得两边各记
+     * 一份、然后在对"当前是哪块屏"的理解上分叉。
+     */
+    @Volatile
+    private var sessionDisplayId: Int = 0
+
+    fun sessionDisplay(): Int = sessionDisplayId
+
+    /** 建一块虚拟屏并记为当前会话。重复调用会建**新的**一块 —— 服务端支持多块屏。 */
+    fun startSession(ctx: Context, width: Int, height: Int, dpi: Int, bitrateKbps: Int = 0): Result<Session> {
+        val svc = start(ctx).getOrElse { return Result.failure(it) }
+        return runCatching {
+            val id = svc.ensureDisplay(width, height, dpi, bitrateKbps)
+            sessionDisplayId = id
+            Session(id, width, height, dpi)
+        }
+    }
+
+    /**
+     * 挂上（或摘下，`sink = null`）视频回流。
+     *
+     * 服务端收到挂载后会**补发** SPS/PPS 并请求一个关键帧（见 `Main.DisplaySession.setVideoSink`），
+     * 所以中途挂上来的解码器也能立刻开始解，不必干等下一个关键帧间隔。
+     */
+    fun setVideoSink(ctx: Context, displayId: Int, sink: IBinder?): Result<Unit> {
+        val svc = start(ctx).getOrElse { return Result.failure(it) }
+        return runCatching { svc.setVideoSink(displayId, sink) }
+    }
+
     // ── 启动 ─────────────────────────────────────────────────────────────────
 
     /**
@@ -343,6 +380,9 @@ object DisplayServer {
         synchronized(lock) {
             stopPingLoop()
             service = null
+            // 屏随进程一起没了，会话 id 必须一起清：留着它，后续调用会拿一个指向已消失显示的
+            // id 去操作，而服务端只会回一句"unknown displayId"。
+            sessionDisplayId = 0
             val outcome = privileged(
                 ctx,
                 "pkill -f ${shq(PROC_PATTERN)} 2>/dev/null; true",

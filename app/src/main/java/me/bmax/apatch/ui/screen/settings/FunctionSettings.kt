@@ -205,6 +205,8 @@ fun FunctionSettingsContent(
     onOpenAllFilesSettings: () -> Unit,
     /** 打开「细化文件访问范围（黑白名单）」子页。 */
     onOpenFileAccess: () -> Unit = {},
+    /** 打开虚拟屏预览（看得见画面、也能在上面点滑）。 */
+    onOpenDisplayPreview: () -> Unit = {},
     /** 共享存储挂载总开关（挂载 /sdcard + dsh-fs 桥，两者都受黑白名单约束）。 */
     mountEnabled: Boolean = true,
     onSetMount: (Boolean) -> Unit = {},
@@ -1350,6 +1352,15 @@ fun FunctionSettingsContent(
                                                 )
                                             }
                                         }
+                                    }
+                                }
+                                if (cap == DshNativeBridge.Cap.DISPLAY) {
+                                    // 预览界面走的是和 agent 工具面**完全同一条路**（同一个服务端、
+                                    // 同一份会话状态），所以它既是有画面可看的地方，也是排障口：
+                                    // agent 那边"截得到图却点不动"时，打开这里就能分清是画面没来、
+                                    // 还是输入没进去。没有独立提权窗口，所以要开就走这一条。
+                                    TextButton(onClick = onOpenDisplayPreview) {
+                                        Text(stringResource(R.string.dsh_display_preview_open))
                                     }
                                 }
                                 val on = nativeBridgeEnabled && nativeAccess[cap] != DshNativeBridge.Access.OFF

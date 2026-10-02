@@ -55,6 +55,7 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.NavGraphs
 import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.DisplayPreviewScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FileAccessScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
@@ -782,6 +783,7 @@ internal fun DshSettingsScreen(
                     onRequestCapPermission = { cap -> requestCapPermission(cap) },
                     onOpenAllFilesSettings = { openAllFilesSettings() },
                     onOpenFileAccess = { navigator.navigate(FileAccessScreenDestination) },
+                    onOpenDisplayPreview = { navigator.navigate(DisplayPreviewScreenDestination) },
                     mountEnabled = storageMount,
                     onSetMount = { on ->
                         storageMount = on

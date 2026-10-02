@@ -38,13 +38,6 @@ object DshDisplay {
 
     private const val TAG = "DshDisplay"
 
-    /**
-     * 当前会话的虚拟屏 id。放内存里就够：App 进程一没，服务端也会跟着被回收，
-     * 落盘反而会留下一个指向已消失显示的 id。
-     */
-    @Volatile
-    private var sessionDisplayId: Int = 0
-
     fun handle(
         ctx: Context,
         method: String,
@@ -74,7 +67,7 @@ object DshDisplay {
         return 200 to JSONObject()
             .put("ok", true)
             .put("running", running)
-            .put("session", sessionDisplayId)
+            .put("session", DisplayServer.sessionDisplay())
             .put("channel", reach?.channel?.name?.lowercase(Locale.ROOT).orEmpty())
             .put("minSdk", android.os.Build.VERSION.SDK_INT)
             .toString()
@@ -85,23 +78,21 @@ object DshDisplay {
      * 服务端支持多块屏，这里不替调用方去重（它想建几块就建几块，`destroy` 在 stop 里统一收）。
      */
     private fun session(ctx: Context, params: Map<String, String>): Pair<Int, String> {
-        val svc = service(ctx) ?: return unavailable(ctx)
         val dm = ctx.resources.displayMetrics
         val w = params["width"]?.toIntOrNull()?.takeIf { it > 0 } ?: dm.widthPixels
         val h = params["height"]?.toIntOrNull()?.takeIf { it > 0 } ?: dm.heightPixels
         val dpi = params["dpi"]?.toIntOrNull()?.takeIf { it > 0 } ?: dm.densityDpi
         val bitrate = params["bitrate"]?.toIntOrNull()?.takeIf { it > 0 } ?: 0
-        return runCatching {
-            val id = svc.ensureDisplay(w, h, dpi, bitrate)
-            sessionDisplayId = id
-            200 to JSONObject()
-                .put("ok", true)
-                .put("display", id)
-                .put("width", w)
-                .put("height", h)
-                .put("dpi", dpi)
-                .toString()
-        }.getOrElse { e -> failure(ctx, e, "session_failed") }
+        // 建屏与会话记账都在 DisplayServer 里（预览界面走的就是同一条路），这里只负责翻成 HTTP。
+        val s = DisplayServer.startSession(ctx, w, h, dpi, bitrate)
+            .getOrElse { e -> return unavailable(ctx, e.message) }
+        return 200 to JSONObject()
+            .put("ok", true)
+            .put("display", s.displayId)
+            .put("width", s.width)
+            .put("height", s.height)
+            .put("dpi", s.dpi)
+            .toString()
     }
 
     /**
@@ -199,7 +190,6 @@ object DshDisplay {
 
     private fun stop(ctx: Context): Pair<Int, String> {
         DisplayServer.stop(ctx)
-        sessionDisplayId = 0
         return 200 to JSONObject().put("ok", true).put("running", false).toString()
     }
 
@@ -213,7 +203,7 @@ object DshDisplay {
      * `display`，所以这一点也是可发现的。
      */
     private fun displayOf(params: Map<String, String>): Int =
-        params["display"]?.toIntOrNull()?.takeIf { it >= 0 } ?: sessionDisplayId
+        params["display"]?.toIntOrNull()?.takeIf { it >= 0 } ?: DisplayServer.sessionDisplay()
 
     private fun service(ctx: Context): IDisplayService? =
         DisplayServer.start(ctx).getOrElse { e ->
@@ -225,17 +215,18 @@ object DshDisplay {
      * 服务端起不来时回**具体原因**，而不是笼统的 500：起不来通常意味着"提权通道没就绪"，
      * agent 该做的是提示用户去看那个设置页，而不是重试。
      */
-    private fun unavailable(ctx: Context): Pair<Int, String> {
+    private fun unavailable(ctx: Context, detail: String? = null): Pair<Int, String> {
         val reach = PrivilegedShell.reach(ctx)
         val reason = when {
             reach == null -> "no_channel"
             !reach.usable -> reach.reason ?: "no_channel"
             else -> "display_server_unavailable"
         }
-        return 503 to DshNativeBridge.err(
-            DshNativeBridge.str(ctx, R.string.dsh_native_err_display_unavailable),
-            reason,
-        )
+        // 带上传入的细节（服务端起不来时它才是那句真正有用的话：推送失败第几块、解密失败、
+        // 或"进程没起来"）；能力可用性给的是"该怎么补救"，两者拼起来才是完整的一句话。
+        val base = DshNativeBridge.str(ctx, R.string.dsh_native_err_display_unavailable)
+        val msg = if (detail.isNullOrBlank()) base else "$base（$detail）"
+        return 503 to DshNativeBridge.err(msg, reason)
     }
 
     private fun badParam(ctx: Context, name: String): Pair<Int, String> =

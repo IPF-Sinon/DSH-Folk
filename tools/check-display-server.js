@@ -311,6 +311,9 @@ for (const f of SHARED) {
     `${APP_PROTO_DIR}/IDisplayVideoSink.java`,
     `${APP_PROTO_DIR}/DisplayBinderContainer.java`,
     'app/src/main/java/me/bmax/apatch/dsh/DisplayServer.kt',
+    'app/src/main/java/me/bmax/apatch/dsh/DshDisplay.kt',
+    'app/src/main/java/me/bmax/apatch/dsh/DisplayVideoSink.kt',
+    'app/src/main/java/me/bmax/apatch/ui/screen/DisplayPreviewScreen.kt',
     `${SERVER_DIR}/Main.java`,
   ];
   for (const f of files) {
@@ -457,7 +460,61 @@ for (const f of SHARED) {
   must(/'app\/\*\*'/.test(onBlock), 'build.yml 的 paths 过滤不能把 app/** 丢掉');
 }
 
-// ── 15. 产物校验（编译之后跑）──
+// ── 15. 客户端解码 / 渲染 ──
+//
+// 这一段是**唯一能替真机把关的地方**：解码与渲染的对错，本地既编不了也跑不了。所以这里
+// 只锁"错了会静默"的那几条不变量 —— 它们全是"看起来在工作、其实不对"的类型。
+{
+  const sink = read('app/src/main/java/me/bmax/apatch/dsh/DisplayVideoSink.kt');
+  const ui = read('app/src/main/java/me/bmax/apatch/ui/screen/DisplayPreviewScreen.kt');
+
+  must(/:\s*IDisplayVideoSink\.Stub\(\)/.test(sink), 'DisplayVideoSink 必须是 IDisplayVideoSink.Stub 的实现');
+  must(/"video\/avc"/.test(sink), '解码器必须按 H.264 (video/avc) 创建');
+  must(/releaseOutputBuffer\(\s*index\s*,\s*true\s*\)/.test(sink),
+    '解码输出必须以 render=true 释放到 Surface，否则画面根本不上屏');
+
+  // 配置帧与媒体帧在流里**没有标记**，只能按 NAL 类型判断。若退化成"头两帧就是 SPS/PPS"
+  // 这种顺序假设，服务端哪天改了补发时机，客户端会把一张真画面当配置吃掉，且不报错。
+  must(/VCL_MIN\s*=\s*1/.test(sink) && /VCL_MAX\s*=\s*5/.test(sink),
+    '配置帧判定必须按 NAL 类型（VCL 1–5）来做');
+  must(/if \(type in VCL_MIN\.\.VCL_MAX\) return false/.test(sink),
+    '看见 VCL 就必须判定为媒体帧（那才是画面数据）');
+  must(/sps|pps|csd-0|csd-1/.test(sink), 'SPS/PPS 必须被用起来（作为 csd 交给解码器）');
+
+  // Binder 线程不能被堵：onVideoFrame 里出现 MediaCodec 调用就等于把服务端的编码线程
+  // 栓在客户端的解码上。
+  {
+    const at = sink.indexOf('override fun onVideoFrame');
+    const end = sink.indexOf('private fun isConfigOnly', at);
+    must(at > 0 && end > at, '找不到 onVideoFrame 的方法体');
+    const body = at > 0 && end > at ? sink.slice(at, end) : '';
+    for (const bad of ['queueInputBuffer', 'getInputBuffer', 'dequeueInputBuffer', 'releaseOutputBuffer', 'setParameters']) {
+      must(!body.includes(bad), `onVideoFrame 里不能出现 ${bad}（它是 Binder 线程，必须立刻返回）`);
+    }
+  }
+  must(/codec\.stop\(\)/.test(sink) && /codec\.release\(\)/.test(sink), '解码器必须成对 stop/release');
+  must(/MAX_QUEUED/.test(sink) && /pending\.removeFirst\(\)|removeFirst\(\)/.test(sink),
+    '待解码队列必须有上限并丢最旧的：直播场景下攒旧帧只会让画面越拖越久');
+
+  // 预览界面
+  must(/@Destination<RootGraph>/.test(ui), '预览必须是一个真正的目的地（否则跳不过去）');
+  must(/toDisplayX/.test(ui) && /toDisplayY/.test(ui), '预览必须有 view → display 的坐标换算');
+  must(/displayW\s*\/\s*viewW/.test(ui) && /displayH\s*\/\s*viewH/.test(ui),
+    '换算必须真的除以预览尺寸（直接发 view 坐标在缩放比不是 1 的机器上会"点哪儿都不准"）');
+  must(/.attach\(/.test(ui), 'Surface 就绪后必须把解码器挂上去（configure 时输出目标就绑死了）');
+  must(/DisplayVideoSink\(/.test(ui) && /asBinder\(\)/.test(ui), '预览必须把 sink 作为 Binder 交给服务端');
+  must(/setVideoSink\([^)]*null\)/.test(ui), '离开/销毁时必须摘掉 sink，否则服务端会一直往没人看的解码器推帧');
+  must(/release\(\)/.test(ui), '离开时必须释放解码器');
+
+  // 入口可达：光有目的地、没人跳过去，等于没有。
+  const fsui = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt');
+  must(/DisplayPreviewScreenDestination/.test(fsui), '设置页必须能跳到预览（否则用户根本到不了）');
+  const fn = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt');
+  must(/onOpenDisplayPreview/.test(fn), '设置页里 DISPLAY 那一项必须有打开预览的动作');
+}
+
+// ── 16. 产物校验（编译之后跑）──
+
 
 
 
