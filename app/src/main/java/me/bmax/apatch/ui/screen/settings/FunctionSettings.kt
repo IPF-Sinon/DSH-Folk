@@ -1771,6 +1771,7 @@ internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms
     DshNativeBridge.Cap.SHELL -> R.string.dsh_native_cap_shell
     DshNativeBridge.Cap.A11Y -> R.string.dsh_native_cap_a11y
+    DshNativeBridge.Cap.DISPLAY -> R.string.dsh_native_cap_display
 }
 
 internal fun accessLabelRes(cap: DshNativeBridge.Cap, access: DshNativeBridge.Access): Int = when {
@@ -1812,6 +1813,7 @@ internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms_desc
     DshNativeBridge.Cap.SHELL -> R.string.dsh_native_cap_shell_desc
     DshNativeBridge.Cap.A11Y -> R.string.dsh_native_cap_a11y_desc
+    DshNativeBridge.Cap.DISPLAY -> R.string.dsh_native_cap_display_desc
 }
 
 /**
@@ -1840,8 +1842,9 @@ internal fun capPermissionHintRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_need_install_perm
     DshNativeBridge.Cap.USAGE -> R.string.dsh_native_need_usage_perm
     DshNativeBridge.Cap.SMS -> R.string.dsh_native_need_sms_perm
-    // 特权命令缺的不是 Android 权限，而是「还没选通道」：点下去跳到本页的权限通道那一段
-    DshNativeBridge.Cap.SHELL -> R.string.dsh_native_cap_shell_need_channel
+    // 特权命令缺的不是 Android 权限，而是「还没选通道」：点下去跳到本页的权限通道那一段。
+    // 虚拟屏也是同一条约束 —— 它要靠那条通道才能把服务端以特权身份拉起来。
+    DshNativeBridge.Cap.SHELL, DshNativeBridge.Cap.DISPLAY -> R.string.dsh_native_cap_shell_need_channel
     DshNativeBridge.Cap.A11Y -> R.string.dsh_native_need_a11y_perm
     // 剩下的（toast/振动/剪贴板/分享/设备信息/网络）不需要任何权限。
     // 界面只在 cap !in capsWithPermission 时才取这一行，而这些项恒在集合里，
@@ -1902,6 +1905,9 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
             DshNativeBridge.Cap.SMS,
             // 读屏更进一步：它读的是用户此刻看的那个界面（可能是聊天窗口）
             DshNativeBridge.Cap.A11Y,
+            // 虚拟屏同理，而且更甚：它拿到的是**画面本身**，还多一项「动手」的能力。
+            // 放在这一组是为了让用户在同一个地方一起权衡这两条读屏路径。
+            DshNativeBridge.Cap.DISPLAY,
         ),
     ),
 

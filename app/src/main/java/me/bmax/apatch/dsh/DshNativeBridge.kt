@@ -158,6 +158,17 @@ object DshNativeBridge {
          * 的差别比别的能力大得多；需要用户单独打开那个无障碍服务（[Special.A11Y_SERVICE]）。
          */
         A11Y("a11y"),
+        /**
+         * 虚拟屏：截屏、在屏幕上点击/滑动/按键、以及在虚拟屏上启动目标 App。
+         *
+         * 和 [A11Y] 是两条不同的路，不是替代关系：A11Y 走无障碍节点树（只认得出有节点、
+         * 无障碍服务还开着的界面，而且它读不到画面本身）；这一项走以特权身份运行的
+         * app_process 服务端，直接创建/镜像一块显示并注入原始输入事件 —— 因此不受
+         * 「界面有没有节点」限制，代价是需要一条提权通道（root / Shizuku / 无线 ADB）。
+         *
+         * 读档位只放行截屏与查询，动手（点击/滑动/按键/启动 App）要读写档位。
+         */
+        DISPLAY("display"),
     }
 
     /**
@@ -370,7 +381,7 @@ object DshNativeBridge {
     fun supportsWrite(cap: Cap): Boolean = when (cap) {
         Cap.NOTIFY, Cap.FULL_SCREEN_NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.TORCH, Cap.CLIPBOARD, Cap.INTENT,
         Cap.MIC, Cap.CAMERA, Cap.TTS, Cap.CALENDAR, Cap.VOLUME, Cap.SETTINGS,
-        Cap.SMS, Cap.SHELL, Cap.A11Y -> true
+        Cap.SMS, Cap.SHELL, Cap.A11Y, Cap.DISPLAY -> true
         else -> false
     }
 
@@ -592,7 +603,7 @@ object DshNativeBridge {
         // 未就绪（root 还没验过、Shizuku 还没授权、ADB 还没配对）要回**精确原因**：
         // 一律回 no_channel 会让 agent 说「用户没开特权」，而实际上用户刚刚开过，
         // 只是还差一步 —— 那句话会把用户引到一个已经打开了的设置页上。
-        Cap.SHELL -> PrivilegedShell.reach(ctx)?.let { reach ->
+        Cap.SHELL, Cap.DISPLAY -> PrivilegedShell.reach(ctx)?.let { reach ->
             when {
                 reach.usable -> true to ""
                 else -> false to (reach.reason ?: "no_channel")
@@ -660,6 +671,10 @@ object DshNativeBridge {
         val risk = when (cap) {
             Cap.SHELL -> PrivilegedShell.riskOf(params["cmd"].orEmpty())
             Cap.A11Y -> DshA11y.riskOf(path.substringAfterLast('/'))
+            // 虚拟屏一律 DANGEROUS：注入输入与启动 App 都能真实改变设备状态，而且它绕过
+            // 无障碍那套「用户看得见在点什么」的界面语义。读档位只放行截屏与查询
+            // （见 isWriteRequest），也就是用户可以「让我看，但别动」。
+            Cap.DISPLAY -> PrivRisk.DANGEROUS
             else -> null
         }
         val strictness = PrivPolicy.of(ctx)
@@ -794,6 +809,20 @@ object DshNativeBridge {
             method == "POST" && path == "/native/a11y/text" -> a11yExec(ctx, "text", params)
             method == "POST" && path == "/native/a11y/global" -> a11yExec(ctx, "global", params)
             method == "GET" && path == "/native/a11y/screenshot" -> a11yExec(ctx, "screenshot", params)
+            // 虚拟屏（截屏 / 注入输入 / 在虚拟屏上启动 App）。
+            //
+            // 逐条列出而不是用 `path.startsWith("/native/display/")` 一把兜住：本项目的
+            // check-native-caps 门禁是「capOf 里声明的每条端点都必须在分派表里显式出现」，
+            // 前缀兜底会让它看不见这些路由，于是新加端点时漏接线也无人拦。a11y 那一族
+            // 同样是逐条列的，风格一致。
+            method == "GET" && path == "/native/display/status" -> display(ctx, method, path, params)
+            method == "POST" && path == "/native/display/session" -> display(ctx, method, path, params)
+            method == "POST" && path == "/native/display/screenshot" -> display(ctx, method, path, params)
+            method == "POST" && path == "/native/display/tap" -> display(ctx, method, path, params)
+            method == "POST" && path == "/native/display/swipe" -> display(ctx, method, path, params)
+            method == "POST" && path == "/native/display/key" -> display(ctx, method, path, params)
+            method == "POST" && path == "/native/display/launch" -> display(ctx, method, path, params)
+            method == "POST" && path == "/native/display/stop" -> display(ctx, method, path, params)
             method == "POST" && path == "/native/notify" -> notify(ctx, params)
             method == "DELETE" && path == "/native/notify" -> cancelNotify(ctx, params)
             method == "GET" && path == "/native/notify/list" -> notificationList(ctx, params)
@@ -916,6 +945,19 @@ object DshNativeBridge {
      * 与 [shellExec] 同样是「闸门都过了才走到这里」：档位（关/读/读写）、严格程度下的确认、
      * 服务是否开着，都已经在前面判定过。这一层只负责调用 [DshA11y] 并把结果按协议返回。
      */
+    /**
+     * 虚拟屏那一族的转发口。
+     *
+     * 与 `a11yExec` 同样的角色：把「子系统的工具面」挡在这个文件之外，好让
+     * 这个文件只管能力档、严格程度、审计与分派。真正的实现与它的取舍见 [DshDisplay]。
+     */
+    private fun display(
+        ctx: Context,
+        method: String,
+        path: String,
+        params: Map<String, String>,
+    ): Pair<Int, String> = DshDisplay.handle(ctx, method, path, params)
+
     private fun a11yExec(ctx: Context, action: String, params: Map<String, String>): Pair<Int, String> {
         val body = try {
             when (action) {
@@ -1025,6 +1067,7 @@ object DshNativeBridge {
             Cap.SMS -> R.string.dsh_native_cap_sms
             Cap.SHELL -> R.string.dsh_native_cap_shell
             Cap.A11Y -> R.string.dsh_native_cap_a11y
+            Cap.DISPLAY -> R.string.dsh_native_cap_display
         },
     )
 
@@ -1040,6 +1083,10 @@ object DshNativeBridge {
             // 只读的那一个动作单列：读屏不改变任何东西，不该被写档位挡住
             path == "/native/a11y/tree" -> false
             path.startsWith("/native/a11y/") -> true
+            // 同理：虚拟屏里「看」与「动手」的差别正是这一档存在的意义。截图与查询是读；
+            // 建会话、点击、滑动、按键、启动 App、停止服务端都是写。
+            path == "/native/display/status" || path == "/native/display/screenshot" -> false
+            path.startsWith("/native/display/") -> true
             path == "/native/shell" ->
                 PrivilegedShell.riskOf(params["cmd"].orEmpty()) != PrivRisk.READONLY
             else -> isWriteRequest(method, path)
@@ -1097,6 +1144,14 @@ object DshNativeBridge {
         "/native/a11y/text",
         "/native/a11y/global",
         "/native/a11y/screenshot" -> Cap.A11Y
+        "/native/display/status",
+        "/native/display/session",
+        "/native/display/screenshot",
+        "/native/display/tap",
+        "/native/display/swipe",
+        "/native/display/key",
+        "/native/display/launch",
+        "/native/display/stop" -> Cap.DISPLAY
         else -> null
     }
 

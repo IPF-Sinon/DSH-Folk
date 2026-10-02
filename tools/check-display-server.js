@@ -304,7 +304,134 @@ for (const f of SHARED) {
   }
 }
 
-// ── 11. 产物校验（编译之后跑）──
+// ── 11. 工具面接线（/native/display/* → Cap.DISPLAY）──
+//
+// 路由要在四个地方各登记一次：capOf（决定用哪项能力）、主分派（真正处理）、
+// isWriteRequest（读档位能不能碰）、以及 handler 自己的 when。少一处的后果都不报编译错：
+// 少 capOf 就是 unknown_endpoint，少分派就是 404，少 isWriteRequest 就是读档位能动手。
+{
+  const bridge = code(read('app/src/main/java/me/bmax/apatch/dsh/DshNativeBridge.kt'));
+  const disp = code(read('app/src/main/java/me/bmax/apatch/dsh/DshDisplay.kt'));
+
+  must(/DISPLAY\("display"\)/.test(bridge), 'Cap 枚举里必须有 DISPLAY("display")');
+  must(/Cap\.SHELL,\s*Cap\.DISPLAY\s*->\s*PrivilegedShell\.reach/.test(bridge),
+    'DISPLAY 的可用性必须与 SHELL 一样看提权通道就绪情况（否则报不出精确原因）');
+  must(/Cap\.A11Y,\s*Cap\.DISPLAY\s*->\s*true/.test(bridge), 'supportsWrite 必须把 DISPLAY 算作可写');
+  must(/Cap\.DISPLAY\s*->\s*PrivRisk\.DANGEROUS/.test(bridge),
+    'DISPLAY 的风险档必须是 DANGEROUS（注入输入与启动 App 都能真实改变设备状态）');
+  must(/-> display\(ctx, method, path, params\)/.test(bridge),
+    '主分派必须把 display 端点转到 display(...) 转发口');
+
+  // 两边登记的路由必须完全一致：handler 里有而 capOf 里没有 → 能力判定为 null、永远
+  // unknown_endpoint；capOf 里有而 handler 里没有 → 稳定 404。
+  const routesIn = (src, re) => new Set([...src.matchAll(re)].map((m) => m[1]));
+  const handled = routesIn(disp, /"(\/native\/display\/\w+)"/g);
+  const mapped = routesIn(bridge, /"(\/native\/display\/\w+)"/g);
+  // 每条路由都要在主分派表里**显式**出现，不能用 path.startsWith 一把兜住：
+  // check-native-caps 门禁是「capOf 声明的端点都必须在分派表里显式出现」，前缀兜底会让它
+  // 看不见这些路由，于是新加端点时漏接线也无人拦。
+  for (const r of mapped) {
+    must(new RegExp(`path == "${r}"`).test(bridge), `${r} 必须在主分派表里显式出现，而不是靠前缀兜住`);
+  }
+  must(handled.size >= 8, `DshDisplay 只分派了 ${handled.size} 条路由，预期至少 8 条`);
+  for (const r of handled) must(mapped.has(r), `${r} 在 handler 里处理了，但 capOf 没登记它（能力判定会是 null）`);
+  for (const r of mapped) must(handled.has(r), `${r} 在 capOf 里登记了，但 handler 不处理它（会稳定 404）`);
+
+  // 读档位只该放行「看」：截图与查询
+  must(/path == "\/native\/display\/status" \|\| path == "\/native\/display\/screenshot" -> false/.test(bridge),
+    'isWriteRequest 必须把 display 的 status/screenshot 判为读');
+  must(/path\.startsWith\("\/native\/display\/"\) -> true/.test(bridge),
+    'isWriteRequest 必须把 display 其余端点判为写（否则读档位也能点击/启动 App）');
+
+  // 截图回路径而不是字节：PNG 走 base64 塞进 JSON 会膨胀 33%，而且 agent 本来就有文件工具
+  must(/stageGuestPath/.test(disp), '截图必须落到暂存目录并回带容器内路径，而不是把 PNG 塞进 JSON');
+  must(/pngSize|be32/.test(disp), '截图响应要带画面尺寸，agent 算点击坐标时要用');
+}
+
+// ── 12. 容器侧 CLI + 主机提示词 ──
+//
+// 提示词里写的 `dsh-native display …` 是**对 agent 的许诺**。许诺了而 CLI 不认，agent 拿到的是
+// command not found，而它会去翻能力开关 —— 那条路永远查不出原因。所以这两份东西必须对齐。
+//
+// 另一半是送达：dsh-native 是 App 自己写进容器的。如果只在引导路径写，升级 App 而沿用旧 rootfs
+// 的用户永远拿不到新子命令。所以既要有"每次启动对一遍"的调用点，也要按内容比对再写。
+{
+  const rt = code(read('app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt'));
+  const host = read('app/src/main/assets/dsh-folk-host.mjs');
+
+  must(/cmd === 'display'/.test(rt), 'dsh-native CLI 必须有 display 子命令分支');
+  // CAP_USAGE 里许诺的子命令，CLI 必须都认
+  const usageBlock = (() => {
+    const at = host.indexOf('display: [');
+    if (at < 0) return '';
+    const end = host.indexOf('\n  ],', at);
+    return end < 0 ? '' : host.slice(at, end);
+  })();
+  must(usageBlock.length > 0, '主机提示词的 CAP_USAGE 里必须有 display 一节');
+  const promised = [...usageBlock.matchAll(/'dsh-native display (\w+)/g)].map((m) => m[1]);
+  must(promised.length >= 7, `CAP_USAGE 的 display 一节只解析出 ${promised.length} 条用法`);
+  for (const sub of new Set(promised)) {
+    const alt = sub === 'shot' ? /act === 'shot' \|\| act === 'screenshot'/ : new RegExp(`act === '${sub}'`);
+    must(alt.test(rt), `提示词许诺了 'dsh-native display ${sub}'，但 CLI 没有这个分支`);
+  }
+  // CAP_CAVEAT 必须自己有一节。断言要精确到这个块里，不能只查全文有没有 "display:" ——
+  // CAP_USAGE 里的 `display: [` 会把那种松检查满足掉，于是删掉注意事项也照样通过。
+  const caveatBlock = (() => {
+    const at = host.indexOf('const CAP_CAVEAT');
+    if (at < 0) return '';
+    const end = host.indexOf('\n};', at);
+    return end < 0 ? '' : host.slice(at, end);
+  })();
+  must(/^ {2}display:/m.test(caveatBlock),
+    'CAP_CAVEAT 必须有 display 一节（它需要提权通道、会 15 秒自退，agent 得知道这是状态不是错误）');
+
+  // 送达：必须有一个"非引导路径"的调用点，而且要按内容比对
+  const callSites = [...rt.matchAll(/ensureFsBridgeCli\(\)/g)].length;
+  must(callSites >= 2, `ensureFsBridgeCli() 只有 ${callSites} 处调用（定义之外一处都没有？）`);
+  must(/f\.readText\(\)\s*\}\s*\.getOrNull\(\)\s*==\s*script/.test(rt),
+    'ensureFsBridgeCli 必须按内容比对再写（每次启动都会调用它，无脑重写会白磨盘）');
+  must(/forwardOutput\(serverProcess\)[\s\S]{0,400}?ensureFsBridgeCli\(\)/.test(rt),
+    'ensureFsBridgeCli 必须挂在每次启动的路径上，否则升级 App 而沿用旧 rootfs 的用户拿不到新 CLI');
+}
+
+// ── 13. 内嵌 CLI 的 JS 语法 ──
+//
+// `dsh-native` 是一段**内嵌在 Kotlin 里的 JavaScript**（DshRuntime.NATIVE_CLI_SCRIPT），
+// 我的 display 子命令就在里面。Kotlin 编译器只会把它当成一个字符串常量，里面写错语法它一句
+// 都不会说 —— 直到容器里 agent 真的去调，才发现整个 CLI 是坏的。所以这里把它抽出来交给 node
+// 做一次语法检查（与手动 `node --check` 同一件事）。
+{
+  const rt = read('app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt');
+  const marker = 'private val NATIVE_CLI_SCRIPT = """';
+  const at = rt.indexOf(marker);
+  must(at >= 0, '找不到 NATIVE_CLI_SCRIPT（内嵌 CLI 的抽取标记失效了）');
+  if (at >= 0) {
+    const start = at + marker.length;
+    const end = rt.indexOf('"""', start);
+    must(end > start, 'NATIVE_CLI_SCRIPT 的 raw string 没有闭合');
+    if (end > start) {
+      // raw string 的首行有缩进、并且以 shebang 开头；两者都要去掉再交给 node
+      const js = rt.slice(start, end)
+        .split('\n')
+        .filter((l, i) => !(i === 0 && l.trim() === '') && !l.trim().startsWith('#!'))
+        .join('\n');
+      const tmp = path.join(require('os').tmpdir(), `dsh-native-cli-${process.pid}.js`);
+      fs.writeFileSync(tmp, js);
+      const r = require('child_process').spawnSync(process.execPath, ['--check', tmp], { encoding: 'utf8' });
+      must(r.status === 0,
+        `内嵌的 dsh-native CLI 有 JS 语法错误（Kotlin 编译查不出来）：${(r.stderr || '').split('\n').slice(0, 4).join(' / ')}`);
+      try { fs.unlinkSync(tmp); } catch (_) { /* 临时文件清不掉不影响结论 */ }
+    }
+  }
+  // 主机提示词也是 JS，同样只在自己运行时才暴露
+  const hostCheck = require('child_process').spawnSync(process.execPath, ['--check', path.join(root, 'app/src/main/assets/dsh-folk-host.mjs')], { encoding: 'utf8' });
+  must(hostCheck.status === 0, `主机提示词 dsh-folk-host.mjs 有 JS 语法错误：${(hostCheck.stderr || '').split('\n').slice(0, 3).join(' / ')}`);
+}
+
+// ── 14. 产物校验（编译之后跑）──
+
+
+
 
 function zipEntries(buf) {
   let eocd = -1;

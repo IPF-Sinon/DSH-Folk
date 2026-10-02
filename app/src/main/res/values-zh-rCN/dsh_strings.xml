@@ -717,6 +717,12 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_err_bad_torch_state">state 必须是 on 或 off</string>
     <string name="dsh_native_err_torch_no_flash">此设备没有摄像头闪光灯</string>
     <string name="dsh_native_err_torch_failed">切换手电筒失败：%1$s</string>
+    <string name="dsh_native_err_display_unavailable">虚拟屏服务端起不来。它需要一条提权通道（root / Shizuku / 无线 ADB），请让用户确认其中一条已启用且就绪。</string>
+    <string name="dsh_native_err_display_no_frame">该显示没有返回画面</string>
+    <string name="dsh_native_err_display_bad_param">%1$s 参数缺失或不合法</string>
+    <string name="dsh_native_err_display_bad_key">未知按键：%1$s（可以是数字 keycode，也可以是 home / back / enter 这类名字）</string>
+    <string name="dsh_native_err_display_bad_package">不是合法的包名：%1$s</string>
+    <string name="dsh_native_err_display_failed">虚拟屏操作失败：%1$s</string>
     <string name="dsh_native_err_bad_url">url 无法解析</string>
     <string name="dsh_native_err_start_failed">拉起失败：%1$s</string>
     <string name="dsh_native_err_activity_background">拉起界面需要应用处于前台，请让用户先切回 DSH-Folk</string>
@@ -785,6 +791,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_cap_a11y">无障碍（读屏与操作）</string>
     <string name="dsh_native_cap_a11y_desc">读取当前屏幕上的文字与控件，或替用户点按、滑动、输入、返回桌面。「读」只看不动；需要你单独在系统设置里打开 DSH-Folk 的无障碍服务。</string>
     <string name="dsh_native_need_a11y_perm">未开启无障碍服务 —— 点这里去系统设置打开</string>
+    <string name="dsh_native_cap_display">虚拟屏（截屏与操作）</string>
+    <string name="dsh_native_cap_display_desc">截取屏幕或一块虚拟屏的画面，并点按、滑动、按键、在虚拟屏上启动目标 App。不依赖无障碍服务，所以没有节点的界面也看得到。「读」只截图；动手要读写档位。它以 root / shell 身份跑一个辅助进程，因此需要先配好一条权限通道。</string>
     <string name="dsh_native_err_a11y_bad_args">参数不全或格式不对</string>
     <string name="dsh_a11y_service_label">DSH-Folk 无障碍</string>
     <string name="dsh_a11y_service_summary">让 AI 读取当前屏幕内容并代为点按</string>

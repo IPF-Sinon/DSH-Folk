@@ -124,6 +124,16 @@ const CAP_USAGE = {
     'dsh-native shell [--su] [--timeout ms] [--] <command...>   # run through the privileged channel',
     '    --reason <why> is required like everywhere else; put -- before a command that has its own --flags',
   ],
+  display: [
+    'dsh-native display status                  # is the service up, which display is the session, which channel',
+    'dsh-native display session [--width N --height N --dpi N]   # create a virtual screen; the response carries its id',
+    'dsh-native display shot [--display N]      # PNG of display N into /tmp; the JSON carries path, width, height',
+    'dsh-native display tap <x> <y> [--display N]',
+    'dsh-native display swipe <x1> <y1> <x2> <y2> [--ms N] [--display N]',
+    'dsh-native display key <home|back|enter|...> [--display N]',
+    'dsh-native display launch <package> [--display N]   # start an app ON the virtual screen',
+    '    display 0 is the real screen: shot/tap/swipe/key work there too, launch targets the virtual one',
+  ],
   sms: [
     'dsh-native sms list [--limit N]                        # recent SMS, read only',
     'dsh-native sms send <number> <text>                    # send an SMS',
@@ -240,6 +250,15 @@ const CAP_CAVEAT = {
     'permission, because under strict strictness a wrong guess costs the user a tap.',
   sms:
     'Read only. SMS bodies are private: use a small --limit and do not repeat unrelated messages.',
+  display:
+    'The host starts a helper as root or shell through the channel the user picked, so this needs a ' +
+    'ready permission channel: until then it answers no_channel / root_unavailable / adb_write_disabled, ' +
+    'which are states to report, not errors to retry. display=0 means the REAL screen — shot/tap/swipe/key ' +
+    'work on it, and that is genuinely the user\'s own screen. Create a session first and pass its id to act ' +
+    'on a virtual screen instead; "launch" is meant for the virtual one. Take a shot and read width/height ' +
+    'from the JSON before computing tap coordinates, and prefer re-shooting after every action over guessing ' +
+    'where the UI went. The service exits after 15s without calls, so re-running any display command restarts ' +
+    'it — that is normal, not a failure.',
 };
 
 let cached = null;

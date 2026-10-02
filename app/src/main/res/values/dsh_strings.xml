@@ -735,6 +735,12 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_native_err_bad_torch_state">state must be on or off</string>
     <string name="dsh_native_err_torch_no_flash">This device has no camera flash</string>
     <string name="dsh_native_err_torch_failed">Could not toggle the flashlight: %1$s</string>
+    <string name="dsh_native_err_display_unavailable">The virtual screen service could not start. It needs a privileged channel (root / Shizuku / wireless ADB) — ask the user to check that one is enabled and ready.</string>
+    <string name="dsh_native_err_display_no_frame">The virtual screen returned no image for that display</string>
+    <string name="dsh_native_err_display_bad_param">The %1$s parameter is missing or invalid</string>
+    <string name="dsh_native_err_display_bad_key">Unknown key: %1$s (use a numeric key code or a name such as home, back, enter)</string>
+    <string name="dsh_native_err_display_bad_package">Not a valid package name: %1$s</string>
+    <string name="dsh_native_err_display_failed">The virtual screen operation failed: %1$s</string>
     <string name="dsh_native_err_bad_url">The url could not be parsed</string>
     <string name="dsh_native_err_start_failed">Could not start the activity: %1$s</string>
     <string name="dsh_native_err_activity_background">Opening a UI needs the app in the foreground — ask the user to switch back to DSH-Folk</string>
@@ -803,6 +809,8 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_native_cap_a11y">Accessibility (read and act)</string>
     <string name="dsh_native_cap_a11y_desc">Read the text and controls on the current screen, or tap, swipe, type and go home for the user. Read only looks; you must enable the DSH-Folk accessibility service in system settings first.</string>
     <string name="dsh_native_need_a11y_perm">Accessibility service is off — tap to open system settings</string>
+    <string name="dsh_native_cap_display">Virtual screen (screenshot and control)</string>
+    <string name="dsh_native_cap_display_desc">Capture the screen or a virtual one, tap, swipe, press keys, and launch apps on the virtual screen. Works without the accessibility service, so it can see screens that expose no nodes. Read only captures; acting needs read-write. It runs a helper as root or shell, so a permission channel must be set up.</string>
     <string name="dsh_native_err_a11y_bad_args">Missing or malformed arguments</string>
     <string name="dsh_a11y_service_label">DSH-Folk accessibility</string>
     <string name="dsh_a11y_service_summary">Let the AI read the current screen and act on it</string>

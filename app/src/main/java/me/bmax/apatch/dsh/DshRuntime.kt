@@ -671,6 +671,14 @@ object DshRuntime {
           '  a11y text <text> [--target <text-or-id>]',
           '  a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>',
           '  a11y screenshot                            # capture the screen; lands in /tmp, JSON carries path',
+          '  display status                             # is the virtual-screen service up, which display is the session',
+          '  display session [--width N --height N --dpi N --bitrate K]   # create a virtual screen; session = its id',
+          '  display shot [--display N]                 # PNG of display N (0 = the real screen) into /tmp; JSON carries path+size',
+          '  display tap <x> <y> [--display N]          # tap. Coordinates come from the shot you just took',
+          '  display swipe <x1> <y1> <x2> <y2> [--ms N] [--display N]',
+          '  display key <home|back|enter|...|keycode> [--display N]',
+          '  display launch <package> [--display N]     # start an app on the virtual screen (not on the real one)',
+          '  display stop                               # shut the service down now; it also self-exits after 15s idle',
           '      Put -- before the command if it contains its own --flags.',
           '  caps                                       # access, accessOptions, once, pending, lastElevation',
           '  elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]',
@@ -763,6 +771,39 @@ object DshRuntime {
                 say(await req('POST', '/native/a11y/global' + q({ action: a[1] })));
               } else if (act === 'screenshot') {
                 say(await req('GET', '/native/a11y/screenshot'));
+              } else {
+                console.error(USAGE);
+                process.exitCode = 1;
+              }
+            } else if (cmd === 'display') {
+              // 坐标 0 是合法值，所以这里一律用 !== undefined 判定，不能照抄 a11y 那几行的
+              // 'a[1] && a[2]' —— 那会把 'tap 0 100' 判成参数不全。
+              const act = a[0];
+              const num = (v) => v !== undefined && v !== '';
+              if (act === 'status') {
+                say(await req('GET', '/native/display/status'));
+              } else if (act === 'session') {
+                say(await req('POST', '/native/display/session' + q({
+                  width: opt.width, height: opt.height, dpi: opt.dpi, bitrate: opt.bitrate
+                })));
+              } else if (act === 'shot' || act === 'screenshot') {
+                say(await req('POST', '/native/display/screenshot' + q({ display: opt.display })));
+              } else if (act === 'tap' && num(a[1]) && num(a[2])) {
+                say(await req('POST', '/native/display/tap' + q({
+                  x: a[1], y: a[2], display: opt.display
+                })));
+              } else if (act === 'swipe' && num(a[1]) && num(a[2]) && num(a[3]) && num(a[4])) {
+                say(await req('POST', '/native/display/swipe' + q({
+                  x1: a[1], y1: a[2], x2: a[3], y2: a[4], duration: opt.ms, display: opt.display
+                })));
+              } else if (act === 'key' && a[1]) {
+                say(await req('POST', '/native/display/key' + q({ key: a[1], display: opt.display })));
+              } else if (act === 'launch' && a[1]) {
+                say(await req('POST', '/native/display/launch' + q({
+                  package: a[1], display: opt.display
+                })));
+              } else if (act === 'stop') {
+                say(await req('POST', '/native/display/stop'));
               } else {
                 console.error(USAGE);
                 process.exitCode = 1;
@@ -2138,7 +2179,13 @@ object DshRuntime {
      * 把 `dsh-fs` / `dsh-native` CLI 写进容器（rootfs 就在 App 私有目录，直接落盘，
      * 不必 execRootfs heredoc）。
      *
-     * 只在引导路径（bootstrap / reinstall）调用一次；CLI 内容不变时重复写无害。
+     * **每次启动都会调用**（见 [startServer] 里的调用点），所以必须按内容比对再写。
+     *
+     * 以前它只在引导路径（bootstrap / reinstall）调用，那留下了一个很安静的缺口：用户升级
+     * App 但沿用同一套 rootfs 时，容器里的 CLI 永远是上一次引导时写下的那份。加一个新子命令
+     * 后主机提示词会立刻开始向 agent 宣传它，而容器里根本没有 —— agent 拿到的是
+     * "command not found"，翻遍设置页也找不到原因。按内容比对再写，成本只是读两个小文件。
+     *
      * 两个脚本都读同一份 fs-bridge.json，所以不需要各自的配置或 ROOTFS_REV 变更。
      */
     private fun ensureFsBridgeCli() {
@@ -2151,6 +2198,7 @@ object DshRuntime {
             runCatching {
                 val f = File(bin, name)
                 f.parentFile?.mkdirs()
+                if (f.isFile && runCatching { f.readText() }.getOrNull() == script) return@runCatching
                 f.writeText(script, StandardCharsets.UTF_8)
                 f.setExecutable(true, false)
             }.onFailure { android.util.Log.w(TAG, "写 $name 失败: ${it.message}") }
@@ -3355,6 +3403,9 @@ object DshRuntime {
             return
         }
         forwardOutput(serverProcess)
+        // 每次启动都对一遍 CLI 内容：升级 App 而沿用旧 rootfs 时，容器里的 dsh-fs / dsh-native
+        // 必须跟着更新，否则新加的子命令只存在于提示词里（见 ensureFsBridgeCli 的注释）。
+        ensureFsBridgeCli()
         startFsBridge()
         startedAt = System.currentTimeMillis()
         _state.update { it.copy(phase = DshPhase.STARTING, port = port, message = str(R.string.dsh_msg_starting)) }
