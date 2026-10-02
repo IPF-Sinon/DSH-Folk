@@ -331,13 +331,13 @@
     <string name="changelog_title">What\u2019s new in %1$s</string>
     <string name="changelog_got_it">Got it</string>
     <string-array name="changelog_items">
-        <item>Stable release: a roundup of improvements since 1.9.5, plus support for the dsh 0.2.0 runtime.</item>
-        <item>New share / open-with handling: pick what an incoming file is for — back up a file (or restore from one), import a theme, or hand it to DSH. Handing it over lets you pick a workspace: the file is copied into it and the prompt is put on your clipboard, or you can start a new session right there with the file already inserted.</item>
-        <item>New option to mount phone storage into a DSH workspace (its own sub-switch, off by default): once mounted, the agent can read and write the directories you choose. For directories that cannot do atomic writes, the model is told through the host prompt to use edit or the terminal instead, so write no longer fails silently.</item>
-        <item>dsh 0.2.0 runtime support: startup no longer tries to launch the system browser; the cloud-backup plugin moves to its 0.2.0-compatible release (0.5.0 is skipped wholesale by dsh on the new runtime, which left cloud backup unusable); the plugin-market seed version is raised to one compatible with both the old and the new runtime.</item>
-        <item>Fixed "auto-open the Web UI once the service is ready" only working on the first launch, and fixed the DSH page pushing the previous screen into the background when arriving from the share entry.</item>
-        <item>Fixed the host prompt disappearing entirely (a plugin patch row was flattened and stopped taking effect), plus several dsh-fs issues: rare stack overflow after changing the mount list, refusing to change no_access, and the on-screen keyboard covering the input.</item>
-        <item>New slim-runtime channel: a "Use the slim runtime" switch (independent of the beta switch, so the two combine freely) selects runtime-slim-latest. The slim build drops TypeScript declarations, source maps, docs, test fixtures and the LibreOffice engine — about 63MB less to download (169MB vs 232MB) — at the cost of document preview and conversion.</item>
+        <item>New virtual screen: DSH can start an app on its own virtual display and operate it for you — screenshots, taps, swipes and key events — while your own screen stays where it is. Turn it on in Settings → Features; it needs a privileged channel (root, Shizuku or wireless ADB).</item>
+        <item>New virtual screen preview under Settings → Features: watch the picture live and drive it by hand. Tap or swipe right on the video, use Back / Home / Recents, or type a package name to start it on that screen. It talks to the same service the agent uses, so it also tells you whether a problem sits on the picture side or the input side.</item>
+        <item>The agent now has a display tool with eight operations and matching dsh-native subcommands, documented in the host prompt. Viewing and acting are kept separate: with read-only access it can take screenshots but cannot touch anything.</item>
+        <item>Fixed a black-picture bug on the virtual screen: the codec setup was sent once, when the encoder started, so anything attaching later — which is how a preview always opens — received no SPS/PPS and stayed black, with no error reported anywhere. The frame stream is now self-contained.</item>
+        <item>Fixed dsh-native not being refreshed when the app is updated: with an existing container the old copy stayed in place, so subcommands the host prompt already advertised showed up to the agent as command not found.</item>
+        <item>Fixed changes under displayserver/ or tools/ not triggering a build, which let a server-side change land without ever being compiled.</item>
+        <item>The virtual screen is ported from Operit\'s shower subsystem (LGPL-3.0), itself derived from scrcpy (Apache-2.0); both credits are in the README and in the source.</item>
     </string-array>
 
     
