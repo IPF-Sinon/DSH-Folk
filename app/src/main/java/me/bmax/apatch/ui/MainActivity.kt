@@ -504,12 +504,16 @@ class MainActivity : AppCompatActivity() {
                 // 「交给 DSH」全程在弹窗里完成（见 DshFileHandoffDialog），不再跳页/强行拉起 Web UI。
                 val pendingUri = remember { mutableStateOf<Uri?>(null) }
                 val pendingFileName = remember { mutableStateOf("") }
-                // 本次 Activity 是不是「为处理外部文件」拉起的。bug1 根因：开了「服务就绪自动打开
-                // 页面」时，分享文件进来→（弹窗里）启动服务→服务就绪那条 LaunchedEffect 自动拉起
-                // Web UI，把用途选择弹窗挤到后台。用户是来处理这个文件的，不该被甩去 Web 界面，
-                // 所以这种启动一律不自动开页面（完成步里有「打开 Web 界面」按钮，由用户决定）。
-                // 必须在 installUri 被下面的 LaunchedEffect 清空前捕获，故用 rememberSaveable 固化。
-                val launchedForExternalFile = rememberSaveable { installUri != null }
+                // 有没有「等着用户选用途的外部文件」。bug1 根因：开了「服务就绪自动打开页面」
+                // 时，分享文件进来→（弹窗里）启动服务→服务就绪那条 LaunchedEffect 自动拉起
+                // Web UI，把用途选择弹窗挤到后台。用户是来处理这个文件的，此时不该被甩去 Web
+                // 界面（完成步里有「打开 Web 界面」按钮，由他决定）。
+                //
+                // 关键：这个压制只活到弹窗关闭为止，**绝不用 rememberSaveable** —— 那会把它
+                // 固化成「本次启动永久压制」，于是分享过一次之后，自动开页面就再也不生效了
+                // （用户实测：功能变成一次性的）。初始值在 installUri 被下面的 LaunchedEffect
+                // 清空前、于本帧组成本身同步求得，既正确又不会和「服务就绪」那次发射抢跑。
+                val externalFilePending = remember { mutableStateOf(installUri != null) }
                 val uri = installUri
                 val lastHandledExternalKey = rememberSaveable { mutableStateOf<String?>(null) }
                 LaunchedEffect(uri) {
@@ -522,6 +526,7 @@ class MainActivity : AppCompatActivity() {
                     val fileName = withContext(Dispatchers.IO) {
                         getFileName(context, uri)
                     }
+                    externalFilePending.value = true
                     pendingUri.value = uri
                     pendingFileName.value = fileName
                     installUri = null
@@ -576,7 +581,11 @@ class MainActivity : AppCompatActivity() {
                     DshFileHandoffDialog(
                         uri = target,
                         fileName = pendingFileName.value,
-                        onDismiss = { pendingUri.value = null },
+                        onDismiss = {
+                            pendingUri.value = null
+                            // 弹窗收起 = 外部文件这轮处理结束，解除对「自动开页面」的压制。
+                            externalFilePending.value = false
+                        },
                         onTheme = { startTheme(it) },
                         onBackup = { startBackup(it) },
                     )
@@ -684,8 +693,9 @@ class MainActivity : AppCompatActivity() {
                             if (phase != DshPhase.RUNNING) return@collect
                             if (webUiAutoOpened.value) return@collect
                             if (!DshRuntime.autoOpenWebUi()) return@collect
-                            // 为处理外部文件而拉起的本次会话：用户在用途选择弹窗里，不能把他甩走。
-                            if (launchedForExternalFile) return@collect
+                            // 有外部文件正等着选用途：用户在弹窗里，不能把他甩走（关掉弹窗即解除，
+                            // 所以不会像 rememberSaveable 那样把「自动开页面」永久压死）。
+                            if (externalFilePending.value) return@collect
                             // 后台不许 startActivity：Android 10+ 会直接吞掉，用户看到的
                             // 只是「没反应」，还会留下一条系统警告。服务可能在用户已经
                             // 切走之后才就绪（比如开机自启拉起的那一份）。

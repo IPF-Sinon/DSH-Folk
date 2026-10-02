@@ -62,12 +62,17 @@ ok(/onTheme\s*=/.test(main) && /ThemeManager\.readThemeMetadata/.test(main), "�
 ok(/onBackup\s*=/.test(main) && /DshConfigBackup\.stage/.test(main) && /RestoreWizardScreenDestination/.test(main), "恢复备份分流 → 暂存后进恢复向导");
 ok(!/fileName\.endsWith\("\.fpt"/.test(main), "已移除「只认 .fpt 自动导主题」的写死分支");
 ok(!/DshFileHandoffScreenDestination/.test(main), "不再跳独立落地页（已改成弹窗）");
-// bug1 根因：开了「服务就绪自动打开页面」时，为处理分享文件拉起 App → 服务就绪 →
-// 自动打开 Web UI 把用途选择弹窗挤到后台。修法：这种启动一律不自动开页面。
-ok(/launchedForExternalFile\s*=\s*rememberSaveable\s*\{\s*installUri != null\s*\}/.test(main),
-  "捕获「本次为处理外部文件而启动」（在 installUri 被清空前固化）");
-ok(/if \(launchedForExternalFile\) return@collect/.test(main),
-  "服务就绪自动开页面的 LaunchedEffect 对这种启动短路（修 bug1 真正根因）");
+// bug1 根因：开了「服务就绪自动打开页面」时，有外部文件待处理会被自动开页面甩走。
+// 修法：用 externalFilePending 压制——但**必须只活到弹窗关闭**。曾用 rememberSaveable
+// 固化，导致分享过一次后自动开页面永久失效（用户实测：功能变成一次性的）。
+ok(/externalFilePending\s*=\s*remember\s*\{\s*mutableStateOf\(installUri != null\)\s*\}/.test(main),
+  "externalFilePending 用普通 remember（installUri 未清空前同步取初值，不与服务就绪抢跑）");
+ok(!/externalFilePending\s*=\s*rememberSaveable/.test(main),
+  "externalFilePending 不得用 rememberSaveable（否则会把自动开页面永久压死）");
+ok(/if \(externalFilePending\.value\) return@collect/.test(main),
+  "服务就绪自动开页面的 LaunchedEffect 在有外部文件待处理时短路（修 bug1 真正根因）");
+ok(/externalFilePending\.value = true/.test(main) && /externalFilePending\.value = false/.test(main),
+  "解析到外部文件时置位、弹窗关闭时解除（自动开页面随之恢复）");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3) 弹窗行为：三选项 + 复制成功 toast + 提示词进剪贴板 + Web UI 只在用户点击时才开
