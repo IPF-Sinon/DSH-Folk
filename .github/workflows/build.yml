@@ -3,10 +3,15 @@ name: Build DSH-Folk
 on:
   push:
     branches: [ main, develop ]
-    paths: [ 'app/**', 'gradle/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml', '.github/actions/**' ]
+    # displayserver/** 必须在内：它是 app 那个 dex jar 的源码，改了它就得编一遍（jar 是
+    # buildDisplayServerJar 现编进 assets 的）。tools/** 也必须在内：门禁由这个工作流跑，
+    # 改了门禁自然要跑一次验证 —— 否则只改门禁的提交会静默地谁都不验。
+    # 实测踩过：一次只改 displayserver/ 与 tools/ 的推送没有触发任何构建，于是那次修复
+    # 根本没被编译过（列表里连一条 run 都没有）。
+    paths: [ 'app/**', 'displayserver/**', 'tools/**', 'gradle/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml', '.github/actions/**' ]
   pull_request:
     branches: [ main, develop ]
-    paths: [ 'app/**', 'gradle/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml', '.github/actions/**' ]
+    paths: [ 'app/**', 'displayserver/**', 'tools/**', 'gradle/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml', '.github/actions/**' ]
   workflow_dispatch:
     inputs:
       build_type:

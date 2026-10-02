@@ -443,7 +443,22 @@ for (const f of SHARED) {
   must(hostCheck.status === 0, `主机提示词 dsh-folk-host.mjs 有 JS 语法错误：${(hostCheck.stderr || '').split('\n').slice(0, 3).join(' / ')}`);
 }
 
-// ── 14. 产物校验（编译之后跑）──
+// ── 14. CI 触发范围 ──
+//
+// 改了 displayserver/ 却不触发构建 = 那次改动根本没被编译过（jar 是 CI 现编的）。
+// 实测踩过一次：只改 displayserver/ 与 tools/ 的推送没有触发任何 run，列表里连一条都没有。
+{
+  const wf = read('.github/workflows/build.yml');
+  const onBlock = wf.slice(0, wf.indexOf('workflow_dispatch'));
+  for (const p of ['displayserver/**', 'tools/**']) {
+    const hits = (onBlock.match(new RegExp(`'${p.replace(/[/*]/g, (c) => '\\' + c)}'`, 'g')) || []).length;
+    must(hits >= 2, `build.yml 的 push 与 pull_request 都要包含 ${p}（现在命中 ${hits} 处）`);
+  }
+  must(/'app\/\*\*'/.test(onBlock), 'build.yml 的 paths 过滤不能把 app/** 丢掉');
+}
+
+// ── 15. 产物校验（编译之后跑）──
+
 
 
 
