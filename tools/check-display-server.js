@@ -109,6 +109,21 @@ for (const f of SHARED) {
   must(/public\s+class\s+Main\b/.test(main), 'Main.java 必须声明 public class Main（app_process 的入口类）');
   must(/static\s+void\s+main\s*\(\s*String\s*\.\.\.\s*\w+/.test(main) || /static\s+void\s+main\s*\(\s*String\s*\[\s*\]/.test(main),
     'Main.main 必须接参数（启动命令要把宿主包名传进去，否则 binder 回传没有投递目标）');
+
+  // 视频流的自足性。移植源的帧流有个会让画面**永久黑屏且不报错**的坑：编解码器配置
+  // （csd-0/csd-1 = SPS/PPS）只在 INFO_OUTPUT_FORMAT_CHANGED 时发一次，而宿主界面是用户
+  // 点开预览才挂 sink 的 —— 那时配置早发过了。修法是两条保险，两条都得在。
+  must(/KEY_PREPEND_HEADER_TO_SYNC_FRAMES/.test(main),
+    '编码器必须设 KEY_PREPEND_HEADER_TO_SYNC_FRAMES，让关键帧自带 SPS/PPS（否则帧流不自足）');
+  must(/configSps\s*=\s*toBytes\(csd0\)/.test(main) && /configPps\s*=\s*toBytes\(csd1\)/.test(main),
+    'trySendConfig 必须把 SPS/PPS **存下来**（只声明字段不算：那还是没东西可补发）');
+  must(/freshSink/.test(main),
+    'setVideoSink 必须把补发所需的状态先搬出锁，再在锁外做 Binder 调用');
+  must(/void setVideoSink\(IBinder sink\) \{[\s\S]{0,160}?freshSink = null[\s\S]{0,160}?synchronized \(lock\)/.test(main),
+    'setVideoSink 必须在进入 synchronized 之前声明 freshSink/sps/pps —— 持锁调用客户端的 ' +
+    'onVideoFrame 会把编码线程堵住（画面卡住），客户端回调进来还会死锁');
+  must(/requestSyncFrame\(\);/.test(main) && /PARAMETER_KEY_REQUEST_SYNC_FRAME/.test(main),
+    '挂上 sink 后要**调用**一次请求关键帧，否则最多要等 1 秒才出画面（只定义不调用等于没有）');
 }
 
 // ── 4. 不许引入 androidx / kotlin，也不许开网络监听 ──

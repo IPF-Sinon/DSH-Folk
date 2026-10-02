@@ -11,6 +11,7 @@ import android.media.MediaCodec.BufferInfo;
 import android.media.MediaFormat;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Looper;
 import android.view.Surface;
@@ -160,6 +161,18 @@ public class Main {
         IDisplayVideoSink videoSink;
         IBinder videoSinkBinder;
         IBinder.DeathRecipient videoSinkDeathRecipient;
+        /**
+         * 编码器的 SPS / PPS（csd-0 / csd-1），留着给**后来才挂上来**的 sink 补发。
+         *
+         * 探到的坑：帧流里没有任何标记区分「编解码器配置」与「媒体帧」，配置只在
+         * INFO_OUTPUT_FORMAT_CHANGED 时发一次（也就是编码器刚起来那一下）。宿主界面是
+         * 用户点开预览才挂 sink 的，那时配置早发过了 —— 解码器拿不到 SPS/PPS，画面会
+         * **永久黑屏**，而且不报任何错。移植源的客户端想必是先挂 sink 再开编码器，所以
+         * 没暴露这个问题。两道保险：见 setVideoSink 与 encoder 的
+         * KEY_PREPEND_HEADER_TO_SYNC_FRAMES。
+         */
+        volatile byte[] configSps;
+        volatile byte[] configPps;
         final Object lock = new Object();
 
         DisplaySession(int displayId, VirtualDisplay virtualDisplay, MediaCodec videoEncoder, Surface encoderSurface, InputController inputController) {
@@ -221,6 +234,10 @@ public class Main {
         }
 
         void setVideoSink(IBinder sink) {
+            // 锁内只搬移状态，锁外才做跨进程调用（见下面那段注释）
+            IDisplayVideoSink freshSink = null;
+            byte[] sps = null;
+            byte[] pps = null;
             synchronized (lock) {
                 if (videoSinkBinder != null && videoSinkBinder != sink && videoSinkDeathRecipient != null) {
                     try {
@@ -252,6 +269,48 @@ public class Main {
                     logToFile("linkToDeath for video sink failed: " + t.getMessage(), t);
                 }
                 videoSink = IDisplayVideoSink.Stub.asInterface(sink);
+                freshSink = videoSink;
+                sps = configSps;
+                pps = configPps;
+            }
+            // 出了锁再发配置、再要关键帧。
+            //
+            // onVideoFrame 是一次**跨进程 Binder 调用**，持锁调用它会把编码线程堵在
+            // sendVideoFrame 的锁上（那个线程一停，画面立刻卡住），而客户端若在自己的
+            // onVideoFrame 里回调本进程，还会直接死锁。锁里只做搬移，不做 I/O。
+            if (freshSink != null) {
+                for (byte[] cfg : new byte[][]{sps, pps}) {
+                    if (cfg == null || cfg.length == 0) {
+                        continue;
+                    }
+                    try {
+                        freshSink.onVideoFrame(cfg);
+                    } catch (Exception e) {
+                        logToFile("Resending codec config failed: " + e.getMessage(), e);
+                    }
+                }
+            }
+            // 不请求关键帧的话，最多要等一个关键帧间隔（1 秒）才等到 IDR。要不到也不致命。
+            requestSyncFrame();
+        }
+
+        /**
+         * 让编码器马上吐一个关键帧。
+         *
+         * 要不到也不致命（关键帧间隔只有 1 秒），所以失败只记日志：为了一个「快一点」的优化
+         * 把 setVideoSink 整条路弄挂，不值得。
+         */
+        private void requestSyncFrame() {
+            MediaCodec codec = videoEncoder;
+            if (codec == null) {
+                return;
+            }
+            try {
+                Bundle params = new Bundle();
+                params.putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0);
+                codec.setParameters(params);
+            } catch (Throwable t) {
+                logToFile("Requesting a sync frame failed: " + t.getMessage(), t);
             }
         }
 
@@ -300,8 +359,22 @@ public class Main {
         private void trySendConfig(MediaFormat format) {
             ByteBuffer csd0 = format.getByteBuffer("csd-0");
             ByteBuffer csd1 = format.getByteBuffer("csd-1");
+            configSps = toBytes(csd0);
+            configPps = toBytes(csd1);
             sendVideoFrame(csd0);
             sendVideoFrame(csd1);
+        }
+
+        /** 把 ByteBuffer 整段拷成字节数组（不改动原 buffer 的 position）。 */
+        private byte[] toBytes(ByteBuffer buffer) {
+            if (buffer == null || !buffer.hasRemaining()) {
+                return null;
+            }
+            ByteBuffer dup = buffer.duplicate();
+            dup.position(0);
+            byte[] data = new byte[dup.remaining()];
+            dup.get(data);
+            return data;
         }
 
         private void sendVideoFrame(ByteBuffer buffer) {
@@ -854,6 +927,9 @@ public class Main {
             format.setInteger(MediaFormat.KEY_BIT_RATE, actualBitRate);
             format.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+            // 让每个关键帧自带 SPS/PPS：这样帧流是自足的，中途挂上来的解码器最多等一个关键帧
+            // 间隔就能开始解，而不是永久黑屏（详见 DisplaySession.configSps 的注释）。
+            format.setInteger(MediaFormat.KEY_PREPEND_HEADER_TO_SYNC_FRAMES, 1);
 
             videoEncoder = MediaCodec.createEncoderByType("video/avc");
             videoEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
