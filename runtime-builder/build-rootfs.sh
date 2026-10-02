@@ -33,10 +33,14 @@ RELEASE_CHANNEL="${RELEASE_CHANNEL:-stable}"       # stable | beta
 #   r4 = 关掉 pnpm 的升级提示（update-notifier=false 写进 rootfs 的 npmrc）：
 #        原来容器里会打印 "Update available! 10.34.5 → 12.3.4"，指向一个装了
 #        就坏的版本，用户照着做会把 pnpm 弄挂。r3 之后的通道都带着这个坑。
+#   r6 = 补齐常用命令行工具（curl/wget/unzip/xz/less/file/jq/nano/openssl/ssh 及
+#        其依赖闭包，共 20 个包），并把动态库闭包检查的入口从「git-core + perl +
+#        python 子目录」扩大到整个 usr/bin 与 usr/sbin —— 覆盖面从「我们显式盯着
+#        的那几个入口」变成「全部用户态程序」。
 #
 # 加 amd64 支持时**不递增**：arm64 的 rootfs 内容一个字节都没变，递增只会让所有
 # 存量用户收到一次「有新运行时」的无意义提示。amd64 是全新资产，自带独立 metadata。
-ROOTFS_REV="${ROOTFS_REV:-5}"
+ROOTFS_REV="${ROOTFS_REV:-6}"
 WORK="${WORK:-/tmp/dsh-runtime}"
 OUT="${OUT:-$PWD/out}"
 
@@ -435,10 +439,62 @@ ln -sf /etc/ssl/certs/ca-certificates.crt "$ROOTFS/usr/lib/ssl/cert.pem"
 test -s "$ROOTFS/etc/ssl/certs/ca-certificates.crt"
 echo "    CA bundle 就绪（$(wc -c < "$ROOTFS/etc/ssl/certs/ca-certificates.crt") 字节）"
 
+echo "==> [5c/9] 安装常用命令行工具"
+# 为什么要有这一步：容器里 dsh 的 agent 是靠**敲命令**干活的，而 ubuntu-base 只有
+# 91 个包，常用工具几乎全缺 —— 没有 curl/wget 就没法在命令行下东西，没有 unzip/xz
+# 就解不开压缩包，没有 jq 处理 JSON 只能现写 node 脚本，没有 file 认不出文件类型，
+# 没有 ssh/openssl 连不了远程也验不了证书。这些不是锦上添花：agent 遇到缺失时要么
+# 绕路要么直接卡住，而用户要的是「一个能自己干活的容器」。
+#
+# 清单是**算出来的，不是凭直觉手写的**：从 noble 的 Packages 索引对下面这些根包做
+# Depends 递归闭包（不含 Recommends，等价 --no-install-recommends），再减去
+# ubuntu-base 已装的包与 [4][5] 两步已解包过的包，最后交给 [6/9] 的
+# check-elf-closure.js 求真闭包兜底。r1 的教训就是手写列表必漏传递依赖。
+#
+# 刻意不装的两个（都有实测代价数据，别凭感觉推翻）：
+#   dig（bind9-dnsutils）—— 它强制 bind9-libs → libxml2 → **libicu74 单包 35 MB**，
+#     一个 dig 连带 43 MB，占整份清单的三分之二；而查 DNS 用 node 的 dns 模块就够
+#     （node -e "require('dns').resolve4('example.com',console.log)"）。不值。
+#   tree —— 只存在于 **universe** 组件，而本脚本只拉 main 索引（拉 universe 会让
+#     每个架构每次构建多下约 45 MB）。为个树状图不值，find 能顶。
+# 下面 20 个包已逐个核对在 noble 的 arm64 与 amd64 **main** 索引里都存在。
+CLI_PKGS="curl libcurl4t64 wget unzip xz-utils less file libmagic1t64 libmagic-mgc
+          jq libjq1 libonig5 nano libedit2 libbsd0 openssl openssh-client
+          adduser libfido2-1 libcbor0.10"
+
+for pkg in $CLI_PKGS; do
+  info="$(resolve_deb "$pkg")" || { echo "!! 索引里找不到 $pkg"; exit 1; }
+  ver="$(printf '%s' "$info" | cut -f1)"
+  fn="$(printf '%s' "$info" | cut -f2)"
+  echo "    $pkg $ver"
+  curl -fsSL --connect-timeout 20 --retry 2 -o "$DEB_DIR/$pkg.deb" "$APT_BASE/$fn"
+  # 同 python3 / git：纯解包，不跑 maintainer script（它们要在目标架构上执行）
+  dpkg-deb -x "$DEB_DIR/$pkg.deb" "$ROOTFS"
+done
+
+# 自检：命令真的在、且是可执行的入口。缺一个就说明清单写漏，构建期直接失败，
+# 别等用户在容器里敲出 command not found 才发现。
+# ssh-keygen 一并验：git 走 ssh 规格克隆 github 时用的是它。
+for c in curl wget unzip xz less file jq nano openssl ssh scp sftp ssh-keygen; do
+  test -x "$ROOTFS/usr/bin/$c" || { echo "!! 缺少命令 $c"; exit 1; }
+done
+# file 的魔数库不是 ELF，闭包检查看不到它；缺了 file 会退化成一个只会报错/误判的壳
+test -s "$ROOTFS/usr/lib/file/magic.mgc" || { echo "!! 缺少 file 的 magic.mgc"; exit 1; }
+echo "    常用工具已就绪（20 个包）"
+
 echo "==> [6/9] 检查动态库依赖闭合"
 # 「文件存在 + 是 ELF」这种自检拦不住缺库（r1 就是这么放过去的），
-# 这里从 git-core / perl 扩展 / python3 出发递归解析 DT_NEEDED 求真闭包。
+# 这里递归解析 DT_NEEDED 求真闭包。
+#
+# 入口从「git-core + perl 扩展 + python3 子目录」扩到整个 usr/bin 与 usr/sbin：
+# 那些子目录只覆盖我们**显式盯着**的几个入口，而缺库这种事恰恰发生在我们没盯的
+# 地方（r1 的 git-remote-https 就是这么漏的）。扩到全量后，任何一个用户态程序的
+# 传递依赖断了都会在构建期失败，同时附带把 e_machine 也全量校验一遍。
+# （r6 已在本地用 base + python + git + 新工具的忠实模拟验证过全量闭合：
+#   usr/bin + usr/sbin 共 347 个入口 ELF、77 个 SONAME，无缺失。）
 node "$(dirname "$0")/check-elf-closure.js" --arch="$TARGET_ARCH" "$ROOTFS" \
+  usr/bin \
+  usr/sbin \
   usr/lib/git-core \
   "usr/lib/${MULTIARCH}/perl" \
   usr/lib/python3.12/lib-dynload
