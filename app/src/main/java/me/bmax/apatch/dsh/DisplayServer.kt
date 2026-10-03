@@ -47,6 +47,15 @@ object DisplayServer {
     const val EXTRA_BINDER_CONTAINER = "binder_container"
     const val EXTRA_BINDER_TOKEN = "binder_token"
 
+    /**
+     * 交接载荷的类名，**这个字符串必须与服务端 jar 里那个类逐字一致**。
+     *
+     * 它只用于诊断文案（告诉用户到底是哪个类没还原出来），不参与协议；协议侧写的是
+     * Parcel 里的真实类名。之所以写成常量而不是 `DisplayBinderContainer::class.java.name`：
+     * 后者在 release 构建里会变成**混淆后的名字** —— 正是要排查的那件事本身。
+     */
+    private const val EXPECTED_CONTAINER = "me.bmax.apatch.display.DisplayBinderContainer"
+
     /** 构建产物：由 app/build.gradle.kts 的 buildDisplayServerJar 生成并注册为 assets 源目录。 */
     private const val JAR_ASSET = "dsh-display-server.jar"
     private const val JAR_PATH = "/data/local/tmp/dsh-display-server.jar"
@@ -162,7 +171,14 @@ object DisplayServer {
             val freshToken = randomToken()
             val latch = java.util.concurrent.CountDownLatch(1)
             val arrived = java.util.concurrent.atomic.AtomicReference<IBinder?>(null)
-            val receiverRegistered = registerReceiver(ctx, freshToken, latch, arrived)
+            // 广播到了、但载荷读不出来时，把**真实原因**留在这里。
+            //
+            // 为什么需要它：单纯「等不到 Binder」有两种完全不同的成因，而历史上超时分支只按
+            // 进程存活去猜，于是把「服务端起来了、广播也到了、只是载荷读不出来」错报成了
+            // 「服务端进程没起来」—— 用户拿着那句提示去查设备与提权通道，方向完全是错的。
+            // 广播到达本身就是「进程起来了」的证据，所以这条路必须给出不同的诊断。
+            val payloadNote = java.util.concurrent.atomic.AtomicReference<String?>(null)
+            val receiverRegistered = registerReceiver(ctx, freshToken, latch, arrived, payloadNote)
             if (!receiverRegistered) {
                 return Result.failure(DisplayError("注册 Binder 交接广播失败"))
             }
@@ -182,6 +198,8 @@ object DisplayServer {
                 }
 
                 if (!latch.await(HANDSHAKE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    // 载荷留下的note 是**确定的事实**，优先于下面按进程存活猜出来的结论。
+                    payloadNote.get()?.let { return Result.failure(DisplayError(it)) }
                     // 没等到广播：区分"进程根本没起来"与"起来了但没送回来"，这两件事的下一步完全不同
                     val alive = processAlive(ctx)
                     return Result.failure(
@@ -216,6 +234,7 @@ object DisplayServer {
         expectedToken: String,
         latch: java.util.concurrent.CountDownLatch,
         arrived: java.util.concurrent.atomic.AtomicReference<IBinder?>,
+        payloadNote: java.util.concurrent.atomic.AtomicReference<String?>,
     ): Boolean {
         // token 通过闭包捕获，不需要额外字段
         val rx = object : BroadcastReceiver() {
@@ -224,19 +243,31 @@ object DisplayServer {
                 val got = intent.getStringExtra(EXTRA_BINDER_TOKEN)
                 if (got == null || got != expectedToken) {
                     // 伪造或过期的交接。记一笔但**不**结束等待：真的那条可能还在路上。
+                    payloadNote.compareAndSet(null, "收到一条 token 对不上的交接广播（不是本次请求发出的）")
                     Log.w(TAG, "忽略 token 不匹配的交接广播")
                     return
                 }
                 // 跨进程来的 Parcelable 必须显式指定 classloader，否则系统会用框架的
                 // classloader 去还原 DisplayBinderContainer，直接 ClassNotFoundException。
                 intent.extras?.classLoader = DisplayBinderContainer::class.java.classLoader
-                val container = parcelableContainer(intent)
+                val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
+                val container = parcelableContainer(intent, failure)
                 if (container == null) {
-                    Log.w(TAG, "交接广播里没有 DisplayBinderContainer")
+                    // 能走到这里就说明**服务端起来了、广播也到了**，所以绝不能再让上层
+                    // 把它报成「进程没起来」。
+                    val why = failure.get() ?: "广播里没有 $EXTRA_BINDER_CONTAINER 这个键"
+                    payloadNote.compareAndSet(
+                        null,
+                        "服务端已经起来了、交接广播也到了，但 Binder 读不出来：$why。" +
+                            "这是 App 自己的问题（release 混淆改了交接类的名字 / proguard 缺 -keep），" +
+                            "不是设备或提权通道的问题，请把这条信息反馈给开发者",
+                    )
+                    Log.e(TAG, "交接广播到了但载荷读不出来：$why")
                     return
                 }
                 val b = container.binder
                 if (b == null) {
+                    payloadNote.compareAndSet(null, "交接广播到了，但服务端给的 Binder 是空的")
                     Log.w(TAG, "交接广播里的 binder 是空的")
                     return
                 }
@@ -260,14 +291,26 @@ object DisplayServer {
         }
     }
 
+    /**
+     * 还原交接过来的容器；失败原因写进 [failure]。
+     *
+     * 失败原因必须**带出去**：真机上它就是「服务端起来了但界面说没起来」那句话的唯一线索
+     * （`Class not found when unmarshalling: …`）。
+     */
     @Suppress("DEPRECATION")
-    private fun parcelableContainer(intent: Intent): DisplayBinderContainer? = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    private fun parcelableContainer(
+        intent: Intent,
+        failure: java.util.concurrent.atomic.AtomicReference<String?>,
+    ): DisplayBinderContainer? = try {
+        val c = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableExtra(EXTRA_BINDER_CONTAINER, DisplayBinderContainer::class.java)
         } else {
             intent.getParcelableExtra(EXTRA_BINDER_CONTAINER) as? DisplayBinderContainer
         }
+        if (c == null) failure.set("键在、但类型不是 $EXPECTED_CONTAINER（多半是被改名了）")
+        c
     } catch (e: Throwable) {
+        failure.set(e.message ?: e.javaClass.simpleName)
         Log.w(TAG, "还原 DisplayBinderContainer 失败: ${e.message}")
         null
     }

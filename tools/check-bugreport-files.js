@@ -205,6 +205,18 @@ ok(/execRootfsForOutput\(DshHomeLogsCommand, 60_000L\)/.test(code), "容器日�
 ok(/redactInPlace\(dshPrevLogFile, notes\)/.test(code) && /redactInPlace\(dshHomeLogFile, notes\)/.test(code),
   "这两项也过脱敏（容器日志里可能有别的凭据）");
 ok(/容器日志采集失败: \$\{it\.message\}/.test(code), "采集失败记进 notes（在 basic.txt 里能看见）");
+// 虚拟屏服务端自己的日志：界面在失败时会让用户"去看这个日志"，报告里必须有它，否则
+// 「服务端到底起来没有、卡在哪一步」只能靠来回问（2026-10-03 那次就是这么绕了一圈）。
+ok(/val displayServerLogFile = File\(bugreportDir, "display-server\.log"\)/.test(code),
+  "归档带虚拟屏服务端日志");
+ok(/cat \$\{me\.bmax\.apatch\.dsh\.DisplayServer\.LOG_PATH\}/.test(code),
+  "服务端日志经特权通道 cat 采集（应用直读多被 SELinux 挡住）");
+ok(/PrivilegedShell\.tryEnter\(\)/.test(code) && /PrivilegedShell\.exit\(\)/.test(code),
+  "采集服务端日志要守特权命令的单飞（tryEnter/exit），不能插队");
+ok(/redactInPlace\(displayServerLogFile, notes\)/.test(code),
+  "服务端日志也过脱敏（里面有交接 token 与启动命令行）");
+ok(/虚拟屏服务端日志未采集/.test(code) && /虚拟屏服务端日志为空/.test(code),
+  "拿不到日志要分别说明「未采集」与「为空」（静默留空会被读成服务端没产生日志）");
 // 限长：不然某天日志涨起来会把归档撑爆
 const cmdMatch = code.match(/private val DshHomeLogsCommand = """([\s\S]*?)"""/);
 const cmd = cmdMatch ? cmdMatch[1] : "";

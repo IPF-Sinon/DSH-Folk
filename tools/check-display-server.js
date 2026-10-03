@@ -80,6 +80,58 @@ for (const f of SHARED) {
   must(!exists(`${SERVER_DIR}/${f}`), `${f} 应只存在于 app 源码树（服务端构建时引用它），不该在 displayserver 里`);
 }
 
+// ── 2b. 过线的 Parcelable 必须写进 proguard 的 -keep ──
+//
+// 共享协议类分两类，**混淆对它们的影响完全不同**，所以判定也必须分开：
+//
+//   · `DisplayBinderContainer` 是 Parcelable，它的**类名随 Parcel 一起过线**。服务端是
+//     app_process 加载的 jar，不经过 R8，写进去的是原始类名；App 侧一旦被改名，还原时就是
+//     `ClassNotFoundException when unmarshalling: …`。这条真漏过一次，而且是 release 专属
+//     （debug 不混淆，所以怎么试都是好的），真机表现还极具误导性：界面说「服务端进程没起来」，
+//     而广播其实按时到了 —— 诊断逻辑本身也一起修了（见 DisplayServer 的 payloadNote）。
+//
+//   · `IDisplayService` / `IDisplayVideoSink` 是 AIDL 接口，过线靠的是描述符**字符串字面量**
+//     （writeInterfaceToken / enforceInterface）与按方法顺序编号的事务码。R8 不改字符串字面量，
+//     两侧又由同一份 .aidl 生成，所以混淆是安全的。这里反向断言"没有多余的 keep"，
+//     免得后人顺手加一条、白白扩大保留面。
+{
+  const proguard = read('app/proguard-rules.pro');
+  const serverAll = actualServer.map((f) => read(`${SERVER_DIR}/${f}`)).join('\n');
+
+  // 服务端塞进 Intent/Bundle extra 的自定义类 == 「过线的 Parcelable」全集
+  const shippedClasses = new Set();
+  for (const m of serverAll.matchAll(/putExtra\(\s*[A-Za-z0-9_."]+\s*,\s*new\s+([A-Za-z0-9_]+)\s*\(/g)) {
+    shippedClasses.add(m[1]);
+  }
+  must(shippedClasses.size > 0, '服务端没有 putExtra(…, new X(…))：解析失效会让本条形同虚设');
+
+  const fqcnOf = (file) => {
+    const src = read(`${APP_PROTO_DIR}/${file}`);
+    const pkg = (src.match(/^package\s+([\w.]+)/m) || [])[1];
+    return pkg ? `${pkg}.${file.replace(/\.java$/, '')}` : null;
+  };
+  const kitOf = (fqcn) => new RegExp(`-keep\\s+class\\s+${fqcn.replace(/\./g, '\\.')}(\\s|\\{)`);
+
+  for (const cls of shippedClasses) {
+    const file = `${cls}.java`;
+    must(SHARED.includes(file), `服务端 putExtra 里的 ${cls} 不在共享协议类清单（SHARED）里`);
+    if (!SHARED.includes(file)) continue;
+    const fqcn = fqcnOf(file);
+    must(!!fqcn, `读不出 ${file} 的包名`);
+    if (!fqcn) continue;
+    must(kitOf(fqcn).test(proguard),
+      `${fqcn} 的类名会随 Parcel 过线，必须在 app/proguard-rules.pro 里 -keep；` +
+      '漏了在 release 里必定 ClassNotFoundException（debug 不混淆，试不出来）');
+  }
+
+  for (const f of ['IDisplayService.java', 'IDisplayVideoSink.java']) {
+    const fqcn = fqcnOf(f);
+    if (!fqcn) { must(false, `读不出 ${f} 的包名`); continue; }
+    must(!kitOf(fqcn).test(proguard),
+      `${fqcn} 是 AIDL 接口，靠描述符字符串过线，不需要 -keep（加了只是白白扩大保留面）`);
+  }
+}
+
 // ── 3. 包名 / 标识：不许有移植源的残留 ──
 {
   const all = [];
@@ -276,6 +328,37 @@ for (const f of SHARED) {
   must(/"\[m\]/.test(kt), 'App 侧 pkill/pgrep 的模式必须带 [m] 括号，否则会连承载命令的 shell 一起杀掉');
   must(/setsid/.test(kt), '启动命令必须处理 setsid（ADB 通道下 adbd 会清掉会话的进程组，后台子进程会被带走）');
   must(/sha256/.test(kt), 'App 侧必须校验推送后的哈希（分块传输最典型的失败是静默截断）');
+}
+
+// ── 9b. 超时诊断不许退化成猜测 ──
+//
+// 历史上「等不到 Binder」只有一句话，且是按进程存活猜出来的（「起来了没送回来」/「没起来」）。
+// 于是「服务端起来了、广播也到了、只是载荷读不出来」被错报成「服务端进程没起来」—— 用户
+// 拿着那句提示去查设备与提权通道，方向完全错，而真相只存在于 logcat 里。
+// 现在广播一到达就会留下 payloadNote，超时分支必须先看它，再看进程存活。
+{
+  const kt = read('app/src/main/java/me/bmax/apatch/dsh/DisplayServer.kt');
+  const startBody = kt.slice(kt.indexOf('fun start(ctx: Context): Result<IDisplayService>'));
+  must(startBody.length > 0, '定位不到 start()（切片标记失效会让本段形同虚设）');
+  must(/payloadNote\.get\(\)\?\.let/.test(startBody),
+    '超时分支必须先读 payloadNote（「广播到了」是确定事实），不能直接按进程存活猜');
+  const noteIdx = startBody.indexOf('payloadNote.get()?.let');
+  const aliveIdx = startBody.indexOf('val alive = processAlive(ctx)');
+  must(noteIdx >= 0 && aliveIdx >= 0 && noteIdx < aliveIdx,
+    'payloadNote 的判断必须排在 processAlive 之前（顺序反了等于没改）');
+  must(/payloadNote\.compareAndSet\(/.test(kt),
+    '接收器在读不出载荷时必须写 payloadNote，否则超时分支拿不到真实原因');
+  must(/failure\.set\(/.test(kt),
+    '还原失败时必须把原因写进 failure —— 那句 `Class not found when unmarshalling` 是唯一线索');
+  const noteBlock = kt.slice(kt.indexOf('val why = failure.get()'), kt.indexOf('val b = container.binder'));
+  must(noteBlock.length > 0, '定位不到「读不出载荷」那段（切片标记失效会让本条形同虚设）');
+  must(/混淆|-keep/.test(noteBlock),
+    '「读不出载荷」的提示必须点出真实成因（release 混淆改名 / proguard 缺 -keep），否则用户不知道该查什么');
+  must(!/进程没起来/.test(noteBlock),
+    '「读不出载荷」的提示不能再说成「进程没起来」——那正是本次要修的错误诊断');
+  must(/EXPECTED_CONTAINER\s*=\s*"me\.bmax\.apatch\.display\.DisplayBinderContainer"/.test(kt),
+    '诊断文案里的类名必须写成字面量：`::class.java.name` 在 release 里会变成混淆后的名字，' +
+    '正是要排查的那件事本身');
 }
 
 // ── 10. 括号配平（一个便宜的语法代理）──

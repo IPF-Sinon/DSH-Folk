@@ -348,6 +348,47 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         }.onSuccess { dshHomeLogFile.writeText(it) }
             .onFailure { notes += "容器日志采集失败: ${it.message}" }
 
+        // 虚拟屏服务端**自己**的日志（/data/local/tmp/dsh-display.log）。
+        //
+        // 服务端是 app_process 起的独立进程，它的报错不进 App 的日志系统；而界面在失败时恰恰会
+        // 让用户"去看这个日志"（DisplayServer 的提示里就写着路径）。报告里原来没有它，于是
+        // 「服务端起来了没有、卡在哪一步」只能靠来回问 —— 2026-10-03 那次就是这么绕了一圈。
+        //
+        // 应用直接读在多数设备上会被 SELinux 挡住（shell_data_file 不对 untrusted_app 开放），
+        // 所以走一次特权通道 `cat`。`cat` 是只读命令，不需要用户确认；拿不到就留一句说明，
+        // 而不是静默留空（静默留空会被读成"服务端没产生日志"）。
+        val displayServerLogFile = File(bugreportDir, "display-server.log")
+        runCatching {
+            val cmd = "cat ${me.bmax.apatch.dsh.DisplayServer.LOG_PATH}"
+            val risk = me.bmax.apatch.dsh.PrivilegedShell.riskOf(cmd)
+            val denied = me.bmax.apatch.dsh.PrivilegedShell.denyReason(apApp, risk, false)
+            when {
+                denied != null -> "denied:$denied"
+                // 同一时刻只允许一条特权命令：正在跑别的就先跳过，不排队（采集不该拖住用户）
+                !me.bmax.apatch.dsh.PrivilegedShell.tryEnter() -> "busy"
+                else -> try {
+                    val out = me.bmax.apatch.dsh.PrivilegedShell.exec(apApp, cmd, false, 15_000L)
+                    when {
+                        out.note != null -> "note:${out.note}"
+                        out.exit != 0 -> "exit:${out.exit}"
+                        else -> out.stdout.takeLast(4000)
+                    }
+                } finally {
+                    me.bmax.apatch.dsh.PrivilegedShell.exit()
+                }
+            }
+        }.onSuccess { text ->
+            when {
+                text.startsWith("denied:") || text.startsWith("note:") ||
+                    text.startsWith("exit:") || text == "busy" ->
+                    notes += "虚拟屏服务端日志未采集（$text）"
+
+                text.isBlank() -> notes += "虚拟屏服务端日志为空（服务端可能从来没起来过）"
+
+                else -> displayServerLogFile.writeText(text)
+            }
+        }.onFailure { notes += "虚拟屏服务端日志采集失败: ${it.message}" }
+
         // 应用自己的备份/恢复日志（filesDir/backup_log.log）：导出与导入的每一步大小、
         // 用了哪条加密路、校验结果都在里面。用户报「导出的包只有 49 字节」时，最需要的就是
         // 这份东西 —— 而它原来根本不在报告里，只能靠来回问。
@@ -372,6 +413,8 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         redactInPlace(dshLogFile, notes)
         redactInPlace(dshPrevLogFile, notes)
         redactInPlace(dshHomeLogFile, notes)
+        // 服务端日志里会出现交接 token 与启动命令行，必须一起脱敏
+        redactInPlace(displayServerLogFile, notes)
         redactInPlace(propFile, notes)
         redactInPlace(cmdlineFile, notes)
 
