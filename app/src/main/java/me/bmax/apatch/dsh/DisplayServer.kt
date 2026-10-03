@@ -129,6 +129,21 @@ object DisplayServer {
     fun currentSession(): Session? = session
 
     /**
+     * 会话屏幕上正在跑的那个包名（agent 用 `display launch` 起过谁）。
+     *
+     * 只给悬浮小窗的把手显示图标用：用户抬眼就知道 agent 此刻在哪个 App 里操作。
+     * 取不到（还没 launch 过、或包名不可见图标）时把手只是不显示图标，其它照旧。
+     */
+    @Volatile
+    private var launchedPackage: String? = null
+
+    fun currentAppPackage(): String? = launchedPackage
+
+    fun noteLaunchedPackage(pkg: String?) {
+        launchedPackage = pkg
+    }
+
+    /**
      * 建一块虚拟屏并记为当前会话。
      *
      * 同尺寸同 dpi 会**复用**已有会话：服务端也按 (宽, 高, dpi) 复用（见 `Main.ensureDisplay`），
@@ -476,6 +491,8 @@ object DisplayServer {
             // 屏随进程一起没了，会话 id 必须一起清：留着它，后续调用会拿一个指向已消失显示的
             // id 去操作，而服务端只会回一句"unknown displayId"。
             session = null
+            // 同理：那块屏上跑过谁，也随屏一起作废，否则小窗把手会显示上一轮的图标
+            launchedPackage = null
             val outcome = privileged(
                 ctx,
                 "pkill -f ${shq(PROC_PATTERN)} 2>/dev/null; true",

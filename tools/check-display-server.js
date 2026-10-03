@@ -686,6 +686,59 @@ for (const f of SHARED) {
   // 预览页占用期间必须让位，而且交还顺序不能反
   must(/DisplayMirror\.suspendForPreview\(\)/.test(preview), '预览页打开时小窗要让位（一块屏只有一个 sink）');
   must(/DisplayMirror\.resumeAfterPreview\(/.test(preview), '预览页关掉后小窗要能回来');
+
+  // ── 形态：照 Operit 的折叠把手模型（这是"自然好看"的全部来源）──
+  //
+  // 一开始做成了"整块画面一直摊在屏幕上"，用户说不如 Operit 自然。差别不在配色而在形态：
+  // 默认折叠成边缘把手、点开才展开、控制按钮点一下才出现。下面几条把这些钉住。
+  must(/FLAG_LAYOUT_NO_LIMITS/.test(mirror),
+    '折叠时要把窗口的一部分放到屏幕外，没有 FLAG_LAYOUT_NO_LIMITS 会被夹回屏内');
+  must(/FLAG_HARDWARE_ACCELERATED/.test(mirror),
+    '非 Activity 窗口要显式声明硬件加速（Compose 在这个窗口里画）');
+  // 折叠是**默认**形态：只查全文有没有 `snapped = true` 是不够的 —— collapse() 里也有一处，
+  // 于是"show() 里默认展开"这种改法能蒙混过关（第一轮反向验证就是这么漏掉的）。
+  // 所以把 show() 的函数体单独切出来看。
+  const showAt = mirror.indexOf('private fun show(ctx: Context');
+  const showBody = showAt < 0 ? '' : mirror.slice(showAt, showAt + 4000);
+  must(showAt >= 0 && /snapped = true/.test(showBody),
+    '显示时默认是**折叠**的把手（在 show() 里显式置为折叠），而不是整块摊开');
+  must(/detectTapGestures/.test(mirror) && /fun expand\(/.test(mirror),
+    '折叠态点一下要能展开');
+  must(/fun collapse\(/.test(mirror), '展开态要能折叠回边缘');
+  must(/ValueAnimator/.test(mirror) && /updateViewLayout/.test(mirror),
+    '折叠/展开/全屏要有位移动画（硬跳那一下就是"糙"的来源）');
+  must(/SNAP_MS = 300L/.test(mirror) && /duration = SNAP_MS/.test(mirror),
+    '动画时长 300ms 且真的用在 ValueAnimator 上（照 Operit 的手感）');
+  must(/CONTROLS_MS/.test(mirror) && /delay\(CONTROLS_MS\)/.test(mirror),
+    '控制按钮出现后要自己隐去 —— 静止画面上不该常驻按钮');
+  must(/currentAppPackage\(\)/.test(mirror),
+    '折叠把手里要显示 agent 正在操作的那个 App 的图标');
+
+  // Compose 承载界面：三个 owner 缺一不可（缺一个会在 rememberSaveable 之类的地方抛）
+  //
+  // 判据认的是**调用** `setViewTreeX(lo)`：只按裸名字判的话，`import` 行自己就能让断言通过
+  // （第一轮反向验证把调用删掉、门禁却仍然绿，就是这么来的）。
+  must(/ComposeView\(/.test(mirror), '小窗界面用 Compose 画（圆角/图标/动画都靠它）');
+  must(/setViewTreeLifecycleOwner\(lo\)/.test(mirror) &&
+    /setViewTreeViewModelStoreOwner\(lo\)/.test(mirror) &&
+    /setViewTreeSavedStateRegistryOwner\(lo\)/.test(mirror),
+    'ComposeView 必须装齐三个 view-tree owner（缺一个就跑不起来）');
+  must(/OverlayLifecycleOwner/.test(mirror), '并且要有对应的 owner 实现');
+  const ownerSrc = read('app/src/main/java/me/bmax/apatch/dsh/OverlayLifecycleOwner.kt');
+  must(/LifecycleOwner/.test(ownerSrc) && /ViewModelStoreOwner/.test(ownerSrc) &&
+    /SavedStateRegistryOwner/.test(ownerSrc),
+    'OverlayLifecycleOwner 要实现三个接口');
+
+  // **不许用 APatchTheme**：它内部无条件调 SystemBarStyle → `context as ComponentActivity`，
+  // 而悬浮窗的 context 不是 Activity —— 用了必崩，而且是运行时才崩。
+  //
+  // 判据要认**调用**（后面跟着 `(` 或 `{`）：本文件里恰好有一段注释在解释"为什么不用它"，
+  // 按裸名字判会把这行注释也当成违规。而 `APatchTheme {` 这种用法同样会崩，
+  // 所以括号和大括号都要算（第一轮反向验证只认括号，`APatchTheme {` 就漏掉了）。
+  must(!/APatchTheme\s*[({]/.test(mirror),
+    '小窗不许用 APatchTheme（它会把 context 强转 ComponentActivity，悬浮窗里必崩）');
+  must(/MaterialTheme\(colorScheme/.test(mirror),
+    '小窗自己提供 MaterialTheme 配色（自包含，不依赖 Activity）');
 }
 
 // ── 18. 产物校验（编译之后跑）──

@@ -123,11 +123,12 @@ Three things that are easy to get wrong:
   deliberate: otherwise an agent would lose the whole virtual screen during the ten-ish seconds it spends thinking
   between a screenshot and a tap. Precisely: **once the app dies, the server exits about 15 seconds later**; while
   the app is alive, only `display stop` (or the preview page's stop button) reclaims it immediately.
-- **The user can watch it work.** Once a virtual screen exists, the app puts the picture in a **floating window**
-  on screen (on by default; it needs the "display over other apps" special permission, granted from
-  Settings → Permissions → the virtual screen row). The user sees what is being tapped even after switching to
-  another app; the window can be dragged and dismissed with ✕. It yields while the full preview page is open —
-  a display has a single video sink, so two viewers would displace each other.
+- **The user can watch it work.** Once a virtual screen exists, a **collapsed handle** appears at the screen
+  edge showing the icon of the app the agent is driving (whoever `display launch` started). Tapping it expands
+  a small window with the live picture; it can be dragged, shown fullscreen, and tapping the picture reveals
+  the controls (which hide themselves after 3 seconds). On by default; it needs the "display over other apps"
+  special permission, granted from Settings → Permissions → the virtual screen row. It yields while the full
+  preview page is open — a display has a single video sink, so two viewers would displace each other.
 - **The preview page shows the agent's screen**, not a new one: it attaches to the existing session through
   `setVideoSink`. What the user sees is what the agent is driving.
 

@@ -806,6 +806,11 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_display_float_summary">Show the virtual screen in a small window while the agent drives it</string>
     <string name="dsh_display_float_need_permission">Needs the \"display over other apps\" permission</string>
     <string name="dsh_display_float_grant">Grant floating window access</string>
+    <string name="dsh_display_float_a11y_expand">Expand the virtual screen window</string>
+    <string name="dsh_display_float_a11y_minimize">Minimize to the screen edge</string>
+    <string name="dsh_display_float_a11y_fullscreen">Show fullscreen</string>
+    <string name="dsh_display_float_a11y_exit_fullscreen">Exit fullscreen</string>
+    <string name="dsh_display_float_a11y_close">Close the window</string>
     <string name="dsh_native_err_bad_url">The url could not be parsed</string>
     <string name="dsh_native_err_start_failed">Could not start the activity: %1$s</string>
     <string name="dsh_native_err_activity_background">Opening a UI needs the app in the foreground — ask the user to switch back to DSH-Folk</string>

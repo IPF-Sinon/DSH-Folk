@@ -168,12 +168,17 @@ DSH-Folk 的 UI 直接复用 FolkPatch，容器与运行时交付思路来自 DS
 - [Shizuku](https://github.com/RikkaApps/Shizuku) —— 免 root 特权通道
 - [KernelSU](https://github.com/tiann/KernelSU) / [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) —— 界面设计参考
 - [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) —— 虚拟显示屏的创建手法（伪造 `ActivityThread`/系统 Context、`SurfaceControl`/`DisplayManager` 反射、`injectInputEvent` 注入），Apache-2.0
-- [Operit](https://github.com/AAswordman/Operit) —— 虚拟屏幕服务端的实现参考，`displayserver/` 移植自其 `tools/shower`，LGPL-3.0
+- [Operit](https://github.com/AAswordman/Operit) —— 虚拟屏幕服务端的实现参考，`displayserver/` 移植自其 `tools/shower`；悬浮小窗的形态（折叠把手 / 展开 / 贴边 / 控制条）参照其 `VirtualDisplayOverlay`，LGPL-3.0
 
 > `displayserver/` 是 [Operit](https://github.com/AAswordman/Operit)（LGPL-3.0）的移植产物，其手法又源自
 > [scrcpy](https://github.com/Genymobile/scrcpy)（Apache-2.0）。LGPLv3 与本站的 GPLv3 兼容，因此可以整体
 > 以 GPL-3.0 分发；移植时按 GPLv3 要求保留了完整源码（本仓库）与该署名。原始的 `com.ai.assistance.shower`
 > 包名已改为 `me.bmax.apatch.display`，并去掉了移植源里与本功能无关的 Compose 界面。
+>
+> 虚拟屏悬浮小窗（`DisplayMirror`）的**形态**也参照了 Operit 的 `VirtualDisplayOverlay`：默认折叠成
+> 边缘把手、点开才展开、点一下出控制条、300ms 位移/尺寸动画。实现是按本仓库的会话模型重写的
+> （只挂 agent 那块屏、与预览页交接唯一的视频 sink、只做旁观不做触摸注入），没有照搬其自动化
+> 进度条、彩虹边框与全屏触摸转发。
 
 ## 许可证
 

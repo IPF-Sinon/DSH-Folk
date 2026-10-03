@@ -121,6 +121,7 @@ jobs:
           node tools/check-display-server.js
           node tools/check-shizuku-user-service.js
           node tools/check-imports.js $(find app/src/main/java -name "*.kt")
+          node tools/check-compose-content.js $(find app/src/main/java -name "*.kt")
           node tools/check-args.js
           node tools/check-autostart.js
 

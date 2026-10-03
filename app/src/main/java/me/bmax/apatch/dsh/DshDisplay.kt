@@ -183,8 +183,12 @@ object DshDisplay {
             )
         }
         return runCatching {
-            svc.launchApp(pkg, displayOf(params))
-            200 to JSONObject().put("ok", true).put("package", pkg).put("display", displayOf(params)).toString()
+            val display = displayOf(params)
+            svc.launchApp(pkg, display)
+            // 记下"这块屏上现在跑的是谁"：悬浮小窗的把手要显示它的图标，
+            // 用户抬眼就知道 agent 此刻在哪个 App 里操作（见 DisplayMirror）。
+            DisplayServer.noteLaunchedPackage(pkg)
+            200 to JSONObject().put("ok", true).put("package", pkg).put("display", display).toString()
         }.getOrElse { e -> failure(ctx, e, "launch_failed") }
     }
 
