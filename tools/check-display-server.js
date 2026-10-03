@@ -639,7 +639,56 @@ for (const f of SHARED) {
     'attachOrStartSession 存在');
 }
 
-// ── 17. 产物校验（编译之后跑）──
+// ── 17. 悬浮小窗（agent 操作虚拟屏时给用户看画面） ──
+//
+// 这一块最容易悄悄坏掉的是**归属**：小窗必须挂 agent 那块屏、必须让位给预览页、
+// 必须只在服务端活着时才去摘 sink。任何一条反了，表现都是"画面不出现"或
+// "服务端被莫名其妙拉起来"，而这两种在编译期都不会报错。
+{
+  const mirror = read('app/src/main/java/me/bmax/apatch/dsh/DisplayMirror.kt');
+  const ds = read('app/src/main/java/me/bmax/apatch/dsh/DisplayServer.kt');
+  const preview = read('app/src/main/java/me/bmax/apatch/ui/screen/DisplayPreviewScreen.kt');
+  const manifest = read('app/src/main/AndroidManifest.xml');
+
+  // 悬浮窗是特殊权限，不声明就根本加不了窗口
+  must(/android\.permission\.SYSTEM_ALERT_WINDOW/.test(manifest),
+    '清单要声明 SYSTEM_ALERT_WINDOW（否则 TYPE_APPLICATION_OVERLAY 的 addView 必定被拒）');
+
+  // 窗口类型与焦点：NOT_FOCUSABLE 不是可选项 ——
+  // 小窗一旦拿到焦点，被 agent 操作的那个应用就会失去焦点，输入也会打到小窗上
+  must(/TYPE_APPLICATION_OVERLAY/.test(mirror), '小窗用 TYPE_APPLICATION_OVERLAY');
+  must(/FLAG_NOT_FOCUSABLE/.test(mirror),
+    '小窗必须 FLAG_NOT_FOCUSABLE（否则会抢走被操作应用的焦点）');
+
+  // 绝不自己建屏：小窗的意义就是"看 agent 正在看的那块"
+  must(/DisplayServer\.currentSession\(\)/.test(mirror), '小窗挂的是当前会话那块屏');
+  must(!/DisplayServer\.(startSession|attachOrStartSession)\(/.test(mirror),
+    '小窗不许自己建屏/建会话 —— 那样用户看到的会是另一块空白屏');
+  must(!/ensureDisplay/.test(mirror), '小窗不许直接碰 ensureDisplay');
+
+  // 只显示，不新建服务端：服务端已被停掉时去 setVideoSink 会把它重新拉起来
+  must(/DisplayServer\.isRunning\(\)/.test(mirror),
+    '摘/挂 sink 前要判服务端还在（setVideoSink 内部会 start()，能把停掉的服务端拉回来）');
+
+  // 接线：建屏时弹出、停止/服务端死掉时收起
+  must(/DisplayMirror\.sync\(ctx\)/.test(ds), '建出虚拟屏后要同步小窗（agent 那条路）');
+  const goneCalls = (ds.match(/DisplayMirror\.onServerGone\(\)/g) || []).length;
+  must(goneCalls >= 2,
+    `服务端换实例的两个时机都要收小窗（用户停止 / 心跳发现已死），DisplayServer 里只找到 ${goneCalls} 处`);
+
+  // 用户在设置里关掉开关时也要立刻收起，而不是"下次建屏才生效"
+  const capsUi = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionCapsScreens.kt');
+  must(/DisplayMirror\.onServerGone\(\)/.test(capsUi), '关掉开关要立刻收起小窗');
+  must(/DisplayMirror\.setEnabled\(/.test(capsUi), '设置页的开关要真的落盘');
+  must(/ACTION_MANAGE_OVERLAY_PERMISSION/.test(capsUi),
+    '缺悬浮窗权限时要能把用户送到那个系统页（只拨开关、什么都不发生最让人困惑）');
+
+  // 预览页占用期间必须让位，而且交还顺序不能反
+  must(/DisplayMirror\.suspendForPreview\(\)/.test(preview), '预览页打开时小窗要让位（一块屏只有一个 sink）');
+  must(/DisplayMirror\.resumeAfterPreview\(/.test(preview), '预览页关掉后小窗要能回来');
+}
+
+// ── 18. 产物校验（编译之后跑）──
 
 
 

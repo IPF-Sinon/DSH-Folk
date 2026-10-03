@@ -102,6 +102,11 @@
     <!-- 应用内更新：下载并校验 APK 后唤起系统安装器。
          不做静默安装（需要 device owner 或系统签名）；sha256 校验不通过一律不装。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 虚拟屏的悬浮小窗：agent 在虚拟屏上操作时，用一个小窗把画面实时放给用户看，
+         而不是要用户自己去设置里开预览页。这是**特殊权限**（要用户在系统页里单独打开），
+         没打开时功能安静地不生效 —— 见 DisplayMirror。
+         该窗口只用于显示：它不接收按键（FLAG_NOT_FOCUSABLE），也不遮挡被操作的应用。 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- 上面那些权限会**隐式**声明硬件要求，必须逐条改成 required=false。
          Android 的规则：申请 CAMERA 等于要求 android.hardware.camera 与

@@ -140,11 +140,21 @@ object DisplayServer {
         val svc = start(ctx).getOrElse { return Result.failure(it) }
         currentSession()
             ?.takeIf { it.width == width && it.height == height && it.dpi == dpi }
-            ?.let { return Result.success(it) }
+            ?.let {
+                // 复用这条路也要同步一次：用户可能刚把小窗关掉，而 agent 又开了一轮
+                DisplayMirror.sync(ctx)
+                return Result.success(it)
+            }
         return runCatching {
             val id = svc.ensureDisplay(width, height, dpi, bitrateKbps)
             if (id <= 0) error("服务端没能建出虚拟屏（ensureDisplay 返回 $id）")
-            Session(id, width, height, dpi).also { session = it }
+            Session(id, width, height, dpi).also {
+                session = it
+                // agent 建出一块虚拟屏 → 把画面放进悬浮小窗给用户看。
+                // 没有悬浮窗权限、或用户在设置里关掉了，这里就是空操作（见 DisplayMirror）。
+                // 预览页自己建会话时不会走到"弹窗"这一步：它进来先 suspendForPreview 让位了。
+                DisplayMirror.sync(ctx)
+            }
         }
     }
 
@@ -459,6 +469,9 @@ object DisplayServer {
     fun stop(ctx: Context) {
         synchronized(lock) {
             stopPingLoop()
+            // 先收悬浮小窗再杀进程：小窗的 detach 需要服务端还活着才发得出去
+            // （服务端没了再调 setVideoSink 会把它**重新拉起来**，见 DisplayMirror.detach）。
+            DisplayMirror.onServerGone()
             service = null
             // 屏随进程一起没了，会话 id 必须一起清：留着它，后续调用会拿一个指向已消失显示的
             // id 去操作，而服务端只会回一句"unknown displayId"。
@@ -510,6 +523,8 @@ object DisplayServer {
                             // 服务端没了，它建的那些虚拟屏也随进程没了：会话必须一起作废，
                             // 否则预览会拿着一个已消失的 displayId 去挂 sink。
                             session = null
+                            // 小窗同理：画面源已经没了，留着一个黑窗口不如收起来
+                            DisplayMirror.onServerGone()
                         }
                     }
                     break

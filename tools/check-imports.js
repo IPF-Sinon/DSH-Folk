@@ -17,7 +17,10 @@ const KNOWN = {
   OutlinedTextField: 'androidx.compose.material3.OutlinedTextField',
   IconButton: 'androidx.compose.material3.IconButton',
   HorizontalDivider: 'androidx.compose.material3.HorizontalDivider',
-  Surface: 'androidx.compose.material3.Surface',
+  // 值可以是一个全限定名，也可以是一组候选：同一个短名在不同包里都合法时，
+  // 命中任意一个就算满足。Surface 就是这种 —— 界面里是 Compose 的，
+  // 而解码头/悬浮窗那边用的是 android.view.Surface。
+  Surface: ['androidx.compose.material3.Surface', 'android.view.Surface'],
   TextButton: 'androidx.compose.material3.TextButton',
   OutlinedButton: 'androidx.compose.material3.OutlinedButton',
   AlertDialog: 'androidx.compose.material3.AlertDialog',
@@ -43,17 +46,21 @@ for (const f of FILES) {
   const code = src
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .split('\n').map((l) => l.replace(/(^|\s)\/\/.*$/, '')).join('\n');
-  for (const [sym, fqcn] of Object.entries(KNOWN)) {
+  for (const [sym, target] of Object.entries(KNOWN)) {
     // 后面跟 ( { [ 或 **.** 都算用到：DshAppDataSnapshot.has(...) / Alignment.CenterVertically
     // 都是「用了这个对象」，而最初的写法只认括号，于是漏报（反向验证时抓到的）。
     if (!new RegExp('(?<![\\w.])' + sym + '\\s*(\\(|\\{|\\[|\\.|$)').test(code)) continue;
-    const pkg = fqcn.split('.').slice(0, -1).join('.');
-    const exact = new RegExp('^import\\s+' + fqcn.replace(/\./g, '\\.') + '\\s*$', 'm').test(code);
-    const wild = new RegExp('^import\\s+' + pkg.replace(/\./g, '\\.') + '\\.\\*\\s*$', 'm').test(code);
-    const samePkg = new RegExp('^package\\s+' + pkg.replace(/\./g, '\\.') + '\\s*$', 'm').test(code);
-    const local = new RegExp('\\b(fun|class|object|interface|val|var)\\s+' + sym + '\\b').test(code);
-    if (!exact && !wild && !samePkg && !local) {
-      console.log('缺 import: ' + f.split('/').pop() + ' 用了 ' + sym + '，需 import ' + fqcn);
+    const cands = Array.isArray(target) ? target : [target];
+    const satisfied = cands.some((fqcn) => {
+      const pkg = fqcn.split('.').slice(0, -1).join('.');
+      const exact = new RegExp('^import\\s+' + fqcn.replace(/\./g, '\\.') + '\\s*$', 'm').test(code);
+      const wild = new RegExp('^import\\s+' + pkg.replace(/\./g, '\\.') + '\\.\\*\\s*$', 'm').test(code);
+      const samePkg = new RegExp('^package\\s+' + pkg.replace(/\./g, '\\.') + '\\s*$', 'm').test(code);
+      const local = new RegExp('\\b(fun|class|object|interface|val|var)\\s+' + sym + '\\b').test(code);
+      return exact || wild || samePkg || local;
+    });
+    if (!satisfied) {
+      console.log('缺 import: ' + f.split('/').pop() + ' 用了 ' + sym + '，需 import ' + cands.join(' 或 '));
       bad++;
     }
   }

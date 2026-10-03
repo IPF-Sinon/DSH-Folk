@@ -257,11 +257,13 @@ const CAP_CAVEAT = {
     'work on it, and that is genuinely the user\'s own screen. Create a session first and pass its id to act ' +
     'on a virtual screen instead; "launch" is meant for the virtual one. Take a shot and read width/height ' +
     'from the JSON before computing tap coordinates, and prefer re-shooting after every action over guessing ' +
-    'where the UI went. Re-running a display command always gives the same session back while the ' +
-    'virtual screen still exists (same width/height/dpi reuses that screen instead of stacking up ' +
-    'new ones), so keep using the id you already have. The helper lives as long as the DSH-Folk app ' +
-    'process does — the app pings it every 10s — and exits ~15s after the app goes away; the user can ' +
-    'also stop it from the preview page.',
+    'where the UI went. Assume the user is watching: once a virtual screen exists the app shows it in a ' +
+    'small floating window on their screen (when the on-screen-over-other-apps permission is granted), so ' +
+    'act as if your taps are visible to them. Re-running a display command always gives the same session ' +
+    'back while the virtual screen still exists (same width/height/dpi reuses that screen instead of ' +
+    'stacking up new ones), so keep using the id you already have. The helper lives as long as the ' +
+    'DSH-Folk app process does — the app pings it every 10s — and exits ~15s after the app goes away; ' +
+    'the user can also stop it from the preview page.',
 };
 
 let cached = null;

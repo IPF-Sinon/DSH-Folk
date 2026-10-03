@@ -50,6 +50,7 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DisplayMirror
 import me.bmax.apatch.dsh.DisplayServer
 import me.bmax.apatch.dsh.DisplayVideoSink
 import kotlin.math.hypot
@@ -93,6 +94,9 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
 
     // 起服务端 + 拿到要看的虚拟屏。两步都是阻塞的特权操作，放 IO 上，别卡住首帧。
     LaunchedEffect(Unit) {
+        // 悬浮小窗先让位：服务端一块屏只有一个 sink，两边同时挂会互相顶掉。
+        // 必须在建会话之前 —— 建会话本身会触发小窗显示（DisplayServer.startSession）。
+        DisplayMirror.suspendForPreview()
         val result = withContext(Dispatchers.IO) {
             // 优先挂到 agent 已经在用的那块屏 —— 预览的意义就是"看它此刻在看的东西"。
             // 另开一块的话，用户看到的是自己的空白屏，而 agent 在另一块上操作，
@@ -141,6 +145,9 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
             Thread {
                 if (id >= 0) runCatching { DisplayServer.setVideoSink(context, id, null) }
                 decoder?.release()
+                // 顺序不能反：小窗要等预览自己摘干净了再去挂同一个 sink，
+                // 否则两边会互相顶掉，最后谁都没画面（服务端一块屏只有一个 sink）。
+                DisplayMirror.resumeAfterPreview(context)
             }.start()
         }
     }

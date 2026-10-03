@@ -135,6 +135,15 @@ object DshEnv {
     const val KEY_RUNTIME_VERSION = "runtime_version"
 
     /**
+     * 虚拟屏悬浮小窗是否开启（默认开）。
+     *
+     * 默认开是因为它解决的是「agent 在虚拟屏上操作，用户完全不知道发生了什么」——
+     * 那是常态而不是特例。真正拦着它出现的是**悬浮窗特殊权限**（要在系统页里单独打开），
+     * 没打开时 [DisplayMirror] 只是安静地不显示，不报错、也不影响 agent。
+     */
+    const val KEY_DISPLAY_FLOAT = "display_float"
+
+    /**
      * 已装运行时要求的最低 App 版本（安装成功时从 metadata 落盘）。
      *
      * 必须持久化而不是每次现查：App 升级/降级后、或离线环境下，启动服务前要知道

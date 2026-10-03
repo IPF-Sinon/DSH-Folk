@@ -35,6 +35,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -62,6 +63,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
+import me.bmax.apatch.dsh.DisplayMirror
 import me.bmax.apatch.util.PermissionUtils
 
 /**
@@ -192,12 +194,19 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
     var pendingFullControl by remember { mutableStateOf<DshNativeBridge.Cap?>(null) }
     // 运行时权限框关掉之后还要接着跳的特殊权限页
     var specialAfterRuntime by remember { mutableStateOf<DshNativeBridge.Special?>(null) }
+    // 悬浮小窗：开关本身存在 prefs 里（默认开），而真正卡住它的是悬浮窗**特殊权限** ——
+    // 那个要在系统页里单独打开，所以两件事各记一份，回到本页时重读权限。
+    var displayFloatOn by remember { mutableStateOf(DisplayMirror.enabled(context)) }
+    var overlayAllowed by remember { mutableStateOf(DisplayMirror.canOverlay(context)) }
 
-    // 跳某项特殊权限的系统设置页。带包名的 Intent 在少数 ROM 上打不开，逐级后退，
+    // 跳某个系统设置页。带包名的 Intent 在少数 ROM 上打不开，逐级后退，
     // 两级都失败时退到应用信息页 —— 总比按下去什么都不发生好。
-    val openSpecialSettings: (DshNativeBridge.Special) -> Unit = { special ->
-        val withPackage = if (special.perAppUri) {
-            Intent(special.action)
+    //
+    // 抽成 (action, perAppUri) 而不是直接收 Special：悬浮窗权限不是"某项能力缺的权限"，
+    // 而是悬浮小窗这个功能自己的特殊权限，但它需要**同一条**跳转阶梯。
+    val openSettingsPage: (String, Boolean) -> Unit = { action, perAppUri ->
+        val withPackage = if (perAppUri) {
+            Intent(action)
                 .setData(Uri.fromParts("package", context.packageName, null))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         } else {
@@ -208,7 +217,7 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
         if (!ok) {
             val plain = runCatching {
                 context.startActivity(
-                    Intent(special.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
             }.isSuccess
             if (!plain) {
@@ -221,6 +230,9 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
                 }
             }
         }
+    }
+    val openSpecialSettings: (DshNativeBridge.Special) -> Unit = { special ->
+        openSettingsPage(special.action, special.perAppUri)
     }
 
     // 一个 launcher 应付所有运行时权限：contract 收的是权限数组，回调里重读状态就够。
@@ -281,6 +293,21 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
         }
     }
 
+    // 悬浮小窗开关。打开时若还没有悬浮窗权限，就直接把用户送到那个系统页 ——
+    // 只把开关拨过去、屏幕上却什么都不发生，是最让人困惑的做法。
+    val toggleDisplayFloat: (Boolean) -> Unit = { want ->
+        displayFloatOn = want
+        DisplayMirror.setEnabled(context.applicationContext, want)
+        if (!want) {
+            // 关掉就立刻收起，并且忘掉「用户手动关过」（那一位只对当前这块屏有意义）
+            DisplayMirror.onServerGone()
+        } else if (!DisplayMirror.canOverlay(context)) {
+            openSettingsPage(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true)
+        } else {
+            DisplayMirror.sync(context.applicationContext)
+        }
+    }
+
     // 写入一项档位。与「功能」页走同一个 API，并同步刷新提示词事实 ——
     // 容器侧是按事实判断「这项能力现在能不能用」的，漏了这一步 agent 会一直拿到旧答案。
     val applyAccess: (DshNativeBridge.Cap, DshNativeBridge.Access) -> Unit = { cap, access ->
@@ -299,6 +326,13 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
         capsWithPermission = DshNativeBridge.capsWithPermission(context)
         coarseLocationOnly = PermissionUtils.hasLocationPermission(context) &&
             !PermissionUtils.hasPreciseLocationPermission(context)
+        // 悬浮窗权限也可能刚在系统页里被打开（开关那一下会把用户送过去），回来要认账；
+        // 刚拿到权限、而且会话还在的话，顺手把小窗显示出来 —— 用户这一趟就是为它去的。
+        val allowedNow = DisplayMirror.canOverlay(context)
+        val justGranted = !overlayAllowed && allowedNow
+        overlayAllowed = allowedNow
+        displayFloatOn = DisplayMirror.enabled(context)
+        if (justGranted && displayFloatOn) DisplayMirror.sync(context.applicationContext)
         nativeBridgeEnabled = DshNativeBridge.enabled(context)
         nativeAccess = DshNativeBridge.accessMap(context)
         DshHostPrompt.writeFacts(context.applicationContext)
@@ -372,6 +406,12 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
                     onClick = { accessSheetCap = cap },
                     onRequestPermission = { requestCapPermission(cap) },
                     onOpenDisplayPreview = { navigator.navigate(DisplayPreviewScreenDestination) },
+                    displayFloatOn = displayFloatOn,
+                    overlayAllowed = overlayAllowed,
+                    onToggleDisplayFloat = toggleDisplayFloat,
+                    onRequestOverlay = {
+                        openSettingsPage(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true)
+                    },
                 )
             }
             item { Spacer(Modifier.height(20.dp)) }
@@ -491,6 +531,10 @@ private fun NativeCapCard(
     onClick: () -> Unit,
     onRequestPermission: () -> Unit,
     onOpenDisplayPreview: () -> Unit,
+    displayFloatOn: Boolean,
+    overlayAllowed: Boolean,
+    onToggleDisplayFloat: (Boolean) -> Unit,
+    onRequestOverlay: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Column(Modifier.padding(14.dp)) {
@@ -519,6 +563,36 @@ private fun NativeCapCard(
             if (cap == DshNativeBridge.Cap.DISPLAY) {
                 TextButton(onClick = onOpenDisplayPreview) {
                     Text(stringResource(R.string.dsh_display_preview_open))
+                }
+                // 悬浮小窗：agent 在虚拟屏上操作时，用户抬眼看得到画面，而不是要他自己
+                // 想起来去开预览页 —— 那正是「agent 干了什么用户完全不知道」的来源。
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.dsh_display_float_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            // 缺权限时说的必须是「为什么现在看不到」这件事本身，
+                            // 而不是一句泛泛的"未开启"—— 用户要找的是那个系统开关。
+                            text = stringResource(
+                                if (overlayAllowed) R.string.dsh_display_float_summary
+                                else R.string.dsh_display_float_need_permission
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (overlayAllowed) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Switch(checked = displayFloatOn, onCheckedChange = onToggleDisplayFloat)
+                }
+                if (!overlayAllowed) {
+                    TextButton(onClick = onRequestOverlay) {
+                        Text(stringResource(R.string.dsh_display_float_grant))
+                    }
                 }
             }
             if (on && permissionMissing) {
