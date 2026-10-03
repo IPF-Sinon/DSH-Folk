@@ -23,6 +23,9 @@ const vm = require("vm");
 const SRC_WEBUI = "app/src/main/java/me/bmax/apatch/ui/DshWebUiActivity.kt";
 const SRC_COMPAT = "app/src/main/java/me/bmax/apatch/util/DshWebCompat.kt";
 const SRC_ENV = "app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt";
+const SRC_FUNCTION_SETTINGS = "app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt";
+const SRC_FUNCTION_SETTINGS_SCREEN =
+  "app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt";
 
 let n = 0;
 let bad = 0;
@@ -372,6 +375,170 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
   ok(!/safeDrawing/.test(modifierSrc), "WebView 上不再用 safeDrawing 内边距（那会留出色带）");
   ok(/installInsetShim\(/.test(webui) && /!insetShimInstalled && isLoopback\(u\)/.test(webui),
     "装上与否分别有 document-start 与 onPageStarted 两条路径");
+}
+
+// ── 手机回车换行：在假 DOM 里真跑一遍 ──
+//
+// 这一段是**行为**断言，不是字符串匹配：造一个最小的 window/document，把 COMPOSER_SHIM
+// 真跑起来，然后喂各种 keydown 进去看它拦不拦、改不改。理由是这条补丁的风险全在"什么时候
+// 不该拦"上 —— 拦错一次，中文输入法确认候选词就变成换行、或者 `/` 菜单回车选不中，
+// 这些只有真跑事件才测得出来。
+{
+  const composer = rawStringConst(webui, "COMPOSER_SHIM");
+  ok(composer.length > 800, `回车换行脚本还原成功（${composer.length} 字节）`);
+  ok(!/\$\{/.test(composer), "脚本里没有未展开的 Kotlin 模板");
+
+  // 静态契约
+  ok(!/beforeinput/.test(composer),
+    "不碰 beforeinput（软键盘只发 beforeinput 时上游本来就会换行，介入反而危险）");
+  ok(/pointer: coarse/.test(composer), "只对触屏（pointer: coarse）注册监听");
+  ok(/isComposing/.test(composer) && /229/.test(composer),
+    "输入法合成期放行（中文回车是确认候选词，拦了就成换行）");
+  ok(/aria-haspopup/.test(composer) && /aria-expanded/.test(composer),
+    "联想菜单打开时放行（回车在菜单里是「选中」），判据用宿主自己的 aria 标记");
+
+  /** 造一个假 window；返回登记下来的监听器。 */
+  function harness(coarse) {
+    const listeners = [];
+    const ctx = {
+      console,
+      document: { querySelectorAll: () => [], addEventListener: () => {} },
+      matchMedia: (q) => ({ matches: q === "(pointer: coarse)" ? coarse : false }),
+    };
+    ctx.window = ctx;
+    ctx.globalThis = ctx;
+    ctx.addEventListener = (ev, fn, capture) => listeners.push({ ev, fn, capture });
+    ctx.KeyboardEvent = function (type, init) {
+      this.type = type;
+      Object.assign(this, init || {});
+    };
+    vm.createContext(ctx);
+    return { ctx, listeners };
+  }
+
+  /** 输入框/卡片元素替身。`menuOpen` 模拟宿主把 aria-expanded 置为 true。 */
+  function element(inComposer, menuOpen) {
+    return {
+      dispatched: [],
+      closest(sel) {
+        if (sel === "[data-composer-input]") return inComposer ? this : null;
+        if (sel === "[data-composer-card]") return inComposer ? this : null;
+        return null;
+      },
+      getClientRects: () => [],
+      getAttribute: () => null,
+      querySelector: (sel) =>
+        menuOpen && sel === '[aria-haspopup][aria-expanded="true"]' ? { tagName: "BUTTON" } : null,
+      dispatchEvent(e) {
+        this.dispatched.push(e);
+        return true;
+      },
+    };
+  }
+
+  function keydown(over) {
+    return Object.assign(
+      {
+        type: "keydown",
+        key: "Enter",
+        code: "Enter",
+        keyCode: 13,
+        shiftKey: false,
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+        isComposing: false,
+        target: null,
+        prevented: 0,
+        stopped: 0,
+        preventDefault() { this.prevented++; },
+        stopImmediatePropagation() { this.stopped++; },
+      },
+      over || {},
+    );
+  }
+
+  const coarse = harness(true);
+  vm.runInContext(composer, coarse.ctx);
+  ok(coarse.listeners.length === 1 && coarse.listeners[0].ev === "keydown",
+    "触屏上挂了恰好一个 keydown 监听");
+  ok(coarse.listeners[0].capture === true,
+    "用的是**捕获**阶段（要在宿主自己的 window 监听之前吃到这次回车）");
+  ok(coarse.ctx.__dshFolkComposerEnter === 1, "装了幂等哨兵（onPageStarted 回落重复注入不会挂两遍）");
+  vm.runInContext(composer, coarse.ctx);
+  ok(coarse.listeners.length === 1, "重复注入不会重复挂监听");
+
+  const fire = (e, target) => {
+    e.target = target;
+    coarse.listeners[0].fn(e);
+    return e;
+  };
+
+  // ① 正题：输入框里的裸回车 → 拦下"发送"，改发一个 Shift+Enter
+  const editor = element(true, false);
+  const e1 = fire(keydown(), editor);
+  ok(e1.prevented === 1, "裸回车被 preventDefault（拦掉上游的发送）");
+  ok(e1.stopped === 1, "并且 stopImmediatePropagation 掉，不让宿主的 window 监听再看到它");
+  ok(editor.dispatched.length === 1, "补发了一个按键事件");
+  const sent = editor.dispatched[0];
+  ok(sent && sent.type === "keydown" && sent.key === "Enter" && sent.shiftKey === true,
+    "补发的是 **Shift+Enter** —— 走上游自己的 fixed.newline 换行路径，不自己搓编辑器");
+  ok(sent && sent.bubbles === true && sent.cancelable === true,
+    "补发事件要冒泡且可取消（否则宿主收不到、或没法阻止默认插入）");
+
+  // ② 合成期：中文输入确认候选词，绝不能拦
+  const e2 = fire(keydown({ isComposing: true }), element(true, false));
+  ok(e2.prevented === 0 && e2.stopped === 0, "isComposing 期间放行");
+  const e3 = fire(keydown({ keyCode: 229 }), element(true, false));
+  ok(e3.prevented === 0, "keyCode 229（旧内核的合成标记）也放行");
+
+  // ③ 带修饰键：Shift+Enter 本来就是换行，Ctrl/Cmd+Enter 是宿主自己的互补行为
+  for (const mod of ["shiftKey", "ctrlKey", "altKey", "metaKey"]) {
+    const em = fire(keydown({ [mod]: true }), element(true, false));
+    ok(em.prevented === 0, `带 ${mod} 的回车放行（那是宿主已定义的行为）`);
+  }
+
+  // ④ 菜单打开：回车是"选中"，不是换行
+  const menuEl = element(true, true);
+  const e4 = fire(keydown(), menuEl);
+  ok(e4.prevented === 0 && menuEl.dispatched.length === 0,
+    "联想/命令菜单打开时放行（回车在那里是选中项）");
+
+  // ⑤ 别的地方的回车（队列条目编辑框、搜索框…）不归这段管
+  const e5 = fire(keydown(), element(false, false));
+  ok(e5.prevented === 0, "输入框之外的回车放行");
+  const e6 = fire(keydown({ key: "a", code: "KeyA", keyCode: 65 }), element(true, false));
+  ok(e6.prevented === 0, "非回车键放行");
+
+  // ⑥ 精确指针（桌面/接了硬键盘）：根本不注册监听，宿主行为原样保留
+  const fine = harness(false);
+  vm.runInContext(composer, fine.ctx);
+  ok(fine.listeners.length === 0, "非触屏设备上不注册任何监听（桌面 Shift+Enter 本来就能按）");
+
+  // ── 接线：两处注入 + 偏好开关 + 设置入口，缺一处这补丁就到不了用户手里 ──
+  ok(/private fun installComposerShim\(view: WebView, url: String\)/.test(webui),
+    "有 installComposerShim");
+  ok(/WebViewCompat\.addDocumentStartJavaScript\(view, COMPOSER_SHIM, rules\)/.test(webui),
+    "document-start 注入（监听必须排在宿主之前，晚一秒就拦不到）");
+  ok(/!composerShimInstalled && isLoopback\(u\)/.test(webui) && /evaluateJavascript\(COMPOSER_SHIM/.test(webui),
+    "onPageStarted 有回落注入（document-start 不支持时尽力而为）");
+  ok(/if \(!DshWebCompat\.enterNewline\(this\)\)/.test(webui),
+    "注入受用户偏好约束（关掉就不注入）");
+  // 定义写对了不等于接上了：反向验证时"删掉调用点"曾经漏网（断言只查了函数定义），
+  // 所以这里钉**调用现场**本身。
+  ok(/composerShimInstalled = installComposerShim\(this, url\)/.test(webui),
+    "建 WebView 时真的调用了它（只定义不调用=补丁永远装不上）");
+  ok(/fun enterNewline\(ctx: Context\): Boolean/.test(compat) &&
+    /getBoolean\(DshEnv\.KEY_WEB_ENTER_NEWLINE, true\)/.test(compat),
+    "偏好默认**开**（手机上这不是可选项，是唯一能换行的办法）");
+  ok(/const val KEY_WEB_ENTER_NEWLINE/.test(env), "偏好键落在 DshEnv");
+
+  const fnSettings = fs.readFileSync(SRC_FUNCTION_SETTINGS, "utf8");
+  const fnScreen = fs.readFileSync(SRC_FUNCTION_SETTINGS_SCREEN, "utf8");
+  ok(/R\.string\.dsh_web_enter_newline_title/.test(fnSettings) &&
+    /onWebEnterNewlineChange/.test(fnSettings),
+    "设置里有一个能拨的开关（标题 + 回调）");
+  ok(/DshWebCompat\.setEnterNewline\(/.test(fnScreen), "拨开关会落盘");
 }
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);

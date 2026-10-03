@@ -620,6 +620,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_webui_compat_on_desc">内核看起来不旧但网页界面仍有异常时选这个</string>
     <string name="dsh_webui_compat_off">从不注入</string>
     <string name="dsh_webui_compat_off_desc">完全不改动页面</string>
+    <string name="dsh_web_enter_newline_title">回车键换行</string>
+    <string name="dsh_web_enter_newline_summary">触屏设备上，聊天框里的回车是换行而不是发送 —— 发送请按发送按钮。上游把 Enter/Shift+Enter 注册成只读快捷键（发送 / 换行），而手机键盘没有 Shift，不补这一下就写不出多行消息。刷新页面后生效。</string>
 
     <!-- 发送日志的时间裁剪 -->
     <string name="dsh_log_trim_title">是否只发送最近一段时间的日志？</string>

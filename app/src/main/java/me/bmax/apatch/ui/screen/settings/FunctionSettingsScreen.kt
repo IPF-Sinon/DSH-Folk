@@ -143,6 +143,8 @@ internal fun DshSettingsScreen(
         mutableStateOf(dshPrefs.getString(DshEnv.KEY_WEBUI_MODE, DshWebUi.MODE_IN_APP) ?: DshWebUi.MODE_IN_APP)
     }
     var webCompatMode by rememberSaveable { mutableStateOf(DshWebCompat.mode(context)) }
+    // 手机回车换行（默认开）：它管的是 WebUI 输入框里回车是换行还是发送
+    var webEnterNewline by rememberSaveable { mutableStateOf(DshWebCompat.enterNewline(context)) }
     // WebView 内核版本只用于显示；读包信息不会触发 WebView 加载，但也没必要每次重组都读
     val webviewVersion = remember { DshWebCompat.kernel(context).display }
     // 自启动：方式 + 是否同时拉容器。Mode 不是 Parcelable，用 remember 就够
@@ -540,6 +542,13 @@ internal fun DshSettingsScreen(
                         DshWebCompat.setMode(context.applicationContext, mode)
                     },
                     webviewVersion = webviewVersion,
+                    webEnterNewline = webEnterNewline,
+                    onWebEnterNewlineChange = { on ->
+                        webEnterNewline = on
+                        // 落盘即生效于**下次加载**：注入发生在页面创建时（document-start），
+                        // 已打开的页面要刷新一次才切过来，这一点在副标题里写明了
+                        DshWebCompat.setEnterNewline(context.applicationContext, on)
+                    },
                     capsWithPermission = capsWithPermission,
                     allFilesGranted = allFilesGranted,
                     onOpenAllFilesSettings = { openAllFilesSettings() },

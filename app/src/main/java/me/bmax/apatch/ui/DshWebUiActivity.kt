@@ -242,6 +242,14 @@ class DshWebUiActivity : AppCompatActivity() {
     private var insetShimInstalled = false
 
     /**
+     * 手机回车换行那一段是否已按 document-start 装上。
+     *
+     * 与 [insetShimInstalled] 一样单独记：它的开关是「手机回车换行」这个用户偏好，
+     * 与内核新旧（[compatShimInstalled]）无关。
+     */
+    private var composerShimInstalled = false
+
+    /**
      * 最近一次算出的系统栏内边距（CSS 像素 = dp）。
      *
      * 存成字段而不是只在组合期用局部量：`onPageStarted` 的补注入发生在**别的时刻**
@@ -467,6 +475,13 @@ class DshWebUiActivity : AppCompatActivity() {
                                                 null,
                                             )
                                         }
+                                        // 回车换行那一段的回落：晚于文档开头，但监听注册仍
+                                        // 早于页面脚本求值，多半还来得及（与上面两段同待遇）
+                                        if (!composerShimInstalled && isLoopback(u) &&
+                                            DshWebCompat.enterNewline(this@DshWebUiActivity)
+                                        ) {
+                                            view?.evaluateJavascript(COMPOSER_SHIM, null)
+                                        }
                                         super.onPageStarted(view, u, favicon)
                                     }
 
@@ -562,6 +577,9 @@ class DshWebUiActivity : AppCompatActivity() {
                                 insetShimInstalled = installInsetShim(
                                     this, url, cssInsetTop, cssInsetRight, cssInsetBottom, cssInsetLeft,
                                 )
+                                // 手机回车换行同样要在文档开始前装：监听必须**排在宿主
+                                // 自己的 window 监听之前**，否则拦不到那次回车（见 COMPOSER_SHIM）
+                                composerShimInstalled = installComposerShim(this, url)
                                 webView = this
                                 loadUrl(url)
                             }
@@ -781,6 +799,37 @@ class DshWebUiActivity : AppCompatActivity() {
             true
         }.getOrElse {
             Log.w(TAG, "addDocumentStartJavaScript failed for inset shim $rules", it)
+            false
+        }
+    }
+
+    /**
+     * 装上「手机回车换行」补丁（document-start），返回是否装上了。
+     *
+     * 与 [installCompatShim] 的区别：那一个受「旧内核兼容」模式约束，这一段受用户偏好
+     * [DshWebCompat.enterNewline] 约束 —— 它是输入行为，不是 API 兼容，与内核新旧无关，
+     * 所以**默认开**。关掉之后不注入，下次加载（刷新）即恢复上游原样。
+     *
+     * 只对回环 origin 生效：别的站点不该被我们改输入行为。
+     */
+    private fun installComposerShim(view: WebView, url: String): Boolean {
+        if (!DshWebCompat.enterNewline(this)) {
+            Log.i(TAG, "composer enter-newline patch disabled by preference")
+            return false
+        }
+        val supported = runCatching {
+            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        }.getOrDefault(false)
+        if (!supported) {
+            Log.i(TAG, "document-start script unsupported, composer shim falls back to onPageStarted")
+            return false
+        }
+        val rules = loopbackOriginRules(url)
+        return runCatching {
+            WebViewCompat.addDocumentStartJavaScript(view, COMPOSER_SHIM, rules)
+            true
+        }.getOrElse {
+            Log.w(TAG, "addDocumentStartJavaScript failed for composer shim $rules", it)
             false
         }
     }
@@ -1157,6 +1206,95 @@ class DshWebUiActivity : AppCompatActivity() {
         + '-' + h[8]+h[9] + '-' + h[10]+h[11]+h[12]+h[13]+h[14]+h[15];
     };
   }
+})();
+"""
+
+        /**
+         * 让**手机上的回车键换行**，而不是发送。
+         *
+         * ## 为什么必须由我们来做
+         *
+         * 上游把输入框（Lexical contenteditable，标记 `[data-composer-input]`）的
+         * 快捷键注册成**只读**绑定：Enter = 发送、Shift+Enter = 换行、Ctrl/Cmd+Enter =
+         * 互补行为（见 `dsh-client-ui-conversation` 的 `fixed.send` / `fixed.newline`；
+         * `dsh-client-shortcuts` 明确写着 `fixed.*` 是 "read-only input action whose keys
+         * cannot be assigned to editable commands"）。而在手机上，软键盘**没有 Shift**，
+         * 于是「换行」这个动作根本按不出来 —— 想写两行都做不到。设置里也没有对应开关
+         * （`settings.enter.*` 只管智能体繁忙时是排队还是插话）。
+         *
+         * ## 手法：借它自己的换行路径，不自己搓编辑器
+         *
+         * 上游把按键监听挂在 `window` 上（capture + bubble 各一个），并且**从不检查
+         * `isTrusted`**。本脚本在 document-start 就注册 window-capture 监听，因此**排在
+         * 它的监听之前**：吃到裸回车后阻止传播，再**合成一个 Shift+Enter** 派发回同一个
+         * 元素 —— 剩下的交给上游自己的 `fixed.newline` 处理。这样换行插入、撤销栈、
+         * 光标位置全是宿主原生行为，我们只改「哪个键等于换行」这一件事。
+         *
+         * ## 三条绝不能碰的边界
+         *
+         * 1. **输入法合成期（`isComposing` / `keyCode 229`）一律放行**：中文输入时回车是
+         *    「确认候选词」，拦了就会把确认变成换行。
+         * 2. **联想菜单打开时放行**：`/`、`@`、`+`、模型等菜单里回车是「选中」。
+         *    判据用宿主自己的无障碍标记 `[aria-haspopup][aria-expanded="true"]`
+         *    （`+` 按钮就是 `aria-haspopup="listbox"` + `aria-expanded={commandMenuOpen}`），
+         *    比猜 `[role="menu"]` 稳。
+         * 3. **只对触屏（`pointer: coarse`）注册监听**：桌面/接了硬键盘的设备上
+         *    Shift+Enter 本来就能按，保持原样。
+         *
+         * ## 兜底与失败模式
+         *
+         * 软键盘若只发 `beforeinput` 而不发 keydown，本脚本不介入 —— 那种情况下上游本来
+         * 就会插入换行（不会误发），所以「不处理」就是安全的一边。
+         * 幂等：重复注入（document-start 与 onPageStarted 回落）只装一次监听。
+         */
+        private const val COMPOSER_SHIM = """
+(function(){
+  if (window.__dshFolkComposerEnter) return; window.__dshFolkComposerEnter = 1;
+  var coarse = false;
+  try { coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches; } catch (e) {}
+  if (!coarse) return;
+
+  var INPUT = '[data-composer-input]';
+  var CARD = '[data-composer-card]';
+
+  // 菜单是否打开：优先信宿主自己的 aria 标记（触发按钮就在输入卡片里），
+  // 再兜一层浮层可见性（菜单本体走 portal 渲染在卡片外）。
+  function menuOpen(el){
+    try {
+      var card = (el && typeof el.closest === 'function' && el.closest(CARD)) || null;
+      if (card !== null && card.querySelector('[aria-haspopup][aria-expanded="true"]') !== null) return true;
+      var list = document.querySelectorAll('[role="menu"],[role="listbox"]');
+      for (var i = 0; i < list.length; i++) {
+        var m = list[i];
+        if (m.getAttribute('aria-hidden') === 'true') continue;
+        if (m.getClientRects && m.getClientRects().length > 0) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  function onKeyDown(e){
+    try {
+      if (e.key !== 'Enter' && e.code !== 'Enter' && e.keyCode !== 13) return;
+      if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+      // 合成期：回车属于输入法（确认候选词），绝不动
+      if (e.isComposing || e.keyCode === 229) return;
+      var t = e.target;
+      if (!t || typeof t.closest !== 'function' || t.closest(INPUT) === null) return;
+      if (menuOpen(t)) return;
+      // 拦住上游的"发送"，改发一个 Shift+Enter 走它自己的换行路径。
+      // stopImmediatePropagation 之所以有效：本监听在 document-start 注册，
+      // 排在宿主那些 window 监听之前。
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      t.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Enter', code: 'Enter', shiftKey: true,
+        bubbles: true, cancelable: true, composed: true
+      }));
+    } catch (err) {}
+  }
+
+  window.addEventListener('keydown', onKeyDown, true);
 })();
 """
 

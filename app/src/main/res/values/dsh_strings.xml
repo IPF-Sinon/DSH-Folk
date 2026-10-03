@@ -640,6 +640,8 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_webui_compat_on_desc">Use this if the web interface misbehaves even though the WebView looks current</string>
     <string name="dsh_webui_compat_off">Never inject</string>
     <string name="dsh_webui_compat_off_desc">Leave the page completely untouched</string>
+    <string name="dsh_web_enter_newline_title">Enter inserts a newline</string>
+    <string name="dsh_web_enter_newline_summary">On touch screens, Enter in the chat box starts a new line instead of sending — send with the send button. Upstream binds Enter/Shift+Enter as read-only shortcuts (send / newline) and phone keyboards have no Shift, so without this you cannot write a multi-line message. Takes effect after a refresh.</string>
 
     <!-- 发送日志的时间裁剪 -->
     <string name="dsh_log_trim_title">Trim log by time?</string>

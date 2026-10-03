@@ -115,6 +115,21 @@ object DshWebCompat {
         prefs(ctx).edit().putBoolean(DshEnv.KEY_WEBUI_COMPAT_NOTICED, true).apply()
     }
 
+    /**
+     * 要不要装「手机回车换行」补丁（默认开）。
+     *
+     * 与 [shouldInject] 是**两件事**：那一个问「内核缺不缺 API」（内核够新就不注入），
+     * 这一个问「用户想不想让回车换行」—— 任何内核上都需要，所以默认开、只看偏好。
+     * 真正的触屏判断在脚本里（`matchMedia('(pointer: coarse)')`）：桌面浏览器上
+     * Shift+Enter 本来就能按，不该动它。
+     */
+    fun enterNewline(ctx: Context): Boolean =
+        prefs(ctx).getBoolean(DshEnv.KEY_WEB_ENTER_NEWLINE, true)
+
+    fun setEnterNewline(ctx: Context, on: Boolean) {
+        prefs(ctx).edit().putBoolean(DshEnv.KEY_WEB_ENTER_NEWLINE, on).apply()
+    }
+
     private fun prefs(ctx: Context) =
         ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
 

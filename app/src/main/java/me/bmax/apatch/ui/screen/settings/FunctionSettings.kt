@@ -173,6 +173,9 @@ fun FunctionSettingsContent(
     onWebCompatModeChange: (String) -> Unit,
     /** 当前 WebView 内核版本名（读不到时为空），只用于显示。 */
     webviewVersion: String,
+    /** 手机回车换行：WebUI 输入框里裸回车 = 换行而不是发送（默认开，只对触屏生效）。 */
+    webEnterNewline: Boolean,
+    onWebEnterNewlineChange: (Boolean) -> Unit,
     /**
      * 权限已经齐了的能力集合。
      *
@@ -677,6 +680,29 @@ fun FunctionSettingsContent(
                         summary = stringResource(R.string.dsh_webui_compat_off_desc),
                         onSelect = { onWebCompatModeChange(DshWebCompat.MODE_OFF) },
                     )
+
+                    Spacer(Modifier.height(12.dp))
+                    // 输入行为，不是兼容性：所以与上面三选一分开，且默认开。
+                    // 上游把 Enter/Shift+Enter 注册成只读快捷键（发送/换行），
+                    // 而手机软键盘没有 Shift —— 不补这一下就写不出多行消息。
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_web_enter_newline_title),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.dsh_web_enter_newline_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        ExpressiveSwitch(
+                            checked = webEnterNewline,
+                            onCheckedChange = onWebEnterNewlineChange,
+                        )
+                    }
                 }
             }
         }

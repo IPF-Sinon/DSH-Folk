@@ -316,6 +316,16 @@ object DshEnv {
     const val KEY_WEBUI_COMPAT_NOTICED = "webui_compat_noticed"
 
     /**
+     * 手机回车换行：把 WebUI 输入框里的裸回车从「发送」改成「换行」（默认开）。
+     *
+     * 上游把 Enter/Shift+Enter 注册成**只读**快捷键（发送 / 换行），而手机软键盘没有
+     * Shift —— 不补这一下，手机上就写不出多行消息。详见 `COMPOSER_SHIM`。
+     *
+     * 只对触屏（`pointer: coarse`）生效；用户关掉后下次加载不再注入。
+     */
+    const val KEY_WEB_ENTER_NEWLINE = "web_enter_newline"
+
+    /**
      * 需要垫片的 Chromium 主版本上界（含）。
      *
      * 取上界 = **垫片覆盖项里要求最高的那个版本**，低报会让该修的设备一条都不修

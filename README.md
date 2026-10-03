@@ -80,6 +80,10 @@ DSH-Folk 把 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)�
 `dsh-config-manager`（**配置备份功能的依赖**）、`dsh-file-upload`（拖拽上传 / 文档转 Markdown / 图片 OCR / 语音输入）。
 失败不影响启动，之后可以在插件商店里手动装；预装清单按包名逐个记账，从旧版本升级上来会自动补装新增的那几个。
 
+WebUI 里有几处**由 DSH-Folk 自己注入**的补丁（不依赖上面这些插件，因此不会被插件升级覆盖）：旧内核的 JS API 兼容垫片、
+系统栏内边距避让，以及**手机回车换行** —— 上游把 Enter/Shift+Enter 注册成只读快捷键（发送 / 换行），而软键盘没有 Shift，
+所以触屏设备上由我们注入一段脚本把裸回车改成换行（发送用发送按钮）；开关在 设置 → 功能 → WebUI 兼容。
+
 root / Shizuku / 无线 ADB 都是**可选**的，并且**默认不启用**。DSH-Folk 只探测并复用设备上已有的 su（Magisk / KernelSU / APatch）
 与已授权的 Shizuku / Sui，自身不打任何内核补丁、不安装 su、不内置 Shizuku Server。要用就去
 **设置 → 安全 → 权限通道 → 首选通道** 选一条（或选「自动」按 root > Shizuku > 无线 ADB 挑）。
