@@ -165,9 +165,6 @@ fun FunctionSettingsContent(
     /** 最近一次测速的原始结果（展示在弹窗里每条线路自己那一行上）。 */
     speedResults: List<DshSource.SpeedResult>,
     onSpeedTest: () -> Unit,
-    perm: PermissionManager.Status,
-    onRefreshPerm: () -> Unit,
-    onRequestShizuku: () -> Unit,
     /** WebUI 打开方式：in | browser | ask。 */
     webuiMode: String,
     onWebuiModeChange: (String) -> Unit,
@@ -176,18 +173,6 @@ fun FunctionSettingsContent(
     onWebCompatModeChange: (String) -> Unit,
     /** 当前 WebView 内核版本名（读不到时为空），只用于显示。 */
     webviewVersion: String,
-    /** 权限通道首选（off | auto | root | shizuku | adb）。 */
-    permPrefName: String,
-    onPermPrefChange: (String) -> Unit,
-    /** 特权严格程度（严格 | 一般 | 宽松）。 */
-    privStrictness: PrivStrictness,
-    onPrivStrictnessChange: (PrivStrictness) -> Unit,
-    /** 原生能力桥总开关。 */
-    nativeBridgeEnabled: Boolean,
-    onNativeBridgeEnabledChange: (Boolean) -> Unit,
-    /** 每项原生能力的访问级别。 */
-    nativeAccess: Map<DshNativeBridge.Cap, DshNativeBridge.Access>,
-    onNativeAccessChange: (DshNativeBridge.Cap, DshNativeBridge.Access) -> Unit,
     /**
      * 权限已经齐了的能力集合。
      *
@@ -195,18 +180,12 @@ fun FunctionSettingsContent(
      * 而且每加一项能力都要改三处签名。改成集合后界面只问「这一项齐了吗」。
      */
     capsWithPermission: Set<DshNativeBridge.Cap>,
-    /** 是否只拿到了「大致位置」（精确位置未授予）。单独一行提示，不算缺权限。 */
-    coarseLocationOnly: Boolean,
     /** 「所有文件访问」是否已授予（appop 特殊权限，只能跳系统设置页）。 */
     allFilesGranted: Boolean,
-    /** 为某项能力申请它缺的权限：运行时权限直接申请，特殊权限跳系统页。 */
-    onRequestCapPermission: (DshNativeBridge.Cap) -> Unit,
     /** 跳「所有文件访问」的系统设置页。 */
     onOpenAllFilesSettings: () -> Unit,
     /** 打开「细化文件访问范围（黑白名单）」子页。 */
     onOpenFileAccess: () -> Unit = {},
-    /** 打开虚拟屏预览（看得见画面、也能在上面点滑）。 */
-    onOpenDisplayPreview: () -> Unit = {},
     /** 打开「权限管理」：特权通道、无线 ADB 与各项原生能力都在那一页里分类 + 可搜索。 */
     onOpenPermissionHub: () -> Unit = {},
     /** 共享存储挂载总开关（挂载 /sdcard + dsh-fs 桥，两者都受黑白名单约束）。 */
@@ -257,23 +236,6 @@ fun FunctionSettingsContent(
     /** 安装插件后是否验证一次能否启动。 */
     verifyAfterInstall: Boolean,
     onVerifyAfterInstallChange: (Boolean) -> Unit,
-    adbPairCode: String,
-    onAdbPairCodeChange: (String) -> Unit,
-    adbPairPort: String,
-    onAdbPairPortChange: (String) -> Unit,
-    adbConnectPort: String,
-    onAdbConnectPortChange: (String) -> Unit,
-    adbHost: String,
-    onAdbHostChange: (String) -> Unit,
-    adbBusy: Boolean,
-    adbOutput: String,
-    adbShellAllowed: Boolean,
-    onAdbShellAllowedChange: (Boolean) -> Unit,
-    adbRootAllowed: Boolean,
-    onAdbRootAllowedChange: (Boolean) -> Unit,
-    onPair: () -> Unit,
-    onDisconnectAdb: () -> Unit,
-    onOpenDevSettings: () -> Unit,
     permissionOnly: Boolean = false,
     flat: Boolean = false,
     highlightKey: String? = null,

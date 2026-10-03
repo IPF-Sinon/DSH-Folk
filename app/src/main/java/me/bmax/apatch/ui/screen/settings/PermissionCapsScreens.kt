@@ -56,6 +56,7 @@ import androidx.core.content.edit
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.DisplayPreviewScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
@@ -345,6 +346,7 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
                     coarseLocationOnly = coarseLocationOnly,
                     onClick = { accessSheetCap = cap },
                     onRequestPermission = { requestCapPermission(cap) },
+                    onOpenDisplayPreview = { navigator.navigate(DisplayPreviewScreenDestination) },
                 )
             }
             item { Spacer(Modifier.height(20.dp)) }
@@ -463,6 +465,7 @@ private fun NativeCapCard(
     coarseLocationOnly: Boolean,
     onClick: () -> Unit,
     onRequestPermission: () -> Unit,
+    onOpenDisplayPreview: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Column(Modifier.padding(14.dp)) {
@@ -483,6 +486,15 @@ private fun NativeCapCard(
                 }
                 Spacer(Modifier.width(8.dp))
                 NativeAccessBadge(cap = cap, access = access)
+            }
+            // 虚拟屏预览走的是和 agent 工具面**完全同一条路**（同一个服务端、同一份会话状态），
+            // 所以它既是有画面可看的地方，也是排障口：agent 那边"截得到图却点不动"时，
+            // 打开这里就能分清是画面没来、还是输入没进去。没有独立提权窗口，要开就走这一条。
+            // 与档位无关地显示：通道不可用时，这一页自己会说明原因，比藏起来更好排障。
+            if (cap == DshNativeBridge.Cap.DISPLAY) {
+                TextButton(onClick = onOpenDisplayPreview) {
+                    Text(stringResource(R.string.dsh_display_preview_open))
+                }
             }
             if (on && permissionMissing) {
                 if (cap == DshNativeBridge.Cap.SHELL) {

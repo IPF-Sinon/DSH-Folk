@@ -647,24 +647,30 @@ console.log("\n── 特权通道约束 ──");
 
   // 事实文件是「agent 知不知道有特权」的唯一来源：改通道 / 刷新权限 / Shizuku 刚授权
   // 三条路径都得重写它。少了任何一条，用户会看到「我开了 root 它也不知道」。
-  const settings = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt", "utf8");
-  const prefBlock = settings.slice(
-    settings.indexOf("onPermPrefChange = { name ->"),
-    settings.indexOf("privStrictness = privStrictness,")
-  );
+  //
+  // 这三段逻辑原先内联在「功能」页的调用点里（FunctionSettingsScreen.kt 给
+  // FunctionSettingsContent 传的那几个 lambda）。权限相关的 UI 搬进「权限管理 → 特权通道」
+  // 之后，它们整体搬到了 PrivilegedChannelScreen —— 断言跟着搬，意图一个字不改。
+  // 每条都要求「锚点必须找到」：切片为空时若只查 includes，会静默通过。
+  const channel = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionChannelScreens.kt", "utf8");
+  const sliceBetween = (src, from, to) => {
+    const a = src.indexOf(from);
+    const b = src.indexOf(to);
+    return a >= 0 && b > a ? src.slice(a, b) : "";
+  };
+  const prefBlock = sliceBetween(channel,
+    "val onPermPrefChange: (String) -> Unit = { name ->",
+    "val onPrivStrictnessChange:");
   ok(prefBlock.length > 0 && prefBlock.includes("DshHostPrompt.writeFacts"),
     "切换权限通道后重写事实（否则容器里还停在旧值）");
-  const refreshBlock = settings.slice(
-    settings.indexOf("onRefreshPerm = {"),
-    settings.indexOf("onRequestShizuku = {")
-  );
-  ok(refreshBlock.includes("allowRootPrompt = true") && refreshBlock.includes("DshHostPrompt.writeFacts"),
+  const refreshBlock = sliceBetween(channel,
+    "val onRefreshPerm: () -> Unit = {",
+    "val onRequestShizuku: () -> Unit = {");
+  ok(refreshBlock.length > 0 && refreshBlock.includes("allowRootPrompt = true") &&
+    refreshBlock.includes("DshHostPrompt.writeFacts"),
     "点「刷新权限」验过 root 后重写事实");
-  const listenerRefresh = settings.slice(
-    settings.indexOf("val refresh = {"),
-    settings.indexOf("val onResult =")
-  );
-  ok(listenerRefresh.includes("PermissionManager.refresh(app)") &&
+  const listenerRefresh = sliceBetween(channel, "val refresh = {", "val onResult =");
+  ok(listenerRefresh.length > 0 && listenerRefresh.includes("PermissionManager.refresh(app)") &&
     listenerRefresh.includes("DshHostPrompt.writeFacts(app)"),
     "Shizuku 授权回调也会重写事实");
   // Shizuku 侧只能走用户服务：newProcess 的返回类型是库内部可见的，直接调编译不过
@@ -875,6 +881,44 @@ ok(/保留/.test(nativeZh),
   // 只看**赋值**次数（注释里提到这个名字是正常的，别把文档算进去）
   const assigns = (runtime.match(/env\["NARB_DISABLE_NATIVE_CACHE"\] = "1"/g) || []).length;
   ok(assigns === 1, `NARB_DISABLE_NATIVE_CACHE 只赋值一次（实际 ${assigns} 次）：按运行时分支设两处只会漏掉一条 exec 路径`);
+}
+
+// ── 入口可达性：搬走一块 UI 时，最容易连「进去的按钮」一起搬丢 ──
+// 真机回归：虚拟屏预览的入口原先挂在原生能力卡片的 DISPLAY 那一项下面。把能力列表整块搬进
+// 分组页时，参数还留在 FunctionSettingsContent 的签名里、调用方也还在传值 —— 编译不报错，
+// 但页面上已经没有任何地方渲染它。用户在设置里翻遍也找不到预览页，只会以为虚拟屏没做。
+{
+  const settings = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt", "utf8");
+  const screen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt", "utf8");
+  const caps = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionCapsScreens.kt", "utf8");
+
+  ok(/DisplayPreviewScreenDestination/.test(caps) && /dsh_display_preview_open/.test(caps),
+    "虚拟屏预览入口渲染在分组页上（否则预览页没有任何入口，功能等于没做）");
+  ok(/if \(cap == DshNativeBridge\.Cap\.DISPLAY\)/.test(caps),
+    "预览入口只挂在虚拟屏那一项上，不是每张卡片都给一个");
+  ok(!/onOpenDisplayPreview/.test(settings),
+    "FunctionSettingsContent 不再留着 onOpenDisplayPreview（留着就是「看着还在通」的死管道）");
+  ok(!/onOpenDisplayPreview/.test(screen),
+    "调用方也不再为这个已搬走的参数传值");
+}
+
+// ── 通用规则：内容页签名里的每个参数都必须在页内真的被用到 ──
+// 只出现一次（就是它自己那行声明）＝ 死管道。本仓已经连续中过三次：原生能力总开关、
+// 共享存储、虚拟屏预览 —— 每次都是「功能搬去了次级页，接口留在原地」，而因为参数还在、
+// 调用方还在传，编译与静态检查全都不报错。
+{
+  const settings = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt", "utf8");
+  const sig = settings.match(/fun FunctionSettingsContent\(([\s\S]*?)\n\) \{/);
+  ok(sig !== null, "解析到 FunctionSettingsContent 的签名");
+  if (sig) {
+    const names = [...sig[1].matchAll(/^ {4}([a-zA-Z][a-zA-Z0-9]*):/gm)].map((m) => m[1]);
+    ok(names.length > 50, `参数表解析出 ${names.length} 个参数（解析失败会让下面这条形同虚设）`);
+    const dead = names.filter(
+      (nm) => (settings.match(new RegExp(`\\b${nm}\\b`, "g")) || []).length <= 1,
+    );
+    ok(dead.length === 0,
+      `FunctionSettingsContent 没有死参数（实际 ${dead.length} 个：${dead.join(" / ")}）`);
+  }
 }
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);

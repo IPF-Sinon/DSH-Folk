@@ -1,8 +1,6 @@
 package me.bmax.apatch.ui.screen.settings
 
-import android.app.Activity
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
@@ -45,8 +43,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -56,7 +52,6 @@ import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.NavGraphs
 import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionHubScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.DisplayPreviewScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FileAccessScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
@@ -66,7 +61,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
-import me.bmax.apatch.dsh.AdbBridge
 import me.bmax.apatch.dsh.ContainerRuntime
 import me.bmax.apatch.dsh.DshAutostart
 import me.bmax.apatch.dsh.DshConfigBackup
@@ -78,7 +72,6 @@ import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
-import me.bmax.apatch.dsh.PrivPolicy
 import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.screen.PluginProgressHost
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
@@ -110,7 +103,6 @@ internal fun DshSettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackBarHost = LocalSnackbarHost.current
-    val perm by PermissionManager.status.collectAsStateWithLifecycle()
     // 插件依赖重建复用插件页那套进度对话框与忙碌锁
     val pluginViewModel = viewModel<DshPluginViewModel>()
 
@@ -147,14 +139,6 @@ internal fun DshSettingsScreen(
         }
     }
     var runtimeId by rememberSaveable { mutableStateOf(DshRuntime.runtimeId()) }
-    // 存的是字符串，rememberSaveable 不能直接存 enum?
-    // 缺省 PREF_OFF：默认不提权，老用户由 PermissionManager.migratePreference 迁移。
-    var permPrefName by rememberSaveable {
-        mutableStateOf(
-            dshPrefs.getString(DshEnv.KEY_PERM_CHANNEL, PermissionManager.PREF_OFF)
-                ?: PermissionManager.PREF_OFF
-        )
-    }
     var webuiMode by rememberSaveable {
         mutableStateOf(dshPrefs.getString(DshEnv.KEY_WEBUI_MODE, DshWebUi.MODE_IN_APP) ?: DshWebUi.MODE_IN_APP)
     }
@@ -193,38 +177,11 @@ internal fun DshSettingsScreen(
     var speedTesting by rememberSaveable { mutableStateOf(false) }
     // 存的是测速**原始结果**而不是拼好的字符串：展示全在竞速弹窗里（每条线路贴在自己那一行）
     var speedResults by remember { mutableStateOf<List<DshSource.SpeedResult>>(emptyList()) }
-    var adbPairCode by rememberSaveable { mutableStateOf("") }
-    var adbPairPort by rememberSaveable { mutableStateOf("") }
-    var adbConnectPort by rememberSaveable { mutableStateOf("") }
-    var adbHost by rememberSaveable { mutableStateOf("") }
-    var adbBusy by rememberSaveable { mutableStateOf(false) }
-    var adbOutput by rememberSaveable { mutableStateOf("") }
-    // 授权状态存 rootfs 里的标记文件（adb-shell.py 直接读），不是 SharedPreferences
-    var adbShellAllowed by rememberSaveable {
-        mutableStateOf(AdbBridge.granted(context, AdbBridge.ShellGrant.WRITE))
-    }
-    var adbRootAllowed by rememberSaveable {
-        mutableStateOf(AdbBridge.granted(context, AdbBridge.ShellGrant.ROOT))
-    }
-    // 原生能力桥：总开关 + 分项。Set<Cap> 不是 Parcelable，用 remember 就够
-    // （返回本页会重读 prefs，这才是权威值）。
-    var nativeBridgeEnabled by remember {
-        mutableStateOf(DshNativeBridge.enabled(context))
-    }
-    var privStrictness by remember { mutableStateOf(PrivPolicy.of(context)) }
-    var nativeAccess by remember { mutableStateOf(DshNativeBridge.accessMap(context)) }
     // 每一项能力的权限是否齐了。任何一项都可能在系统设置里被撤销，而撤销之后开关
     // 还是亮的 —— 所以必须每次回到本页重读（见下面的 LifecycleResumeEffect），
     // 不能只在首次组合时读一次。
     var capsWithPermission by remember {
         mutableStateOf(DshNativeBridge.capsWithPermission(context))
-    }
-    // 「只给了大致位置」不是缺权限，是一种需要单独说明的状态
-    var coarseLocationOnly by remember {
-        mutableStateOf(
-            PermissionUtils.hasLocationPermission(context) &&
-                !PermissionUtils.hasPreciseLocationPermission(context)
-        )
     }
     var allFilesGranted by remember {
         mutableStateOf(PermissionUtils.hasAllFilesAccess(context))
@@ -232,121 +189,19 @@ internal fun DshSettingsScreen(
     var storageMount by remember { mutableStateOf(DshFileAccess.mountEnabled(context)) }
 
     /**
-     * 跳某项特殊权限的系统设置页。
-     *
-     * 带包名的 Intent 在少数 ROM 上会打不开，所以失败后退回不带包名的全局列表页；
-     * 勿扰访问那个页面本身就不接受包名（[DshNativeBridge.Special.perAppUri] 是 false）。
-     * 两级都失败时退到应用信息页 —— 总比按下去什么都不发生好。
-     */
-    val openSpecialSettings: (DshNativeBridge.Special) -> Unit = { special ->
-        val withPackage = if (special.perAppUri) {
-            Intent(special.action)
-                .setData(Uri.fromParts("package", context.packageName, null))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        } else {
-            null
-        }
-        val ok = withPackage != null &&
-            runCatching { context.startActivity(withPackage) }.isSuccess
-        if (!ok) {
-            val plain = runCatching {
-                context.startActivity(
-                    Intent(special.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            }.isSuccess
-            if (!plain) {
-                runCatching {
-                    context.startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                            .setData(Uri.fromParts("package", context.packageName, null))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                }
-            }
-        }
-    }
-
-    /**
-     * 运行时权限框关掉之后还要接着跳的特殊权限页（没有则为空）。
-     *
-     * 全屏通知是真的两样都要：POST_NOTIFICATIONS 走运行时申请，canUseFullScreenIntent()
-     * 只能去系统页开。用户点一次「去授权」应该两样都补上，否则回来还是
-     * `no_android_permission`，而界面看起来什么也没发生。运行时的框是系统弹窗、不会让
-     * 本页 onResume，所以这一步只能挂在申请回调里。
-     */
-    var specialAfterRuntime by remember { mutableStateOf<DshNativeBridge.Special?>(null) }
-
-    /**
      * 运行时权限申请器。
      *
-     * 用一个 launcher 应付三类能力：contract 收的是权限数组，回调里重读一遍状态就够了，
-     * 不必为每类各建一个 launcher（launcher 必须在组合期注册，条件注册会崩）。
+     * 只为「所有文件访问」在 Android 10 及以下那条路径服务（见 [openAllFilesSettings]）——
+     * 该权限在 R+ 上是 appop，运行时申请永远返回拒绝，只能跳系统页。
+     * 用 launcher 而不是直接 startActivity：API 26–29 上它走的是普通运行时权限。
      */
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
         capsWithPermission = DshNativeBridge.capsWithPermission(context)
-        coarseLocationOnly = PermissionUtils.hasLocationPermission(context) &&
-            !PermissionUtils.hasPreciseLocationPermission(context)
         // 权限变了，提示词里的能力清单也得跟着变
         DshHostPrompt.writeFacts(context.applicationContext)
-        specialAfterRuntime?.let { openSpecialSettings(it) }
-        specialAfterRuntime = null
     }
-    /**
-     * 为某项能力补上它缺的权限。
-     *
-     * 两条路：能 requestPermissions 的直接申请；特殊权限（改系统设置 / 勿扰访问 /
-     * 安装未知应用 / 无障碍服务）只能跳系统页。走错路的后果是按钮按下去毫无反应。
-     * 两样都缺时（全屏通知）先申请运行时的，再在回调里跳特殊页 —— 见
-     * [specialAfterRuntime]。
-     *
-     * 用户第二次拒绝之后系统不再弹窗（`shouldShowRequestPermissionRationale` 为 false
-     * 且权限仍未授予），此时 launch 会立即回调、界面毫无反应 —— 那种情况下直接送去
-     * 系统设置页，否则用户会以为按钮坏了。
-     */
-    val requestCapPermission: (DshNativeBridge.Cap) -> Unit = { cap ->
-        // 特殊权限（改系统设置 / 勿扰访问 / 安装未知应用）不走 requestPermissions ——
-        // 那对它们永远返回拒绝，launch 一下界面毫无反应。它们各有一个专门的系统页。
-        val currentAccess = DshNativeBridge.access(context, cap)
-        val specialMissing = DshNativeBridge.specialPermissionOf(cap, currentAccess)
-            ?.takeIf { !DshNativeBridge.specialGranted(context, it) }
-        val needed = DshNativeBridge.runtimePermissions(context, cap, currentAccess).filter {
-            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (needed.isEmpty()) {
-            specialMissing?.let { openSpecialSettings(it) }
-        } else {
-            val activity = context as? Activity
-            val canAsk = activity == null || !prefsAskedPermission(dshPrefs, cap) ||
-                needed.any { ActivityCompat.shouldShowRequestPermissionRationale(activity, it) }
-            if (canAsk) {
-                markAskedPermission(dshPrefs, cap)
-                specialAfterRuntime = specialMissing
-                permissionLauncher.launch(needed.toTypedArray())
-            } else if (specialMissing != null) {
-                openSpecialSettings(specialMissing)
-            } else if (cap == DshNativeBridge.Cap.NOTIFY) {
-                // 通知有专门的开关页，比通用的应用信息页少两跳
-                runCatching {
-                    context.startActivity(
-                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                }
-            } else {
-                runCatching {
-                    context.startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                            .setData(Uri.fromParts("package", context.packageName, null))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                }
-            }
-        }
-    }
-
 
     /**
      * 跳「所有文件访问」的系统设置页。
@@ -427,11 +282,7 @@ internal fun DshSettingsScreen(
         // 「勿扰访问」「安装未知应用」**只能**在那里改），而用户从设置页返回走的正是
         // onResume —— 少了这几行，回来看到的还是旧状态。
         capsWithPermission = DshNativeBridge.capsWithPermission(context)
-        coarseLocationOnly = PermissionUtils.hasLocationPermission(context) &&
-            !PermissionUtils.hasPreciseLocationPermission(context)
         allFilesGranted = PermissionUtils.hasAllFilesAccess(context)
-        nativeBridgeEnabled = DshNativeBridge.enabled(context)
-        nativeAccess = DshNativeBridge.accessMap(context)
         // 无障碍开关同样只能在系统设置里改。少了这一行，用户点「打开无障碍设置」、开好、
         // 返回，看到的还是「服务尚未启用」—— 他会以为没生效，再去开一遍。
         a11yEnabled = DshAutostart.a11yEnabled(context)
@@ -463,7 +314,6 @@ internal fun DshSettingsScreen(
         }
     }
 
-    var pendingFullControl by remember { mutableStateOf<DshNativeBridge.Cap?>(null) }
     // 运行时替换（重装/切版本/导入）前的「建议先备份」拦截：不为 null 时先弹提示，用户选「继续」才跑
     var pendingRuntimeOp by remember { mutableStateOf<(() -> Unit)?>(null) }
 
@@ -497,28 +347,6 @@ internal fun DshSettingsScreen(
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackBarHost) },
     ) { paddingValues ->
-        if (pendingFullControl != null) {
-            AlertDialog(
-                onDismissRequest = { pendingFullControl = null },
-                title = { Text(stringResource(R.string.dsh_native_full_control_warning_title)) },
-                text = { Text(stringResource(R.string.dsh_native_full_control_warning_message)) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val cap = pendingFullControl ?: return@TextButton
-                        DshNativeBridge.setAccess(context.applicationContext, cap, DshNativeBridge.Access.CONTROL)
-                        nativeAccess = DshNativeBridge.accessMap(context.applicationContext)
-                        DshHostPrompt.writeFacts(context.applicationContext)
-                        pendingFullControl = null
-                        requestCapPermission(cap)
-                    }) { Text(stringResource(R.string.dsh_native_full_control_continue)) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { pendingFullControl = null }) {
-                        Text(stringResource(android.R.string.cancel))
-                    }
-                },
-            )
-        }
         LazyColumn(
             modifier = Modifier.padding(paddingValues),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -701,24 +529,6 @@ internal fun DshSettingsScreen(
                             }
                         }
                     },
-                    perm = perm,
-                    onRefreshPerm = {
-                        // 用户主动点刷新才允许弹 su 授权框（refresh 默认不弹）
-                        scope.launch(Dispatchers.IO) {
-                            PermissionManager.refresh(context.applicationContext, allowRootPrompt = true)
-                            // 验过之后通道才真的可用，这一刻的事实必须落盘：否则用户点了
-                            // 「刷新权限」、su 也授权了，agent 那边还是「没验过」
-                            DshHostPrompt.writeFacts(context.applicationContext)
-                        }
-                    },
-                    onRequestShizuku = {
-                        runCatching { Shizuku.requestPermission(SHIZUKU_REQ_CODE) }
-                            .onFailure {
-                                scope.launch {
-                                    snackBarHost.showSnackbar(it.message ?: "Shizuku request failed")
-                                }
-                            }
-                    },
                     webuiMode = webuiMode,
                     onWebuiModeChange = { mode ->
                         webuiMode = mode
@@ -730,61 +540,10 @@ internal fun DshSettingsScreen(
                         DshWebCompat.setMode(context.applicationContext, mode)
                     },
                     webviewVersion = webviewVersion,
-                    permPrefName = permPrefName,
-                    onPermPrefChange = { name ->
-                        permPrefName = name
-                        // 这条偏好是全应用「要不要提权」的总闸：选「未启用」时硬件监控、
-                        // 日志采集、root 文件兜底都会走非特权路径，首页重启菜单也不出现。
-                        // 容器执行本身不依赖它（proot/proroot 从来不需要 root）。
-                        // 「自动」= 按 root > shizuku > adb 的优先级挑一条可用的。
-                        val ch = when (name) {
-                            PermissionManager.PREF_OFF -> PermissionManager.Channel.NONE
-                            PermissionManager.PREF_ROOT -> PermissionManager.Channel.ROOT
-                            PermissionManager.PREF_SHIZUKU -> PermissionManager.Channel.SHIZUKU
-                            PermissionManager.PREF_ADB -> PermissionManager.Channel.ADB
-                            else -> null
-                        }
-                        PermissionManager.setPreference(context.applicationContext, ch)
-                        scope.launch(Dispatchers.IO) {
-                            PermissionManager.refresh(context.applicationContext)
-                            // 「我刚把通道设成 root」是用户最期待立刻生效的一步：这里不写，
-                            // agent 会一直以为设备上没有提权途径，连试都不试
-                            DshHostPrompt.writeFacts(context.applicationContext)
-                        }
-                    },
-                    privStrictness = privStrictness,
-                    onPrivStrictnessChange = { level ->
-                        privStrictness = level
-                        PrivPolicy.set(context.applicationContext, level)
-                        // 严格程度写进了提示词事实（agent 据此决定「这件事要不要拆成十条命令」），
-                        // 所以改完就得让容器侧看到新值
-                        DshHostPrompt.writeFacts(context.applicationContext)
-                    },
-                    nativeBridgeEnabled = nativeBridgeEnabled,
-                    onNativeBridgeEnabledChange = { on ->
-                        nativeBridgeEnabled = on
-                        DshNativeBridge.setEnabled(context.applicationContext, on)
-                        // 提示词里写着「哪些能力开着」，开关一变就得让容器侧看到新事实
-                        DshHostPrompt.writeFacts(context.applicationContext)
-                    },
-                    nativeAccess = nativeAccess,
-                    onNativeAccessChange = { cap, access ->
-                        if (cap == DshNativeBridge.Cap.NOTIFY && access == DshNativeBridge.Access.CONTROL) {
-                            pendingFullControl = cap
-                        } else {
-                            DshNativeBridge.setAccess(context.applicationContext, cap, access)
-                            nativeAccess = DshNativeBridge.accessMap(context.applicationContext)
-                            DshHostPrompt.writeFacts(context.applicationContext)
-                            if (access != DshNativeBridge.Access.OFF) requestCapPermission(cap)
-                        }
-                    },
                     capsWithPermission = capsWithPermission,
-                    coarseLocationOnly = coarseLocationOnly,
                     allFilesGranted = allFilesGranted,
-                    onRequestCapPermission = { cap -> requestCapPermission(cap) },
                     onOpenAllFilesSettings = { openAllFilesSettings() },
                     onOpenFileAccess = { navigator.navigate(FileAccessScreenDestination) },
-                    onOpenDisplayPreview = { navigator.navigate(DisplayPreviewScreenDestination) },
                     onOpenPermissionHub = { navigator.navigate(PermissionHubScreenDestination) },
                     mountEnabled = storageMount,
                     onSetMount = { on ->
@@ -847,67 +606,6 @@ internal fun DshSettingsScreen(
                     onVerifyAfterInstallChange = { on ->
                         verifyAfterInstall = on
                         dshPrefs.edit().putBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, on).apply()
-                    },
-                    adbPairCode = adbPairCode,
-                    onAdbPairCodeChange = { adbPairCode = it.filter { c -> c.isDigit() }.take(6) },
-                    adbPairPort = adbPairPort,
-                    onAdbPairPortChange = { adbPairPort = it.filter { c -> c.isDigit() }.take(5) },
-                    adbConnectPort = adbConnectPort,
-                    onAdbConnectPortChange = { adbConnectPort = it.filter { c -> c.isDigit() }.take(5) },
-                    adbHost = adbHost,
-                    onAdbHostChange = { adbHost = it.trim() },
-                    adbBusy = adbBusy,
-                    adbOutput = adbOutput,
-                    adbShellAllowed = adbShellAllowed,
-                    onAdbShellAllowedChange = { on ->
-                        AdbBridge.setGranted(context, AdbBridge.ShellGrant.WRITE, on)
-                        adbShellAllowed = AdbBridge.granted(context, AdbBridge.ShellGrant.WRITE)
-                    },
-                    adbRootAllowed = adbRootAllowed,
-                    onAdbRootAllowedChange = { on ->
-                        AdbBridge.setGranted(context, AdbBridge.ShellGrant.ROOT, on)
-                        adbRootAllowed = AdbBridge.granted(context, AdbBridge.ShellGrant.ROOT)
-                    },
-                    onDisconnectAdb = {
-                        adbBusy = true
-                        scope.launch(Dispatchers.IO) {
-                            val out = runCatching {
-                                AdbBridge.disconnect(context.applicationContext)
-                            }.getOrDefault("")
-                            PermissionManager.refresh(context.applicationContext)
-                            withContext(Dispatchers.Main) {
-                                adbOutput = if (out.contains("DISCONNECTED")) {
-                                    context.getString(R.string.dsh_adb_disconnected)
-                                } else {
-                                    context.getString(R.string.dsh_adb_disconnect_failed)
-                                }
-                                adbBusy = false
-                            }
-                        }
-                    },
-                    onPair = {
-                        adbBusy = true
-                        scope.launch(Dispatchers.IO) {
-                            val out = runCatching {
-                                // 配对脚本必须先在容器里就位，且依赖装好，否则直接报 ImportError
-                                if (!AdbBridge.injected()) AdbBridge.inject(context.applicationContext)
-                                if (!AdbBridge.depsOk()) AdbBridge.installDeps(context.applicationContext)
-                                AdbBridge.pair(adbPairCode, adbPairPort, adbConnectPort, adbHost)
-                            }.getOrElse { it.message ?: "pair failed" }
-                            PermissionManager.refresh(context.applicationContext)
-                            withContext(Dispatchers.Main) {
-                                adbOutput = out
-                                adbBusy = false
-                            }
-                        }
-                    },
-                    onOpenDevSettings = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            )
-                        }
                     },
                     permissionOnly = permissionOnly,
                     highlightKey = highlightKey,
@@ -1072,27 +770,3 @@ private fun RuntimeBackupAdviceDialog(
 }
 
 private data class RuntimeImportCandidate(val uri: Uri, val name: String, val size: Long)
-
-private const val SHIZUKU_REQ_CODE = 4210
-
-/**
- * 「这项能力的权限弹窗已经弹过一次了」的记账 key 前缀。
- *
- * 为什么需要记账：`shouldShowRequestPermissionRationale` 在**从未申请过**和
- * **被永久拒绝**两种情况下都返回 false，光看它无法区分。不记账就会走成两种坏结果之一 ——
- * 要么第一次就把用户丢去系统设置页（本该弹窗），要么永久拒绝后反复 launch 一个
- * 立刻回调、界面毫无反应的弹窗。
- */
-private const val ASKED_PERM_PREFIX = "asked_perm_"
-
-private fun prefsAskedPermission(
-    prefs: android.content.SharedPreferences,
-    cap: DshNativeBridge.Cap,
-): Boolean = prefs.getBoolean(ASKED_PERM_PREFIX + cap.id, false)
-
-private fun markAskedPermission(
-    prefs: android.content.SharedPreferences,
-    cap: DshNativeBridge.Cap,
-) {
-    prefs.edit { putBoolean(ASKED_PERM_PREFIX + cap.id, true) }
-}

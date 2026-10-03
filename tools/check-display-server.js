@@ -507,10 +507,12 @@ for (const f of SHARED) {
   must(/release\(\)/.test(ui), '离开时必须释放解码器');
 
   // 入口可达：光有目的地、没人跳过去，等于没有。
-  const fsui = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt');
-  must(/DisplayPreviewScreenDestination/.test(fsui), '设置页必须能跳到预览（否则用户根本到不了）');
-  const fn = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt');
-  must(/onOpenDisplayPreview/.test(fn), '设置页里 DISPLAY 那一项必须有打开预览的动作');
+  // 预览入口原先渲染在 FunctionSettings.kt 的原生能力列表里。能力列表搬进「权限管理 →
+  // 分类」之后，入口跟着搬到分组页的虚拟屏卡片上 —— 位置变了，断言跟着搬，意图不变。
+  const caps = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionCapsScreens.kt');
+  must(/DisplayPreviewScreenDestination/.test(caps), '分组页必须能跳到预览（否则用户根本到不了）');
+  must(/if \(cap == DshNativeBridge\.Cap\.DISPLAY\)[\s\S]{0,200}?dsh_display_preview_open/.test(caps),
+    '预览入口必须挂在虚拟屏那一项上（挂到别的能力或每张卡都给一个都不对）');
 }
 
 // ── 16. 产物校验（编译之后跑）──
