@@ -523,8 +523,8 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_perm_prefer_shizuku_desc">Prefer Shizuku / Sui shell permission</string>
     <string name="dsh_perm_prefer_adb_desc">Prefer in-container wireless ADB</string>
     <!-- Channel readiness: short words shared by the option subtitles and the
-         "Wireless ADB privilege" row. Keep separate from the dsh_perm_hint_* set --
-         those are full sentences describing the *effective* channel on the home card. -->
+         "Wireless ADB privilege" row. Keep separate from the dsh_perm_hint_* set,
+         which are full sentences describing the *effective* channel on the home card. -->
     <string name="dsh_perm_state_suffix">(%1$s)</string>
     <string name="dsh_perm_state_root_unverified">root found, not verified</string>
     <string name="dsh_perm_state_root_absent">no root found</string>

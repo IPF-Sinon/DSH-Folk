@@ -63,6 +63,27 @@ for (const rel of XML_FILES) {
 }
 if (xmlEscBad) fail += xmlEscBad;
 
+// ── 0b. XML 注释里不许出现 `--` ──
+//
+// XML 规范禁止注释体内出现连续两个连字符，aapt2 会直接报
+// `The string "--" is not permitted within comments.` 并中止 packageResources ——
+// 而这个错只有 CI 能发现（本地没有 aapt2）。它纯粹是文本规则，在这里就能拦住。
+// 2026-10-03 的一次构建就是这么废掉的：英文注释里写了 `set --`，中文侧同样位置没有注释，
+// 于是违规只出现在单一语言里，逐行读 diff 时很容易滑过去。
+let xmlCommentBad = 0;
+for (const rel of XML_FILES) {
+  const raw = fs.readFileSync(path.join(ROOT, rel), "utf8");
+  for (const m of raw.matchAll(/<!--([\s\S]*?)-->/g)) {
+    if (m[1].includes("--")) {
+      const line = raw.slice(0, m.index).split("\n").length;
+      console.log(`✗ ${rel}:${line} 注释内含 "--"（XML 注释不允许连续两个连字符）`);
+      xmlCommentBad++;
+    }
+  }
+}
+if (xmlCommentBad) fail += xmlCommentBad;
+else console.log("✓ XML 注释里没有非法的连续连字符");
+
 // ── 1. 键集 ──
 const enOnly = [...en.map.keys()].filter((k) => !zh.map.has(k) && !en.untranslatable.has(k));
 const zhOnly = [...zh.map.keys()].filter((k) => !en.map.has(k));
