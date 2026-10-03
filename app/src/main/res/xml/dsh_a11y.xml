@@ -8,6 +8,12 @@
     这一位，因为用户当初只是想让 DSH 开机自启，而不是让应用看他的屏幕。
   - canPerformGestures="true" 让它能点、滑（dispatchGesture）。没有它，这一项就只是
     「看」，做不了「操作」。
+  - canTakeScreenshot="true" 才有资格调 takeScreenshot（Android 11+ 的 a11y 截屏）。
+    这一位**只在 bind 时从 XML 读一次**，而且是**硬门槛**、不是"降级"：缺了它，系统在
+    服务端直接抛 SecurityException（AOSP：AbstractAccessibilityServiceConnection.takeScreenshot
+    → mSecurityPolicy.canTakeScreenshotLocked 失败），客户端只看到一个没有信息量的失败。
+    运行时也补不上：setServiceInfo 只同步 updateDynamicallyConfigurableProperties
+    （事件类型/包名/flags），capabilities 不在其中。详见 [DshA11y.screenshot]。
   - flagReportViewIds 让节点带上 viewIdResourceName：按 text 点不到时还能按 id 定位，
     比坐标稳。
   - 事件只订阅窗口变化与内容变化两类：读数按需现取（rootInActiveWindow），不靠事件流；
@@ -21,6 +27,7 @@
     android:accessibilityFlags="flagDefault|flagReportViewIds|flagRetrieveInteractiveWindows"
     android:canPerformGestures="true"
     android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
     android:description="@string/dsh_a11y_service_desc"
     android:notificationTimeout="100"
     android:summary="@string/dsh_a11y_service_summary" />

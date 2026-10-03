@@ -192,6 +192,15 @@ Shizuku 没授权、无线 ADB 没配对。用户把通道设成 root、点「�
 节点自己常常 `clickable=false`（真正接点击的是父容器），所以点击会往上找可点祖先；找不到才退回按中心坐标
 点一次。安全窗口（锁屏、密码框）系统不给节点，这时明确回 `no_window`，而不是让人以为是自己写错了。
 
+**`a11y screenshot`（Android 11+）依赖一个"只在 bind 时读一次"的能力位**：服务必须在自己的 meta-data
+里声明 `android:canTakeScreenshot="true"`（本仓在 `res/xml/dsh_a11y.xml`）。缺了它不是"降级"而是**硬失败**
+—— 系统在服务端直接抛 `SecurityException`（AOSP：`canTakeScreenshotLocked` 失败），而且**运行时补不上**：
+`setServiceInfo` 只同步事件类型/包名/flags 这类"可动态配置"的属性，capabilities 不在其中。所以
+`no_screenshot_capability` 的含义是"这台机器在能力位生效之前就把服务 bind 上了"，处理办法是让用户把那个
+无障碍开关**关一次再开**。另外两点也是系统给的：系统限制**最快 333ms 一张**（调用落在窗口里时我们等
+≥350ms 自动重试一次，仍失败就回 `capture_failed_too_soon`），以及安全窗口/私有虚拟屏会让它回
+`capture_failed_no_access` / `capture_failed_bad_display`。Android 11 以下是 `unsupported_os`。
+
 **权限不够时，能力调用自己就是申请**：桥不会立刻回 403，而是**把这次调用挂住**，同时在 App 里弹窗；
 用户答应就地执行这条命令、把真实结果还给 agent，用户拒绝（或 60 秒不处理）这次调用就以失败结束。
 agent 因此不需要「先申请、再调一次」，也不会出现「申请成功了但调用还是失败」这种半途状态。

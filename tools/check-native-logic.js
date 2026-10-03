@@ -786,6 +786,40 @@ console.log("\n── 无障碍 ──");
   ok(/DshA11yService/.test(manifest) && /DshAutostartService/.test(manifest), "两个服务都在清单里");
   eq((stripXml(manifest).match(/BIND_ACCESSIBILITY_SERVICE/g) || []).length, 2, "两个无障碍服务各自都有权限门");
   ok(/canPerformGestures="true"/.test(xml), "能力服务允许手势");
+  // ── a11y 截屏：一个只在 bind 时读、且是硬门槛的能力位 ──
+  //
+  // 用户报「无障碍权限的截屏是不是有问题」。根因：res/xml/dsh_a11y.xml 少了
+  // android:canTakeScreenshot="true"。官方 javadoc（AccessibilityService.takeScreenshot）
+  // 写明必须声明；AOSP 服务端（AbstractAccessibilityServiceConnection.takeScreenshot →
+  // canTakeScreenshotLocked 失败）**直接抛 SecurityException**。它只在 bind 时从 XML 读
+  // 一次（setServiceInfo 只同步 updateDynamicallyConfigurableProperties，capabilities 不在
+  // 其中），所以运行时补不上、老连接也可能还带着旧能力位。
+  //
+  // 断言必须查**剥掉注释的** XML：注释里正好解释了这一位，只查原文会被自己的说明蒙过去。
+  ok(/android:canTakeScreenshot="true"/.test(stripXml(xml)),
+    "能力服务声明了 canTakeScreenshot（takeScreenshot 的硬门槛，缺了它系统在服务端抛 SecurityException）");
+  ok(!/canTakeScreenshot/.test(stripXml(auto)),
+    "自启服务不需要截屏能力（它每一位都取最小值，与能力服务是两份授权）");
+  // 钉**调用点**：canTakeScreenshot 与 no_screenshot_capability 这两个名字在下面的
+  // SecurityException 分支里都有，只查名字的话，把预检整个删掉照样绿（反向验证抓到过）。
+  ok(/if \(!canTakeScreenshot\(svc\)\) return fail\("no_screenshot_capability"\)/.test(a11y),
+    "客户端先自查能力位，缺了就回一个指名道姓的 reason（否则只剩笼统的 capture_failed，看起来像设备不支持）");
+  ok(/AccessibilityServiceInfo\.CAPABILITY_CAN_TAKE_SCREENSHOT/.test(a11y),
+    "自查的正是 canTakeScreenshot 那一位（查错位等于没查）");
+  ok(/it is SecurityException/.test(a11y),
+    "系统的 SecurityException 也归到 no_screenshot_capability（绑定期读一次这个事实要能传到 agent）");
+  ok(/ERROR_TAKE_SCREENSHOT_NO_ACCESSIBILITY_ACCESS -> "capture_failed_no_access"/.test(a11y) &&
+    /ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT -> "capture_failed_too_soon"/.test(a11y) &&
+    /ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY -> "capture_failed_bad_display"/.test(a11y),
+    "错误码映射成能行动的原因（no_access=去开开关、too_soon=等一下、bad_display=换一块屏）");
+  {
+    const m = a11y.match(/SCREENSHOT_MIN_GAP_MS = (\d+)L/);
+    ok(m !== null && Number(m[1]) >= 333,
+      "重试间隔不小于系统下限 333ms（ACCESSIBILITY_TAKE_SCREENSHOT_REQUEST_INTERVAL_TIMES_MS）—— " +
+        "比它短的重试必然再撞同一个错");
+  }
+  ok(/reason == "capture_failed_too_soon" && attempt == 0/.test(a11y),
+    "只对 too_soon（暂时性）重试，且**限一次**（不是无限重试）");
   ok(/instance === this/.test(svc), "服务断开时只清掉自己的引用（避免误清新实例）");
 }
 

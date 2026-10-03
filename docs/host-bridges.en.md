@@ -202,6 +202,14 @@ It clicks by text or view id rather than by remembered coordinates (bounds are d
 real handler on a parent, so a click walks up to the nearest clickable ancestor and only falls back to tapping the centre when there is none. Secure windows (lock screen,
 password fields) refuse to hand over nodes and answer `no_window` instead of failing vaguely.
 
+**`a11y screenshot` (Android 11+) depends on a capability that is read once, at bind time**: the service must declare `android:canTakeScreenshot="true"` in its
+meta-data (this repo does so in `res/xml/dsh_a11y.xml`). Without it there is no graceful fallback, only a hard failure — the system throws a `SecurityException` on
+the server side (AOSP: `canTakeScreenshotLocked` fails), and it **cannot be added at runtime**: `setServiceInfo` only syncs the dynamically configurable properties
+(event types, package names, flags), not capabilities. So `no_screenshot_capability` means the phone bound the service before the capability existed; the fix is to
+have the user toggle that accessibility switch off and on. Two more limits come from the system: at most one screenshot every 333ms (a call landing inside that window
+waits ≥350ms and retries once here, and still answers `capture_failed_too_soon` if that is not enough), and secure windows or private virtual displays answer
+`capture_failed_no_access` / `capture_failed_bad_display`. Below Android 11 it is `unsupported_os`.
+
 **When access is missing, the capability call itself is the request**: the bridge does not answer it with a bare 403 — it **holds
 that call open**, shows the dialog in the app, and then either runs the command and hands the real result back, or fails that one call (deny, or no answer within
 60 seconds). The agent never has to file a request and then call again, so "the request succeeded but the call still failed" cannot happen.

@@ -239,7 +239,14 @@ const CAP_CAVEAT = {
     'click by text or id rather than by coordinates: bounds are device specific. It needs the ' +
     'user to turn on the DSH-Folk accessibility service (a SEPARATE switch from the one used ' +
     'for boot autostart) and returns no_a11y_service until then. Secure windows (lock screen, ' +
-    'password fields) answer no_window — the system refusing, not a bug. Prefer click over tap: ' +
+    'password fields) answer no_window — the system refusing, not a bug. ' +
+    'a11y screenshot is Android 11+ only (unsupported_os below that), and the system allows one at ' +
+    'most every 333ms; a call landing inside that window waits and retries once by itself, so ' +
+    'capture_failed_too_soon means it was still too soon. no_screenshot_capability means this ' +
+    'phone bound the accessibility service before it declared the capability (it is read once, at ' +
+    'bind time) — ask the user to toggle that switch off and on again; capture_failed_no_access ' +
+    'means the service lost its accessibility access, while capture_failed_bad_display and ' +
+    'capture_failed_internal come from the system. Prefer click over tap: ' +
     'a node click survives layout shifts. Do this only when the user asked for it in this ' +
     'turn, and never drive the UI to work around a permission the user has not granted.',
   shell:

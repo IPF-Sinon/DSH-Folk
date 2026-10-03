@@ -1,6 +1,7 @@
 package me.bmax.apatch.dsh
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.graphics.Bitmap
@@ -229,15 +230,83 @@ internal object DshA11y {
     private const val SCREENSHOT_TIMEOUT_MS = 4000L
 
     /**
+     * 两次 a11y 截屏之间的最小间隔。
+     *
+     * 系统侧的硬限制（`ACCESSIBILITY_TAKE_SCREENSHOT_REQUEST_INTERVAL_TIMES_MS = 333`，
+     * 见 AOSP AbstractAccessibilityServiceConnection.takeScreenshot）：太密就直接回
+     * `ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT`。而这个数字在返回码里是看不到的 ——
+     * 调用方（agent）看到"截屏失败"只会以为坏了，所以这里**自己**等一小会儿再试一次。
+     */
+    private const val SCREENSHOT_MIN_GAP_MS = 350L
+
+    /**
+     * 系统返回的截屏错误码 → 能行动的原因。
+     *
+     * 直接用 `capture_failed_3` 这种写法（以前的实现）虽然诚实，但对 agent 完全不可读：
+     * 3 是"间隔太短"、2 是"无障碍访问没给"、6 是"安全窗口" —— 三者的处理方式完全不同
+     * （等一下 / 让用户开开关 / 换个界面）。
+     */
+    private fun screenshotReason(errorCode: Int): String = when (errorCode) {
+        AccessibilityService.ERROR_TAKE_SCREENSHOT_INTERNAL_ERROR -> "capture_failed_internal"
+        AccessibilityService.ERROR_TAKE_SCREENSHOT_NO_ACCESSIBILITY_ACCESS -> "capture_failed_no_access"
+        AccessibilityService.ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT -> "capture_failed_too_soon"
+        AccessibilityService.ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY -> "capture_failed_bad_display"
+        else -> "capture_failed_$errorCode"
+    }
+
+    /**
      * 截取当前屏幕（[AccessibilityService.takeScreenshot]，Android 11+）。
      *
      * 与 media/camera 一样：字节落进容器 `/tmp` 暂存区，回**容器内路径**而不是把二进制塞回
      * JSON。安全窗口（锁屏 / 标了 FLAG_SECURE 的界面）系统会拒绝，回 capture_failed_* ——
      * 那是系统在挡，不是 bug。回调在主执行器上跑，用闩锁等它、超时按失败处理。
+     *
+     * ## 一个**只在 bind 时读一次**的能力位
+     *
+     * 这一条是踩过的坑，写在这里省得再踩：`takeScreenshot` 要求服务在它的 meta-data 里
+     * 声明 `android:canTakeScreenshot="true"`（见 res/xml/dsh_a11y.xml）。缺了它，**系统
+     * 在服务端直接抛 SecurityException**（AOSP：canTakeScreenshotLocked 失败），客户端拿到的
+     * 只是一次普通的失败 —— 以前这里就把它归成 `capture_failed`，于是"截屏永远失败"看起来
+     * 像是设备或权限的问题，其实是配置里少了一位。
+     *
+     * 更麻烦的是：capabilities 属于"只在 bind 时从 XML 读"的那一类
+     * （`setServiceInfo` 只同步 updateDynamicallyConfigurableProperties，不含它），所以
+     * **运行时补不上**，App 升级后老连接也可能还带着旧能力位。所以这里先自查一次能力位：
+     * 缺了就回一个**指名道姓**的原因，用户去"无障碍"里关一次再开即可。
      */
     fun screenshot(ctx: Context): JSONObject {
         val svc = service() ?: return fail("no_a11y_service")
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return fail("unsupported_os")
+        if (!canTakeScreenshot(svc)) return fail("no_screenshot_capability")
+
+        // 间隔太短时自己补一次：350ms 之后重试，最多两回。
+        var attempt = 0
+        while (true) {
+            val shot = captureOnce(ctx, svc)
+            val bmp = shot.first
+            val reason = shot.second
+            if (bmp != null) return saveResult(ctx, bmp)
+            // too_soon 是**暂时性**的（系统有 333ms 的下限），值得再试一次；其余按失败返回
+            if (reason == "capture_failed_too_soon" && attempt == 0) {
+                attempt++
+                runCatching { Thread.sleep(SCREENSHOT_MIN_GAP_MS) }
+                continue
+            }
+            return fail(reason ?: "capture_failed")
+        }
+    }
+
+    /** 这个服务现在有没有截屏能力位（见 [screenshot] 的说明）。 */
+    private fun canTakeScreenshot(svc: AccessibilityService): Boolean = runCatching {
+        val info = svc.serviceInfo ?: return@runCatching true
+        (info.capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT) != 0
+    }.getOrDefault(true)
+
+    /** 试一次；回调在主执行器上跑，这里用闩锁等它（超时按失败）。 */
+    private fun captureOnce(
+        ctx: Context,
+        svc: AccessibilityService,
+    ): Pair<Bitmap?, String?> {
         val latch = CountDownLatch(1)
         var bitmap: Bitmap? = null
         var reason: String? = null
@@ -263,17 +332,23 @@ internal object DshA11y {
                     }
 
                     override fun onFailure(errorCode: Int) {
-                        reason = "capture_failed_$errorCode"
+                        reason = screenshotReason(errorCode)
                         latch.countDown()
                     }
                 },
             )
         }.onFailure {
-            reason = "capture_failed"
+            // 能力位缺失时，系统的 SecurityException 就走这条路（见 KDoc）：别把它缩成
+            // 一个笼统的 capture_failed，那会让"配置少一位"看起来像"设备不支持"。
+            reason = if (it is SecurityException) "no_screenshot_capability" else "capture_failed"
             latch.countDown()
         }
-        if (!latch.await(SCREENSHOT_TIMEOUT_MS, TimeUnit.MILLISECONDS)) return fail("timeout")
-        val bmp = bitmap ?: return fail(reason ?: "capture_failed")
+        if (!latch.await(SCREENSHOT_TIMEOUT_MS, TimeUnit.MILLISECONDS)) return null to "timeout"
+        return bitmap to reason
+    }
+
+    /** 落盘 + 收尾（原 screenshot 的后半段，拆出来是为了让重试那段读得下去）。 */
+    private fun saveResult(ctx: Context, bmp: Bitmap): JSONObject {
         val width = bmp.width
         val height = bmp.height
         val dir = DshNativeBridge.stageDir(ctx)
