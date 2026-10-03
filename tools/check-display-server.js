@@ -766,16 +766,42 @@ for (const f of SHARED) {
   // ── 全屏必须留出路 ──
   //
   // 曾经写成 `else -> Modifier`：进了全屏后控制条被隐去、再点画面什么也不出，
-  // 整块屏幕被盖住，退不出去也关不掉，用户只能重启 App。这条断言钉的就是它。
+  // 整块屏幕被盖住，退不出去也关不掉，用户只能重启 App。
+  //
+  // 现在全屏态**故意**让 tap 分支空着 —— 那里的单指触摸全被转发给虚拟屏了，覆盖层
+  // 收不到；出路改成右上角**常驻**胶囊。所以出路要分两条钉：
+  //   ① 展开态：点一下切换控制条；
+  //   ② 全屏态：胶囊常驻（不受 `controls` 自动隐藏影响）。
   must(/detectTapGestures \{ controls = !controls \}/.test(mirror),
-    '展开态与全屏态都能"点一下切换控制条"（全屏里这是唯一的出路）');
-  // 注意负向前瞻：`else -> Modifier.pointerInput(…)` 是**合法**的新写法，
-  // 而 `\b` 在 "Modifier" 和 "." 之间也成立，用它会把合法代码一起判违规。
-  // 要钉的是"赤裸裸什么都不做"的 `else -> Modifier`。
-  must(!/else -> Modifier(?![\w.])/.test(code(mirror)),
-    '不能再有"某个状态下点画面什么都不做"的分支（全屏曾因此变成死胡同）');
+    '展开态点一下要能切换控制条');
+  must(/if \(isFullscreen\) \{[\s\S]{0,400}?FullscreenPill\(\)/.test(mirror),
+    '全屏态的控制条必须是常驻胶囊（不能挂在 controls 上——那里会 3 秒后自动隐去）');
+  must(/else -> Modifier(?![\w.])/.test(mirror) === false ||
+    /if \(isFullscreen\) \{[\s\S]{0,400}?FullscreenPill\(\)/.test(mirror),
+    '若 tap 分支在全屏态留空，就必须有常驻胶囊兜底（否则又变成死胡同）');
   must(/fullscreen = !fullscreen[\s\S]{0,700}?controls = true/.test(mirror),
     '切进全屏时先把控制条亮出来（进去后立刻能看到退出/缩小/关闭）');
+
+  // ── 全屏把触摸转发进虚拟屏 ──
+  //
+  // 取舍与 Operit 一致：小窗态点一下是唤控制条，全屏点一下（滑一下）是点虚拟屏。
+  // 转发必须走单线程 executor：tap/swipe 是 binder 调用（阻塞，不能压主线程），
+  // 且手势要保序。
+  must(/awaitEachGesture \{[\s\S]{0,900}?forwardTouch\(/.test(mirror),
+    '全屏态要有手势转发（awaitEachGesture → forwardTouch）');
+  must(/touchExecutor/.test(mirror) && /newSingleThreadExecutor/.test(mirror),
+    '转发要跑在单线程 executor 上（保序 + 不占主线程）');
+  must(/DisplayServer\.current\(\)/.test(mirror) &&
+    /svc\.tap\(displayId, x1, y1\)/.test(mirror) &&
+    /svc\.swipe\(displayId, x1, y1, x2, y2, durationMs\)/.test(mirror),
+    '转发要真的调用服务端（svc.tap / svc.swipe）');
+  must(/TAP_SLOP_PX = 24\.0/.test(mirror),
+    '「算点击还是滑动」的阈值要与预览页一致（同一个手指动作两处结果不能不同）');
+  must(/from\.x \* videoWidth \/ boxW/.test(mirror) && /to\.y \* videoHeight \/ boxH/.test(mirror),
+    '窗口坐标要按视频区尺寸换算成虚拟屏坐标（照预览页那套）');
+  must(/\.onSizeChanged \{ boxW = it\.width; boxH = it\.height \}/.test(mirror),
+    '换算要用视频区**真实**像素尺寸，不能拿虚拟屏分辨率当窗口尺寸');
+
   // 控制条保持**三个图标**（用户明确说过带文字的胶囊没必要，"原来就挺好的"）。
   // 要钉的不是样式，而是"三个动作都还在、而且全屏态给的是退出图标"。
   must(/Icons\.Filled\.FullscreenExit/.test(mirror) && /Icons\.Filled\.Fullscreen/.test(mirror),

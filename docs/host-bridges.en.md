@@ -125,9 +125,14 @@ Three things that are easy to get wrong:
   the app is alive, only `display stop` (or the preview page's stop button) reclaims it immediately.
 - **The user can watch it work.** Once a virtual screen exists, a **collapsed handle** appears at the screen
   edge showing the icon of the app the agent is driving (whoever `display launch` started). Tapping it expands
-  a small window with the live picture; it can be dragged, shown fullscreen, and tapping the picture reveals
-  the controls (collapse / fullscreen / close, which hide themselves after 3 seconds) — tapping works in
-  fullscreen too, and that is the only way back out of it. On by default; it needs the "display over other apps"
+  a small window with the live picture; it can be dragged, shown fullscreen, and in the expanded state tapping
+  the picture reveals the controls (collapse / fullscreen / close, which hide themselves after 3 seconds).
+  **In fullscreen the finger goes straight through**: taps and swipes are converted exactly the way the preview
+  page does it (`x * display width / video width`, anything under a 24px move counts as a tap) and sent to the
+  virtual display — fullscreen is the "I want to tap it myself" case. Since every single-finger touch is
+  forwarded and the overlay never sees it, the fullscreen controls are an **always-on** pill in the top-right
+  (collapse / exit fullscreen / close), so there is always a way out. Forwarding happens only here (the small
+  window still just watches). On by default; it needs the "display over other apps"
   special permission, granted from Settings → Permissions → the virtual screen row. It yields while the full
   preview page is open — a display has a single video sink, so two viewers would displace each other.
 - **The preview page shows the agent's screen**, not a new one: it attaches to the existing session through

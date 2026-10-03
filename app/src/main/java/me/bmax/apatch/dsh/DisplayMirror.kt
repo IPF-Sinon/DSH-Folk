@@ -14,8 +14,11 @@ import android.view.TextureView
 import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -44,13 +47,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
@@ -67,6 +73,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
+import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -136,6 +143,28 @@ object DisplayMirror {
     /** 展开态小窗的圆角 / 折叠把手的圆角。 */
     private const val EXPANDED_RADIUS_DP = 16
     private const val HANDLE_RADIUS_DP = 14
+
+    /** 全屏常驻胶囊里一格按钮与图标的大小。 */
+    private const val PILL_BUTTON_DP = 34
+    private const val PILL_ICON_DP = 18
+
+    /**
+     * 「算点击还是滑动」的位移阈值（px）。与预览页同一个值（`DisplayPreviewScreen.TAP_SLOP_PX`）：
+     * 两处对「手指抖一下算不算滑动」的判断必须一致，否则同一个动作在两个界面里结果不同。
+     */
+    private const val TAP_SLOP_PX = 24.0
+
+    /**
+     * 触摸转发用的**单线程** executor。
+     *
+     * 单线程是为了保序：`tap`/`swipe` 都是 binder 调用（阻塞），并发跑就可能 UP 抢在 MOVE 前到，
+     * 远端会看到一个乱序的手势。它同时把主线程让出来（手势回调跑在主线程）。
+     */
+    private val touchExecutor: java.util.concurrent.ExecutorService by lazy {
+        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "DshDisplayMirrorTouch")
+        }
+    }
 
     /** 折叠 / 展开 / 全屏的动画时长。 */
     private const val SNAP_MS = 300L
@@ -494,6 +523,49 @@ object DisplayMirror {
         hide()
     }
 
+    /**
+     * 把一次全屏手势转发进虚拟屏（**只在全屏**）。
+     *
+     * 坐标换算与判定沿用预览页那一套：先把窗口像素按比例换算到虚拟屏坐标
+     * （`x * 虚拟屏宽 / 视频区宽`），位移小于 [TAP_SLOP_PX] 算点击，否则按滑动发出去。
+     *
+     * 必须离开主线程：`svc.tap` / `svc.swipe` 都是 binder 调用，而这里正处在手势回调里
+     * （主线程）；[touchExecutor] 是单线程的，保证 DOWN/MOVE/UP 的先后不乱。
+     */
+    private fun forwardTouch(
+        displayId: Int,
+        tap: Boolean,
+        from: Offset,
+        to: Offset,
+        boxW: Int,
+        boxH: Int,
+        durationMs: Long,
+    ) {
+        if (displayId <= 0 || boxW <= 0 || boxH <= 0) return
+        val x1 = from.x * videoWidth / boxW
+        val y1 = from.y * videoHeight / boxH
+        val x2 = to.x * videoWidth / boxW
+        val y2 = to.y * videoHeight / boxH
+        runCatching {
+            touchExecutor.execute {
+                // 刻意不用 return@Runnable：那是"传给构造函数的 lambda 的隐式标签"，脆
+                // （同 DisplayServer.startPingLoop 的注释）。用 if 包住即可。
+                try {
+                    val svc = DisplayServer.current()
+                    if (svc != null) {
+                        if (tap) {
+                            svc.tap(displayId, x1, y1)
+                        } else {
+                            svc.swipe(displayId, x1, y1, x2, y2, durationMs)
+                        }
+                    }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "转发触摸失败：${t.message}", t)
+                }
+            }
+        }.onFailure { Log.w(TAG, "触摸转发任务提交失败：${it.message}") }
+    }
+
     // ── Compose 界面 ─────────────────────────────────────────────────────────
 
     @Composable
@@ -502,6 +574,9 @@ object DisplayMirror {
         val isSnapped = snapped
         val isFullscreen = fullscreen
         var surface by remember { mutableStateOf<Surface?>(null) }
+        // 视频区在窗口内的像素尺寸：转发触摸时要把窗口坐标换算成虚拟屏坐标
+        var boxW by remember { mutableStateOf(0) }
+        var boxH by remember { mutableStateOf(0) }
 
         // Surface 就绪 → 建解码头并挂到服务端；换 Surface 会重建解码器
         LaunchedEffect(surface, displayId) {
@@ -523,13 +598,15 @@ object DisplayMirror {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .onSizeChanged { boxW = it.width; boxH = it.height }
                 .pointerInput(isSnapped, isFullscreen) {
                     when {
-                        // 折叠态：只有拖动（上下挪）与点一下展开
+                        // 折叠态：拖动 = 沿屏幕边缘挪
                         isSnapped -> detectDragGestures { change, amount ->
                             change.consume()
                             moveBy(amount.x, amount.y)
                         }
+                        // 展开态：拖动 = 挪窗口
                         !isFullscreen -> detectDragGestures(
                             onDragStart = { controls = false },
                             onDrag = { change, amount ->
@@ -537,6 +614,29 @@ object DisplayMirror {
                                 moveBy(amount.x, amount.y)
                             },
                         )
+                        // **全屏态：把触摸转发进虚拟屏** —— 全屏就是"我要亲手点它"的场景。
+                        //
+                        // 手势只在这里转发（小窗态仍只旁观），与 Operit 同一取舍：小窗点一下
+                        // 是唤控制条，全屏点一下是点虚拟屏。转发跑在单线程 executor 上（binder
+                        // 调用会阻塞），按预览页那套映射与判定（同为 24px 的 tap 阈值）。
+                        else -> awaitEachGesture {
+                            val down = awaitFirstDown()
+                            val from = down.position
+                            val startedAt = System.currentTimeMillis()
+                            val to = waitForUpOrCancellation()?.position ?: from
+                            if (displayId <= 0 || boxW <= 0 || boxH <= 0) return@awaitEachGesture
+                            val moved = hypot((to.x - from.x).toDouble(), (to.y - from.y).toDouble())
+                            val duration = (System.currentTimeMillis() - startedAt).coerceIn(20L, 10_000L)
+                            forwardTouch(
+                                displayId = displayId,
+                                tap = moved < TAP_SLOP_PX,
+                                from = from,
+                                to = to,
+                                boxW = boxW,
+                                boxH = boxH,
+                                durationMs = duration,
+                            )
+                        }
                     }
                 }
                 .then(
@@ -544,14 +644,14 @@ object DisplayMirror {
                         isSnapped -> Modifier.pointerInput(isSnapped) {
                             detectTapGestures { expand() }
                         }
-                        // 展开态**与全屏态**都点一下切换控制条。
+                        // 展开态：点一下切换控制条。
                         //
-                        // 全屏这一支以前漏了（写成 `else -> Modifier`），后果很重：进了全屏后
-                        // 控制条被隐去、再点画面什么也不出，于是整块屏幕被盖住、退不出去也关不掉，
-                        // 用户只能重启 App。全屏态**必须**保留这条出路，它是唯一的出路。
-                        else -> Modifier.pointerInput(isSnapped, isFullscreen) {
+                        // 全屏态**不再需要**这条：那里单指触摸全被转发给虚拟屏，控制条改成
+                        // 右上角**常驻**胶囊（见 FullscreenPill 与下方注释）。
+                        !isFullscreen -> Modifier.pointerInput(isSnapped, isFullscreen) {
                             detectTapGestures { controls = !controls }
                         }
+                        else -> Modifier
                     }
                 ),
         ) {
@@ -598,8 +698,66 @@ object DisplayMirror {
                         }
                     },
                 )
-                if (controls) MirrorControls()
+                if (isFullscreen) {
+                    // 全屏：**常驻**右上角小胶囊。
+                    //
+                    // 为什么不能像展开态那样"点一下唤出"：全屏的单指触摸全被转发进虚拟屏了，
+                    // 覆盖层收不到 —— Operit 正是栽在这里（它靠"进全屏时亮 3 秒"，错过就摸不到
+                    // 按钮）。常驻一小块换来"永远出得去"，比省下那 3 个 32dp 的按钮划算。
+                    FullscreenPill()
+                } else if (controls) {
+                    MirrorControls()
+                }
             }
+        }
+    }
+
+    /**
+     * 全屏态常驻的右上角胶囊：缩小到边缘 / 退出全屏 / 关闭。
+     *
+     * 它是全屏态**唯一**的出路（窗口 `FLAG_NOT_FOCUSABLE`，收不到返回键；单指触摸又都转发给了
+     * 虚拟屏），所以不参与自动隐藏、也不参与触摸转发 —— 按钮在 Compose 层，点按会被自己消费掉，
+     * 转发手势（`awaitFirstDown`）默认只认未被消费的 down。
+     */
+    @Composable
+    private fun BoxScope.FullscreenPill() {
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(12.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color.Black.copy(alpha = 0.45f))
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PillButton(
+                icon = Icons.Outlined.Minimize,
+                a11y = R.string.dsh_display_float_a11y_minimize,
+                onClick = { collapse() },
+            )
+            PillButton(
+                icon = Icons.Filled.FullscreenExit,
+                a11y = R.string.dsh_display_float_a11y_exit_fullscreen,
+                onClick = { toggleFullscreen() },
+            )
+            PillButton(
+                icon = Icons.Filled.Close,
+                a11y = R.string.dsh_display_float_a11y_close,
+                onClick = { dismiss() },
+            )
+        }
+    }
+
+    /** 胶囊里的一格。 */
+    @Composable
+    private fun PillButton(icon: ImageVector, a11y: Int, onClick: () -> Unit) {
+        IconButton(onClick = onClick, modifier = Modifier.size(PILL_BUTTON_DP.dp)) {
+            Icon(
+                imageVector = icon,
+                contentDescription = stringResource(a11y),
+                tint = Color.White,
+                modifier = Modifier.size(PILL_ICON_DP.dp),
+            )
         }
     }
 
