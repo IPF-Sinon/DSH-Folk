@@ -457,7 +457,13 @@ private data class ChannelGuideSpec(
     val titleRes: Int,
     val bodyRes: Int,
     val actionRes: Int,
-    val action: () -> Unit,
+    /**
+     * 点了要去做的那件事；**为 null 表示这一步只是说明**（例如本机根本没有 root）。
+     *
+     * 这时候不能再配一个 [R.string.dsh_chguide_later] 次按钮 —— 两个按钮做同一件事
+     * （都是关掉弹窗），读起来像少了一个选项。
+     */
+    val action: (() -> Unit)?,
 )
 
 /**
@@ -519,11 +525,19 @@ private fun ChannelGuideDialog(
             R.string.dsh_chguide_root_absent_title,
             R.string.dsh_chguide_root_absent_body,
             R.string.dsh_chguide_ok,
-            onDismiss,
+            // 没有可执行的动作：这台设备就是没有 su，能做的只有说清楚它意味着什么
+            null,
         )
 
         ChannelReadiness.READY -> return
     }
+    // 只在真有动作时才给次按钮，理由见 ChannelGuideSpec.action
+    val dismissButton: (@Composable () -> Unit)? =
+        if (spec.action != null) {
+            { TextButton(onClick = onDismiss) { Text(stringResource(R.string.dsh_chguide_later)) } }
+        } else {
+            null
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.dsh_chguide_title)) },
@@ -539,14 +553,16 @@ private fun ChannelGuideDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                onDismiss()
-                spec.action()
-            }) { Text(stringResource(spec.actionRes)) }
+            if (spec.action != null) {
+                TextButton(onClick = {
+                    onDismiss()
+                    spec.action()
+                }) { Text(stringResource(spec.actionRes)) }
+            } else {
+                TextButton(onClick = onDismiss) { Text(stringResource(spec.actionRes)) }
+            }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dsh_chguide_later)) }
-        },
+        dismissButton = dismissButton,
     )
 }
 
