@@ -809,10 +809,6 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_display_float_need_permission">Needs the \"display over other apps\" permission</string>
     <string name="dsh_display_float_grant">Grant floating window access</string>
     <string name="dsh_display_float_a11y_expand">Expand the virtual screen window</string>
-    <string name="dsh_display_float_btn_minimize">Shrink</string>
-    <string name="dsh_display_float_btn_fullscreen">Fullscreen</string>
-    <string name="dsh_display_float_btn_exit_fullscreen">Exit fullscreen</string>
-    <string name="dsh_display_float_btn_close">Close</string>
     <string name="dsh_display_float_a11y_minimize">Minimize to the screen edge</string>
     <string name="dsh_display_float_a11y_fullscreen">Show fullscreen</string>
     <string name="dsh_display_float_a11y_exit_fullscreen">Exit fullscreen</string>

@@ -776,12 +776,20 @@ for (const f of SHARED) {
     '不能再有"某个状态下点画面什么都不做"的分支（全屏曾因此变成死胡同）');
   must(/fullscreen = !fullscreen[\s\S]{0,700}?controls = true/.test(mirror),
     '切进全屏时先把控制条亮出来（进去后立刻能看到退出/缩小/关闭）');
-  must(/dsh_display_float_btn_exit_fullscreen/.test(mirror),
-    '全屏态的控制条里有"退出全屏"这一格');
-  must(/dsh_display_float_btn_minimize/.test(mirror) && /dsh_display_float_btn_close/.test(mirror),
-    '控制条里有"缩小到边缘"和"关闭"（三个动作都是出路）');
-  must(/TextButton\(/.test(mirror) && /dsh_display_float_btn_fullscreen/.test(mirror),
-    '控制条带文字标签，不是三个裸图标（裸图标认不出哪个是退回去）');
+  // 控制条保持**三个图标**（用户明确说过带文字的胶囊没必要，"原来就挺好的"）。
+  // 要钉的不是样式，而是"三个动作都还在、而且全屏态给的是退出图标"。
+  must(/Icons\.Filled\.FullscreenExit/.test(mirror) && /Icons\.Filled\.Fullscreen/.test(mirror),
+    '全屏态那个按钮要变成"退出全屏"图标（进去以后不能还是放大图标）');
+  must(/Icons\.Outlined\.Minimize/.test(mirror) && /collapse\(\)/.test(mirror),
+    '控制条里有"折叠回边缘"');
+  must(/Icons\.Filled\.Close/.test(mirror) && /dismiss\(\)/.test(mirror),
+    '控制条里有"关闭这一块"');
+  must(/dsh_display_float_a11y_minimize/.test(mirror) &&
+    /dsh_display_float_a11y_exit_fullscreen/.test(mirror) &&
+    /dsh_display_float_a11y_close/.test(mirror),
+    '三个按钮都要有无障碍描述（纯图标的可读性全靠它）');
+  must(!/dsh_display_float_btn_/.test(mirror),
+    '不要再引入带文字的按钮文案（用户否决了那个改法）');
 }
 
 // ── 18. 产物校验（编译之后跑）──

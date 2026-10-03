@@ -19,13 +19,11 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -34,11 +32,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.outlined.Minimize
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -666,12 +662,11 @@ object DisplayMirror {
     /**
      * 控制条：点画面才出现，3 秒后自己隐去。
      *
-     * 做成**带文字**的横向胶囊，而不是三个裸图标 —— 上一版只有图标时，用户在全屏里
-     * 认不出"哪个是退回去"，报告"只有放大全屏按钮，没有缩小回来的按钮"，然后被整块
-     * 屏幕盖住只能重启。图标（`Minimize` 一条横线、`Close` 一个叉）在实拍画面上
-     * 本来就不好认，配上文字才没有歧义。
+     * 保持三个图标（用户明确说带文字的胶囊没必要，"原来就挺好的"）：
+     * 折叠回边缘把手 / 切换全屏 / 关闭这一块 —— 三个动作都是**出路**。
      *
-     * 三个动作都是**出路**：缩小回边缘把手 / 切换全屏 / 关闭这一块。
+     * 真正的坑不在这里的样式，而在**唤出**：全屏态一度没有"点画面出控制条"这一支，
+     * 进了全屏就再也出不来（见 [MirrorContent] 里的注释）。
      */
     @Composable
     private fun BoxScope.MirrorControls() {
@@ -680,66 +675,35 @@ object DisplayMirror {
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.35f)),
         ) { }
-        Row(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color.Black.copy(alpha = 0.72f))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // 全屏时先给"退出全屏"（真正的逆操作），再给"缩小到边缘"
-            if (fullscreen) {
-                ControlButton(
-                    icon = Icons.Filled.FullscreenExit,
-                    label = R.string.dsh_display_float_btn_exit_fullscreen,
-                    a11y = R.string.dsh_display_float_a11y_exit_fullscreen,
-                    onClick = { toggleFullscreen() },
-                )
-            } else {
-                ControlButton(
-                    icon = Icons.Filled.Fullscreen,
-                    label = R.string.dsh_display_float_btn_fullscreen,
-                    a11y = R.string.dsh_display_float_a11y_fullscreen,
-                    onClick = { toggleFullscreen() },
+            IconButton(onClick = { collapse() }) {
+                Icon(
+                    imageVector = Icons.Outlined.Minimize,
+                    contentDescription = stringResource(R.string.dsh_display_float_a11y_minimize),
+                    tint = Color.White,
                 )
             }
-            ControlButton(
-                icon = Icons.Outlined.Minimize,
-                label = R.string.dsh_display_float_btn_minimize,
-                a11y = R.string.dsh_display_float_a11y_minimize,
-                onClick = { collapse() },
-            )
-            ControlButton(
-                icon = Icons.Filled.Close,
-                label = R.string.dsh_display_float_btn_close,
-                a11y = R.string.dsh_display_float_a11y_close,
-                onClick = { dismiss() },
-            )
-        }
-    }
-
-    /** 控制条上的一格：图标 + 文字（文字是给用户看的，图标是给眼睛快速定位的）。 */
-    @Composable
-    private fun ControlButton(
-        icon: androidx.compose.ui.graphics.vector.ImageVector,
-        label: Int,
-        a11y: Int,
-        onClick: () -> Unit,
-    ) {
-        TextButton(
-            onClick = onClick,
-            colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-        ) {
-            Icon(imageVector = icon, contentDescription = stringResource(a11y), tint = Color.White)
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = stringResource(label),
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge,
-            )
+            IconButton(onClick = { toggleFullscreen() }) {
+                Icon(
+                    imageVector = if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                    contentDescription = stringResource(
+                        if (fullscreen) R.string.dsh_display_float_a11y_exit_fullscreen
+                        else R.string.dsh_display_float_a11y_fullscreen
+                    ),
+                    tint = Color.White,
+                )
+            }
+            IconButton(onClick = { dismiss() }) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.dsh_display_float_a11y_close),
+                    tint = Color.White,
+                )
+            }
         }
     }
 
