@@ -678,7 +678,7 @@ object DshRuntime {
           '  display swipe <x1> <y1> <x2> <y2> [--ms N] [--display N]',
           '  display key <home|back|enter|...|keycode> [--display N]',
           '  display launch <package> [--display N]     # start an app on the virtual screen (not on the real one)',
-          '  display stop                               # shut the service down now; it also self-exits after 15s idle',
+          '  display stop                               # shut the service down now (the app keeps it alive while it runs)',
           '      Put -- before the command if it contains its own --flags.',
           '  caps                                       # access, accessOptions, once, pending, lastElevation',
           '  elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]',
@@ -697,8 +697,13 @@ object DshRuntime {
         ].join('\n');
         (async function () {
           try {
+            // 先处理"没给命令"：光敲 `dsh-native` 的人要的是用法，不是关于 --reason 的抱怨。
+            // 原来 --reason 的检查在最前面，于是这一句会把用法提示顶掉。
+            if (!cmd) { console.error(USAGE); process.exit(1); }
             if (cmd !== 'caps' && !opt.reason) {
               console.error('dsh-native: --reason is required for every capability call');
+              // 顺手把用法也打出来：忘了 --reason 的人多半也还没记住这个命令的形状
+              console.error(USAGE);
               process.exit(1);
             }
             if (cmd === 'caps') {
@@ -770,7 +775,7 @@ object DshRuntime {
               } else if (act === 'global' && a[1]) {
                 say(await req('POST', '/native/a11y/global' + q({ action: a[1] })));
               } else if (act === 'screenshot') {
-                say(await req('GET', '/native/a11y/screenshot'));
+                say(await req('GET', '/native/a11y/screenshot' + q({})));
               } else {
                 console.error(USAGE);
                 process.exitCode = 1;
@@ -781,7 +786,7 @@ object DshRuntime {
               const act = a[0];
               const num = (v) => v !== undefined && v !== '';
               if (act === 'status') {
-                say(await req('GET', '/native/display/status'));
+                say(await req('GET', '/native/display/status' + q({})));
               } else if (act === 'session') {
                 say(await req('POST', '/native/display/session' + q({
                   width: opt.width, height: opt.height, dpi: opt.dpi, bitrate: opt.bitrate
@@ -803,13 +808,13 @@ object DshRuntime {
                   package: a[1], display: opt.display
                 })));
               } else if (act === 'stop') {
-                say(await req('POST', '/native/display/stop'));
+                say(await req('POST', '/native/display/stop' + q({})));
               } else {
                 console.error(USAGE);
                 process.exitCode = 1;
               }
             } else if (cmd === 'device') {
-              say(await req('GET', '/native/device'));
+              say(await req('GET', '/native/device' + q({})));
             } else if (cmd === 'notify') {
               if (!a[0]) { console.error(USAGE); process.exit(1); }
               say(await req('POST', '/native/notify' + q({
@@ -835,7 +840,7 @@ object DshRuntime {
               say(await req('POST', '/native/torch' + q({ state: a[0] })));
             } else if (cmd === 'clip') {
               if (a[0] === 'get') {
-                say(await req('GET', '/native/clipboard'));
+                say(await req('GET', '/native/clipboard' + q({})));
               } else if (a[0] === 'set' && a[1]) {
                 say(await req('POST', '/native/clipboard' + q({ text: a[1], label: opt.label })));
               } else {
@@ -885,7 +890,7 @@ object DshRuntime {
                   text: a[1], lang: opt.lang, rate: opt.rate, pitch: opt.pitch
                 })));
               } else if (a[0] === 'voices') {
-                say(await req('GET', '/native/tts/voices'));
+                say(await req('GET', '/native/tts/voices' + q({})));
               } else { console.error(USAGE); process.exitCode = 1; }
             } else if (cmd === 'calendar') {
               if (a[0] === 'list') {
@@ -909,18 +914,18 @@ object DshRuntime {
                 maxAge: opt.maxAge, wait: opt.wait
               })));
             } else if (cmd === 'phone') {
-              say(await req('GET', '/native/phone/info'));
+              say(await req('GET', '/native/phone/info' + q({})));
             } else if (cmd === 'sensors') {
               if (a[0] === 'list') {
-                say(await req('GET', '/native/sensors/list'));
+                say(await req('GET', '/native/sensors/list' + q({})));
               } else if (a[0] === 'read' && a[1]) {
                 say(await req('GET', '/native/sensors/read' + q({ id: a[1] })));
               } else { console.error(USAGE); process.exitCode = 1; }
             } else if (cmd === 'network') {
-              say(await req('GET', '/native/network'));
+              say(await req('GET', '/native/network' + q({})));
             } else if (cmd === 'volume') {
               if (!a[0]) {
-                say(await req('GET', '/native/volume'));
+                say(await req('GET', '/native/volume' + q({})));
               } else if (a[0] === 'set' && a[1] !== undefined) {
                 say(await req('POST', '/native/volume' + q({
                   percent: a[1], stream: opt.stream
@@ -931,7 +936,7 @@ object DshRuntime {
               say(await req('POST', '/native/ringer' + q({ mode: a[0] })));
             } else if (cmd === 'settings') {
               if (!a[0]) {
-                say(await req('GET', '/native/settings'));
+                say(await req('GET', '/native/settings' + q({})));
               } else if (a[0] === 'brightness') {
                 say(await req('POST', '/native/settings/brightness' + q({
                   percent: a[1], auto: opt.auto
@@ -942,7 +947,7 @@ object DshRuntime {
                 say(await req('POST', '/native/settings/rotation' + q({ on: a[1] })));
               } else { console.error(USAGE); process.exitCode = 1; }
             } else if (cmd === 'install') {
-              say(await req('GET', '/native/install'));
+              say(await req('GET', '/native/install' + q({})));
             } else if (cmd === 'usage') {
               if (a[0] === 'list') {
                 say(await req('GET', '/native/usage/list' + q({ days: opt.days, limit: opt.limit })));

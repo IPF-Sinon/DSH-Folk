@@ -105,6 +105,7 @@ jobs:
           node tools/check-refs.js
           node tools/check-native-logic.js
           node tools/check-native-caps.js
+          node tools/check-native-cli.js
           node tools/check-web-shim.js
           node tools/check-backup-logic.js
           node tools/check-bugreport-files.js
@@ -120,6 +121,8 @@ jobs:
           node tools/check-display-server.js
           node tools/check-shizuku-user-service.js
           node tools/check-imports.js $(find app/src/main/java -name "*.kt")
+          node tools/check-args.js
+          node tools/check-autostart.js
 
       # 与 build.yml 的 release job 同一套校验：缺任何一项就硬失败。
       # 用 debug key 悄悄签出一个「测试版」的后果更隐蔽 —— 用户装不上，

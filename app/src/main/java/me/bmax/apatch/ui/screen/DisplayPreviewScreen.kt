@@ -91,11 +91,13 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
     var viewH by remember { mutableStateOf(0) }
     var sink by remember { mutableStateOf<DisplayVideoSink?>(null) }
 
-    // 起服务端 + 建虚拟屏。两步都是阻塞的特权操作，放 IO 上，别卡住首帧。
+    // 起服务端 + 拿到要看的虚拟屏。两步都是阻塞的特权操作，放 IO 上，别卡住首帧。
     LaunchedEffect(Unit) {
-        val dm = context.resources.displayMetrics
         val result = withContext(Dispatchers.IO) {
-            DisplayServer.startSession(context, dm.widthPixels, dm.heightPixels, dm.densityDpi)
+            // 优先挂到 agent 已经在用的那块屏 —— 预览的意义就是"看它此刻在看的东西"。
+            // 另开一块的话，用户看到的是自己的空白屏，而 agent 在另一块上操作，
+            // 两边的画面永远不会是同一个。没有会话时才按设备尺寸新建一块。
+            DisplayServer.attachOrStartSession(context)
         }
         result.onSuccess { s ->
             displayId = s.displayId

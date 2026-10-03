@@ -105,8 +105,11 @@ fun PermissionHubScreen(navigator: DestinationsNavigator) {
                 onSearchTextChange = { query = it },
                 onClearClick = { query = "" },
                 onBackClick = { navigator.popBackStack() },
-                // 直接进搜索态：这一页的存在意义就是"快速找到那一项"，藏一个放大镜反而多一步
-                startInSearchMode = true,
+                // 不要改成 true：进搜索态会主动 requestFocus 并拉起键盘，而键盘会盖住这一页
+                // 真正的正文 —— 分类列表。用户进这一页十次里有九次是来点分类的，一进来就被
+                // 键盘挡住列表，"少点一下放大镜"省下的那一步远不抵这一下。
+                // 放大镜按钮本来就在（SearchBar 的 actions），点它才进搜索态。
+                startInSearchMode = false,
             )
         },
     ) { padding ->

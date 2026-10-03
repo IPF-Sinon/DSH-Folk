@@ -152,6 +152,16 @@ public class Main {
 
     private class DisplaySession {
         final int displayId;
+        /**
+         * 建这块屏时**请求**的尺寸与 dpi（不是对齐之后的）。
+         *
+         * 留着是为了复用判定：同一个 (宽, 高, dpi) 的请求返回同一块屏。没有这三个值时
+         * `ensureDisplay` 只能每次都新建 —— 真机上于是攒下一串同尺寸的孤儿虚拟屏，
+         * 每块都占着一个硬件编码器。
+         */
+        final int reqWidth;
+        final int reqHeight;
+        final int reqDpi;
         final VirtualDisplay virtualDisplay;
         final MediaCodec videoEncoder;
         final Surface encoderSurface;
@@ -175,8 +185,13 @@ public class Main {
         volatile byte[] configPps;
         final Object lock = new Object();
 
-        DisplaySession(int displayId, VirtualDisplay virtualDisplay, MediaCodec videoEncoder, Surface encoderSurface, InputController inputController) {
+        DisplaySession(int displayId, int reqWidth, int reqHeight, int reqDpi,
+                       VirtualDisplay virtualDisplay, MediaCodec videoEncoder, Surface encoderSurface,
+                       InputController inputController) {
             this.displayId = displayId;
+            this.reqWidth = reqWidth;
+            this.reqHeight = reqHeight;
+            this.reqDpi = reqDpi;
             this.virtualDisplay = virtualDisplay;
             this.videoEncoder = videoEncoder;
             this.encoderSurface = encoderSurface;
@@ -518,6 +533,19 @@ public class Main {
                 public int ensureDisplay(int width, int height, int dpi, int bitrateKbps) {
                     markClientActive();
                     int bitRate = bitrateKbps > 0 ? bitrateKbps * 1000 : DEFAULT_BIT_RATE;
+                    // 同尺寸同 dpi 复用已有的那块，别再开一块。
+                    //
+                    // 这里原来是一句 "Removed check for existing display, we now support
+                    // multiple."（移植时删掉的），后果是真机上每调一次 display session 就多一块
+                    // 虚拟屏 + 一个硬件编码器，而且只有 display stop 才会回收 —— 用户看到的就是
+                    // dumpsys 里一串同尺寸的 DshDisplay-* 挂着不走。
+                    // 需要另一种尺寸时按新尺寸调用即可，那时仍然会真的新建。
+                    int reused = findDisplay(width, height, dpi);
+                    if (reused > 0) {
+                        logToFile("Reusing virtual display id=" + reused + " for " + width + "x" + height
+                                + " dpi=" + dpi, null);
+                        return reused;
+                    }
                     return createVirtualDisplay(width, height, dpi, bitRate);
                 }
 
@@ -902,6 +930,19 @@ public class Main {
     }
 
 
+    /**
+     * 找一块与请求尺寸/dpi 完全相同的现存屏（0 = 没有）。
+     *
+     * 判据用**请求值**而不是对齐后的实际值：调用方说的是"我要 1080x1920@420"，同一个请求
+     * 就该拿到同一块屏；对齐是编码器的实现细节，不该让 1080 和 1081 意外合并成一块。
+     */
+    private int findDisplay(int width, int height, int dpi) {
+        for (DisplaySession s : displays.values()) {
+            if (s.reqWidth == width && s.reqHeight == height && s.reqDpi == dpi) return s.displayId;
+        }
+        return 0;
+    }
+
     private synchronized int createVirtualDisplay(int width, int height, int dpi, int bitRate) {
         logToFile("ensureVirtualDisplay requested: " + width + "x" + height + " dpi=" + dpi + " bitRate=" + bitRate, null);
         
@@ -992,7 +1033,7 @@ public class Main {
                     inputController = null;
                 }
                 
-                DisplaySession session = new DisplaySession(virtualDisplayId, virtualDisplay, videoEncoder, encoderSurface, inputController);
+                DisplaySession session = new DisplaySession(virtualDisplayId, width, height, dpi, virtualDisplay, videoEncoder, encoderSurface, inputController);
                 displays.put(virtualDisplayId, session);
                 logToFile("Registered DisplaySession for id=" + virtualDisplayId, null);
                 return virtualDisplayId;

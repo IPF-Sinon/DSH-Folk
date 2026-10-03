@@ -30,9 +30,10 @@ const PAIRS = [
   ["MultimediaSettingsContent", "app/src/main/java/me/bmax/apatch/ui/screen/settings/MultimediaSettings.kt",
     "app/src/main/java/me/bmax/apatch/ui/screen/settings/MultimediaSettingsScreen.kt"],
   ["SecuritySettingsContent", "app/src/main/java/me/bmax/apatch/ui/screen/settings/SecuritySettings.kt",
-    "app/src/main/java/me/bmax/apatch/ui/screen/settings/SecuritySettingsScreen.kt"],
-  ["PluginSettingsContent", "app/src/main/java/me/bmax/apatch/ui/screen/settings/PluginSettings.kt",
-    "app/src/main/java/me/bmax/apatch/ui/screen/settings/PluginSettingsScreen.kt"],
+    // 调用点不在 SecuritySettingsScreen.kt：设置页统一到一个 DshSettingsScreen 之后，安全那一组
+    // 是**功能页在 permissionOnly 下**渲染的。配对表原本还指着旧的调用文件，而门禁对
+    // 「文件不存在」是静默跳过 —— 于是这条配对早就名存实亡（下面把它改成失败，就是为了这个）。
+    "app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt"],
 ];
 
 let fail = 0;
@@ -125,8 +126,14 @@ function splitTop(body) {
 
 for (const [fn, declFile, callFile] of PAIRS) {
   console.log(`── ${fn} ──`);
-  if (!fs.existsSync(path.join(ROOT, declFile)) || !fs.existsSync(path.join(ROOT, callFile))) {
-    console.log("  – 跳过（文件不存在）");
+  // 文件不存在要**报错**，不能静默跳过：一条被跳过的配对看起来像有覆盖，实际什么都没查。
+  // SecuritySettingsContent 那条就是这样烂掉的（调用点搬去了别处，而这里一直"跳过"）。
+  if (!fs.existsSync(path.join(ROOT, declFile))) {
+    ok(false, `声明的文件不存在：${declFile}（配对表过期了，改指向或删掉这一条）`);
+    continue;
+  }
+  if (!fs.existsSync(path.join(ROOT, callFile))) {
+    ok(false, `调用点文件不存在：${callFile}（配对表过期了，改指向或删掉这一条）`);
     continue;
   }
   const decl = fs.readFileSync(path.join(ROOT, declFile), "utf8");

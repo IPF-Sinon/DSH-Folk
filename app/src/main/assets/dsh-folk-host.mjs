@@ -257,8 +257,11 @@ const CAP_CAVEAT = {
     'work on it, and that is genuinely the user\'s own screen. Create a session first and pass its id to act ' +
     'on a virtual screen instead; "launch" is meant for the virtual one. Take a shot and read width/height ' +
     'from the JSON before computing tap coordinates, and prefer re-shooting after every action over guessing ' +
-    'where the UI went. The service exits after 15s without calls, so re-running any display command restarts ' +
-    'it — that is normal, not a failure.',
+    'where the UI went. Re-running a display command always gives the same session back while the ' +
+    'virtual screen still exists (same width/height/dpi reuses that screen instead of stacking up ' +
+    'new ones), so keep using the id you already have. The helper lives as long as the DSH-Folk app ' +
+    'process does — the app pings it every 10s — and exits ~15s after the app goes away; the user can ' +
+    'also stop it from the preview page.',
 };
 
 let cached = null;

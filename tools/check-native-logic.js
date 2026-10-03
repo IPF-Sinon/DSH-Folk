@@ -855,6 +855,17 @@ const capsSrc = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/sett
   ok(!/dsh_native_cli_hint/.test(settingsSrc), "安全页上不再残留 CLI 提示");
   ok(/if \(bridgeEnabled\) \{[\s\S]{0,300}?dsh_native_cli_hint/.test(hubSrc),
     "CLI 提示只在桥开着时出现（关着桥还教人怎么调 CLI，是自相矛盾的）");
+
+  // 搜索框不许自动进入搜索态。
+  //
+  // startInSearchMode = true 会让 SearchBar 主动 requestFocus 并拉起键盘（SearchBar 里那个
+  // LaunchedEffect），而键盘正好盖住这一页的正文 —— 分类列表。用户十次里有九次是来点分类的，
+  // 一进来就被键盘挡住，"少点一下放大镜"省下的那一步远不抵这一下。
+  // 放大镜按钮本来就在 SearchBar 的 actions 里，点它才进搜索态（见它的 onFocusChanged）。
+  ok(!/startInSearchMode\s*=\s*true/.test(hubSrc),
+    "权限管理页不要自动进入搜索态（键盘会盖住分类列表）");
+  ok(/startInSearchMode\s*=\s*false/.test(hubSrc),
+    "并且显式写成 false —— 删掉这一行也能过，但下次有人想「顺手改回 true」时就少了一句挡着的注释");
 }
 const nativeZh = fs.readFileSync("app/src/main/res/values-zh-rCN/dsh_strings.xml", "utf8");
 const nativeEn = fs.readFileSync("app/src/main/res/values/dsh_strings.xml", "utf8");

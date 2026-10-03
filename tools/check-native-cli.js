@@ -59,6 +59,31 @@ for (const [name, body] of [["dsh-native", script], ["dsh-fs", fsScript]]) {
     `${name}: 代码里零个 CJK（实际 ${cjk.length}${cjk.length ? " → " + cjk.slice(0, 10).join("") : ""}）`);
 }
 
+// ── 每条能力调用都必须带 reason ──
+//
+// host 对 /native/** 一律强制 reason（只有 /native/capabilities 与 /native/elevate 在 reason
+// 检查之前就被接走），而 reason 唯一的来源就是 `+ q({...})`。**漏套 q() 的那条命令在真机上
+// 100% 返回 reason_required**，看起来像"这个功能没实现"。
+//
+// 这件事真发生过，而且是一次漏 12 条：`display status`、`display stop`、`a11y screenshot`、
+// `device`、`clip get`、`tts voices`、`phone`、`sensors list`、`network`、`volume`、
+// `settings`、`install`。之所以长期没人发现，是因为下面那个假服务端从不检查 reason，
+// 于是「命令没带 reason」与「命令不带 reason 也能通过」在门禁里长得一模一样。
+{
+  const reqLines = script.split("\n")
+    .map((l, i) => ({ l, n: i + 1 }))
+    .filter(({ l }) => /\breq\('/.test(l));
+  ok(reqLines.length > 30, `解析到 ${reqLines.length} 处 req( 调用（解析失效会让本条形同虚设）`);
+  const noReason = reqLines.filter(({ l }) => !/q\(/.test(l) && !/'\/native\/capabilities'/.test(l));
+  ok(noReason.length === 0,
+    "每条能力调用都带了 q()（即 reason）" +
+    (noReason.length ? " → 漏 " + noReason.map(({ n, l }) => n + ":" + l.trim().slice(0, 46)).join(" / ") : ""));
+  // 反向：豁免只能是 capabilities —— 否则这条断言会被一句 "反正不用 reason" 慢慢掏空
+  const exempt = reqLines.filter(({ l }) => !/q\(/.test(l));
+  ok(exempt.every(({ l }) => /'\/native\/capabilities'/.test(l)),
+    "不带 q() 的只有 /native/capabilities 这一个豁免端点");
+}
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dshcli-"));
 for (const [name, body] of [["dsh-native", script], ["dsh-fs", fsScript]]) {
   const f = path.join(tmp, name + ".js");
@@ -106,11 +131,43 @@ const EXPECT = [
   [["media", "get", "42", "--type", "video"], "GET", "/native/media/read", { type: "video", id: "42" }],
   [["mic", "record", "--ms", "3000"], "POST", "/native/mic/record", { ms: "3000" }],
   [["caps"], "GET", "/native/capabilities", {}],
+  // a11y 与 display：权限最大、也最容易漏套 q() 的两组，之前一条用例都没有
+  // （`display status` / `display stop` 就是这么漏掉的）。
+  [["a11y", "tree", "--depth", "3", "--max", "40"], "GET", "/native/a11y/tree", { depth: "3", max: "40" }],
+  [["a11y", "click", "OK", "--class", "android.widget.Button", "--index", "1"], "POST", "/native/a11y/click", { target: "OK", class: "android.widget.Button", index: "1" }],
+  [["a11y", "tap", "10", "20", "--ms", "80"], "POST", "/native/a11y/tap", { x: "10", y: "20", ms: "80" }],
+  [["a11y", "swipe", "1", "2", "3", "4", "--ms", "200"], "POST", "/native/a11y/swipe", { x1: "1", y1: "2", x2: "3", y2: "4", ms: "200" }],
+  [["a11y", "text", "hi", "--target", "Note"], "POST", "/native/a11y/text", { text: "hi", target: "Note" }],
+  [["a11y", "global", "back"], "POST", "/native/a11y/global", { action: "back" }],
+  [["a11y", "screenshot"], "GET", "/native/a11y/screenshot", {}],
+  [["display", "status"], "GET", "/native/display/status", {}],
+  [["display", "session", "--width", "1080", "--height", "1920", "--dpi", "420", "--bitrate", "4000000"], "POST", "/native/display/session", { width: "1080", height: "1920", dpi: "420", bitrate: "4000000" }],
+  [["display", "shot", "--display", "13"], "POST", "/native/display/screenshot", { display: "13" }],
+  // 坐标 0 是合法值，用 0 才能压住 'a[1] && a[2]' 那类判空写法（display tap 0 0）
+  [["display", "tap", "0", "0", "--display", "13"], "POST", "/native/display/tap", { x: "0", y: "0", display: "13" }],
+  [["display", "swipe", "1", "2", "3", "4", "--ms", "150", "--display", "13"], "POST", "/native/display/swipe", { x1: "1", y1: "2", x2: "3", y2: "4", duration: "150", display: "13" }],
+  [["display", "key", "home", "--display", "13"], "POST", "/native/display/key", { key: "home", display: "13" }],
+  [["display", "launch", "com.miui.calculator", "--display", "13"], "POST", "/native/display/launch", { package: "com.miui.calculator", display: "13" }],
+  [["display", "stop"], "POST", "/native/display/stop", {}],
 ];
+
+// 每条能力调用都替它补上 --reason，好让假服务端能像真 host 一样强制它。
+// 不给 `caps` 补：那一条是 host 唯一免 reason 的端点。
+const REASON = "gate-reason";
+const withReason = (argv) => (argv[0] === "caps" ? argv : [...argv, "--reason", REASON]);
 
 const seen = [];
 const server = http.createServer((req, res) => {
   seen.push(req.method + " " + req.url);
+  const u = new URL("http://x" + req.url);
+  // 与真 host 同一条契约：/native/capabilities 之外，缺 reason 一律 400 reason_required
+  // （DshNativeBridge 在路由分发前就拦了）。不在这里强制的话，脚本漏套 q() 的命令会
+  // 静默"通过"，这正是 12 条命令同时失效却没人发现的原因。
+  if (u.pathname !== "/native/capabilities" && !u.searchParams.get("reason")) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: false, code: "reason_required" }));
+    return;
+  }
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ ok: true }));
 });
@@ -130,7 +187,7 @@ const server = http.createServer((req, res) => {
   for (const [argv, method, urlPath, params] of EXPECT) {
     seen.length = 0;
     try {
-      await run(process.execPath, [runner, ...argv]);
+      await run(process.execPath, [runner, ...withReason(argv)]);
     } catch (e) {
       ok(false, argv.join(" ") + " → 退出码非 0: " + String(e.stderr || "").slice(0, 160));
       continue;
@@ -143,6 +200,8 @@ const server = http.createServer((req, res) => {
     const qs = new URL("http://x" + gotUrl).searchParams;
     const pathOk = gotMethod === method && gotUrl.split("?")[0] === urlPath;
     const bad = [];
+    // reason 必须真的落在 query 里：漏套 q() 的命令会在这里当场现形
+    if (argv[0] !== "caps" && qs.get("reason") !== REASON) bad.push("reason 丢失（漏套 q()）");
     for (const [k, v] of Object.entries(params)) {
       if (qs.get(k) !== v) bad.push(`${k}=${qs.get(k)}≠${v}`);
     }
@@ -161,15 +220,16 @@ const server = http.createServer((req, res) => {
   }
   ok(usageOk, "无参数 → 打 usage、不发请求、退出码非 0");
 
-  // 未知命令同样不该悄悄成功
+  // 未知命令同样不该悄悄成功。**带上 --reason**：不带的话命中的是上一条「缺 reason」的分支
+  // （它也打 usage），这条断言就分不清"未知命令被拒"与"根本没走到分发"。
   seen.length = 0;
   let unknownOk = false;
   try {
-    await run(process.execPath, [runner, "nosuchcmd"]);
+    await run(process.execPath, [runner, "nosuchcmd", "--reason", REASON]);
   } catch (e) {
     unknownOk = String(e.stderr || "").includes("usage: dsh-native") && seen.length === 0;
   }
-  ok(unknownOk, "未知命令 → 打 usage、不发请求、退出码非 0");
+  ok(unknownOk, "未知命令（带 reason）→ 打 usage、不发请求、退出码非 0");
 
   // USAGE 里列出的顶层命令必须都真的被分发（写了帮助却没实现是最气人的那种 bug）
   const usageBlock = script.slice(
@@ -179,8 +239,11 @@ const server = http.createServer((req, res) => {
   // USAGE 里每条命令行的形状是：<缩进>'<两空格><命令名> ...',
   // 所以要认的是「引号 + 恰好两个空格 + 命令名」，不是任意两空格缩进 ——
   // 后者会把脚本里的 const / if / for 全当成命令。
-  const usageCmds = [...usageBlock.matchAll(/^\s*' {2}([a-z-]+)/gm)].map((m) => m[1]);
-  const dispatched = new Set([...script.matchAll(/cmd === '([a-z-]+)'/g)].map((m) => m[1]));
+  // 命令名里可以有数字（a11y、tts 之外还有 notify-full-screen 这种连字符组合），
+  // 所以是 [a-z][a-z0-9-]* 而不是 [a-z-]+：后者会把 `a11y` 截成 `a`，于是断言拿着一个
+  // 根本不存在的命令去比对，报出"缺 a"这种没人看得懂的失败。
+  const usageCmds = [...usageBlock.matchAll(/^\s*' {2}([a-z][a-z0-9-]*)/gm)].map((m) => m[1]);
+  const dispatched = new Set([...script.matchAll(/cmd === '([a-z][a-z0-9-]*)'/g)].map((m) => m[1]));
   const missing = [...new Set(usageCmds)].filter((c) => !dispatched.has(c));
   ok(missing.length === 0, "USAGE 列出的命令都有分发" + (missing.length ? " → 缺 " + missing.join(",") : ""));
 
@@ -189,15 +252,38 @@ const server = http.createServer((req, res) => {
   ok(undocumented.length === 0,
     "分发的命令都写进了 USAGE" + (undocumented.length ? " → 漏写 " + undocumented.join(",") : ""));
 
-  // README 同样是用户会照着敲的地方
-  const readme = fs.readFileSync("docs/host-bridges.md", "utf8");
-  const inReadme = new Set([...readme.matchAll(/^dsh-native ([a-z-]+)/gm)].map((m) => m[1]));
-  const rdMissing = [...dispatched].filter((c) => !inReadme.has(c));
-  ok(rdMissing.length === 0,
-    "每条命令 README 都写了" + (rdMissing.length ? " → 漏写 " + rdMissing.join(",") : ""));
-  const rdExtra = [...inReadme].filter((c) => !dispatched.has(c));
-  ok(rdExtra.length === 0,
-    "README 没写不存在的命令" + (rdExtra.length ? " → " + rdExtra.join(",") : ""));
+  // 两份 README 都是用户会照着敲的地方（README.md 链中文那份，README.en.md 链英文那份）。
+  // 只查一份的话另一份会静默落后 —— display 这一整块就曾经两份都没写。
+  for (const doc of ["docs/host-bridges.md", "docs/host-bridges.en.md"]) {
+    const readme = fs.readFileSync(doc, "utf8");
+    const inReadme = new Set([...readme.matchAll(/^dsh-native ([a-z][a-z0-9-]*)/gm)].map((m) => m[1]));
+    const rdMissing = [...dispatched].filter((c) => !inReadme.has(c));
+    ok(rdMissing.length === 0,
+      `${doc}: 每条命令都写了` + (rdMissing.length ? " → 漏写 " + rdMissing.join(",") : ""));
+    const rdExtra = [...inReadme].filter((c) => !dispatched.has(c));
+    ok(rdExtra.length === 0,
+      `${doc}: 没写不存在的命令` + (rdExtra.length ? " → " + rdExtra.join(",") : ""));
+  }
+
+  // ── 门禁自己也不能是孤儿 ──
+  //
+  // 这个文件本身曾经就是孤儿：躺在 tools/ 里，两个工作流谁都没调它，于是它悄悄腐烂到
+  // 二十多条断言常年失败，而「12 条 dsh-native 命令漏了 reason」这种真问题一条都没拦住。
+  // 不被执行的门禁比没有门禁更糟 —— 它让人以为有人在守。
+  //
+  // 局限：如果哪天有人把**本文件**从两个工作流里摘掉，这条断言也没机会跑了。它挡的是
+  // 「新加门禁忘了接线」这类更常见的疏漏。
+  {
+    const wfs = [".github/workflows/build.yml", ".github/workflows/beta.yml"];
+    const all = fs.readdirSync("tools").filter((f) => /^check-.*\.js$/.test(f));
+    ok(all.length > 20, `tools/ 下有 ${all.length} 个 check 脚本（解析失效会让本条形同虚设）`);
+    for (const wf of wfs) {
+      const text = fs.readFileSync(wf, "utf8");
+      const missing = all.filter((f) => !text.includes(`tools/${f}`));
+      ok(missing.length === 0,
+        `${wf} 调用了每个 check 脚本` + (missing.length ? " → 孤儿: " + missing.join(",") : ""));
+    }
+  }
 
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });

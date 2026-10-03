@@ -52,11 +52,16 @@ Commands:
 ```
 dsh-native notify <title> [body] [--id N] [--ongoing]
 dsh-native notify-cancel [--id N]
+dsh-native notify-list [--limit N]              # read active system notifications
+dsh-native notify-dismiss <key>|--all           # dismiss system notifications (needs notification full control)
+dsh-native notify-full-screen <title> [body]    # urgent full-screen alert
 dsh-native toast <text>
 dsh-native vibrate [--ms N] [--amplitude 1..255]
+dsh-native torch <on|off>                # camera flash as a flashlight
 dsh-native clip get | clip set <text> [--label L]
 dsh-native share <text> [--title T]
 dsh-native open <https-link>
+dsh-native dial <number>                 # put the number in the dialer; the user presses call
 dsh-native device
 dsh-native network                       # connection type / internet validation / metering / WiFi signal
 dsh-native phone                         # carrier / network type / SIM / call state
@@ -76,15 +81,50 @@ dsh-native ringer <normal|vibrate|silent>
 dsh-native settings | settings brightness <1..100> [--auto 0|1] | settings timeout <ms>
 dsh-native settings rotation <0|1>
 dsh-native install                       # whether this device allows installing unknown apps
+dsh-native usage list [--days N] [--limit N]            # recent app foreground usage
+dsh-native sms list [--limit N] | sms send <number> <text>   # read SMS / send SMS
 dsh-native shell [--su] [--timeout ms] [--] <command>   # run through the channel you picked (see below)
 dsh-native a11y tree [--depth N] [--max N]        # read the current screen as a node tree
 dsh-native a11y click <text-or-id> [--class C] [--index N]
 dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
 dsh-native a11y text <text> [--target <text-or-id>]
 dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen>
+dsh-native a11y screenshot               # capture the screen; lands in /tmp, JSON carries path
+dsh-native display status                # is the service up, which display is the session, which channel
+dsh-native display session [--width N --height N --dpi N --bitrate K]   # same size reuses the existing screen
+dsh-native display shot [--display N]    # PNG of display N into /tmp; JSON carries path and size
+dsh-native display tap <x> <y> [--display N]
+dsh-native display swipe <x1> <y1> <x2> <y2> [--ms N] [--display N]
+dsh-native display key <home|back|enter|...> [--display N]
+dsh-native display launch <package> [--display N]   # start an app ON the virtual screen, not the real one
+dsh-native display stop                  # shut the service down now; the virtual screen goes with the process
 dsh-native caps                          # which capabilities are enabled and available
 dsh-native elevate <cap> <read|write|read_write|control> --reason <why> [--command <cmd>]
 ```
+
+### Virtual screen (`display`)
+
+Start an app on a **virtual display** and drive it — screenshots, taps, swipes, key events — while the user's own
+screen is left alone. The server runs as root/shell through `app_process` and hands its Binder back to the app,
+so it needs a ready elevation channel like every other `/native/` capability. `display 0` is the **real screen**:
+`shot`/`tap`/`swipe`/`key` work there too, and only `launch` is meant for the virtual one.
+
+Take the coordinates from the screenshot you just took: `shot` returns the PNG path plus width and height.
+Re-shoot after every action rather than guessing where the UI went.
+
+Three things that are easy to get wrong:
+
+- **A `session` with the same size and dpi reuses the screen that already exists** instead of stacking up new ones.
+  Ask for a different size and you do get a new one. This used to create a fresh display every time (the reuse
+  check was dropped when the subsystem was ported), which left a row of same-sized `DshDisplay-*` virtual screens
+  behind on real devices, each holding a hardware encoder, reclaimed only by `display stop`.
+- **The server lives as long as the app.** It does have a watchdog — no video sink and no client activity means it
+  exits — but the app pings it every 10 seconds while it runs, and a ping counts as client activity. That is
+  deliberate: otherwise an agent would lose the whole virtual screen during the ten-ish seconds it spends thinking
+  between a screenshot and a tap. Precisely: **once the app dies, the server exits about 15 seconds later**; while
+  the app is alive, only `display stop` (or the preview page's stop button) reclaims it immediately.
+- **The preview page shows the agent's screen**, not a new one: it attaches to the existing session through
+  `setVideoSink`. What the user sees is what the agent is driving.
 
 ### Privileged commands (`shell`)
 

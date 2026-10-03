@@ -109,24 +109,55 @@ object DisplayServer {
     data class Session(val displayId: Int, val width: Int, val height: Int, val dpi: Int)
 
     /**
-     * 当前会话的虚拟屏 id（0 = 还没有会话）。
+     * 当前会话的虚拟屏。
      *
      * 会话状态**只此一份**：HTTP 工具面（[DshDisplay]）与预览界面都从这里取，免得两边各记
-     * 一份、然后在对"当前是哪块屏"的理解上分叉。
+     * 一份、然后在对「当前是哪块屏」的理解上分叉。
+     *
+     * 记整份 [Session] 而不只是 id：预览界面要挂到**已有**会话上，配置解码器需要它的尺寸；
+     * 只留 id 的话预览只能自己再建一块（那样用户看到的永远不是 agent 正在操作的那块）。
+     *
+     * 失效点必须跟着服务端实例走 —— 服务端一换，旧的屏随进程消失，这个值必须一起清掉，
+     * 否则后续调用会拿着指向已消失显示的 id 去操作（服务端只会回一句 unknown displayId）。
      */
     @Volatile
-    private var sessionDisplayId: Int = 0
+    private var session: Session? = null
 
-    fun sessionDisplay(): Int = sessionDisplayId
+    fun sessionDisplay(): Int = session?.displayId ?: 0
 
-    /** 建一块虚拟屏并记为当前会话。重复调用会建**新的**一块 —— 服务端支持多块屏。 */
+    /** 当前会话（含尺寸）；null = 还没有会话。 */
+    fun currentSession(): Session? = session
+
+    /**
+     * 建一块虚拟屏并记为当前会话。
+     *
+     * 同尺寸同 dpi 会**复用**已有会话：服务端也按 (宽, 高, dpi) 复用（见 `Main.ensureDisplay`），
+     * 于是重复调用不会再每次多开一块屏和一个硬件编码器 —— 真机上曾经因此攒下一串
+     * `DshDisplay-*` 孤儿虚拟屏（旧的那些是进程被杀时泄漏的，只能重启设备清掉）。
+     * 想换一个尺寸，直接按新尺寸调用即可，那会真的建新的一块。
+     */
     fun startSession(ctx: Context, width: Int, height: Int, dpi: Int, bitrateKbps: Int = 0): Result<Session> {
         val svc = start(ctx).getOrElse { return Result.failure(it) }
+        currentSession()
+            ?.takeIf { it.width == width && it.height == height && it.dpi == dpi }
+            ?.let { return Result.success(it) }
         return runCatching {
             val id = svc.ensureDisplay(width, height, dpi, bitrateKbps)
-            sessionDisplayId = id
-            Session(id, width, height, dpi)
+            if (id <= 0) error("服务端没能建出虚拟屏（ensureDisplay 返回 $id）")
+            Session(id, width, height, dpi).also { session = it }
         }
+    }
+
+    /**
+     * 优先挂到**已有的**会话；没有会话才按当前设备尺寸新建一块。
+     *
+     * 预览界面走这个而不是 [startSession]：agent 已经在操作某块屏时，预览另开一块的话，
+     * 用户看到的是自己的空白屏，而 agent 在另一块上点 —— 两边的画面永远不会是同一个。
+     */
+    fun attachOrStartSession(ctx: Context): Result<Session> {
+        currentSession()?.let { return Result.success(it) }
+        val dm = ctx.resources.displayMetrics
+        return startSession(ctx, dm.widthPixels, dm.heightPixels, dm.densityDpi)
     }
 
     /**
@@ -167,6 +198,10 @@ object DisplayServer {
             }
 
             pushJar(ctx, bytes)?.let { note -> return Result.failure(DisplayError(note)) }
+
+            // 走到这里就要起一个**新的**服务端进程了：上一个实例的虚拟屏随它消失，会话作废。
+            // 放在这里（而不是等交接成功之后）是因为从这一刻起旧会话就已经不可信了。
+            session = null
 
             val freshToken = randomToken()
             val latch = java.util.concurrent.CountDownLatch(1)
@@ -416,7 +451,9 @@ object DisplayServer {
     /**
      * 停掉服务端。
      *
-     * 其实不打这一枪它也会在 15 秒内因空闲自杀（见类注释），但"用户按了停止"应当立刻生效。
+     * 心跳还在时它不会自己退（见类注释：心跳是刻意算作"客户端还活着"的，否则 agent 在
+     * 「截图 → 思考 → 点击」的间隔里就会丢掉虚拟屏）。所以用户主动停止就必须真的打这一枪，
+     * 否则那块屏会一直挂到 App 进程结束。
      * 命令里的 `[m]` 括号见 [PROC_PATTERN] 的注释 —— 不加它会连承载命令的 shell 一起杀掉。
      */
     fun stop(ctx: Context) {
@@ -425,7 +462,7 @@ object DisplayServer {
             service = null
             // 屏随进程一起没了，会话 id 必须一起清：留着它，后续调用会拿一个指向已消失显示的
             // id 去操作，而服务端只会回一句"unknown displayId"。
-            sessionDisplayId = 0
+            session = null
             val outcome = privileged(
                 ctx,
                 "pkill -f ${shq(PROC_PATTERN)} 2>/dev/null; true",
@@ -468,7 +505,12 @@ object DisplayServer {
                 }
                 if (!alive) {
                     synchronized(lock) {
-                        if (service === svc) service = null
+                        if (service === svc) {
+                            service = null
+                            // 服务端没了，它建的那些虚拟屏也随进程没了：会话必须一起作废，
+                            // 否则预览会拿着一个已消失的 displayId 去挂 sink。
+                            session = null
+                        }
                     }
                     break
                 }

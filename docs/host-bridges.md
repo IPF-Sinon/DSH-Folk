@@ -92,9 +92,39 @@ dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
 dsh-native a11y text <文字> [--target <文字或 id>]
 dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>
 dsh-native a11y screenshot               # 截当前屏幕，PNG 落在 /tmp、JSON 里回路径
+dsh-native display status                # 服务起没起、当前会话是哪块屏、走的哪条通道
+dsh-native display session [--width N --height N --dpi N --bitrate K]   # 建虚拟屏；同尺寸会复用已有那块
+dsh-native display shot [--display N]    # 截屏，PNG 落在 /tmp、JSON 里回路径与尺寸
+dsh-native display tap <x> <y> [--display N]
+dsh-native display swipe <x1> <y1> <x2> <y2> [--ms N] [--display N]
+dsh-native display key <home|back|enter|...> [--display N]
+dsh-native display launch <包名> [--display N]   # 把 App 起在那块虚拟屏上，而不是真实屏
+dsh-native display stop                  # 立刻关掉服务端（虚拟屏跟着进程一起回收）
 dsh-native caps                          # 查当前哪些能力开着、能不能用
 dsh-native elevate <能力> <read|write|read_write|control> --reason <理由> [--command <命令>]
 ```
+
+### 虚拟屏（`display`）
+
+在一块**虚拟显示器**上启动目标 App 并代为操作 —— 截屏、点击、滑动、按键 —— 而用户自己的屏幕不受打扰。
+服务端以 root/shell 身份用 `app_process` 起来，通过 Binder 把能力交回应用（同 /native/ 下其它能力一样，
+需要一条就绪的提权通道）。`display 0` 是**真实屏幕**：`shot`/`tap`/`swipe`/`key` 对它也有效，
+`launch` 才是只为虚拟屏准备的。
+
+坐标一律从刚截的那张图里算：`shot` 回的是 PNG 路径与宽高，**先看图再算点**，别凭上一次的坐标猜。
+每做一步就重新截一张，比「猜界面变成什么样了」可靠得多。
+
+几个容易误解的地方：
+
+- **同尺寸同 dpi 的 `session` 会复用已有那块屏**，不是每次都新建。想换尺寸就按新尺寸调用，那时才真的新建。
+  这一条以前不是这样的（移植时把复用检查删掉了），后果是真机上攒下一串同尺寸的 `DshDisplay-*`
+  虚拟屏、每块都占着一个硬件编码器，而只有 `display stop` 才会回收。
+- **服务端的存活跟随 App**：它带看门狗（没有视频 sink、又没有客户端活动就退出），但 App 在运行期间
+  每 10 秒 `ping` 一次，而 `ping` 也算客户端活动 —— 这是**刻意**的，否则 agent 在「截图 → 思考 → 点击」
+  的十几秒间隔里就会丢掉整块虚拟屏。所以准确的描述是：**App 一死，服务端约 15 秒后自己退出**；
+  只要 App 还活着，就只能靠 `display stop`（或预览页的停止按钮）立刻回收。
+- **预览页看的就是 agent 那块屏**：它优先挂到已有会话上（`setVideoSink`），不会另开一块。
+  用户点开预览时看到的画面，与 agent 正在操作的是同一个。
 
 ### 特权命令（`shell`）
 

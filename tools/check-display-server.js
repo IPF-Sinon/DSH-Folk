@@ -598,7 +598,48 @@ for (const f of SHARED) {
     '预览入口必须挂在虚拟屏那一项上（挂到别的能力或每张卡都给一个都不对）');
 }
 
-// ── 16. 产物校验（编译之后跑）──
+// ── 16. 虚拟屏的复用，以及「预览看的就是 agent 那块屏」 ──
+//
+// 两件事同一个根因：会话从来不复用。于是每调一次 display session（预览页也算一次）就多一块
+// 虚拟屏 + 一个硬件编码器，只有 stop 才会回收 —— 真机上表现为 dumpsys 里一串同尺寸的
+// DshDisplay-* 挂着不走；而预览页另开一块，意味着用户看到的画面**永远不是** agent 正在
+// 操作的那块（agent 在 13 上点，用户在看 14）。
+{
+  const main = read(`${SERVER_DIR}/Main.java`);
+  const ds = read('app/src/main/java/me/bmax/apatch/dsh/DisplayServer.kt');
+  const preview = read('app/src/main/java/me/bmax/apatch/ui/screen/DisplayPreviewScreen.kt');
+
+  // 服务端：记下请求尺寸，并在 ensureDisplay 里真的复用
+  must(/final int reqWidth;/.test(main) && /final int reqHeight;/.test(main) && /final int reqDpi;/.test(main),
+    'DisplaySession 要记下请求的宽高与 dpi（否则 ensureDisplay 无从判断能不能复用）');
+  must(/findDisplay\(width, height, dpi\)/.test(main),
+    'ensureDisplay 必须按 (宽, 高, dpi) 找已有屏 —— 移植时删掉的那段复用就是孤儿虚拟屏的来源');
+  must(/private int findDisplay\(int width, int height, int dpi\)/.test(main),
+    'findDisplay 存在（只查有没有调用、不查实现，会把空壳函数放过去）');
+  must(/s\.reqWidth == width && s\.reqHeight == height && s\.reqDpi == dpi/.test(main),
+    'findDisplay 三个维度都要比对（只看宽会把不同 dpi 的屏错并成一块）');
+
+  // App：会话记完整尺寸，同尺寸复用
+  must(/private var session: Session\? = null/.test(ds),
+    '会话要记整份 Session（预览挂到已有会话时，配置解码器需要它的尺寸）');
+  must(/it\.width == width && it\.height == height && it\.dpi == dpi/.test(ds),
+    'startSession 同尺寸同 dpi 要复用已有会话');
+
+  // 会话失效点必须跟着服务端实例走
+  const cleared = (ds.match(/session = null/g) || []).length;
+  must(cleared >= 3,
+    `会话要在服务端换实例的三个时机一起作废（用户停止 / 心跳发现已死 / 起新进程），实际清了 ${cleared} 处`);
+
+  // 预览：挂已有会话，绝不自己新建
+  must(/DisplayServer\.attachOrStartSession\(/.test(preview),
+    '预览页必须用 attachOrStartSession（优先挂到 agent 那块屏）');
+  must(!/DisplayServer\.startSession\(/.test(preview),
+    '预览页不该直接 startSession —— 那会另开一块屏，用户看到的就不是 agent 正在操作的那块');
+  must(/fun attachOrStartSession\(ctx: Context\): Result<Session>/.test(ds),
+    'attachOrStartSession 存在');
+}
+
+// ── 17. 产物校验（编译之后跑）──
 
 
 
