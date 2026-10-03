@@ -445,20 +445,41 @@ console.log("── 特权严格程度 ──");
     if (s === "normal") return r !== "readonly";
     return r === "dangerous";
   };
-  // 复刻体：必须与 Kotlin 里的分支一一对应
-  const needs = (strictness, r) =>
-    strictness === "strict" ? true : strictness === "normal" ? r !== "readonly" : r === "dangerous";
+  // 复刻体：必须与 Kotlin 里的分支一一对应（含"信任"这一维）
+  const needs = (strictness, r, trusted = false) => {
+    if (r === "dangerous") return true;
+    if (trusted) return false;
+    if (strictness === "strict") return true;
+    if (strictness === "normal") return r !== "readonly";
+    return false;
+  };
   eq([needs("strict", "readonly"), needs("strict", "write"), needs("strict", "dangerous")], [true, true, true],
     "严格档：读、写、危险都要用户同意（含只读，这正是它区别于「一般」的地方）");
   eq([needs("normal", "readonly"), needs("normal", "write"), needs("normal", "dangerous")], [false, true, true],
     "一般档：只读免确认，写与危险要确认");
   eq([needs("loose", "readonly"), needs("loose", "write"), needs("loose", "dangerous")], [false, false, true],
     "宽松档：档位内免确认，只有危险命令要确认");
+  eq([needs("strict", "readonly", true), needs("strict", "write", true)], [false, false],
+    "信任后严格档也不再逐条问 —— 这正是「按能力免确认」存在的理由（不必把整机降到宽松）");
+  eq([needs("normal", "write", true), needs("loose", "readonly", true)], [false, false],
+    "信任在一般/宽松档同样免确认（不改变已有行为）");
+  eq([needs("strict", "dangerous", true), needs("loose", "dangerous", true)], [true, true],
+    "危险操作不受信任影响：任何档、任何信任状态都要问");
   eq([risk("strict", "readonly"), risk("normal", "write"), risk("loose", "dangerous")], [true, true, true],
     "复刻体与参考实现一致");
+  ok(/if \(risk == PrivRisk\.DANGEROUS\) return true/.test(priv),
+    "危险操作在函数最前面就被拦下（信任与档位都越不过它）");
+  ok(/if \(trusted\) return false/.test(priv), "信任在危险判定之后、档位判定之前生效");
   ok(/PrivStrictness\.STRICT -> true/.test(priv), "严格档在所有等级上都返回 true（没有给只读开后门）");
   ok(/PrivStrictness\.NORMAL -> risk != PrivRisk\.READONLY/.test(priv), "一般档只给只读免确认");
-  ok(/PrivStrictness\.LOOSE -> risk == PrivRisk\.DANGEROUS/.test(priv), "宽松档只拦危险命令");
+  ok(/PrivStrictness\.LOOSE -> false/.test(priv), "宽松档只拦危险命令（危险已在函数开头返回）");
+  // 信任名单本身：按能力存、读出来要拷一份（getStringSet 返回的是 prefs 内部对象）
+  ok(/KEY_PRIV_TRUSTED_CAPS = "priv_trusted_caps"/.test(fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt", "utf8")),
+    "信任名单有独立的 prefs 键");
+  ok(/getStringSet\(DshEnv\.KEY_PRIV_TRUSTED_CAPS, emptySet\(\)\)\?\.toSet\(\)/.test(priv),
+    "读信任名单要拷一份（直接改 prefs 返回的集合是写不进去的）");
+  ok(/fun setTrusted\(ctx: Context, cap: DshNativeBridge\.Cap, on: Boolean\)/.test(priv),
+    "信任可撤销（能加也能减）");
   ok(/fun allowsPersistentGrant\(strictness: PrivStrictness\): Boolean =\s*strictness != PrivStrictness\.STRICT/.test(priv),
     "严格档不给「允许（长期）」");
   ok(/entries\.firstOrNull \{ it\.id == raw \} \?: DEFAULT/.test(priv) && /val DEFAULT = STRICT/.test(priv),
@@ -692,8 +713,41 @@ console.log("\n── 特权通道约束 ──");
   ok(/"\/native\/shell" -> Cap\.SHELL/.test(bridge), "端点映射到 Cap.SHELL");
   ok(/PrivilegedShell\.riskOf\(params\["cmd"\]\.orEmpty\(\)\) != PrivRisk\.READONLY/.test(bridge),
     "读写判定看命令本身（否则「读」档位连 getprop 都用不了）");
-  ok(/val confirm = risk != null && PrivPolicy\.needsConfirm\(strictness, risk\)/.test(bridge),
-    "严格程度接在闸门上");
+  ok(/val confirm = risk != null && PrivPolicy\.needsConfirm\(strictness, risk, trusted\)/.test(bridge),
+    "严格程度接在闸门上（并把「这个能力被信任」一起算进去）");
+  ok(/val trusted = risk != null && PrivPolicy\.isTrusted\(ctx, cap\)/.test(bridge),
+    "信任是按**能力**判定的（不是全局）");
+  ok(/privDecision = "trusted"/.test(bridge),
+    "审计能分辨「被信任放行」与「本来就不问」");
+  ok(/Decision\.ALLOW_TRUST/.test(bridge), "第三个结论（不再逐条确认）也放行这次调用");
+
+  // ── 虚拟屏按端点分级：读的归读、动的归动 ──
+  //
+  // 以前一律 DANGEROUS，后果是"不管用户选哪一档严格程度，每条点击都要弹窗" —— 用虚拟屏
+  // 这件事在实践中根本走不下去。分级必须与 isWriteRequest 是同一条线，所以逐端点对拍。
+  ok(/Cap\.DISPLAY -> if \(isWriteRequest\(method, path, params\)\) PrivRisk\.WRITE else PrivRisk\.READONLY/.test(bridge),
+    "虚拟屏的风险按端点算（查询/截图是只读，其余是写）");
+  const dispRead = ["/native/display/status", "/native/display/screenshot"];
+  const dispWrite = [
+    "/native/display/session", "/native/display/screenshot2", "/native/display/tap",
+    "/native/display/swipe", "/native/display/key", "/native/display/launch", "/native/display/stop",
+  ];
+  // 复刻 isWriteRequest 里虚拟屏那三行，确认与上面的风险分级逐端点一致
+  const isWrite = (path) => {
+    if (path === "/native/display/status" || path === "/native/display/screenshot") return false;
+    if (path.startsWith("/native/display/")) return true;
+    return null;
+  };
+  eq(dispRead.map(isWrite), [false, false], "查询与截图算只读（用户可以「让我看，但别动」）");
+  eq(dispWrite.map(isWrite), [true, true, true, true, true, true, true],
+    "建会话/点击/滑动/按键/启动/停止都算写");
+  // 两边必须给出同一个答案，否则会出现"档位按读放行、严格程度按写弹窗"这种自相矛盾
+  for (const path of dispRead.concat(dispWrite)) {
+    const byWrite = isWrite(path);
+    const byRisk = byWrite ? "write" : "readonly";
+    const expect = dispRead.includes(path) ? "readonly" : "write";
+    eq(byRisk === expect, true, "风险分级与 isWriteRequest 在 " + path + " 上一致");
+  }
   ok(/if \(need != null \|\| confirm\)/.test(bridge), "「档位不足」与「按严格程度要确认」走同一条弹窗路径");
   ok(/Kind\.CALL/.test(bridge) && /Kind\.LEVEL/.test(bridge), "两种弹窗分开了（长期授权只对 LEVEL 有意义）");
   ok(/.put\("decision", decision\)/.test(bridge), "审计记录了「用户点过头还是自动放行」");
@@ -989,6 +1043,74 @@ ok(/保留/.test(nativeZh),
   ok(/dsh_chguide_root_verify/.test(ch), "检测到 root 未验证时，引导去验证");
   ok(/allowRootPrompt = true/.test(ch),
     "「去验证 / 重新探测」允许真跑 su（默认不弹授权框，见 PermissionManager.refresh）");
+}
+
+// ── 「不再逐条确认」名单（P2）──
+//
+// 这一段的教训：第一版只查"关键字都在不在"，16 条变异里漏了 8 条 —— 把
+// `if (risk == DANGEROUS) return true` 与 `if (trusted) return false` 换个顺序，两个字符串都还在，
+// 语义却变成"信任可以越过危险操作"。所以下面凡是"顺序有意义"的地方一律比**位置**，
+// 凡是"按钮真的接上了"的地方一律查**调用**而不是类型名。
+console.log("── 「不再逐条确认」名单 ──");
+{
+  const privSrc = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/PrivPolicy.kt", "utf8");
+  const privCode = code(privSrc);
+  const iDanger = privCode.indexOf("if (risk == PrivRisk.DANGEROUS) return true");
+  const iTrusted = privCode.indexOf("if (trusted) return false");
+  ok(iDanger > 0 && iTrusted > iDanger,
+    "危险判定必须排在信任之前（换顺序 = 信任能越过卸载/重启这类不可逆动作）");
+  ok(/if \(on\) next\.add\(cap\.id\) else next\.remove\(cap\.id\)/.test(privCode),
+    "信任能加也能减（只能靠清数据撤销的授权，用户没有真正选择权）");
+
+  const bridgeSrc = code(SRC.bridge);
+  const reqSrc = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshElevationRequests.kt", "utf8");
+  ok(/ALLOW_TRUST\("allow_trust"\)/.test(code(reqSrc)),
+    "存在第三个结论 ALLOW_TRUST（没有它，弹窗那个按钮无处可回）");
+  // 桥里"等结论"的那个 when：ALLOW_TRUST 必须与允许同列，否则点了它这次调用反而失败
+  const waitAt = SRC.bridge.indexOf("DshElevationRequests.awaitDecision(request.id)");
+  const waitBlock = waitAt < 0 ? "" : SRC.bridge.slice(waitAt, SRC.bridge.indexOf("Decision.DENIED", waitAt));
+  ok(/Decision\.ALLOW_TRUST/.test(waitBlock),
+    "ALLOW_TRUST 与「允许/仅本次」同列放行（只加结论不放行 = 点了按钮这次调用却失败）");
+  ok(/\.put\("trusted", true\)/.test(SRC.bridge),
+    "显式 elevate 的响应里说明这次带了信任（agent 才知道以后不用问）");
+  ok(/trusted = risk != null && PrivPolicy\.isTrusted\(ctx, cap\)/.test(bridgeSrc),
+    "信任按能力取，且不写死成 DISPLAY（它是通用机制，弹窗对每个能力都给这个按钮）");
+
+  const dlg = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/component/ElevationRequestDialog.kt", "utf8");
+  const dlgCode = code(dlg);
+  ok(/TextButton\(onClick = \{ allowTrusted\(activity, request\) \}\)/.test(dlgCode),
+    "弹窗里有第三个按钮，且真的接到 allowTrusted");
+  const trustAt = dlgCode.indexOf("private fun allowTrusted(");
+  const trustBody = trustAt < 0 ? "" : dlgCode.slice(trustAt, dlgCode.indexOf("\n}\n", trustAt));
+  ok(/PrivPolicy\.setTrusted\(ctx, request\.cap, true\)/.test(trustBody),
+    "按钮真的写进信任名单");
+  ok(/DshNativeBridge\.setAccess\(ctx, request\.cap, request\.access\)/.test(trustBody),
+    "按钮同时落盘档位（只信任不落档位 → 严格档下下次还是弹，这个按钮等于没用）");
+  ok(/DshHostPrompt\.writeFacts\(ctx\)/.test(trustBody),
+    "按钮后要刷新宿主事实（agent 靠它知道以后不用问）");
+  ok(/dsh_native_elevate_trust_hint/.test(dlgCode),
+    "弹窗里说明这个按钮会长期生效、以及去哪儿撤销（不讲清楚就是在骗用户）");
+
+  const capsCode = code(
+    fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionCapsScreens.kt", "utf8"),
+  );
+  ok(/PrivPolicy\.setTrusted\(context\.applicationContext, cap, want\)/.test(capsCode),
+    "设置页能改信任名单（撤销入口必须找得到）");
+  ok(/Switch\(checked = trusted, onCheckedChange = onToggleTrust\)/.test(capsCode),
+    "能力卡片上真的有一个开关，且接到 onToggleTrust");
+  ok(/trusted = cap\.id in trustedCaps/.test(capsCode),
+    "开关状态来自 prefs 里的名单（写死的开关只是装饰）");
+  ok(/PrivPolicy\.setTrusted[\s\S]{0,400}?DshHostPrompt\.writeFacts/.test(capsCode),
+    "改完名单要刷新宿主事实（漏了这一步 agent 会一直按旧假设行事）");
+
+  const facts = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshHostPrompt.kt", "utf8");
+  ok(/\.put\("nativeTrusted", JSONArray\(if \(nativeOn\) PrivPolicy\.trusted\(ctx\)\.sorted\(\) else emptyList<String>\(\)\)\)/.test(facts),
+    "事实文件里带上信任名单");
+  const prompt = fs.readFileSync("app/src/main/assets/dsh-folk-host.mjs", "utf8");
+  ok(/Array\.isArray\(f\.nativeTrusted\)[\s\S]{0,80}?f\.nativeTrusted\.filter/.test(prompt),
+    "提示词读了这份事实（按数组逐个筛，而不是只提一句）");
+  ok(/no-more-asking list/.test(prompt) && /dangerous actions[\s\S]{0,120}?still ask/i.test(prompt),
+    "提示词讲清它的边界（危险操作仍然会问），否则 agent 会以为有了它就能绕过危险确认");
 }
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);

@@ -191,10 +191,25 @@ password fields) refuse to hand over nodes and answer `no_window` instead of fai
 that call open**, shows the dialog in the app, and then either runs the command and hands the real result back, or fails that one call (deny, or no answer within
 60 seconds). The agent never has to file a request and then call again, so "the request succeeded but the call still failed" cannot happen.
 
-The dialog gives the user three answers — **Allow** (the level sticks), **Allow once** (exactly the next call of that capability goes through and then reverts; the
-switch in settings is untouched) and **Deny** (closing the dialog counts as deny). Its body shows **the command that is about to run** verbatim in a monospace,
+The dialog gives the user four answers — **Allow** (the level sticks), **Allow once** (exactly the next call of that capability goes through and then reverts; the
+switch in settings is untouched), **Allow and stop asking** (below) and **Deny** (closing the dialog counts as deny). Its body shows **the command that is about to run** verbatim in a monospace,
 selectable block — what the user is judging is never "camera=write, yes or no" but "what is it about to do". The bridge rebuilds that command from the call
-itself, so an ordinary call needs no extra flag; only an explicit `dsh-native elevate` takes `--command` to say what it intends to do. Several deliberate constraints:
+itself, so an ordinary call needs no extra flag; only an explicit `dsh-native elevate` takes `--command` to say what it intends to do.
+
+**"Allow and stop asking" is a second key that works per capability** (`priv_trusted_caps`, holding `Cap.id` values). It exists because strictness is
+**global**: to stop the virtual screen from prompting on every single tap, the only other option was dropping the whole device to normal/loose — which also
+frees up shell, SMS, notifications and the rest, too big a price, so most people just put up with tapping "Allow" dozens of times. This list narrows the grant
+to **one capability**, and it can be **revoked at any time from that capability's card in Settings → Permissions** (a grant you can only undo by wiping data is
+not really a choice). Two hard edges live in `PrivPolicy` and are pair-checked cell by cell in `check-native-logic.js`: **dangerous actions always ask**
+(uninstall, reboot, wiping data — whatever the strictness, trusted or not), and it **does not change** what global strictness means (strict still asks every
+time on capabilities that were not trusted).
+
+**The virtual screen's risk is graded per endpoint**: status and screenshot are **read-only**; creating a session, tapping, swiping, keys, launching an app and
+stopping are **write** — the same predicate the read/write level uses (`isWriteRequest`), because two separate predicates would let "the level says read, the
+strictness says write" contradict each other. The reason for the change: the virtual screen used to be classified as dangerous, so **every tap prompted no
+matter which strictness the user picked**, and using the virtual screen simply was not workable in practice.
+
+Several deliberate constraints:
 
 - **An unanswered request is denied after 60 seconds.** A dialog left hanging would otherwise hold the single “one request at a time” slot forever, turning every later
   request into a 409; with a deadline the worst case degrades to “this one did not go through”.

@@ -170,6 +170,15 @@ private fun ElevationDialog(activity: Activity, request: DshElevationRequests.Re
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(
+                        R.string.dsh_native_elevate_trust_hint,
+                        request.cap.id,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(12.dp))
                 // 倒计时放在正文末尾而不是按钮行里：按钮行是几个并排的动作，塞一个会跳动的
                 // 秒数进去会让整行随秒数重排；这里它是一条稳定宽度的说明。
@@ -194,6 +203,12 @@ private fun ElevationDialog(activity: Activity, request: DshElevationRequests.Re
                     TextButton(onClick = { allow(activity, request) }) {
                         Text(stringResource(R.string.dsh_native_elevate_allow))
                     }
+                }
+                // 第三个选项：按**能力**免掉后续弹窗，可撤销，危险操作照旧会问。
+                // 严格档下也给：它正是为"我不想为虚拟屏的每条点击点几十次允许、又不想把
+                // 整机降到宽松"准备的出口（点了它才会生效，之后不再逐条问）。
+                TextButton(onClick = { allowTrusted(activity, request) }) {
+                    Text(stringResource(R.string.dsh_native_elevate_trust))
                 }
             }
         },
@@ -322,6 +337,24 @@ private fun allow(activity: Activity, request: DshElevationRequests.Request) {
     DshNativeBridge.setAccess(activity.applicationContext, request.cap, request.access)
     DshHostPrompt.writeFacts(activity.applicationContext)
     DshElevationRequests.resolve(request.id, DshElevationRequests.Decision.ALLOWED)
+    requestRuntimePermissions(activity, request)
+}
+
+/**
+ * 「允许并不再逐条确认」（[DshElevationRequests.Decision.ALLOW_TRUST]）。
+ *
+ * 与 [allow] 的两点差别：
+ *  1. 能力被写进信任名单 —— 之后这个能力不再逐条弹窗（危险操作除外，见 PrivPolicy）；
+ *  2. 档位也一起落盘。信任必须有档位才跑得动，而严格档下"只信任、不落档位"会变成
+ *     "下次还是弹" —— 那样这个按钮等于没用。它比全局降到宽松窄得多（只这一个能力），
+ *     而且是可撤销的（设置 → 权限管理 里那一项）。
+ */
+private fun allowTrusted(activity: Activity, request: DshElevationRequests.Request) {
+    val ctx = activity.applicationContext
+    DshNativeBridge.setAccess(ctx, request.cap, request.access)
+    PrivPolicy.setTrusted(ctx, request.cap, true)
+    DshHostPrompt.writeFacts(ctx)
+    DshElevationRequests.resolve(request.id, DshElevationRequests.Decision.ALLOW_TRUST)
     requestRuntimePermissions(activity, request)
 }
 

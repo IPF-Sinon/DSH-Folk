@@ -792,6 +792,19 @@ function render(f) {
         ' Read-only commands run as-is; anything that changes device state needs the write level.'
     );
     lines.push('');
+    // 「不再逐条确认」名单：按能力生效，危险操作不受它影响。
+    const trustedList = Array.isArray(f.nativeTrusted)
+      ? f.nativeTrusted.filter((c) => typeof c === 'string')
+      : [];
+    if (trustedList.length) {
+      lines.push(
+        'The user added these capabilities to the **no-more-asking list**: ' +
+          trustedList.join(', ') +
+          '. Calls within them run without a dialog. This is per capability and revocable; ' +
+          'dangerous actions (uninstall, reboot, wiping data) still ask, no matter what.'
+      );
+      lines.push('');
+    }
     const strictness = str(f.privStrictness) || 'strict';
     if (!ready) {
       // 还没就绪，讲弹窗频率只会让 agent 以为现在就能调

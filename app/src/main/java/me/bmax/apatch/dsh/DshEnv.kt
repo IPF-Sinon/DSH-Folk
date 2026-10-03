@@ -285,6 +285,17 @@ object DshEnv {
     const val KEY_PRIV_STRICTNESS = "priv_strictness"
 
     /**
+     * 「不再逐条确认」的能力名单（StringSet，存 [DshNativeBridge.Cap.id]）。
+     *
+     * 为什么需要它：严格程度是**全局**的。用户想要「虚拟屏别再每条点击都问我」，唯一的办法
+     * 是把整机降到「一般/宽松」，而那会同时放过 shell、短信、通知等所有能力 —— 代价太大，
+     * 于是大多数人只能忍着点几十次「允许」。这份名单把授权收窄到**单个能力**，而且可撤销。
+     *
+     * 它管不到危险操作：卸载、重启、清数据这类改完回不去的动作永远会问（见 PrivPolicy）。
+     */
+    const val KEY_PRIV_TRUSTED_CAPS = "priv_trusted_caps"
+
+    /**
      * 原生能力桥总开关（默认关）。
      *
      * 关闭时 `/native/` 下的全部端点 一律 403。容器里跑的是 dsh 和用户自己装的第三方插件，

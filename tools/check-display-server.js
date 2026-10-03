@@ -418,8 +418,12 @@ for (const f of SHARED) {
   must(/Cap\.SHELL,\s*Cap\.DISPLAY\s*->\s*PrivilegedShell\.reach/.test(bridge),
     'DISPLAY 的可用性必须与 SHELL 一样看提权通道就绪情况（否则报不出精确原因）');
   must(/Cap\.A11Y,\s*Cap\.DISPLAY\s*->\s*true/.test(bridge), 'supportsWrite 必须把 DISPLAY 算作可写');
-  must(/Cap\.DISPLAY\s*->\s*PrivRisk\.DANGEROUS/.test(bridge),
-    'DISPLAY 的风险档必须是 DANGEROUS（注入输入与启动 App 都能真实改变设备状态）');
+  // 风险档按**端点**算：查询/截图是只读，其余是写（曾经一律 DANGEROUS，代价是"不管选哪一档
+  // 严格程度，每条点击都要弹窗"，虚拟屏在实践中根本用不下去）。与 isWriteRequest 是同一条线。
+  must(/Cap\.DISPLAY -> if \(isWriteRequest\(method, path, params\)\) PrivRisk\.WRITE else PrivRisk\.READONLY/.test(bridge),
+    'DISPLAY 的风险档必须按端点分级，且与 isWriteRequest 用同一个判据（两处脱钩会出现"档位按读放行、严格程度按写弹窗"）');
+  must(!/Cap\.DISPLAY\s*->\s*PrivRisk\.DANGEROUS/.test(bridge),
+    'DISPLAY 不再一律 DANGEROUS（那等于免确认名单也救不了它：危险操作永远要问）');
   must(/-> display\(ctx, method, path, params\)/.test(bridge),
     '主分派必须把 display 端点转到 display(...) 转发口');
 

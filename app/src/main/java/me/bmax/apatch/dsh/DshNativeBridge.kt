@@ -674,11 +674,19 @@ object DshNativeBridge {
             // 虚拟屏一律 DANGEROUS：注入输入与启动 App 都能真实改变设备状态，而且它绕过
             // 无障碍那套「用户看得见在点什么」的界面语义。读档位只放行截屏与查询
             // （见 isWriteRequest），也就是用户可以「让我看，但别动」。
-            Cap.DISPLAY -> PrivRisk.DANGEROUS
+            // 虚拟屏按**端点**分级（以前一律 DANGEROUS）：查询与截图是只读；建会话、点击、
+            // 滑动、按键、启动 App、停止都只算"会改状态、影响清楚、容易恢复"（WRITE）。
+            // 这与 isWriteRequest 的读/写分档是**同一条线**，两处必须对齐（门禁逐端点对拍）——
+            // 以前一律 DANGEROUS 的后果是：不管用户选哪一档严格程度，每条点击都要弹窗，
+            // 于是"用虚拟屏"这件事在实践中根本走不下去。
+            Cap.DISPLAY -> if (isWriteRequest(method, path, params)) PrivRisk.WRITE else PrivRisk.READONLY
             else -> null
         }
         val strictness = PrivPolicy.of(ctx)
-        val confirm = risk != null && PrivPolicy.needsConfirm(strictness, risk)
+        // 「不再逐条确认」是**按能力**的：用户不必为了免掉虚拟屏的每条点击，把整机降到宽松。
+        // 危险操作它管不着（PrivPolicy 里先判 DANGEROUS）。
+        val trusted = risk != null && PrivPolicy.isTrusted(ctx, cap)
+        val confirm = risk != null && PrivPolicy.needsConfirm(strictness, risk, trusted)
         if (need != null || confirm) {
             // 弹窗只有在前台才看得见；不在前台就别把这条连接挂在这里等一个永远不会出现的弹窗
             if (!isForeground(ctx)) {
@@ -719,6 +727,8 @@ object DshNativeBridge {
             when (DshElevationRequests.awaitDecision(request.id)) {   // 阻塞在这里等用户
                 DshElevationRequests.Decision.ALLOWED,
                 DshElevationRequests.Decision.ONCE,
+                // 「允许并不再逐条确认」：能力已进信任名单（按钮那边落的盘），这次当然放行
+                DshElevationRequests.Decision.ALLOW_TRUST,
                 -> Unit
 
                 DshElevationRequests.Decision.DENIED -> {
@@ -742,6 +752,9 @@ object DshNativeBridge {
                 }
             }
         }
+        // 免确认直接跑掉的时候，"为什么不用问"要能分辨：被信任放行，与本来就不问（宽松档/
+        // 只读），事后审计的含义完全不同。
+        if (risk != null && need == null && !confirm && trusted) privDecision = "trusted"
         // 兜底：走到这里档位仍不够（例如申请期间用户在别处把开关关掉了）。维持原来的 403，
         // 而不是假装放行。
         if (!capCallable(ctx, cap)) {
@@ -1411,7 +1424,8 @@ object DshNativeBridge {
         val decision = DshElevationRequests.awaitDecision(request.id)
         val base = JSONObject()
             .put("ok", decision == DshElevationRequests.Decision.ALLOWED ||
-                decision == DshElevationRequests.Decision.ONCE)
+                decision == DshElevationRequests.Decision.ONCE ||
+                decision == DshElevationRequests.Decision.ALLOW_TRUST)
             .put("status", decision.id)
             .put("cap", cap.id)
             .put("access", requested.id)
@@ -1419,6 +1433,15 @@ object DshNativeBridge {
         val response = when (decision) {
             DshElevationRequests.Decision.ALLOWED -> 200 to base
                 .put("note", "The user allowed it. The level is saved; call the capability now.")
+                .toString()
+
+            DshElevationRequests.Decision.ALLOW_TRUST -> 200 to base
+                .put("trusted", true)
+                .put(
+                    "note",
+                    "The user allowed it and added this capability to the no-more-asking list. " +
+                        "The level is saved; call the capability now. Dangerous actions still ask.",
+                )
                 .toString()
 
             DshElevationRequests.Decision.ONCE -> 200 to base

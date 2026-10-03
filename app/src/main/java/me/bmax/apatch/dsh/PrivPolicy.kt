@@ -64,15 +64,46 @@ internal object PrivPolicy {
     }
 
     /**
+     * 这个能力是不是在「不再逐条确认」名单里。
+     *
+     * 名单按 [DshNativeBridge.Cap.id] 存；读出来先拷一份 —— `getStringSet` 返回的是 prefs
+     * 内部的对象，直接改它会写坏（而且改不动）存储。
+     */
+    fun trusted(ctx: Context): Set<String> =
+        prefs(ctx).getStringSet(DshEnv.KEY_PRIV_TRUSTED_CAPS, emptySet())?.toSet() ?: emptySet()
+
+    fun isTrusted(ctx: Context, cap: DshNativeBridge.Cap): Boolean = trusted(ctx).contains(cap.id)
+
+    fun setTrusted(ctx: Context, cap: DshNativeBridge.Cap, on: Boolean) {
+        val next = trusted(ctx).toMutableSet()
+        if (on) next.add(cap.id) else next.remove(cap.id)
+        prefs(ctx).edit().putStringSet(DshEnv.KEY_PRIV_TRUSTED_CAPS, next).apply()
+    }
+
+    /**
      * 这次调用要不要用户当场同意。
      *
      * 严格档对**所有**等级都返回 true，包括只读 —— 用户选严格就是选了「每次都问」，
      * 这里不能自作主张给只读开绿灯（那正是「宽松/一般」两档的用处）。
+     *
+     * @param trusted 这个能力是否被单独信任（见 [setTrusted]）。两个例外，缺一不可：
+     *  - **危险操作永远要问**（[PrivRisk.DANGEROUS]）：信任不是万能钥匙，卸载/重启/清数据
+     *    这类改完回不去的动作，不管什么档、不管信不信任，都要用户当场点头；
+     *  - 其余等级上，信任 = 「这个能力别再逐条问」，这正是它存在的意义 —— 用户不必为了
+     *    免掉虚拟屏的每条点击，把整机降到「宽松」。
      */
-    fun needsConfirm(strictness: PrivStrictness, risk: PrivRisk): Boolean = when (strictness) {
-        PrivStrictness.STRICT -> true
-        PrivStrictness.NORMAL -> risk != PrivRisk.READONLY
-        PrivStrictness.LOOSE -> risk == PrivRisk.DANGEROUS
+    fun needsConfirm(
+        strictness: PrivStrictness,
+        risk: PrivRisk,
+        trusted: Boolean = false,
+    ): Boolean {
+        if (risk == PrivRisk.DANGEROUS) return true
+        if (trusted) return false
+        return when (strictness) {
+            PrivStrictness.STRICT -> true
+            PrivStrictness.NORMAL -> risk != PrivRisk.READONLY
+            PrivStrictness.LOOSE -> false
+        }
     }
 
     /** 严格档下弹窗不给「允许（长期）」：那与「每次都要同意」直接冲突。 */

@@ -260,6 +260,9 @@ object DshHostPrompt {
                 .put("nativeBridge", nativeOn)
                 .put("nativeCaps", caps)
                 .put("nativeOnce", once)
+                // 「不再逐条确认」名单：agent 靠它知道"这条调用还会不会弹窗"。不给的话它会
+                // 一直按旧假设行事 —— 要么不敢调，要么以为用户在故意刁难。
+                .put("nativeTrusted", JSONArray(if (nativeOn) PrivPolicy.trusted(ctx).sorted() else emptyList<String>()))
                 // 两个时限写进事实，而不是在提示词里硬写一遍：改一个常量不该还要
                 // 记得去改容器里那段文字（两处写死的版本号迟早会漂移）
                 .put("elevateTtlMs", DshElevationRequests.TTL_MS)
