@@ -118,6 +118,21 @@ Three things that are easy to get wrong:
   Ask for a different size and you do get a new one. This used to create a fresh display every time (the reuse
   check was dropped when the subsystem was ported), which left a row of same-sized `DshDisplay-*` virtual screens
   behind on real devices, each holding a hardware encoder, reclaimed only by `display stop`.
+  **A new size does not make the old screen go away**, so "how many screens are there right now" has to be visible:
+  Settings → Permissions → the virtual screen card has "Manage virtual screens", listing every screen alive in the
+  server process (id / size / dpi / whether a picture is being sent / which app is running on it), with per-screen
+  preview and terminate, plus "terminate all" (= stop the server). That page **never starts the server just to show
+  the list**: opening settings should not spin up a root process as a side effect, so with no server running it
+  honestly says "no virtual screen is alive".
+- **How our parameters compare with the ported implementation** (same screen, same encoder): resolution and dpi both
+  come from the **real device values** (some implementations subtract the status bar and build the screen at a fixed
+  dpi, which makes the picture's aspect differ from the device and makes coordinate-based taps drift more); the
+  default bitrate is 4 Mbps for us against 3 Mbps there (that one also ships 1.5/3/5/10/20 Mbps presets; we only have
+  the internal default); both use 30 fps and a 1-second keyframe interval. These numbers can be overridden per
+  session with `session --bitrate` — when it feels laggy, read the line of numbers in the small window first
+  (queued/decoded fps, dropped frames, peak queue depth, average wait) and only then decide what to change: low
+  decoded fps with few drops means the encoding side (bitrate/resolution), while many drops or a high wait means the
+  client cannot keep up with decoding.
 - **The server lives as long as the app.** It does have a watchdog — no video sink and no client activity means it
   exits — but the app pings it every 10 seconds while it runs, and a ping counts as client activity. That is
   deliberate: otherwise an agent would lose the whole virtual screen during the ten-ish seconds it spends thinking

@@ -183,6 +183,16 @@ public class Main {
          */
         volatile byte[] configSps;
         volatile byte[] configPps;
+
+        /**
+         * 最近一次在这块屏上启动的包名（从没 launch 过就是空串）。
+         *
+         * 只为诊断与管理页存在："这块屏上现在跑的是谁"是用户判断要不要留着它的关键信息。
+         * 不参与任何判定 —— 服务端重启后它是空的，所以空值只表示"不知道"，不能理解成
+         * "没有 App 在跑"。
+         */
+        volatile String lastPackage = "";
+
         final Object lock = new Object();
 
         DisplaySession(int displayId, int reqWidth, int reqHeight, int reqDpi,
@@ -559,8 +569,42 @@ public class Main {
                 public void launchApp(String packageName, int displayId) {
                     markClientActive();
                     if (packageName != null && !packageName.isEmpty()) {
+                        // 先记账再启动：启动失败也要能看出"agent 想在这块屏上开谁"，
+                        // 那正是排查"点了没反应"时最需要的一条信息。
+                        DisplaySession session = displays.get(displayId);
+                        if (session != null) session.lastPackage = packageName;
                         launchPackageOnVirtualDisplay(packageName, displayId);
                     }
+                }
+
+                /**
+                 * 列出所有活着的虚拟屏（JSON 数组）。
+                 *
+                 * 刻意**不**碰 markClientActive()：这是只读诊断，管理页看一眼不该把服务端的
+                 * 空闲看门狗推后 —— 那会让"用户没在用"这件事被我们自己的查询掩盖掉。
+                 */
+                @Override
+                public String listDisplays() {
+                    org.json.JSONArray out = new org.json.JSONArray();
+                    try {
+                        for (Map.Entry<Integer, DisplaySession> e : displays.entrySet()) {
+                            DisplaySession s = e.getValue();
+                            if (s == null) continue;
+                            out.put(new org.json.JSONObject()
+                                    .put("id", e.getKey())
+                                    // 请求值而不是编码器对齐后的值：用户看到的应该就是他要的那块
+                                    .put("width", s.reqWidth)
+                                    .put("height", s.reqHeight)
+                                    .put("dpi", s.reqDpi)
+                                    .put("hasSink", s.videoSink != null)
+                                    .put("package", s.lastPackage == null ? "" : s.lastPackage));
+                        }
+                    } catch (Throwable t) {
+                        // 拼 JSON 不该失败；真失败了也返回已经攒下的部分，而不是把整个管理页
+                        // 变成"服务端不可用"。
+                        logToFile("listDisplays failed: " + t.getMessage(), t);
+                    }
+                    return out.toString();
                 }
 
                 @Override

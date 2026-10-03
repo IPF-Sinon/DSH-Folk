@@ -1057,6 +1057,86 @@ if (jarArgAt >= 0) {
   }
 }
 
+// ── 虚拟屏管理页（P3）：把"现在有几块屏"变成看得见的东西 ──
+//
+// 这一页跨了四个地方：手写 AIDL（接口/事务号/onTransact/Proxy 四处，少一处就是运行期崩）、
+// 服务端实现、宿主侧包装、以及界面。所以下面逐层钉住 —— 只查"有 listDisplays 这个方法"
+// 是不够的（那正是"加了接口没加 onTransact"能蒙混过关的查法）。
+{
+  const svcJava = read('app/src/main/java/me/bmax/apatch/display/IDisplayService.java');
+  must(/String listDisplays\(\) throws RemoteException;/.test(svcJava), 'AIDL 接口声明了 listDisplays');
+  must(/static final int TRANSACTION_listDisplays = IBinder\.FIRST_CALL_TRANSACTION \+ 14;/.test(svcJava),
+    'listDisplays 有独立的事务号（与已有 14 个方法不能撞）');
+  must(/case TRANSACTION_listDisplays:[\s\S]{0,200}?reply\.writeString\(_list\)/.test(svcJava),
+    'onTransact 里真的处理了 listDisplays 并把字符串写回去');
+  must(/public String listDisplays\(\) throws RemoteException \{[\s\S]{0,400}?remote\.transact\(TRANSACTION_listDisplays/.test(svcJava),
+    'Proxy 里真的发起了 listDisplays 事务（三处缺一处 = 运行时崩溃或空结果）');
+
+  const main = read('displayserver/src/main/java/me/bmax/apatch/display/Main.java');
+  const listAt = main.indexOf('public String listDisplays()');
+  const listEnd = listAt < 0 ? -1 : main.indexOf('@Override', listAt + 10);
+  const listBody = listAt < 0 ? '' : main.slice(listAt, listEnd > 0 ? listEnd : listAt + 1500);
+  must(listAt >= 0, '服务端实现了 listDisplays');
+  // 只读诊断不许把看门狗推后：那会让"用户没在用"这件事被我们自己的查询掩盖掉
+  must(listBody.length > 0 && !/markClientActive/.test(listBody),
+    'listDisplays 不算客户端活动（看一眼列表不该让服务端的空闲看门狗重置）');
+  for (const key of ['"id"', '"width"', '"height"', '"dpi"', '"hasSink"', '"package"']) {
+    must(listBody.includes(key), `listDisplays 的每一项带 ${key}（管理页要显示它）`);
+  }
+  must(/public void launchApp\(String packageName, int displayId\)[\s\S]{0,400}?lastPackage = packageName/.test(main),
+    'launchApp 记下"这块屏上跑的是谁"（管理页最有用的那一栏；不记就只能显示未知）');
+  must(/volatile String lastPackage = ""/.test(main), 'lastPackage 是 volatile 且默认空串');
+
+  const dsTab = read('app/src/main/java/me/bmax/apatch/dsh/DisplayServer.kt');
+  const hostAt = dsTab.indexOf('fun listDisplays(): Result<List<DisplayInfo>>');
+  const hostEnd = hostAt < 0 ? -1 : dsTab.indexOf('\n    }', hostAt);
+  const hostBody = hostAt < 0 ? '' : dsTab.slice(hostAt, hostEnd > 0 ? hostEnd : hostAt + 1200);
+  must(hostAt >= 0, '宿主侧包装了 listDisplays');
+  // 打开设置顺手把服务端（root 进程）拉起来是纯粹的副作用，看列表不该有
+  must(hostBody.length > 0 && !/\bstart\(ctx\)/.test(hostBody),
+    'listDisplays 不许把服务端拉起来（否则打开一次设置就多一个 root 进程）');
+  must(/service \?: return Result\.success\(emptyList\(\)\)/.test(hostBody),
+    '服务端没在跑就如实回空列表');
+  const attachAt = dsTab.indexOf('fun attachDisplay(ctx: Context, displayId: Int)');
+  const attachEnd = attachAt < 0 ? -1 : dsTab.indexOf('\n    }', attachAt);
+  const attachBody = attachAt < 0 ? '' : dsTab.slice(attachAt, attachEnd > 0 ? attachEnd : attachAt + 1200);
+  must(attachAt >= 0, '能挂到指定的那块屏（管理页点预览）');
+  must(attachBody.length > 0 && !/session = /.test(attachBody),
+    'attachDisplay 不许改写"当前会话"（看一眼别的屏不该把 agent 的下一条命令改道）');
+
+  const manage = read('app/src/main/java/me/bmax/apatch/ui/screen/DisplayManageScreen.kt');
+  must(/@Destination<RootGraph>/.test(manage) && /fun DisplayManageScreen\(/.test(manage),
+    '管理页是一个真的可导航的目的地');
+  must(/DisplayServer\.listDisplays\(\)/.test(manage), '管理页列出的是服务端里活着的屏');
+  must(/DisplayServer\.stopSession\(context, info\.id\)/.test(manage),
+    '逐个终止走 stopSession（与小窗上的 ✕ 同一条路：agent 会拿到 display_terminated_by_user）');
+  // 钉住"按钮真的走到确认框"这条链，不能只查 AlertDialog 三个字在不在文件里
+  // （把 `if (confirmStopAll)` 改成 `if (false)` 时字符串都还在，确认框却永远不弹了 —— 反向验证抓到过）
+  must(/TextButton\(onClick = \{ confirmStopAll = true \}\)[\s\S]{0,120}?dsh_display_manage_stop_all/.test(manage),
+    '「全部终止」按钮只是打开确认框（不是直接执行）');
+  must(/if \(confirmStopAll\) \{[\s\S]{0,200}?AlertDialog\(/.test(manage),
+    '确认框真的挂在 confirmStopAll 上');
+  must(/DisplayServer\.stop\(context\)/.test(manage),
+    '确认之后才走 pkill 整个服务端');
+
+  const preview = read('app/src/main/java/me/bmax/apatch/ui/screen/DisplayPreviewScreen.kt');
+  must(/fun DisplayPreviewScreen\(navigator: DestinationsNavigator, displayId: Int\? = null\)/.test(preview),
+    '预览页能接收一个可选的 displayId');
+  must(/if \(wanted > 0\) \{\n\s+DisplayServer\.attachDisplay\(context, wanted\)/.test(preview),
+    '带了 id 就挂到那一块（否则管理页的"预览"看的还是当前会话，等于点错了地方）');
+  // 局部状态不能与参数同名：同名会把参数藏掉，于是"指定 id"这条分支永远走不到（且编译不报错）
+  must(/var sessionId by remember \{ mutableStateOf\(-1\) \}/.test(preview) && !/var displayId by remember/.test(preview),
+    '局部状态叫 sessionId，不与 displayId 参数同名（同名 = 参数被藏掉，"指定 id"永远不生效）');
+  must(/navigator\.navigate\(DisplayPreviewScreenDestination\(null\)\)/.test(read('app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionCapsScreens.kt')),
+    '既有的"打开预览"入口显式传 null（本仓对可选导航参数的既有写法）');
+
+  const capsSrc = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionCapsScreens.kt');
+  must(/onOpenDisplayManage = \{ navigator\.navigate\(DisplayManageScreenDestination\) \}/.test(capsSrc),
+    '虚拟屏卡片上有管理页入口，并真的接上导航');
+  must(/TextButton\(onClick = onOpenDisplayManage\)/.test(capsSrc),
+    '那个入口是一个真的按钮，不是只传进来的参数');
+}
+
 if (errors.length) {
   console.error('check-display-server FAILED:');
   for (const e of errors) console.error('  ✗ ' + e);

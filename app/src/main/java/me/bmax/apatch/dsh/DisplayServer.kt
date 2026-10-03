@@ -10,6 +10,7 @@ import android.util.Base64
 import android.util.Log
 import me.bmax.apatch.display.DisplayBinderContainer
 import me.bmax.apatch.display.IDisplayService
+import org.json.JSONArray
 import java.security.MessageDigest
 import java.security.SecureRandom
 
@@ -199,6 +200,24 @@ object DisplayServer {
         currentSession()?.let { return Result.success(it) }
         val dm = ctx.resources.displayMetrics
         return startSession(ctx, dm.widthPixels, dm.heightPixels, dm.densityDpi)
+    }
+
+    /**
+     * 挂到一块**指定**的屏（管理页点"预览"时用）。
+     *
+     * 尺寸只能问服务端（[listDisplays]）：解码器 configure 需要宽高，而那块屏可能是 agent
+     * 早先建的，App 侧的会话指针未必指着它。
+     *
+     * 刻意**不**改 [session]：管理页只是看一眼别的屏，不该把"当前会话"偷换掉 ——
+     * 那会让 agent 的下一条命令落到用户刚点过的那块屏上。
+     */
+    fun attachDisplay(ctx: Context, displayId: Int): Result<Session> {
+        if (displayId <= 0) return attachOrStartSession(ctx)
+        currentSession()?.takeIf { it.displayId == displayId }?.let { return Result.success(it) }
+        val info = listDisplays().getOrElse { return Result.failure(it) }
+            .firstOrNull { it.id == displayId }
+            ?: return Result.failure(DisplayError("那块虚拟屏已经不在了（id=$displayId）"))
+        return Result.success(Session(info.id, info.width, info.height, info.dpi))
     }
 
     /**
@@ -515,9 +534,58 @@ object DisplayServer {
     }
 
     /**
-     * 停掉服务端。
+     * 管理页要看的一块活着的虚拟屏。
      *
-     * 心跳还在时它不会自己退（见类注释：心跳是刻意算作"客户端还活着"的，否则 agent 在
+     * 与 [Session] 分开：[Session] 是"当前会话"（agent 正在用的那一块，全局只有一块），
+     * 而这是服务端进程里**所有**活着的屏 —— 用户可能同时攒下几块（改了尺寸就会新建一块）。
+     */
+    data class DisplayInfo(
+        val id: Int,
+        val width: Int,
+        val height: Int,
+        val dpi: Int,
+        /** 有没有视频出口（挂着小窗或预览页）。没有就是"没人在看"，不是"屏坏了"。 */
+        val hasSink: Boolean,
+        /** 最近一次在这块屏上启动的包名；空串 = 不知道（从没 launch 过，或服务端重启过）。 */
+        val packageName: String,
+    )
+
+    /**
+     * 列出服务端里所有活着的虚拟屏。
+     *
+     * **不会为了看列表而把服务端拉起来**：用户打开管理页只是想看一眼有什么，那时把 root 进程
+     * 拉起来（[start] 会真启动它）纯属副作用。所以服务端没在跑就回空列表 —— 这既是真的
+     * （确实没有屏），也避免"打开一次设置就多一个 root 进程"。
+     *
+     * 失败时回 [Result.failure]：管理页要把原因显示出来（多半是"服务端刚挂"），不能假装成
+     * "一块屏也没有"。
+     */
+    fun listDisplays(): Result<List<DisplayInfo>> = runCatching {
+        val svc = service ?: return Result.success(emptyList())
+        val raw = svc.listDisplays() ?: return Result.success(emptyList())
+        val arr = JSONArray(raw)
+        buildList {
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val id = o.optInt("id", -1)
+                if (id < 0) continue
+                add(
+                    DisplayInfo(
+                        id = id,
+                        width = o.optInt("width", 0),
+                        height = o.optInt("height", 0),
+                        dpi = o.optInt("dpi", 0),
+                        hasSink = o.optBoolean("hasSink", false),
+                        packageName = o.optString("package", ""),
+                    ),
+                )
+            }
+        }
+    }
+
+    /**
+     * 停掉服务端。
+     *     * 心跳还在时它不会自己退（见类注释：心跳是刻意算作"客户端还活着"的，否则 agent 在
      * 「截图 → 思考 → 点击」的间隔里就会丢掉虚拟屏）。所以用户主动停止就必须真的打这一枪，
      * 否则那块屏会一直挂到 App 进程结束。
      * 命令里的 `[m]` 括号见 [PROC_PATTERN] 的注释 —— 不加它会连承载命令的 shell 一起杀掉。

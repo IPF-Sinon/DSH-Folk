@@ -49,6 +49,19 @@ public interface IDisplayService extends IInterface {
     void setVideoSink(int displayId, IBinder sink) throws RemoteException;
 
     /**
+     * 列出当前**还活着**的所有虚拟屏，回一段 JSON 数组（服务端侧拼，客户端只解析）。
+     *
+     * 为什么回字符串而不是 Parcelable 列表：这是一份会变的诊断信息（宽高、dpi、有没有视频出口、
+     * 上面跑的是谁），而且两端共用**同一个手写** AIDL 文件，加一个方法就要同时改接口、onTransact、
+     * Proxy 三处。让它只回一段 JSON，形状以后再变也不用再动 AIDL。
+     *
+     * 每项：{"id":0,"width":1080,"height":1920,"dpi":440,"hasSink":true,"package":"com.x"}
+     * （package 可能是空串：从没 launch 过，或服务端重启后不知道。）**没有副作用** ——
+     * 管理页只是要看一眼有哪些屏，不该因此唤醒看门狗或建任何东西。
+     */
+    String listDisplays() throws RemoteException;
+
+    /**
      * 心跳，没有任何副作用，只把服务端的空闲计时器推后。
      *
      * 服务端有个看门狗：既没有视频 sink、又 15 秒没有客户端活动，就 System.exit(0)。
@@ -76,6 +89,7 @@ public interface IDisplayService extends IInterface {
         static final int TRANSACTION_setVideoSink = IBinder.FIRST_CALL_TRANSACTION + 11;
         static final int TRANSACTION_injectTouchEvent = IBinder.FIRST_CALL_TRANSACTION + 12;
         static final int TRANSACTION_ping = IBinder.FIRST_CALL_TRANSACTION + 13;
+        static final int TRANSACTION_listDisplays = IBinder.FIRST_CALL_TRANSACTION + 14;
 
         public Stub() {
             attachInterface(this, DESCRIPTOR);
@@ -242,6 +256,13 @@ public interface IDisplayService extends IInterface {
                             edgeFlags
                     );
                     reply.writeNoException();
+                    return true;
+                }
+                case TRANSACTION_listDisplays: {
+                    data.enforceInterface(DESCRIPTOR);
+                    String _list = listDisplays();
+                    reply.writeNoException();
+                    reply.writeString(_list);
                     return true;
                 }
                 case TRANSACTION_ping: {
@@ -505,6 +526,21 @@ public interface IDisplayService extends IInterface {
                     data.writeStrongBinder(sink);
                     remote.transact(TRANSACTION_setVideoSink, data, reply, 0);
                     reply.readException();
+                } finally {
+                    reply.recycle();
+                    data.recycle();
+                }
+            }
+
+            @Override
+            public String listDisplays() throws RemoteException {
+                Parcel data = Parcel.obtain();
+                Parcel reply = Parcel.obtain();
+                try {
+                    data.writeInterfaceToken(DESCRIPTOR);
+                    remote.transact(TRANSACTION_listDisplays, data, reply, 0);
+                    reply.readException();
+                    return reply.readString();
                 } finally {
                     reply.recycle();
                     data.recycle();

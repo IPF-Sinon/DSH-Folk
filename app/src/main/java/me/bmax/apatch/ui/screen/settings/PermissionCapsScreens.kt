@@ -57,6 +57,7 @@ import androidx.core.content.edit
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.DisplayManageScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.DisplayPreviewScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
@@ -417,7 +418,8 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
                     coarseLocationOnly = coarseLocationOnly,
                     onClick = { accessSheetCap = cap },
                     onRequestPermission = { requestCapPermission(cap) },
-                    onOpenDisplayPreview = { navigator.navigate(DisplayPreviewScreenDestination) },
+                    onOpenDisplayPreview = { navigator.navigate(DisplayPreviewScreenDestination(null)) },
+                    onOpenDisplayManage = { navigator.navigate(DisplayManageScreenDestination) },
                     displayFloatOn = displayFloatOn,
                     overlayAllowed = overlayAllowed,
                     onToggleDisplayFloat = toggleDisplayFloat,
@@ -545,6 +547,7 @@ private fun NativeCapCard(
     onClick: () -> Unit,
     onRequestPermission: () -> Unit,
     onOpenDisplayPreview: () -> Unit,
+    onOpenDisplayManage: () -> Unit,
     displayFloatOn: Boolean,
     overlayAllowed: Boolean,
     onToggleDisplayFloat: (Boolean) -> Unit,
@@ -579,6 +582,11 @@ private fun NativeCapCard(
             if (cap == DshNativeBridge.Cap.DISPLAY) {
                 TextButton(onClick = onOpenDisplayPreview) {
                     Text(stringResource(R.string.dsh_display_preview_open))
+                }
+                // 管理与排障入口：预览页看的是"当前会话"，而这里能看到**所有**活着的屏
+                // （agent 改了尺寸就会多一块，旧的不会自己消失）。
+                TextButton(onClick = onOpenDisplayManage) {
+                    Text(stringResource(R.string.dsh_display_manage_open))
                 }
                 // 悬浮小窗：agent 在虚拟屏上操作时，用户抬眼看得到画面，而不是要他自己
                 // 想起来去开预览页 —— 那正是「agent 干了什么用户完全不知道」的来源。

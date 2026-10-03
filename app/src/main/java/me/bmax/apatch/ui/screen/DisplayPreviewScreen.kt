@@ -75,11 +75,11 @@ import kotlin.math.hypot
 @OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>
 @Composable
-fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
+fun DisplayPreviewScreen(navigator: DestinationsNavigator, displayId: Int? = null) {
     val context = LocalContext.current
 
     var state by remember { mutableStateOf(context.getString(R.string.dsh_display_preview_starting)) }
-    var displayId by remember { mutableStateOf(-1) }
+    var sessionId by remember { mutableStateOf(-1) }
     var displayW by remember { mutableStateOf(0) }
     var displayH by remember { mutableStateOf(0) }
     var launchedText by remember { mutableStateOf("") }
@@ -98,13 +98,20 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
         // 必须在建会话之前 —— 建会话本身会触发小窗显示（DisplayServer.startSession）。
         DisplayMirror.suspendForPreview()
         val result = withContext(Dispatchers.IO) {
-            // 优先挂到 agent 已经在用的那块屏 —— 预览的意义就是"看它此刻在看的东西"。
-            // 另开一块的话，用户看到的是自己的空白屏，而 agent 在另一块上操作，
-            // 两边的画面永远不会是同一个。没有会话时才按设备尺寸新建一块。
-            DisplayServer.attachOrStartSession(context)
+            // 从管理页点进来时看的是**指定的那一块**（它可能不是当前会话）：尺寸问服务端，
+            // 且不改"当前会话"指针 —— 看一眼别的屏不该把 agent 的下一条命令改道。
+            val wanted = displayId ?: -1
+            if (wanted > 0) {
+                DisplayServer.attachDisplay(context, wanted)
+            } else {
+                // 优先挂到 agent 已经在用的那块屏 —— 预览的意义就是"看它此刻在看的东西"。
+                // 另开一块的话，用户看到的是自己的空白屏，而 agent 在另一块上操作，
+                // 两边的画面永远不会是同一个。没有会话时才按设备尺寸新建一块。
+                DisplayServer.attachOrStartSession(context)
+            }
         }
         result.onSuccess { s ->
-            displayId = s.displayId
+            sessionId = s.displayId
             displayW = s.width
             displayH = s.height
             // 解码器按**会话的真实尺寸**建：createVideoFormat(0,0) 会 configure 失败，
@@ -126,12 +133,12 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
     }
 
     // Surface 与解码器都就绪 → 挂上并开始收帧
-    LaunchedEffect(surface, sink, displayId) {
+    LaunchedEffect(surface, sink, sessionId) {
         val s = surface ?: return@LaunchedEffect
         val decoder = sink ?: return@LaunchedEffect
-        if (displayId < 0) return@LaunchedEffect
+        if (sessionId < 0) return@LaunchedEffect
         decoder.attach(s)
-        val id = displayId
+        val id = sessionId
         val r = withContext(Dispatchers.IO) { DisplayServer.setVideoSink(context, id, decoder.asBinder()) }
         r.onSuccess { state = context.getString(R.string.dsh_display_preview_connected, id) }
             .onFailure { e -> state = e.message ?: context.getString(R.string.dsh_display_preview_start_failed) }
@@ -140,7 +147,7 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
     // 离开时摘掉 sink：不摘的话服务端会一直往一个没人看的解码器推帧
     DisposableEffect(Unit) {
         onDispose {
-            val id = displayId
+            val id = sessionId
             val decoder = sink
             Thread {
                 if (id >= 0) runCatching { DisplayServer.setVideoSink(context, id, null) }
@@ -186,7 +193,7 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
                 AndroidView(
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(displayId, viewW, viewH) {
+                        .pointerInput(sessionId, viewW, viewH) {
                             // 一个手势循环同时判定单击与滑动。用两个 pointerInput 会互相吃事件
                             // （tap 检测器先消费 down），分成两段反而两个都不准。
                             awaitEachGesture {
@@ -194,7 +201,7 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
                                 val startedAt = System.currentTimeMillis()
                                 val from = down.position
                                 val to = waitForUpOrCancellation()?.position ?: from
-                                val id = displayId
+                                val id = sessionId
                                 if (id < 0 || viewW == 0) return@awaitEachGesture
                                 val moved = hypot((to.x - from.x).toDouble(), (to.y - from.y).toDouble())
                                 val duration = (System.currentTimeMillis() - startedAt).coerceIn(20L, 10_000L)
@@ -224,7 +231,7 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
 
                                 override fun surfaceDestroyed(holder: SurfaceHolder) {
                                     surface = null
-                                    val id = displayId
+                                    val id = sessionId
                                     val decoder = sink
                                     // Surface 没了就别再收帧了；留着 sink 只会让服务端白推
                                     Thread {
@@ -236,7 +243,7 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
                         }
                     },
                 )
-                if (displayId < 0) CircularProgressIndicator()
+                if (sessionId < 0) CircularProgressIndicator()
             }
 
             Spacer(Modifier.height(8.dp))
@@ -252,13 +259,13 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
             Spacer(Modifier.height(4.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { sendKey(displayId, KEY_BACK) }) {
+                TextButton(onClick = { sendKey(sessionId, KEY_BACK) }) {
                     Text(stringResource(R.string.dsh_display_preview_key_back))
                 }
-                TextButton(onClick = { sendKey(displayId, KEY_HOME) }) {
+                TextButton(onClick = { sendKey(sessionId, KEY_HOME) }) {
                     Text(stringResource(R.string.dsh_display_preview_key_home))
                 }
-                TextButton(onClick = { sendKey(displayId, KEY_RECENTS) }) {
+                TextButton(onClick = { sendKey(sessionId, KEY_RECENTS) }) {
                     Text(stringResource(R.string.dsh_display_preview_key_recents))
                 }
             }
@@ -273,10 +280,10 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator) {
                 )
                 Spacer(Modifier.width(8.dp))
                 Button(
-                    enabled = displayId >= 0 && launchedText.isNotBlank(),
+                    enabled = sessionId >= 0 && launchedText.isNotBlank(),
                     onClick = {
                         val pkg = launchedText.trim()
-                        val id = displayId
+                        val id = sessionId
                         Thread { runCatching { DisplayServer.current()?.launchApp(pkg, id) } }.start()
                     },
                 ) { Text(stringResource(R.string.dsh_display_preview_launch)) }
