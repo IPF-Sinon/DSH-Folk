@@ -921,5 +921,64 @@ ok(/保留/.test(nativeZh),
   }
 }
 
+// ── 通用规则：FunctionSettings.kt 里不许留死私有函数 ──
+// 同一个重构还留下了两份「活的那份在别的文件里」的死拷贝：`yesNo` 与 `permOptionSummary`。
+// 它们编译得过、门禁也不报，直到有人恰好看见两处同名实现才发现。
+// 私有顶层函数只可能在本文件被调用，所以「名字在本文件只出现一次」＝只有声明没有调用。
+// （`internal` 不在此列：nativeCapTitleRes 等是跨文件共用的入口，本文件内只出现一次正常。）
+// 局限：函数只在 KDoc 里被 `[name]` 提及时会算 2 次 —— 漏报可接受，误报不可接受。
+{
+  const settings = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt", "utf8");
+  const privates = [...settings.matchAll(/^private fun ([A-Za-z0-9_]+)/gm)].map((m) => m[1]);
+  ok(privates.length > 5, `解析出 ${privates.length} 个私有顶层函数（解析失败会让下面这条形同虚设）`);
+  const dead = privates.filter(
+    (nm) => (settings.match(new RegExp(`\\b${nm}\\b`, "g")) || []).length <= 1,
+  );
+  ok(dead.length === 0,
+    `FunctionSettings.kt 没有死私有函数（实际 ${dead.length} 个：${dead.join(" / ")}）`);
+}
+
+// ── 特权通道：状态要分清「差在哪一步」，未就绪的通道必须有出口 ──
+// 原先每条选项只有「可用 /（当前不可用）」两态，选中一条不可用的通道之后只留一句
+// 「首选通道当前不可用，已回退为 X」。用户读不出差的是哪一步（没授权？本机没检测到？
+// 根本没配置？），也没有任何地方能点进去把它修好 —— 三种完全不同的处境被糊成一句
+// 「不可用」，下一步动作只能靠猜。
+{
+  const ch = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionChannelScreens.kt", "utf8");
+  const readyStart = ch.indexOf("private fun readinessOf(");
+  const readyBlock = readyStart < 0 ? "" : ch.slice(readyStart, readyStart + 1200);
+  ok(readyBlock.length > 0, "找到通道就绪判定 readinessOf");
+  for (const fact of ["suPresent", "rootVerified", "shizukuRunning", "shizukuGranted", "adbPaired"]) {
+    ok(readyBlock.includes(fact), `就绪判定真的读了 ${fact}`);
+  }
+  const states = ["ROOT_UNVERIFIED", "ROOT_ABSENT", "SHIZUKU_UNGRANTED", "SHIZUKU_ABSENT", "ADB_UNCONFIGURED"];
+  const missingStates = states.filter((s) => !ch.includes(s));
+  ok(missingStates.length === 0,
+    `五种未就绪状态都有名字（缺 ${missingStates.join(",") || "无"}）`);
+  for (const key of [
+    "dsh_perm_state_root_unverified",
+    "dsh_perm_state_root_absent",
+    "dsh_perm_state_shizuku_ungranted",
+    "dsh_perm_state_shizuku_absent",
+    "dsh_perm_state_adb_unconfigured",
+  ]) {
+    ok(ch.includes(key), `未就绪状态有专属文案 ${key}（而不是一句笼统的「不可用」）`);
+  }
+  ok(/readinessOf\(name, perm\)[\s\S]{0,150}guideReadiness = it/.test(ch),
+    "选中一条未就绪的通道会打开引导（而不是只留一句「已回退」）");
+  ok(/dsh_perm_fell_back_go/.test(ch),
+    "「还没配置好」那一行也留了同一个出口（通道可能在选中之后才失效）");
+  // 锚点必须是**调用**，不能只是类型名：本文件顶部就 import 了
+  // WirelessAdbScreenDestination，只匹配名字的话，把跳转删掉这条照样绿（反向验证栽过）。
+  ok(/navigate\(WirelessAdbScreenDestination\)/.test(ch), "ADB 未配置的引导能到配对页");
+  ok(/FunctionSettingsScreenDestination\("function_runtime"\)/.test(ch),
+    "运行时没装时引导去装运行时（配对脚本跑在容器里，装了才谈得上配对）");
+  ok(/dsh_chguide_shizuku_request/.test(ch) && /onRequestShizuku/.test(ch),
+    "Shizuku 在跑但未授权时，引导直接申请授权");
+  ok(/dsh_chguide_root_verify/.test(ch), "检测到 root 未验证时，引导去验证");
+  ok(/allowRootPrompt = true/.test(ch),
+    "「去验证 / 重新探测」允许真跑 su（默认不弹授权框，见 PermissionManager.refresh）");
+}
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

@@ -65,14 +65,16 @@ import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.util.PermissionUtils
 
 /**
- * 原生能力的四个分组页。
+ * 原生能力的分组页。
  *
- * 「功能」页把十几项能力摊在一张大卡片里，越往下滚越长；这里按 [CapGroup] 拆成四个
- * 目的地，一个分组一屏，列表项从「一行四个按钮」换成「一张卡片 + 一个范围胶囊」，
- * 点开卡片才选档位。分组本身仍是**纯视觉**的：CapGroup 只决定这一屏显示哪些能力，
- * 档位的存储、协议 id、闸门语义与「功能」页完全共用一套（[DshNativeBridge]）。
+ * 「功能」页把二十几项能力摊在一张大卡片里，越往下滚越长；这里按 [CapGroup] 拆成一屏
+ * 一组，列表项从「一行四个按钮」换成「一张卡片 + 一个范围胶囊」，点开卡片才选档位。
+ * 分组本身仍是**纯视觉**的：CapGroup 只决定这一屏显示哪些能力，档位的存储、协议 id、
+ * 闸门语义与「功能」页完全共用一套（[DshNativeBridge]）。
  *
- * 四个目的地都不带参数：分组由各自的入口函数写死，导航参数越少，返回栈与深链越好推理。
+ * 每个目的地都不带参数：分组由各自的入口函数写死，导航参数越少，返回栈与深链越好推理。
+ * 分组数量跟着 [CapGroup] 走 —— 新增一组就必须补一个入口，否则 `PermissionHubScreen`
+ * 里那个穷尽的 `when` 会直接编译不过（这正是我们要的：漏一组不会静默消失）。
  */
 @Destination<RootGraph>
 @Composable
@@ -90,6 +92,29 @@ fun NativeCapsSenseScreen(navigator: DestinationsNavigator) {
 @Composable
 fun NativeCapsPersonalScreen(navigator: DestinationsNavigator) {
     NativeCapsPage(navigator, CapGroup.PERSONAL)
+}
+
+/**
+ * 「拍摄与位置」组。
+ *
+ * 入口函数名把组义写全（`Capture`），与 `CapGroup.CAPTURE` 对齐。
+ */
+@Destination<RootGraph>
+@Composable
+fun NativeCapsCaptureScreen(navigator: DestinationsNavigator) {
+    NativeCapsPage(navigator, CapGroup.CAPTURE)
+}
+
+/**
+ * 「屏幕与外部界面」组。
+ *
+ * 叫 `ScreenAccessScreen` 而不是 `ScreenScreen`：前者至少读得懂。这一组含无障碍、虚拟屏
+ * 与分享面板，共同点是「看得见或接管用户屏幕」。
+ */
+@Destination<RootGraph>
+@Composable
+fun NativeCapsScreenAccessScreen(navigator: DestinationsNavigator) {
+    NativeCapsPage(navigator, CapGroup.SCREEN)
 }
 
 @Destination<RootGraph>

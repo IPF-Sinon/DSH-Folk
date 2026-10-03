@@ -17,8 +17,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,9 +47,11 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.NativeCapsCaptureScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsControlScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsInteractScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsPersonalScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.NativeCapsScreenAccessScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsSenseScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PrivilegedChannelScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.WirelessAdbScreenDestination
@@ -127,7 +134,12 @@ fun PermissionHubScreen(navigator: DestinationsNavigator) {
                     HubRow(
                         icon = Icons.Filled.Wifi,
                         title = stringResource(R.string.dsh_perm_cat_wireless_adb),
-                        summary = stringResource(R.string.dsh_adb_summary),
+                        // 这一行常显（没 root 也没 Shizuku 的用户，这是唯一一条能自己配出来的
+                        // 通道，藏起来就没法发现了），所以副标题必须说清它现在到底能不能用。
+                        summary = stringResource(
+                            if (perm.adbPaired) R.string.dsh_adb_paired
+                            else R.string.dsh_perm_state_adb_unconfigured
+                        ) + " · " + stringResource(R.string.dsh_adb_summary),
                         onClick = { navigator.navigate(WirelessAdbScreenDestination) },
                     )
                 }
@@ -187,7 +199,7 @@ fun PermissionHubScreen(navigator: DestinationsNavigator) {
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     for (group in CapGroup.entries) {
                         HubRow(
-                            icon = Icons.Filled.NotificationsActive,
+                            icon = groupIcon(group),
                             title = stringResource(group.titleRes),
                             summary = stringResource(R.string.dsh_perm_caps_count, group.caps.size),
                             onClick = { navigateToGroup(navigator, group) },
@@ -250,8 +262,25 @@ private fun navigateToGroup(navigator: DestinationsNavigator, group: CapGroup) {
         CapGroup.INTERACT -> navigator.navigate(NativeCapsInteractScreenDestination)
         CapGroup.SENSE -> navigator.navigate(NativeCapsSenseScreenDestination)
         CapGroup.PERSONAL -> navigator.navigate(NativeCapsPersonalScreenDestination)
+        CapGroup.CAPTURE -> navigator.navigate(NativeCapsCaptureScreenDestination)
+        CapGroup.SCREEN -> navigator.navigate(NativeCapsScreenAccessScreenDestination)
         CapGroup.CONTROL -> navigator.navigate(NativeCapsControlScreenDestination)
     }
+}
+
+/**
+ * 每个分组一个语义图标。
+ *
+ * 六个分组共用同一个图标会让这份列表读起来像六个「同一件事」—— 分组的意义就在标题和
+ * 图标上，两者都雷同等于没分。
+ */
+private fun groupIcon(group: CapGroup): ImageVector = when (group) {
+    CapGroup.INTERACT -> Icons.Filled.TouchApp
+    CapGroup.SENSE -> Icons.Filled.Sensors
+    CapGroup.PERSONAL -> Icons.Filled.Person
+    CapGroup.CAPTURE -> Icons.Filled.PhotoCamera
+    CapGroup.SCREEN -> Icons.Filled.ScreenShare
+    CapGroup.CONTROL -> Icons.Filled.AdminPanelSettings
 }
 
 private fun navigateTo(navigator: DestinationsNavigator, target: HubTarget) {

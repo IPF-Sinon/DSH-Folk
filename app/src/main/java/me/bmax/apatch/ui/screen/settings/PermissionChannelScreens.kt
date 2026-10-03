@@ -58,6 +58,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.WirelessAdbScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -115,6 +117,10 @@ fun PrivilegedChannelScreen(navigator: DestinationsNavigator) {
         )
     }
     var privStrictness by remember { mutableStateOf(PrivPolicy.of(context)) }
+
+    // 非 null = 正在为该状态显示引导弹窗。存状态而不是存 prefName：弹窗内容只取决于
+    // 「差在哪一步」，而这一步选完就固定了。
+    var guideReadiness by remember { mutableStateOf<ChannelReadiness?>(null) }
 
     /**
      * 进页面先全量探测一次。
@@ -188,6 +194,9 @@ fun PrivilegedChannelScreen(navigator: DestinationsNavigator) {
         // 日志采集、root 文件兜底都会走非特权路径，首页重启菜单也不出现。
         // 容器执行本身不依赖它（proot/proroot 从来不需要 root）。
         // 「自动」= 按 root > shizuku > adb 的优先级挑一条可用的。
+        //
+        // 偏好**照旧落盘**，即使这条通道现在还没就绪：它表达的是「我想用哪条」，
+        // 用户把配对/授权做完之后应当自动生效，而不是再回来重选一次。
         val ch = when (name) {
             PermissionManager.PREF_OFF -> PermissionManager.Channel.NONE
             PermissionManager.PREF_ROOT -> PermissionManager.Channel.ROOT
@@ -196,6 +205,9 @@ fun PrivilegedChannelScreen(navigator: DestinationsNavigator) {
             else -> null
         }
         PermissionManager.setPreference(context.applicationContext, ch)
+        // 选了还没就绪的通道：别只留一句「已回退」，直接把用户送到能修好它的那一步。
+        // 用当前快照判定即可 —— 配对/授权状态不会因为「选了一下」而改变。
+        readinessOf(name, perm).takeIf { it != ChannelReadiness.READY }?.let { guideReadiness = it }
         scope.launch(Dispatchers.IO) {
             PermissionManager.refresh(context.applicationContext)
             // 「我刚把通道设成 root」是用户最期待立刻生效的一步：这里不写，
@@ -323,21 +335,30 @@ fun PrivilegedChannelScreen(navigator: DestinationsNavigator) {
                         selected = permPrefName == PermissionManager.PREF_ROOT,
                         enabled = true,
                         title = stringResource(R.string.dsh_perm_root),
-                        summary = permOptionSummary(R.string.dsh_perm_prefer_root_desc, perm.rootVerified),
+                        summary = channelOptionSummary(
+                            R.string.dsh_perm_prefer_root_desc,
+                            readinessOf(PermissionManager.PREF_ROOT, perm),
+                        ),
                         onSelect = { onPermPrefChange(PermissionManager.PREF_ROOT) },
                     )
                     RuntimeOption(
                         selected = permPrefName == PermissionManager.PREF_SHIZUKU,
                         enabled = true,
                         title = stringResource(R.string.dsh_perm_shizuku),
-                        summary = permOptionSummary(R.string.dsh_perm_prefer_shizuku_desc, perm.shizukuGranted),
+                        summary = channelOptionSummary(
+                            R.string.dsh_perm_prefer_shizuku_desc,
+                            readinessOf(PermissionManager.PREF_SHIZUKU, perm),
+                        ),
                         onSelect = { onPermPrefChange(PermissionManager.PREF_SHIZUKU) },
                     )
                     RuntimeOption(
                         selected = permPrefName == PermissionManager.PREF_ADB,
                         enabled = true,
                         title = stringResource(R.string.dsh_perm_adb),
-                        summary = permOptionSummary(R.string.dsh_perm_prefer_adb_desc, perm.adbPaired),
+                        summary = channelOptionSummary(
+                            R.string.dsh_perm_prefer_adb_desc,
+                            readinessOf(PermissionManager.PREF_ADB, perm),
+                        ),
                         onSelect = { onPermPrefChange(PermissionManager.PREF_ADB) },
                     )
 
@@ -351,6 +372,15 @@ fun PrivilegedChannelScreen(navigator: DestinationsNavigator) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.tertiary,
                         )
+                        // 「还没配置好」必须有个出口：上次选的那条通道可能是在这之后失效的
+                        // （系统里撤了授权、Shizuku 被停掉、adbkey 被删），这时用户要的是
+                        // 同一个引导，而不是自己去猜哪一步没做。
+                        val fellBackReadiness = readinessOf(permPrefName, perm)
+                        if (fellBackReadiness != ChannelReadiness.READY) {
+                            TextButton(onClick = { guideReadiness = fellBackReadiness }) {
+                                Text(stringResource(R.string.dsh_perm_fell_back_go))
+                            }
+                        }
                     }
 
                     Spacer(Modifier.height(16.dp))
@@ -405,6 +435,119 @@ fun PrivilegedChannelScreen(navigator: DestinationsNavigator) {
             }
         }
     }
+
+    guideReadiness?.let { readiness ->
+        ChannelGuideDialog(
+            readiness = readiness,
+            navigator = navigator,
+            onRequestShizuku = onRequestShizuku,
+            onRefreshPerm = onRefreshPerm,
+            onDismiss = { guideReadiness = null },
+        )
+    }
+}
+
+/**
+ * 一条引导弹窗的内容。
+ *
+ * 抽成规格对象是为了让下面那个 `when` 的每个分支都只负责「给出这一步该说什么、点了去哪」，
+ * 弹窗本身的形状（标题、按钮位置、关闭语义）只有一处。
+ */
+private data class ChannelGuideSpec(
+    val titleRes: Int,
+    val bodyRes: Int,
+    val actionRes: Int,
+    val action: () -> Unit,
+)
+
+/**
+ * 选中一条还没就绪的通道之后的引导。
+ *
+ * `when` 是**穷尽**的：新增一种未就绪状态却忘了给它出口，会直接编译不过。这类「弹出来
+ * 却没有任何办法解决」的弹窗正是要避免的形态 —— 所以让编译器替我们盯住。
+ */
+@Composable
+private fun ChannelGuideDialog(
+    readiness: ChannelReadiness,
+    navigator: DestinationsNavigator,
+    onRequestShizuku: () -> Unit,
+    onRefreshPerm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (readiness == ChannelReadiness.READY) return
+    val context = LocalContext.current
+    // ADB 的引导分两种：运行时没装就先装运行时，装了才谈得上配对
+    val runtimeInstalled = remember(context) { DshEnv.isRuntimeInstalled(context) }
+    val spec = when (readiness) {
+        ChannelReadiness.ADB_UNCONFIGURED ->
+            if (runtimeInstalled) {
+                ChannelGuideSpec(
+                    R.string.dsh_chguide_adb_title,
+                    R.string.dsh_chguide_adb_body,
+                    R.string.dsh_chguide_adb_go_pair,
+                ) { navigator.navigate(WirelessAdbScreenDestination) }
+            } else {
+                ChannelGuideSpec(
+                    R.string.dsh_chguide_adb_runtime_title,
+                    R.string.dsh_chguide_adb_runtime_body,
+                    R.string.dsh_chguide_adb_go_runtime,
+                ) { navigator.navigate(FunctionSettingsScreenDestination("function_runtime")) }
+            }
+
+        ChannelReadiness.SHIZUKU_UNGRANTED -> ChannelGuideSpec(
+            R.string.dsh_chguide_shizuku_ungranted_title,
+            R.string.dsh_chguide_shizuku_ungranted_body,
+            R.string.dsh_chguide_shizuku_request,
+            onRequestShizuku,
+        )
+
+        ChannelReadiness.SHIZUKU_ABSENT -> ChannelGuideSpec(
+            R.string.dsh_chguide_shizuku_absent_title,
+            R.string.dsh_chguide_shizuku_absent_body,
+            R.string.dsh_chguide_shizuku_retry,
+            onRefreshPerm,
+        )
+
+        ChannelReadiness.ROOT_UNVERIFIED -> ChannelGuideSpec(
+            R.string.dsh_chguide_root_unverified_title,
+            R.string.dsh_chguide_root_unverified_body,
+            R.string.dsh_chguide_root_verify,
+            onRefreshPerm,
+        )
+
+        ChannelReadiness.ROOT_ABSENT -> ChannelGuideSpec(
+            R.string.dsh_chguide_root_absent_title,
+            R.string.dsh_chguide_root_absent_body,
+            R.string.dsh_chguide_ok,
+            onDismiss,
+        )
+
+        ChannelReadiness.READY -> return
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dsh_chguide_title)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(spec.titleRes),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(stringResource(spec.bodyRes))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onDismiss()
+                spec.action()
+            }) { Text(stringResource(spec.actionRes)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dsh_chguide_later)) }
+        },
+    )
 }
 
 /**
@@ -487,9 +630,11 @@ fun WirelessAdbScreen(navigator: DestinationsNavigator) {
                     Spacer(Modifier.height(12.dp))
 
                     Text(
+                        // 与特权通道页那条选项用的是同一套状态词：两处对同一件事说不同的话，
+                        // 用户会以为它们不是一回事。
                         text = stringResource(
                             if (perm.adbPaired) R.string.dsh_adb_paired
-                            else R.string.dsh_adb_not_paired
+                            else R.string.dsh_perm_state_adb_unconfigured
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
@@ -770,13 +915,57 @@ private fun RuntimeOption(
 private fun yesNo(b: Boolean): String = if (b) "✓" else "✗"
 
 /**
- * 权限通道选项的副标题：中性说明 + 通道不可用时的「（当前不可用）」。
+ * 一条通道「准备好没有」。
  *
- * 注意别复用 [R.string.dsh_perm_hint_root] 那组 —— 那是给首页卡描述「当前生效通道」
- * 的断言（「已获得 root，完整能力」），当选项说明用就会变成无条件宣称已配对/已 root。
+ * 为什么不是布尔：用户看到「当前不可用」时最需要知道的是**差在哪一步** —— 是没授权、
+ * 本机压根没检测到，还是根本没配置过。这三件事的下一步动作完全不同（请求授权 / 去装
+ * 或去启动 / 去配对），一句「不可用」把三种情况糊成一种，用户只能猜。
+ *
+ * 与「当前生效通道」是两件事：这里只说选中它之后能不能立刻用。
+ * 做成枚举是为了让下面每个 `when` 都**穷尽**——新增一种未就绪状态时，引导弹窗漏了分支
+ * 会直接编译不过，而不是让用户看到一个没有出口的弹窗。
  */
+private enum class ChannelReadiness {
+    READY,
+    ROOT_UNVERIFIED,
+    ROOT_ABSENT,
+    SHIZUKU_UNGRANTED,
+    SHIZUKU_ABSENT,
+    ADB_UNCONFIGURED,
+}
+
+private fun readinessOf(prefName: String, perm: PermissionManager.Status): ChannelReadiness =
+    when (prefName) {
+        PermissionManager.PREF_ROOT -> when {
+            perm.rootVerified -> ChannelReadiness.READY
+            perm.suPresent -> ChannelReadiness.ROOT_UNVERIFIED
+            else -> ChannelReadiness.ROOT_ABSENT
+        }
+
+        PermissionManager.PREF_SHIZUKU -> when {
+            perm.shizukuGranted -> ChannelReadiness.READY
+            perm.shizukuRunning -> ChannelReadiness.SHIZUKU_UNGRANTED
+            else -> ChannelReadiness.SHIZUKU_ABSENT
+        }
+
+        PermissionManager.PREF_ADB ->
+            if (perm.adbPaired) ChannelReadiness.READY else ChannelReadiness.ADB_UNCONFIGURED
+
+        // OFF = 显式不提权，AUTO = 由系统按可用性自己挑：两者都没有「就绪」可言
+        else -> ChannelReadiness.READY
+    }
+
+/** 通道选项的副标题：中性说明 + 未就绪时的「（差在哪一步）」。 */
 @Composable
-private fun permOptionSummary(baseRes: Int, available: Boolean): String {
+private fun channelOptionSummary(baseRes: Int, readiness: ChannelReadiness): String {
     val base = stringResource(baseRes)
-    return if (available) base else base + "\n" + stringResource(R.string.dsh_perm_prefer_unavailable)
+    val stateRes = when (readiness) {
+        ChannelReadiness.READY -> return base
+        ChannelReadiness.ROOT_UNVERIFIED -> R.string.dsh_perm_state_root_unverified
+        ChannelReadiness.ROOT_ABSENT -> R.string.dsh_perm_state_root_absent
+        ChannelReadiness.SHIZUKU_UNGRANTED -> R.string.dsh_perm_state_shizuku_ungranted
+        ChannelReadiness.SHIZUKU_ABSENT -> R.string.dsh_perm_state_shizuku_absent
+        ChannelReadiness.ADB_UNCONFIGURED -> R.string.dsh_perm_state_adb_unconfigured
+    }
+    return base + "\n" + stringResource(R.string.dsh_perm_state_suffix, stringResource(stateRes))
 }

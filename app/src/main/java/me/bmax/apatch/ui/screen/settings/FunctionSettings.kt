@@ -1300,14 +1300,26 @@ internal fun capPermissionHintRes(cap: DshNativeBridge.Cap): Int = when (cap) {
 /**
  * 能力分组。
  *
- * 顺序就是界面顺序，从「只影响这台手机的表面」到「读走个人数据」再到「改系统状态」——
+ * 顺序就是界面顺序，按「这项能力能碰到什么」递进：只是让设备发声/发光 → 只读设备状态 →
+ * 读用户本人的内容 → 动采集硬件 → 看得见或接管屏幕 → 改系统状态并动用特权通道。
  * 越往下越该慎重，用户从上往下扫的时候压力是递增的。
  *
+ * 分六组而不是四组的理由：原先「个人数据」一组塞了 10 项，把三类完全不同的东西混在
+ * 一起 —— 用户本人的内容（日历/通讯录/短信）、采集硬件（摄像头/麦克风/媒体库/位置）、
+ * 以及**读屏与操作屏幕**（无障碍/虚拟屏）。前两类拆开才看得清；后两类是全表里权限
+ * 最大的两项，埋在 10 项长列表里看不见，理应单独成组。
+ *
  * [caps] 必须覆盖 [DshNativeBridge.Cap] 的每一项，否则新加的能力会在界面上凭空消失，
- * 却仍然可以被 prefs 里的旧值打开。`FunctionSettingsCapGroupTest` 盯着这一点。
+ * 却仍然可以被 prefs 里的旧值打开。`check-native-caps.js` 盯着覆盖与不重复。
  */
 internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.Cap>) {
-    /** 只影响这台设备的即时表现，不读也不改任何持久状态。 */
+    /**
+     * 只影响这台设备的即时表现，不读也不改任何持久状态。
+     *
+     * 这一组的判据是**严格**的：只产出（发声、发光、震动、弹提示），不读回任何东西。
+     * 剪贴板与分享面板曾经在这里，但它们能读走用户复制的内容 / 把内容交给外部 App，
+     * 已经挪到各自更该在的组。
+     */
     INTERACT(
         R.string.dsh_native_group_interact,
         listOf(
@@ -1316,8 +1328,6 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
             DshNativeBridge.Cap.TOAST,
             DshNativeBridge.Cap.VIBRATE,
             DshNativeBridge.Cap.TORCH,
-            DshNativeBridge.Cap.CLIPBOARD,
-            DshNativeBridge.Cap.INTENT,
             // TTS 放这一组：它做的是「对着这台设备发声」，和 toast / 振动同类 ——
             // 即时表现、不读也不改任何持久状态。放在「个人内容」组会让人误以为它
             // 要读什么东西。
@@ -1325,7 +1335,13 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
         ),
     ),
 
-    /** 读设备与环境状态，都是只读、都不涉及个人内容。 */
+    /**
+     * 读设备与环境状态，都是只读、都不涉及个人内容。
+     *
+     * 「安装权限状态」在这一组：它只**读**「允许安装未知应用」这个开关，自己不会装任何
+     * 东西（见 [DshNativeBridge.Cap.INSTALL] 的说明）。原先放在「更改系统状态」里，
+     * 与它自己的语义自相矛盾。
+     */
     SENSE(
         R.string.dsh_native_group_sense,
         listOf(
@@ -1333,6 +1349,7 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
             DshNativeBridge.Cap.NETWORK,
             DshNativeBridge.Cap.PHONE,
             DshNativeBridge.Cap.SENSORS,
+            DshNativeBridge.Cap.INSTALL,
         ),
     ),
 
@@ -1340,23 +1357,49 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
     PERSONAL(
         R.string.dsh_native_group_personal,
         listOf(
+            // 剪贴板放这一组：档位里有 view / view_send，它是能**读**用户复制的东西的
+            // （可能是刚复制的密码）。INTERACT 那组的判据是「不读任何持久状态」，它不合。
+            DshNativeBridge.Cap.CLIPBOARD,
+            DshNativeBridge.Cap.CALENDAR,
+            DshNativeBridge.Cap.CONTACTS,
+            DshNativeBridge.Cap.SMS,
+            DshNativeBridge.Cap.USAGE,
+        ),
+    ),
+
+    /** 动采集硬件：拿得到画面、声音与所在位置。需要应用在前台的几项也都在这里。 */
+    CAPTURE(
+        R.string.dsh_native_group_capture,
+        listOf(
             DshNativeBridge.Cap.MEDIA,
             DshNativeBridge.Cap.CAMERA,
             DshNativeBridge.Cap.MIC,
             DshNativeBridge.Cap.LOCATION,
-            DshNativeBridge.Cap.CALENDAR,
-            DshNativeBridge.Cap.CONTACTS,
-            DshNativeBridge.Cap.USAGE,
-            DshNativeBridge.Cap.SMS,
-            // 读屏更进一步：它读的是用户此刻看的那个界面（可能是聊天窗口）
-            DshNativeBridge.Cap.A11Y,
-            // 虚拟屏同理，而且更甚：它拿到的是**画面本身**，还多一项「动手」的能力。
-            // 放在这一组是为了让用户在同一个地方一起权衡这两条读屏路径。
-            DshNativeBridge.Cap.DISPLAY,
         ),
     ),
 
-    /** 改系统的全局状态。改完不会自动恢复，所以放在最后。 */
+    /**
+     * 看得见、或者能接管用户屏幕。
+     *
+     * 无障碍与虚拟屏原先在「个人数据」组里，当时的理由是要让用户在**同一个地方**权衡
+     * 这两条读屏路径（见 [DshNativeBridge.Cap.A11Y] / [DshNativeBridge.Cap.DISPLAY]）。
+     * 独立成组保住了「同一处权衡」，同时让全表权限最大的两项不再淹没在长列表里。
+     *
+     * 「分享与打开链接」在这一组：它把用户交给外部 App（分享面板 / 浏览器），
+     * 同样是「影响到本应用之外的界面」。
+     */
+    SCREEN(
+        R.string.dsh_native_group_screen,
+        listOf(
+            // 读屏更进一步：它读的是用户此刻看的那个界面（可能是聊天窗口）
+            DshNativeBridge.Cap.A11Y,
+            // 虚拟屏同理，而且更甚：它拿到的是**画面本身**，还多一项「动手」的能力。
+            DshNativeBridge.Cap.DISPLAY,
+            DshNativeBridge.Cap.INTENT,
+        ),
+    ),
+
+    /** 改系统的全局状态，或直接动用特权通道。改完不会自动恢复，所以放在最后。 */
     CONTROL(
         R.string.dsh_native_group_control,
         listOf(
@@ -1364,7 +1407,6 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
             DshNativeBridge.Cap.SHELL,
             DshNativeBridge.Cap.VOLUME,
             DshNativeBridge.Cap.SETTINGS,
-            DshNativeBridge.Cap.INSTALL,
         ),
     ),
 }
@@ -1376,20 +1418,6 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
  * 界面与启动日志共用同一份（原先各有一份，文案曾经漂移过）。
  */
 internal fun sourceLabelRes(source: String): Int = DshSource.labelRes(source)
-
-private fun yesNo(b: Boolean): String = if (b) "✓" else "✗"
-
-/**
- * 权限通道选项的副标题：中性说明 + 通道不可用时的「（当前不可用）」。
- *
- * 注意别复用 [R.string.dsh_perm_hint_root] 那组 —— 那是给首页卡描述「当前生效通道」
- * 的断言（「已获得 root，完整能力」），当选项说明用就会变成无条件宣称已配对/已 root。
- */
-@Composable
-private fun permOptionSummary(baseRes: Int, available: Boolean): String {
-    val base = stringResource(baseRes)
-    return if (available) base else base + "\n" + stringResource(R.string.dsh_perm_prefer_unavailable)
-}
 
 /**
  * 外观与 [OutlinedButton] 一致的按钮，但支持长按。

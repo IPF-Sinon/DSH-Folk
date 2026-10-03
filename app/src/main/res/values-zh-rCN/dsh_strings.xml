@@ -43,7 +43,8 @@
     <string name="dsh_perm_prefer_off_desc">完全不提权。容器本身不需要 root，只有硬件监控、日志采集与重启菜单会少掉需要特权的那部分。</string>
     <string name="dsh_perm_prefer_auto">自动</string>
     <string name="dsh_perm_prefer_auto_desc">优先 root，其次 Shizuku，再次无线 ADB</string>
-    <string name="dsh_perm_fell_back">首选通道当前不可用，已回退为 %1$s</string>
+    <string name="dsh_perm_fell_back">选中的通道还没配置好，当前生效的是 %1$s</string>
+    <string name="dsh_perm_fell_back_go">去配置</string>
     <string name="dsh_perm_shizuku_uid_root">uid 0（root）</string>
     <string name="dsh_perm_shizuku_uid_shell">uid 2000（shell）</string>
     <string name="dsh_perm_shizuku_detail_uid">服务运行中：%1$s · 已授权：%2$s · %3$s</string>
@@ -164,7 +165,6 @@
     <string name="dsh_adb_install_deps">安装依赖</string>
     <string name="dsh_adb_pair">配对</string>
     <string name="dsh_adb_paired">已配对</string>
-    <string name="dsh_adb_not_paired">未配对</string>
     <string name="dsh_adb_needs_runtime">请先在主页安装运行时。</string>
     <string name="dsh_adb_open_devsettings">打开开发者选项</string>
     <string name="dsh_output">输出</string>
@@ -504,7 +504,36 @@
     <string name="dsh_perm_prefer_root_desc">优先用 su（Magisk / KernelSU / APatch）</string>
     <string name="dsh_perm_prefer_shizuku_desc">优先用 Shizuku / Sui 的 shell 权限</string>
     <string name="dsh_perm_prefer_adb_desc">优先用容器内的无线 ADB</string>
-    <string name="dsh_perm_prefer_unavailable">（当前不可用）</string>
+    <!-- 通道就绪状态：选项副标题与「无线 ADB 特权」那一行共用这套短词。
+         与 dsh_perm_hint_* 那组区分开 —— 那是首页描述「当前生效通道」的整句断言。 -->
+    <string name="dsh_perm_state_suffix">（%1$s）</string>
+    <string name="dsh_perm_state_root_unverified">检测到 root，未验证</string>
+    <string name="dsh_perm_state_root_absent">未检测到 root</string>
+    <string name="dsh_perm_state_shizuku_ungranted">当前未授权</string>
+    <string name="dsh_perm_state_shizuku_absent">未检测到 Shizuku</string>
+    <string name="dsh_perm_state_adb_unconfigured">当前未配置</string>
+
+    <!-- 选中一条还没就绪的通道时的引导。每个分支都必须把用户送到能解决它的那一步。 -->
+    <string name="dsh_chguide_title">还差一步</string>
+    <string name="dsh_chguide_later">稍后</string>
+    <string name="dsh_chguide_ok">知道了</string>
+    <string name="dsh_chguide_adb_title">无线 ADB 还没配置</string>
+    <string name="dsh_chguide_adb_body">先在系统的「开发者选项 → 无线调试」里打开无线调试，选「使用配对码配对设备」，然后把显示的 6 位配对码与端口填进来。配对成功后，你选的这条通道会自动生效。</string>
+    <string name="dsh_chguide_adb_go_pair">去配对</string>
+    <string name="dsh_chguide_adb_runtime_title">无线 ADB 需要容器运行时</string>
+    <string name="dsh_chguide_adb_runtime_body">配对脚本跑在容器里，所以要先把运行时装好。装好后回到这一页再配对。</string>
+    <string name="dsh_chguide_adb_go_runtime">去安装运行时</string>
+    <string name="dsh_chguide_shizuku_ungranted_title">Shizuku 还没授权本应用</string>
+    <string name="dsh_chguide_shizuku_ungranted_body">Shizuku 服务在运行，但 DSH-Folk 还没被授权使用它。点下面的按钮会弹出 Shizuku 的授权框。</string>
+    <string name="dsh_chguide_shizuku_request">请求授权</string>
+    <string name="dsh_chguide_shizuku_absent_title">没有检测到 Shizuku</string>
+    <string name="dsh_chguide_shizuku_absent_body">需要先安装并启动 Shizuku（或用它的 Sui 模式），让它常驻后台。启动之后回到这一页点「重试检测」。</string>
+    <string name="dsh_chguide_shizuku_retry">重试检测</string>
+    <string name="dsh_chguide_root_unverified_title">检测到 root，但还没验证</string>
+    <string name="dsh_chguide_root_unverified_body">设备上有 su，但 DSH-Folk 还没拿到过 uid 0。点下面的按钮会真跑一次 su，届时 root 管理器会弹授权框。</string>
+    <string name="dsh_chguide_root_verify">去验证</string>
+    <string name="dsh_chguide_root_absent_title">没有检测到 root</string>
+    <string name="dsh_chguide_root_absent_body">这台设备没有可用的 su，所以这条通道现在给不了权限。DSH 仍能在容器里正常运行，只是访问系统路径与部分插件功能受限。</string>
     <string name="dsh_perm_shizuku_uid_other">uid %1$s</string>
     <string name="dsh_adb_pair_with_deps">安装依赖并配对</string>
     <string name="dsh_adb_disconnect">断开</string>
@@ -769,11 +798,15 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_err_mic_background">录音需要应用处于前台；后台录音 Android 只会给静音，不会报错</string>
 
 
-    <!-- ── 能力分组标题 ── -->
+    <!-- ── 能力分组标题 ──
+         六组按「这项能力能碰到什么」递进：只是让设备发声/发光 → 只读设备状态 → 读用户内容
+         → 动采集硬件 → 看得见/接管屏幕 → 改系统状态与特权。 -->
     <string name="dsh_native_group_interact">与设备交互</string>
-    <string name="dsh_native_group_sense">读取设备状态</string>
-    <string name="dsh_native_group_personal">个人数据</string>
-    <string name="dsh_native_group_control">更改系统状态</string>
+    <string name="dsh_native_group_sense">设备与环境信息</string>
+    <string name="dsh_native_group_personal">个人内容</string>
+    <string name="dsh_native_group_capture">拍摄与位置</string>
+    <string name="dsh_native_group_screen">屏幕与外部界面</string>
+    <string name="dsh_native_group_control">特权与系统更改</string>
 
     <!-- ── 相机 / 日历 / 通讯录 / 位置 / 电话 / 传感器 / 网络 / 音量 / 系统设置 / 安装 ── -->
     <string name="dsh_native_cap_camera">摄像头</string>

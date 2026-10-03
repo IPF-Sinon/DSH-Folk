@@ -100,10 +100,17 @@ ok(caps.length > 0, "解析到 Cap 列表");
 
 // ── 1 & 2. 分组覆盖 ──
 console.log("── 界面分组 ──");
-const groupBlock = ui.slice(
+// 必须先把注释剥掉：分组块里会在 KDoc 里用 `[DshNativeBridge.Cap.X]` 交叉引用别的组
+// （正是为了说明「这一项为什么从那一组挪过来」）。注释里的引用不是「出现在分组里」，
+// 不剥就会把解释性引用误判成重复分组 —— 而重复分组本身是真问题，不能因此放宽。
+// 局限：这个剥法不看字符串字面量；分组块里没有含 `//` 或 `/*` 的字符串，够用。
+const stripKotlinComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+const groupBlock = stripKotlinComments(ui.slice(
   ui.indexOf("internal enum class CapGroup("),
   ui.indexOf("\n}", ui.indexOf("internal enum class CapGroup("))
-);
+));
+ok(groupBlock.length > 0, "定位到 CapGroup 分组块（切片标记没失效）");
 const grouped = [...groupBlock.matchAll(/DshNativeBridge\.Cap\.([A-Z0-9_]+)/g)].map((m) => m[1]);
 const missingGroup = caps.filter((c) => !grouped.includes(c.name));
 ok(missingGroup.length === 0,

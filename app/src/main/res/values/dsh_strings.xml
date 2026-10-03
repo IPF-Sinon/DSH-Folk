@@ -47,7 +47,8 @@
     <string name="dsh_perm_prefer_off_desc">Never elevate. The container does not need root; hardware stats, log collection and the reboot menu lose their privileged parts.</string>
     <string name="dsh_perm_prefer_auto">Automatic</string>
     <string name="dsh_perm_prefer_auto_desc">Root first, then Shizuku, then wireless ADB</string>
-    <string name="dsh_perm_fell_back">Preferred channel is unavailable; using %1$s instead</string>
+    <string name="dsh_perm_fell_back">The channel you picked is not configured yet; using %1$s instead</string>
+    <string name="dsh_perm_fell_back_go">Configure</string>
     <string name="dsh_perm_shizuku_uid_root">uid 0 (root)</string>
     <string name="dsh_perm_shizuku_uid_shell">uid 2000 (shell)</string>
     <string name="dsh_perm_shizuku_detail_uid">Service running: %1$s · Granted: %2$s · %3$s</string>
@@ -181,7 +182,6 @@
     <string name="dsh_adb_install_deps">Install dependencies</string>
     <string name="dsh_adb_pair">Pair</string>
     <string name="dsh_adb_paired">Paired</string>
-    <string name="dsh_adb_not_paired">Not paired</string>
     <string name="dsh_adb_needs_runtime">Install the runtime from Home first.</string>
     <string name="dsh_adb_open_devsettings">Open developer options</string>
     <string name="dsh_output">Output</string>
@@ -522,7 +522,38 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_perm_prefer_root_desc">Prefer su (Magisk / KernelSU / APatch)</string>
     <string name="dsh_perm_prefer_shizuku_desc">Prefer Shizuku / Sui shell permission</string>
     <string name="dsh_perm_prefer_adb_desc">Prefer in-container wireless ADB</string>
-    <string name="dsh_perm_prefer_unavailable">(currently unavailable)</string>
+    <!-- Channel readiness: short words shared by the option subtitles and the
+         "Wireless ADB privilege" row. Keep separate from the dsh_perm_hint_* set --
+         those are full sentences describing the *effective* channel on the home card. -->
+    <string name="dsh_perm_state_suffix">(%1$s)</string>
+    <string name="dsh_perm_state_root_unverified">root found, not verified</string>
+    <string name="dsh_perm_state_root_absent">no root found</string>
+    <string name="dsh_perm_state_shizuku_ungranted">not granted yet</string>
+    <string name="dsh_perm_state_shizuku_absent">Shizuku not found</string>
+    <string name="dsh_perm_state_adb_unconfigured">not configured yet</string>
+
+    <!-- Guidance shown right after picking a channel that is not ready. Every branch must
+         land the user on the step that actually fixes it. -->
+    <string name="dsh_chguide_title">One more step</string>
+    <string name="dsh_chguide_later">Later</string>
+    <string name="dsh_chguide_ok">Got it</string>
+    <string name="dsh_chguide_adb_title">Wireless ADB is not configured</string>
+    <string name="dsh_chguide_adb_body">First open Developer options → Wireless debugging, choose Pair device with pairing code, then enter the 6-digit code and the port here. Once paired, the channel you picked takes effect automatically.</string>
+    <string name="dsh_chguide_adb_go_pair">Pair now</string>
+    <string name="dsh_chguide_adb_runtime_title">Wireless ADB needs the container runtime</string>
+    <string name="dsh_chguide_adb_runtime_body">The pairing script runs inside the container, so the runtime has to be installed first. Come back to this page to pair once it is.</string>
+    <string name="dsh_chguide_adb_go_runtime">Install runtime</string>
+    <string name="dsh_chguide_shizuku_ungranted_title">Shizuku has not authorized this app</string>
+    <string name="dsh_chguide_shizuku_ungranted_body">The Shizuku service is running, but DSH-Folk has not been granted access to it yet. The button below opens the Shizuku permission prompt.</string>
+    <string name="dsh_chguide_shizuku_request">Request permission</string>
+    <string name="dsh_chguide_shizuku_absent_title">Shizuku was not found</string>
+    <string name="dsh_chguide_shizuku_absent_body">Install Shizuku (or use its Sui mode) and keep it running in the background first. Then come back to this page and tap Re-detect.</string>
+    <string name="dsh_chguide_shizuku_retry">Re-detect</string>
+    <string name="dsh_chguide_root_unverified_title">root found, but not verified</string>
+    <string name="dsh_chguide_root_unverified_body">This device has su, but DSH-Folk has never obtained uid 0. The button below runs su for real, so your root manager will show its prompt.</string>
+    <string name="dsh_chguide_root_verify">Verify now</string>
+    <string name="dsh_chguide_root_absent_title">No root found</string>
+    <string name="dsh_chguide_root_absent_body">This device has no usable su, so this channel cannot grant privilege right now. DSH still runs fine inside its container -- only system paths and some plugin features are limited.</string>
     <string name="dsh_perm_shizuku_uid_other">uid %1$s</string>
     <string name="dsh_adb_pair_with_deps">Install deps &amp; pair</string>
     <string name="dsh_adb_disconnect">Disconnect</string>
@@ -788,10 +819,16 @@ Updating Android System WebView from your app store is the proper fix.</string>
 
 
     <!-- ── 能力分组标题 ── -->
+    <!-- ── Capability group titles ──
+         Six groups ordered by what the capability can reach: only make the device
+         beep/glow → read device state → read the user's own content → drive capture
+         hardware → see or take over the screen → change system state and escalate. -->
     <string name="dsh_native_group_interact">Interact with the device</string>
-    <string name="dsh_native_group_sense">Read device state</string>
-    <string name="dsh_native_group_personal">Personal data</string>
-    <string name="dsh_native_group_control">Change system state</string>
+    <string name="dsh_native_group_sense">Device and environment info</string>
+    <string name="dsh_native_group_personal">Personal content</string>
+    <string name="dsh_native_group_capture">Camera, mic and location</string>
+    <string name="dsh_native_group_screen">Screen and external UI</string>
+    <string name="dsh_native_group_control">Privileges and system changes</string>
 
     <!-- ── 相机 / 日历 / 通讯录 / 位置 / 电话 / 传感器 / 网络 / 音量 / 系统设置 / 安装 ── -->
     <string name="dsh_native_cap_camera">Camera</string>
