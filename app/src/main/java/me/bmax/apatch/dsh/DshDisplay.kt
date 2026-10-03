@@ -263,9 +263,6 @@ object DshDisplay {
         return current to null
     }
 
-            params["display"]?.toIntOrNull()?.takeIf { it >= 0 } ?: DisplayServer.sessionDisplay()
-
-
     private fun service(ctx: Context): IDisplayService? =
         DisplayServer.start(ctx).getOrElse { e ->
             Log.i(TAG, "虚拟屏服务端不可用：${e.message}")
