@@ -149,6 +149,15 @@ object DisplayMirror {
     private const val PILL_ICON_DP = 18
 
     /**
+     * 常驻胶囊离屏幕顶端的距离。
+     *
+     * 不能用 12dp 那种"好看"的小边距：窗口是 `FLAG_LAYOUT_NO_LIMITS`（画面伸到状态栏底下），
+     * 而状态栏是更上层的系统窗口，压在它那一条里的触摸到不了覆盖层 —— 而这里是全屏唯一的出路。
+     * 32dp 足够越过常见状态栏（含 MIUI 的加高条），也让胶囊不与被镜像 App 的顶栏重叠。
+     */
+    private const val PILL_TOP_DP = 32
+
+    /**
      * 「算点击还是滑动」的位移阈值（px）。与预览页同一个值（`DisplayPreviewScreen.TAP_SLOP_PX`）：
      * 两处对「手指抖一下算不算滑动」的判断必须一致，否则同一个动作在两个界面里结果不同。
      */
@@ -703,7 +712,10 @@ object DisplayMirror {
                     //
                     // 为什么不能像展开态那样"点一下唤出"：全屏的单指触摸全被转发进虚拟屏了，
                     // 覆盖层收不到 —— Operit 正是栽在这里（它靠"进全屏时亮 3 秒"，错过就摸不到
-                    // 按钮）。常驻一小块换来"永远出得去"，比省下那 3 个 32dp 的按钮划算。
+                    // 按钮）。常驻一小块换来"永远出得去"，比省下那 3 个 34dp 的按钮划算。
+                    //
+                    // 它自己的表面（含按钮之间/周围的黑底）会消费掉触摸，只有可见范围之外的
+                    // 透明外边距留给虚拟屏；否则按胶囊会顺带点到虚拟屏（见 FullscreenPill）。
                     FullscreenPill()
                 } else if (controls) {
                     MirrorControls()
@@ -724,7 +736,27 @@ object DisplayMirror {
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(12.dp)
+                // 顶到状态栏**下面**：窗口是 FLAG_LAYOUT_NO_LIMITS（画面会伸到状态栏底下），
+                // 而状态栏是更上层的系统窗口 —— 落在它那一条里的触摸到不了我们这儿。偏巧
+                // 这里是全屏态唯一的出路，被压住一角就可能按不动。
+                .padding(top = PILL_TOP_DP.dp, end = 12.dp)
+                // 吃掉落在**胶囊可见表面**上的触摸（含 4/2dp 内边距）。
+                //
+                // 只靠按钮消费不够：按钮之外还有一圈可见的黑底，落在那里会**穿到虚拟屏**上，
+                // 用户会看到"明明按的是胶囊，虚拟屏里也被点了一下"。
+                //
+                // 位置刻意夹在 `.padding(top/end)` 与 `.clip(…)` 之间：消费范围 = 可见的
+                // 胶囊本体，**不含**那 12dp 透明外边距 —— 外边距一来看不见，二来那正是
+                // 虚拟屏里 App 顶栏常放菜单的位置，吞掉它反而按不到 App 的按钮。
+                //
+                // 它在按钮的**外层**：Compose 的 Main 阶段是"后代先于祖先"，按钮先拿到
+                // 自己的 down 并消费，所以这里抢不走按钮的点按（只在按钮没消费时才生效）。
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown().also { it.consume() }
+                        waitForUpOrCancellation()
+                    }
+                }
                 .clip(RoundedCornerShape(999.dp))
                 .background(Color.Black.copy(alpha = 0.45f))
                 .padding(horizontal = 4.dp, vertical = 2.dp),

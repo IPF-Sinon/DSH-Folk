@@ -774,13 +774,29 @@ for (const f of SHARED) {
   //   ② 全屏态：胶囊常驻（不受 `controls` 自动隐藏影响）。
   must(/detectTapGestures \{ controls = !controls \}/.test(mirror),
     '展开态点一下要能切换控制条');
-  must(/if \(isFullscreen\) \{[\s\S]{0,400}?FullscreenPill\(\)/.test(mirror),
+  // 窗口给宽一点：`if (isFullscreen) {` 到 `FullscreenPill()` 之间隔着解释这段历史的注释，
+  // 注释一长，窗口给小了就会误报（这里已经栽过一次）。
+  must(/if \(isFullscreen\) \{[\s\S]{0,900}?FullscreenPill\(\)/.test(mirror),
     '全屏态的控制条必须是常驻胶囊（不能挂在 controls 上——那里会 3 秒后自动隐去）');
   must(/else -> Modifier(?![\w.])/.test(mirror) === false ||
-    /if \(isFullscreen\) \{[\s\S]{0,400}?FullscreenPill\(\)/.test(mirror),
+    /if \(isFullscreen\) \{[\s\S]{0,900}?FullscreenPill\(\)/.test(mirror),
     '若 tap 分支在全屏态留空，就必须有常驻胶囊兜底（否则又变成死胡同）');
   must(/fullscreen = !fullscreen[\s\S]{0,700}?controls = true/.test(mirror),
     '切进全屏时先把控制条亮出来（进去后立刻能看到退出/缩小/关闭）');
+  // 胶囊自己必须吃掉落在它可见表面上的触摸。只靠 IconButton 消费不够：按钮之外还有
+  // 一圈可见的黑底，落到那里会穿到虚拟屏，变成"按了胶囊、App 也被点了一下"。
+  must(/awaitFirstDown\(\)\.also \{ it\.consume\(\) \}/.test(mirror),
+    '胶囊表面要消费掉触摸（否则按胶囊会顺带点到虚拟屏）');
+  // 用**位置**比较而不是"字符窗口"：窗口大小取决于注释长短，注释一改就误报（栽过两次）。
+  const iPillPad = mirror.indexOf('.padding(top = PILL_TOP_DP.dp, end = 12.dp)');
+  const iPillTouch = mirror.indexOf('.pointerInput(Unit)');
+  const iPillClip = mirror.indexOf('.clip(RoundedCornerShape(999.dp))');
+  must(iPillPad >= 0 && iPillTouch > iPillPad && iPillClip > iPillTouch,
+    '消费触摸的 pointerInput 要夹在外边距与 .clip 之间（消费=可见胶囊本体，不吃透明外边距）');
+  const topDp = Number((mirror.match(/PILL_TOP_DP = (\d+)/) || [])[1]);
+  must(topDp >= 28,
+    `胶囊离顶端要够远、压不到状态栏那一条（现在 ${topDp}dp）—— 窗口是 FLAG_LAYOUT_NO_LIMITS，` +
+    '状态栏是更上层的系统窗口，而这里是全屏唯一的出路');
 
   // ── 全屏把触摸转发进虚拟屏 ──
   //
