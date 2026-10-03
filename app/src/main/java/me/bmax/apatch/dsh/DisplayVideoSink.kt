@@ -152,6 +152,11 @@ class DisplayVideoSink(
         decoder = null
         configured = false
         decodedFrames = 0
+        // 统计基线跟着解码器一起对齐：否则重建后第一行会算出负数（decodedFrames 归零、
+        // 基线还停在重建前）。attach() 目前每个 sink 只走一次，但别让这个坑留着。
+        statsQueued = queuedFrames
+        statsDecoded = decodedFrames
+        statsDropped = droppedQueueFull
         runCatching { codec.stop() }.onFailure { Log.w(TAG, "stop 解码器失败: ${it.message}") }
         runCatching { codec.release() }.onFailure { Log.w(TAG, "release 解码器失败: ${it.message}") }
         synchronized(lock) { freeInputs.clear() }

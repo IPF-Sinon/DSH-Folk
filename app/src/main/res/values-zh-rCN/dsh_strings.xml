@@ -794,7 +794,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_display_float_a11y_minimize">折叠到屏幕边缘</string>
     <string name="dsh_display_float_a11y_fullscreen">全屏显示</string>
     <string name="dsh_display_float_a11y_exit_fullscreen">退出全屏</string>
-    <string name="dsh_display_float_a11y_close">关闭小窗</string>
+    <string name="dsh_display_float_a11y_close">终止这块虚拟屏</string>
     <string name="dsh_display_float_hint">agent 正在这块屏上操作 · 点这里看</string>
     <string name="dsh_display_float_terminate_title">终止这块虚拟屏？</string>
     <string name="dsh_display_float_terminate_summary">agent 的下一步会失败（它得重新建屏）。只想让它别挡着，请用「折叠到屏幕边缘」。</string>

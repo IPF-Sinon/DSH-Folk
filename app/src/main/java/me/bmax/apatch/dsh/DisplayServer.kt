@@ -170,10 +170,8 @@ object DisplayServer {
         currentSession()
             ?.takeIf { it.width == width && it.height == height && it.dpi == dpi }
             ?.let {
-                // 复用这条路也要同步一次：用户可能刚把小窗关掉，而 agent 又开了一轮。
-                // 复用 = 新的一轮，所以走 beginRound（它会清掉"这一轮不想看"）。
                 terminatedDisplay = 0
-                DisplayMirror.beginRound(ctx)
+                DisplayMirror.onAgentUse(ctx)
                 return Result.success(it)
             }
         return runCatching {
@@ -186,7 +184,7 @@ object DisplayServer {
                 // agent 建出一块虚拟屏 → 把画面放进悬浮小窗给用户看。
                 // 没有悬浮窗权限、或用户在设置里关掉了，这里就是空操作（见 DisplayMirror）。
                 // 预览页自己建会话时不会走到"弹窗"这一步：它进来先 suspendForPreview 让位了。
-                DisplayMirror.beginRound(ctx)
+                DisplayMirror.onAgentUse(ctx)
             }
         }
     }

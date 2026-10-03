@@ -672,14 +672,18 @@ for (const f of SHARED) {
     '摘/挂 sink 前要判服务端还在（setVideoSink 内部会 start()，能把停掉的服务端拉回来）');
 
   // 接线：建屏时弹出、停止/服务端死掉时收起
-  must(/DisplayMirror\.beginRound\(ctx\)/.test(ds),
-    '建出虚拟屏后要同步小窗（agent 那条路），并且是 beginRound —— 复用同一个 (宽,高,dpi) 的屏也要算新一轮');
+  must(/DisplayMirror\.onAgentUse\(ctx\)/.test(ds),
+    '建出虚拟屏后要同步小窗（agent 那条路）');
   const goneCalls = (ds.match(/DisplayMirror\.onServerGone\(\)/g) || []).length;
   must(goneCalls >= 2,
     `服务端换实例的两个时机都要收小窗（用户停止 / 心跳发现已死），DisplayServer 里只找到 ${goneCalls} 处`);
-  const beginRounds = (ds.match(/DisplayMirror\.beginRound\(ctx\)/g) || []).length;
-  must(beginRounds >= 2,
-    `新建会话与复用会话两条路都要 beginRound（找到 ${beginRounds} 处）—— 只改一条的话，复用那条路上用户还是看不到画面`);
+  const syncCalls = (ds.match(/DisplayMirror\.onAgentUse\(ctx\)/g) || []).length;
+  must(syncCalls >= 2,
+    `新建会话与复用会话两条路都要同步（找到 ${syncCalls} 处）—— 只改一条的话，复用那条路上用户还是看不到画面`);
+  // 反向教训：曾经有一份"✕ = 这块屏永远不看"的记忆（dismissed，按 displayId 记），而屏会被复用，
+  // 于是用户关过一次之后就再也看不到画面。那条路已经删掉了，这里钉住它不许复活。
+  must(!/dismissed/.test(mirror),
+    '不许再有"这块屏永远不看"的记忆（它就是"用户关过一次后再也看不到画面"的根因）');
 
   // ── 小窗要"自动出现"：任何一次 display 调用都算 agent 在用屏 ──
   //
@@ -690,13 +694,15 @@ for (const f of SHARED) {
     'display 命令的总出口要同步小窗（含带 --display N 直接用已有屏那条路）');
   must(/path != "\/native\/display\/status"/.test(display),
     'status 不算"在用"（那是问状态，不该把把手点亮）');
-  must(/fun onAgentUse\(/.test(mirror) && /fun beginRound\(/.test(mirror),
-    '小窗要有 onAgentUse（每次用）与 beginRound（新一轮）两个入口');
-  // 光有 beginRound 这个名字不够：变异成"beginRound 里不重置 dismissed"照样能过 ——
-  // 而那样用户关过一次 ✕ 之后，复用的同一块屏就再也弹不出来了（这正是原来的毛病）。
-  must(/private fun noteUse\(ctx: Context, newRound: Boolean\)/.test(mirror) &&
-    /if \(newRound\) dismissed = 0/.test(mirror),
-    'beginRound 必须真的把"这一轮不想看"清掉（复用同一块屏时才会重新出现）');
+  // --display 0 是真实屏幕（提示词里明写的能力）：它没碰虚拟屏，不该点亮虚拟屏的把手
+  must(/params\["display"\]\?\.toIntOrNull\(\) == 0/.test(display) && /&& !realScreen/.test(display),
+    '显式操作真实屏（--display 0）不算"在用虚拟屏"');
+  must(/fun onAgentUse\(/.test(mirror), '小窗要有统一的"agent 在用屏"入口');
+  // 入口光存在不够：它必须真的去同步窗口，不能只"亮一下"（把手还是不出来）
+  const useAt = mirror.indexOf('fun onAgentUse(ctx: Context) {');
+  const useBody = useAt < 0 ? '' : mirror.slice(useAt, mirror.indexOf('\n    }', useAt));
+  must(/syncOnMain\(\)/.test(useBody) && /pulseToken\+\+/.test(useBody),
+    'onAgentUse 要既同步窗口（出现）又脉冲（亮一下）');
   must(/pulseToken\+\+/.test(mirror),
     'agent 每用一次屏就让把手亮一下（只出把手又不出声，用户不知道它在干活）');
 
@@ -716,6 +722,9 @@ for (const f of SHARED) {
     '气泡要真的把窗口撑开（把手窗口只有几十 dp，画不下文字）');
   must(/if \(hint\) \{\n\s+hint = false\n\s+collapse\(\)/.test(mirror),
     '气泡到点要自己收回去（且用户已展开时不抢回来）');
+  // 气泡期间窗口是"气泡宽"，此时拖拽若按把手的 x 算，会把内容整个推到屏外
+  must(/p\.x = if \(hint\) hintX\(ctx\) else snappedX\(ctx\)/.test(mirror),
+    '气泡显示期间拖拽要按气泡的宽度算 x（否则一拖就变成屏外的一条窄缝）');
 
   // ── ✕ 是"终止这块虚拟屏"，不是"藏起来" ──
   const stopSessionAt = ds.indexOf('fun stopSession(');
@@ -738,6 +747,12 @@ for (const f of SHARED) {
   must(!/Dialog\(/.test(mirror),
     '确认层不能是真 Dialog：悬浮窗是 FLAG_NOT_FOCUSABLE，建不出来（要在同一窗口里画）');
   must(/TerminateConfirm\(\)/.test(mirror), '确认层要真的画出来');
+  // 确认层的半透明背景必须消费触摸：全屏态父层会把"未消费的单指触摸"转发进虚拟屏 ——
+  // 正在确认要不要终止它、却还在点它，说不过去。
+  const confirmAt = mirror.indexOf('private fun BoxScope.TerminateConfirm()');
+  const confirmBody = confirmAt < 0 ? '' : mirror.slice(confirmAt, mirror.indexOf('@Composable', confirmAt + 10));
+  must(/background\(Color\.Black\.copy\(alpha = 0\.6f\)\)[\s\S]{0,300}?awaitFirstDown\(\)\.also \{ it\.consume\(\) \}/.test(confirmBody),
+    '确认层的背景要消费触摸（全屏态下否则会点穿到虚拟屏上）');
 
   // ── 会话没了不许静默落到真实屏幕 ──
   //
@@ -753,8 +768,11 @@ for (const f of SHARED) {
     '用户刚终止过的那块屏，要给出**准确**原因（不是 unknown displayId 让 agent 去猜参数）');
   must(/DisplayServer\.terminatedByUser\(id\)/.test(display),
     '显式指定 --display 时也要先查"这块是不是用户刚终止的"');
-  must(!/displayOf\(params\)/.test(display),
-    '注入输入的端点一律走 displayOfOrError（不能再用会回落成真实屏幕的那个版本）');
+  must(!/\bdisplayOf\(/.test(display),
+    '注入输入的端点一律走 displayOfOrError（不能再有会回落成真实屏幕的那个版本）');
+  const resolved = (display.match(/displayOfOrError\(ctx, params\)/g) || []).length;
+  must(resolved >= 5,
+    `截图/点击/滑动/按键/启动 五个端点都要走 displayOfOrError（找到 ${resolved} 处）`);
 
   // ── 卡顿要能落到数字上 ──
   const sink = read('app/src/main/java/me/bmax/apatch/dsh/DisplayVideoSink.kt');
@@ -772,6 +790,14 @@ for (const f of SHARED) {
     'pending 与 pendingStamps 必须同增同删（少一处就会错位）');
   must(/STATS_MS = 2000L/.test(sink) && /lastStatsLine/.test(sink),
     '统计行要定时更新并可读出去（界面/日志同一份数字）');
+  // decodedFrames 在释放解码器时归零，基线却留在重建前 → 第一行会算出负数。
+  // 必须钉在 releaseDecoderLocked 里：maybeLogStats 里也有一处「statsDecoded = decodedFrames」
+  // （那是每次刷新基线用的），只查全文会被它蒙混过去（这轮又栽了一次）。
+  const relAt = sink.indexOf('private fun releaseDecoderLocked()');
+  const relBody = relAt < 0 ? '' : sink.slice(relAt, sink.indexOf('\n    }', relAt));
+  must(/decodedFrames = 0/.test(relBody) && /statsDecoded = decodedFrames/.test(relBody) &&
+    /statsQueued = queuedFrames/.test(relBody),
+    '解码器重建时统计基线要一起对齐（否则会打出负数 fps）');
   must(/sink\?\.lastStatsLine/.test(mirror),
     '小窗要把这行数字显示出来（控制条可见时）');
 
@@ -887,9 +913,11 @@ for (const f of SHARED) {
   must(/awaitFirstDown\(\)\.also \{ it\.consume\(\) \}/.test(mirror),
     '胶囊表面要消费掉触摸（否则按胶囊会顺带点到虚拟屏）');
   // 用**位置**比较而不是"字符窗口"：窗口大小取决于注释长短，注释一改就误报（栽过两次）。
+  // 必须**从胶囊自己的起点**往后找 pointerInput：确认层里也有一处相同的 consume，
+  // 它排在文件更前面，用全文 indexOf 会串到那一个上（这轮就栽了一次）。
   const iPillPad = mirror.indexOf('.padding(top = PILL_TOP_DP.dp, end = 12.dp)');
-  const iPillTouch = mirror.indexOf('.pointerInput(Unit)');
-  const iPillClip = mirror.indexOf('.clip(RoundedCornerShape(999.dp))');
+  const iPillTouch = mirror.indexOf('.pointerInput(Unit)', iPillPad);
+  const iPillClip = mirror.indexOf('.clip(RoundedCornerShape(999.dp))', iPillTouch);
   must(iPillPad >= 0 && iPillTouch > iPillPad && iPillClip > iPillTouch,
     '消费触摸的 pointerInput 要夹在外边距与 .clip 之间（消费=可见胶囊本体，不吃透明外边距）');
   const topDp = Number((mirror.match(/PILL_TOP_DP = (\d+)/) || [])[1]);

@@ -73,6 +73,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -244,10 +245,6 @@ object DisplayMirror {
     @Volatile
     private var suspended = false
 
-    /** 用户手动关掉过的那块屏（点小窗上的 ✕）。下次建屏要重新给他看，所以只在同一块屏上生效。 */
-    @Volatile
-    private var dismissed = 0
-
     /**
      * 每"亮一下"把手就 +1。
      *
@@ -256,7 +253,7 @@ object DisplayMirror {
      */
     private var pulseToken by mutableStateOf(0)
 
-    /** 首次出现的提示气泡是否正显示着（一次性，见 [KEY_DISPLAY_HINT_SHOWN]）。 */
+    /** 首次出现的提示气泡是否正显示着（一次性，见 [DshEnv.KEY_DISPLAY_HINT_SHOWN]）。 */
     private var hint by mutableStateOf(false)
 
     /** 是否正在问"要不要终止这块虚拟屏"（✕ 不再是"藏起来"，见 [terminateCurrent]）。 */
@@ -305,26 +302,18 @@ object DisplayMirror {
      * agent 用了虚拟屏（任何一次 display 调用成功）。
      *
      * 为什么不能只在 [DisplayServer.startSession] 里同步一次：agent 完全可以显式带着
-     * `--display N` 直接用**已有的**那块屏（[DshDisplay.displayOf]），那条路不建会话，
+     * `--display N` 直接用**已有的**那块屏（[DshDisplay.displayOfOrError]），那条路不建会话，
      * 于是窗口从来不出现 —— 用户看到的就是「agent 在用虚拟屏，可是什么都没弹出来」。
-     */
-    fun onAgentUse(ctx: Context) = noteUse(ctx, newRound = false)
-
-    /**
-     * 新一轮开始（建/复用会话，或开始驱动某个 App）。
      *
-     * 与 [onAgentUse] 的区别只有一个：它会忘掉"这一轮我不想看"（[dismissed]）。
-     * 屏是会被复用的，若把 ✕ 记成"这块屏永远不看"，那么用户关过一次之后，
-     * 后面每一轮 agent 操作他都再也看不到画面。
+     * 这里**没有**"用户关掉过就别再烦他"这种记忆：以前 ✕ 是"藏起来"、而且按 displayId 记住，
+     * 而屏会被复用，所以用户关过一次之后就**永远**看不到画面了。现在 ✕ 改成终止这块屏
+     * （见 [terminateCurrent]），"别挡着我"交给折叠 —— 两种意图各有各的按钮，不靠隐藏。
      */
-    fun beginRound(ctx: Context) = noteUse(ctx, newRound = true)
-
-    private fun noteUse(ctx: Context, newRound: Boolean) {
+    fun onAgentUse(ctx: Context) {
         try {
             app = ctx.applicationContext
             main.post {
                 try {
-                    if (newRound) dismissed = 0
                     pulseToken++
                     syncOnMain()
                 } catch (t: Throwable) {
@@ -346,7 +335,6 @@ object DisplayMirror {
             // 预览页正占着那个 sink：不是"不显示"，是"先让位"，等它关掉再要回来
             if (suspended) return
             val s = DisplayServer.currentSession() ?: return hide()
-            if (dismissed == s.displayId) return
             if (view != null && shownDisplayId == s.displayId) return
             show(ctx, s)
         } catch (t: Throwable) {
@@ -383,7 +371,6 @@ object DisplayMirror {
      * 动窗口的那部分交给主线程。
      */
     fun onServerGone() {
-        dismissed = 0
         try {
             main.post { hide() }
         } catch (t: Throwable) {
@@ -625,7 +612,8 @@ object DisplayMirror {
         val dm = ctx.resources.displayMetrics
         if (snapped) {
             p.y = (p.y + dy.roundToInt()).coerceIn(0, (dm.heightPixels - p.height).coerceAtLeast(0))
-            p.x = snappedX(ctx)
+            // 气泡显示期间窗口比把手宽得多，x 要按气泡那套算 —— 否则一拖就缩成屏外的一条窄缝
+            p.x = if (hint) hintX(ctx) else snappedX(ctx)
         } else {
             p.x = (p.x + dx.roundToInt()).coerceIn(0, (dm.widthPixels - p.width).coerceAtLeast(0))
             p.y = (p.y + dy.roundToInt()).coerceIn(0, (dm.heightPixels - p.height).coerceAtLeast(0))
@@ -657,8 +645,6 @@ object DisplayMirror {
         val ctx = app ?: return
         val id = shownDisplayId
         confirmTerminate = false
-        // 这轮"不想看"的记忆也一起清掉：屏都没了，"不看这块屏"就没有意义了
-        dismissed = 0
         hide()
         if (id <= 0) return
         Thread({
@@ -877,7 +863,15 @@ object DisplayMirror {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f)),
+                .background(Color.Black.copy(alpha = 0.6f))
+                // 半透明背景也要吃掉触摸：全屏态下父层的 awaitEachGesture 会把"没被消费的
+                // 单指触摸"转发进虚拟屏 —— 正在确认要不要终止它、却还在点它，说不过去。
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown().also { it.consume() }
+                        waitForUpOrCancellation()
+                    }
+                },
         )
         Column(
             modifier = Modifier
@@ -1046,12 +1040,17 @@ object DisplayMirror {
                 horizontalArrangement = if (right) Arrangement.End else Arrangement.Start,
             ) {
                 if (hint) {
+                    // weight(1f, fill = false)：文字最多占满剩余宽度，**不**把图标挤出去
+                    // （不然 208dp 里塞 文案 + 图标 + 箭头时，可能把图标量成 0 宽）
                     Text(
                         text = stringResource(R.string.dsh_display_float_hint),
                         color = Color.White,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 4.dp),
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .padding(horizontal = 4.dp),
                     )
                     Spacer(Modifier.width(4.dp))
                 }

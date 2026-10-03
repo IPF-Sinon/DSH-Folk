@@ -19,8 +19,10 @@ import java.util.Locale
  * 随便点，而不影响用户手上的操作。
  *
  * 哪个动作落在哪种屏上由调用方用 `display` 参数决定：`0` 真实屏，`<id>` 虚拟屏。
- * 不传时：截图取当前会话的虚拟屏（有的话），其余动作同理，都没有则退回 `0`。
- * 响应里始终回带 `display`，所以"我到底操作了哪块屏"是可发现的，不用猜。
+ * 不传时只认**当前会话的虚拟屏**；没有会话就回 `no_session`，**不会**退回 `0` ——
+ * 退回 `0` 等于把"点虚拟屏"悄悄变成"点用户自己的手机屏幕"，那是个没人能自查的错。
+ * 想操作真实屏就显式写 `--display 0`。响应里始终回带 `display`，所以"我到底操作了哪块屏"
+ * 是可发现的，不用猜。
  *
  * ## 为什么截图回的是路径而不是字节
  *
@@ -51,8 +53,10 @@ object DshDisplay {
         // 显式带 `--display N` 直接用已有屏那条路 —— 那条不建会话，于是以前窗口从来不出现，
         // 用户看到的就是「agent 在用虚拟屏，可什么都没弹出来」。
         // status 不算：那是问状态，不是操作。
+        // 显式 --display 0 是**真实屏幕**（提示词里写明的能力），没碰虚拟屏，别去点亮把手。
+        val realScreen = params["display"]?.toIntOrNull() == 0
         if (result.first == 200 && path.startsWith("/native/display/") &&
-            path != "/native/display/status"
+            path != "/native/display/status" && !realScreen
         ) {
             DisplayMirror.onAgentUse(ctx)
         }
@@ -217,8 +221,7 @@ object DshDisplay {
             // 记下"这块屏上现在跑的是谁"：悬浮小窗的把手要显示它的图标，
             // 用户抬眼就知道 agent 此刻在哪个 App 里操作（见 DisplayMirror）。
             DisplayServer.noteLaunchedPackage(pkg)
-            // 开始驱动某个 App = 新一轮：忘掉"这一轮不想看"，并把把手亮一下
-            DisplayMirror.beginRound(ctx)
+            DisplayMirror.onAgentUse(ctx)
             200 to JSONObject().put("ok", true).put("package", pkg).put("display", display).toString()
         }.getOrElse { e -> failure(ctx, e, "launch_failed") }
     }

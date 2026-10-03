@@ -814,7 +814,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_display_float_a11y_minimize">Minimize to the screen edge</string>
     <string name="dsh_display_float_a11y_fullscreen">Show fullscreen</string>
     <string name="dsh_display_float_a11y_exit_fullscreen">Exit fullscreen</string>
-    <string name="dsh_display_float_a11y_close">Close the window</string>
+    <string name="dsh_display_float_a11y_close">Terminate this virtual screen</string>
     <string name="dsh_display_float_hint">The agent is driving this screen · tap to watch</string>
     <string name="dsh_display_float_terminate_title">Terminate this virtual screen?</string>
     <string name="dsh_display_float_terminate_summary">The agent\'s next step will fail (it has to create a screen again). If you just want it out of the way, use "minimize to the screen edge".</string>
