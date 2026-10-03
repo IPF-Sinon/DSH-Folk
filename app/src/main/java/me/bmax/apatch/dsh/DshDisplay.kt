@@ -43,6 +43,27 @@ object DshDisplay {
         method: String,
         path: String,
         params: Map<String, String>,
+    ): Pair<Int, String> {
+        val result = dispatch(ctx, method, path, params)
+        // agent 用了虚拟屏 → 让悬浮把手出现并亮一下。
+        //
+        // 挂在**总出口**而不是各端点里：任何一条成功的 display 命令都算"它正在干活"，包括
+        // 显式带 `--display N` 直接用已有屏那条路 —— 那条不建会话，于是以前窗口从来不出现，
+        // 用户看到的就是「agent 在用虚拟屏，可什么都没弹出来」。
+        // status 不算：那是问状态，不是操作。
+        if (result.first == 200 && path.startsWith("/native/display/") &&
+            path != "/native/display/status"
+        ) {
+            DisplayMirror.onAgentUse(ctx)
+        }
+        return result
+    }
+
+    private fun dispatch(
+        ctx: Context,
+        method: String,
+        path: String,
+        params: Map<String, String>,
     ): Pair<Int, String> = when {
         method == "GET" && path == "/native/display/status" -> status(ctx)
         method == "POST" && path == "/native/display/session" -> session(ctx, params)
@@ -103,7 +124,8 @@ object DshDisplay {
      */
     private fun screenshot(ctx: Context, params: Map<String, String>): Pair<Int, String> {
         val svc = service(ctx) ?: return unavailable(ctx)
-        val display = displayOf(params)
+        val (display, err) = displayOfOrError(ctx, params)
+        if (err != null) return err
         return runCatching {
             val png = svc.requestScreenshot(display)
                 ?: return@runCatching 500 to DshNativeBridge.err(
@@ -133,18 +155,22 @@ object DshDisplay {
     }
 
     private fun tap(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val (display, err) = displayOfOrError(ctx, params)
+        if (err != null) return err
         val svc = service(ctx) ?: return unavailable(ctx)
         val x = params["x"]?.toFloatOrNull()
             ?: return badParam(ctx, "x")
         val y = params["y"]?.toFloatOrNull()
             ?: return badParam(ctx, "y")
         return runCatching {
-            svc.tap(displayOf(params), x, y)
+            svc.tap(display, x, y)
             200 to JSONObject().put("ok", true).put("x", x.toDouble()).put("y", y.toDouble()).toString()
         }.getOrElse { e -> failure(ctx, e, "tap_failed") }
     }
 
     private fun swipe(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val (display, err) = displayOfOrError(ctx, params)
+        if (err != null) return err
         val svc = service(ctx) ?: return unavailable(ctx)
         val x1 = params["x1"]?.toFloatOrNull() ?: return badParam(ctx, "x1")
         val y1 = params["y1"]?.toFloatOrNull() ?: return badParam(ctx, "y1")
@@ -152,12 +178,14 @@ object DshDisplay {
         val y2 = params["y2"]?.toFloatOrNull() ?: return badParam(ctx, "y2")
         val ms = params["duration"]?.toLongOrNull()?.coerceIn(20L, 10_000L) ?: 300L
         return runCatching {
-            svc.swipe(displayOf(params), x1, y1, x2, y2, ms)
+            svc.swipe(display, x1, y1, x2, y2, ms)
             200 to JSONObject().put("ok", true).put("durationMs", ms).toString()
         }.getOrElse { e -> failure(ctx, e, "swipe_failed") }
     }
 
     private fun key(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val (display, err) = displayOfOrError(ctx, params)
+        if (err != null) return err
         val svc = service(ctx) ?: return unavailable(ctx)
         val raw = params["key"]?.trim().orEmpty()
         if (raw.isEmpty()) return badParam(ctx, "key")
@@ -167,13 +195,15 @@ object DshDisplay {
                 "bad_key",
             )
         return runCatching {
-            svc.injectKey(displayOf(params), code)
+            svc.injectKey(display, code)
             200 to JSONObject().put("ok", true).put("keyCode", code).toString()
         }.getOrElse { e -> failure(ctx, e, "key_failed") }
     }
 
     private fun launch(ctx: Context, params: Map<String, String>): Pair<Int, String> {
         val svc = service(ctx) ?: return unavailable(ctx)
+        val (display, err) = displayOfOrError(ctx, params)
+        if (err != null) return err
         val pkg = params["package"]?.trim().orEmpty()
         if (pkg.isEmpty()) return badParam(ctx, "package")
         if (!pkg.matches(Regex("[A-Za-z0-9_.]+"))) {
@@ -183,11 +213,12 @@ object DshDisplay {
             )
         }
         return runCatching {
-            val display = displayOf(params)
             svc.launchApp(pkg, display)
             // 记下"这块屏上现在跑的是谁"：悬浮小窗的把手要显示它的图标，
             // 用户抬眼就知道 agent 此刻在哪个 App 里操作（见 DisplayMirror）。
             DisplayServer.noteLaunchedPackage(pkg)
+            // 开始驱动某个 App = 新一轮：忘掉"这一轮不想看"，并把把手亮一下
+            DisplayMirror.beginRound(ctx)
             200 to JSONObject().put("ok", true).put("package", pkg).put("display", display).toString()
         }.getOrElse { e -> failure(ctx, e, "launch_failed") }
     }
@@ -202,12 +233,38 @@ object DshDisplay {
     /**
      * 要操作哪块屏。
      *
-     * 显式传 `display` 时听它的（`0` = 真实屏幕）。不传时**优先当前会话的虚拟屏** ——
-     * agent 刚建了虚拟屏却截到真实屏幕会很困惑，而且这个错很难自查。响应里始终回带
-     * `display`，所以这一点也是可发现的。
+     * 显式传 `display` 时听它的（`0` = 真实屏幕，这是给 agent 的明确能力，详见主机提示词）。
+     * 不传时**优先当前会话的虚拟屏** —— agent 刚建了虚拟屏却截到真实屏幕会很困惑，而且这个错
+     * 很难自查。响应里始终回带 `display`，所以这一点也是可发现的。
+     *
+     * 返回 `(displayId, 错误)`：错误非 null 时调用方直接把它当结果返回。
      */
-    private fun displayOf(params: Map<String, String>): Int =
-        params["display"]?.toIntOrNull()?.takeIf { it >= 0 } ?: DisplayServer.sessionDisplay()
+    private fun displayOfOrError(ctx: Context, params: Map<String, String>): Pair<Int, Pair<Int, String>?> {
+        params["display"]?.toIntOrNull()?.takeIf { it >= 0 }?.let { id ->
+            // 用户刚在小窗上亲手终止了这块屏：说清楚，别让 agent 以为是自己参数写错了。
+            // 服务端对已销毁的 id 不报错（输入注入直接落空），所以这个判断必须由我们做。
+            if (DisplayServer.terminatedByUser(id)) {
+                return 0 to (409 to DshNativeBridge.err(
+                    DshNativeBridge.str(ctx, R.string.dsh_native_err_display_terminated),
+                    "display_terminated_by_user",
+                ))
+            }
+            return id to null
+        }
+        val current = DisplayServer.sessionDisplay()
+        if (current <= 0) {
+            // 以前这里回落到 0，而 0 是**真实屏幕** —— 会话没了之后再点一下，就变成点用户自己的
+            // 手机屏幕了，还没有任何提示。没有会话时必须报错，让 agent 去建屏或显式写 --display 0。
+            return 0 to (409 to DshNativeBridge.err(
+                DshNativeBridge.str(ctx, R.string.dsh_native_err_display_no_session),
+                "no_session",
+            ))
+        }
+        return current to null
+    }
+
+            params["display"]?.toIntOrNull()?.takeIf { it >= 0 } ?: DisplayServer.sessionDisplay()
+
 
     private fun service(ctx: Context): IDisplayService? =
         DisplayServer.start(ctx).getOrElse { e ->

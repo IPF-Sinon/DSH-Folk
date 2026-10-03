@@ -787,6 +787,8 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_native_err_torch_failed">Could not toggle the flashlight: %1$s</string>
     <string name="dsh_native_err_display_unavailable">The virtual screen service could not start. It needs a privileged channel (root / Shizuku / wireless ADB) — ask the user to check that one is enabled and ready.</string>
     <string name="dsh_native_err_display_no_frame">The virtual screen returned no image for that display</string>
+    <string name="dsh_native_err_display_terminated">The user just terminated this virtual screen from the floating window, so it no longer exists. Do not retry — ask the user whether to create a new one.</string>
+    <string name="dsh_native_err_display_no_session">There is no virtual-screen session. Omitting --display does not fall back to the real screen (that is display 0 and must be written explicitly). Create one with display session, or pass --display.</string>
     <string name="dsh_native_err_display_bad_param">The %1$s parameter is missing or invalid</string>
     <string name="dsh_native_err_display_bad_key">Unknown key: %1$s (use a numeric key code or a name such as home, back, enter)</string>
     <string name="dsh_native_err_display_bad_package">Not a valid package name: %1$s</string>
@@ -813,6 +815,11 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_display_float_a11y_fullscreen">Show fullscreen</string>
     <string name="dsh_display_float_a11y_exit_fullscreen">Exit fullscreen</string>
     <string name="dsh_display_float_a11y_close">Close the window</string>
+    <string name="dsh_display_float_hint">The agent is driving this screen · tap to watch</string>
+    <string name="dsh_display_float_terminate_title">Terminate this virtual screen?</string>
+    <string name="dsh_display_float_terminate_summary">The agent\'s next step will fail (it has to create a screen again). If you just want it out of the way, use "minimize to the screen edge".</string>
+    <string name="dsh_display_float_terminate_cancel">Keep it</string>
+    <string name="dsh_display_float_terminate_ok">Terminate</string>
     <string name="dsh_native_err_bad_url">The url could not be parsed</string>
     <string name="dsh_native_err_start_failed">Could not start the activity: %1$s</string>
     <string name="dsh_native_err_activity_background">Opening a UI needs the app in the foreground — ask the user to switch back to DSH-Folk</string>

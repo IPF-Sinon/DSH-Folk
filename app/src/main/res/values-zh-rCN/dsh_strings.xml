@@ -767,6 +767,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_err_torch_failed">切换手电筒失败：%1$s</string>
     <string name="dsh_native_err_display_unavailable">虚拟屏服务端起不来。它需要一条提权通道（root / Shizuku / 无线 ADB），请让用户确认其中一条已启用且就绪。</string>
     <string name="dsh_native_err_display_no_frame">该显示没有返回画面</string>
+    <string name="dsh_native_err_display_terminated">用户刚刚在小窗上终止了这块虚拟屏，它已经不存在了。不要重试，先问用户要不要重新建屏。</string>
+    <string name="dsh_native_err_display_no_session">当前没有虚拟屏会话。不写 --display 时不会自动落到真实屏幕上（那是 display 0，要显式写）。先建屏（display session），或显式指定 --display。</string>
     <string name="dsh_native_err_display_bad_param">%1$s 参数缺失或不合法</string>
     <string name="dsh_native_err_display_bad_key">未知按键：%1$s（可以是数字 keycode，也可以是 home / back / enter 这类名字）</string>
     <string name="dsh_native_err_display_bad_package">不是合法的包名：%1$s</string>
@@ -793,6 +795,11 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_display_float_a11y_fullscreen">全屏显示</string>
     <string name="dsh_display_float_a11y_exit_fullscreen">退出全屏</string>
     <string name="dsh_display_float_a11y_close">关闭小窗</string>
+    <string name="dsh_display_float_hint">agent 正在这块屏上操作 · 点这里看</string>
+    <string name="dsh_display_float_terminate_title">终止这块虚拟屏？</string>
+    <string name="dsh_display_float_terminate_summary">agent 的下一步会失败（它得重新建屏）。只想让它别挡着，请用「折叠到屏幕边缘」。</string>
+    <string name="dsh_display_float_terminate_cancel">先留着</string>
+    <string name="dsh_display_float_terminate_ok">终止</string>
     <string name="dsh_native_err_bad_url">url 无法解析</string>
     <string name="dsh_native_err_start_failed">拉起失败：%1$s</string>
     <string name="dsh_native_err_activity_background">拉起界面需要应用处于前台，请让用户先切回 DSH-Folk</string>

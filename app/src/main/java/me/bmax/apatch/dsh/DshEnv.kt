@@ -144,6 +144,14 @@ object DshEnv {
     const val KEY_DISPLAY_FLOAT = "display_float"
 
     /**
+     * 悬浮把手那个一次性提示气泡是否已经给过了。
+     *
+     * 默认只出把手（用户要的"不挡事"），可把手只有 40dp 宽 —— 不解释一次，用户不知道
+     * 这一小块是什么、更不知道 agent 正在里面操作。所以第一次出现时给一次文字说明，之后不再打扰。
+     */
+    const val KEY_DISPLAY_HINT_SHOWN = "display_float_hint_shown"
+
+    /**
      * 已装运行时要求的最低 App 版本（安装成功时从 metadata 落盘）。
      *
      * 必须持久化而不是每次现查：App 升级/降级后、或离线环境下，启动服务前要知道

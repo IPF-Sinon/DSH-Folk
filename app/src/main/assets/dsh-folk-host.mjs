@@ -133,6 +133,9 @@ const CAP_USAGE = {
     'dsh-native display key <home|back|enter|...> [--display N]',
     'dsh-native display launch <package> [--display N]   # start an app ON the virtual screen',
     '    display 0 is the real screen: shot/tap/swipe/key work there too, launch targets the virtual one',
+    '    omitting --display means the session screen only: with no session you get no_session, it does',
+    '    NOT fall back to the real screen; the user can terminate a screen from the floating window,',
+    '    after which calls on that id answer display_terminated_by_user (ask before creating a new one)',
   ],
   sms: [
     'dsh-native sms list [--limit N]                        # recent SMS, read only',
@@ -821,6 +824,13 @@ function render(f) {
         'went away — tell the user to refresh permissions), timeout (504, dropped), busy (429, ' +
         'another privileged command is still running), denied_by_user / request_expired. All of ' +
         'those are STATES, not transient errors: report them, do not retry in a loop.'
+    );
+    lines.push('');
+    lines.push(
+        'Virtual-screen specific states: display_terminated_by_user (the user killed that screen ' +
+          'from the floating window — it is gone, do not retry the same id, ask whether to create ' +
+          'a new one) and no_session (no virtual screen exists; omitting --display never falls ' +
+          'back to the real screen, so create one or pass --display 0 explicitly).'
     );
   }
 

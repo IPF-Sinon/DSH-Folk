@@ -13,6 +13,9 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.WindowManager
 import androidx.compose.foundation.Image
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -24,9 +27,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -38,6 +43,8 @@ import androidx.compose.material.icons.outlined.Minimize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -56,6 +63,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
@@ -133,7 +142,7 @@ object DisplayMirror {
     private const val WIDTH_FRACTION = 0.40f
 
     /** 折叠把手：露出的宽度 / 藏到屏幕外的宽度 / 高度（dp）。 */
-    private const val HANDLE_VISIBLE_DP = 36
+    private const val HANDLE_VISIBLE_DP = 40
     private const val HANDLE_OFFSCREEN_DP = 12
     private const val HANDLE_HEIGHT_DP = 48
 
@@ -143,6 +152,18 @@ object DisplayMirror {
     /** 展开态小窗的圆角 / 折叠把手的圆角。 */
     private const val EXPANDED_RADIUS_DP = 16
     private const val HANDLE_RADIUS_DP = 14
+
+    /** 首次出现的提示气泡：宽度（可见部分）与停留时长。 */
+    private const val HINT_WIDTH_DP = 208
+    private const val HINT_MS = 4200L
+
+    /** 把手的入场淡入、以及 agent 每用一次屏时的脉冲时长。 */
+    private const val APPEAR_MS = 220
+    private const val PULSE_MS = 300
+
+    /** 把手的常态底色与"正在干活"的高亮色。 */
+    private val HANDLE_BASE = Color.Gray.copy(alpha = 0.85f)
+    private val HANDLE_HOT = Color(0xFF2F6FB0).copy(alpha = 0.95f)
 
     /** 全屏常驻胶囊里一格按钮与图标的大小。 */
     private const val PILL_BUTTON_DP = 34
@@ -227,6 +248,20 @@ object DisplayMirror {
     @Volatile
     private var dismissed = 0
 
+    /**
+     * 每"亮一下"把手就 +1。
+     *
+     * agent 每用一次虚拟屏都会碰它 —— 只出把手、又不出声的话，用户根本不知道它在干活
+     * （这正是当初"agent 干了什么用户完全不知道"的老问题）。Compose 侧监听它做呼吸高亮。
+     */
+    private var pulseToken by mutableStateOf(0)
+
+    /** 首次出现的提示气泡是否正显示着（一次性，见 [KEY_DISPLAY_HINT_SHOWN]）。 */
+    private var hint by mutableStateOf(false)
+
+    /** 是否正在问"要不要终止这块虚拟屏"（✕ 不再是"藏起来"，见 [terminateCurrent]）。 */
+    private var confirmTerminate by mutableStateOf(false)
+
     // ── 开关与权限 ───────────────────────────────────────────────────────────
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
@@ -266,6 +301,41 @@ object DisplayMirror {
         }
     }
 
+    /**
+     * agent 用了虚拟屏（任何一次 display 调用成功）。
+     *
+     * 为什么不能只在 [DisplayServer.startSession] 里同步一次：agent 完全可以显式带着
+     * `--display N` 直接用**已有的**那块屏（[DshDisplay.displayOf]），那条路不建会话，
+     * 于是窗口从来不出现 —— 用户看到的就是「agent 在用虚拟屏，可是什么都没弹出来」。
+     */
+    fun onAgentUse(ctx: Context) = noteUse(ctx, newRound = false)
+
+    /**
+     * 新一轮开始（建/复用会话，或开始驱动某个 App）。
+     *
+     * 与 [onAgentUse] 的区别只有一个：它会忘掉"这一轮我不想看"（[dismissed]）。
+     * 屏是会被复用的，若把 ✕ 记成"这块屏永远不看"，那么用户关过一次之后，
+     * 后面每一轮 agent 操作他都再也看不到画面。
+     */
+    fun beginRound(ctx: Context) = noteUse(ctx, newRound = true)
+
+    private fun noteUse(ctx: Context, newRound: Boolean) {
+        try {
+            app = ctx.applicationContext
+            main.post {
+                try {
+                    if (newRound) dismissed = 0
+                    pulseToken++
+                    syncOnMain()
+                } catch (t: Throwable) {
+                    Log.w(TAG, "同步悬浮小窗失败：${t.message}", t)
+                }
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "同步悬浮小窗失败：${t.message}", t)
+        }
+    }
+
     private fun syncOnMain() {
         val ctx = app ?: return
         try {
@@ -295,6 +365,8 @@ object DisplayMirror {
         val v = view
         view = null
         params = null
+        hint = false
+        confirmTerminate = false
         if (v != null) runCatching { wm?.removeView(v) }
         // 生命周期跟着窗口一起收：Compose 在无人持有之后别再收到事件
         owner?.moveTo(androidx.lifecycle.Lifecycle.Event.ON_DESTROY)
@@ -303,8 +375,9 @@ object DisplayMirror {
     }
 
     /**
-     * 服务端停了/死了：收起小窗，并且忘掉「用户手动关过」——
-     * 下一次建屏是全新的一轮，该重新给他看。
+     * 屏没了：收起小窗，并且忘掉「用户手动关过」——
+     * 无论是服务端整个停了、还是用户只终止了某一块屏（小窗上的 ✕），
+     * 下一块屏都是全新的一轮，该重新给他看。
      *
      * 这个方法从 [DisplayServer.stop] 的后台线程被调，状态存储本身是线程安全的，
      * 动窗口的那部分交给主线程。
@@ -360,6 +433,8 @@ object DisplayMirror {
             snappedRight = true
             fullscreen = false
             controls = false
+            hint = false
+            confirmTerminate = false
 
             val dm = ctx.resources.displayMetrics
             restW = (dm.widthPixels * WIDTH_FRACTION).roundToInt().coerceAtLeast(1)
@@ -412,6 +487,24 @@ object DisplayMirror {
             windowManager.addView(cv, p)
             view = cv
             shownDisplayId = s.displayId
+
+            // 首次出现给一次提示气泡：只出把手、又不说话，用户根本不知道这一小块是什么。
+            // 只提示一次（记住看过），之后靠脉冲高亮提示"agent 又开始干活了"。
+            if (!prefs(ctx).getBoolean(DshEnv.KEY_DISPLAY_HINT_SHOWN, false)) {
+                prefs(ctx).edit().putBoolean(DshEnv.KEY_DISPLAY_HINT_SHOWN, true).apply()
+                hint = true
+                animateTo(hintWidthPx(ctx), handleHeightPx(ctx), hintX(ctx), p.y)
+                main.postDelayed(
+                    {
+                        // 用户已经自己展开/切全屏了就别再抢回来（那两处都会把 hint 清掉）
+                        if (hint) {
+                            hint = false
+                            collapse()
+                        }
+                    },
+                    HINT_MS,
+                )
+            }
         } catch (t: Throwable) {
             // 没有悬浮窗权限、厂商 ROM 拦了 OVERLAY 类型等，都会走到这里。
             // 只记日志：agent 那一次调用已经成功了，不能被这个副作用拖下水。
@@ -428,6 +521,16 @@ object DisplayMirror {
     private fun visiblePx(ctx: Context) = densityPx(ctx, HANDLE_VISIBLE_DP)
     private fun handleWidthPx(ctx: Context) = densityPx(ctx, HANDLE_VISIBLE_DP + HANDLE_OFFSCREEN_DP)
     private fun handleHeightPx(ctx: Context) = densityPx(ctx, HANDLE_HEIGHT_DP)
+
+    /** 提示气泡那一版的窗口宽度：可见部分是 [HINT_WIDTH_DP]，另有屏外的那 [HANDLE_OFFSCREEN_DP]。 */
+    private fun hintWidthPx(ctx: Context) = densityPx(ctx, HINT_WIDTH_DP + HANDLE_OFFSCREEN_DP)
+
+    /** 气泡期间的 x：可见边缘仍贴在屏幕上，多出来的宽度向屏内长。 */
+    private fun hintX(ctx: Context): Int {
+        val screenW = ctx.resources.displayMetrics.widthPixels
+        return if (snappedRight) screenW - densityPx(ctx, HINT_WIDTH_DP)
+        else -densityPx(ctx, HANDLE_OFFSCREEN_DP)
+    }
 
     private fun snappedX(ctx: Context): Int {
         val screenW = ctx.resources.displayMetrics.widthPixels
@@ -452,6 +555,9 @@ object DisplayMirror {
     private fun expand() {
         val ctx = app ?: return
         val dm = ctx.resources.displayMetrics
+        // 用户自己展开了：提示气泡与确认层都让位（气泡的收尾任务会看到 hint 已是 false 而跳过）
+        hint = false
+        confirmTerminate = false
         snapped = false
         fullscreen = false
         controls = true
@@ -463,6 +569,9 @@ object DisplayMirror {
     private fun toggleFullscreen() {
         val ctx = app ?: return
         val dm = ctx.resources.displayMetrics
+        // 用户自己动手了：提示气泡与确认层都让位
+        hint = false
+        confirmTerminate = false
         fullscreen = !fullscreen
         // 切进/切出全屏都把控制条亮出来：全屏时它是**唯一的出路**（窗口不可聚焦，
         // 收不到返回键；点画面出控制条是用户唯一能按到"退出全屏/缩小/关闭"的地方），
@@ -528,8 +637,35 @@ object DisplayMirror {
 
     /** 用户按了 ✕：记下"这一块他不想看"，同屏不再弹回来。 */
     private fun dismiss() {
-        dismissed = shownDisplayId
+        confirmTerminate = true
+        controls = false
+    }
+
+    /** 取消终止：回到刚才的样子，什么都不动。 */
+    private fun cancelTerminate() {
+        confirmTerminate = false
+    }
+
+    /**
+     * 确认终止：真的把那块虚拟屏销毁掉。
+     *
+     * 窗口先收，`destroyDisplay` 交给后台线程（binder 调用不占主线程）。
+     * 服务端进程**不动** —— 那是 [DisplayServer.stop]（全部终止）的事，这里只收这一块，
+     * agent 可能还开着别的屏，或者马上要建新的。
+     */
+    private fun terminateCurrent() {
+        val ctx = app ?: return
+        val id = shownDisplayId
+        confirmTerminate = false
+        // 这轮"不想看"的记忆也一起清掉：屏都没了，"不看这块屏"就没有意义了
+        dismissed = 0
         hide()
+        if (id <= 0) return
+        Thread({
+            // 刻意不用 return@Thread（隐式标签脆，见 DisplayServer.startPingLoop 的同一条注释）
+            val r = DisplayServer.stopSession(ctx, id)
+            if (r.isFailure) Log.w(TAG, "终止虚拟屏失败：" + r.exceptionOrNull()?.message)
+        }, "DshDisplayMirrorTerminate").start()
     }
 
     /**
@@ -707,7 +843,12 @@ object DisplayMirror {
                         }
                     },
                 )
-                if (isFullscreen) {
+                if (confirmTerminate) {
+                    // 终止确认层：✕ 的后果不小（agent 下一步会失败），所以要问一次。
+                    // 刻意**不用** Dialog —— 这是个 FLAG_NOT_FOCUSABLE 的悬浮窗，
+                    // 真 Dialog 需要 Activity token 与焦点，在这里建不出来；同一窗口里画一层最稳。
+                    TerminateConfirm()
+                } else if (isFullscreen) {
                     // 全屏：**常驻**右上角小胶囊。
                     //
                     // 为什么不能像展开态那样"点一下唤出"：全屏的单指触摸全被转发进虚拟屏了，
@@ -719,6 +860,58 @@ object DisplayMirror {
                     FullscreenPill()
                 } else if (controls) {
                     MirrorControls()
+                }
+            }
+        }
+    }
+
+    /**
+     * 终止确认层（小窗上的 ✕ 按下去之后）。
+     *
+     * 说什么很重要：用户按 ✕ 想要的多半是"别挡着我"，而这件事现在做的是**销毁那块屏**，
+     * agent 的下一步会因此失败。所以文案把后果讲明白，并给出"只是先收起来"的替代路径
+     * ——左下角那颗"折叠"图标（[MirrorControls] 里的 Minimize）才是"先别挡我"。
+     */
+    @Composable
+    private fun BoxScope.TerminateConfirm() {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.6f)),
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(horizontal = 12.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF23262B).copy(alpha = 0.96f))
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = stringResource(R.string.dsh_display_float_terminate_title),
+                color = Color.White,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.size(6.dp))
+            Text(
+                text = stringResource(R.string.dsh_display_float_terminate_summary),
+                color = Color.White.copy(alpha = 0.8f),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(Modifier.size(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(onClick = { cancelTerminate() }) {
+                    Text(stringResource(R.string.dsh_display_float_terminate_cancel), color = Color.White)
+                }
+                TextButton(onClick = { terminateCurrent() }) {
+                    Text(
+                        text = stringResource(R.string.dsh_display_float_terminate_ok),
+                        color = Color(0xFFFF8A80),
+                    )
                 }
             }
         }
@@ -815,22 +1008,53 @@ object DisplayMirror {
                 }
             }
         }
+        // 入场淡入
+        val appear = remember { Animatable(0f) }
+        LaunchedEffect(Unit) { appear.animateTo(1f, tween(APPEAR_MS)) }
+        // 脉冲：agent 每用一次虚拟屏（pulseToken 变一次）把手就亮一下。
+        // 这是"只出把手"这个选择的必要补偿 —— 不出声又不亮，用户就不知道它在干活。
+        val glow = remember { Animatable(0f) }
+        LaunchedEffect(pulseToken) {
+            if (pulseToken > 0) {
+                repeat(2) {
+                    glow.animateTo(1f, tween(PULSE_MS))
+                    glow.animateTo(0f, tween(PULSE_MS))
+                }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // 窗口是瞬时 addView 出来的，硬闪一下看不出"它刚出现"；
+                // 淡入 + 描边 + 脉冲（agent 每用一次屏就亮一下）一起让这一小块"显眼"。
+                .graphicsLayer { alpha = appear.value }
                 .clip(RoundedCornerShape(HANDLE_RADIUS_DP.dp))
-                .background(Color.Gray.copy(alpha = 0.85f)),
+                .background(lerp(HANDLE_BASE, HANDLE_HOT, glow.value))
+                .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(HANDLE_RADIUS_DP.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Row(
-                // 藏到屏幕外的那一段留白：内容要留在看得见的那一侧
-                modifier = Modifier.padding(
-                    start = if (right) 0.dp else HANDLE_OFFSCREEN_DP.dp,
-                    end = if (right) HANDLE_OFFSCREEN_DP.dp else 0.dp,
-                ),
+                // 藏到屏幕外的那一段留白：内容要留在看得见的那一侧。
+                // fillMaxSize + 端对齐：有提示气泡时，文字留在靠里侧、图标与箭头贴着可见边缘。
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        start = if (right) 0.dp else HANDLE_OFFSCREEN_DP.dp,
+                        end = if (right) HANDLE_OFFSCREEN_DP.dp else 0.dp,
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = if (right) Arrangement.End else Arrangement.Start,
             ) {
+                if (hint) {
+                    Text(
+                        text = stringResource(R.string.dsh_display_float_hint),
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
                 if (icon != null) {
                     Image(
                         bitmap = icon!!,
@@ -892,6 +1116,29 @@ object DisplayMirror {
                     imageVector = Icons.Filled.Close,
                     contentDescription = stringResource(R.string.dsh_display_float_a11y_close),
                     tint = Color.White,
+                )
+            }
+            // 视频链路的一行数字（入队/解码 fps、丢帧、队列峰值、平均等待）。
+            // 用户报"卡"的时候，这一行就是判据：解码低＝分辨率/码率压不住；丢帧多＝我们这边排队。
+            // 只在控制条可见时出现（控制条本来就会自动隐去），平时不占画面。
+            //
+            // sink.lastStatsLine 是普通 volatile，不是 Compose 状态，所以要自己轮询 ——
+            // 控制条在的这几秒里每 500ms 取一次，数字是活的而不是"打开那一刻的快照"。
+            var statsLine by remember { mutableStateOf("") }
+            LaunchedEffect(Unit) {
+                while (true) {
+                    statsLine = sink?.lastStatsLine.orEmpty()
+                    delay(500)
+                }
+            }
+            if (statsLine.isNotEmpty()) {
+                Text(
+                    text = statsLine,
+                    color = Color.White.copy(alpha = 0.75f),
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 2,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
         }

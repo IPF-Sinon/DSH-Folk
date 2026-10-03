@@ -125,6 +125,20 @@ object DisplayServer {
 
     fun sessionDisplay(): Int = session?.displayId ?: 0
 
+    /**
+     * 用户刚亲手终止掉的那块屏（小窗上的 ✕）。
+     *
+     * 为什么要记着：终止之后 agent 往往还在用同一个 displayId 调下一步，而服务端对已销毁的
+     * id **不会报错**（输入注入直接落空、截图回空），于是 agent 会以为"点成功了"。记下这个 id，
+     * 让下一次调用直接得到「用户终止了这块屏」这个**准确**原因，而不是一句 `unknown endpoint`
+     * 或者更糟的"成功"。
+     */
+    @Volatile
+    private var terminatedDisplay = 0
+
+    /** 这块屏是不是刚被用户自己终止了（见 [terminatedDisplay]）。 */
+    fun terminatedByUser(displayId: Int): Boolean = displayId > 0 && displayId == terminatedDisplay
+
     /** 当前会话（含尺寸）；null = 还没有会话。 */
     fun currentSession(): Session? = session
 
@@ -156,8 +170,10 @@ object DisplayServer {
         currentSession()
             ?.takeIf { it.width == width && it.height == height && it.dpi == dpi }
             ?.let {
-                // 复用这条路也要同步一次：用户可能刚把小窗关掉，而 agent 又开了一轮
-                DisplayMirror.sync(ctx)
+                // 复用这条路也要同步一次：用户可能刚把小窗关掉，而 agent 又开了一轮。
+                // 复用 = 新的一轮，所以走 beginRound（它会清掉"这一轮不想看"）。
+                terminatedDisplay = 0
+                DisplayMirror.beginRound(ctx)
                 return Result.success(it)
             }
         return runCatching {
@@ -165,10 +181,12 @@ object DisplayServer {
             if (id <= 0) error("服务端没能建出虚拟屏（ensureDisplay 返回 $id）")
             Session(id, width, height, dpi).also {
                 session = it
+                // 新的一轮开始了：上一轮"用户终止过哪块屏"这件事随之作废（id 会被复用）
+                terminatedDisplay = 0
                 // agent 建出一块虚拟屏 → 把画面放进悬浮小窗给用户看。
                 // 没有悬浮窗权限、或用户在设置里关掉了，这里就是空操作（见 DisplayMirror）。
                 // 预览页自己建会话时不会走到"弹窗"这一步：它进来先 suspendForPreview 让位了。
-                DisplayMirror.sync(ctx)
+                DisplayMirror.beginRound(ctx)
             }
         }
     }
@@ -472,6 +490,31 @@ object DisplayServer {
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
     // ── 停止 ─────────────────────────────────────────────────────────────────
+
+    /**
+     * 终止**一块**虚拟屏（小窗上的 ✕ 就是它），服务端本身继续活着。
+     *
+     * 与 [stop] 的区别很重要：[stop] 是 `pkill` 整个服务端进程（"全部终止"），
+     * 而这里是让用户把挡事的那一块收掉 —— agent 可能同时开着别的屏，或者马上还要建新的。
+     *
+     * 记下 [terminatedDisplay]：服务端对被销毁的 id 不会报错（输入注入直接落空），
+     * 所以要由我们自己把"用户终止了它"如实告诉 agent（见 [terminatedByUser]）。
+     */
+    fun stopSession(ctx: Context, displayId: Int): Result<Unit> = runCatching {
+        if (displayId <= 0) error("displayId 无效：$displayId")
+        val svc = service ?: error("服务端不在")
+        // Binder 调用放在锁外：它可能慢，而锁是给"启停服务端"用的
+        svc.destroyDisplay(displayId)
+        terminatedDisplay = displayId
+        synchronized(lock) {
+            if (session?.displayId == displayId) {
+                session = null
+                launchedPackage = null
+            }
+        }
+        // 窗口跟着收：这块屏没了，画面也就没了。同时忘掉"用户不想看"——下一块屏该重新给他看
+        DisplayMirror.onServerGone()
+    }
 
     /**
      * 停掉服务端。

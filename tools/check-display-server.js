@@ -648,6 +648,7 @@ for (const f of SHARED) {
   const mirror = read('app/src/main/java/me/bmax/apatch/dsh/DisplayMirror.kt');
   const ds = read('app/src/main/java/me/bmax/apatch/dsh/DisplayServer.kt');
   const preview = read('app/src/main/java/me/bmax/apatch/ui/screen/DisplayPreviewScreen.kt');
+  const env = read('app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt');
   const manifest = read('app/src/main/AndroidManifest.xml');
 
   // 悬浮窗是特殊权限，不声明就根本加不了窗口
@@ -671,10 +672,108 @@ for (const f of SHARED) {
     '摘/挂 sink 前要判服务端还在（setVideoSink 内部会 start()，能把停掉的服务端拉回来）');
 
   // 接线：建屏时弹出、停止/服务端死掉时收起
-  must(/DisplayMirror\.sync\(ctx\)/.test(ds), '建出虚拟屏后要同步小窗（agent 那条路）');
+  must(/DisplayMirror\.beginRound\(ctx\)/.test(ds),
+    '建出虚拟屏后要同步小窗（agent 那条路），并且是 beginRound —— 复用同一个 (宽,高,dpi) 的屏也要算新一轮');
   const goneCalls = (ds.match(/DisplayMirror\.onServerGone\(\)/g) || []).length;
   must(goneCalls >= 2,
     `服务端换实例的两个时机都要收小窗（用户停止 / 心跳发现已死），DisplayServer 里只找到 ${goneCalls} 处`);
+  const beginRounds = (ds.match(/DisplayMirror\.beginRound\(ctx\)/g) || []).length;
+  must(beginRounds >= 2,
+    `新建会话与复用会话两条路都要 beginRound（找到 ${beginRounds} 处）—— 只改一条的话，复用那条路上用户还是看不到画面`);
+
+  // ── 小窗要"自动出现"：任何一次 display 调用都算 agent 在用屏 ──
+  //
+  // 曾经只挂在 startSession 上，于是 agent 显式用 `--display N` 继续操作已有屏时窗口从不出现
+  // （那条路不建会话）。用户看到的就是「agent 在用虚拟屏，可什么都没弹出来」。
+  const display = read('app/src/main/java/me/bmax/apatch/dsh/DshDisplay.kt');
+  must(/fun handle\([\s\S]{0,900}?DisplayMirror\.onAgentUse\(ctx\)/.test(display),
+    'display 命令的总出口要同步小窗（含带 --display N 直接用已有屏那条路）');
+  must(/path != "\/native\/display\/status"/.test(display),
+    'status 不算"在用"（那是问状态，不该把把手点亮）');
+  must(/fun onAgentUse\(/.test(mirror) && /fun beginRound\(/.test(mirror),
+    '小窗要有 onAgentUse（每次用）与 beginRound（新一轮）两个入口');
+  // 光有 beginRound 这个名字不够：变异成"beginRound 里不重置 dismissed"照样能过 ——
+  // 而那样用户关过一次 ✕ 之后，复用的同一块屏就再也弹不出来了（这正是原来的毛病）。
+  must(/private fun noteUse\(ctx: Context, newRound: Boolean\)/.test(mirror) &&
+    /if \(newRound\) dismissed = 0/.test(mirror),
+    'beginRound 必须真的把"这一轮不想看"清掉（复用同一块屏时才会重新出现）');
+  must(/pulseToken\+\+/.test(mirror),
+    'agent 每用一次屏就让把手亮一下（只出把手又不出声，用户不知道它在干活）');
+
+  // ── 把手更显眼：入场淡入 + 脉冲 + 一次性提示气泡 ──
+  must(
+    /val appear = remember \{ Animatable\(0f\) \}/.test(mirror) &&
+      /LaunchedEffect\(Unit\) \{ appear\.animateTo\(1f, tween\(APPEAR_MS\)\) \}/.test(mirror),
+    '把手要有入场淡入（窗口是瞬时 addView 出来的，硬闪一下看不出"它刚出现"）',
+  );
+  must(/lerp\(HANDLE_BASE, HANDLE_HOT, glow\.value\)/.test(mirror),
+    '脉冲要高亮底色（缩放在窗口内会被裁掉，只能改颜色）');
+  must(/KEY_DISPLAY_HINT_SHOWN/.test(mirror) && /KEY_DISPLAY_HINT_SHOWN/.test(env),
+    '首次提示气泡要用落盘的"已提示过"标记，只提示一次');
+  must(/if \(!prefs\(ctx\)\.getBoolean\(DshEnv\.KEY_DISPLAY_HINT_SHOWN, false\)\)/.test(mirror),
+    '气泡只在第一次出现时给');
+  must(/animateTo\(hintWidthPx\(ctx\), handleHeightPx\(ctx\), hintX\(ctx\), p\.y\)/.test(mirror),
+    '气泡要真的把窗口撑开（把手窗口只有几十 dp，画不下文字）');
+  must(/if \(hint\) \{\n\s+hint = false\n\s+collapse\(\)/.test(mirror),
+    '气泡到点要自己收回去（且用户已展开时不抢回来）');
+
+  // ── ✕ 是"终止这块虚拟屏"，不是"藏起来" ──
+  const stopSessionAt = ds.indexOf('fun stopSession(');
+  // 只切到下一个函数的 KDoc 之前：否则会把后面的 stop() 一起切进来，而那里正有 pkill
+  const stopSessionEnd = stopSessionAt < 0 ? -1 : ds.indexOf('\n    /**', stopSessionAt);
+  const stopSessionBody = stopSessionAt < 0
+    ? ''
+    : ds.slice(stopSessionAt, stopSessionEnd > 0 ? stopSessionEnd : stopSessionAt + 1600);
+  must(/private fun dismiss\(\) \{\n\s+confirmTerminate = true/.test(mirror),
+    '✕ 要先问一次再终止（终止会让 agent 下一步失败）');
+  must(/fun cancelTerminate\(\)/.test(mirror), '确认层要能取消');
+  must(/DisplayServer\.stopSession\(ctx, id\)/.test(mirror),
+    '确认后才真的终止这块屏');
+  must(stopSessionAt >= 0 && /svc\.destroyDisplay\(displayId\)/.test(stopSessionBody),
+    'stopSession 要销毁**这一块**屏');
+  must(stopSessionBody.length > 0 && !/pkill/.test(stopSessionBody),
+    'stopSession 不许 pkill 整个服务端 —— 那是"全部终止"（DisplayServer.stop）的事');
+  must(/terminatedDisplay = displayId/.test(stopSessionBody),
+    '终止过的屏要记账，否则 agent 下一步会静默落空（服务端对已销毁的 id 不报错）');
+  must(!/Dialog\(/.test(mirror),
+    '确认层不能是真 Dialog：悬浮窗是 FLAG_NOT_FOCUSABLE，建不出来（要在同一窗口里画）');
+  must(/TerminateConfirm\(\)/.test(mirror), '确认层要真的画出来');
+
+  // ── 会话没了不许静默落到真实屏幕 ──
+  //
+  // displayOf() 以前回落到 sessionDisplay()，它没有会话时是 0，而 **0 是真实屏幕**：
+  // 用户终止虚拟屏之后，agent 的下一次点击就点到用户自己的手机屏幕上了，且毫无提示。
+  must(/private fun displayOfOrError\(/.test(display),
+    '取屏要能失败：没有会话时必须报错，而不是回落到真实屏幕');
+  // 断言要钉住**判定条件**，不能只查字符串存在：把 `if (current <= 0)` 改成 `if (false)`
+  // 时字符串还在，而"静默点真实屏"已经回来了（反向验证抓到的一次）。
+  must(/if \(current <= 0\) \{[\s\S]{0,400}?no_session/.test(display),
+    '没有会话时（current <= 0）必须真的回 no_session');
+  must(/display_terminated_by_user/.test(display),
+    '用户刚终止过的那块屏，要给出**准确**原因（不是 unknown displayId 让 agent 去猜参数）');
+  must(/DisplayServer\.terminatedByUser\(id\)/.test(display),
+    '显式指定 --display 时也要先查"这块是不是用户刚终止的"');
+  must(!/displayOf\(params\)/.test(display),
+    '注入输入的端点一律走 displayOfOrError（不能再用会回落成真实屏幕的那个版本）');
+
+  // ── 卡顿要能落到数字上 ──
+  const sink = read('app/src/main/java/me/bmax/apatch/dsh/DisplayVideoSink.kt');
+  must(/queuedFrames/.test(sink) && /droppedQueueFull/.test(sink) && /decodedFrames/.test(sink),
+    '解码侧要记 入队/丢帧/解码 三个计数（"卡"无法据此判断就只能靠猜）');
+  must(/waitSumMs/.test(sink) && /pendingStamps/.test(sink),
+    '要量"从进队列到喂进解码器"的等待（排队积压才是用户感到的迟滞）');
+  // 同样要钉住"真的在算"：把累加改成 `+= 0` 时名字都还在，数字却永远是 0。
+  must(/val waitedMs = \(System\.nanoTime\(\) - pendingStamps\.removeFirst\(\)\) \/ 1_000_000L/.test(sink) &&
+    /waitSumMs \+= waitedMs/.test(sink) && /waitCount\+\+/.test(sink),
+    '等待时长要真的量出来并累加（不是留个 0 的占位）');
+  must(/入队 %.1ffps，解码 %.1ffps，丢帧 %d，队列峰值 %d，平均等待 %dms/.test(sink),
+    '统计行要把五个数都印出来（入队/解码/丢帧/队列峰值/平均等待）');
+  must(/pendingStamps\.clear\(\)/.test(sink),
+    'pending 与 pendingStamps 必须同增同删（少一处就会错位）');
+  must(/STATS_MS = 2000L/.test(sink) && /lastStatsLine/.test(sink),
+    '统计行要定时更新并可读出去（界面/日志同一份数字）');
+  must(/sink\?\.lastStatsLine/.test(mirror),
+    '小窗要把这行数字显示出来（控制条可见时）');
 
   // 用户在设置里关掉开关时也要立刻收起，而不是"下次建屏才生效"
   const capsUi = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionCapsScreens.kt');

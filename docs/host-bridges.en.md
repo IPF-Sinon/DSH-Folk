@@ -123,16 +123,27 @@ Three things that are easy to get wrong:
   deliberate: otherwise an agent would lose the whole virtual screen during the ten-ish seconds it spends thinking
   between a screenshot and a tap. Precisely: **once the app dies, the server exits about 15 seconds later**; while
   the app is alive, only `display stop` (or the preview page's stop button) reclaims it immediately.
-- **The user can watch it work.** Once a virtual screen exists, a **collapsed handle** appears at the screen
-  edge showing the icon of the app the agent is driving (whoever `display launch` started). Tapping it expands
-  a small window with the live picture; it can be dragged, shown fullscreen, and in the expanded state tapping
-  the picture reveals the controls (collapse / fullscreen / close, which hide themselves after 3 seconds).
+- **The user can watch it work.** As soon as the agent starts using a virtual screen (any successful display
+  command, including the `--display N` shortcut that reuses an existing screen), a **collapsed handle** appears
+  at the screen edge showing the icon of the app the agent is driving (whoever `display launch` started).
+  Tapping it expands a small window with the live picture; it can be dragged, shown fullscreen, and in the
+  expanded state tapping the picture reveals the controls (collapse / fullscreen / terminate, which hide
+  themselves after 3 seconds) along with one line of video-link numbers (queued/decoded fps, dropped frames,
+  peak queue depth, average wait) — that line is the evidence when someone reports "it feels laggy".
   **In fullscreen the finger goes straight through**: taps and swipes are converted exactly the way the preview
   page does it (`x * display width / video width`, anything under a 24px move counts as a tap) and sent to the
   virtual display — fullscreen is the "I want to tap it myself" case. Since every single-finger touch is
   forwarded and the overlay never sees it, the fullscreen controls are an **always-on** pill in the top-right
-  (collapse / exit fullscreen / close), so there is always a way out. Forwarding happens only here (the small
-  window still just watches). On by default; it needs the "display over other apps"
+  (collapse / exit fullscreen / terminate), so there is always a way out. Forwarding happens only here (the
+  small window still just watches).
+  **The handle stays out of the way, but is no longer invisible:** it occupies 40dp at the screen edge, fades
+  in when it appears, lights up every time the agent uses the screen, and shows a one-time hint the **first**
+  time it appears (remembered in `display_float_hint_shown`). Its ✕ means **terminate this virtual screen**
+  (it asks first, because the agent's next step will fail) — after that calls on the same id answer
+  `display_terminated_by_user`, and the agent should ask whether to create a new screen. To merely get it out
+  of the way, use the collapse button. Also: omitting `--display` only ever means the current session; with no
+  session you get `no_session` and it does **not** quietly fall back to the real screen (that is `--display 0`
+  and has to be written explicitly). On by default; it needs the "display over other apps"
   special permission, granted from Settings → Permissions → the virtual screen row. It yields while the full
   preview page is open — a display has a single video sink, so two viewers would displace each other.
 - **The preview page shows the agent's screen**, not a new one: it attaches to the existing session through

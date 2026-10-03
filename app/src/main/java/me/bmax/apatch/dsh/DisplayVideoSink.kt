@@ -47,6 +47,9 @@ class DisplayVideoSink(
          */
         const val MAX_QUEUED = 4
 
+        /** 统计行多久刷一次。用户说的"卡卡的"要能落到数字上（见 [lastStatsLine]）。 */
+        const val STATS_MS = 2000L
+
         /** 一帧里有 VCL（真正的图像数据）时的 NAL 类型范围。 */
         const val VCL_MIN = 1
         const val VCL_MAX = 5
@@ -54,6 +57,15 @@ class DisplayVideoSink(
 
     private val lock = Any()
     private val pending = ArrayDeque<ByteArray>()
+
+    /**
+     * 与 [pending] 一一对应的入队时刻（nanoTime）。
+     *
+     * 用来量"帧从进队列到喂进解码器等了多久" —— 解码跟不上时，这一段等待就是用户看到的
+     * 迟滞，而且它比"丢了多少帧"更直接。两个队列必须同增同删（只有 addLast / removeFirst /
+     * clear 三个地方，都在一起改）。
+     */
+    private val pendingStamps = ArrayDeque<Long>()
     private val freeInputs = ArrayDeque<Int>()
 
     private var sps: ByteArray? = null
@@ -63,6 +75,35 @@ class DisplayVideoSink(
     private var decoder: MediaCodec? = null
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
+
+    // ── 量化的计数 ───────────────────────────────────────────────────────────
+    //
+    // 全是"够用就好"的计数，不追求精确同步：写方在 Binder 线程（onVideoFrame）与解码线程
+    // （onOutputBufferAvailable），读方在任意线程。@Volatile + 一个独立统计行，不共享状态机。
+    @Volatile
+    private var queuedFrames = 0L
+    @Volatile
+    private var droppedQueueFull = 0L
+    @Volatile
+    private var maxQueueDepth = 0
+    @Volatile
+    private var waitSumMs = 0L
+    @Volatile
+    private var waitCount = 0L
+    private var statsAtMs = 0L
+    private var statsQueued = 0L
+    private var statsDecoded = 0L
+    private var statsDropped = 0L
+
+    /**
+     * 最近一次统计行（每 [STATS_MS] 更新一次）。
+     *
+     * 界面直接读它显示：小窗展开时把这一行画在控制条下面，用户与我们都看到同一组数字 ——
+     * "卡"就不再是一句感觉，而是"解码 12fps、队列峰值 4、平均等了 90ms"这种可判断的事实。
+     */
+    @Volatile
+    var lastStatsLine: String = ""
+        private set
 
     @Volatile
     private var released = false
@@ -100,6 +141,7 @@ class DisplayVideoSink(
             handler = null
             surface = null
             pending.clear()
+            pendingStamps.clear()
             freeInputs.clear()
         }
     }
@@ -137,10 +179,54 @@ class DisplayVideoSink(
         }
         synchronized(lock) {
             if (released) return
-            while (pending.size >= MAX_QUEUED) pending.removeFirst()
+            while (pending.size >= MAX_QUEUED) {
+                pending.removeFirst()
+                pendingStamps.removeFirst()
+                droppedQueueFull++
+            }
             pending.addLast(data)
+            pendingStamps.addLast(System.nanoTime())
+            queuedFrames++
+            if (pending.size > maxQueueDepth) maxQueueDepth = pending.size
         }
         drain()
+        maybeLogStats()
+    }
+
+    /**
+     * 每 [STATS_MS] 打一行可判断的数字，并存进 [lastStatsLine] 给界面用。
+     *
+     * 这一行是这次"卡顿"调查的**唯一依据**：没有它，任何优化都只是换个地方猜。
+     * 三个数各指一类病因 —— 入队低＝服务端没在推；入队正常但解码低＝解码器跟不上（分辨率/码率）；
+     * 丢帧多或平均等待高＝我们这边排队太久（该看队列策略）。
+     */
+    private fun maybeLogStats() {
+        val now = System.currentTimeMillis()
+        if (statsAtMs == 0L) {
+            statsAtMs = now
+            statsQueued = queuedFrames
+            statsDecoded = decodedFrames
+            statsDropped = droppedQueueFull
+            return
+        }
+        val elapsed = now - statsAtMs
+        if (elapsed < STATS_MS) return
+        val secs = elapsed / 1000.0
+        val dq = queuedFrames - statsQueued
+        val dd = decodedFrames - statsDecoded
+        val ddrop = droppedQueueFull - statsDropped
+        val avgWait = if (waitCount > 0) waitSumMs / waitCount else 0
+        val line = "入队 %.1ffps，解码 %.1ffps，丢帧 %d，队列峰值 %d，平均等待 %dms（累计丢 %d）"
+            .format(dq / secs, dd / secs, ddrop, maxQueueDepth, avgWait, droppedQueueFull)
+        lastStatsLine = line
+        Log.i(TAG, "小窗视频：$line")
+        statsAtMs = now
+        statsQueued = queuedFrames
+        statsDecoded = decodedFrames
+        statsDropped = droppedQueueFull
+        maxQueueDepth = 0
+        waitSumMs = 0
+        waitCount = 0
     }
 
     /**
@@ -196,6 +282,11 @@ class DisplayVideoSink(
                 if (freeInputs.isEmpty() || pending.isEmpty()) return
                 index = freeInputs.removeFirst()
                 frame = pending.removeFirst()
+                if (pendingStamps.isNotEmpty()) {
+                    val waitedMs = (System.nanoTime() - pendingStamps.removeFirst()) / 1_000_000L
+                    waitSumMs += waitedMs
+                    waitCount++
+                }
             }
             try {
                 val buf = codec.getInputBuffer(index) ?: continue
