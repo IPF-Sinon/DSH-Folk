@@ -807,47 +807,49 @@ console.log("─ 预装/安装日志降噪");
     "peer 说明解释了「为什么缺是正常的」");
 }
 
-// ───────────────── 权限页：原生能力桥关掉时整块收起 ─────────────────
+// ───────────────── 权限页：原生能力桥关掉时必须看得出来 ─────────────────
 //
-// 这一块以前与总开关无关：关掉桥之后分项、共享存储、CLI 提示照样摊在页面上，
-// 每项按钮只是变灰。用户看到的是一堵「关着的开关墙」，读不出「现在什么都不通」，
-// 也读不出「档位还留着」。所以这里的断言是**结构性的**：那一整块必须在开关里面。
-console.log("─ 原生能力桥：关掉时详情整块收起");
+// 这一块以前与总开关无关：关掉桥之后分项、共享存储、CLI 提示照样摊在页面上，每项按钮只是变灰。
+// 用户看到的是一堵「关着的开关墙」，读不出「现在什么都不通」，也读不出「档位还留着」。
+// 原先是靠**结构性**断言守的：那一整块必须在 `if (nativeBridgeEnabled)` 里面。
+//
+// 现在能力列表搬进了次级页（权限管理 → 分类），那个结构没有了，但**意图要换个地方守住**：
+// 状态必须出现在用户看得见的那一层，而且总开关本身必须仍然够得着 —— 整块搬走最容易把它一起搬丢。
+console.log("─ 原生能力桥：关掉时的状态必须出现在看得见的那一层");
 const settingsSrc = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt", "utf8");
+const screenSrc = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt", "utf8");
+const hubSrc = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionHubScreen.kt", "utf8");
+const capsSrc = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionCapsScreens.kt", "utf8");
 {
-  const at = settingsSrc.indexOf("if (nativeBridgeEnabled) {");
-  ok(at > 0, "能力桥那一块由 nativeBridgeEnabled 包着");
-  if (at > 0) {
-    const open = settingsSrc.indexOf("{", at);
-    let depth = 0;
-    let end = -1;
-    for (let i = open; i < settingsSrc.length; i++) {
-      if (settingsSrc[i] === "{") depth++;
-      else if (settingsSrc[i] === "}") {
-        depth--;
-        if (depth === 0) { end = i; break; }
-      }
-    }
-    ok(end > open, "能按括号配对切出这块的区间");
-    const body = settingsSrc.slice(at, end);
-    ok(/for \(group in CapGroup\.entries\)/.test(body),
-      "逐项能力档位在开关里面（关着就不显示）");
-    ok(/dsh_storage_cap_title/.test(body) && /onOpenAllFilesSettings/.test(body),
-      "共享存储那一节也在里面（它同样只在桥开着时有意义）");
-    ok(/dsh_native_cli_hint/.test(body),
-      "CLI 提示也在里面（关着桥还教人怎么调 CLI，是自相矛盾的）");
-    ok(!/onNativeBridgeEnabledChange/.test(body),
-      "总开关本身不在里面 —— 关着的时候必须还能把它打开");
-  }
+  ok(!/for \(group in CapGroup\.entries\)/.test(settingsSrc),
+    "能力档位不再内联在安全页上（搬进了权限管理的次级页）");
+  ok(/item\(key = "function_permission"[\s\S]{0,400}onOpenPermissionHub/.test(settingsSrc),
+    "安全页上只剩一个「权限管理」入口");
+  ok(/onOpenPermissionHub = \{ navigator\.navigate\(PermissionHubScreenDestination\) \}/.test(screenSrc),
+    "入口真的接到权限管理页（否则用户根本到不了）");
+
+  // 总开关曾经和列表画在同一张卡片里，整块搬走时最容易把它一起搬丢 —— 而它丢了，
+  // 用户就再也没有办法开关原生能力（参数还在、也还在传，所以编译不会报错）。
+  ok(/DshNativeBridge\.setEnabled\(/.test(hubSrc) && /R\.string\.dsh_native_enable\b/.test(hubSrc),
+    "原生能力总开关搬到了权限管理页（只搬列表会把开关留在够不着的地方）");
+
+  // 状态要在可见层
+  ok(/DshNativeBridge\.enabled\(context\)/.test(hubSrc), "权限管理页读总开关状态");
+  ok(/DshNativeBridge\.Access\.OFF/.test(hubSrc), "并且数出「档位不是关」的能力项数");
+  ok(/R\.string\.dsh_native_off_hint_kept, activeCaps/.test(hubSrc) &&
+    /R\.string\.dsh_native_off_hint\b/.test(hubSrc),
+    "两种收尾说明都在权限管理页上：有档位残留时报数，没有时只说「都不通」");
+
+  // 进到分类页里也仍要知道桥是关着的
+  ok(/if \(!nativeBridgeEnabled\)/.test(capsSrc), "分类页里也保留了「桥关着」的说明");
+  ok(/R\.string\.dsh_native_off_hint_kept, activeCount/.test(capsSrc), "分类页里同样报残留条数");
+
+  // CLI 提示跟着能力列表走，而且只在桥开着时出现
+  ok(/dsh_native_cli_hint/.test(hubSrc), "CLI 提示跟着能力列表搬走了");
+  ok(!/dsh_native_cli_hint/.test(settingsSrc), "安全页上不再残留 CLI 提示");
+  ok(/if \(bridgeEnabled\) \{[\s\S]{0,300}?dsh_native_cli_hint/.test(hubSrc),
+    "CLI 提示只在桥开着时出现（关着桥还教人怎么调 CLI，是自相矛盾的）");
 }
-ok(/LaunchedEffect\(nativeBridgeEnabled\) \{[\s\S]{0,120}if \(!nativeBridgeEnabled\) capsExpanded = false/.test(settingsSrc),
-  "关掉时顺手收起详情，重新打开是收起的初始态");
-ok(/val activeCapCount = DshNativeBridge\.Cap\.entries\.count \{/.test(settingsSrc) &&
-  /a != DshNativeBridge\.Access\.OFF/.test(settingsSrc),
-  "数出「档位不是关」的能力项数");
-ok(/R\.string\.dsh_native_off_hint_kept, activeCapCount/.test(settingsSrc) &&
-  /R\.string\.dsh_native_off_hint\b/.test(settingsSrc),
-  "两种收尾说明都在：有档位残留时报数，没有时只说「都不通」");
 const nativeZh = fs.readFileSync("app/src/main/res/values-zh-rCN/dsh_strings.xml", "utf8");
 const nativeEn = fs.readFileSync("app/src/main/res/values/dsh_strings.xml", "utf8");
 ok(/dsh_native_off_hint_kept">[^<]*%1\$d/.test(nativeZh) && /dsh_native_off_hint_kept">[^<]*%1\$d/.test(nativeEn),

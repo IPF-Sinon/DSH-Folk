@@ -207,6 +207,8 @@ fun FunctionSettingsContent(
     onOpenFileAccess: () -> Unit = {},
     /** 打开虚拟屏预览（看得见画面、也能在上面点滑）。 */
     onOpenDisplayPreview: () -> Unit = {},
+    /** 打开「权限管理」：特权通道、无线 ADB 与各项原生能力都在那一页里分类 + 可搜索。 */
+    onOpenPermissionHub: () -> Unit = {},
     /** 共享存储挂载总开关（挂载 /sdcard + dsh-fs 桥，两者都受黑白名单约束）。 */
     mountEnabled: Boolean = true,
     onSetMount: (Boolean) -> Unit = {},
@@ -1054,618 +1056,88 @@ fun FunctionSettingsContent(
             }
         }
 
-        // ───────── 权限通道 ─────────
+        // ───────── 权限管理 ─────────
+        // 通道、配对与每一项原生能力都收进了这一页（分类 + 搜索）。原先它们挤在安全页上一条
+        // 越接越长的列表里，想找某一项只能一路滚到底 —— 见 PermissionHubScreen 的 KDoc。
         item(key = "function_permission", visible = permissionOnly) {
-            ExpressiveCard(flat = flat) {
+            ExpressiveCard(flat = flat, onClick = onOpenPermissionHub) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     SectionHeader(
                         icon = { Icon(Icons.Filled.Security, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_perm_section),
-                        summary = stringResource(R.string.dsh_perm_summary),
+                        title = stringResource(R.string.dsh_perm_hub_title),
+                        summary = stringResource(R.string.dsh_perm_hub_summary),
                     )
-                    var permissionExpanded by remember { mutableStateOf(false) }
-                    TextButton(onClick = { permissionExpanded = !permissionExpanded }) {
-                        Icon(
-                            if (permissionExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                            contentDescription = null,
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(if (permissionExpanded) R.string.dsh_section_collapse else R.string.dsh_section_expand))
-                    }
-                    AnimatedVisibility(visible = permissionExpanded) {
-                        Column {
-                    Spacer(Modifier.height(12.dp))
-
-                    Text(
-                        text = stringResource(
-                            R.string.dsh_perm_current,
-                            perm.label(LocalContext.current),
-                        ),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(
-                            R.string.dsh_perm_root_detail,
-                            yesNo(perm.suPresent),
-                            perm.rootProvider.ifEmpty { "-" },
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (perm.shizukuGranted) {
-                        val shizukuUidLabel = when (perm.shizukuUid) {
-                            0 -> stringResource(R.string.dsh_perm_shizuku_uid_root)
-                            2000 -> stringResource(R.string.dsh_perm_shizuku_uid_shell)
-                            else -> stringResource(R.string.dsh_perm_shizuku_uid_other, perm.shizukuUid)
-                        }
-                        Text(
-                            text = stringResource(
-                                R.string.dsh_perm_shizuku_detail_uid,
-                                yesNo(perm.shizukuRunning),
-                                yesNo(perm.shizukuGranted),
-                                shizukuUidLabel,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (perm.channel == PermissionManager.Channel.NONE) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = if (!perm.elevationEnabled &&
-                                (perm.suPresent || perm.shizukuRunning || perm.adbPaired)
-                            ) {
-                                // 有通道可用、只是用户没启用：别让他以为设备不支持
-                                stringResource(R.string.dsh_perm_detected_not_enabled)
-                            } else {
-                                stringResource(R.string.dsh_perm_none_hint)
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(R.string.dsh_perm_prefer),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    RuntimeOption(
-                        selected = permPrefName == PermissionManager.PREF_OFF,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_perm_prefer_off),
-                        summary = stringResource(R.string.dsh_perm_prefer_off_desc),
-                        onSelect = { onPermPrefChange(PermissionManager.PREF_OFF) },
-                    )
-                    RuntimeOption(
-                        selected = permPrefName == PermissionManager.PREF_AUTO,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_perm_prefer_auto),
-                        summary = stringResource(R.string.dsh_perm_prefer_auto_desc),
-                        onSelect = { onPermPrefChange(PermissionManager.PREF_AUTO) },
-                    )
-                    RuntimeOption(
-                        selected = permPrefName == PermissionManager.PREF_ROOT,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_perm_root),
-                        summary = permOptionSummary(R.string.dsh_perm_prefer_root_desc, perm.rootVerified),
-                        onSelect = { onPermPrefChange(PermissionManager.PREF_ROOT) },
-                    )
-                    RuntimeOption(
-                        selected = permPrefName == PermissionManager.PREF_SHIZUKU,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_perm_shizuku),
-                        summary = permOptionSummary(R.string.dsh_perm_prefer_shizuku_desc, perm.shizukuGranted),
-                        onSelect = { onPermPrefChange(PermissionManager.PREF_SHIZUKU) },
-                    )
-                    RuntimeOption(
-                        selected = permPrefName == PermissionManager.PREF_ADB,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_perm_adb),
-                        summary = permOptionSummary(R.string.dsh_perm_prefer_adb_desc, perm.adbPaired),
-                        onSelect = { onPermPrefChange(PermissionManager.PREF_ADB) },
-                    )
-
-                    if (perm.preferenceFellBack) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = stringResource(
-                                R.string.dsh_perm_fell_back,
-                                perm.label(LocalContext.current),
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.tertiary,
-                        )
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    // 严格程度只管「要不要问」，与选哪条通道是两件事，所以排在同一张卡里、
-                    // 通道选择之后：用户先决定用哪条通道，再决定它有多自由。
-                    Text(
-                        text = stringResource(R.string.dsh_priv_strictness_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.dsh_priv_strictness_summary),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    RuntimeOption(
-                        selected = privStrictness == PrivStrictness.STRICT,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_priv_strict),
-                        summary = stringResource(R.string.dsh_priv_strict_desc),
-                        onSelect = { onPrivStrictnessChange(PrivStrictness.STRICT) },
-                    )
-                    RuntimeOption(
-                        selected = privStrictness == PrivStrictness.NORMAL,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_priv_normal),
-                        summary = stringResource(R.string.dsh_priv_normal_desc),
-                        onSelect = { onPrivStrictnessChange(PrivStrictness.NORMAL) },
-                    )
-                    RuntimeOption(
-                        selected = privStrictness == PrivStrictness.LOOSE,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_priv_loose),
-                        summary = stringResource(R.string.dsh_priv_loose_desc),
-                        onSelect = { onPrivStrictnessChange(PrivStrictness.LOOSE) },
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = onRefreshPerm) {
-                            Text(stringResource(R.string.dsh_perm_refresh))
-                        }
-                        AnimatedVisibility(visible = perm.shizukuRunning && !perm.shizukuGranted) {
-                            Button(onClick = onRequestShizuku) {
-                                Text(stringResource(R.string.dsh_perm_request_shizuku))
-                            }
-                        }
-                    }
-                    }
                 }
             }
         }
-        }
 
-        // ───────── 原生能力桥 ─────────
-        item(key = "function_native_bridge", visible = permissionOnly) {
+        // ───────── 共享存储（挂载 /sdcard） ─────────
+        // 它从来不是"原生能力"的一部分：原生能力是"拿到身份后能动什么"，而它管的是容器里
+        // 有没有 /sdcard。原来只是凑巧画在那张卡片里，还被桥的总开关一起藏了起来 ——
+        // 桥关着它照样有用（挂载层与 dsh-fs 桥都不经过原生能力桥），所以现在独立成卡。
+        item(key = "function_storage_mount", visible = permissionOnly) {
             ExpressiveCard(flat = flat) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.NotificationsActive, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_native_section),
-                        summary = stringResource(R.string.dsh_native_summary),
-                    )
-                    Spacer(Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
+                    // ── 共享存储（挂载 /sdcard） ──
+                    // 一个开关同时管两件事：容器 bind 挂载 + dsh-fs 桥（两者都受黑白名单约束）。
+                    // 关＝容器彻底看不到 /sdcard。长按整行进黑白名单设置。改动需重启 dsh 才在
+                    // 挂载层生效（dsh-fs 侧立即生效）。
+                    // 长按进黑白名单要覆盖**整张卡片**：combinedClickable 原来只挂在标题 Row 上，
+                    // 而 `if (mountEnabled)` 里那几行（已授权提示 / 重启提示）在 Row 之外，
+                    // 于是卡片看着一大块、实际只有标题那一小块能长按。把 clickable 提到外层
+                    // Column，卡片范围内（按钮自身除外）都能长按。
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = { onSetMount(!mountEnabled) },
+                                onLongClick = onOpenFileAccess,
+                            ),
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.dsh_native_enable),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = stringResource(R.string.dsh_native_enable_summary),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        ExpressiveSwitch(
-                            checked = nativeBridgeEnabled,
-                            onCheckedChange = onNativeBridgeEnabledChange,
-                        )
-                    }
-
-                    // 总开关关着时这一整块都不显示：分项、共享存储、CLI 提示摊在那里，
-                    // 只会让人以为「关了也还有东西在跑」。档位本身仍留在 prefs 里，重新打开
-                    // 开关即恢复 —— 这件事由下面的 offHint 说清楚，不靠用户自己猜。
-                    var capsExpanded by remember { mutableStateOf(false) }
-                    // 关掉时顺手收起详情，下次打开是收起的初始态
-                    LaunchedEffect(nativeBridgeEnabled) {
-                        if (!nativeBridgeEnabled) capsExpanded = false
-                    }
-                    // 这一项统计给 offHint 用：关了开关之后还有多少项「档位不是关」，
-                    // 它们此刻立即失效、但值还在 —— 不说等于把状态藏起来。
-                    val activeCapCount = DshNativeBridge.Cap.entries.count {
-                        val a = nativeAccess[it]
-                        a != null && a != DshNativeBridge.Access.OFF
-                    }
-                    if (nativeBridgeEnabled) {
-                        TextButton(onClick = { capsExpanded = !capsExpanded }) {
-                            Icon(
-                                if (capsExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                contentDescription = null,
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(stringResource(if (capsExpanded) R.string.dsh_section_collapse else R.string.dsh_section_expand))
-                        }
-                        AnimatedVisibility(visible = capsExpanded) {
-                            Column {
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_native_caps),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        // 十几项平铺成一列会变成一堵开关墙，所以按「这项能力动的是什么」分组。
-                        // 分组只是视觉的：开关语义、prefs 存储、协议 id 全都不变。
-                        for (group in CapGroup.entries) {
-                            val caps = group.caps
-                            if (caps.isEmpty()) continue
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = stringResource(group.titleRes),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            for (cap in caps) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            text = stringResource(nativeCapTitleRes(cap)),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                        Text(
-                                            text = stringResource(nativeCapSummaryRes(cap)),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    Spacer(Modifier.width(8.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        val modes = DshNativeBridge.accessOptions(cap)
-                                        for (mode in modes) {
-                                            OutlinedButton(
-                                                onClick = { onNativeAccessChange(cap, mode) },
-                                                enabled = nativeBridgeEnabled,
-                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-                                            ) {
-                                                Text(
-                                                    stringResource(
-                                                        when (mode) {
-                                                            DshNativeBridge.Access.OFF -> R.string.dsh_native_access_off
-                                                            DshNativeBridge.Access.WRITE -> accessLabelRes(cap, mode)
-                                                            DshNativeBridge.Access.READ -> accessLabelRes(cap, mode)
-                                                            DshNativeBridge.Access.CONTROL -> R.string.dsh_native_access_control
-                                                            DshNativeBridge.Access.READ_WRITE -> accessLabelRes(cap, mode)
-                                                        }
-                                                    ),
-                                                    color = if (nativeAccess[cap] == mode) MaterialTheme.colorScheme.primary
-                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                                if (cap == DshNativeBridge.Cap.DISPLAY) {
-                                    // 预览界面走的是和 agent 工具面**完全同一条路**（同一个服务端、
-                                    // 同一份会话状态），所以它既是有画面可看的地方，也是排障口：
-                                    // agent 那边"截得到图却点不动"时，打开这里就能分清是画面没来、
-                                    // 还是输入没进去。没有独立提权窗口，所以要开就走这一条。
-                                    TextButton(onClick = onOpenDisplayPreview) {
-                                        Text(stringResource(R.string.dsh_display_preview_open))
-                                    }
-                                }
-                                val on = nativeBridgeEnabled && nativeAccess[cap] != DshNativeBridge.Access.OFF
-                                if (on && cap !in capsWithPermission) {
-                                    if (cap == DshNativeBridge.Cap.SHELL) {
-                                        // 特权命令缺的不是 Android 权限 —— 没有任何框可弹、也没有系统页
-                                        // 可跳（解决办法在本页的「权限通道」那一段），所以是一行说明而
-                                        // 不是一个按下去什么都不发生的按钮。
-                                        Text(
-                                            text = stringResource(capPermissionHintRes(cap)),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    } else {
-                                        TextButton(onClick = { onRequestCapPermission(cap) }) {
-                                            Text(stringResource(capPermissionHintRes(cap)))
-                                        }
-                                    }
-                                } else if (on && cap == DshNativeBridge.Cap.LOCATION &&
-                                    coarseLocationOnly
-                                ) {
-                                    // 大致位置**不是**缺权限（很多人就想只给这个），所以是一行
-                                    // 说明而不是「去授权」按钮：点了也只会再弹一次同样的框。
-                                    Text(
-                                        text = stringResource(R.string.dsh_native_precise_location),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-
-                        // ── 共享存储（挂载 /sdcard） ──
-                        // 一个开关同时管两件事：容器 bind 挂载 + dsh-fs 桥（两者都受黑白名单约束）。
-                        // 关＝容器彻底看不到 /sdcard。长按整行进黑白名单设置。改动需重启 dsh 才在
-                        // 挂载层生效（dsh-fs 侧立即生效）。
-                        HorizontalDivider(Modifier.padding(vertical = 12.dp))
-                        // 长按进黑白名单要覆盖**整张卡片**：combinedClickable 原来只挂在标题 Row 上，
-                        // 而 `if (mountEnabled)` 里那几行（已授权提示 / 重启提示）在 Row 之外，
-                        // 于是卡片看着一大块、实际只有标题那一小块能长按。把 clickable 提到外层
-                        // Column，卡片范围内（按钮自身除外）都能长按。
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .combinedClickable(
-                                    onClick = { onSetMount(!mountEnabled) },
-                                    onLongClick = onOpenFileAccess,
-                                ),
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(R.string.dsh_storage_cap_title),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.dsh_storage_mount_hint),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                ExpressiveSwitch(
-                                    checked = mountEnabled,
-                                    onCheckedChange = onSetMount,
-                                )
-                            }
-                            if (mountEnabled) {
-                                if (allFilesGranted) {
-                                    Text(
-                                        text = stringResource(R.string.dsh_storage_granted),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                } else {
-                                    TextButton(onClick = onOpenAllFilesSettings) {
-                                        Text(stringResource(R.string.dsh_storage_need_perm))
-                                    }
-                                }
+                            Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = stringResource(R.string.dsh_storage_restart_hint),
+                                    text = stringResource(R.string.dsh_storage_cap_title),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    text = stringResource(R.string.dsh_storage_mount_hint),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            Spacer(Modifier.width(8.dp))
+                            ExpressiveSwitch(
+                                checked = mountEnabled,
+                                onCheckedChange = onSetMount,
+                            )
                         }
-
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_native_cli_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                            }
-                        }
-                    } else {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = if (activeCapCount > 0) {
-                                stringResource(R.string.dsh_native_off_hint_kept, activeCapCount)
+                        if (mountEnabled) {
+                            if (allFilesGranted) {
+                                Text(
+                                    text = stringResource(R.string.dsh_storage_granted),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             } else {
-                                stringResource(R.string.dsh_native_off_hint)
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-
-        // ───────── 无线 ADB 配对 ─────────
-        item(key = "function_wireless_adb", visible = permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.Wifi, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_adb_section),
-                        summary = stringResource(R.string.dsh_adb_summary),
-                    )
-                    Spacer(Modifier.height(12.dp))
-
-                    Text(
-                        text = stringResource(
-                            if (perm.adbPaired) R.string.dsh_adb_paired
-                            else R.string.dsh_adb_not_paired
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
-
-                    if (!runtimeInstalled) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_adb_needs_runtime),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = adbPairCode,
-                        onValueChange = onAdbPairCodeChange,
-                        label = { Text(stringResource(R.string.dsh_adb_pair_code)) },
-                        singleLine = true,
-                        enabled = runtimeInstalled && !adbBusy,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = adbPairPort,
-                            onValueChange = onAdbPairPortChange,
-                            label = { Text(stringResource(R.string.dsh_adb_pair_port)) },
-                            singleLine = true,
-                            enabled = runtimeInstalled && !adbBusy,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                        )
-                        OutlinedTextField(
-                            value = adbConnectPort,
-                            onValueChange = onAdbConnectPortChange,
-                            label = { Text(stringResource(R.string.dsh_adb_connect_port)) },
-                            singleLine = true,
-                            enabled = runtimeInstalled && !adbBusy,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = adbHost,
-                        onValueChange = onAdbHostChange,
-                        label = { Text(stringResource(R.string.dsh_adb_host)) },
-                        singleLine = true,
-                        enabled = runtimeInstalled && !adbBusy,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-                    var disconnectConfirming by remember { mutableStateOf(false) }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Button(
-                            onClick = onPair,
-                            enabled = runtimeInstalled && !adbBusy && adbPairCode.isNotBlank(),
-                        ) {
-                            Text(stringResource(R.string.dsh_adb_pair_with_deps))
-                        }
-                        if (perm.adbPaired) {
-                            OutlinedButton(
-                                onClick = { disconnectConfirming = true },
-                                enabled = !adbBusy,
-                            ) {
-                                Text(stringResource(R.string.dsh_adb_disconnect))
+                                TextButton(onClick = onOpenAllFilesSettings) {
+                                    Text(stringResource(R.string.dsh_storage_need_perm))
+                                }
                             }
-                        }
-                        TextButton(onClick = onOpenDevSettings) {
-                            Text(stringResource(R.string.dsh_adb_open_devsettings))
-                        }
-                        if (adbBusy) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        }
-                    }
-                    if (disconnectConfirming) {
-                        AlertDialog(
-                            onDismissRequest = { disconnectConfirming = false },
-                            title = { Text(stringResource(R.string.dsh_adb_disconnect_confirm_title)) },
-                            text = { Text(stringResource(R.string.dsh_adb_disconnect_confirm_text)) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    disconnectConfirming = false
-                                    onDisconnectAdb()
-                                }) {
-                                    Text(stringResource(R.string.dsh_adb_disconnect))
-                                }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { disconnectConfirming = false }) {
-                                    Text(stringResource(android.R.string.cancel))
-                                }
-                            },
-                        )
-                    }
-
-                    // 写操作授权：adb-shell.py 读 rootfs 里的标记文件，只读命令不受影响
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
                             Text(
-                                text = stringResource(R.string.dsh_adb_shell_allow),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = stringResource(R.string.dsh_adb_shell_allow_summary),
+                                text = stringResource(R.string.dsh_storage_restart_hint),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Spacer(Modifier.width(8.dp))
-                        ExpressiveSwitch(
-                            checked = adbShellAllowed,
-                            onCheckedChange = onAdbShellAllowedChange,
-                            enabled = runtimeInstalled && !adbBusy,
-                        )
-                    }
-
-                    // root shell：只有手机本身已 root 才有意义，所以顺带用权限通道判断
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.dsh_adb_root_allow),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = stringResource(R.string.dsh_adb_root_allow_summary),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        ExpressiveSwitch(
-                            checked = adbRootAllowed,
-                            onCheckedChange = onAdbRootAllowedChange,
-                            enabled = runtimeInstalled && !adbBusy && (perm.suPresent || perm.shizukuIsRoot),
-                        )
-                    }
-
-                    if (adbOutput.isNotBlank()) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.dsh_output),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = adbOutput,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 220.dp)
-                                .verticalScroll(rememberScrollState()),
-                        )
                     }
                 }
             }
         }
+
     }
 
     if (showCleanStorageDialog.value) CleanStorageDialog(showCleanStorageDialog)

@@ -121,7 +121,24 @@
     <string name="dsh_run_mode_current">当前：%1$s</string>
     <string name="dsh_run_mode_restart_hint">下次启动 harness 时生效。</string>
 
-    <string name="dsh_perm_section">权限通道</string>
+                <string name="dsh_perm_request_shizuku_failed">请求 Shizuku 授权失败</string>
+        <string name="dsh_adb_pair_failed">配对失败</string>
+<string name="dsh_perm_hub_title">权限管理</string>
+    <string name="dsh_perm_hub_summary">特权通道、无线 ADB 与 agent 能用的每一项原生能力，都收在这里</string>
+    <string name="dsh_perm_hub_search">搜索权限或能力</string>
+    <string name="dsh_perm_hub_empty">没有匹配项</string>
+    <string name="dsh_perm_cat_privileged">特权通道</string>
+    <string name="dsh_perm_cat_privileged_summary">当前生效：%1$s</string>
+    <string name="dsh_perm_cat_wireless_adb">无线 ADB 特权</string>
+    <string name="dsh_perm_hub_cat_native">原生能力</string>
+    <string name="dsh_perm_access_sheet_title">允许的范围</string>
+    <string name="dsh_perm_access_off_desc">完全不允许。agent 的这类调用会被直接拒绝。</string>
+    <string name="dsh_perm_access_read_desc">只允许看，不允许改动。</string>
+    <string name="dsh_perm_access_write_desc">只允许改动，不允许读取。摄像头这类能力就是这个形状。</string>
+    <string name="dsh_perm_access_rw_desc">既允许看，也允许改。</string>
+    <string name="dsh_perm_access_control_desc">允许它按你的名义操作这台设备的状态。</string>
+    <string name="dsh_perm_caps_count">共 %1$d 项</string>
+<string name="dsh_perm_section">权限通道</string>
     <string name="dsh_perm_summary">DSH-Folk 不打内核补丁，只探测并复用设备上已有的提权途径。</string>
     <string name="dsh_perm_current">当前生效：%1$s</string>
     <string name="dsh_priv_strictness_title">特权严格程度</string>

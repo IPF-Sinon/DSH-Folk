@@ -153,11 +153,16 @@ object SettingsRegistry {
             add(SettingEntry("function_clean_storage", R.string.settings_clean_storage, R.string.settings_clean_storage_summary, SettingCategory.FUNCTION))
 
             // === Permissions ===
-            add(SettingEntry("function_permission", R.string.dsh_perm_section, R.string.dsh_perm_summary, SettingCategory.SECURITY))
-            // 严格程度就在权限通道那张卡里，但用户会按「严格」「宽松」这些词去搜 —— 单列一条
+            // 通道、配对与原生能力现在都收在「权限管理」这一个入口后面，安全页上只剩那一张卡片。
+            // 所以下面四条**都指向同一个 item key**：全局搜索命中哪一条都落到那张卡片上，
+            // 再用页内的搜索框找到具体那一项 —— 这样"搜到却跳不过去"至少不会发生。
+            add(SettingEntry("function_permission", R.string.dsh_perm_hub_title, R.string.dsh_perm_hub_summary, SettingCategory.SECURITY))
+            // 严格程度就在特权通道那一页里，但用户会按「严格」「宽松」这些词去搜 —— 单列一条
             add(SettingEntry("function_permission", R.string.dsh_priv_strictness_title, R.string.dsh_priv_strictness_summary, SettingCategory.SECURITY))
-            add(SettingEntry("function_native_bridge", R.string.dsh_native_section, R.string.dsh_native_summary, SettingCategory.SECURITY))
-            add(SettingEntry("function_wireless_adb", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.SECURITY))
+            add(SettingEntry("function_permission", R.string.dsh_native_section, R.string.dsh_native_summary, SettingCategory.SECURITY))
+            add(SettingEntry("function_permission", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.SECURITY))
+            // 共享存储挂在安全页上单独一张卡（不属于原生能力，见 FunctionSettings.kt 的说明）
+            add(SettingEntry("function_storage_mount", R.string.dsh_storage_cap_title, R.string.dsh_storage_mount_hint, SettingCategory.SECURITY))
         }
     }
 

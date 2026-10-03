@@ -138,7 +138,24 @@
     <string name="dsh_run_mode_current">Current: %1$s</string>
     <string name="dsh_run_mode_restart_hint">Takes effect the next time the harness starts.</string>
 
-    <string name="dsh_perm_section">Permission channel</string>
+                <string name="dsh_perm_request_shizuku_failed">Could not request Shizuku permission</string>
+        <string name="dsh_adb_pair_failed">Pairing failed</string>
+<string name="dsh_perm_hub_title">Permissions</string>
+    <string name="dsh_perm_hub_summary">The privileged channel, wireless ADB, and every native capability the agent may borrow</string>
+    <string name="dsh_perm_hub_search">Search permissions or capabilities</string>
+    <string name="dsh_perm_hub_empty">Nothing matches</string>
+    <string name="dsh_perm_cat_privileged">Privileged channel</string>
+    <string name="dsh_perm_cat_privileged_summary">Active now: %1$s</string>
+    <string name="dsh_perm_cat_wireless_adb">Wireless ADB privileges</string>
+    <string name="dsh_perm_hub_cat_native">Native capabilities</string>
+    <string name="dsh_perm_access_sheet_title">Allowed scope</string>
+    <string name="dsh_perm_access_off_desc">Not allowed at all. Calls of this kind are refused outright.</string>
+    <string name="dsh_perm_access_read_desc">Read only — nothing may be changed.</string>
+    <string name="dsh_perm_access_write_desc">Write only — nothing may be read. Cameras have this shape.</string>
+    <string name="dsh_perm_access_rw_desc">Both reading and writing are allowed.</string>
+    <string name="dsh_perm_access_control_desc">It may drive this device’s state on your behalf.</string>
+    <string name="dsh_perm_caps_count">%1$d capabilities</string>
+<string name="dsh_perm_section">Permission channel</string>
     <string name="dsh_perm_summary">DSH-Folk does not patch the kernel. It detects and reuses what the device already has.</string>
     <string name="dsh_perm_current">In effect: %1$s</string>
     <string name="dsh_priv_strictness_title">Privilege strictness</string>
