@@ -3,14 +3,14 @@ package me.bmax.apatch.dsh
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.PixelFormat
+import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
 import android.view.Surface
-import android.view.SurfaceHolder
-import android.view.SurfaceView
+import android.view.TextureView
 import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -19,11 +19,13 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -32,9 +34,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.outlined.Minimize
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -49,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
@@ -132,6 +137,10 @@ object DisplayMirror {
     /** 把手里那个 App 图标的大小。 */
     private const val HANDLE_ICON_DP = 30
 
+    /** 展开态小窗的圆角 / 折叠把手的圆角。 */
+    private const val EXPANDED_RADIUS_DP = 16
+    private const val HANDLE_RADIUS_DP = 14
+
     /** 折叠 / 展开 / 全屏的动画时长。 */
     private const val SNAP_MS = 300L
 
@@ -153,6 +162,9 @@ object DisplayMirror {
 
     /** 小窗里挂的是哪块屏。0 = 没显示。 */
     private var shownDisplayId = 0
+
+    /** 第一帧是否已经记过日志（真机黑屏时用来区分"没帧"与"没合成"）。 */
+    private var firstFrameLogged = false
 
     /** 展开前的几何：从贴边折叠还原时用。 */
     private var restX = 0
@@ -309,6 +321,7 @@ object DisplayMirror {
             appPackage = DisplayServer.currentAppPackage()
             videoWidth = s.width.coerceAtLeast(1)
             videoHeight = s.height.coerceAtLeast(1)
+            firstFrameLogged = false
             snapped = true
             snappedRight = true
             fullscreen = false
@@ -417,7 +430,10 @@ object DisplayMirror {
         val ctx = app ?: return
         val dm = ctx.resources.displayMetrics
         fullscreen = !fullscreen
-        controls = false
+        // 切进/切出全屏都把控制条亮出来：全屏时它是**唯一的出路**（窗口不可聚焦，
+        // 收不到返回键；点画面出控制条是用户唯一能按到"退出全屏/缩小/关闭"的地方），
+        // 不能让他进去以后先看到一块没有任何按钮的黑屏。3 秒后由自动隐藏收走。
+        controls = true
         if (fullscreen) {
             animateTo(dm.widthPixels, dm.heightPixels, 0, 0)
         } else {
@@ -519,7 +535,7 @@ object DisplayMirror {
                             moveBy(amount.x, amount.y)
                         }
                         !isFullscreen -> detectDragGestures(
-                            onDragStart = { controls = true },
+                            onDragStart = { controls = false },
                             onDrag = { change, amount ->
                                 change.consume()
                                 moveBy(amount.x, amount.y)
@@ -532,33 +548,57 @@ object DisplayMirror {
                         isSnapped -> Modifier.pointerInput(isSnapped) {
                             detectTapGestures { expand() }
                         }
-                        !isFullscreen -> Modifier.pointerInput(isSnapped, isFullscreen) {
-                            detectTapGestures { controls = true }
+                        // 展开态**与全屏态**都点一下切换控制条。
+                        //
+                        // 全屏这一支以前漏了（写成 `else -> Modifier`），后果很重：进了全屏后
+                        // 控制条被隐去、再点画面什么也不出，于是整块屏幕被盖住、退不出去也关不掉，
+                        // 用户只能重启 App。全屏态**必须**保留这条出路，它是唯一的出路。
+                        else -> Modifier.pointerInput(isSnapped, isFullscreen) {
+                            detectTapGestures { controls = !controls }
                         }
-                        else -> Modifier
                     }
                 ),
         ) {
             if (isSnapped) {
                 MirrorHandle()
             } else {
+                // 圆角必须靠 TextureView：SurfaceView 的画面是**独立图层**（SurfaceFlinger 合成），
+                // 父级的裁剪对它无效 —— 用 SurfaceView 时四角永远是直角（用户反馈"边角太锐利"）。
+                // TextureView 画在普通视图树里，裁剪/圆角/透明度都认。
+                // 全屏时不裁（贴屏幕边缘，圆角反而会切掉画面）。
+                val shape = if (isFullscreen) RectangleShape else RoundedCornerShape(EXPANDED_RADIUS_DP.dp)
                 AndroidView(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(shape),
                     factory = { c ->
-                        SurfaceView(c).apply {
-                            holder.addCallback(object : SurfaceHolder.Callback {
-                                override fun surfaceCreated(h: SurfaceHolder) {
-                                    surface = h.surface
+                        TextureView(c).apply {
+                            surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                                override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
+                                    surface = Surface(st)
                                 }
 
-                                override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, hh: Int) = Unit
+                                override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) = Unit
 
-                                override fun surfaceDestroyed(h: SurfaceHolder) {
+                                override fun onSurfaceTextureUpdated(st: SurfaceTexture) {
+                                    // 第一帧到达只记一次：真机上"黑屏"要能区分"没帧"与"没合成"。
+                                    // 这个回调只给 st，拿不到宽高 —— 用虚拟屏自己的分辨率记。
+                                    if (!firstFrameLogged) {
+                                        firstFrameLogged = true
+                                        Log.i(TAG, "小窗收到第一帧（虚拟屏 ${videoWidth}x${videoHeight}）")
+                                    }
+                                }
+
+                                override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
                                     // Surface 没了还继续解会直接报错
                                     surface = null
-                                    detachSink()
+                                    // 返回 false = 这个 SurfaceTexture 由我们自己释放。**必须**这样：
+                                    // 返回 true 会让上层当场释放它，而解码器是异步停用的，可能还在往
+                                    // 这个已释放的目标写帧。真释放放在 detach 线程、解码器停用之后。
+                                    detachSink(st)
+                                    return false
                                 }
-                            })
+                            }
                         }
                     },
                 )
@@ -592,7 +632,7 @@ object DisplayMirror {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(HANDLE_RADIUS_DP.dp))
                 .background(Color.Gray.copy(alpha = 0.85f)),
             contentAlignment = Alignment.Center,
         ) {
@@ -623,7 +663,16 @@ object DisplayMirror {
         }
     }
 
-    /** 展开态的控制按钮：点画面才出现，3 秒后自己隐去。 */
+    /**
+     * 控制条：点画面才出现，3 秒后自己隐去。
+     *
+     * 做成**带文字**的横向胶囊，而不是三个裸图标 —— 上一版只有图标时，用户在全屏里
+     * 认不出"哪个是退回去"，报告"只有放大全屏按钮，没有缩小回来的按钮"，然后被整块
+     * 屏幕盖住只能重启。图标（`Minimize` 一条横线、`Close` 一个叉）在实拍画面上
+     * 本来就不好认，配上文字才没有歧义。
+     *
+     * 三个动作都是**出路**：缩小回边缘把手 / 切换全屏 / 关闭这一块。
+     */
     @Composable
     private fun BoxScope.MirrorControls() {
         Box(
@@ -631,35 +680,66 @@ object DisplayMirror {
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.35f)),
         ) { }
-        Column(
-            modifier = Modifier.align(Alignment.Center),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.Black.copy(alpha = 0.72f))
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            IconButton(onClick = { collapse() }) {
-                Icon(
-                    imageVector = Icons.Outlined.Minimize,
-                    contentDescription = stringResource(R.string.dsh_display_float_a11y_minimize),
-                    tint = Color.White,
+            // 全屏时先给"退出全屏"（真正的逆操作），再给"缩小到边缘"
+            if (fullscreen) {
+                ControlButton(
+                    icon = Icons.Filled.FullscreenExit,
+                    label = R.string.dsh_display_float_btn_exit_fullscreen,
+                    a11y = R.string.dsh_display_float_a11y_exit_fullscreen,
+                    onClick = { toggleFullscreen() },
+                )
+            } else {
+                ControlButton(
+                    icon = Icons.Filled.Fullscreen,
+                    label = R.string.dsh_display_float_btn_fullscreen,
+                    a11y = R.string.dsh_display_float_a11y_fullscreen,
+                    onClick = { toggleFullscreen() },
                 )
             }
-            IconButton(onClick = { toggleFullscreen() }) {
-                Icon(
-                    imageVector = if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                    contentDescription = stringResource(
-                        if (fullscreen) R.string.dsh_display_float_a11y_exit_fullscreen
-                        else R.string.dsh_display_float_a11y_fullscreen
-                    ),
-                    tint = Color.White,
-                )
-            }
-            IconButton(onClick = { dismiss() }) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = stringResource(R.string.dsh_display_float_a11y_close),
-                    tint = Color.White,
-                )
-            }
+            ControlButton(
+                icon = Icons.Outlined.Minimize,
+                label = R.string.dsh_display_float_btn_minimize,
+                a11y = R.string.dsh_display_float_a11y_minimize,
+                onClick = { collapse() },
+            )
+            ControlButton(
+                icon = Icons.Filled.Close,
+                label = R.string.dsh_display_float_btn_close,
+                a11y = R.string.dsh_display_float_a11y_close,
+                onClick = { dismiss() },
+            )
+        }
+    }
+
+    /** 控制条上的一格：图标 + 文字（文字是给用户看的，图标是给眼睛快速定位的）。 */
+    @Composable
+    private fun ControlButton(
+        icon: androidx.compose.ui.graphics.vector.ImageVector,
+        label: Int,
+        a11y: Int,
+        onClick: () -> Unit,
+    ) {
+        TextButton(
+            onClick = onClick,
+            colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            Icon(imageVector = icon, contentDescription = stringResource(a11y), tint = Color.White)
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = stringResource(label),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
         }
     }
 
@@ -693,11 +773,15 @@ object DisplayMirror {
         }
     }
 
-    /** 摘掉当前 sink 并释放解码器（主线程）。 */
-    private fun detachSink() {
-        val dec = sink ?: return
+    /** 摘掉当前 sink 并释放解码器（主线程）。[st] 非空时在解码器停用后再放掉它。 */
+    private fun detachSink(st: SurfaceTexture? = null) {
+        val dec = sink
+        if (dec == null) {
+            runCatching { st?.release() }
+            return
+        }
         sink = null
-        detach(dec, shownDisplayId)
+        detach(dec, shownDisplayId, st)
     }
 
     /**
@@ -707,8 +791,11 @@ object DisplayMirror {
      * 而服务端已经被停掉之后调它会把服务端**重新拉起来** —— 用户按了停止，
      * 结果因为收一个窗口又活过来，那是最糟的。
      */
-    private fun detach(dec: DisplayVideoSink?, id: Int) {
-        if (dec == null) return
+    private fun detach(dec: DisplayVideoSink?, id: Int, st: SurfaceTexture? = null) {
+        if (dec == null) {
+            runCatching { st?.release() }
+            return
+        }
         val ctx = app
         Thread({
             try {
@@ -719,6 +806,10 @@ object DisplayMirror {
                 Log.w(TAG, "摘除视频回流失败：${t.message}", t)
             } finally {
                 runCatching { dec.release() }
+                // 顺序不能反：SurfaceTexture 必须等解码器停用之后才 release，
+                // 否则 MediaCodec 可能还在往一个已经释放的渲染目标写帧。
+                // TextureView 的销毁回调返回 false，就是把这次 release 交到这里来做。
+                if (st != null) runCatching { st.release() }
             }
         }, "DshDisplayMirrorDetach").start()
     }

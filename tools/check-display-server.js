@@ -739,6 +739,49 @@ for (const f of SHARED) {
     '小窗不许用 APatchTheme（它会把 context 强转 ComponentActivity，悬浮窗里必崩）');
   must(/MaterialTheme\(colorScheme/.test(mirror),
     '小窗自己提供 MaterialTheme 配色（自包含，不依赖 Activity）');
+
+  // ── 圆角：视频宿主必须是 TextureView ──
+  //
+  // SurfaceView 的画面由 SurfaceFlinger 独立合成，**父级裁剪对它无效** —— 用 SurfaceView
+  // 时四角永远是直角（用户反馈"边角太锐利"）。TextureView 画在普通视图树里，裁剪认。
+  must(/TextureView\(c\)/.test(mirror),
+    '视频宿主用 TextureView（SurfaceView 是独立图层，裁不出圆角）');
+  must(!/SurfaceView\(/.test(mirror), '不能再用 SurfaceView，否则圆角又变直角');
+  must(/RoundedCornerShape\(EXPANDED_RADIUS_DP\.dp\)/.test(mirror) && /\.clip\(shape\)/.test(mirror),
+    '展开态小窗套一层圆角裁剪');
+  must(/RectangleShape/.test(mirror),
+    '全屏时不裁圆角（贴着屏幕边缘，圆角会切掉画面）');
+  // SurfaceTexture 由我们自己释放，且必须在解码器停用之后
+  must(/onSurfaceTextureDestroyed[\s\S]{0,800}?detachSink\(st\)[\s\S]{0,120}?return false/.test(mirror),
+    'TextureView 销毁时把 SurfaceTexture 交给 detach 处理并返回 false（不让上层当场释放）');
+  {
+    const at = mirror.indexOf('private fun detach(dec: DisplayVideoSink?');
+    const body = at < 0 ? '' : mirror.slice(at, at + 1400);
+    const rel = body.indexOf('dec.release()');
+    const stRel = body.indexOf('st.release()');
+    must(rel >= 0 && stRel > rel,
+      'SurfaceTexture 的 release 必须排在解码器 release 之后（否则 MediaCodec 还在往已释放的目标写帧）');
+  }
+
+  // ── 全屏必须留出路 ──
+  //
+  // 曾经写成 `else -> Modifier`：进了全屏后控制条被隐去、再点画面什么也不出，
+  // 整块屏幕被盖住，退不出去也关不掉，用户只能重启 App。这条断言钉的就是它。
+  must(/detectTapGestures \{ controls = !controls \}/.test(mirror),
+    '展开态与全屏态都能"点一下切换控制条"（全屏里这是唯一的出路）');
+  // 注意负向前瞻：`else -> Modifier.pointerInput(…)` 是**合法**的新写法，
+  // 而 `\b` 在 "Modifier" 和 "." 之间也成立，用它会把合法代码一起判违规。
+  // 要钉的是"赤裸裸什么都不做"的 `else -> Modifier`。
+  must(!/else -> Modifier(?![\w.])/.test(code(mirror)),
+    '不能再有"某个状态下点画面什么都不做"的分支（全屏曾因此变成死胡同）');
+  must(/fullscreen = !fullscreen[\s\S]{0,700}?controls = true/.test(mirror),
+    '切进全屏时先把控制条亮出来（进去后立刻能看到退出/缩小/关闭）');
+  must(/dsh_display_float_btn_exit_fullscreen/.test(mirror),
+    '全屏态的控制条里有"退出全屏"这一格');
+  must(/dsh_display_float_btn_minimize/.test(mirror) && /dsh_display_float_btn_close/.test(mirror),
+    '控制条里有"缩小到边缘"和"关闭"（三个动作都是出路）');
+  must(/TextButton\(/.test(mirror) && /dsh_display_float_btn_fullscreen/.test(mirror),
+    '控制条带文字标签，不是三个裸图标（裸图标认不出哪个是退回去）');
 }
 
 // ── 18. 产物校验（编译之后跑）──
