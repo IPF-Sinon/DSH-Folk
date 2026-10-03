@@ -1125,17 +1125,56 @@ console.log("── 「不再逐条确认」名单 ──");
   ok(/dsh_native_elevate_trust_hint/.test(dlgCode),
     "弹窗里说明这个按钮会长期生效、以及去哪儿撤销（不讲清楚就是在骗用户）");
 
+  // 名单**在哪儿**管理：原先是每张能力卡上一颗开关，代价是"根本不是名单"（看不到一共免掉了
+  // 哪几项，加一项还得先翻到那张卡）。现在集中在权限总页最下面的一类里，可按名字/摘要/分类名
+  // 搜索、逐项开关。下面的断言钉住这条链：入口在最下面、状态来自 prefs、改完刷新事实。
+  const trustPage = code(
+    fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/TrustedCapsScreen.kt", "utf8"),
+  );
+  ok(/PrivPolicy\.setTrusted\(context\.applicationContext, cap, want\)/.test(trustPage),
+    "名单页能改信任名单（撤销入口必须找得到）");
+  ok(/Switch\(checked = trusted, onCheckedChange = onToggle\)/.test(trustPage),
+    "每一项真的有一个开关，且接到 onToggle");
+  ok(/trusted = cap\.id in trusted\b/.test(trustPage) && /PrivPolicy\.trusted\(context\)/.test(trustPage),
+    "开关状态来自 prefs 里的名单（写死的开关只是装饰）");
+  ok(/PrivPolicy\.setTrusted[\s\S]{0,400}?DshHostPrompt\.writeFacts/.test(trustPage),
+    "改完名单要刷新宿主事实（漏了这一步 agent 会一直按旧假设行事）");
+  ok(/CapGroup\.entries\.mapNotNull \{ group ->/.test(trustPage),
+    "按**分类**遍历全部能力（只列一类 = 加一项还得先想起来它属于哪一类）");
+  {
+    // 搜索谓词整段钉住：三层匹配 + 一个都不许少。只查 contains(q) 在不在文件里，
+    // 把 filter 整个删掉照样绿（反向验证抓到过）。
+    const at = trustPage.indexOf("val caps = group.caps.filter { cap ->");
+    const seg = at < 0 ? "" : trustPage.slice(at, trustPage.indexOf("}", at));
+    const needles = (seg.match(/contains\(q\)/g) || []).length;
+    ok(at >= 0 && /q\.isEmpty\(\) \|\|/.test(seg) && needles === 3,
+      "搜索覆盖三层（能力名 / 摘要 / 分类名），且真的过了一遍 filter");
+  }
+  {
+    const hub = code(
+      fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionHubScreen.kt", "utf8"),
+    );
+    // 位置：必须排在分类循环**之后**（它是一份跨全部能力的名单，不是一个能力分类）。
+    // indexOf(needle, from) 返回 -1 的前提是"循环之后再没有这一行" —— 正是要钉的语义。
+    // 定位必须靠**这一行**自己的特征（图标），不能靠 R.string.dsh_priv_trust_title：
+    // 那个串在 searchHits 里也有一份（搜索命中），于是"把入口挪到循环之前"照样绿 ——
+    // 反向验证抓到过。同理，导航要钉 onClick 这个调用点：HubTarget.Trusted 分支
+    // 里也有一次 navigate(TrustedCapsScreenDestination)。
+    const loopAt = hub.indexOf("for (group in CapGroup.entries) {");
+    const iconAt = hub.indexOf("icon = Icons.Filled.VerifiedUser");
+    const navAt = hub.indexOf("onClick = { navigator.navigate(TrustedCapsScreenDestination) }");
+    ok(loopAt >= 0 && iconAt > loopAt,
+      "入口在权限总页的分类列表**最下面**（循环之后，而不是混在分类之间）");
+    ok(navAt > iconAt && navAt - iconAt < 400,
+      "那一行的按钮真的接上了名单页（导入还在、这一行的调用换成别的页 = 死管道）");
+    ok(/trustTitle\.lowercase\(\)\.contains\(q\)/.test(hub) && /HubTarget\.Trusted/.test(hub),
+      "总页的搜索也能搜到它（搜「逐条」却搜不到这一页 = 用户找不着）");
+  }
   const capsCode = code(
     fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionCapsScreens.kt", "utf8"),
   );
-  ok(/PrivPolicy\.setTrusted\(context\.applicationContext, cap, want\)/.test(capsCode),
-    "设置页能改信任名单（撤销入口必须找得到）");
-  ok(/Switch\(checked = trusted, onCheckedChange = onToggleTrust\)/.test(capsCode),
-    "能力卡片上真的有一个开关，且接到 onToggleTrust");
-  ok(/trusted = cap\.id in trustedCaps/.test(capsCode),
-    "开关状态来自 prefs 里的名单（写死的开关只是装饰）");
-  ok(/PrivPolicy\.setTrusted[\s\S]{0,400}?DshHostPrompt\.writeFacts/.test(capsCode),
-    "改完名单要刷新宿主事实（漏了这一步 agent 会一直按旧假设行事）");
+  ok(!/dsh_priv_trust_title/.test(capsCode) && !/onToggleTrust/.test(capsCode),
+    "能力卡上不再放同一颗开关（一处管理，避免两个入口各说各话）");
 
   const facts = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshHostPrompt.kt", "utf8");
   ok(/\.put\("nativeTrusted", JSONArray\(if \(nativeOn\) PrivPolicy\.trusted\(ctx\)\.sorted\(\) else emptyList<String>\(\)\)\)/.test(facts),

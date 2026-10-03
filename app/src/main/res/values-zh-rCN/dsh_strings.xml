@@ -767,6 +767,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_err_torch_failed">切换手电筒失败：%1$s</string>
     <string name="dsh_native_err_display_unavailable">虚拟屏服务端起不来。它需要一条提权通道（root / Shizuku / 无线 ADB），请让用户确认其中一条已启用且就绪。</string>
         <string name="dsh_priv_trust_title">不再逐条确认</string>
+    <string name="dsh_priv_trust_hub_summary">已加入 %1$d 项。开着的就是"以后不再逐条问它"，关掉即恢复逐条确认；危险操作（卸载/重启/清数据）照旧会问。</string>
+    <string name="dsh_priv_trust_empty">没有匹配的能力</string>
     <string name="dsh_priv_trust_summary">这项能力之后不再逐条弹窗；卸载、重启、清数据这类危险操作仍然会问。</string>
 <string name="dsh_native_err_display_no_frame">该显示没有返回画面</string>
     <string name="dsh_native_err_display_terminated">用户刚刚在小窗上终止了这块虚拟屏，它已经不存在了。不要重试，先问用户要不要重新建屏。</string>
@@ -1016,7 +1018,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_elevate_message">能力：%1$s\n申请权限：%2$s\n理由：%3$s</string>
     <string name="dsh_native_elevate_allow">允许</string>
     <string name="dsh_native_elevate_trust">允许并不再逐条确认</string>
-    <string name="dsh_native_elevate_trust_hint">把「%1$s」加进「不再逐条确认」名单：以后它不再逐条弹窗（危险操作照旧会问），需要的档位也一起存下。随时可以在 设置 → 权限管理 里撤销。</string>
+    <string name="dsh_native_elevate_trust_hint">把「%1$s」加进「不再逐条确认」名单：以后它不再逐条弹窗（危险操作照旧会问），需要的档位也一起存下。随时可以在 设置 → 权限管理 → 不再逐条确认 里撤销。</string>
     <string name="dsh_native_elevate_deny">拒绝</string>
     <string name="dsh_native_elevate_once">仅本次</string>
     <string name="dsh_native_elevate_once_hint">「仅本次」只放行接下来的一次调用，用完自动收回，不会改动设置里的开关；系统权限不足时仍会再弹一次 Android 自己的授权框。</string>

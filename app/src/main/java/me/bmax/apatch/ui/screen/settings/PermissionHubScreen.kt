@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -54,6 +55,7 @@ import com.ramcosta.composedestinations.generated.destinations.NativeCapsPersona
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsScreenAccessScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsSenseScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PrivilegedChannelScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.TrustedCapsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.WirelessAdbScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
@@ -63,6 +65,7 @@ import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.ExpressiveSwitch
 import me.bmax.apatch.ui.component.SearchAppBar
 import me.bmax.apatch.dsh.PermissionManager
+import me.bmax.apatch.dsh.PrivPolicy
 
 /**
  * 权限管理：把「通道」「配对」和每一项原生能力收进一个带搜索的分类入口。
@@ -208,6 +211,17 @@ fun PermissionHubScreen(navigator: DestinationsNavigator) {
                             onClick = { navigateToGroup(navigator, group) },
                         )
                     }
+                    // 放在**最下面**：它不是一个能力分类，而是"哪些能力已经不用再问了" ——
+                    // 一份跨全部能力的名单。挤在分类之间会让人以为它也是其中一类。
+                    HubRow(
+                        icon = Icons.Filled.VerifiedUser,
+                        title = stringResource(R.string.dsh_priv_trust_title),
+                        summary = stringResource(
+                            R.string.dsh_priv_trust_hub_summary,
+                            PrivPolicy.trusted(context).size,
+                        ),
+                        onClick = { navigator.navigate(TrustedCapsScreenDestination) },
+                    )
                 }
                 if (bridgeEnabled) {
                     // 只在桥开着时给这条提示：关着桥还教人怎么调 CLI 是自相矛盾的
@@ -258,6 +272,7 @@ private sealed interface HubTarget {
     data class Group(val group: CapGroup) : HubTarget
     data object Channel : HubTarget
     data object WirelessAdb : HubTarget
+    data object Trusted : HubTarget
 }
 
 private fun navigateToGroup(navigator: DestinationsNavigator, group: CapGroup) {
@@ -291,6 +306,7 @@ private fun navigateTo(navigator: DestinationsNavigator, target: HubTarget) {
         is HubTarget.Group -> navigateToGroup(navigator, target.group)
         HubTarget.Channel -> navigator.navigate(PrivilegedChannelScreenDestination)
         HubTarget.WirelessAdb -> navigator.navigate(WirelessAdbScreenDestination)
+        HubTarget.Trusted -> navigator.navigate(TrustedCapsScreenDestination)
     }
 }
 
@@ -312,6 +328,16 @@ private fun searchHits(query: String, context: Context): List<Hit> {
     val adbTitle = context.getString(R.string.dsh_perm_cat_wireless_adb)
     if (adbTitle.lowercase().contains(q)) {
         hits += Hit("perm-adb", adbTitle, context.getString(R.string.dsh_adb_summary), HubTarget.WirelessAdb)
+    }
+
+    val trustTitle = context.getString(R.string.dsh_priv_trust_title)
+    if (trustTitle.lowercase().contains(q)) {
+        hits += Hit(
+            "perm-trust",
+            trustTitle,
+            context.getString(R.string.dsh_priv_trust_hub_summary, PrivPolicy.trusted(context).size),
+            HubTarget.Trusted,
+        )
     }
 
     for (group in CapGroup.entries) {

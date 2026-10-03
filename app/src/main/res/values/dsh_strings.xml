@@ -787,6 +787,8 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_native_err_torch_failed">Could not toggle the flashlight: %1$s</string>
     <string name="dsh_native_err_display_unavailable">The virtual screen service could not start. It needs a privileged channel (root / Shizuku / wireless ADB) — ask the user to check that one is enabled and ready.</string>
         <string name="dsh_priv_trust_title">Stop asking every time</string>
+    <string name="dsh_priv_trust_hub_summary">%1$d added. Switched on means it is no longer asked one by one; switching it off restores the prompts. Dangerous operations (uninstall / reboot / clear data) are still asked.</string>
+    <string name="dsh_priv_trust_empty">No capability matches</string>
     <string name="dsh_priv_trust_summary">This capability no longer prompts per call; dangerous actions (uninstall, reboot, wiping data) still do.</string>
 <string name="dsh_native_err_display_no_frame">The virtual screen returned no image for that display</string>
     <string name="dsh_native_err_display_terminated">The user just terminated this virtual screen from the floating window, so it no longer exists. Do not retry — ask the user whether to create a new one.</string>
@@ -1038,7 +1040,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_native_elevate_message">Capability: %1$s\nRequested access: %2$s\nReason: %3$s</string>
     <string name="dsh_native_elevate_allow">Allow</string>
     <string name="dsh_native_elevate_trust">Allow and stop asking</string>
-    <string name="dsh_native_elevate_trust_hint">Adds “%1$s” to the no-more-asking list: it will stop prompting per call (dangerous actions still ask), and the level it needs is saved as well. You can revoke this any time in Settings → Permissions.</string>
+    <string name="dsh_native_elevate_trust_hint">Adds “%1$s” to the no-more-asking list: it will stop prompting per call (dangerous actions still ask), and the level it needs is saved as well. You can revoke this any time in Settings → Permissions → No more asking.</string>
     <string name="dsh_native_elevate_deny">Deny</string>
     <string name="dsh_native_elevate_once">Allow once</string>
     <string name="dsh_native_elevate_once_hint">“Allow once” lets exactly the next call through and then takes it back — it does not change the switch in settings. If the Android permission is missing you will still get the system dialog.</string>

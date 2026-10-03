@@ -200,9 +200,6 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
     // 那个要在系统页里单独打开，所以两件事各记一份，回到本页时重读权限。
     var displayFloatOn by remember { mutableStateOf(DisplayMirror.enabled(context)) }
     var overlayAllowed by remember { mutableStateOf(DisplayMirror.canOverlay(context)) }
-    // 「不再逐条确认」名单：与严格程度是两个维度（严格程度管所有能力，这份名单只管一个）。
-    // 从 prefs 读初值，回到本页重读 —— 它也可能被那条弹窗的第三个按钮改掉。
-    var trustedCaps by remember { mutableStateOf(PrivPolicy.trusted(context)) }
 
     // 跳某个系统设置页。带包名的 Intent 在少数 ROM 上打不开，逐级后退，
     // 两级都失败时退到应用信息页 —— 总比按下去什么都不发生好。
@@ -313,14 +310,6 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
         }
     }
 
-    // 把一项能力加进/移出「不再逐条确认」名单。必须同步刷新提示词事实：agent 靠它知道
-    // 「这条调用还会不会弹窗」，漏了这一步它会一直按旧假设行事。
-    val toggleTrust: (DshNativeBridge.Cap, Boolean) -> Unit = { cap, want ->
-        PrivPolicy.setTrusted(context.applicationContext, cap, want)
-        trustedCaps = PrivPolicy.trusted(context)
-        DshHostPrompt.writeFacts(context.applicationContext)
-    }
-
     // 写入一项档位。与「功能」页走同一个 API，并同步刷新提示词事实 ——
     // 容器侧是按事实判断「这项能力现在能不能用」的，漏了这一步 agent 会一直拿到旧答案。
     val applyAccess: (DshNativeBridge.Cap, DshNativeBridge.Access) -> Unit = { cap, access ->
@@ -426,8 +415,6 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
                     onRequestOverlay = {
                         openSettingsPage(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true)
                     },
-                    trusted = cap.id in trustedCaps,
-                    onToggleTrust = { toggleTrust(cap, it) },
                 )
             }
             item { Spacer(Modifier.height(20.dp)) }
@@ -552,8 +539,6 @@ private fun NativeCapCard(
     overlayAllowed: Boolean,
     onToggleDisplayFloat: (Boolean) -> Unit,
     onRequestOverlay: () -> Unit,
-    trusted: Boolean,
-    onToggleTrust: (Boolean) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Column(Modifier.padding(14.dp)) {
@@ -618,26 +603,6 @@ private fun NativeCapCard(
                         Text(stringResource(R.string.dsh_display_float_grant))
                     }
                 }
-            }
-            // 「不再逐条确认」：这是**唯一**能免掉后续弹窗、又不动全局严格程度的出口。
-            // 放在这里而不是只放在弹窗里，是因为"撤销"必须找得到 —— 只能靠重装/清数据撤销的
-            // 授权，用户其实没有真正选择权。
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.dsh_priv_trust_title),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        text = stringResource(R.string.dsh_priv_trust_summary),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = trusted, onCheckedChange = onToggleTrust)
             }
             if (on && permissionMissing) {
                 if (cap == DshNativeBridge.Cap.SHELL) {

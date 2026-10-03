@@ -222,8 +222,10 @@ itself, so an ordinary call needs no extra flag; only an explicit `dsh-native el
 **"Allow and stop asking" is a second key that works per capability** (`priv_trusted_caps`, holding `Cap.id` values). It exists because strictness is
 **global**: to stop the virtual screen from prompting on every single tap, the only other option was dropping the whole device to normal/loose — which also
 frees up shell, SMS, notifications and the rest, too big a price, so most people just put up with tapping "Allow" dozens of times. This list narrows the grant
-to **one capability**, and it can be **revoked at any time from that capability's card in Settings → Permissions** (a grant you can only undo by wiping data is
-not really a choice). Two hard edges live in `PrivPolicy` and are pair-checked cell by cell in `check-native-logic.js`: **dangerous actions always ask**
+to **one capability**, and it can be **revoked at any time** (a grant you can only undo by wiping data is not really a choice). Adding and revoking both
+happen in **one place**: Settings → Permissions → the **last category, "No more asking"**, which lists every native capability by category with a search box
+(matching capability name, summary or category name); switched on means it is no longer asked one by one. The switch used to sit on each capability's card, and
+the cost of that was that it **was not a list at all** — you could not see which ones you had exempted, and adding one meant first finding its card. Two hard edges live in `PrivPolicy` and are pair-checked cell by cell in `check-native-logic.js`: **dangerous actions always ask**
 (uninstall, reboot, wiping data — whatever the strictness, trusted or not), and it **does not change** what global strictness means (strict still asks every
 time on capabilities that were not trusted).
 
