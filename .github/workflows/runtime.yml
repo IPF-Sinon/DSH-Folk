@@ -59,7 +59,7 @@ jobs:
       min_app: ${{ steps.minapp.outputs.min_app_version }}
       default_tag: ${{ steps.tag.outputs.default_tag }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # 通道 × 口味 → 滚动 tag。四个组合各占一个互不覆盖的 release 位置。
       # 集中算一次，避免下面 build / publish 两处各写一份三元表达式（那样两边漂移时
@@ -112,9 +112,9 @@ jobs:
       matrix:
         arch: ${{ fromJSON(needs.plan.outputs.arches) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
 
@@ -141,7 +141,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dsh-runtime-rootfs-${{ matrix.arch }}
           path: |
