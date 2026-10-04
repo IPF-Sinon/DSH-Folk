@@ -87,7 +87,7 @@ dsh-native shell [--su] [--timeout ms] [--] <command>   # run through the channe
 dsh-native a11y tree [--depth N] [--max N]        # read the current screen as a node tree
 dsh-native a11y click <text-or-id> [--class C] [--index N]
 dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
-dsh-native a11y text <text> [--target <text-or-id>] [--class C] [--index N]
+dsh-native a11y text <text> [--target <text-or-id>] [--class C] [--index N]   # empty text clears the field
 dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen>
 dsh-native a11y screenshot               # capture the screen; lands in /tmp, JSON carries path
 dsh-native display status                # is the service up, which display is the session, which channel
@@ -230,6 +230,11 @@ uses it too, and WebView input fields accept it), then — if the host refuses �
 when both fail is it `set_text_rejected`. Note that an accessibility service **cannot** reach the target app `InputConnection`:
 AOSP `AccessibilityNodeInfo` has no `getInputConnection`/`commitText`, so "use InputConnection" is not a path that exists on
 Android.
+
+**`a11y text ""` clears the field**: `ACTION_SET_TEXT` means "set the content to this string", and an empty string empties it — no need to
+find and press that clear button (which often has no node name at all). Clearing **takes no paste fallback**: pasting an empty clipboard is a
+no-op on most hosts while `performAction` still reports true, which would turn into "the reply says ok but the field is still full"; when it
+cannot be cleared the answer is an honest `set_text_rejected`.
 
 **Explicit addressing (`--target` / `--class`) searches every readable window on the screen, not just the active one**: a device has three
 "current windows" and they can differ — the active window (what `tree` reads), the input-focus window (what the `text` focus path writes into), and

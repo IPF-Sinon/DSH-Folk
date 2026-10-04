@@ -900,6 +900,25 @@ console.log("\n── 无障碍 ──");
       "tree 成功时也带窗口表，失败时也带（同一个函数）");
   }
 
+  // ── 空串 = 清空：判据不能是真值，清空也不能拿"粘贴空剪贴板"冒充成功 ──
+  ok(/act === 'text' && a\.length > 1/.test(CODE.rt),
+    "CLI 用 a.length > 1 判 text 的位置参数（a[1] 真值会把空串判成参数不全 → 只回 usage）");
+  ok(!/act === 'text' && a\[1\]/.test(CODE.rt), "没有残留 a[1] 真值判据");
+  ok(/val value = params\["text"\]\s*\n?\s*\?: return 400/.test(CODE.bridge) ||
+     /params\["text"\] ?: return 400/.test(CODE.bridge),
+    "桥只把「没给 text」当错误（空串要放行，否则清空这条命令到不了无障碍）");
+  {
+    const i = a11y.indexOf("private fun writeInto(");
+    const seg = a11y.slice(i, a11y.indexOf("private fun pasteInto(", i));
+    ok(/if \(text\.isEmpty\(\)\) return fail\("set_text_rejected"\)/.test(seg),
+      "空串清不掉就如实回 set_text_rejected，不走粘贴（空剪贴板在多数宿主是无操作，performAction 照样回 true）");
+    // 光比 pasteInto 的位置不够：「聚焦 → 判空 → 回 set_text_rejected」也满足"在粘贴之前"，
+    // 而聚焦那一步只服务于粘贴退路。空串根本不该进退路。
+    ok(seg.indexOf("text.isEmpty()") < seg.indexOf("ACTION_FOCUS") &&
+      seg.indexOf("text.isEmpty()") < seg.indexOf("pasteInto(node, text)"),
+      "空串判据在退路**之前**（连为粘贴服务的聚焦都不走；放后面等于没拦）");
+  }
+
   // ── 焦点回退：三层，缺一层就是真机上「明明有输入框却说没有焦点」 ──
   {
     const i = a11y.indexOf("fun setText(");

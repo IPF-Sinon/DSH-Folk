@@ -142,6 +142,9 @@ const EXPECT = [
   [["a11y", "text", "hi", "--class", "EditText"], "POST", "/native/a11y/text", { text: "hi", class: "EditText" }],
   // 页面上两个输入框时"写第二个"：--index 要和 click 一样透到底（只声明不传 = 又只能写焦点那个）
   [["a11y", "text", "hi", "--class", "EditText", "--index", "1"], "POST", "/native/a11y/text", { text: "hi", class: "EditText", index: "1" }],
+  // 空串是**合法输入 = 清空这个框**：判据用 a[1] 真值会让 'a11y text ""' 回一句 usage，
+  // 于是清空只能靠找到并点中那个清除按钮（它往往连节点名都没有）
+  [["a11y", "text", ""], "POST", "/native/a11y/text", { text: "" }],
   [["a11y", "global", "back"], "POST", "/native/a11y/global", { action: "back" }],
   [["a11y", "screenshot"], "GET", "/native/a11y/screenshot", {}],
   [["display", "status"], "GET", "/native/display/status", {}],

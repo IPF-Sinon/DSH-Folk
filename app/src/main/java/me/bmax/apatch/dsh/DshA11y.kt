@@ -241,6 +241,10 @@ internal object DshA11y {
      * 但认粘贴。**没有**第三条路：无障碍服务拿不到目标应用的 InputConnection（AOSP 的
      * `AccessibilityNodeInfo` 里没有 getInputConnection / commitText，这份文件 6656 行整份查过）。
      * 返回值用 `by` 说明这次走的是哪一路，省得"写进去了，但不知道靠什么写进去的"。
+     *
+     * **空串是合法输入 = 清空这个框**（`ACTION_SET_TEXT` 的语义就是把内容设成给定串）。
+     * 清空**不走粘贴退路**：把空剪贴板粘进去对多数宿主是个无操作，而 `performAction` 照样回 true
+     * —— 那会变成"报告 ok、框里没清掉"。清不掉就如实回 `set_text_rejected`。
      */
     private fun writeInto(node: AccessibilityNodeInfo, text: String): JSONObject {
         if (!node.isEditable && !node.isClickable) return fail("not_editable")
@@ -250,6 +254,7 @@ internal object DshA11y {
         if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
             return JSONObject().put("ok", true).put("by", "set_text")
         }
+        if (text.isEmpty()) return fail("set_text_rejected")
         // 聚焦是粘贴的前提：很多框只在有输入焦点时才处理 PASTE
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         return if (pasteInto(node, text)) {

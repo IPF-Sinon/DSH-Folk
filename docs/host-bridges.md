@@ -89,7 +89,7 @@ dsh-native shell [--su] [--timeout ms] [--] <命令>   # 走你选的权限通�
 dsh-native a11y tree [--depth N] [--max N]        # 读当前屏幕的节点树
 dsh-native a11y click <文字或 id> [--class C] [--index N]
 dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
-dsh-native a11y text <文字> [--target <文字或 id>] [--class 类名] [--index N]
+dsh-native a11y text <文字> [--target <文字或 id>] [--class 类名] [--index N]   # 文字为空串 = 清空该输入框
 dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>
 dsh-native a11y screenshot               # 截当前屏幕，PNG 落在 /tmp、JSON 里回路径
 dsh-native display status                # 服务起没起、当前会话是哪块屏、走的哪条通道
@@ -220,6 +220,11 @@ view id（`viewIdResourceName` 通常是 null），`class`（如 `EditText`）�
 两路都不行才是 `set_text_rejected`。注意无障碍服务**拿不到**目标应用的 `InputConnection`：
 AOSP 的 `AccessibilityNodeInfo` 里没有 `getInputConnection`/`commitText`，所以"改用
 InputConnection"这条路在 Android 上不存在。
+
+**`a11y text ""` 清空输入框**：`ACTION_SET_TEXT` 的语义就是把内容设成给定串，空串即清空 ——
+不用再去找到并点中那个清除按钮（它往往连节点名都没有）。清空**不走粘贴退路**：把空剪贴板粘进
+去对多数宿主是个无操作，而 `performAction` 照样回 true，那会变成"报告 ok、框里没清掉"；清不掉
+就如实回 `set_text_rejected`。
 
 **显式寻址（`--target` / `--class`）搜的是"这块屏幕上的所有可读窗"，不止活动窗**：真机上
 "当前窗"有三个且可以互不相同 —— 活动窗（`tree` 读的那个）、输入焦点窗（`text` 的焦点路径写进去的那个）、

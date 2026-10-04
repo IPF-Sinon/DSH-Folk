@@ -668,7 +668,7 @@ object DshRuntime {
           '  a11y click <text-or-id> [--class C] [--index N]',
           '  a11y tap <x> <y> [--ms N]',
           '  a11y swipe <x1> <y1> <x2> <y2> [--ms N]',
-          '  a11y text <text> [--target <text-or-id>] [--class C] [--index N]',
+          '  a11y text <text> [--target <text-or-id>] [--class C] [--index N]   (empty text clears the field)',
           '  a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>',
           '  a11y screenshot                            # capture the screen; lands in /tmp, JSON carries path',
           '  display status                             # is the virtual-screen service up, which display is the session',
@@ -770,9 +770,13 @@ object DshRuntime {
                 say(await req('POST', '/native/a11y/swipe' + q({
                   x1: a[1], y1: a[2], x2: a[3], y2: a[4], ms: opt.ms
                 })));
-              } else if (act === 'text' && a[1]) {
+              } else if (act === 'text' && a.length > 1) {
                 // a[1] 是"要写进去的字"，--target / --class 是"往哪儿写"。class 这一路
                 // 是给 WebView 里的编辑框留的：它们常常既没有 text 也没有 view id。
+                //
+                // 判据是 `a.length > 1` 而不是 `a[1]`：**空串是合法输入 = 清空这个输入框**。
+                // 用真值判断会把 'a11y text ""' 判成"参数不全"、只回一句 usage —— 于是
+                // "清空输入框"这件事只能靠找到并点上那个清除按钮，而它往往没有节点名。
                 say(await req('POST', '/native/a11y/text' + q({
                   text: a[1], target: opt.target, class: opt.class, index: opt.index
                 })));

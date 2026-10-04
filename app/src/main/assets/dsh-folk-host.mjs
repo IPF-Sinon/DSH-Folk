@@ -116,7 +116,7 @@ const CAP_USAGE = {
     'dsh-native a11y click <text-or-id> [--class C] [--index N]   # tap that node',
     'dsh-native a11y tap <x> <y> [--ms N]            # tap a coordinate from a tree you just read',
     'dsh-native a11y swipe <x1> <y1> <x2> <y2> [--ms N]',
-    'dsh-native a11y text <text> [--target <text-or-id>] [--class C] [--index N]   # type into an editable field',
+    'dsh-native a11y text <text> [--target <text-or-id>] [--class C] [--index N]   # type into a field ("" clears it)',
     'dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>',
     'dsh-native a11y screenshot                      # capture the current screen; copies a PNG into /tmp, returns its path',
   ],
@@ -251,7 +251,9 @@ const CAP_CAVEAT = {
     'WebView often has no text and no view id, so --class EditText is the only handle), or ' +
     'neither (writes into the focused node). Addressing searches every readable window, not just ' +
     'the active one (the input-focus window and the active window can differ on a real device), ' +
-    'so --index N picks the Nth match when a page has several fields; a locator that matches ' +
+    'so --index N picks the Nth match when a page has several fields; an empty text clears the ' +
+    'field (the reply still says by:set_text - there is no paste fallback for clearing, because ' +
+    'pasting an empty clipboard is a no-op on most hosts while reporting success); a locator that matches ' +
     'nothing answers not_found with searchedWindows and matches, ' +
     'a missing input focus answers no_input_focus, and the success says by:set_text or by:paste ' +
     '(when the field refuses ACTION_SET_TEXT we focus it, paste from the clipboard, and put the ' +
