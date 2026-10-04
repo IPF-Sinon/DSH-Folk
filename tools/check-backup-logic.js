@@ -549,12 +549,26 @@ for (const key of [
   "KEY_SEED_PLUGINS_DONE", "KEY_SEEDED_PLUGINS", "KEY_SEED_REPAIR_REV", "KEY_SEED_RUNTIME",
   "KEY_SEED_PASSES", "KEY_SEED_SHADOWED", "KEY_SEED_SHADOWED_RUNTIME",
   "KEY_RUNTIME_VERSION", "KEY_RUNTIME_MIN_APP", "KEY_PROROOT_FAIL", "KEY_ROOTFS_SIZE",
-  "KEY_PERM_CHANNEL", "KEY_PRIV_STRICTNESS", "KEY_NATIVE_BRIDGE", "KEY_NATIVE_CAPS",
+  "KEY_PERM_CHANNEL", "KEY_PRIV_RESTRICT_MODE", "KEY_PRIV_RESTRICT_CAPS", "KEY_PRIV_DANGER_ADDED",
+  "KEY_PRIV_DANGER_DISABLED", "KEY_NATIVE_BRIDGE", "KEY_NATIVE_CAPS",
 ]) {
   ok(new RegExp("DshEnv\\." + key + ",").test(appData), "排除表点名 " + key);
 }
 ok(/val PRIVILEGE_KEYS = setOf\(/.test(appData) && /fun excludedPrivilegeCount\(/.test(appData),
   "提权项单独数出来：结果里要说明「这几项不是漏了，是按设计没跟着走」");
+{
+  // 策略键必须在 PRIVILEGE_KEYS **这一段**里出现，否则"提权项不随备份走"对它们是空的 ——
+  // 恢复一份备份就会替用户把限制模式与两张清单设置好，而那是用户自己的决定。
+  // 切片必须只取那一行集合本体：同名键在下面的排除表里也有一次，钉全文件等于没钉
+  // （反向验证抓到过：把 KEY_PRIV_RESTRICT_CAPS 从集合里删掉，排除表那次照样让它变绿）。
+  const at = appData.indexOf("val PRIVILEGE_KEYS = setOf(");
+  const body = at < 0 ? "" : appData.slice(at, appData.indexOf(")", at));
+  const missing = ["KEY_PERM_CHANNEL", "KEY_PRIV_RESTRICT_MODE", "KEY_PRIV_RESTRICT_CAPS",
+    "KEY_PRIV_DANGER_ADDED", "KEY_PRIV_DANGER_DISABLED", "KEY_NATIVE_BRIDGE", "KEY_NATIVE_CAPS"]
+    .filter((k) => !body.includes("DshEnv." + k));
+  ok(at >= 0 && missing.length === 0,
+    "提权集合点名每一个提权键（缺 " + (missing.join(",") || "无") + "）");
+}
 ok(/schema/.test(appData) && /SCHEMA_V2 = 2/.test(appData),
   "包结构带版本号（v2 起 prefs 按文件分组）");
 ok(/private fun isFlatV1\(/.test(appData) && /if \(v\.has\("t"\)\) return true/.test(appData),

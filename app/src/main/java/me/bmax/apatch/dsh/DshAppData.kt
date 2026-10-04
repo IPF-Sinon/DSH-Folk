@@ -46,10 +46,19 @@ object DshAppData {
     /** 打进包的偏好文件。顺序即界面上的报告顺序。 */
     val PREFS_FILES = listOf(PREFS_NAME, DshEnv.PREF)
 
-    /** 提权相关的那几个键：不随备份走，且要在导入结果里单独点名。 */
+    /**
+     * 提权相关的那几个键：不随备份走，且要在导入结果里单独点名。
+     *
+     * 限制模式与两张清单同属"换台机器不该替用户决定"的那一类：它们决定 agent 还能不能
+     * 静默动手（详见 docs/backup.md）。旧的 priv_strictness / priv_trusted_caps 不在这里：
+     * 迁移时已被删掉，新装的机器上根本不存在这两个键。
+     */
     val PRIVILEGE_KEYS = setOf(
         DshEnv.KEY_PERM_CHANNEL,
-        DshEnv.KEY_PRIV_STRICTNESS,
+        DshEnv.KEY_PRIV_RESTRICT_MODE,
+        DshEnv.KEY_PRIV_RESTRICT_CAPS,
+        DshEnv.KEY_PRIV_DANGER_ADDED,
+        DshEnv.KEY_PRIV_DANGER_DISABLED,
         DshEnv.KEY_NATIVE_BRIDGE,
         DshEnv.KEY_NATIVE_CAPS,
     )
@@ -111,7 +120,10 @@ object DshAppData {
             DshEnv.KEY_ROOTFS_SIZE,
             // 提权项
             DshEnv.KEY_PERM_CHANNEL,
-            DshEnv.KEY_PRIV_STRICTNESS,
+            DshEnv.KEY_PRIV_RESTRICT_MODE,
+            DshEnv.KEY_PRIV_RESTRICT_CAPS,
+            DshEnv.KEY_PRIV_DANGER_ADDED,
+            DshEnv.KEY_PRIV_DANGER_DISABLED,
             DshEnv.KEY_NATIVE_BRIDGE,
             DshEnv.KEY_NATIVE_CAPS,
         ),
