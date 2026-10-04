@@ -87,7 +87,7 @@ dsh-native shell [--su] [--timeout ms] [--] <command>   # run through the channe
 dsh-native a11y tree [--depth N] [--max N]        # read the current screen as a node tree
 dsh-native a11y click <text-or-id> [--class C] [--index N]
 dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
-dsh-native a11y text <text> [--target <text-or-id>]
+dsh-native a11y text <text> [--target <text-or-id>] [--class C]
 dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen>
 dsh-native a11y screenshot               # capture the screen; lands in /tmp, JSON carries path
 dsh-native display status                # is the service up, which display is the session, which channel
@@ -201,6 +201,23 @@ Reads the current screen as a node tree, and can tap, swipe, type or go home on 
 It clicks by text or view id rather than by remembered coordinates (bounds are device specific; they are returned with the tree). Nodes are often `clickable=false` with the
 real handler on a parent, so a click walks up to the nearest clickable ancestor and only falls back to tapping the centre when there is none. Secure windows (lock screen,
 password fields) refuse to hand over nodes and answer `no_window` instead of failing vaguely.
+
+**Three ways to address the editable field you are typing into**: `--target` (text / description / view id), **just `--class`**, or
+neither (write into whatever currently has focus). The middle path exists for **inputs inside a WebView**: a web element usually has neither
+text nor a view id (`viewIdResourceName` is normally null there), and `class` (e.g. `EditText`) is the one stable handle. The failures
+differ by path too: a locator that matches nothing is `not_found`, a missing input focus is `no_input_focus` (both used to answer
+`no_input_focus`, so "nothing matched" read like "no focus").
+
+**Our own Web UI names its inputs**: a web element has no text and no view id in the accessibility tree, so
+`DshWebUiActivity` injects a shim (`A11Y_SHIM`) at document start that copies the `placeholder` the page already shows
+into an `aria-label` (nothing is touched when an aria-label / labelledby / title exists, and no name is invented when
+there is nothing to copy). The agent can then read those names from the tree and address them with `--target` — loopback
+origin only, so other sites keep their own semantics.
+
+**Three diagnostic fields on `a11y tree`**: `focused` (which node holds keyboard focus), `input` (the node `FOCUS_INPUT` resolves
+to, with `found:false` when it resolves to none), and `own` (the active window was **our own overlay window**, so this tree is a
+different one). Failures from `no_input_focus` / `not_found` also carry `window` and `windows[]`: one run on a device separates
+"the service resolved the target app" from "it resolved our own overlay".
 
 **`a11y screenshot` (Android 11+) depends on a capability that is read once, at bind time**: the service must declare `android:canTakeScreenshot="true"` in its
 meta-data (this repo does so in `res/xml/dsh_a11y.xml`). Without it there is no graceful fallback, only a hard failure — the system throws a `SecurityException` on

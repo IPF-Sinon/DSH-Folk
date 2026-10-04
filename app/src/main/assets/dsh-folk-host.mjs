@@ -116,7 +116,7 @@ const CAP_USAGE = {
     'dsh-native a11y click <text-or-id> [--class C] [--index N]   # tap that node',
     'dsh-native a11y tap <x> <y> [--ms N]            # tap a coordinate from a tree you just read',
     'dsh-native a11y swipe <x1> <y1> <x2> <y2> [--ms N]',
-    'dsh-native a11y text <text> [--target <text-or-id>]  # type into an editable field',
+    'dsh-native a11y text <text> [--target <text-or-id>] [--class C]   # type into an editable field',
     'dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>',
     'dsh-native a11y screenshot                      # capture the current screen; copies a PNG into /tmp, returns its path',
   ],
@@ -246,7 +246,14 @@ const CAP_CAVEAT = {
     'phone bound the accessibility service before it declared the capability (it is read once, at ' +
     'bind time) — ask the user to toggle that switch off and on again; capture_failed_no_access ' +
     'means the service lost its accessibility access, while capture_failed_bad_display and ' +
-    'capture_failed_internal come from the system. Prefer click over tap: ' +
+    'capture_failed_internal come from the system. ' +
+    'For an input box, a11y text takes --target, or just --class (a web element inside a ' +
+    'WebView often has no text and no view id, so --class EditText is the only handle), or ' +
+    'neither (writes into the focused node). A locator that matches nothing answers not_found, ' +
+    'a missing input focus answers no_input_focus. The tree gives you focused (who holds the ' +
+    'keyboard focus), input (what FOCUS_INPUT resolves to; found:false when nothing does) and ' +
+    'own (the active window was our own floating overlay, so the tree is a different one); ' +
+    'the failures also carry window/windows[] — read them before blaming the app. Prefer click over tap: ' +
     'a node click survives layout shifts. Do this only when the user asked for it in this ' +
     'turn, and never drive the UI to work around a permission the user has not granted.',
   shell:

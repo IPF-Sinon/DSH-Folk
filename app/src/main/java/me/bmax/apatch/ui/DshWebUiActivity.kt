@@ -250,6 +250,14 @@ class DshWebUiActivity : AppCompatActivity() {
     private var composerShimInstalled = false
 
     /**
+     * 「给可编辑元素补无障碍名字」那一段是否已按 document-start 装上。
+     *
+     * 与 [composerShimInstalled] 一样：**无条件**（不是用户偏好），跟内核新旧无关，
+     * 失败原因独立。它不改变页面行为，只是让网页输入框在无障碍树里有名字。
+     */
+    private var a11yShimInstalled = false
+
+    /**
      * 最近一次算出的系统栏内边距（CSS 像素 = dp）。
      *
      * 存成字段而不是只在组合期用局部量：`onPageStarted` 的补注入发生在**别的时刻**
@@ -446,6 +454,11 @@ class DshWebUiActivity : AppCompatActivity() {
                                     override fun onPageFinished(view: WebView?, u: String?) {
                                         progress = 100
                                         if (isLoopback(u)) view?.evaluateJavascript(BLOB_SHIM, null)
+                                        // 名字那一段的回落：document-start 装不上时至少在这里补一次
+                                        // （观察器仍会盯着后挂上来的输入框）
+                                        if (!a11yShimInstalled && isLoopback(u)) {
+                                            view?.evaluateJavascript(A11Y_SHIM, null)
+                                        }
                                         super.onPageFinished(view, u)
                                     }
 
@@ -580,6 +593,9 @@ class DshWebUiActivity : AppCompatActivity() {
                                 // 手机回车换行同样要在文档开始前装：监听必须**排在宿主
                                 // 自己的 window 监听之前**，否则拦不到那次回车（见 COMPOSER_SHIM）
                                 composerShimInstalled = installComposerShim(this, url)
+                                // 无障碍名字：给网页里的输入框补 aria-label，
+                                // 让 agent 的 a11y text / tree 能寻址（否则网页元素的 text / id 全空）
+                                a11yShimInstalled = installA11yShim(this, url)
                                 webView = this
                                 loadUrl(url)
                             }
@@ -812,6 +828,35 @@ class DshWebUiActivity : AppCompatActivity() {
      *
      * 只对回环 origin 生效：别的站点不该被我们改输入行为。
      */
+    /**
+     * 把「给可编辑元素补无障碍名字」装到文档开头。
+     *
+     * 为什么需要：WebView 里的输入框在无障碍树里通常**既没有 text 也没有 view id**
+     * （`viewIdResourceName` 对网页元素是 null），agent 的 `a11y text --target` 因此无从
+     * 下手。这里把页面上已有的 `placeholder` 抄成 `aria-label`（Chromium 会映射成
+     * contentDescription），于是树里能看到它、也能按它定位。抄的是页面上**本来就显示给用户**
+     * 的字，不新造词；只在元素没有任何无障碍名字时才写。
+     *
+     * 只对回环 origin 生效：别的站点不该被我们改无障碍语义。
+     */
+    private fun installA11yShim(view: WebView, url: String): Boolean {
+        val supported = runCatching {
+            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        }.getOrDefault(false)
+        if (!supported) {
+            Log.i(TAG, "document-start script unsupported, a11y shim falls back to onPageFinished")
+            return false
+        }
+        val rules = loopbackOriginRules(url)
+        return runCatching {
+            WebViewCompat.addDocumentStartJavaScript(view, A11Y_SHIM, rules)
+            true
+        }.getOrElse {
+            Log.w(TAG, "addDocumentStartJavaScript failed for a11y shim", it)
+            false
+        }
+    }
+
     private fun installComposerShim(view: WebView, url: String): Boolean {
         if (!DshWebCompat.enterNewline(this)) {
             Log.i(TAG, "composer enter-newline patch disabled by preference")
@@ -1297,6 +1342,46 @@ class DshWebUiActivity : AppCompatActivity() {
   window.addEventListener('keydown', onKeyDown, true);
 })();
 """
+
+        /**
+         * 给网页里的可编辑元素补一个无障碍名字。
+         *
+         * 为什么需要：WebView 的输入框在无障碍树里通常**既没有 text 也没有 view id**
+         * （`viewIdResourceName` 对网页元素是 null），agent 的 `a11y text --target` 因此
+         * 无从下手 —— 用户现场就是"截图里光标在框里、键盘也弹着，但服务看不见它"。
+         * 这里把页面上**本来就显示给用户**的 `placeholder` 抄成 `aria-label`
+         * （Chromium 会把它映射成 contentDescription），树里于是有名字可读、也能按它定位。
+         *
+         * 三条自我约束：
+         * - 只在元素**没有任何**无障碍名字时才写（aria-label / aria-labelledby / title
+         *   有一个就放行），不覆盖宿主自己的语义；
+         * - 没有名字也没有 placeholder 的，不硬造（宁可没有，也不要一个编出来的词）；
+         * - 用 MutationObserver 盯着后挂上来的输入框（SPA 首屏之后才渲染搜索框）。
+         *
+         * 幂等：重复注入（刷新、SPA 路由、onPageFinished 回落）只装一次。
+         */
+        private const val A11Y_SHIM = """
+(function(){
+  if (window.__dshFolkA11yLabel) return; window.__dshFolkA11yLabel = 1;
+  function label(){
+    var els = document.querySelectorAll('input, textarea, [contenteditable="true"], [data-composer-input]');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      try {
+        if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || el.getAttribute('title')) continue;
+        var name = el.getAttribute('placeholder') || el.getAttribute('data-placeholder') || '';
+        if (!name) continue;
+        el.setAttribute('aria-label', name);
+      } catch (e) {}
+    }
+  }
+  function start(){
+    label();
+    try { new MutationObserver(label).observe(document.documentElement, {subtree:true, childList:true}); } catch (e) {}
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', start); } else { start(); }
+})();
+""".trimIndent()
 
         /**
          * 拦 blob:/data: 下载。

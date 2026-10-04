@@ -138,6 +138,8 @@ const EXPECT = [
   [["a11y", "tap", "10", "20", "--ms", "80"], "POST", "/native/a11y/tap", { x: "10", y: "20", ms: "80" }],
   [["a11y", "swipe", "1", "2", "3", "4", "--ms", "200"], "POST", "/native/a11y/swipe", { x1: "1", y1: "2", x2: "3", y2: "4", ms: "200" }],
   [["a11y", "text", "hi", "--target", "Note"], "POST", "/native/a11y/text", { text: "hi", target: "Note" }],
+  // WebView 的编辑框既没有 text 也没有 view id，class 是唯一抓手（见 DshA11y.setText）
+  [["a11y", "text", "hi", "--class", "EditText"], "POST", "/native/a11y/text", { text: "hi", class: "EditText" }],
   [["a11y", "global", "back"], "POST", "/native/a11y/global", { action: "back" }],
   [["a11y", "screenshot"], "GET", "/native/a11y/screenshot", {}],
   [["display", "status"], "GET", "/native/display/status", {}],

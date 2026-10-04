@@ -777,6 +777,77 @@ console.log("\n── 无障碍 ──");
     "点击会往上找可点祖先（文案节点自己往往不可点）");
   ok(/ACTION_SET_TEXT/.test(a11y), "输入走 ACTION_SET_TEXT，不是模拟按键");
   ok(/dispatchGesture/.test(a11y) && /await\(/.test(a11y), "手势等回调再返回（不等只是「排队成功」）");
+  // ── 往输入框写字：WebView 那一格（用户现场：class=EditText、text/id/desc 全空） ──
+  // 用户报告"a11y text 打不进 WebView"。三条定位方式必须都在，且失败原因要能分开：
+  // 定位失败 = not_found，焦点失败 = no_input_focus（以前两者都叫 no_input_focus）。
+  ok(/findAll\(svc, target\.orEmpty\(\), className\)/.test(a11y),
+    "setText 的定位把 class 传进 findAll（只给 class 时 target 传空串：contains(\"\") 命中全部，再被 class 滤掉）");
+  ok(/DshA11y\.setText\(value, text\(params\["target"\]\), text\(params\["class"\]\)\)/.test(CODE.bridge),
+    "桥接把 class 透给 setText（钉调用点：只声明参数、不传等于没接）");
+  ok(/\/native\/a11y\/text" -> listOf\(option\("target"\), option\("class"\)\)/.test(CODE.bridge),
+    "CLI 选项表里 text 也有 --class（否则 agent 根本敲不出来）");
+  {
+    // 三种定位 + 两种失败原因，逐条钉住结构（顺序即语义：先 target、再 class、最后焦点）
+    const i = a11y.indexOf("fun setText(");
+    const seg = a11y.slice(i, a11y.indexOf("private fun writeInto", i));
+    const byFocus = seg.indexOf("target.isNullOrBlank() && className.isNullOrBlank()");
+    const find = seg.indexOf("svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)");
+    const noFocus = seg.indexOf('fail("no_input_focus")');
+    const loc = seg.indexOf("val matches = findAll(svc, target.orEmpty(), className)");
+    const notFound = seg.indexOf('fail("not_found")');
+    ok(byFocus > 0 && find > byFocus && noFocus > find,
+      "两个定位参数都没给 → 走 FOCUS_INPUT → 失败才是 no_input_focus");
+    ok(loc > noFocus && notFound > loc,
+      "给了定位 → findAll → 没命中是 not_found（不是 no_input_focus）");
+  }
+  {
+    // "共用"要数**调用次数**，不是查函数在不在：两条定位分支各调一次，少一处就是又分叉了
+    const i = a11y.indexOf("fun setText(");
+    const seg = a11y.slice(i, a11y.indexOf("private fun writeInto", i));
+    const calls = (seg.match(/writeInto\(/g) || []).length;
+    ok(/private fun writeInto\(node: AccessibilityNodeInfo, text: String\)/.test(a11y) && calls === 2,
+      "两条定位分支都调 writeInto（「共用」要数调用次数：改一处漏两处才是真风险）");
+  }
+  // ── 判因字段：树与失败都要能说清"问的是哪个窗口/哪个节点" ──
+  ok(/if \(node.isFocused\) obj.put\("focused", true\)/.test(a11y),
+    "树里报 focused（用户「节点没报 focused」的结论，根因是我们从没问过）");
+  ok(/\.put\("input", inputDiag\(svc\)\)/.test(a11y) && /fun inputDiag\(svc: AccessibilityService\)/.test(a11y),
+    "树里报 input（FOCUS_INPUT 到底解析到谁；解析不到 found:false）");
+  ok(/\.put\("own", skippedOwn\)/.test(a11y),
+    "树里报 own（活动窗口本来是我们自己的悬浮窗，读的是别的窗）");
+  ok(/private fun pickRoot\(svc: AccessibilityService\): Pair<AccessibilityNodeInfo\?, Boolean>/.test(a11y) &&
+    /pickRoot\(svc\)/.test(a11y) && /pickRoot\(root\)\.first/.test(a11y),
+    "选窗口收敛到 pickRoot，树与 findAll 都用它（两处各选一次 = 两处各错一次）");
+  ok(/window.type == AccessibilityWindowInfo.TYPE_SYSTEM &&[\s\S]{0,80}?== svc.packageName/.test(a11y),
+    "只跳过\"自家 + 系统窗口\"那一类：本应用自己的界面（TYPE_APPLICATION）仍是可驱动的目标");
+  ok(/private fun windowDiag\(svc: AccessibilityService, out: JSONObject\): JSONObject/.test(a11y) &&
+    /windowDiag\(svc, fail\("no_input_focus"\)\)/.test(a11y) &&
+    /windowDiag\(\s*\n?\s*svc,\s*\n?\s*fail\("not_found"\)/.test(a11y),
+    "两种失败都带上 window/windows[]（否则两种成因在返回值里一模一样）");
+  {
+    // 诊断**内容**也要钉：只说"带 window/windows"不够 —— 把 windows[] 摘掉、或
+    // 不写 active/focused，两种成因照样分不开（反向验证漏过这两条）。
+    const wi = a11y.indexOf("private fun windowDiag(");
+    const end = a11y.indexOf("private fun fail(", wi);
+    const seg = end > wi ? a11y.slice(wi, end) : a11y.slice(wi);
+    ok(/svc\.windows/.test(seg) && /\.put\("window", svc\.rootInActiveWindow/.test(seg) &&
+       /\.put\("windows", ws\)/.test(seg) && /ws\.put\(/.test(seg),
+      "诊断：活动窗口的包名 + **真的挂上去**的全部窗口列表（算了不挂 = 和没算一样）");
+    ok(/\.put\("package", w\.root\?\.packageName/.test(seg) &&
+       /\.put\("system", w\.type == AccessibilityWindowInfo\.TYPE_SYSTEM\)/.test(seg) &&
+       /\.put\("active", w\.isActive\)/.test(seg) &&
+       /\.put\("focused", w\.isFocused\)/.test(seg),
+      "每个窗口都报 package/system/active/focused（这四位才分得出谁在前、谁是自己）");
+  }
+  {
+    const i = a11y.indexOf("private fun pickRoot(");
+    const seg = a11y.slice(i, a11y.indexOf("private fun isOwnOverlay", i));
+    ok(/if \(active != null && !ownOverlayActive\) return active to false/.test(seg),
+      "活动窗口不是自家悬浮窗时，照旧用它（自排除不许把正常路径也改道）");
+    ok(/other \?: active \?: svc\.windows/.test(seg) ||
+       /other \?: active/.test(seg),
+      "没有别的可读窗口就退回活动窗口（读自己的树好过读不到）");
+  }
 
   // 两个无障碍服务必须是两份不同的配置：自启那个不能有读屏权限
   ok(/canRetrieveWindowContent="true"/.test(xml), "能力服务打开了读屏");

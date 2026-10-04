@@ -541,5 +541,81 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
   ok(/DshWebCompat\.setEnterNewline\(/.test(fnScreen), "拨开关会落盘");
 }
 
+// ── 无障碍名字：在假 DOM 里真跑一遍 ──
+//
+// 用户现场：`a11y text` 打不进 WebView 的输入框 —— 树里那个"编辑框"既没有 text 也没有
+// view id（网页元素的 viewIdResourceName 就是 null），agent 无从寻址。这一段补的是**
+// aria-label**（Chromium 映射成 contentDescription）。风险全在"什么时候不该写"上：
+// 覆盖宿主自己的名字、或替一个没名字的框编一个词。所以真跑。
+{
+  const a11yShim = rawStringConst(webui, "A11Y_SHIM");
+  ok(a11yShim.length > 300, `无障碍名字脚本还原成功（${a11yShim.length} 字节）`);
+  ok(!/\$\{/.test(a11yShim), "脚本里没有未展开的 Kotlin 模板");
+  ok(/pointer|placeholder/.test(a11yShim) && /aria-label/.test(a11yShim),
+    "判据是 placeholder → aria-label");
+  ok(/MutationObserver/.test(a11yShim),
+    "盯着后挂上来的输入框（SPA 首屏之后才渲染的搜索框）");
+
+  function el(attrs) {
+    const a = Object.assign({}, attrs);
+    return {
+      attrs: a,
+      getAttribute: (k) => (k in a ? a[k] : null),
+      setAttribute: (k, v) => { a[k] = v; },
+    };
+  }
+  const inputs = [
+    el({ placeholder: "Search sessions" }),
+    // 这两个也带 placeholder：不带的话，即便补丁覆盖了宿主的名字，也没东西可覆盖 ——
+    // "不动"就成了一个测不出来的断言（反向验证抓到过）
+    el({ "aria-label": "already named", placeholder: "SHOULD-NOT-OVERWRITE" }),
+    el({ title: "titled", placeholder: "SHOULD-NOT-OVERWRITE" }),
+    el({}),
+  ];
+  const ctx = {
+    console,
+    document: {
+      readyState: "complete",
+      documentElement: {},
+      querySelectorAll: () => inputs,
+      addEventListener: () => {},
+    },
+    MutationObserver: function () { this.observe = () => {}; },
+  };
+  ctx.window = ctx;
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(a11yShim, ctx);
+  ok(inputs[0].attrs["aria-label"] === "Search sessions",
+    "没名字但有 placeholder 的框，被写上同字的 aria-label（于是树里能读到、能 --target）");
+  ok(inputs[1].attrs["aria-label"] === "already named", "已有 aria-label 的不动（不覆盖宿主语义）");
+  ok(inputs[2].attrs["aria-label"] === undefined, "有 title 的也不动");
+  ok(inputs[3].attrs["aria-label"] === undefined, "没名字也没 placeholder 的不硬造名字");
+  ok(ctx.__dshFolkA11yLabel === 1, "装了幂等哨兵（onPageFinished 回落重复注入不会写两遍）");
+
+  // 注入策略：与另外三段垫片同款 —— document-start 优先，装不上才回落（这里是 onPageFinished）
+  ok(/private fun installA11yShim\(view: WebView, url: String\)/.test(webui), "有 installA11yShim");
+  ok(/WebViewCompat\.addDocumentStartJavaScript\(view, A11Y_SHIM, rules\)/.test(webui),
+    "document-start 注入（观察器要在页面脚本渲染出输入框之前就位）");
+  {
+    // 钉**顺序**：addDocumentStartJavaScript 只对"调用返回之后才开始加载"的 frame 生效 ——
+    // 装在 loadUrl 之后等于对本次加载无效（反向验证：两处都在时会漏）。
+    const installAt = webui.indexOf("a11yShimInstalled = installA11yShim(this, url)");
+    const loadAt = webui.indexOf("loadUrl(url)");
+    ok(installAt > 0 && loadAt > installAt, "loadUrl **之前**安装（晚了就对本次加载无效）");
+  }
+  ok(/!a11yShimInstalled && isLoopback\(u\)/.test(webui) && /evaluateJavascript\(A11Y_SHIM/.test(webui),
+    "装不上时有回落（尽力而为），且只对回环 origin");
+  {
+    // 只看**这个函数**的函数体：别的三段垫片也用 loopbackOriginRules，全局找不到等于没查
+    const i = webui.indexOf("private fun installA11yShim(");
+    const j = webui.indexOf("private fun ", i + 10);
+    const body = j > i ? webui.slice(i, j) : webui.slice(i);
+    ok(/WebViewCompat\.addDocumentStartJavaScript\(view, A11Y_SHIM, loopbackOriginRules\(url\)\)/.test(body) ||
+       /val rules = loopbackOriginRules\(url\)[\s\S]{0,120}?A11Y_SHIM, rules/.test(body),
+      "只改我们自己页面的无障碍语义（rules 来自 loopback，别处也叫这个名字）");
+  }
+}
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

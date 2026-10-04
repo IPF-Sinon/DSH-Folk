@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -48,21 +49,36 @@ internal object DshA11y {
 
     private fun service(): AccessibilityService? = DshA11yService.service()
 
-    /** 把 [node] 及子树转成 JSON；超限就截断并标出来。 */
+    /**
+     * 把 [node] 及子树转成 JSON；超限就截断并标出来。
+     *
+     * 除了树本身，还回三样**判因**用的东西（都是踩出来的坑，见各自说明）：
+     * - `own`：活动窗口本来是我们**自己的悬浮窗**、这一棵读的是别的窗；
+     * - `input`：当前"键盘输入焦点"落在哪（`FOCUS_INPUT` 解析不到时说 `found:false`）；
+     * - `package`：读的到底是哪个包（`home` 之后仍报自己包名就是这么看出来的）。
+     */
     fun snapshot(maxDepth: Int = MAX_DEPTH, maxNodes: Int = MAX_NODES): JSONObject {
         val svc = service() ?: return JSONObject().put("ok", false).put("reason", "no_a11y_service")
-        val root = svc.rootInActiveWindow
-            ?: svc.windows.firstOrNull { it.isActive }?.root
-            ?: return JSONObject()
-                .put("ok", false)
-                .put("reason", "no_window")
-                .put("note", "The current window is not readable — a secure or system window (lock screen, password dialog).")
+        val (root, skippedOwn) = pickRoot(svc)
+        if (root == null) {
+            return windowDiag(
+                svc,
+                JSONObject()
+                    .put("ok", false)
+                    .put("reason", "no_window")
+                    .put("note", "The current window is not readable — a secure or system window (lock screen, password dialog)."),
+            )
+        }
         val counter = intArrayOf(0)
         val truncated = booleanArrayOf(false)
         val tree = walk(root, 0, maxDepth.coerceIn(1, MAX_DEPTH), maxNodes.coerceIn(1, MAX_NODES), counter, truncated)
         return JSONObject()
             .put("ok", true)
             .put("package", root.packageName?.toString().orEmpty())
+            // 活动窗口本来是我们自己的悬浮窗（于是这棵树读的是别的窗）—— 不写出来，
+            // 「package 怎么是自己」就会变成下一个要靠猜的谜
+            .put("own", skippedOwn)
+            .put("input", inputDiag(svc))
             .put("nodes", counter[0])
             .put("truncated", truncated[0])
             .put("tree", tree)
@@ -90,6 +106,9 @@ internal object DshA11y {
         val rect = Rect()
         node.getBoundsInScreen(rect)
         obj.put("bounds", JSONArray(listOf(rect.left, rect.top, rect.right, rect.bottom)))
+        // 键盘输入焦点落在谁身上：agent 找输入框时这一位比什么都直接（以前树里根本没有它，
+        // 于是"节点没报 focused"其实是"我们从没问过"）
+        if (node.isFocused) obj.put("focused", true)
         if (node.isClickable) obj.put("clickable", true)
         if (node.isEditable) obj.put("editable", true)
         if (node.isScrollable) obj.put("scrollable", true)
@@ -138,16 +157,40 @@ internal object DshA11y {
         }
     }
 
-    /** 往可编辑节点里写字（默认写当前聚焦的那个）。 */
-    fun setText(text: String, target: String?): JSONObject {
+    /**
+     * 往可编辑节点里写字。
+     *
+     * 三条定位方式，按语义从窄到宽：
+     * - 给了 `target`（可再带 `class` 过滤）：按文字/描述/view id 找（与 [click] 同一套匹配）；
+     * - **只给了 `class`**：WebView 里的原生编辑框经常既没有 text 也没有 view id
+     *   （`viewIdResourceName` 对网页元素通常是 null），`class` 是唯一稳的抓手 ——
+     *   `findAll` 的匹配是 `text.contains(target)`，target 传空串即命中全部，再被 class 滤掉；
+     * - 两个都没给：写**当前聚焦**的那个（`FOCUS_INPUT`）。
+     *
+     * 三种方式失败的 reason 不同：定位失败是 `not_found`（附上找的是什么），
+     * 焦点失败是 `no_input_focus`（附上是哪个窗口）—— 否则"没找到"会被读成"没焦点"。
+     */
+    fun setText(text: String, target: String?, className: String? = null): JSONObject {
         val svc = service() ?: return fail("no_a11y_service")
-        val node = if (target.isNullOrBlank()) {
-            svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-        } else {
-            findAll(svc, target, null).firstOrNull { it.isEditable }
-                ?: findAll(svc, target, null).firstOrNull()
+        val byFocus = target.isNullOrBlank() && className.isNullOrBlank()
+        if (byFocus) {
+            val focused = svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            if (focused == null) return windowDiag(svc, fail("no_input_focus"))
+            return writeInto(focused, text)
         }
-        if (node == null) return fail("no_input_focus")
+        val matches = findAll(svc, target.orEmpty(), className)
+        val node = matches.firstOrNull { it.isEditable } ?: matches.firstOrNull()
+            ?: return windowDiag(
+                svc,
+                fail("not_found")
+                    .put("target", target.orEmpty())
+                    .put("class", className.orEmpty()),
+            )
+        return writeInto(node, text)
+    }
+
+    /** 真正落字：不可编辑也不可点 = 这个节点现在还不是输入框（状态不符，不是找不到）。 */
+    private fun writeInto(node: AccessibilityNodeInfo, text: String): JSONObject {
         if (!node.isEditable && !node.isClickable) return fail("not_editable")
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
@@ -373,8 +416,7 @@ internal object DshA11y {
     private fun findAll(root: AccessibilityService, target: String, className: String?): List<AccessibilityNodeInfo> {
         val out = ArrayList<AccessibilityNodeInfo>()
         val queue = ArrayDeque<AccessibilityNodeInfo>()
-        root.rootInActiveWindow?.let { queue.add(it) }
-            ?: root.windows.firstOrNull { it.isActive }?.root?.let { queue.add(it) }
+        pickRoot(root).first?.let { queue.add(it) }
         var visited = 0
         while (queue.isNotEmpty() && visited < MAX_NODES * 8) {
             val node = queue.removeFirst()
@@ -392,6 +434,70 @@ internal object DshA11y {
             for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
         }
         return out
+    }
+
+    /**
+     * 读哪一棵树、往哪个窗口里找节点。
+     *
+     * 优先"活动窗口"，但**跳过我们自己的悬浮窗**：它是常驻特性（TYPE_APPLICATION_OVERLAY），
+     * `FLAG_NOT_FOCUSABLE` 保证它不抢输入焦点，可它照样在无障碍的窗口列表里、也可能被当成
+     * 活动窗口 —— 那时 agent 是对着一个把手读屏、在错误的树里找目标，表现成"节点找不到"，
+     * 而真正的原因是我们自己的窗冒充了前台。
+     *
+     * 只跳"系统窗口"那一类：**本应用自己的界面**（TYPE_APPLICATION）常常正是 agent 要驱动的
+     * 目标（本仓的聊天/搜索框就在自己的 WebView 里），跳掉它等于把能力从自己身上拿掉。
+     *
+     * @return 选中的 root，以及"是否因为活动窗口是自己的悬浮窗而改选了别的"
+     */
+    private fun pickRoot(svc: AccessibilityService): Pair<AccessibilityNodeInfo?, Boolean> {
+        val active = svc.rootInActiveWindow
+        val ownOverlayActive = svc.windows.firstOrNull { it.isActive }?.let { isOwnOverlay(svc, it) } ?: false
+        if (active != null && !ownOverlayActive) return active to false
+        val other = svc.windows.asSequence()
+            .filter { !isOwnOverlay(svc, it) }
+            .mapNotNull { it.root }
+            .firstOrNull()
+        // 没有别的可读窗口就退回活动窗口：读我们自己的树，也好过读不到
+        return (other ?: active ?: svc.windows.firstOrNull { it.isActive }?.root) to ownOverlayActive
+    }
+
+    /** 这个窗口是本应用自己的悬浮窗吗（系统窗口 + 自家包名）。 */
+    private fun isOwnOverlay(svc: AccessibilityService, window: AccessibilityWindowInfo): Boolean =
+        window.type == AccessibilityWindowInfo.TYPE_SYSTEM &&
+            window.root?.packageName?.toString() == svc.packageName
+
+    /** 当前"键盘输入焦点"落在哪个节点上（解析不到就是"没人有焦点"，不是异常）。 */
+    private fun inputDiag(svc: AccessibilityService): JSONObject {
+        val n = svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            ?: return JSONObject().put("found", false)
+        return JSONObject()
+            .put("found", true)
+            .put("class", n.className?.toString()?.substringAfterLast('.').orEmpty())
+            .put("text", n.text?.toString().orEmpty())
+            .put("id", n.viewIdResourceName?.substringAfterLast('/').orEmpty())
+            .put("editable", n.isEditable)
+    }
+
+    /**
+     * 失败时附上"问的是哪个窗口"。
+     *
+     * 一次真机就能分开两类 `no_input_focus`：解析到的是**目标 App** 的窗（那问题在 WebView
+     * 的节点契约），还是**我们自己的悬浮窗**（见 [pickRoot]）。没有这两个字段时，两种成因
+     * 在返回值里一模一样。
+     */
+    private fun windowDiag(svc: AccessibilityService, out: JSONObject): JSONObject {
+        out.put("window", svc.rootInActiveWindow?.packageName?.toString().orEmpty())
+        val ws = JSONArray()
+        for (w in svc.windows) {
+            ws.put(
+                JSONObject()
+                    .put("package", w.root?.packageName?.toString().orEmpty())
+                    .put("system", w.type == AccessibilityWindowInfo.TYPE_SYSTEM)
+                    .put("active", w.isActive)
+                    .put("focused", w.isFocused),
+            )
+        }
+        return out.put("windows", ws)
     }
 
     private fun fail(reason: String): JSONObject = JSONObject().put("ok", false).put("reason", reason)

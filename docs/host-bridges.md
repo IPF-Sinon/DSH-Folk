@@ -89,7 +89,7 @@ dsh-native shell [--su] [--timeout ms] [--] <命令>   # 走你选的权限通�
 dsh-native a11y tree [--depth N] [--max N]        # 读当前屏幕的节点树
 dsh-native a11y click <文字或 id> [--class C] [--index N]
 dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
-dsh-native a11y text <文字> [--target <文字或 id>]
+dsh-native a11y text <文字> [--target <文字或 id>] [--class 类名]
 dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>
 dsh-native a11y screenshot               # 截当前屏幕，PNG 落在 /tmp、JSON 里回路径
 dsh-native display status                # 服务起没起、当前会话是哪块屏、走的哪条通道
@@ -191,6 +191,23 @@ Shizuku 没授权、无线 ADB 没配对。用户把通道设成 root、点「�
 读屏优先按文字或 view id 定位再点，而不是记坐标：坐标跨设备跨分辨率都不通用，读树时把 `bounds` 一并返回。
 节点自己常常 `clickable=false`（真正接点击的是父容器），所以点击会往上找可点祖先；找不到才退回按中心坐标
 点一次。安全窗口（锁屏、密码框）系统不给节点，这时明确回 `no_window`，而不是让人以为是自己写错了。
+
+**往输入框里写字的三种定位方式**：`--target`（文字/描述/view id）、**只给 `--class`**、以及都不给
+（写当前焦点）。中间那一路是给 **WebView 里的编辑框**留的：网页元素在无障碍树里常常既没有 text 也没有
+view id（`viewIdResourceName` 通常是 null），`class`（如 `EditText`）是唯一稳的抓手。三种方式失败的
+原因不同：定位失败是 `not_found`，焦点失败是 `no_input_focus`（两者以前都叫 `no_input_focus`，
+"没找到"因此会被读成"没焦点"）。
+
+**我们自己的 Web UI 会给输入框补名字**：网页元素在无障碍树里没有 text / view id，所以
+`DshWebUiActivity` 在文档开头注入一段垫片（`A11Y_SHIM`），把页面上**本来就显示给用户**的
+`placeholder` 抄成 `aria-label`（已有 aria-label/labelledby/title 的不动，没有名字也不硬造）。
+于是 agent 读树时能看到这些输入框的名字、也能按名字 `--target` 定位 —— 只对回环 origin 生效，
+别的站点不被改语义。
+
+**`a11y tree` 的三个判因字段**：`focused`（哪个节点拿着键盘焦点）、`input`（`FOCUS_INPUT` 解析到的
+那个节点；解析不到时 `found:false`）、`own`（活动窗口本来是**我们自己的悬浮窗**，于是这棵树读的是
+别的窗）。`no_input_focus` / `not_found` 的返回值里还会带 `window` 与 `windows[]`：一次真机就能分清
+"服务解析到的是目标 App"还是"解析到的是我们自己的悬浮窗"。
 
 **`a11y screenshot`（Android 11+）依赖一个"只在 bind 时读一次"的能力位**：服务必须在自己的 meta-data
 里声明 `android:canTakeScreenshot="true"`（本仓在 `res/xml/dsh_a11y.xml`）。缺了它不是"降级"而是**硬失败**
