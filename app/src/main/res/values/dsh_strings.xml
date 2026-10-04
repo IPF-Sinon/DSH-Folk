@@ -648,6 +648,7 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_log_trim_message">The window applies to logcat, the kernel log and crash dumps. Device state snapshots (properties, mounts, kernel config) have no time dimension and are always collected in full, so right after a reboot — or when a crash happened inside the window — the archive may not shrink much.</string>
     <string name="dsh_log_trim_yes">Trim</string>
     <string name="dsh_log_trim_all">Send everything</string>
+    <string name="dsh_log_window_includes">The archive includes the capability-call log (which capability was called when, and what came back): notification bodies, SMS, clipboard and spoken text are masked; shell commands and accessibility actions are kept as they are - those are exactly what you review.</string>
     <string name="dsh_log_window_title">Log time window</string>
     <string name="dsh_log_window_10m">Last 10 minutes</string>
     <string name="dsh_log_window_30m">Last 30 minutes</string>

@@ -273,6 +273,24 @@ const webui = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/DshWebUiActiv
 ok(/onConsoleMessage[\s\S]{0,2000}?DshRuntime\.appendLog\(\"\[page\] \" \+ line\)/.test(webui),
   "WebView 的页面报错落进 dsh 日志（不只是 logcat）");
 
+// 披露：归档是发给别人的，用户点「发送」前得知道里面有什么。这一句以前不存在，
+// "含能力调用记录"只在文件头里写着 —— 那是给读报告的人看的，不是给做决定的人看的。
+console.log("── 发送前的披露 ──");
+{
+  const ui = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/GeneralSettings.kt", "utf8");
+  ok(/stringResource\(R\.string\.dsh_log_window_includes\)/.test(ui),
+    "发送日志对话框引用披露文案（说了却没人看到 = 没说）");
+  for (const loc of ["app/src/main/res/values/strings_dsh_placeholder", "app/src/main/res/values/dsh_strings.xml", "app/src/main/res/values-zh-rCN/dsh_strings.xml"]) {
+    if (!fs.existsSync(loc)) continue;
+    const str = fs.readFileSync(loc, "utf8");
+    const m = str.match(/<string name="dsh_log_window_includes">([^<]*)<\/string>/);
+    ok(m !== null && /(能力调用记录|capability-call log)/.test(m[1]),
+      loc.split("/")[3 === 0 ? 0 : loc.includes("zh-rCN") ? 2 : 3] + "：披露文案点了名（报告里有什么）");
+    ok(m !== null && /(打码|masked)/.test(m[1]),
+      (loc.includes("zh-rCN") ? "中文" : "英文") + "：披露文案说了哪些字段被打码（否则用户无法判断能不能发）");
+  }
+}
+
 console.log("── 最终归档 ──");
 ok(
   /chown \$uid:\$uid \$\{targetFile\.absolutePath\}/.test(code) &&

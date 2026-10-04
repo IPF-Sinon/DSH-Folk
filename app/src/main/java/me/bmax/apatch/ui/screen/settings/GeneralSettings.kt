@@ -554,6 +554,14 @@ fun GeneralSettingsContent(
                         valueRange = 0f..4f,
                         steps = 3,
                     )
+                    // 归档是要发给别人的，用户点「发送」之前得知道里面有什么。以前这里只有
+                    // 时间窗口，于是"报告里含能力调用记录"只在文件头里写着 —— 那句是给读
+                    // 报告的人看的，不是给做决定的人看的。
+                    Text(
+                        text = stringResource(R.string.dsh_log_window_includes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             },
             confirmButton = {
