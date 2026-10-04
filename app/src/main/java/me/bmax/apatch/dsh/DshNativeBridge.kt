@@ -1441,6 +1441,17 @@ object DshNativeBridge {
                 .put("note", "The user allowed it. The level is saved; call the capability now.")
                 .toString()
 
+            // 用户也可能按「仅本次」：档位不落盘，但这一次（到 ONCE_TTL_MS 为止）必须放行 ——
+            // 少了这个分支 Kotlin 的 when 不穷尽，直接编译不过（本地无 JDK，只有 CI 会报）。
+            DshElevationRequests.Decision.ONCE -> 200 to base
+                .put("expiresInMs", DshNativeBridge.ONCE_TTL_MS)
+                .put(
+                    "note",
+                    "The user allowed this call only. The level was not saved, so expect to be " +
+                        "asked again next time; call the capability now.",
+                )
+                .toString()
+
             DshElevationRequests.Decision.DENIED -> 403 to err(
                 str(ctx, R.string.dsh_native_err_denied, capName(ctx, cap)),
                 "denied_by_user",

@@ -729,6 +729,15 @@ console.log("\n── 特权通道约束 ──");
   ok(/privDecision = if \(PrivPolicy\.restrictMode\(ctx\)\) "cap_not_listed" else "restrict_off"/.test(bridge),
     "审计能分辨「开关关着」与「这条能力不在清单里」");
   ok(!/Decision\.ALLOW_TRUST/.test(bridge), "桥里不再有第三个结论（弹窗也没有第三个按钮）");
+  {
+    // 显式 elevate 的响应 when 必须覆盖每个剩下的结论：少一个分支 Kotlin 直接编译不过。
+    // 加这条的由来 —— 删掉 ALLOW_TRUST 之后漏了 ONCE，本地没有 JDK 编译器，只有 CI 报错。
+    const at = bridge.indexOf("val response = when (decision) {");
+    const seg = at < 0 ? "" : bridge.slice(at, bridge.indexOf("\n        }", at));
+    const missing = ["ALLOWED", "ONCE", "DENIED", "EXPIRED"].filter((d) => !seg.includes("Decision." + d));
+    ok(at >= 0 && missing.length === 0,
+      "显式 elevate 的响应覆盖每个结论（缺 " + (missing.join(",") || "无") + "）");
+  }
   ok(!/Cap\.A11Y -> DshA11y\.riskOf/.test(bridge) && !/Cap\.DISPLAY -> if \(isWriteRequest/.test(bridge),
     "桥里不再按能力各写一套风险分级（那正是「有些能力从没被问过」的成因）");
 
