@@ -1507,7 +1507,7 @@ object DshNativeBridge {
                 .put("reason", reason)
                 .put("status", response.first)
                 .put("result", auditResult(response.second))
-            if (extra != null) for (key in extra.keys()) entry.put(key, extra.get(key))
+            for (key in extra.keys()) entry.put(key, extra.get(key))
             FileWriter(file, true).use { it.append(entry.toString()).append('\n') }
         }.onFailure { Log.w(TAG, "记录能力调用失败: ${it.message}") }
     }
@@ -1523,19 +1523,27 @@ object DshNativeBridge {
     }
 
     /**
-     * 特权调用的审计附加字段：走的哪条通道、拿到什么身份、当时是哪一档严格程度、
-     * 这次有没有经过用户同意。
+     * 审计附加字段：这次**为什么**问、或者为什么没问。
      *
-     * 这四项是事后复盘的全部依据 —— 「凌晨三点那条 pm uninstall 是谁批的」只能靠它们回答。
+     * [restrictMode] 与 [decision] 对**每个**能力都写：新模型下「这条为什么没被拦」正是要复盘
+     * 的问题（开关关着是全局默认，不在清单里是用户把它移出了清单，两者含义完全不同）。
+     * 旧写法只给 shell 记，于是真机报告里 153 条 a11y 调用一条都答不出是问过还是静默放行。
+     *
+     * [channel] / [uid] 仍然只给 shell：它们描述的是**那条提权通道的身份**
+     * （「凌晨三点那条 pm uninstall 是谁批的、以什么身份跑的」只能靠它们回答），
+     * 对相机、无障碍这些不经过提权通道的能力没有意义。
      */
-    private fun privAuditExtra(ctx: Context, cap: Cap, decision: String): JSONObject? {
-        if (cap != Cap.SHELL) return null
-        val reach = PrivilegedShell.reach(ctx)
-        return JSONObject()
-            .put("channel", reach?.channel?.name?.lowercase().orEmpty())
-            .put("uid", reach?.uid ?: -1)
+    private fun privAuditExtra(ctx: Context, cap: Cap, decision: String): JSONObject {
+        val entry = JSONObject()
             .put("restrictMode", PrivPolicy.restrictMode(ctx))
             .put("decision", decision)
+        if (cap == Cap.SHELL) {
+            val reach = PrivilegedShell.reach(ctx)
+            entry
+                .put("channel", reach?.channel?.name?.lowercase().orEmpty())
+                .put("uid", reach?.uid ?: -1)
+        }
+        return entry
     }
 
     private fun channelLabel(ctx: Context, channel: PermissionManager.Channel): String = str(

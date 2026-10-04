@@ -201,6 +201,15 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         apFileTree, appListFile, propFile, packageConfigFile, kernelConfig,
     ).forEach { prepareOut(it) }
 
+    // 没有提权通道时用的是普通 sh（见 APatchCli.tryGetRootShell），下面那批只能读到空。
+    // 不写这一句，读报告的人分不清「没采」与「采了但为空」：真机报告里 15 个 0 字节文件、
+    // basic.txt 里一个字都没解释，靠 PermissionChannel: NONE 反推出来的就是这么回事。
+    if (!me.bmax.apatch.dsh.PermissionManager.elevationEnabled(context)) {
+        notes += "特权未启用：本次采集用的是普通 sh，dmesg / kallsyms / mounts / filesystems / " +
+            "cmdline / packages / defconfig / ap_tree 以及各崩溃转储目录（tombstones / dropbox / " +
+            "pstore / diag / oplus / bootlog）都可能为空"
+    }
+
     tryGetRootShell(context).use { shell ->
         // 崩溃转储目录按 mtime 收窗口内的文件：find 出相对路径清单，再交给 tar -T。
         // toybox find 的 `-mmin -N` 语义是「距今不足 N 分钟」（compare_numsign 的 '-' 分支），
@@ -430,6 +439,8 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
             val sb = StringBuilder()
             sb.append("# 能力调用审计（与设备上「权限调用记录」同一份数据；每行一条 JSON）\n")
             sb.append("# 字段：time method path command capability access effectiveAccess reason status result\n")
+            sb.append("#       restrictMode decision（每个能力都有：这次为什么问、或为什么没问）\n")
+            sb.append("#       channel uid（只有 shell 有：走的那条提权通道与拿到的身份）\n")
             sb.append("# 隐私：command 按各端点的打码口径；fullCommand（明文副本）不随报告导出\n")
             fun appendAudit(name: String, label: String, keep: Int) {
                 val src = File(auditDir, name)

@@ -774,6 +774,24 @@ console.log("\n── 特权通道约束 ──");
   ok(/Kind\.CALL/.test(bridge) && /Kind\.LEVEL/.test(bridge), "两种弹窗分开了（长期授权只对 LEVEL 有意义）");
   ok(/.put\("decision", decision\)/.test(bridge), "审计记录了「用户点过头还是自动放行」");
   ok(/\.put\("restrictMode", PrivPolicy\.restrictMode\(ctx\)\)/.test(bridge), "审计记录了当时的限制模式");
+  {
+    // 旧写法只给 shell 记 decision/restrictMode，于是 a11y/虚拟屏的"为什么没问"无从复盘
+    // （真机报告里 153 条 a11y 调用全部答不出）。这里钉住：两个字段在 shell 判定**之前**
+    // 就写进 entry，只有 channel/uid 留在 shell 分支里。
+    const at = bridge.indexOf("private fun privAuditExtra(");
+    const body = at < 0 ? "" : bridge.slice(at, bridge.indexOf("\n    }\n", at));
+    const shellAt = body.indexOf("if (cap == Cap.SHELL)");
+    const modeAt = body.indexOf('"restrictMode"');
+    const decAt = body.indexOf('"decision"');
+    const chAt = body.indexOf('"channel"');
+    const uidAt = body.indexOf('"uid"');
+    ok(shellAt > 0 && modeAt > 0 && decAt > 0 && modeAt < shellAt && decAt < shellAt,
+      "restrictMode 与 decision 对每个能力都写（在 shell 分支之前）");
+    ok(chAt > shellAt && uidAt > shellAt,
+      "channel / uid 仍只在 shell 分支里（它们描述的是那条提权通道的身份）");
+    ok(!/private fun privAuditExtra\([^)]*\): JSONObject\?/.test(bridge),
+      "附加字段不再是可空的（可空就等于「有些能力没有这两个字段」）");
+  }
   ok(/PrivilegedShell\.denyReason\(ctx, risk, asRoot\)/.test(bridge), "执行前先过通道约束");
   ok(/spendOnce\(ctx, cap, method, path, params\)/.test(bridge), "「仅本次」配额按同样的读写判据消耗");
 }

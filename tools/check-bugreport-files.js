@@ -298,6 +298,28 @@ ok(
   "归档 tar.gz 交回应用属主（否则 FileProvider 分享不出去）"
 );
 
+
+// 审计头部的字段说明：与实际字段不符时，读报告的人会以为"没有这两个字段就是没记录"。
+{
+  const log = code;
+  ok(/# 字段：time method path command capability access effectiveAccess reason status result/.test(log),
+    "审计头部仍列出基础字段");
+  ok(/restrictMode decision/.test(log) && /channel uid/.test(log),
+    "审计头部说清两类附加字段各自适用于谁");
+}
+// 退化到普通 sh 采集时必须留一句说明：否则读报告的人分不清「没采」与「采了但为空」
+// （真机报告里 15 个 0 字节文件、basic.txt 里一个字都没解释）。
+{
+  const log = code;
+  ok(/if \(!me\.bmax\.apatch\.dsh\.PermissionManager\.elevationEnabled\(context\)\)/.test(log),
+    "退化采集的说明挂在「特权未启用」这个条件上（无条件写就成了误报）");
+  const at = log.indexOf("elevationEnabled(context)");
+  const seg = at < 0 ? "" : log.slice(at, at + 700);
+  const named = ["dmesg", "kallsyms", "mounts", "filesystems", "cmdline", "packages", "defconfig", "ap_tree", "tombstones", "dropbox", "pstore"];
+  const missing = named.filter((n) => !seg.includes(n));
+  ok(missing.length === 0, "说明里点名了会受影响的采集项（缺 " + (missing.join(",") || "无") + "）");
+}
+
 console.log("");
 if (failed === 0) {
   console.log("全部通过（" + written.size + " 个文件 + " + total + " 项断言）");
