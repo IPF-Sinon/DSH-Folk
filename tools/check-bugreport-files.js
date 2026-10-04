@@ -21,7 +21,9 @@ const fs = require("fs");
 const PATH = "app/src/main/java/me/bmax/apatch/util/LogEvent.kt";
 
 let failed = 0;
+let total = 0;
 function ok(cond, label) {
+  total++;
   if (cond) {
     console.log("  ✓ " + label);
   } else {
@@ -224,6 +226,48 @@ ok(/head -20/.test(cmd), "容器日志最多取 20 个文件");
 ok(/tail -c 65536/.test(cmd), "每个文件最多 64 KB");
 ok(/-size -8M/.test(cmd), "跳过超大日志文件");
 
+// 能力调用审计：2026-10-04 那轮"服务自己刚写进去的字，--target 查不到"与"--class 说没匹配上、
+// 而节点就在树里"两条 bug，本来靠这份记录一眼就能定位，而报告里原来一条都没有。
+console.log("── 能力调用审计进归档 ──");
+ok(/val auditLogFile = File\(bugreportDir, "audit-log\.txt"\)/.test(code), "归档带 audit-log.txt");
+ok(/File\(auditDir, name\)/.test(code) && /appendAudit\("native-capability\.jsonl", "最近"/.test(code),
+  "收当前那份审计（filesDir/audit/native-capability.jsonl）");
+ok(/appendAudit\("native-capability\.previous\.jsonl", "上一份"/.test(code),
+  "也收轮转出去的上一份：换过文件或重启过时，事故那几条往往在里面（同 dsh-prev.log 的由来）");
+ok(/reduceAuditLine\(line\)/.test(code), "每一行都过降级函数（不是把原始 jsonl 直接倒进报告）");
+{
+  // fullCommand 是同参数的不打码副本：留在设备上供「权限调用记录」复核，报告不带第二份明文。
+  // 判据要钉在真正删掉它的那一行上 —— 只断言"文件里出现过 fullCommand"会被注释满足。
+  const mk = code.match(/private fun reduceAuditLine\(line: String\): String = runCatching \{([\s\S]*?)\}\.getOrElse/);
+  const body = mk ? mk[1] : "";
+  ok(/JSONObject\(line\)/.test(body) && /remove\("fullCommand"\)/.test(body),
+    "降级函数真的删掉 fullCommand（明文副本不进报告）");
+  // 只断言"文件里出现过 fullCommand"会被注释/文件头说明满足，所以钉在"写回"这个动作上
+  ok(!/\.put\("fullCommand"/.test(code) && !/append\("fullCommand"/.test(code),
+    "没有任何地方把 fullCommand 写回记录（删掉之后又写回 = 报告里照样有明文副本）");
+}
+{
+  // 只 grep 有没有那句字（之前就是这样）挡不住"写了但从不执行"：条件一改就永远不说，
+  // 而报告里少掉的记录又变成一个要来回问的问题。所以把说明钉在截断条件**里面**。
+  const acc = code.match(/if \(lines\.size > tail\.size\) \{([\s\S]{0,300}?)\}\n/);
+  ok(acc !== null && /原 /.test(acc[1]) && /只取最后/.test(acc[1]),
+    "截断说明挂在 lines.size > tail.size 条件里（不是写了但从执行不到）");
+}
+ok(/\}\.onSuccess \{ auditLogFile\.writeText\(it\) \}/.test(code) &&
+  /\}\s*\.onFailure \{ notes \+= "能力调用审计采集失败: \$\{it\.message\}" \}/.test(code),
+  "采集失败记进 notes（采集本身不能把报告搞崩）");
+ok(/redactInPlace\(auditLogFile, notes\)/.test(code),
+  "审计也过脱敏（返回体里可能有 WebUI token、设备标识）");
+{
+  // 收多少行要有个头：审计文件上限 1 MB，行数给太大等于把整份报告撑起来
+  const keep = code.match(/AUDIT_KEEP_LINES = (\d+)/);
+  const prev = code.match(/AUDIT_PREV_KEEP_LINES = (\d+)/);
+  const k = keep ? Number(keep[1]) : -1;
+  const pv = prev ? Number(prev[1]) : -1;
+  ok(k > 0 && k <= 2000 && pv > 0 && pv <= 1000 && pv <= k,
+    "行数上限合理（当前 " + k + " + " + pv + " 条，上限 2000/1000 且上一份不超过当前）");
+}
+
 // 前端页面报错也要有一份落进 dsh 日志：logcat 只覆盖最近几分钟，还要看采集时机
 const webui = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/DshWebUiActivity.kt", "utf8");
 ok(/onConsoleMessage[\s\S]{0,2000}?DshRuntime\.appendLog\(\"\[page\] \" \+ line\)/.test(webui),
@@ -238,7 +282,7 @@ ok(
 
 console.log("");
 if (failed === 0) {
-  console.log("全部通过（" + written.size + " 个文件 + 8 项断言）");
+  console.log("全部通过（" + written.size + " 个文件 + " + total + " 项断言）");
   process.exit(0);
 }
 console.log(failed + " 项失败");

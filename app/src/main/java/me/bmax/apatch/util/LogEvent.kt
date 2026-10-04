@@ -50,6 +50,13 @@ enum class LogWindow(val minutes: Int, val labelRes: Int) {
 private const val DOLLAR = "\$"
 
 /**
+ * 审计日志收多少行。审计文件本身上限 1 MB（约几千条），500 条足够覆盖"这次为什么失败"
+ * 的现场；真机上换过文件或重启过，事故那几条往往落在上一份里，所以再多收一点上一份。
+ */
+private const val AUDIT_KEEP_LINES = 500
+private const val AUDIT_PREV_KEEP_LINES = 200
+
+/**
  * 采集容器内 dsh 自己写的日志。
  *
  * 为什么要有这一项：应用收的 `dsh.log` 只是 dsh 进程的 **stdout**，而插件落盘的日志
@@ -407,6 +414,42 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         }.onSuccess { backupLogFile.writeText(it) }
             .onFailure { notes += "备份日志采集失败: ${it.message}" }
 
+        // 能力调用审计（filesDir/audit/native-capability.jsonl）：谁在什么时候调了什么、返回了什么。
+        //
+        // 为什么要有这一项：2026-10-04 那轮 a11y 报告里"服务自己刚写进去的字，--target 查不到"
+        // 与"--class 说没匹配上、而节点就在树里"，靠这份记录一眼就能定位（请求参数、返回码、
+        // 返回体都在里面）—— 而报告里原来一条都没有，只能靠来回问、靠猜，多花了两轮。
+        //
+        // 只收 `command`，**丢掉 `fullCommand`**：前者是各端点自己声明的打码口径（通知正文、
+        // 短信、剪贴板、TTS 这类打码，shell 与无障碍按设计不打码 —— 用户要复核的就是"它点了
+        // 哪里/输入了什么"），后者是同一份参数的不打码副本；那份明文留在设备上供「权限调用
+        // 记录」复核就够了，报告是要发给别人的，不必带第二份。
+        val auditLogFile = File(bugreportDir, "audit-log.txt")
+        runCatching {
+            val auditDir = File(apApp.filesDir, "audit")
+            val sb = StringBuilder()
+            sb.append("# 能力调用审计（与设备上「权限调用记录」同一份数据；每行一条 JSON）\n")
+            sb.append("# 字段：time method path command capability access effectiveAccess reason status result\n")
+            sb.append("# 隐私：command 按各端点的打码口径；fullCommand（明文副本）不随报告导出\n")
+            fun appendAudit(name: String, label: String, keep: Int) {
+                val src = File(auditDir, name)
+                if (!src.isFile) return
+                val lines = src.readLines()
+                val tail = lines.takeLast(keep)
+                sb.append("# ---- ").append(label).append(" ").append(tail.size).append(" 条")
+                if (lines.size > tail.size) {
+                    sb.append("（原 ").append(lines.size).append(" 条，只取最后 ").append(keep).append(" 条）")
+                }
+                sb.append(" ----\n")
+                for (line in tail) sb.append(reduceAuditLine(line)).append('\n')
+            }
+            appendAudit("native-capability.jsonl", "最近", AUDIT_KEEP_LINES)
+            // 上一份：审计文件超 1 MB 会轮转，而"事故那几条"常常正好落在被轮转出去的那份里
+            appendAudit("native-capability.previous.jsonl", "上一份", AUDIT_PREV_KEEP_LINES)
+            sb.toString()
+        }.onSuccess { auditLogFile.writeText(it) }
+            .onFailure { notes += "能力调用审计采集失败: ${it.message}" }
+
         // 打包之前过一遍脱敏：dsh.log 里有 WebUI 的 token（dsh 服务端自己打印的启动地址），
         // 容器日志里可能还有别的凭据，props / cmdline 里有设备稳定标识。
         // 归档是要发给别人的，这些不能在里面。
@@ -415,6 +458,8 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         redactInPlace(dshHomeLogFile, notes)
         // 服务端日志里会出现交接 token 与启动命令行，必须一起脱敏
         redactInPlace(displayServerLogFile, notes)
+        // 审计的返回体里同样可能有 token（例如 shell 回显、WebUI 地址），一起过
+        redactInPlace(auditLogFile, notes)
         redactInPlace(propFile, notes)
         redactInPlace(cmdlineFile, notes)
 
@@ -433,6 +478,16 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         targetFile
     }
 }
+
+/**
+ * 审计行降级：丢掉 `fullCommand`（同参数的不打码副本），只留 `command`。
+ *
+ * 解析不了的行原样保留（截断到 2000 字符）—— 宁可留一条看不懂的行，也别因为一条坏行
+ * 把整份记录丢掉：这份记录存在的前提就是"事后能复核"。
+ */
+private fun reduceAuditLine(line: String): String = runCatching {
+    org.json.JSONObject(line).also { it.remove("fullCommand") }.toString()
+}.getOrElse { line.take(2000) }
 
 /**
  * 按行首时间戳过滤 logcat 全量输出（`-T` 兜底用）。

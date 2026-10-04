@@ -38,6 +38,16 @@ inside the container (`dsh-home-logs.txt`, size-capped per file), and WebView pa
 in logcat and in that log). The first alone is not enough: a service start wipes it, so a report
 collected after a restart shows nothing about what went wrong before it.
 
+**The capability-call audit log (`audit-log.txt`) goes into the archive too**: who called what, when, and what came back — the same data as the
+on-device "privilege call log". It exists because of the 2026-10-04 accessibility report: "the service cannot find the string it just wrote with
+`--target`" and "`--class` says nothing matched while the node is right there in the tree" were both one glance away with this record (request
+params, status code, response body) — and the report carried none of it, so that round was spent asking back and guessing. Two edges: only
+`command` is collected (each endpoint declares its own masking: notification bodies, SMS, clipboard and TTS are masked; shell and accessibility
+are not, by design, because what the user reviews is *where it tapped and what it typed*), and `fullCommand` is **dropped** (the unmasked copy of
+the same params is enough on-device, while the report is sent to someone else); the current file keeps its last 500 entries and the rotated
+previous one its last 200 (the entries from the incident often live there), truncation is written into the file header, and it is redacted like
+every other item.
+
 Session restore **does not carry `session.lock` over**: it is runtime state ("this session is being
 written"), meaningless across machines, and — worse — the grouping helper parsed it as a session
 (a zero-byte file yields no zstd frame), which is how a real device reported "6 of 15 session files
