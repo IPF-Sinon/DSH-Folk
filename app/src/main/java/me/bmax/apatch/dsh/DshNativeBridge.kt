@@ -386,7 +386,7 @@ object DshNativeBridge {
     }
 
     // 特权命令是**唯一**既读又写却没有 Android 权限的能力：它的门禁全在通道上
-    // （[PrivilegedShell.denyReason]）与严格程度上（[PrivPolicy.needsConfirm]）。
+    // （[PrivilegedShell.denyReason]）与「限制模式 + 危险操作清单」上（[PrivPolicy.needsConfirm]）。
 
     fun supportsRead(cap: Cap): Boolean = when (cap) {
         Cap.TOAST, Cap.VIBRATE, Cap.TORCH, Cap.FULL_SCREEN_NOTIFY, Cap.INTENT, Cap.MIC, Cap.CAMERA -> false
@@ -666,27 +666,28 @@ object DshNativeBridge {
         // 档位不够时**不**直接 403，而是阻塞着问用户。用户同意就把这次调用就地执行掉并返回真实
         // 结果 —— agent 不需要「申请 → 再调一次」，也就不会看到「申请成功了但调用还是失败」。
         val need = insufficient(ctx, cap, method, path, params)
-        // 档位够不代表就能直接跑：特权调用还要过「严格程度」这一关（[PrivPolicy]）。
-        // 严格档下每一次都要用户当场同意，档位够不够与此无关。
-        val risk = when (cap) {
-            Cap.SHELL -> PrivilegedShell.riskOf(params["cmd"].orEmpty())
-            Cap.A11Y -> DshA11y.riskOf(path.substringAfterLast('/'))
-            // 虚拟屏一律 DANGEROUS：注入输入与启动 App 都能真实改变设备状态，而且它绕过
-            // 无障碍那套「用户看得见在点什么」的界面语义。读档位只放行截屏与查询
-            // （见 isWriteRequest），也就是用户可以「让我看，但别动」。
-            // 虚拟屏按**端点**分级（以前一律 DANGEROUS）：查询与截图是只读；建会话、点击、
-            // 滑动、按键、启动 App、停止都只算"会改状态、影响清楚、容易恢复"（WRITE）。
-            // 这与 isWriteRequest 的读/写分档是**同一条线**，两处必须对齐（门禁逐端点对拍）——
-            // 以前一律 DANGEROUS 的后果是：不管用户选哪一档严格程度，每条点击都要弹窗，
-            // 于是"用虚拟屏"这件事在实践中根本走不下去。
-            Cap.DISPLAY -> if (isWriteRequest(method, path, params)) PrivRisk.WRITE else PrivRisk.READONLY
-            else -> null
+        // 档位够不代表就能直接跑：还要过「限制模式 + 危险操作清单」这一关（[PrivPolicy]）。
+        //
+        // 判据只有两个来源，**对所有能力一视同仁**：
+        //  ① 命中危险操作清单 → 永远问（清单条目可删，删掉即沉默）；
+        //  ② 限制模式开着、且这个能力在能力清单里 → 每次都问。
+        // 旧模型这里是 `when (cap)` 只给 shell/虚拟屏/无障碍算 risk、其余返回 null ——
+        // 于是短信、相机、麦克风、定位在能力启用之后再没被问过。那道"闸"本来就只覆盖三个
+        // 能力；现在把 CAMERA 之类放进能力清单才是真的新增了一道闸。
+        val danger = cap == Cap.SHELL &&
+            PrivPolicy.shellRisk(ctx, params["cmd"].orEmpty()) == PrivRisk.DANGEROUS
+        val confirm = PrivPolicy.needsConfirm(
+            restrictMode = PrivPolicy.restrictMode(ctx),
+            capRestricted = PrivPolicy.isRestricted(ctx, cap),
+            danger = danger,
+        )
+        // risk 只用于审计与返回值（`docRisk` 等）：它不再决定问不问，但必须仍与清单一致，
+        // 否则"审计说 dangerous、实际没问"就成了新的谜。
+        val risk = if (cap == Cap.SHELL) {
+            PrivPolicy.shellRisk(ctx, params["cmd"].orEmpty())
+        } else {
+            PrivRisk.WRITE
         }
-        val strictness = PrivPolicy.of(ctx)
-        // 「不再逐条确认」是**按能力**的：用户不必为了免掉虚拟屏的每条点击，把整机降到宽松。
-        // 危险操作它管不着（PrivPolicy 里先判 DANGEROUS）。
-        val trusted = risk != null && PrivPolicy.isTrusted(ctx, cap)
-        val confirm = risk != null && PrivPolicy.needsConfirm(strictness, risk, trusted)
         if (need != null || confirm) {
             // 弹窗只有在前台才看得见；不在前台就别把这条连接挂在这里等一个永远不会出现的弹窗
             if (!isForeground(ctx)) {
@@ -727,8 +728,6 @@ object DshNativeBridge {
             when (DshElevationRequests.awaitDecision(request.id)) {   // 阻塞在这里等用户
                 DshElevationRequests.Decision.ALLOWED,
                 DshElevationRequests.Decision.ONCE,
-                // 「允许并不再逐条确认」：能力已进信任名单（按钮那边落的盘），这次当然放行
-                DshElevationRequests.Decision.ALLOW_TRUST,
                 -> Unit
 
                 DshElevationRequests.Decision.DENIED -> {
@@ -752,9 +751,11 @@ object DshNativeBridge {
                 }
             }
         }
-        // 免确认直接跑掉的时候，"为什么不用问"要能分辨：被信任放行，与本来就不问（宽松档/
-        // 只读），事后审计的含义完全不同。
-        if (risk != null && need == null && !confirm && trusted) privDecision = "trusted"
+        // 免确认直接跑掉的时候，"为什么不用问"要能分辨：限制模式关着，还是这个能力不在清单里
+        // —— 事后复盘时这两者的含义完全不同（前者是全局默认，后者是用户把它移出了清单）。
+        if (need == null && !confirm) {
+            privDecision = if (PrivPolicy.restrictMode(ctx)) "cap_not_listed" else "restrict_off"
+        }
         // 兜底：走到这里档位仍不够（例如申请期间用户在别处把开关关掉了）。维持原来的 403，
         // 而不是假装放行。
         if (!capCallable(ctx, cap)) {
@@ -1241,8 +1242,8 @@ object DshNativeBridge {
      * 当前特权通道的事实：走哪条、能拿到什么身份、严格程度如何。
      *
      * 四个字段都是 agent 决定「要不要走特权这条路」必需的信息：uid 决定它能读什么，
-     * canRoot 决定 `--su` 有没有意义，strictness 决定这次调用会不会弹窗
-     * （严格档下每次都会，所以别把十件事拆成十条命令）。
+     * canRoot 决定 `--su` 有没有意义，restrictMode 决定这次调用会不会还要用户点头
+     * （开着时清单里的能力每次都会，所以别把十件事拆成十条命令）。
      */
     internal fun elevationJson(ctx: Context): Any {
         val reach = PrivilegedShell.reach(ctx) ?: return JSONObject.NULL
@@ -1256,7 +1257,8 @@ object DshNativeBridge {
             .put("reason", reach.reason ?: JSONObject.NULL)
             // 首选不可用而落到了别的通道：不说的话，agent 会以为「用户选的就是这条」
             .put("fellBackFrom", reach.selected?.let { PrivilegedShell.channelId(it) } ?: JSONObject.NULL)
-            .put("strictness", PrivPolicy.of(ctx).id)
+            // 现在只有一个开关：限制模式。旧字段叫 strictness，语义已经不存在（见 PrivPolicy）
+            .put("restrictMode", PrivPolicy.restrictMode(ctx))
     }
 
     // ────────────────────────── 能力实现 ──────────────────────────
@@ -1429,8 +1431,7 @@ object DshNativeBridge {
         val decision = DshElevationRequests.awaitDecision(request.id)
         val base = JSONObject()
             .put("ok", decision == DshElevationRequests.Decision.ALLOWED ||
-                decision == DshElevationRequests.Decision.ONCE ||
-                decision == DshElevationRequests.Decision.ALLOW_TRUST)
+                decision == DshElevationRequests.Decision.ONCE)
             .put("status", decision.id)
             .put("cap", cap.id)
             .put("access", requested.id)
@@ -1438,25 +1439,6 @@ object DshNativeBridge {
         val response = when (decision) {
             DshElevationRequests.Decision.ALLOWED -> 200 to base
                 .put("note", "The user allowed it. The level is saved; call the capability now.")
-                .toString()
-
-            DshElevationRequests.Decision.ALLOW_TRUST -> 200 to base
-                .put("trusted", true)
-                .put(
-                    "note",
-                    "The user allowed it and added this capability to the no-more-asking list. " +
-                        "The level is saved; call the capability now. Dangerous actions still ask.",
-                )
-                .toString()
-
-            DshElevationRequests.Decision.ONCE -> 200 to base
-                .put("once", true)
-                .put("onceTtlMs", ONCE_TTL_MS)
-                .put(
-                    "note",
-                    "The user allowed this once. It covers exactly one call within " +
-                        "${ONCE_TTL_MS / 1000}s; make that call now.",
-                )
                 .toString()
 
             DshElevationRequests.Decision.DENIED -> 403 to err(
@@ -1541,7 +1523,7 @@ object DshNativeBridge {
         return JSONObject()
             .put("channel", reach?.channel?.name?.lowercase().orEmpty())
             .put("uid", reach?.uid ?: -1)
-            .put("strictness", PrivPolicy.of(ctx).id)
+            .put("restrictMode", PrivPolicy.restrictMode(ctx))
             .put("decision", decision)
     }
 

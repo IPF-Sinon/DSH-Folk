@@ -129,6 +129,13 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
         // 太晚（那时首帧已经在 measure 了），会撞未初始化的 lateinit 直接崩。
         me.bmax.apatch.dsh.DshRuntime.init(this)
 
+        // 权限策略迁移：旧模型（全局严格程度 + 信任名单）→ 新模型（限制模式 + 两张清单）。
+        // 放在这里而不是 UI 里：它必须在任何一次能力判定之前跑完，而首页 composition 只是
+        // "通常更早" —— 一个后台调用不该因为用户没打开首页就按旧键做判定。
+        // 迁移只跑一次，并且**一律关**（用户拍板）；需要告知的人由 KEY_PRIV_POLICY_NOTICE 记着，
+        // 由首页在更新内容弹窗关掉之后弹一次说明（见 Home.kt）。
+        me.bmax.apatch.dsh.PrivPolicy.migrateOnce(this)
+
         // 主题/音效/背景等配置必须在任何 Composable 读取之前同步载入
         MusicConfig.load(this)
         me.bmax.apatch.ui.theme.SoundEffectConfig.load(this)

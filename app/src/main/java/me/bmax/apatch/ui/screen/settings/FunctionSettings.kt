@@ -87,7 +87,6 @@ import me.bmax.apatch.dsh.RuntimeVersion
 import me.bmax.apatch.dsh.compareVersions
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
-import me.bmax.apatch.dsh.PrivStrictness
 import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.ExpressiveSwitch

@@ -176,8 +176,9 @@ The three channels differ only in who executes:
 | wireless ADB | 2000, uid 0 only with `--su` | forwarded to the in-container script, so its two locks still apply |
 
 Only two levels are meaningful: **read** allows diagnostics (the **same allowlist** the in-container script uses — `tools/check-native-logic.js` asserts the two are
-byte-identical), **read+write** can change device state. Strictness decides whether you are asked (see above), and every call is audited with the channel, the identity,
-the strictness in force and whether the user approved it or it ran unattended. **"a channel is selected" and "a channel works" are two different things**, and the prompt states both: root that has not been
+byte-identical), **read+write** can change device state. Whether you are asked is decided by restriction mode plus the two lists (see above), and every call is
+audited with the channel, the identity, the restriction mode in force and whether the user approved it or it ran unattended (an unattended run also records
+whether the switch was off or the capability was simply not on the list, which mean different things in hindsight). **"a channel is selected" and "a channel works" are two different things**, and the prompt states both: root that has not been
 refreshed yet is "selected, one step missing" (`root_unverified`) rather than "this device has no privilege" — the latter makes the
 agent give up without trying. Root no longer needs a manual refresh either: the app verifies it on launch (silent when the grant
 already exists) and a denial is not retried for a day, so the prompt cannot nag. Only three cases are blocked up front: unverified
@@ -185,7 +186,7 @@ root (still attempted, the su prompt appears at call
 time), unauthorized Shizuku, and unfinished ADB pairing. Selecting a channel, tapping Refresh permissions, and just granting Shizuku
 each rewrite the host facts immediately — miss one and the user hits "I turned root on and it seems not to know", because that prompt
 section is rendered from those facts. `dsh-native caps` carries the **read-only command list** and whether the channel is ready:
-under strict strictness a wrong guess costs the user a tap, and the list has a single source shared with the host's own check.
+when the capability is on the restriction list a wrong guess costs the user a tap, and the list has a single source shared with the host's own check.
 
 
 Results carry `exit` plus `stdout`/`stderr` (truncated past 64 KB); failures are separated by
@@ -268,31 +269,41 @@ off restores the page (the manager is native, so it still opens when a script bl
 that call open**, shows the dialog in the app, and then either runs the command and hands the real result back, or fails that one call (deny, or no answer within
 60 seconds). The agent never has to file a request and then call again, so "the request succeeded but the call still failed" cannot happen.
 
-The dialog gives the user four answers — **Allow** (the level sticks), **Allow once** (exactly the next call of that capability goes through and then reverts; the
-switch in settings is untouched), **Allow and stop asking** (below) and **Deny** (closing the dialog counts as deny). Its body shows **the command that is about to run** verbatim in a monospace,
+The dialog gives the user **three** answers — **Allow** (the level sticks), **Allow once** (exactly the next call of that capability goes through and then reverts; the
+switch in settings is untouched) and **Deny** (closing the dialog counts as deny). Its body shows **the command that is about to run** verbatim in a monospace,
 selectable block — what the user is judging is never "camera=write, yes or no" but "what is it about to do". The bridge rebuilds that command from the call
-itself, so an ordinary call needs no extra flag; only an explicit `dsh-native elevate` takes `--command` to say what it intends to do.
+itself, so an ordinary call needs no extra flag; only an explicit `dsh-native elevate` takes `--command` to say what it intends to do. **There is exactly one
+place to stop being asked**: Settings → Permissions → Restriction mode; the dialog only says where that is (a shortcut button on the dialog would be a second
+entry point, and then the user cannot see how much they exempted in total).
 
-**"Allow and stop asking" is a second key that works per capability** (`priv_trusted_caps`, holding `Cap.id` values). It exists because strictness is
-**global**: to stop the virtual screen from prompting on every single tap, the only other option was dropping the whole device to normal/loose — which also
-frees up shell, SMS, notifications and the rest, too big a price, so most people just put up with tapping "Allow" dozens of times. This list narrows the grant
-to **one capability**, and it can be **revoked at any time** (a grant you can only undo by wiping data is not really a choice). Adding and revoking both
-happen in **one place**: Settings → Permissions → the **last category, "No more asking"**, which lists every native capability by category with a search box
-(matching capability name, summary or category name); switched on means it is no longer asked one by one. The switch used to sit on each capability's card, and
-the cost of that was that it **was not a list at all** — you could not see which ones you had exempted, and adding one meant first finding its card. Two hard edges live in `PrivPolicy` and are pair-checked cell by cell in `check-native-logic.js`: **dangerous actions always ask**
-(uninstall, reboot, wiping data — whatever the strictness, trusted or not), and it **does not change** what global strictness means (strict still asks every
-time on capabilities that were not trusted).
+**Whether you are asked depends on two things only** (`PrivPolicy.needsConfirm`, one line, pair-checked cell by cell in `check-native-logic.js`):
 
-**Accessibility risk is graded per action too**: `tree`/`screenshot` were read-only, `click`/`tap`/`swipe` were writes, but **typing and system
-actions counted as dangerous** — meaning `a11y text` asked on every single call no matter which strictness the user picked and no matter whether they had
-added the capability to "no more asking", so the list did nothing for accessibility. The criterion goes back to the one the read/write tiering uses: they
-all change screen state, and none of them is unrecoverable (while `tap`/`click` were already writes, and those can press any "send"/"delete"/"uninstall"
-button on screen). The dangerous tier stays for uninstall, reboot and wiping data. Adding accessibility to the list now silences the whole family.
+1. **The dangerous-operation list**: a hit always asks, whatever the switch says. The default table comes from the two hard-coded tables in
+   `PrivilegedShell` (`rm` / `dd` / `mkfs` / `reboot`… and `pm uninstall` / `settings put` / `svc power`…), but in settings it is **an ordinary list you can
+   edit**: remove an entry and it stops asking (the predicate takes the command basename), add your own and it takes effect immediately, and a restore-default
+   button puts everything back (removed built-ins and your additions are stored separately so each can be restored independently). Additions accept only
+   "command" or "command subcommand" made of plain characters — a broken regex would let some command go **silently unasked**, which is far worse than not
+   supporting regex.
+2. **Restriction mode plus the capability list**: **off** by default (for new installs and for users migrated from the old model alike). While it is off, a
+   capability the agent has been granted runs without asking again; switch it on and every capability on the list asks every time — the default list is shell,
+   virtual screen, camera, microphone and SMS, and it can be edited or restored too.
 
-**The virtual screen's risk is graded per endpoint**: status and screenshot are **read-only**; creating a session, tapping, swiping, keys, launching an app and
-stopping are **write** — the same predicate the read/write level uses (`isWriteRequest`), because two separate predicates would let "the level says read, the
-strictness says write" contradict each other. The reason for the change: the virtual screen used to be classified as dangerous, so **every tap prompted no
-matter which strictness the user picked**, and using the virtual screen simply was not workable in practice.
+**Why the old model was replaced**: it was "global strictness (strict/normal/loose) plus a per-capability no-more-asking list", stacked on top of the access
+level (may I do this at all) into three dimensions whose combinations were impossible to explain; worse, its per-call gate covered **only shell, the virtual
+screen and accessibility** — SMS, camera, microphone and location were never asked again once their level was granted, so the list had nothing to act on for
+them. There is now one predicate for every capability: whether it is **on the list** decides whether you are asked, the **level** decides whether it is allowed.
+
+On upgrade the settings are rebuilt under the new model (restriction mode off, list at its default) and one notice is shown **after the changelog dialog is
+closed** — without it, a user who sees the agent act silently will read it as a bug.
+
+**Accessibility actions are no longer graded individually**: `tree`/`screenshot` were read-only, `click`/`swipe` writes and `text`/`global` dangerous, so
+once it entered the asking path `a11y text` prompted every single time. Now the family is not graded per action at all: whether it is on the capability list
+decides whether it asks, the read/write level decides whether it is allowed.
+
+**The virtual screen's risk is no longer graded separately either**: the read/write split (`isWriteRequest`: status and screenshot read-only; session, tap,
+swipe, keys, launching an app and stopping are writes) still decides the **level**, but no longer decides whether you are asked. It used to be classified as
+dangerous, so **every tap prompted no matter which setting the user picked**, and using the virtual screen was simply not workable — which was also the old
+model's least explicable spot: for one endpoint the level said read while strictness said write.
 
 Several deliberate constraints:
 

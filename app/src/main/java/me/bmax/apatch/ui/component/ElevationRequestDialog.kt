@@ -40,7 +40,6 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshElevationRequests
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
-import me.bmax.apatch.dsh.PrivPolicy
 
 /**
  * 原生能力申请弹窗（两段）。
@@ -103,7 +102,9 @@ private fun ElevationDialog(activity: Activity, request: DshElevationRequests.Re
     val confirmOnly = request.kind == DshElevationRequests.Kind.CALL
     // 严格档不给「允许（长期）」：那一档的全部含义就是「下次还要问」，给一个落盘的
     // 长期授权等于把它悄悄降成「一般」。
-    val persistent = !confirmOnly && PrivPolicy.allowsPersistentGrant(PrivPolicy.of(activity))
+    // 「允许（长期）」只在档位不够时给：档位已经够了还问，是限制模式或危险清单要的问一次，
+      // 而"长期"在这里没有意义（它动的是档位，不是"还问不问"）。
+    val persistent = !confirmOnly
 
     AlertDialog(
         onDismissRequest = { DshElevationRequests.clear(request.id) },
@@ -171,11 +172,10 @@ private fun ElevationDialog(activity: Activity, request: DshElevationRequests.Re
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
+                // 想让它以后别问，入口只在「权限管理 → 限制模式」（名单只在一处管理）——
+                // 弹窗这里只说清"去哪"，不给第二个入口。
                 Text(
-                    text = stringResource(
-                        R.string.dsh_native_elevate_trust_hint,
-                        request.cap.id,
-                    ),
+                    text = stringResource(R.string.dsh_native_elevate_where_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -203,12 +203,6 @@ private fun ElevationDialog(activity: Activity, request: DshElevationRequests.Re
                     TextButton(onClick = { allow(activity, request) }) {
                         Text(stringResource(R.string.dsh_native_elevate_allow))
                     }
-                }
-                // 第三个选项：按**能力**免掉后续弹窗，可撤销，危险操作照旧会问。
-                // 严格档下也给：它正是为"我不想为虚拟屏的每条点击点几十次允许、又不想把
-                // 整机降到宽松"准备的出口（点了它才会生效，之后不再逐条问）。
-                TextButton(onClick = { allowTrusted(activity, request) }) {
-                    Text(stringResource(R.string.dsh_native_elevate_trust))
                 }
             }
         },
@@ -337,24 +331,6 @@ private fun allow(activity: Activity, request: DshElevationRequests.Request) {
     DshNativeBridge.setAccess(activity.applicationContext, request.cap, request.access)
     DshHostPrompt.writeFacts(activity.applicationContext)
     DshElevationRequests.resolve(request.id, DshElevationRequests.Decision.ALLOWED)
-    requestRuntimePermissions(activity, request)
-}
-
-/**
- * 「允许并不再逐条确认」（[DshElevationRequests.Decision.ALLOW_TRUST]）。
- *
- * 与 [allow] 的两点差别：
- *  1. 能力被写进信任名单 —— 之后这个能力不再逐条弹窗（危险操作除外，见 PrivPolicy）；
- *  2. 档位也一起落盘。信任必须有档位才跑得动，而严格档下"只信任、不落档位"会变成
- *     "下次还是弹" —— 那样这个按钮等于没用。它比全局降到宽松窄得多（只这一个能力），
- *     而且是可撤销的（设置 → 权限管理 里那一项）。
- */
-private fun allowTrusted(activity: Activity, request: DshElevationRequests.Request) {
-    val ctx = activity.applicationContext
-    DshNativeBridge.setAccess(ctx, request.cap, request.access)
-    PrivPolicy.setTrusted(ctx, request.cap, true)
-    DshHostPrompt.writeFacts(ctx)
-    DshElevationRequests.resolve(request.id, DshElevationRequests.Decision.ALLOW_TRUST)
     requestRuntimePermissions(activity, request)
 }
 

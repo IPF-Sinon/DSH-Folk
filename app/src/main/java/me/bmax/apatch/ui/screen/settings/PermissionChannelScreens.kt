@@ -59,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.RestrictModeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.WirelessAdbScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
@@ -70,7 +71,6 @@ import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.dsh.PrivPolicy
-import me.bmax.apatch.dsh.PrivStrictness
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.ExpressiveSwitch
 import me.bmax.apatch.util.ui.LocalSnackbarHost
@@ -116,7 +116,8 @@ fun PrivilegedChannelScreen(navigator: DestinationsNavigator) {
                 ?: PermissionManager.PREF_OFF
         )
     }
-    var privStrictness by remember { mutableStateOf(PrivPolicy.of(context)) }
+    // 「要不要再问」现在只有一个开关（限制模式）+ 两张清单，清单在专门的页面里管理
+    var restrictMode by remember { mutableStateOf(PrivPolicy.restrictMode(context)) }
 
     // 非 null = 正在为该状态显示引导弹窗。存状态而不是存 prefName：弹窗内容只取决于
     // 「差在哪一步」，而这一步选完就固定了。
@@ -216,10 +217,10 @@ fun PrivilegedChannelScreen(navigator: DestinationsNavigator) {
         }
     }
 
-    val onPrivStrictnessChange: (PrivStrictness) -> Unit = { level ->
-        privStrictness = level
-        PrivPolicy.set(context.applicationContext, level)
-        // 严格程度写进了提示词事实（agent 据此决定「这件事要不要拆成十条命令」），
+    val onRestrictModeChange: (Boolean) -> Unit = { on ->
+        restrictMode = on
+        PrivPolicy.setRestrictMode(context.applicationContext, on)
+        // 限制模式写进了提示词事实（agent 据此决定「这件事要不要拆成十条命令」），
         // 所以改完就得让容器侧看到新值
         DshHostPrompt.writeFacts(context.applicationContext)
     }
@@ -384,41 +385,45 @@ fun PrivilegedChannelScreen(navigator: DestinationsNavigator) {
                     }
 
                     Spacer(Modifier.height(16.dp))
-                    // 严格程度只管「要不要问」，与选哪条通道是两件事，所以排在同一张卡里、
-                    // 通道选择之后：用户先决定用哪条通道，再决定它有多自由。
+                    // 「要不要再问」与选哪条通道是两件事，所以排在同一张卡里、通道选择之后：
+                    // 用户先决定用哪条通道，再决定它有多自由。清单本身在专门的页面里管理
+                    // —— 排在这里等于把一张长清单塞进通道卡。
                     Text(
-                        text = stringResource(R.string.dsh_priv_strictness_title),
+                        text = stringResource(R.string.dsh_priv_restrict_title),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.dsh_priv_strictness_summary),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    RuntimeOption(
-                        selected = privStrictness == PrivStrictness.STRICT,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_priv_strict),
-                        summary = stringResource(R.string.dsh_priv_strict_desc),
-                        onSelect = { onPrivStrictnessChange(PrivStrictness.STRICT) },
-                    )
-                    RuntimeOption(
-                        selected = privStrictness == PrivStrictness.NORMAL,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_priv_normal),
-                        summary = stringResource(R.string.dsh_priv_normal_desc),
-                        onSelect = { onPrivStrictnessChange(PrivStrictness.NORMAL) },
-                    )
-                    RuntimeOption(
-                        selected = privStrictness == PrivStrictness.LOOSE,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_priv_loose),
-                        summary = stringResource(R.string.dsh_priv_loose_desc),
-                        onSelect = { onPrivStrictnessChange(PrivStrictness.LOOSE) },
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(
+                                    if (restrictMode) R.string.dsh_priv_restrict_on
+                                    else R.string.dsh_priv_restrict_off
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.dsh_priv_restrict_hub_summary,
+                                    stringResource(
+                                        if (restrictMode) R.string.dsh_priv_restrict_on
+                                        else R.string.dsh_priv_restrict_off
+                                    ),
+                                    PrivPolicy.restrictedCaps(context).size,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        ExpressiveSwitch(checked = restrictMode, onCheckedChange = onRestrictModeChange)
+                    }
+                    TextButton(onClick = { navigator.navigate(RestrictModeScreenDestination) }) {
+                        Text(stringResource(R.string.dsh_priv_restrict_manage))
+                    }
 
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -272,11 +272,12 @@ const CAP_CAVEAT = {
     'The host runs this for you through the channel the user picked (root / Shizuku / wireless ADB); ' +
     'you never become root inside the container. Read-only commands need the read level, anything ' +
     'that changes device state needs read+write, and how often you are asked depends on the ' +
-    'strictness the user chose (strict = every single call pops a dialog). Reasons such as ' +
+    'restriction mode the user chose (with it on, a listed capability pops a dialog every call; ' +
+    'dangerous commands always pop one). Reasons such as ' +
     'no_channel, adb_write_disabled, root_unavailable, root_lost, timeout, busy, denied_by_user ' +
     'are states to report, not errors to retry. `dsh-native caps` lists the exact read-only ' +
     'commands (and whether the channel is ready) — check it before assuming a command needs ' +
-    'permission, because under strict strictness a wrong guess costs the user a tap.',
+    'permission, because when a capability is on the restriction list a wrong guess costs the user a tap.',
   sms:
     'Read only. SMS bodies are private: use a small --limit and do not repeat unrelated messages.',
   display:
@@ -818,39 +819,33 @@ function render(f) {
         ' Read-only commands run as-is; anything that changes device state needs the write level.'
     );
     lines.push('');
-    // 「不再逐条确认」名单：按能力生效，危险操作不受它影响。
-    const trustedList = Array.isArray(f.nativeTrusted)
-      ? f.nativeTrusted.filter((c) => typeof c === 'string')
+    // 限制模式 + 能力清单：判据只有两个来源（命中危险操作清单 / 能力在清单里且开关开着）。
+    // 说清楚，否则 agent 要么不敢调，要么以为用户在故意刁难。
+    const restrictedCaps = Array.isArray(f.restrictedCaps)
+      ? f.restrictedCaps.filter((c) => typeof c === 'string')
       : [];
-    if (trustedList.length) {
-      lines.push(
-        'The user added these capabilities to the **no-more-asking list**: ' +
-          trustedList.join(', ') +
-          '. Calls within them run without a dialog. This is per capability and revocable; ' +
-          'dangerous actions (uninstall, reboot, wiping data) still ask, no matter what.'
-      );
-      lines.push('');
-    }
-    const strictness = str(f.privStrictness) || 'strict';
     if (!ready) {
       // 还没就绪，讲弹窗频率只会让 agent 以为现在就能调
-    } else if (strictness === 'strict') {
+    } else if (f.restrictMode === true && restrictedCaps.length) {
       lines.push(
-        'Strictness is **strict**: EVERY privileged call opens a confirmation dialog that the user ' +
-          'must answer (allow once / deny), even for `getprop`. So batch your work into as few, as ' +
-          'meaningful calls as possible, and never fire a loop of small commands — each one costs ' +
-          'the user a tap. If the user denies or the dialog times out, stop and say what you could ' +
-          'not do; do not retry the same command.'
+        'Restriction mode is **on**: every call to these capabilities opens a confirmation dialog ' +
+          'that the user must answer: ' +
+          restrictedCaps.join(', ') +
+          '. Calls to anything else run without asking. So batch that work into as few, as ' +
+          'meaningful calls as possible — each one costs the user a tap. If the user denies or the ' +
+          'dialog times out, stop and say what you could not do; do not retry the same command.'
       );
-    } else if (strictness === 'normal') {
+    } else if (f.restrictMode === true) {
       lines.push(
-        'Strictness is **normal**: read-only commands run without asking; anything that changes ' +
-          'device state opens a confirmation dialog first.'
+        'Restriction mode is **on**, but the capability list is empty, so a call only opens a ' +
+          'dialog when it hits the dangerous-operation list (uninstall, reboot, wiping data and ' +
+          'the like), which the user can edit — those always ask once.'
       );
     } else {
       lines.push(
-        'Strictness is **loose**: commands within the granted level run without asking; only ' +
-          'dangerous ones (uninstall, reboot, wiping data, typing into text fields) ask first.'
+        'Restriction mode is **off**: once a capability is enabled, calls to it run without asking ' +
+          'again. Only commands on the dangerous-operation list (uninstall, reboot, wiping data ' +
+          'and the like) still open a dialog, and that list is the user own to edit.'
       );
     }
     lines.push('');

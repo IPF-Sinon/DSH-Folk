@@ -260,9 +260,13 @@ object DshHostPrompt {
                 .put("nativeBridge", nativeOn)
                 .put("nativeCaps", caps)
                 .put("nativeOnce", once)
-                // 「不再逐条确认」名单：agent 靠它知道"这条调用还会不会弹窗"。不给的话它会
+                // 限制模式与能力清单：agent 靠它知道"这条调用还会不会弹窗"。不给的话它会
                 // 一直按旧假设行事 —— 要么不敢调，要么以为用户在故意刁难。
-                .put("nativeTrusted", JSONArray(if (nativeOn) PrivPolicy.trusted(ctx).sorted() else emptyList<String>()))
+                .put("restrictMode", PrivPolicy.restrictMode(ctx))
+                .put(
+                    "restrictedCaps",
+                    JSONArray(if (nativeOn) PrivPolicy.restrictedCaps(ctx).sorted() else emptyList<String>()),
+                )
                 // 两个时限写进事实，而不是在提示词里硬写一遍：改一个常量不该还要
                 // 记得去改容器里那段文字（两处写死的版本号迟早会漂移）
                 .put("elevateTtlMs", DshElevationRequests.TTL_MS)
@@ -285,8 +289,6 @@ object DshHostPrompt {
                 // 提示词那一段只在它非空时才渲染，于是「这台设备根本没有提权途径」这件事
                 // 压根不会出现在 agent 的视野里 —— 它也就不会去建议用户开一个不存在的东西。
                 .put("elevation", elevationJson(ctx))
-                // 严格程度：agent 据此决定要不要把一件事拆成十条命令（严格档下每条都会弹窗）
-                .put("privStrictness", PrivPolicy.of(ctx).id)
                 // 「挂载进工作区」：agent 必须知道这个挂载点位于共享存储（无硬链接），
                 // 否则会在 /root/workspace/sdcard 里反复用 write 工具撞 EINVAL。
                 .put("workspaceStorageMounted", workspaceStorageMounted)
@@ -324,7 +326,7 @@ object DshHostPrompt {
      * 提权通道的事实，交给 agent 的是「它能提到什么」，而不是我们内部选了哪条通道。
      *
      * 四个字段各有用途：channel 让它在报错里说清是哪条通道坏了；uid 决定它能读什么
-     * （0 和 2000 差着整个 /data）；canRoot 决定 --su 有没有意义；strictness 决定这次
+     * （0 和 2000 差着整个 /data）；canRoot 决定 --su 有没有意义；restrictMode 决定这次
      * 调用会不会弹出确认框。没有通道时返回 null。
      */
     private fun elevationJson(ctx: Context): Any {

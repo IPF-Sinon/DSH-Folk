@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -75,6 +76,8 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.component.WallpaperAwareDropdownMenu
 import me.bmax.apatch.ui.component.WallpaperAwareDropdownMenuItem
+import androidx.compose.material3.AlertDialog
+import me.bmax.apatch.dsh.PrivPolicy
 import me.bmax.apatch.ui.component.ChangelogDialog
 import me.bmax.apatch.ui.component.WelcomeGuideDialog
 import me.bmax.apatch.ui.component.rememberConfirmDialog
@@ -123,6 +126,15 @@ fun HomeScreen(navigator: DestinationsNavigator) {
     // 参照也会和引导叠在一起。所以 shouldShow 要求 welcome 已经看过，而下面这个分支
     // 也只在引导不显示时才走。
     val homeContext = LocalContext.current
+
+    // 一次性策略变更说明。读取（而不是 remember 一次）就够：这个标志只会在迁移那一刻为真，
+    // 之后由 dismissPolicyNotice 清掉；进程内不会有人再把它置真。
+    var showPolicyNotice by remember { mutableStateOf(PrivPolicy.policyNoticePending(homeContext)) }
+    val dismissPolicyNotice: () -> Unit = {
+        PrivPolicy.consumePolicyNotice(homeContext)
+        showPolicyNotice = false
+    }
+
     var showChangelog by remember {
         mutableStateOf(
             Changelog.shouldShow(
@@ -154,6 +166,21 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     .apply()
                 showChangelog = false
             }
+        )
+    } else if (showPolicyNotice) {
+        // 权限策略变过一次（v1.9.9：全局严格程度 + 信任名单 → 限制模式 + 两张清单），
+        // 老用户得知道"默认不再逐条问了"，否则他下次看到 agent 静默动手会以为是 bug。
+        // 排在这里（更新内容弹窗关掉之后、且与首启引导互斥）：两个弹窗叠在一起没人看得下去。
+        // 判据不依赖"这版更新说明还没看过" —— 早看过 changelog 的人照样该收到这条。
+        AlertDialog(
+            onDismissRequest = { dismissPolicyNotice() },
+            title = { Text(stringResource(R.string.dsh_priv_notice_title)) },
+            text = { Text(stringResource(R.string.dsh_priv_notice_message)) },
+            confirmButton = {
+                TextButton(onClick = { dismissPolicyNotice() }) {
+                    Text(stringResource(R.string.dsh_priv_notice_ok))
+                }
+            },
         )
     }
 

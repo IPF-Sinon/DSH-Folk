@@ -55,7 +55,7 @@ import com.ramcosta.composedestinations.generated.destinations.NativeCapsPersona
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsScreenAccessScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsSenseScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PrivilegedChannelScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.TrustedCapsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.RestrictModeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.WirelessAdbScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
@@ -211,16 +211,20 @@ fun PermissionHubScreen(navigator: DestinationsNavigator) {
                             onClick = { navigateToGroup(navigator, group) },
                         )
                     }
-                    // 放在**最下面**：它不是一个能力分类，而是"哪些能力已经不用再问了" ——
-                    // 一份跨全部能力的名单。挤在分类之间会让人以为它也是其中一类。
+                    // 放在**最下面**：它不是一个能力分类，而是"还要不要再问"这件事本身 ——
+                    // 一个开关 + 两张跨全部能力的清单。挤在分类之间会让人以为它也是其中一类。
                     HubRow(
                         icon = Icons.Filled.VerifiedUser,
-                        title = stringResource(R.string.dsh_priv_trust_title),
+                        title = stringResource(R.string.dsh_priv_restrict_title),
                         summary = stringResource(
-                            R.string.dsh_priv_trust_hub_summary,
-                            PrivPolicy.trusted(context).size,
+                            R.string.dsh_priv_restrict_hub_summary,
+                            stringResource(
+                                if (PrivPolicy.restrictMode(context)) R.string.dsh_priv_restrict_on
+                                else R.string.dsh_priv_restrict_off
+                            ),
+                            PrivPolicy.restrictedCaps(context).size,
                         ),
-                        onClick = { navigator.navigate(TrustedCapsScreenDestination) },
+                        onClick = { navigator.navigate(RestrictModeScreenDestination) },
                     )
                 }
                 if (bridgeEnabled) {
@@ -272,7 +276,7 @@ private sealed interface HubTarget {
     data class Group(val group: CapGroup) : HubTarget
     data object Channel : HubTarget
     data object WirelessAdb : HubTarget
-    data object Trusted : HubTarget
+    data object Restrict : HubTarget
 }
 
 private fun navigateToGroup(navigator: DestinationsNavigator, group: CapGroup) {
@@ -306,7 +310,7 @@ private fun navigateTo(navigator: DestinationsNavigator, target: HubTarget) {
         is HubTarget.Group -> navigateToGroup(navigator, target.group)
         HubTarget.Channel -> navigator.navigate(PrivilegedChannelScreenDestination)
         HubTarget.WirelessAdb -> navigator.navigate(WirelessAdbScreenDestination)
-        HubTarget.Trusted -> navigator.navigate(TrustedCapsScreenDestination)
+        HubTarget.Restrict -> navigator.navigate(RestrictModeScreenDestination)
     }
 }
 
@@ -330,13 +334,20 @@ private fun searchHits(query: String, context: Context): List<Hit> {
         hits += Hit("perm-adb", adbTitle, context.getString(R.string.dsh_adb_summary), HubTarget.WirelessAdb)
     }
 
-    val trustTitle = context.getString(R.string.dsh_priv_trust_title)
-    if (trustTitle.lowercase().contains(q)) {
+    val restrictTitle = context.getString(R.string.dsh_priv_restrict_title)
+    if (restrictTitle.lowercase().contains(q)) {
         hits += Hit(
-            "perm-trust",
-            trustTitle,
-            context.getString(R.string.dsh_priv_trust_hub_summary, PrivPolicy.trusted(context).size),
-            HubTarget.Trusted,
+            "perm-restrict",
+            restrictTitle,
+            context.getString(
+                R.string.dsh_priv_restrict_hub_summary,
+                context.getString(
+                    if (PrivPolicy.restrictMode(context)) R.string.dsh_priv_restrict_on
+                    else R.string.dsh_priv_restrict_off
+                ),
+                PrivPolicy.restrictedCaps(context).size,
+            ),
+            HubTarget.Restrict,
         )
     }
 

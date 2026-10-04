@@ -69,6 +69,15 @@ internal object PrivilegedShell {
         "am" to setOf("force-stop", "kill"),
     )
 
+    /**
+     * 内置危险条目，给「危险操作清单」当初始内容（"rm"、"pm uninstall"…）。
+     *
+     * 从这两张表算出来而不是另抄一份：清单的默认值与判据必须同源，否则"内置条目"和
+     * 实际判定会各说各话。用户删掉的条目由 [PrivPolicy] 自己记（它只管生效的那份清单）。
+     */
+    fun builtinDangerEntries(): List<String> =
+        (DANGEROUS_CMDS + DANGEROUS_SUB.flatMap { (cmd, subs) -> subs.map { "$cmd $it" } }).sorted()
+
     /** shell 元字符：出现即不再相信「按命令名判只读」。 */
     private val META_CHARS = listOf(">", "<", "|", ";", "&", "$(", "`", "\n", "\r")
 

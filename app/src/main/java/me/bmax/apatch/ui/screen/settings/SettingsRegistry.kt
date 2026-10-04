@@ -158,7 +158,7 @@ object SettingsRegistry {
             // 再用页内的搜索框找到具体那一项 —— 这样"搜到却跳不过去"至少不会发生。
             add(SettingEntry("function_permission", R.string.dsh_perm_hub_title, R.string.dsh_perm_hub_summary, SettingCategory.SECURITY))
             // 严格程度就在特权通道那一页里，但用户会按「严格」「宽松」这些词去搜 —— 单列一条
-            add(SettingEntry("function_permission", R.string.dsh_priv_strictness_title, R.string.dsh_priv_strictness_summary, SettingCategory.SECURITY))
+            add(SettingEntry("function_permission", R.string.dsh_priv_restrict_title, R.string.dsh_priv_restrict_summary, SettingCategory.SECURITY))
             add(SettingEntry("function_permission", R.string.dsh_native_section, R.string.dsh_native_summary, SettingCategory.SECURITY))
             add(SettingEntry("function_permission", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.SECURITY))
             // 共享存储挂在安全页上单独一张卡（不属于原生能力，见 FunctionSettings.kt 的说明）

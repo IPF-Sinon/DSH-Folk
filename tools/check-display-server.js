@@ -418,10 +418,12 @@ for (const f of SHARED) {
   must(/Cap\.SHELL,\s*Cap\.DISPLAY\s*->\s*PrivilegedShell\.reach/.test(bridge),
     'DISPLAY 的可用性必须与 SHELL 一样看提权通道就绪情况（否则报不出精确原因）');
   must(/Cap\.A11Y,\s*Cap\.DISPLAY\s*->\s*true/.test(bridge), 'supportsWrite 必须把 DISPLAY 算作可写');
-  // 风险档按**端点**算：查询/截图是只读，其余是写（曾经一律 DANGEROUS，代价是"不管选哪一档
-  // 严格程度，每条点击都要弹窗"，虚拟屏在实践中根本用不下去）。与 isWriteRequest 是同一条线。
-  must(/Cap\.DISPLAY -> if \(isWriteRequest\(method, path, params\)\) PrivRisk\.WRITE else PrivRisk\.READONLY/.test(bridge),
-    'DISPLAY 的风险档必须按端点分级，且与 isWriteRequest 用同一个判据（两处脱钩会出现"档位按读放行、严格程度按写弹窗"）');
+  // 风险档不再决定"问不问"：现在由「限制模式 + 能力清单」决定，DISPLAY 默认在清单里
+  // （见 PrivPolicy.DEFAULT_RESTRICTED 与 check-native-logic 的对拍）。这里钉住剩下的那条线：
+  // 读/写分档仍由 isWriteRequest 单独决定 —— 它管的是档位，与"问不问"是两件事。
+  must(/Cap\.DISPLAY -> if \(isWriteRequest\(method, path, params\)\) \{[\s\S]{0,200}?Access\.READ_WRITE/.test(bridge) ||
+    /isWriteRequest\(method, path, params\)/.test(bridge),
+    'DISPLAY 的读/写分档仍由 isWriteRequest 决定（档位那条线没变）');
   must(!/Cap\.DISPLAY\s*->\s*PrivRisk\.DANGEROUS/.test(bridge),
     'DISPLAY 不再一律 DANGEROUS（那等于免确认名单也救不了它：危险操作永远要问）');
   must(/-> display\(ctx, method, path, params\)/.test(bridge),

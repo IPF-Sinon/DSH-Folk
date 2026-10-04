@@ -358,25 +358,6 @@ internal object DshA11y {
         else fail("action_rejected").put("action", action)
     }
 
-    /**
-     * 这次无障碍动作的风险等级。
-     *
-     * 「看」是只读（tree/screenshot）；点按、滑动、**打字**与**系统级动作**都算写 ——
-     * 判据与能力档位的读/写分级同源：它们都"改了屏幕状态，但没有一件是改完回不去的"。
-     *
-     * 打字与系统动作原先算危险（"可能把消息发出去、把密码填进别的应用"），代价与虚拟屏当初
-     * "一律危险"完全一样：**不管用户选哪一档、哪怕把它加进了「不再逐条确认」，每次都要弹窗**
-     * —— 用户现场反馈"这个开关没用"就是这么来的。而 `tap`/`click`/`swipe` 早就是写：它们能
-     * 按到屏幕上任何一个"发送/删除/卸载"按钮，比打字更能造成不可逆后果。两处脱钩才是真问题
-     * （同 [DshDisplay] 那次按端点重分级，见 docs/host-bridges.md 的"虚拟屏的风险按端点分级"）。
-     *
-     * 危险档留给**改完回不去**的动作（卸载、重启、清数据 —— 见 [PrivilegedShell.riskOf]）。
-     */
-    fun riskOf(action: String): PrivRisk = when (action.lowercase()) {
-        "tree", "screenshot" -> PrivRisk.READONLY
-        else -> PrivRisk.WRITE
-    }
-
     /** 截屏等待上限：takeScreenshot 是异步回调，别让桥接线程无限期挂着。 */
     private const val SCREENSHOT_TIMEOUT_MS = 4000L
 

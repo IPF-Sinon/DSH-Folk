@@ -43,7 +43,7 @@
 + 外观主题包 `dsh-folk/theme.zip`，并且**不带密钥**：`webdav_*` 整组、名字像 password/token/secret
 的键、以及 `app_initialized`（带过去会让新设备跳过首次初始化）。`dshfolk` 里还有三类键按设计排除：
 预装账本（`seed_*`，记的是「这台机器发生过什么」）、本机运行时状态（`runtime_version`、
-`proroot_fail_streak`、`rootfs_size_bytes`）、以及提权项（权限通道、严格程度、原生桥开关与能力档位）——
+`proroot_fail_streak`、`rootfs_size_bytes`）、以及提权项（权限通道、限制模式与两张清单、原生桥开关与能力档位）——
 换台机器恢复一份备份，不该由备份替用户决定把 root/Shizuku/ADB 或 SMS/SHELL 这些能力打开。
 被跳过的条数会如实报出来（其中提权项单独点名）。
 外观（背景图/视频背景/字体/音乐/音效）是 `filesDir` 里的资源文件，prefs 里只有文件名与 `file://` 指向，

@@ -277,23 +277,44 @@ object DshEnv {
     const val KEY_PERM_CHANNEL = "perm_channel_pref"
 
     /**
-     * 特权严格程度：strict | normal | loose（见 [PrivPolicy]）。
+     * **历史键**：旧的全局严格程度（strict | normal | loose）。
      *
-     * **默认 strict**：每一次特权调用都要用户当场同意。这一项管的是「要不要问一声」，
-     * 与 [KEY_PERM_CHANNEL] 的「用哪条通道」、与能力档位的「允不允许做」是三件事。
+     * 语义已经不存在（见 [PrivPolicy] 的模型说明）：现在只有「限制模式 + 两张清单」。
+     * 这个键只在 [PrivPolicy.migrateOnce] 里被读一次（判断"是不是老用户，要不要弹一次
+     * 策略变更说明"），读完即删。**不要**在任何新代码里读它。
      */
     const val KEY_PRIV_STRICTNESS = "priv_strictness"
 
-    /**
-     * 「不再逐条确认」的能力名单（StringSet，存 [DshNativeBridge.Cap.id]）。
-     *
-     * 为什么需要它：严格程度是**全局**的。用户想要「虚拟屏别再每条点击都问我」，唯一的办法
-     * 是把整机降到「一般/宽松」，而那会同时放过 shell、短信、通知等所有能力 —— 代价太大，
-     * 于是大多数人只能忍着点几十次「允许」。这份名单把授权收窄到**单个能力**，而且可撤销。
-     *
-     * 它管不到危险操作：卸载、重启、清数据这类改完回不去的动作永远会问（见 PrivPolicy）。
-     */
+    /** **历史键**：旧的「不再逐条确认」名单。同 [KEY_PRIV_STRICTNESS]，只被迁移读一次。 */
     const val KEY_PRIV_TRUSTED_CAPS = "priv_trusted_caps"
+
+    /**
+     * 限制模式开关（默认**关**）。
+     *
+     * 关：能力启用之后不再逐条问；开：[KEY_PRIV_RESTRICT_CAPS] 里的能力每次都问。
+     * 与档位（"允不允许做"）是两件事：档位决定边界，这一项决定"要不要再问一声"。
+     */
+    const val KEY_PRIV_RESTRICT_MODE = "priv_restrict_mode"
+
+    /**
+     * 能力清单（StringSet，存 [DshNativeBridge.Cap.id]）：限制模式开着时**这些能力每次都问**。
+     *
+     * 键不存在 = 用 [PrivPolicy.DEFAULT_RESTRICTED]（shell / 虚拟屏 / 相机 / 麦克风 / 短信），
+     * 而不是空集：开关关着时清单不生效，但用户一拨开关就该立刻看到"这五项要申请"。
+     */
+    const val KEY_PRIV_RESTRICT_CAPS = "priv_restrict_caps"
+
+    /** 危险操作清单里用户**增补**的条目（按行分隔："rm"、"pm uninstall"）。 */
+    const val KEY_PRIV_DANGER_ADDED = "priv_danger_added"
+
+    /** 危险操作清单里被用户**删掉**的内置条目（存内置条目本身，内置表以后新增的自动生效）。 */
+    const val KEY_PRIV_DANGER_DISABLED = "priv_danger_disabled"
+
+    /** 旧模型迁移标记（只跑一次）。 */
+    const val KEY_PRIV_MIGRATED = "priv_policy_migrated_v2"
+
+    /** 待弹的「权限策略已改变」一次性提示（迁移时对老用户置位，弹过即清）。 */
+    const val KEY_PRIV_POLICY_NOTICE = "priv_policy_notice"
 
     /**
      * 原生能力桥总开关（默认关）。
