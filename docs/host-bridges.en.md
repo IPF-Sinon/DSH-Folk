@@ -214,10 +214,28 @@ into an `aria-label` (nothing is touched when an aria-label / labelledby / title
 there is nothing to copy). The agent can then read those names from the tree and address them with `--target` — loopback
 origin only, so other sites keep their own semantics.
 
-**Three diagnostic fields on `a11y tree`**: `focused` (which node holds keyboard focus), `input` (the node `FOCUS_INPUT` resolves
-to, with `found:false` when it resolves to none), and `own` (the active window was **our own overlay window**, so this tree is a
-different one). Failures from `no_input_focus` / `not_found` also carry `window` and `windows[]`: one run on a device separates
-"the service resolved the target app" from "it resolved our own overlay".
+**Diagnostic fields on `a11y tree`**: `focused` (which node holds keyboard focus), `input` (the node `FOCUS_INPUT` resolves to,
+with `found:false` when it resolves to none), `a11y` (`FOCUS_ACCESSIBILITY`, the screen-reader cursor — a different thing that is
+often in a different window; both carry `window`, the id of the window that answered), `own` (the active window was **our own
+overlay window**, so this tree is a different one) and `rootWindow`/`rootChildren` (which window the tree came from, and how many
+children its root has — that is how "only 37 nodes?" is told apart from "the wrong window was read"). Failures from
+`no_input_focus` / `not_found` also carry `window`, `windowReadable` and `windows[]` (per window: `package`, `id`, `type`,
+`system`, `active`, `focused`, `rootAvailable`). `windowReadable` exists because `window`/`package` are read off the root:
+**a missing root and an empty package name are two different things**, and conflating them turns "this window is unreadable"
+into "the package is empty".
+
+**Writing into a field has two paths, and `by` in the reply says which one ran**: `ACTION_SET_TEXT` first (uiautomator setText
+uses it too, and WebView input fields accept it), then — if the host refuses — focus plus the system clipboard plus
+`ACTION_PASTE` (self-drawn fields often reject SET_TEXT but accept a paste; **the user clipboard is restored afterwards**). Only
+when both fail is it `set_text_rejected`. Note that an accessibility service **cannot** reach the target app `InputConnection`:
+AOSP `AccessibilityNodeInfo` has no `getInputConnection`/`commitText`, so "use InputConnection" is not a path that exists on
+Android.
+
+**Why focus can be "there is a field right there but no input focus is reported"**: `AccessibilityService.findFocus(FOCUS_INPUT)`
+goes through `ANY_WINDOW_ID`, which the server resolves with `getFocusedWindowId(FOCUS_INPUT)` — and **it voids the whole query
+when that window does not belong to the caller display type** (AOSP `resolveAccessibilityWindowIdForFindFocusLocked` →
+`windowIdBelongsToDisplayType`). A window on the mirror virtual display (proxy display) hits exactly that. The focus path is
+therefore three layers: the system resolution, then asking the tree we picked, then the first visible editable node in it.
 
 **`a11y screenshot` (Android 11+) depends on a capability that is read once, at bind time**: the service must declare `android:canTakeScreenshot="true"` in its
 meta-data (this repo does so in `res/xml/dsh_a11y.xml`). Without it there is no graceful fallback, only a hard failure — the system throws a `SecurityException` on

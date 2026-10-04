@@ -830,10 +830,10 @@ console.log("\n── 无障碍 ──");
     const wi = a11y.indexOf("private fun windowDiag(");
     const end = a11y.indexOf("private fun fail(", wi);
     const seg = end > wi ? a11y.slice(wi, end) : a11y.slice(wi);
-    ok(/svc\.windows/.test(seg) && /\.put\("window", svc\.rootInActiveWindow/.test(seg) &&
+    ok(/svc\.windows/.test(seg) && /\.put\("window", active\?\.packageName/.test(seg) &&
        /\.put\("windows", ws\)/.test(seg) && /ws\.put\(/.test(seg),
       "诊断：活动窗口的包名 + **真的挂上去**的全部窗口列表（算了不挂 = 和没算一样）");
-    ok(/\.put\("package", w\.root\?\.packageName/.test(seg) &&
+    ok(/\.put\("package", root\?\.packageName/.test(seg) &&
        /\.put\("system", w\.type == AccessibilityWindowInfo\.TYPE_SYSTEM\)/.test(seg) &&
        /\.put\("active", w\.isActive\)/.test(seg) &&
        /\.put\("focused", w\.isFocused\)/.test(seg),
@@ -848,6 +848,67 @@ console.log("\n── 无障碍 ──");
        /other \?: active/.test(seg),
       "没有别的可读窗口就退回活动窗口（读自己的树好过读不到）");
   }
+
+  // ── 焦点回退：三层，缺一层就是真机上「明明有输入框却说没有焦点」 ──
+  {
+    const i = a11y.indexOf("fun setText(");
+    const seg = a11y.slice(i, a11y.indexOf("private fun writeInto", i));
+    const s1 = seg.indexOf("svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)");
+    const s2 = seg.indexOf("pickRoot(svc).first?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)");
+    const s3 = seg.indexOf("firstEditable(pickRoot(svc).first)");
+    ok(s1 > 0 && s2 > s1 && s3 > s2,
+      "焦点三层回退：系统输入焦点窗 → 选中那棵树里再问一次 → 该树第一个可编辑节点（AOSP 会因跨 display 让第一层作废）");
+    const fe = a11y.slice(a11y.indexOf("private fun firstEditable("));
+    ok(/private fun firstEditable\(root: AccessibilityNodeInfo\?\)/.test(a11y) &&
+      /node\.isEditable && node\.isVisibleToUser/.test(fe),
+      "firstEditable 只认「可见 + 可编辑」（不可见的编辑框不是光标所在的那个）");
+  }
+
+  // ── 写入退路：SET_TEXT 被拒时「聚焦 + 剪贴板 + PASTE」，且如实标出走了哪一路 ──
+  {
+    const i = a11y.indexOf("private fun writeInto(");
+    const j = a11y.indexOf("private fun firstEditable(", i);
+    const seg = a11y.slice(i, j);
+    const focus = seg.indexOf("performAction(AccessibilityNodeInfo.ACTION_FOCUS)");
+    ok(/ACTION_SET_TEXT/.test(seg) && /put\("by", "set_text"\)/.test(seg),
+      "先 ACTION_SET_TEXT，成功时 by=set_text（uiautomator 的 setText 也是这一路）");
+    ok(focus > 0 && focus < seg.indexOf("pasteInto(node, text)"),
+      "被拒时**先聚焦再粘贴**（很多框只在有输入焦点时才处理 PASTE）");
+    ok(/put\("by", "paste"\)/.test(seg) && /fail\("set_text_rejected"\)/.test(seg),
+      "粘贴成功 by=paste；两路都不行才是 set_text_rejected");
+    const paste = a11y.slice(a11y.indexOf("private fun pasteInto("), j);
+    ok(/ACTION_PASTE/.test(paste) && /setPrimaryClip\(ClipData\.newPlainText/.test(paste),
+      "退路真的走 ACTION_PASTE（写剪贴板 + PASTE）");
+    ok(/setPrimaryClip\(previous\)/.test(paste),
+      "粘完把用户的剪贴板还原（agent 写一次字不该把它顶掉）");
+  }
+
+  // ── 诊断无损化：两种焦点分开 + 回答者所在窗 + 「根没拿到」与「包名为空」分开 ──
+  ok(/\.put\("a11y", focusDiag\(svc, AccessibilityNodeInfo\.FOCUS_ACCESSIBILITY\)\)/.test(a11y) &&
+    /fun inputDiag\(svc: AccessibilityService\): JSONObject =\s*\n\s*focusDiag\(svc, AccessibilityNodeInfo\.FOCUS_INPUT\)/.test(a11y),
+    "input=FOCUS_INPUT 与 a11y=FOCUS_ACCESSIBILITY 分开报（两者常常不在同一个窗）");
+  ok(/private fun focusDiag\(svc: AccessibilityService, type: Int\)/.test(a11y) &&
+    /svc\.findFocus\(type\)/.test(a11y) && /\.put\("window", n\.windowId\)/.test(a11y),
+    "focusDiag 按 type 各问各的，并报出回答者所在的窗 id（可与窗口表对照）");
+  ok(/\.put\("rootWindow", root\.windowId\)/.test(a11y) &&
+    /\.put\("rootChildren", root\.childCount\)/.test(a11y),
+    "树报根身份：从哪个窗读的、根有几个孩子（「怎么才 37 个节点」全靠这两个字段分辨）");
+  {
+    const wi = a11y.indexOf("private fun windowDiag(");
+    const end = a11y.indexOf("private fun fail(", wi);
+    const seg = end > wi ? a11y.slice(wi, end) : a11y.slice(wi);
+    ok(/val active = svc\.rootInActiveWindow/.test(seg) && /\.put\("windowReadable", active != null\)/.test(seg),
+      "windowReadable：把「根没拿到」与「包名为空」分开（现场报告正是被有损诊断带偏的）");
+    ok(/\.put\("id", w\.id\)/.test(seg) && /\.put\("type", w\.type\)/.test(seg) &&
+      /\.put\("rootAvailable", root != null\)/.test(seg),
+      "每个窗口报 id/type/rootAvailable（焦点字段里的 window 才有的对照）");
+  }
+
+  // ── bounds 设防：退化矩形显式报错，不静默点一条线 ──
+  ok(/if \(rect\.right <= rect\.left \|\| rect\.bottom <= rect\.top\)/.test(a11y) &&
+    /fail\("invalid_bounds"\)/.test(a11y) &&
+    /\.put\("bounds", JSONArray\(listOf\(rect\.left, rect\.top, rect\.right, rect\.bottom\)\)\)/.test(a11y),
+    "退化矩形（零宽 / 越界）显式报 invalid_bounds + 那个矩形（折叠动画里最常见）");
 
   // 两个无障碍服务必须是两份不同的配置：自启那个不能有读屏权限
   ok(/canRetrieveWindowContent="true"/.test(xml), "能力服务打开了读屏");

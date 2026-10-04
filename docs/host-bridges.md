@@ -204,10 +204,28 @@ view id（`viewIdResourceName` 通常是 null），`class`（如 `EditText`）�
 于是 agent 读树时能看到这些输入框的名字、也能按名字 `--target` 定位 —— 只对回环 origin 生效，
 别的站点不被改语义。
 
-**`a11y tree` 的三个判因字段**：`focused`（哪个节点拿着键盘焦点）、`input`（`FOCUS_INPUT` 解析到的
-那个节点；解析不到时 `found:false`）、`own`（活动窗口本来是**我们自己的悬浮窗**，于是这棵树读的是
-别的窗）。`no_input_focus` / `not_found` 的返回值里还会带 `window` 与 `windows[]`：一次真机就能分清
-"服务解析到的是目标 App"还是"解析到的是我们自己的悬浮窗"。
+**`a11y tree` 的判因字段**：`focused`（哪个节点拿着键盘焦点）、`input`（`FOCUS_INPUT` 解析到的那个
+节点；解析不到时 `found:false`）、`a11y`（`FOCUS_ACCESSIBILITY`，即**读屏光标** —— 与输入焦点不是
+一回事，常常还不在同一个窗里；两者都带 `window` = 回答者所在的窗 id）、`own`（活动窗口本来是我们
+自己的悬浮窗，于是这棵树读的是别的窗）、`rootWindow`/`rootChildren`（这棵树从哪个窗读的、根上有
+几个孩子 —— "怎么才 37 个节点"靠这两个字段分辨是"树被裁了"还是"读错了窗"）。
+`no_input_focus` / `not_found` 的返回值里还会带 `window`、`windowReadable` 与 `windows[]`
+（每窗 `package`/`id`/`type`/`system`/`active`/`focused`/`rootAvailable`）。`windowReadable` 的存在
+是因为 `window`/`package` 都是从"根"上读的：**根没拿到与包名为空是两件事**，混在一起会把
+"窗口读不到"误读成"包名为空"。
+
+**往输入框写字有两条路，返回值里的 `by` 说明走了哪条**：先 `ACTION_SET_TEXT`（uiautomator 的
+`setText` 也是这一路，WebView 的输入框认它），被宿主拒绝时退到"聚焦 + 系统剪贴板 +
+`ACTION_PASTE`"（自绘/接管输入的框常拒 SET_TEXT 但认粘贴；**粘完会把用户的剪贴板还原**）。
+两路都不行才是 `set_text_rejected`。注意无障碍服务**拿不到**目标应用的 `InputConnection`：
+AOSP 的 `AccessibilityNodeInfo` 里没有 `getInputConnection`/`commitText`，所以"改用
+InputConnection"这条路在 Android 上不存在。
+
+**焦点为什么可能"明明有输入框却报没有"**：`AccessibilityService.findFocus(FOCUS_INPUT)` 走
+`ANY_WINDOW_ID`，服务端按 `getFocusedWindowId(FOCUS_INPUT)` 解析，并且**当那个窗不属于调用者的
+display 类型时整个查询作废**（AOSP `resolveAccessibilityWindowIdForFindFocusLocked` →
+`windowIdBelongsToDisplayType`）。镜像虚拟屏（proxy display）上的窗正好会踩这一条。所以焦点
+路径是三层：系统解析 → 我们自己选中的那棵树里再问一次 → 那棵树里第一个可见可编辑节点。
 
 **`a11y screenshot`（Android 11+）依赖一个"只在 bind 时读一次"的能力位**：服务必须在自己的 meta-data
 里声明 `android:canTakeScreenshot="true"`（本仓在 `res/xml/dsh_a11y.xml`）。缺了它不是"降级"而是**硬失败**

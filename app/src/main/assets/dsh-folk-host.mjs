@@ -250,10 +250,17 @@ const CAP_CAVEAT = {
     'For an input box, a11y text takes --target, or just --class (a web element inside a ' +
     'WebView often has no text and no view id, so --class EditText is the only handle), or ' +
     'neither (writes into the focused node). A locator that matches nothing answers not_found, ' +
-    'a missing input focus answers no_input_focus. The tree gives you focused (who holds the ' +
-    'keyboard focus), input (what FOCUS_INPUT resolves to; found:false when nothing does) and ' +
-    'own (the active window was our own floating overlay, so the tree is a different one); ' +
-    'the failures also carry window/windows[] — read them before blaming the app. Prefer click over tap: ' +
+    'a missing input focus answers no_input_focus, and the success says by:set_text or by:paste ' +
+    '(when the field refuses ACTION_SET_TEXT we focus it, paste from the clipboard, and put the ' +
+    'clipboard back). The tree gives you focused (who holds the keyboard focus), input (what ' +
+    'FOCUS_INPUT resolves to; found:false when nothing does) and a11y (the screen-reader cursor — ' +
+    'a different thing, often in a different window; both carry the window id they came from), ' +
+    'plus own (the active window was our own floating overlay, so the tree is a different one) ' +
+    'and rootWindow/rootChildren (which window the tree came from, and how many children its ' +
+    'root has — that is how you tell a pruned tree from a wrong one); ' +
+    'the failures also carry window/windowReadable/windows[] — read them before blaming the app. ' +
+    'A click whose node only reports a degenerate rectangle (zero width, or running off screen) ' +
+    'answers invalid_bounds instead of tapping a line. Prefer click over tap: ' +
     'a node click survives layout shifts. Do this only when the user asked for it in this ' +
     'turn, and never drive the UI to work around a permission the user has not granted.',
   shell:

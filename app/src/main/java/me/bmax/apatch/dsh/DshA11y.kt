@@ -3,6 +3,8 @@ package me.bmax.apatch.dsh
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Path
@@ -79,6 +81,12 @@ internal object DshA11y {
             // 「package 怎么是自己」就会变成下一个要靠猜的谜
             .put("own", skippedOwn)
             .put("input", inputDiag(svc))
+            // 读屏焦点与输入焦点分开报（见 [focusDiag]）：两者常常不在同一个窗里 ——
+            // 现场"tree 说没有可编辑节点、input 却说有"的矛盾，靠这两个字段才分辨得出来
+            .put("a11y", focusDiag(svc, AccessibilityNodeInfo.FOCUS_ACCESSIBILITY))
+            // 这棵树是从哪个窗读的、根上有几个孩子 —— "树怎么只有 37 个节点"全靠这两个字段分辨
+            .put("rootWindow", root.windowId)
+            .put("rootChildren", root.childCount)
             .put("nodes", counter[0])
             .put("truncated", truncated[0])
             .put("tree", tree)
@@ -142,6 +150,13 @@ internal object DshA11y {
         if (clickable == null) {
             // 找不到可点祖先：退回按中心坐标点一次（很多自绘控件只认触摸）
             val rect = Rect().also { picked.getBoundsInScreen(it) }
+            // 折叠/动画中的节点会上报退化矩形（x1==x2 的零宽线，甚至 x1>x2 跑到屏外）——那样
+            // "点一下"是静默落到一条线上：看着成功，实际什么也没点到。显式报出来。
+            if (rect.right <= rect.left || rect.bottom <= rect.top) {
+                return fail("invalid_bounds")
+                    .put("target", target)
+                    .put("bounds", JSONArray(listOf(rect.left, rect.top, rect.right, rect.bottom)))
+            }
             val tapped = tap((rect.left + rect.right) / 2f, (rect.top + rect.bottom) / 2f, 60L)
             return if (tapped.optBoolean("ok")) {
                 JSONObject().put("ok", true).put("by", "gesture").put("target", target)
@@ -174,7 +189,15 @@ internal object DshA11y {
         val svc = service() ?: return fail("no_a11y_service")
         val byFocus = target.isNullOrBlank() && className.isNullOrBlank()
         if (byFocus) {
+            // 三层找焦点，缺一层就会在真机上"明明有输入框却说没有焦点"：
+            // 1. 系统按**输入焦点窗**解析（AOSP resolveAccessibilityWindowIdForFindFocusLocked →
+            //    getFocusedWindowId(FOCUS_INPUT)）。输入焦点落在镜像虚拟屏那类 proxy display 的窗上时，
+            //    windowIdBelongsToDisplayType 为假 → 整个查询作废、返回 null；
+            // 2. 退到我们自己选中的那棵树里再问一次（那个窗的 provider 还认 DOM 的 activeElement）；
+            // 3. 还没有就问"这棵树里第一个可编辑节点" —— 光标在框里、而宿主没把焦点报上来时靠它。
             val focused = svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                ?: pickRoot(svc).first?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                ?: firstEditable(pickRoot(svc).first)
             if (focused == null) return windowDiag(svc, fail("no_input_focus"))
             return writeInto(focused, text)
         }
@@ -189,14 +212,67 @@ internal object DshA11y {
         return writeInto(node, text)
     }
 
-    /** 真正落字：不可编辑也不可点 = 这个节点现在还不是输入框（状态不符，不是找不到）。 */
+    /**
+     * 真正落字：不可编辑也不可点 = 这个节点现在还不是输入框（状态不符，不是找不到）。
+     *
+     * 先 `ACTION_SET_TEXT`（uiautomator 的 setText 走的也是它，WebView 的输入框认这一路）；
+     * 被拒时退到"聚焦 + 系统剪贴板 + `ACTION_PASTE`" —— 自绘/宿主接管输入的框常拒 SET_TEXT，
+     * 但认粘贴。**没有**第三条路：无障碍服务拿不到目标应用的 InputConnection（AOSP 的
+     * `AccessibilityNodeInfo` 里没有 getInputConnection / commitText，这份文件 6656 行整份查过）。
+     * 返回值用 `by` 说明这次走的是哪一路，省得"写进去了，但不知道靠什么写进去的"。
+     */
     private fun writeInto(node: AccessibilityNodeInfo, text: String): JSONObject {
         if (!node.isEditable && !node.isClickable) return fail("not_editable")
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        val done = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        return if (done) JSONObject().put("ok", true) else fail("set_text_rejected")
+        if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
+            return JSONObject().put("ok", true).put("by", "set_text")
+        }
+        // 聚焦是粘贴的前提：很多框只在有输入焦点时才处理 PASTE
+        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        return if (pasteInto(node, text)) {
+            JSONObject().put("ok", true).put("by", "paste")
+        } else {
+            fail("set_text_rejected")
+        }
+    }
+
+    /**
+     * 退路：把 [text] 放上剪贴板 → `ACTION_PASTE` → **把剪贴板还原**。
+     *
+     * 还原不是洁癖：剪贴板是用户的，agent 写一次字就把它顶掉是个可见的副作用。`performAction`
+     * 是等结果回来的（粘贴在目标窗口里已经处理完），所以随后还原不会截胡那次粘贴。
+     */
+    private fun pasteInto(node: AccessibilityNodeInfo, text: String): Boolean {
+        val svc = service() ?: return false
+        val cm = runCatching {
+            svc.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        }.getOrNull() ?: return false
+        val previous = runCatching { cm.primaryClip }.getOrNull()
+        val staged = runCatching {
+            cm.setPrimaryClip(ClipData.newPlainText("dsh-a11y", text))
+            true
+        }.getOrDefault(false)
+        if (!staged) return false
+        val done = node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        if (previous != null) runCatching { cm.setPrimaryClip(previous) }
+        return done
+    }
+
+    /** 树里第一个可编辑节点（BFS）。光标在框里、而宿主没把焦点报给无障碍时的最后一手。 */
+    private fun firstEditable(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (root == null) return null
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var visited = 0
+        while (queue.isNotEmpty() && visited < MAX_NODES * 8) {
+            val node = queue.removeFirst()
+            visited++
+            if (node.isEditable && node.isVisibleToUser) return node
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
+        }
+        return null
     }
 
     /** 按屏幕坐标点一下。坐标来自 [snapshot] 里读到的 bounds。 */
@@ -467,15 +543,27 @@ internal object DshA11y {
             window.root?.packageName?.toString() == svc.packageName
 
     /** 当前"键盘输入焦点"落在哪个节点上（解析不到就是"没人有焦点"，不是异常）。 */
-    private fun inputDiag(svc: AccessibilityService): JSONObject {
-        val n = svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            ?: return JSONObject().put("found", false)
+    private fun inputDiag(svc: AccessibilityService): JSONObject =
+        focusDiag(svc, AccessibilityNodeInfo.FOCUS_INPUT)
+
+    /**
+     * "某一类焦点现在落在谁身上"。
+     *
+     * 两类焦点**不是一回事**，返回值里必须分开写，否则下一次还会被误读：`FOCUS_INPUT` 是键盘
+     * 输入焦点（系统按 `getFocusedWindowId(FOCUS_INPUT)` 解析；网页里它就是 DOM 的
+     * activeElement，所以完全可能是一个按钮/单选框），`FOCUS_ACCESSIBILITY` 才是读屏光标。
+     * `window` 是回答者所在的窗 id，可与 [windowDiag] 的窗口表对照 —— 这两类焦点常常落在
+     * **不同的窗**里（"tree 与 input 自相矛盾"就是这么来的）。
+     */
+    private fun focusDiag(svc: AccessibilityService, type: Int): JSONObject {
+        val n = svc.findFocus(type) ?: return JSONObject().put("found", false)
         return JSONObject()
             .put("found", true)
             .put("class", n.className?.toString()?.substringAfterLast('.').orEmpty())
             .put("text", n.text?.toString().orEmpty())
             .put("id", n.viewIdResourceName?.substringAfterLast('/').orEmpty())
             .put("editable", n.isEditable)
+            .put("window", n.windowId)
     }
 
     /**
@@ -486,15 +574,23 @@ internal object DshA11y {
      * 在返回值里一模一样。
      */
     private fun windowDiag(svc: AccessibilityService, out: JSONObject): JSONObject {
-        out.put("window", svc.rootInActiveWindow?.packageName?.toString().orEmpty())
+        val active = svc.rootInActiveWindow
+        out.put("window", active?.packageName?.toString().orEmpty())
+        // package 是从"根"上读的：根拿不到（安全窗、别的 display、窗口刚销毁）时它也是空串 ——
+        // 不把这两件事分开，现场就会把"根没拿到"读成"包名为空"（本轮的报告正是这么被带偏的）。
+        out.put("windowReadable", active != null)
         val ws = JSONArray()
         for (w in svc.windows) {
+            val root = runCatching { w.root }.getOrNull()
             ws.put(
                 JSONObject()
-                    .put("package", w.root?.packageName?.toString().orEmpty())
+                    .put("package", root?.packageName?.toString().orEmpty())
                     .put("system", w.type == AccessibilityWindowInfo.TYPE_SYSTEM)
                     .put("active", w.isActive)
-                    .put("focused", w.isFocused),
+                    .put("focused", w.isFocused)
+                    .put("id", w.id)
+                    .put("type", w.type)
+                    .put("rootAvailable", root != null),
             )
         }
         return out.put("windows", ws)
