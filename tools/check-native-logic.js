@@ -789,6 +789,19 @@ console.log("\n── 特权通道约束 ──");
       "restrictMode 与 decision 对每个能力都写（在 shell 分支之前）");
     ok(chAt > shellAt && uidAt > shellAt,
       "channel / uid 仍只在 shell 分支里（它们描述的是那条提权通道的身份）");
+    // 参数 extra 本身仍可空（默认 null），所以调用点必须判空 —— 少了它 Kotlin 直接编译不过
+    // （本地没有 JDK，这类错只有 CI 报，beta.146 就是这么红的）。
+    ok(/if \(extra != null\) for \(key in extra\.keys\(\)\) entry\.put\(key, extra\.get\(key\)\)/.test(bridge),
+      "可空参数在调用点判空（删掉这一行 = 编译不过）");
+    // 用户拒绝/超时那两条也要带上判据：reason 只说"被拒"，说不出"当时是哪条判据在问"
+    const deniedAt = bridge.indexOf('"denied_by_user"');
+    const deniedSeg = deniedAt < 0 ? "" : bridge.slice(deniedAt, deniedAt + 400);
+    ok(/privAuditExtra\(ctx, cap, privDecision\)/.test(deniedSeg),
+      "被拒那条也记下当时的判据（restrictMode + decision=denied）");
+    const expiredAt = bridge.indexOf('"request_expired"');
+    const expiredSeg = expiredAt < 0 ? "" : bridge.slice(expiredAt, expiredAt + 400);
+    ok(/privAuditExtra\(ctx, cap, privDecision\)/.test(expiredSeg),
+      "超时那条也记下当时的判据（decision=expired）");
     ok(!/private fun privAuditExtra\([^)]*\): JSONObject\?/.test(bridge),
       "附加字段不再是可空的（可空就等于「有些能力没有这两个字段」）");
   }

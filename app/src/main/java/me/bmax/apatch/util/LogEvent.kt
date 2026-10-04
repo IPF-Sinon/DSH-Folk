@@ -439,7 +439,8 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
             val sb = StringBuilder()
             sb.append("# 能力调用审计（与设备上「权限调用记录」同一份数据；每行一条 JSON）\n")
             sb.append("# 字段：time method path command capability access effectiveAccess reason status result\n")
-            sb.append("#       restrictMode decision（每个能力都有：这次为什么问、或为什么没问）\n")
+            sb.append("#       restrictMode decision（执行路径与「用户拒绝/超时」这几条都有，\n")
+            sb.append("#         每个能力都在内；其余 403/409 是前置失败，看 reason 即可）\n")
             sb.append("#       channel uid（只有 shell 有：走的那条提权通道与拿到的身份）\n")
             sb.append("# 隐私：command 按各端点的打码口径；fullCommand（明文副本）不随报告导出\n")
             fun appendAudit(name: String, label: String, keep: Int) {

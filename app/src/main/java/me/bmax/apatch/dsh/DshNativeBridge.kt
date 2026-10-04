@@ -736,7 +736,9 @@ object DshNativeBridge {
                         str(ctx, R.string.dsh_native_err_denied, capName(ctx, cap)),
                         "denied_by_user",
                     )
-                    audit(ctx, method, path, params, cap, reason, result)
+                    // 被拒这条也要记「当时是什么判据在问」：restrictMode 关着却问了，
+                    // 说明问的原因是危险清单命中；开着则是清单里的能力。reason 只说了"被拒"。
+                    audit(ctx, method, path, params, cap, reason, result, privAuditExtra(ctx, cap, privDecision))
                     return result
                 }
 
@@ -746,7 +748,7 @@ object DshNativeBridge {
                         str(ctx, R.string.dsh_native_err_request_expired, capName(ctx, cap)),
                         "request_expired",
                     )
-                    audit(ctx, method, path, params, cap, reason, result)
+                    audit(ctx, method, path, params, cap, reason, result, privAuditExtra(ctx, cap, privDecision))
                     return result
                 }
             }
@@ -1507,7 +1509,7 @@ object DshNativeBridge {
                 .put("reason", reason)
                 .put("status", response.first)
                 .put("result", auditResult(response.second))
-            for (key in extra.keys()) entry.put(key, extra.get(key))
+            if (extra != null) for (key in extra.keys()) entry.put(key, extra.get(key))
             FileWriter(file, true).use { it.append(entry.toString()).append('\n') }
         }.onFailure { Log.w(TAG, "记录能力调用失败: ${it.message}") }
     }
