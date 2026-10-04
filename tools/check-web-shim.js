@@ -617,5 +617,18 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
   }
 }
 
+// ── const 垫片的形状：不许在初始化器里调函数 ──
+//
+// CI 抓到过一次：`private const val A11Y_SHIM = """...""".trimIndent()` —— const 的初始化器
+// 必须是**常量表达式**，函数调用不是（同文件三段垫片都是裸 `"""`，`val FS_BRIDGE_CLI_SCRIPT`
+// 那种非 const 的才用 trimIndent）。这条断言让它在本地就现形，而不是等到 CI 编译。
+{
+  const decls = [...webui.matchAll(/private const val (\w+) = """([\s\S]*?)"""(\S*)/g)];
+  ok(decls.length >= 4, `抠到 ${decls.length} 个 const 垫片`);
+  const badTail = decls.filter((d) => d[3].startsWith(".")).map((d) => d[1] + d[3].slice(0, 12));
+  ok(badTail.length === 0,
+    "const 垫片的初始化器是裸字符串" + (badTail.length ? `（${badTail.join(", ")} 里调了函数）` : `（${decls.map((d) => d[1]).join(", ")}）`));
+}
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

@@ -1381,7 +1381,7 @@ class DshWebUiActivity : AppCompatActivity() {
   }
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', start); } else { start(); }
 })();
-""".trimIndent()
+"""
 
         /**
          * 拦 blob:/data: 下载。
