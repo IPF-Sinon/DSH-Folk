@@ -1,6 +1,13 @@
 package me.bmax.apatch.ui.screen.settings
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Update
@@ -9,9 +16,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import me.bmax.apatch.APApplication
 import me.bmax.apatch.R
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 import me.bmax.apatch.ui.component.ToggleSettingCard
 
@@ -28,6 +44,7 @@ import me.bmax.apatch.ui.component.ToggleSettingCard
 fun ModuleSettingsContent(
     flat: Boolean = false,
     highlightKey: String? = null,
+    onOpenUserscripts: () -> Unit = {},
 ) {
     val prefs = APApplication.sharedPreferences
 
@@ -42,6 +59,30 @@ fun ModuleSettingsContent(
     }
 
     SplicedColumnGroup(flat = flat, highlightKey = highlightKey) {
+        // 用户脚本：不打包的扩展方式（与"插件带 client bundle"并列的那一档）。
+        // 放在插件页，因为要回答的正是"这个应用能怎么扩展"。
+        item(key = "module_userscripts") {
+            ExpressiveCard(flat = flat, onClick = onOpenUserscripts) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Code, null, Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = stringResource(R.string.dsh_userscripts_entry),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = stringResource(R.string.dsh_userscripts_entry_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
         item(key = "module_disable_update") {
             ToggleSettingCard(
                 icon = Icons.Filled.Update,

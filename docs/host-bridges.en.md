@@ -227,6 +227,12 @@ have the user toggle that accessibility switch off and on. Two more limits come 
 waits ≥350ms and retries once here, and still answers `capture_failed_too_soon` if that is not enough), and secure windows or private virtual displays answer
 `capture_failed_no_access` / `capture_failed_bad_display`. Below Android 11 it is `unsupported_os`.
 
+**The page may have been changed by a userscript**: the app plugin page has a `Userscripts` entry — import a
+`.user.js` (paste, or pick a file) and it runs on our own page before the page own scripts
+(GM_getValue/setValue/deleteValue, GM_addStyle, GM_log, GM_notification). So the UI of a given app version is not
+necessarily the shipped one: when diagnosing "where did that button go", check plugins -> userscripts first; switching it
+off restores the page (the manager is native, so it still opens when a script blanks the WebView).
+
 **When access is missing, the capability call itself is the request**: the bridge does not answer it with a bare 403 — it **holds
 that call open**, shows the dialog in the app, and then either runs the command and hands the real result back, or fails that one call (deny, or no answer within
 60 seconds). The agent never has to file a request and then call again, so "the request succeeded but the call still failed" cannot happen.

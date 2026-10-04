@@ -258,6 +258,14 @@ class DshWebUiActivity : AppCompatActivity() {
     private var a11yShimInstalled = false
 
     /**
+     * 用户脚本这次是否已按 document-start 装上（每个启用的脚本各一段，见 [Userscripts.injections]）。
+     *
+     * 与 [a11yShimInstalled] 一样：无条件、与内核新旧无关（装脚本是用户的决定，不是内核能力），
+     * 失败原因独立。
+     */
+    private var userscriptsInstalled = false
+
+    /**
      * 最近一次算出的系统栏内边距（CSS 像素 = dp）。
      *
      * 存成字段而不是只在组合期用局部量：`onPageStarted` 的补注入发生在**别的时刻**
@@ -413,6 +421,8 @@ class DshWebUiActivity : AppCompatActivity() {
                                 // blob: 下载的桥。只在 loadUrl 的回环地址上注入
                                 // （onPageStarted 里按 origin 校验），别的来源拿不到它
                                 addJavascriptInterface(BlobBridge(), BLOB_BRIDGE)
+                                // 用户脚本的 GM_notification 落到原生 Toast
+                                addJavascriptInterface(UserscriptBridge(), USERSCRIPT_BRIDGE)
                                 webViewClient = object : WebViewClient() {
                                     /**
                                      * 只让回环页面留在这个 WebView 里，其余交给系统浏览器。
@@ -494,6 +504,11 @@ class DshWebUiActivity : AppCompatActivity() {
                                             DshWebCompat.enterNewline(this@DshWebUiActivity)
                                         ) {
                                             view?.evaluateJavascript(COMPOSER_SHIM, null)
+                                        }
+                                        // 用户脚本的回落：document-start 装不上时在这里补
+                                        // （脚本自己的 document-start 语义就退化成"onPageStarted"）
+                                        if (!userscriptsInstalled && isLoopback(u)) {
+                                            injectUserscriptsNow(view, u)
                                         }
                                         super.onPageStarted(view, u, favicon)
                                     }
@@ -596,6 +611,9 @@ class DshWebUiActivity : AppCompatActivity() {
                                 // 无障碍名字：给网页里的输入框补 aria-label，
                                 // 让 agent 的 a11y text / tree 能寻址（否则网页元素的 text / id 全空）
                                 a11yShimInstalled = installA11yShim(this, url)
+                                // 用户脚本：页面脚本之前跑用户自己的 JS（不打包的扩展方式，
+                                // 见 Userscripts）。每个启用的脚本各一段，互不牵连
+                                userscriptsInstalled = installUserscripts(this, url)
                                 webView = this
                                 loadUrl(url)
                             }
@@ -691,6 +709,24 @@ class DshWebUiActivity : AppCompatActivity() {
      * 只从回环页面注入（[BLOB_SHIM] 由 onPageFinished 在校验 origin 后执行）。
      * 即便如此也不信任入参：文件名只取 basename 并过滤路径分隔符，写入目录写死。
      */
+    /**
+     * 用户脚本 `GM_notification` 的原生落点：一个 Toast。
+     *
+     * 与 [BlobBridge] 同一套信任前提 —— 只在回环页面上挂（外部链接会被踢去系统浏览器），
+     * 所以拿到调用的只可能是我们自己的页面。JS 线程调用，转回 UI 线程；长度截断，
+     * 免得一个脚本刷屏。调用方可以什么都不传（脚本常写 GM_notification("done")）。
+     */
+    private inner class UserscriptBridge {
+        @JavascriptInterface
+        fun notify(title: String?, text: String?) {
+            val body = listOfNotNull(title?.trim()?.takeIf { it.isNotEmpty() }, text?.trim()?.takeIf { it.isNotEmpty() })
+                .joinToString(": ")
+                .take(200)
+                .ifEmpty { return }
+            runOnUiThread { showToast(this@DshWebUiActivity, body) }
+        }
+    }
+
     private inner class BlobBridge {
         @JavascriptInterface
         fun save(base64: String, fileName: String) {
@@ -839,6 +875,47 @@ class DshWebUiActivity : AppCompatActivity() {
      *
      * 只对回环 origin 生效：别的站点不该被我们改无障碍语义。
      */
+    /**
+     * 把启用的用户脚本按 document-start 装进页面。
+     *
+     * **一段一个脚本**（不是拼成一大段）：WebView 分别编译，于是一个脚本语法错只毁它自己
+     * （拼接的话，一处语法错会让整段都不执行，且静默）。返回"是否已按 document-start 装上"，
+     * 供 [onPageStarted] 的回落判断。
+     *
+     * 只给回环页面：别的站点不该被用户的脚本改（与四段垫片同一条 origin 规则）。
+     */
+    private fun installUserscripts(view: WebView, url: String): Boolean {
+        if (!Userscripts.masterEnabled(this)) {
+            Log.i(TAG, "userscripts disabled by preference")
+            return true // 关着也算"已处理"：不用在 onPageStarted 里反复补
+        }
+        val scripts = Userscripts.injections(this, url)
+        if (scripts.isEmpty()) return true
+        val supported = runCatching {
+            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        }.getOrDefault(false)
+        if (!supported) {
+            Log.i(TAG, "document-start script unsupported, userscripts fall back to onPageStarted")
+            return false
+        }
+        val rules = loopbackOriginRules(url)
+        return runCatching {
+            scripts.forEach { WebViewCompat.addDocumentStartJavaScript(view, it, rules) }
+            Log.i(TAG, "userscripts injected at document-start: " + scripts.size)
+            true
+        }.getOrElse {
+            Log.w(TAG, "addDocumentStartJavaScript failed for userscripts", it)
+            false
+        }
+    }
+
+    /** document-start 装不上时的回落：逐段 evaluate（时机退化成 onPageStarted）。 */
+    private fun injectUserscriptsNow(view: WebView?, url: String?) {
+        // 显式判空：智能转换只对"null 检查后的不可变参数"生效，不依赖 stdlib 的契约注解
+        if (view == null || url == null || url.isBlank()) return
+        Userscripts.injections(this, url).forEach { view.evaluateJavascript(it, null) }
+    }
+
     private fun installA11yShim(view: WebView, url: String): Boolean {
         val supported = runCatching {
             WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
@@ -903,6 +980,9 @@ class DshWebUiActivity : AppCompatActivity() {
 
         /** JS 侧看到的桥名。 */
         private const val BLOB_BRIDGE = "DshFolkDownload"
+
+        /** 用户脚本的 GM_notification 桥名（注入体的 JS 里按这个名字找）。 */
+        private const val USERSCRIPT_BRIDGE = "DshFolkNotify"
 
         /**
          * document-start 脚本允许的 origin 规则。

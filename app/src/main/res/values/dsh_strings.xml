@@ -1470,4 +1470,20 @@ Updating Android System WebView from your app store is the proper fix.</string>
     <string name="dsh_handoff_prompt">Please handle this file in the workspace: %1$s</string>
     <string name="dsh_handoff_copy_failed">Copy failed: %1$s</string>
     <string name="dsh_handoff_done_message">Copied to %1$s. The prompt is on the clipboard.</string>
+    <string name="dsh_userscripts_title">Userscripts</string>
+    <string name="dsh_userscripts_scope">Applies to this app own page (the built-in dsh web UI) only. The metadata block, @match / @include / @exclude and @run-at (document-start / -end / -idle) are read the Greasemonkey way. Turn the switch off to put the page back the way it was.</string>
+    <string name="dsh_userscripts_master">Run userscripts</string>
+    <string name="dsh_userscripts_master_summary">Off = the page is left exactly as shipped (and the manager still works — it is native, not in the WebView).</string>
+    <string name="dsh_userscripts_paste">Paste a script</string>
+    <string name="dsh_userscripts_pick">Pick a file</string>
+    <string name="dsh_userscripts_empty">Nothing installed yet. Paste one or pick a .user.js — it runs before the page own scripts.</string>
+    <string name="dsh_userscripts_count">%1$d installed</string>
+    <string name="dsh_userscripts_paste_hint">Paste the text of a .user.js, metadata block and all.</string>
+    <string name="dsh_userscripts_install">Install</string>
+    <string name="dsh_userscripts_installed">Installed</string>
+    <string name="dsh_userscripts_read_failed">Could not read that as text (not a text file?)</string>
+    <string name="dsh_userscripts_delete">Delete script</string>
+    <string name="dsh_userscripts_delete_confirm">Delete</string>
+    <string name="dsh_userscripts_entry">Userscripts</string>
+    <string name="dsh_userscripts_entry_summary">Run your own JS against this app own web UI — a .user.js, no build, no release.</string>
 </resources>

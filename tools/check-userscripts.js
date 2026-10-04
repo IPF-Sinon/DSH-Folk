@@ -1,0 +1,462 @@
+#!/usr/bin/env node
+/**
+ * 用户脚本（油猴 .user.js 的够用子集）的门禁。
+ *
+ * ## 为什么要有这个检查器
+ *
+ * 用户脚本的失败**全在"跑起来之后"**：元数据里 `@run-at` 读错 → 脚本在 DOM 还没有时跑、
+ * 报 TypeError；`@exclude` 语义写成"随便命中一个就跑"→ 该排除的页面照跑；GM 存储命名空间
+ * 用了**标题**而不是**文件 id** → 两个同名脚本互相覆盖对方的值；一段脚本抛错把整段注入吞掉
+ * → 用户只看到"我这脚本没生效"，控制台里一个字都没有。
+ *
+ * 这些用正则匹配源码一个都防不住，所以这里分三层：
+ * 1. 解析（元数据块）与 `@match`/`@exclude` —— 对着**表**逐格断言；
+ * 2. 注入体（`Userscripts.blob`）—— 从 Kotlin 里抠出来，在**假 DOM 里真跑**：
+ *    `start/end/idle` 三档时机、幂等哨兵、GM_* 读写与通知、抛错隔离；
+ * 3. 管线 —— 一段一个脚本地 document-start 注入、只给回环、装在 loadUrl 之前、回落路径、
+ *    JS→原生的 Toast 桥、管理页的三个动作。
+ *
+ * ## 与 Kotlin 的关系
+ *
+ * 第 1 层是**复刻**（Kotlin 是纯函数，JS 这边照抄一份来对表），所以每条复刻旁边都钉一句
+ * 源码锚点：Kotlin 改了而这里没跟上时，锚点先报。
+ */
+const fs = require("fs");
+const vm = require("vm");
+
+const SRC_US = "app/src/main/java/me/bmax/apatch/dsh/Userscripts.kt";
+const SRC_WEBUI = "app/src/main/java/me/bmax/apatch/ui/DshWebUiActivity.kt";
+const SRC_ENV = "app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt";
+const SRC_MODULE = "app/src/main/java/me/bmax/apatch/ui/screen/settings/ModuleSettings.kt";
+const SRC_MODULE_SCREEN = "app/src/main/java/me/bmax/apatch/ui/screen/settings/ModuleSettingsScreen.kt";
+const SRC_SCREEN = "app/src/main/java/me/bmax/apatch/ui/screen/settings/UserscriptsScreen.kt";
+
+let n = 0;
+let bad = 0;
+function ok(cond, label) {
+  n++;
+  if (cond) console.log("  ✓ " + label);
+  else {
+    bad++;
+    console.log("  ✗ " + label);
+  }
+}
+function eq(actual, expected, label) {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  ok(a === e, label + (a === e ? "" : `（期望 ${e}，实际 ${a}）`));
+}
+
+const us = fs.readFileSync(SRC_US, "utf8");
+const webui = fs.readFileSync(SRC_WEBUI, "utf8");
+const env = fs.readFileSync(SRC_ENV, "utf8");
+const moduleSrc = fs.readFileSync(SRC_MODULE, "utf8");
+const moduleScreen = fs.readFileSync(SRC_MODULE_SCREEN, "utf8");
+const screen = fs.readFileSync(SRC_SCREEN, "utf8");
+
+console.log("\n── 元数据解析：对表 ──");
+
+// 复刻 `Userscripts.parse`。Kotlin 那份的每一句都在下面被锚点钉着。
+function parseMeta(text) {
+  const out = {};
+  const push = (k, v) => {
+    (out[k] = out[k] || []).push(v);
+  };
+  let inside = false;
+  for (const raw of text.replace(/\r\n/g, "\n").split("\n")) {
+    const line = raw.trim();
+    if (line.includes("==UserScript==")) {
+      inside = true;
+      continue;
+    }
+    if (!inside) continue;
+    if (line.includes("==/UserScript==")) break;
+    if (!line.startsWith("//")) continue;
+    const body = line.replace(/^\/\//, "").trim();
+    if (!body.startsWith("@")) continue;
+    const rest = body.slice(1);
+    const key = rest.split(" ")[0].trim().toLowerCase();
+    if (!key) continue;
+    const value = rest.includes(" ") ? rest.slice(rest.indexOf(" ") + 1).trim() : "";
+    push(key, value);
+  }
+  const first = (k) => (out[k] && out[k][0]) || "";
+  const matches = [...(out.match || []), ...(out.include || [])].filter((v) => v !== "");
+  const excludes = (out.exclude || []).filter((v) => v !== "");
+  const runAtMap = {
+    "document-start": "start",
+    start: "start",
+    "document-idle": "idle",
+    idle: "idle",
+  };
+  return {
+    title: first("name") || first("title"),
+    version: first("version"),
+    description: first("description"),
+    runAt: runAtMap[first("run-at").toLowerCase()] || "end",
+    matches,
+    excludes,
+  };
+}
+
+ok(/line\.contains\("==UserScript=="\)/.test(us) && /startsWith\("\/\/"\)/.test(us),
+  "锚点：解析只认 // 行注释的元数据块");
+ok(/"document-start", "start" -> "start"/.test(us) && /else -> "end"/.test(us),
+  "锚点：@run-at 三档归一，缺省 end（清单之外的写法不算 start）");
+ok(/matches = include,\s*\n\s*excludes = exclude,/.test(us),
+  "锚点：@match/@include 归一为 matches，@exclude 单独一路");
+
+{
+  const real = [
+    "// ==UserScript==",
+    "// @name         Wide rail",
+    "// @namespace    dsh-folk",
+    "// @version      1.2.0",
+    "// @description  widen the left rail",
+    "// @match        *://127.0.0.1:*/*",
+    "// @match        http://localhost:*/*",
+    "// @include      /s/*",
+    "// @exclude      *://127.0.0.1:*/settings*",
+    "// @run-at       document-idle",
+    "// @grant        GM_setValue",
+    "// ==/UserScript==",
+    "",
+    '(function(){ document.title = "x"; })();',
+  ].join("\n");
+  const m = parseMeta(real);
+  eq(m.title, "Wide rail", "@name");
+  eq(m.version, "1.2.0", "@version");
+  eq(m.description, "widen the left rail", "@description");
+  eq(m.runAt, "idle", "@run-at document-idle → idle");
+  eq(m.matches, ["*://127.0.0.1:*/*", "http://localhost:*/*", "/s/*"],
+    "@match ×2 + @include 合并进 matches（顺序保持）");
+  eq(m.excludes, ["*://127.0.0.1:*/settings*"], "@exclude 单独一路");
+}
+{
+  const crlf = "// ==UserScript==\r\n// @name  A\r\n// @run-at document-start\r\n// ==/UserScript==\r\n";
+  const m = parseMeta(crlf);
+  eq([m.title, m.runAt], ["A", "start"], "CRLF 头（从 Windows 粘贴过来的）照样解析");
+}
+{
+  const m = parseMeta("(function(){})();");
+  eq([m.title, m.version, m.runAt, m.matches.length], ["", "", "end", 0],
+    "没有元数据块：不报错、不回退成 start，交给调用方兜底标题");
+}
+{
+  const m = parseMeta("/* ==UserScript==\n   @name Block\n   ==/UserScript== */\n");
+  eq(m.title, "", "块注释里的元数据认不出来（已在 KDoc 的「边界」里写明，不是 bug）");
+}
+{
+  const m = parseMeta("// ==UserScript==\n// @Name Case\n// @RUN-AT DOCUMENT-START\n// ==/UserScript==\n");
+  eq([m.title, m.runAt], ["Case", "start"], "键名大小写不敏感（@Name / @RUN-AT）");
+}
+
+console.log("\n── @match / @exclude：对表 ──");
+
+function globToRegex(glob) {
+  let sb = "^";
+  for (const c of glob) {
+    if (c === "*") sb += ".*";
+    else if (/[A-Za-z0-9/:._-]/.test(c)) sb += c === "." ? "\\." : c;
+    else sb += "\\" + c;
+  }
+  return sb + "$";
+}
+function matchesAny(url, patterns) {
+  if (patterns.length === 0) return false;
+  const clean = url.split("#")[0].split("?")[0];
+  return patterns.some((p) => {
+    try {
+      return new RegExp(globToRegex(p.split("#")[0].split("?")[0])).test(clean);
+    } catch (e) {
+      return false;
+    }
+  });
+}
+function applies(url, meta) {
+  return (meta.matches.length === 0 || matchesAny(url, meta.matches)) &&
+    !matchesAny(url, meta.excludes);
+}
+
+ok(/if \(patterns\.isEmpty\(\)\) return false/.test(us),
+  "锚点：matchesAny 对空模式返回 false（「没写模式」由 applies 决定放行，不是 matchesAny 自作主张）");
+ok(/\(meta\.matches\.isEmpty\(\) \|\| matchesAny\(url, meta\.matches\)\) &&[\s\S]{0,80}!matchesAny\(url, meta\.excludes\)/.test(us),
+  "锚点：applies = （没写模式 或 命中）且 未被 @exclude 命中（排除优先）");
+ok(/getBoolean\(DshEnv\.KEY_USERSCRIPTS_ON, true\)/.test(us),
+  "锚点：总开关默认**开**（装了脚本却默认不跑是最难查的那种坑）");
+ok(/url\.substringBefore\('#'\)\.substringBefore\('\?'\)/.test(us) &&
+  /it\.substringBefore\('#'\)\.substringBefore\('\?'\)/.test(us),
+  "锚点：匹配前 URL 与模式**两侧**都去掉 #fragment 与 ?query（@match 不管查询串）");
+
+const HERE = "http://127.0.0.1:8080/s/1";
+eq(globToRegex("*://127.0.0.1:*/*"), "^.*://127\\.0\\.0\\.1:.*/.*$",
+  "通配转正则（. 被转义，* 变 .*）");
+
+eq(matchesAny(HERE, []), false, "空模式 → false（「没写」由 applies 放行）");
+for (const [patterns, want, label] of [
+  [["*://127.0.0.1:*/*"], true, "*://127.0.0.1:*/* 命中自己的页面"],
+  [["http://localhost:8080/*"], false, "host 写错（localhost）→ 不命中"],
+  [["http://127.0.0.1:8080/s/*"], true, "带路径前缀的模式命中"],
+  [["http://127.0.0.1:8080/other/*"], false, "路径不符 → 不命中"],
+  [["*://example.com/*"], false, "别的站点 → 不命中"],
+  [["*://*/*"], true, "最宽的 *://*/* 命中"],
+  [["http://127.0.0.1:8080/s/1"], true, "精确 URL 命中"],
+  [["http://127.0.0.1:8080/s/1?x=1"], true, "模式带查询串也命中（两侧都去掉查询）"],
+  [["http://127.0.0.1:8080/s.1"], false, "模式里的 . 只匹配字面点，不当「任意字符」"],
+]) {
+  eq(matchesAny(HERE, patterns), want, label);
+}
+
+eq(matchesAny("http://127.0.0.1:8080/s/(1)", ["http://127.0.0.1:8080/s/(1)"]), true,
+  "带括号的 URL 精确命中（括号是字面量，不是分组）");
+eq(applies(HERE, { matches: [], excludes: [] }), true, "没写 @match → 放行（我们这儿「到处」只有一个站）");
+eq(applies(HERE, { matches: ["*://*/*"], excludes: [] }), true, "命中的 @match → 跑");
+eq(applies(HERE, { matches: ["*://example.com/*"], excludes: [] }), false, "不命中的 @match → 不跑");
+eq(applies(HERE, { matches: ["*://*/*"], excludes: ["*://127.0.0.1:*/*"] }), false,
+  "@exclude 命中 → 即便 @match 命中也**不跑**（排除优先）");
+eq(applies(HERE, { matches: [], excludes: ["*://example.com/*"] }), true,
+  "没写 @match、@exclude 又没命中 → 跑");
+eq(applies(HERE, { matches: [], excludes: ["http://127.0.0.1:8080/*"] }), false,
+  "没写 @match、@exclude 命中 → 不跑");
+
+console.log("\n── 注入体：在假 DOM 里真跑 ──");
+
+/**
+ * 从 Kotlin 里还原 `Userscripts.blob`：它是**函数**返回值（要插入标题/版本/时机/脚本文本），
+ * 所以抠出三引号后把 5 个 Kotlin 模板换成具体值。
+ */
+const blobMatch = us.match(/private fun blob\([\s\S]*?= """\n([\s\S]*?)\n"""\.trimIndent\(\)/);
+ok(blobMatch !== null, "能从 Userscripts.kt 抠出 blob");
+const blobTemplate = blobMatch ? blobMatch[1] : "";
+
+/** 造一个假 window/document；返回登记下来的调用。 */
+function harness({ runAt = "start", code = "", readyState = "loading" } = {}) {
+  const warns = [];
+  const logs = [];
+  const styles = [];
+  const notified = [];
+  const store = new Map();
+  const listeners = {};
+  const idle = [];
+  const timeouts = [];
+  const doc = {
+    readyState,
+    documentElement: { appendChild: (el) => styles.push(el) },
+    head: { appendChild: (el) => styles.push(el) },
+    createElement: (tag) => ({ tagName: tag, textContent: "" }),
+    addEventListener: (ev, fn) => {
+      listeners[ev] = fn;
+    },
+  };
+  const ctx = {
+    document: doc,
+    console: {
+      log: (...a) => logs.push(a.join(" ")),
+      warn: (...a) => warns.push(a.join(" ")),
+    },
+    localStorage: {
+      getItem: (k) => (store.has(k) ? store.get(k) : null),
+      setItem: (k, v) => store.set(k, v),
+      removeItem: (k) => store.delete(k),
+    },
+    requestIdleCallback: (f) => {
+      idle.push(f);
+      return idle.length;
+    },
+    setTimeout: (f) => {
+      timeouts.push(f);
+      return timeouts.length;
+    },
+  };
+  ctx.window = ctx;
+  ctx.DshFolkNotify = { notify: (title, text) => notified.push([title, text]) };
+  // 假页面：GM / unsafeWindow / DshFolkNotify / 事件
+  const js = blobTemplate
+    .replace(/\$\{js\(meta\.title\.ifBlank \{ id \}\)\}/, JSON.stringify("Demo title"))
+    .replace(/\$\{js\(id\)\}/, JSON.stringify("demo-title-1a2b3c4d"))
+    .replace(/\$\{js\(meta\.version\)\}/, JSON.stringify("1.0"))
+    .replace(/\$\{js\(meta\.runAt\)\}/, JSON.stringify(runAt))
+    .replace(/\$\{code\}/, code);
+  return { js, ctx, warns, logs, styles, notified, store, listeners, idle, timeouts, meta: { runAt } };
+}
+
+function run(js, ctx) {
+  vm.createContext(ctx);
+  vm.runInContext(js, ctx);
+}
+
+{
+  const h = harness({
+    runAt: "start",
+    code: [
+      "unsafeWindow.__ran = (unsafeWindow.__ran || 0) + 1;",
+      'GM_addStyle("#a{color:red}");',
+      'GM_setValue("n", 7);',
+      'GM_log("hello", 42);',
+      'GM_notification("done", "Demo");',
+    ].join("\n"),
+  });
+  ok(h.js.length > 500 && !/\$\{/.test(h.js), `注入体还原成功（${h.js.length} 字节，无未展开模板）`);
+  try {
+    new vm.Script(h.js);
+    ok(true, "注入体语法有效");
+  } catch (e) {
+    ok(false, "注入体语法有效（" + e.message + "）");
+  }
+  run(h.js, h.ctx);
+  ok(h.ctx.__ran === 1, "document-start：脚本当场跑（unsafeWindow === window）");
+  eq(h.styles.length, 1, "GM_addStyle 插了 1 个 style");
+  eq(h.styles[0].textContent, "#a{color:red}", "style 内容原样");
+  eq(h.store.get("dshFolk.gm.demo-title-1a2b3c4d.n"), "7", "GM_setValue 落进 localStorage（按**文件 id** 分命名空间）");
+  eq(h.notified, [["Demo", "done"]], "GM_notification 走原生桥（title, text）");
+  ok(h.warns.length === 0, "跑完没有警告");
+  eq(h.logs.length, 1, "GM_log 只写一条（不是两条）");
+
+  // 幂等哨兵：document-start 装上了、onPageStarted 又回落一次 —— 不该跑两遍
+  delete h.ctx.__dshFolkRunner;
+  run(h.js, h.ctx);
+  ok(h.ctx.__ran === 1, "重复注入只跑一次（回落路径不会让脚本跑两遍）");
+}
+
+{
+  // GM_getValue / deleteValue：预置一份"上次存下的值"
+  const h = harness({
+    runAt: "start",
+    code: [
+      "window.__got = GM_getValue(\"n\", -1);",
+      "GM_deleteValue(\"n\");",
+      "window.__after = GM_getValue(\"n\", -1);",
+      "window.__missing = GM_getValue(\"nope\", \"d\");",
+    ].join("\n"),
+  });
+  h.store.set("dshFolk.gm.demo-title-1a2b3c4d.n", "7");
+  run(h.js, h.ctx);
+  eq(h.ctx.__got, 7, "GM_getValue 读回（JSON 解码）");
+  eq(h.ctx.__after, -1, "GM_deleteValue 之后回到默认值");
+  eq(h.ctx.__missing, "d", "没有这个键 → 用默认值");
+}
+
+{
+  // @run-at 的三档时机
+  const code = "window.__ran = (window.__ran || 0) + 1;";
+  const loading = harness({ runAt: "end", code, readyState: "loading" });
+  run(loading.js, loading.ctx);
+  ok(loading.ctx.__ran === undefined, "document-end + 文档还在加载：先不跑");
+  ok(typeof loading.listeners.DOMContentLoaded === "function", "document-end：登记在 DOMContentLoaded 上");
+  loading.listeners.DOMContentLoaded();
+  ok(loading.ctx.__ran === 1, "DOMContentLoaded 一到就跑");
+
+  const ready = harness({ runAt: "end", code, readyState: "complete" });
+  run(ready.js, ready.ctx);
+  ok(ready.ctx.__ran === 1, "document-end + 文档已就绪：立刻跑（不白等一个不会再来的事件）");
+
+  const idle = harness({ runAt: "idle", code });
+  run(idle.js, idle.ctx);
+  ok(idle.ctx.__ran === undefined, "document-idle：交给 requestIdleCallback");
+  eq(idle.idle.length, 1, "登记了 1 次 idle 回调");
+  idle.idle[0]();
+  ok(idle.ctx.__ran === 1, "idle 回调一到就跑");
+}
+
+{
+  const h = harness({
+    runAt: "start",
+    code: 'window.__before = 1; throw new Error("boom"); window.__after = 2;',
+  });
+  run(h.js, h.ctx);
+  ok(h.ctx.__before === 1, "抛错前的语句已生效");
+  ok(h.ctx.__after === undefined, "抛错后的语句没跑（异常真的抛出去了）");
+  eq(h.warns.length, 1, "异常只报一次（console.warn）");
+  ok(h.warns[0].includes("Demo title"), "警告里带**标题**，不是文件 id（人读的是它）");
+  ok(h.ctx.__dshFolkRunner["demo-title-1a2b3c4d"] === 1, "哨兵仍按文件 id 记录");
+}
+
+{
+  // 标题相同、文件 id 不同：同一个页面（同一份 localStorage）里各存一份
+  const a = harness({ runAt: "start", code: 'GM_setValue("k", "A");' });
+  run(a.js, a.ctx);
+  const b = harness({ runAt: "start", code: 'GM_setValue("k", "B");' });
+  b.js = b.js.replace(/demo-title-ffffffff|demo-title-1a2b3c4d/g, "demo-title-ffffffff");
+  run(b.js, a.ctx);
+  eq(a.store.get("dshFolk.gm.demo-title-1a2b3c4d.k"), "\"A\"", "脚本 A 的值还在原处");
+  eq(a.store.get("dshFolk.gm.demo-title-ffffffff.k"), "\"B\"", "同名的 B 存在**自己 id** 的命名空间里");
+  ok(a.ctx.__dshFolkRunner["demo-title-ffffffff"] === 1, "哨兵也按 id 分开（同名不会互相顶掉）");
+}
+
+{
+  // 没有原生桥时 GM_notification 不该炸
+  const h = harness({ runAt: "start", code: 'GM_notification("no bridge");' });
+  delete h.ctx.DshFolkNotify;
+  run(h.js, h.ctx);
+  ok(h.warns.length === 0, "没有原生桥：退化成 console.log，不报错");
+  ok(h.logs.some((l) => l.includes("no bridge")), "退化路径里仍能看到正文");
+}
+
+console.log("\n── 管线：注入 / 回落 / 桥 / 管理页 ──");
+
+ok(/fun injections\(ctx: Context, url: String\): List<String>/.test(us), "injections 返回**多段**（不是一大段）");
+ok(/if \(!masterEnabled\(ctx\)\) return emptyList\(\)/.test(us), "总开关关着：一段都不注入");
+ok(/\.filter \{ it\.enabled \}/.test(us) && /if \(!applies\(url, meta\)\) return@mapNotNull null/.test(us),
+  "逐条过滤：启用的 + 匹配这次 URL 的");
+ok(/fun read\(ctx: Context, uri: Uri\): String\?/.test(us), "从 content:// 读文本（文件选择器那条路）");
+ok(/if \(on\) next\.add\(id\) else next\.remove\(id\)/.test(us), "启用 = 名单里加/去一个 id");
+ok(/File\(d, "\$id\.user\.js"\)\.writeText\(text\)/.test(us) && /setEnabled\(ctx, id, true\)/.test(us),
+  "装 = 落一个文件 + 默认启用");
+ok(/File\(dir\(ctx\), "\$id\.user\.js"\)\.delete\(\)/.test(us) && /setEnabled\(ctx, id, false\)/.test(us),
+  "删 = 删文件 + 从启用名单里去掉");
+
+ok(/private fun installUserscripts\(view: WebView, url: String\): Boolean/.test(webui), "有 installUserscripts");
+ok(/scripts\.forEach \{ WebViewCompat\.addDocumentStartJavaScript\(view, it, rules\) \}/.test(webui),
+  "**一段一个脚本**地注册 document-start（一个脚本语法错只毁它自己）");
+ok(/private fun injectUserscriptsNow\(view: WebView\?, url: String\?\)/.test(webui) &&
+  /Userscripts\.injections\(this, url\)\.forEach \{ view\.evaluateJavascript\(it, null\) \}/.test(webui),
+  "document-start 装不上时逐段回落");
+ok(/userscriptsInstalled = installUserscripts\(this, url\)/.test(webui), "安装点存在");
+{
+  const a = webui.indexOf("userscriptsInstalled = installUserscripts(this, url)");
+  const b = webui.indexOf("loadUrl(url)");
+  ok(a > 0 && b > a, "装在 loadUrl **之前**（document-start 注册只对之后开始的加载生效）");
+}
+ok(/!userscriptsInstalled && isLoopback\(u\)/.test(webui) && /injectUserscriptsNow\(view, u\)/.test(webui),
+  "onPageStarted 的回落只在回环页面上做");
+ok(/val rules = loopbackOriginRules\(url\)[\s\S]{0,200}addDocumentStartJavaScript/.test(webui),
+  "origin 规则：用户脚本只改我们自己的页面");
+ok(/if \(!Userscripts\.masterEnabled\(this\)\)/.test(webui) && /return true \/\/ 关着也算/.test(webui),
+  "总开关关着 = 已处理（不在回落里反复补）");
+ok(/addJavascriptInterface\(UserscriptBridge\(\), USERSCRIPT_BRIDGE\)/.test(webui), "GM_notification 的桥挂上了");
+ok(/private const val USERSCRIPT_BRIDGE = "DshFolkNotify"/.test(webui) &&
+  /private inner class UserscriptBridge[\s\S]{0,400}@JavascriptInterface[\s\S]{0,120}fun notify\(/.test(webui),
+  "桥类 + 方法（JS 线程进来，转回 UI 线程）");
+ok(/runOnUiThread \{ showToast\(this@DshWebUiActivity, body\) \}/.test(webui) &&
+  /\.take\(200\)/.test(webui),
+  "落到 Toast，且截断长度（一个脚本刷不了屏）");
+
+ok(/const val KEY_USERSCRIPTS_ON = "dsh_userscripts_on"/.test(env) &&
+  /const val KEY_USERSCRIPTS_ENABLED = "dsh_userscripts_enabled"/.test(env),
+  "两个 prefs 键落在 DshEnv（总开关 + 逐个启用）");
+ok(/internal fun idOf\(title: String, text: String\): String/.test(us) &&
+  /Integer\.toHexString\(text\.hashCode\(\)\)/.test(us),
+  "文件名 = 标题 slug + 正文哈希（标题进名字，重装同文即覆盖）");
+ok(/onOpenUserscripts: \(\) -> Unit = \{\}/.test(moduleSrc) &&
+  /onClick = onOpenUserscripts/.test(moduleSrc),
+  "插件页多了一张能点的卡（用户脚本）");
+ok(/onOpenUserscripts = \{ navigator\.navigate\(UserscriptsScreenDestination\) \}/.test(moduleScreen),
+  "点了真的会导航（不是画着好看）");
+
+ok(/if \(script\.runAt\.isNotBlank\(\)|runAt = meta\.runAt/.test(us), "管理页拿得到 run-at");
+ok(/fun list\(ctx: Context\): List<Script>/.test(us) && /\.sortedBy \{ it\.name \}/.test(us),
+  "list 的顺序稳定（按文件名），注入顺序可复现");
+ok(/var pendingDelete by remember \{ mutableStateOf<String\?>\(null\) \}/.test(screen) &&
+  /AlertDialog\(/.test(screen) && /Userscripts\.remove\(context, deleting\)/.test(screen),
+  "删除有确认（脚本是用户的文本，误删没有撤销）");
+ok(/Userscripts\.setEnabled\(context, s\.id, want\)/.test(screen) &&
+  /Userscripts\.setMasterEnabled\(context, it\)/.test(screen),
+  "逐条开关 + 总开关都接到了引擎");
+ok(/Userscripts\.install\(context, pasted\)/.test(screen) && /Userscripts\.install\(context, text\)/.test(screen),
+  "粘贴与选文件两条路都走 install");
+ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
+  /Userscripts\.read\(context, uri\)/.test(screen),
+  "选文件：ACTION_GET_CONTENT + read(content://)");
+
+console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
+process.exit(bad === 0 ? 0 : 1);

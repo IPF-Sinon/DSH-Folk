@@ -218,6 +218,11 @@ view id（`viewIdResourceName` 通常是 null），`class`（如 `EditText`）�
 ≥350ms 自动重试一次，仍失败就回 `capture_failed_too_soon`），以及安全窗口/私有虚拟屏会让它回
 `capture_failed_no_access` / `capture_failed_bad_display`。Android 11 以下是 `unsupported_os`。
 
+**页面可能被用户脚本改过**：App 的插件页里有一处「用户脚本」—— 导入一个 `.user.js`（粘贴或选文件），
+它会在页面脚本之前跑到我们自己的页面上（GM_getValue/setValue/deleteValue、GM_addStyle、GM_log、
+GM_notification 可用）。所以同一版 App 的界面**可能不是出厂样子**：诊断"这个按钮怎么不见了"时，先看一眼
+插件 → 用户脚本；那里关掉即可恢复（管理页是原生的，坏脚本弄白页面时它照样能开）。
+
 **权限不够时，能力调用自己就是申请**：桥不会立刻回 403，而是**把这次调用挂住**，同时在 App 里弹窗；
 用户答应就地执行这条命令、把真实结果还给 agent，用户拒绝（或 60 秒不处理）这次调用就以失败结束。
 agent 因此不需要「先申请、再调一次」，也不会出现「申请成功了但调用还是失败」这种半途状态。

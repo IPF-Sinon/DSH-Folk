@@ -314,6 +314,7 @@
     <string name="changelog_title">%1$s 更新了什么</string>
     <string name="changelog_got_it">知道了</string>
     <string-array name="changelog_items">
+        <item>插件页新增「用户脚本」：导入一个 .user.js（粘贴或选文件），它会在页面脚本之前运行，可以改本应用自己网页的界面 —— 一个不用打包、不用发版的扩展口。元数据块、@match / @include / @exclude、@run-at（document-start / -end / -idle）按油猴的写法读；GM_getValue / setValue / deleteValue、GM_addStyle、GM_log、GM_notification（落到系统 Toast）可用。每个脚本**独立一段**注入，一个脚本出错不影响别的；总开关 + 逐条开关随时收回（管理页是原生的，页面被脚本弄白时它照样能开）。只作用于本应用自己的页面。</item>
         <item>无障碍能力更好用：① 输入框定位多了「只给 --class」这一路 —— WebView 里的输入框在无障碍树里常常既没有文字也没有 view id，class（如 EditText）是唯一抓手；② 定位失败与焦点失败分开报（not_found / no_input_focus，以前都叫后者，"没找到"会被读成"没焦点"）；③ 节点树新增 focused（谁拿着键盘焦点）、input（焦点解析到谁）与 own（活动窗口本来是我们自己的悬浮窗），失败时还会附上 window/windows[] —— 一次真机就能分清"服务看的是目标 App"还是"看的是我们自己的窗"；④ App 自己的网页输入框现在会带上名字（把页面上本来就显示的 placeholder 抄成 aria-label），agent 读树即可按名字定位。</item>
         <item>「不再逐条确认」名单挪到一处管理：权限管理最下面新增一类同名入口，按分类列出全部原生能力（可按能力名 / 摘要 / 分类名搜索），开着的就是"以后不再逐条问它"。以前这颗开关挂在每张能力卡上 —— 代价是它根本不是名单，看不到自己一共免掉了哪几项，想加一项还得先翻到那张卡。</item>
         <item>修好无障碍截屏（a11y screenshot）：服务的配置里少声明了一位 canTakeScreenshot，而它是**硬门槛**、且只在系统 bind 服务时读一次 —— 缺了它系统在服务端直接抛 SecurityException，用户看到的只是一个笼统的"截屏失败"。现在声明上了；另外把系统返回码翻译成能行动的原因（间隔太短 333ms 会自动等一下就重试一次；能力位没生效回 no_screenshot_capability，把无障碍开关关一次再开即可）。</item>

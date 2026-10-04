@@ -1444,4 +1444,20 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_handoff_prompt">请处理工作区里的这个文件：%1$s</string>
     <string name="dsh_handoff_copy_failed">复制失败：%1$s</string>
     <string name="dsh_handoff_done_message">已复制到「%1$s」，提示词已在剪贴板。</string>
+    <string name="dsh_userscripts_title">用户脚本</string>
+    <string name="dsh_userscripts_scope">只作用于本应用自己的页面（内置的 dsh web）。元数据块、@match / @include / @exclude 与 @run-at（document-start / -end / -idle）按油猴的写法读。关掉下面的总开关，页面立刻恢复出厂样子。</string>
+    <string name="dsh_userscripts_master">启用用户脚本</string>
+    <string name="dsh_userscripts_master_summary">关掉 = 页面回到出厂状态（管理页照样能用：它是原生的，不在 WebView 里 —— 页面被脚本弄坏时的退路）。</string>
+    <string name="dsh_userscripts_paste">粘贴脚本</string>
+    <string name="dsh_userscripts_pick">从文件选</string>
+    <string name="dsh_userscripts_empty">还没装脚本。粘贴一个、或选一个 .user.js —— 它会在页面自己的脚本之前运行。</string>
+    <string name="dsh_userscripts_count">已装 %1$d 个</string>
+    <string name="dsh_userscripts_paste_hint">把 .user.js 的正文贴在这里（连 ==UserScript== 元数据块一起）。</string>
+    <string name="dsh_userscripts_install">安装</string>
+    <string name="dsh_userscripts_installed">已安装</string>
+    <string name="dsh_userscripts_read_failed">读不出文本内容（不是文本文件？）</string>
+    <string name="dsh_userscripts_delete">删除脚本</string>
+    <string name="dsh_userscripts_delete_confirm">删除</string>
+    <string name="dsh_userscripts_entry">用户脚本</string>
+    <string name="dsh_userscripts_entry_summary">用一段自己的 JS 改本应用自己的网页 —— 一个 .user.js，不用打包、不用发版。</string>
 </resources>
