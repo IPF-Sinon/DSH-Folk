@@ -765,11 +765,17 @@ console.log("\n── 无障碍 ──");
   const auto = fs.readFileSync("app/src/main/res/xml/dsh_autostart_a11y.xml", "utf8");
   const manifest = fs.readFileSync("app/src/main/AndroidManifest.xml", "utf8");
 
-  const risk = (a) => (a === "tree" ? "readonly" : a === "text" || a === "global" ? "dangerous" : "write");
-  eq(["tree", "click", "tap", "swipe", "text", "global"].map(risk),
-    ["readonly", "write", "write", "write", "dangerous", "dangerous"],
-    "看屏幕是只读；点滑是写；打字与系统动作是危险");
+  // 打字与系统动作原先算"危险"，后果与虚拟屏当初"一律危险"一样：加进「不再逐条确认」也
+  // 照样每次弹窗（用户现场反馈"这个开关没用"）。判据与读写分级同源 —— 它们改屏幕状态，
+  // 但没有一件改完回不去；危险档留给卸载/重启/清数据那类。
+  const risk = (a) => (a === "tree" || a === "screenshot" ? "readonly" : "write");
+  eq(["tree", "click", "tap", "swipe", "text", "global", "screenshot"].map(risk),
+    ["readonly", "write", "write", "write", "write", "write", "readonly"],
+    "看屏幕是只读；点、滑、打字、系统动作都是写（同一判据：改屏幕状态但都回得去）");
   ok(/fun riskOf\(action: String\): PrivRisk/.test(a11y), "无障碍也有自己的风险分级");
+  ok(/"tree", "screenshot" -> PrivRisk\.READONLY/.test(a11y) &&
+    !/"text", "global" -> PrivRisk\.DANGEROUS/.test(a11y),
+    "打字/系统动作不再算危险 —— 算危险就等于「加进不再逐条确认也照样弹窗」（用户现场反馈）；危险档留给改完回不去的动作");
   ok(/MAX_NODES/.test(a11y) && /MAX_DEPTH/.test(a11y), "读屏有节点数与深度上限（否则一次调用能读回几十万字符）");
   ok(/no_a11y_service/.test(a11y), "服务没开时返回可指路的 reason");
   ok(/no_window/.test(a11y), "安全窗口（锁屏/密码框）拿不到节点时单独一个 reason");
@@ -780,12 +786,12 @@ console.log("\n── 无障碍 ──");
   // ── 往输入框写字：WebView 那一格（用户现场：class=EditText、text/id/desc 全空） ──
   // 用户报告"a11y text 打不进 WebView"。三条定位方式必须都在，且失败原因要能分开：
   // 定位失败 = not_found，焦点失败 = no_input_focus（以前两者都叫 no_input_focus）。
-  ok(/findAll\(svc, target\.orEmpty\(\), className\)/.test(a11y),
-    "setText 的定位把 class 传进 findAll（只给 class 时 target 传空串：contains(\"\") 命中全部，再被 class 滤掉）");
-  ok(/DshA11y\.setText\(value, text\(params\["target"\]\), text\(params\["class"\]\)\)/.test(CODE.bridge),
-    "桥接把 class 透给 setText（钉调用点：只声明参数、不传等于没接）");
-  ok(/\/native\/a11y\/text" -> listOf\(option\("target"\), option\("class"\)\)/.test(CODE.bridge),
-    "CLI 选项表里 text 也有 --class（否则 agent 根本敲不出来）");
+  ok(/findAll\(svc, target\.orEmpty\(\), className, searched\)/.test(a11y),
+    "setText 的定位把 class 传进 findAll，并收下搜过的窗（只给 class 时 target 传空串：contains(\"\") 命中全部）");
+  ok(/DshA11y\.setText\(\s*\n?\s*value,[\s\S]{0,160}?text\(params\["class"\]\),[\s\S]{0,80}?params\["index"\]/.test(CODE.bridge),
+    "桥接把 class 与 index 透给 setText（钉调用点：只声明参数、不传等于没接）");
+  ok(/\/native\/a11y\/text" -> listOf\(option\("target"\), option\("class"\), option\("index"\)\)/.test(CODE.bridge),
+    "CLI 选项表里 text 有 --target/--class/--index（否则 agent 根本敲不出来）");
   {
     // 三种定位 + 两种失败原因，逐条钉住结构（顺序即语义：先 target、再 class、最后焦点）
     const i = a11y.indexOf("fun setText(");
@@ -793,7 +799,7 @@ console.log("\n── 无障碍 ──");
     const byFocus = seg.indexOf("target.isNullOrBlank() && className.isNullOrBlank()");
     const find = seg.indexOf("svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)");
     const noFocus = seg.indexOf('fail("no_input_focus")');
-    const loc = seg.indexOf("val matches = findAll(svc, target.orEmpty(), className)");
+    const loc = seg.indexOf("val matches = findAll(svc, target.orEmpty(), className, searched)");
     const notFound = seg.indexOf('fail("not_found")');
     ok(byFocus > 0 && find > byFocus && noFocus > find,
       "两个定位参数都没给 → 走 FOCUS_INPUT → 失败才是 no_input_focus");
@@ -816,8 +822,9 @@ console.log("\n── 无障碍 ──");
   ok(/\.put\("own", skippedOwn\)/.test(a11y),
     "树里报 own（活动窗口本来是我们自己的悬浮窗，读的是别的窗）");
   ok(/private fun pickRoot\(svc: AccessibilityService\): Pair<AccessibilityNodeInfo\?, Boolean>/.test(a11y) &&
-    /pickRoot\(svc\)/.test(a11y) && /pickRoot\(root\)\.first/.test(a11y),
-    "选窗口收敛到 pickRoot，树与 findAll 都用它（两处各选一次 = 两处各错一次）");
+    /pickRoot\(svc\)\.first\?\.findFocus/.test(a11y) &&
+    /pickRoot\(svc\)/.test(a11y.slice(a11y.indexOf("fun snapshot"), a11y.indexOf("fun snapshot") + 900)),
+    "树仍从 pickRoot 读（那是「主窗」）；显式寻址改用 searchRoots（多窗）—— 两条路各自说清搜哪儿");
   ok(/window.type == AccessibilityWindowInfo.TYPE_SYSTEM &&[\s\S]{0,80}?== svc.packageName/.test(a11y),
     "只跳过\"自家 + 系统窗口\"那一类：本应用自己的界面（TYPE_APPLICATION）仍是可驱动的目标");
   ok(/private fun windowDiag\(svc: AccessibilityService, out: JSONObject\): JSONObject/.test(a11y) &&
@@ -830,13 +837,13 @@ console.log("\n── 无障碍 ──");
     const wi = a11y.indexOf("private fun windowDiag(");
     const end = a11y.indexOf("private fun fail(", wi);
     const seg = end > wi ? a11y.slice(wi, end) : a11y.slice(wi);
-    ok(/svc\.windows/.test(seg) && /\.put\("window", active\?\.packageName/.test(seg) &&
-       /\.put\("windows", ws\)/.test(seg) && /ws\.put\(/.test(seg),
+    ok(/\.put\("window", active\?\.packageName/.test(seg) && /\.put\("windows", windowArray\(svc\)\)/.test(seg),
       "诊断：活动窗口的包名 + **真的挂上去**的全部窗口列表（算了不挂 = 和没算一样）");
-    ok(/\.put\("package", root\?\.packageName/.test(seg) &&
-       /\.put\("system", w\.type == AccessibilityWindowInfo\.TYPE_SYSTEM\)/.test(seg) &&
-       /\.put\("active", w\.isActive\)/.test(seg) &&
-       /\.put\("focused", w\.isFocused\)/.test(seg),
+    const wa = a11y.slice(a11y.indexOf("private fun windowArray("), wi);
+    ok(/\.put\("package", root\?\.packageName/.test(wa) &&
+       /\.put\("system", w\.type == AccessibilityWindowInfo\.TYPE_SYSTEM\)/.test(wa) &&
+       /\.put\("active", w\.isActive\)/.test(wa) &&
+       /\.put\("focused", w\.isFocused\)/.test(wa),
       "每个窗口都报 package/system/active/focused（这四位才分得出谁在前、谁是自己）");
   }
   {
@@ -847,6 +854,50 @@ console.log("\n── 无障碍 ──");
     ok(/other \?: active \?: svc\.windows/.test(seg) ||
        /other \?: active/.test(seg),
       "没有别的可读窗口就退回活动窗口（读自己的树好过读不到）");
+  }
+
+  // ── 显式寻址要搜**多个窗**：写入走输入焦点窗、树读活动窗，两者可以不是同一个 ──
+  {
+    const i = a11y.indexOf("private fun searchRoots(");
+    const seg = a11y.slice(i, a11y.indexOf("private fun findAll(", i));
+    ok(i > 0 && /svc\.windows/.test(seg) && /!isOwnOverlay\(svc, it\)/.test(seg),
+      "searchRoots 遍历可读窗，并排除自家悬浮窗（自排除不许在寻址这条路上失效）");
+    ok(seg.indexOf("svc.rootInActiveWindow?.windowId") < seg.indexOf("FOCUS_INPUT") &&
+      seg.indexOf("FOCUS_INPUT") < seg.indexOf("FOCUS_ACCESSIBILITY"),
+      "优先级：活动窗 → 输入焦点窗 → 读屏焦点窗（顺序固定，index 才可复现）");
+    ok(/\.sortedBy/.test(seg) && /prio\.indexOf\(w\.id\)/.test(seg),
+      "按优先级排序（不是碰运气取第一个）");
+  }
+  {
+    const i = a11y.indexOf("private fun findAll(");
+    const seg = a11y.slice(i, a11y.indexOf("private fun searchRoots", i) > 0 ? a11y.length : i);
+    ok(/for \(root in searchRoots\(svc\)\)/.test(a11y.slice(i, i + 1200)),
+      "findAll 搜的是 searchRoots 的全部窗（不是只搜活动窗 —— 那正是现场 --target 查不到自己刚写的字的原因）");
+    ok(/searchedWindows\?\.add\(root\.windowId\)/.test(a11y.slice(i, i + 1200)),
+      "记下实际搜过的窗 id（not_found 时这是分辨「没匹配上」与「没搜到那个窗」的唯一证据）");
+  }
+  {
+    const i = a11y.indexOf("fun setText(");
+    const seg = a11y.slice(i, a11y.indexOf("private fun writeInto", i));
+    ok(/fun setText\(text: String, target: String\?, className: String\?, index: Int = 0\)/.test(a11y),
+      "setText 收下 index（页面上两个输入框时「我要第二个」才表达得出来）");
+    ok(/matches\.getOrNull\(index\)/.test(seg) && /index <= 0/.test(seg),
+      "默认（index<=0）仍优先可编辑的那个；显式给了下标就按点名来");
+    ok(/\.put\("matches", matches\.size\)/.test(seg) && /\.put\("searchedWindows", JSONArray\(searched\)\)/.test(seg),
+      "not_found 报出命中数与搜过的窗（没有它就只能靠猜）");
+    ok(/\.put\("matches", 0\)/.test(a11y) && /val searched = ArrayList<Int>\(\)[\s\S]{0,200}?findAll\(svc, target, className, searched\)/.test(a11y),
+      "click 的 not_found 也报同一份证据（显式寻址是同一条路，证据也该同源）");
+  }
+  {
+    const i = a11y.indexOf("private fun windowArray(");
+    const seg = a11y.slice(i, a11y.indexOf("private fun windowDiag(", i));
+    ok(/for \(w in svc\.windows\)/.test(seg) && /rootAvailable/.test(seg),
+      "windowArray 是唯一一份窗口表实现（成功与失败共用，两处不会各说各话）");
+    const loops = (a11y.match(/for \(w in svc\.windows\)/g) || []).length;
+    eq(loops, 1, "全文件只有一处遍历窗口表（复制出第二份 = 迟早两处不一致）");
+    ok(/\.put\("windows", windowArray\(svc\)\)/.test(a11y) &&
+      (a11y.match(/\.put\("windows", windowArray\(svc\)\)/g) || []).length >= 2,
+      "tree 成功时也带窗口表，失败时也带（同一个函数）");
   }
 
   // ── 焦点回退：三层，缺一层就是真机上「明明有输入框却说没有焦点」 ──
@@ -899,8 +950,9 @@ console.log("\n── 无障碍 ──");
     const seg = end > wi ? a11y.slice(wi, end) : a11y.slice(wi);
     ok(/val active = svc\.rootInActiveWindow/.test(seg) && /\.put\("windowReadable", active != null\)/.test(seg),
       "windowReadable：把「根没拿到」与「包名为空」分开（现场报告正是被有损诊断带偏的）");
-    ok(/\.put\("id", w\.id\)/.test(seg) && /\.put\("type", w\.type\)/.test(seg) &&
-      /\.put\("rootAvailable", root != null\)/.test(seg),
+    const wa = a11y.slice(a11y.indexOf("private fun windowArray("), wi);
+    ok(/\.put\("id", w\.id\)/.test(wa) && /\.put\("type", w\.type\)/.test(wa) &&
+      /\.put\("rootAvailable", root != null\)/.test(wa),
       "每个窗口报 id/type/rootAvailable（焦点字段里的 window 才有的对照）");
   }
 

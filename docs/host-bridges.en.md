@@ -87,7 +87,7 @@ dsh-native shell [--su] [--timeout ms] [--] <command>   # run through the channe
 dsh-native a11y tree [--depth N] [--max N]        # read the current screen as a node tree
 dsh-native a11y click <text-or-id> [--class C] [--index N]
 dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
-dsh-native a11y text <text> [--target <text-or-id>] [--class C]
+dsh-native a11y text <text> [--target <text-or-id>] [--class C] [--index N]
 dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen>
 dsh-native a11y screenshot               # capture the screen; lands in /tmp, JSON carries path
 dsh-native display status                # is the service up, which display is the session, which channel
@@ -231,6 +231,14 @@ when both fail is it `set_text_rejected`. Note that an accessibility service **c
 AOSP `AccessibilityNodeInfo` has no `getInputConnection`/`commitText`, so "use InputConnection" is not a path that exists on
 Android.
 
+**Explicit addressing (`--target` / `--class`) searches every readable window on the screen, not just the active one**: a device has three
+"current windows" and they can differ — the active window (what `tree` reads), the input-focus window (what the `text` focus path writes into), and
+the screen-reader-focus window. One run really did show `input.window=29546` next to `rootWindow=1`: the service could not find the string it had just
+written with `--target`, because the lookup only walked the active window. The search now walks a fixed order (active → input focus → a11y focus →
+the rest, always skipping our own overlay window); `not_found` carries `searchedWindows` (which windows were actually read) and `matches` (how many
+nodes matched), and `tree` **always** carries `windows[]`. When several nodes match, `--index N` picks the Nth (`click` and `text` share the
+meaning; without `--index`, `text` still prefers an editable match among the hits).
+
 **Why focus can be "there is a field right there but no input focus is reported"**: `AccessibilityService.findFocus(FOCUS_INPUT)`
 goes through `ANY_WINDOW_ID`, which the server resolves with `getFocusedWindowId(FOCUS_INPUT)` — and **it voids the whole query
 when that window does not belong to the caller display type** (AOSP `resolveAccessibilityWindowIdForFindFocusLocked` →
@@ -269,6 +277,12 @@ happen in **one place**: Settings → Permissions → the **last category, "No m
 the cost of that was that it **was not a list at all** — you could not see which ones you had exempted, and adding one meant first finding its card. Two hard edges live in `PrivPolicy` and are pair-checked cell by cell in `check-native-logic.js`: **dangerous actions always ask**
 (uninstall, reboot, wiping data — whatever the strictness, trusted or not), and it **does not change** what global strictness means (strict still asks every
 time on capabilities that were not trusted).
+
+**Accessibility risk is graded per action too**: `tree`/`screenshot` were read-only, `click`/`tap`/`swipe` were writes, but **typing and system
+actions counted as dangerous** — meaning `a11y text` asked on every single call no matter which strictness the user picked and no matter whether they had
+added the capability to "no more asking", so the list did nothing for accessibility. The criterion goes back to the one the read/write tiering uses: they
+all change screen state, and none of them is unrecoverable (while `tap`/`click` were already writes, and those can press any "send"/"delete"/"uninstall"
+button on screen). The dangerous tier stays for uninstall, reboot and wiping data. Adding accessibility to the list now silences the whole family.
 
 **The virtual screen's risk is graded per endpoint**: status and screenshot are **read-only**; creating a session, tapping, swiping, keys, launching an app and
 stopping are **write** — the same predicate the read/write level uses (`isWriteRequest`), because two separate predicates would let "the level says read, the

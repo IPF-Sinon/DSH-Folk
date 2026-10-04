@@ -87,6 +87,9 @@ internal object DshA11y {
             // 这棵树是从哪个窗读的、根上有几个孩子 —— "树怎么只有 37 个节点"全靠这两个字段分辨
             .put("rootWindow", root.windowId)
             .put("rootChildren", root.childCount)
+            // 屏幕上还有哪些可读窗、哪些读不到。显式寻址（--target/--class）会搜**全部**可读窗，
+            // 所以树里没有某个输入框时，先看这里有没有别的窗 —— 不然会误判成"节点不在"
+            .put("windows", windowArray(svc))
             .put("nodes", counter[0])
             .put("truncated", truncated[0])
             .put("tree", tree)
@@ -143,8 +146,15 @@ internal object DshA11y {
      */
     fun click(target: String, className: String?, index: Int): JSONObject {
         val svc = service() ?: return fail("no_a11y_service")
-        val matches = findAll(svc, target, className)
-        if (matches.isEmpty()) return fail("not_found").put("target", target)
+        val searched = ArrayList<Int>()
+        val matches = findAll(svc, target, className, searched)
+        if (matches.isEmpty()) {
+            // 报出"搜过哪些窗"：与显式写入同一条寻址路径，出问题时也应该是同一份证据
+            return fail("not_found")
+                .put("target", target)
+                .put("matches", 0)
+                .put("searchedWindows", JSONArray(searched))
+        }
         val picked = matches.getOrNull(index) ?: matches[0]
         val clickable = generateSequence(picked) { it.parent }.firstOrNull { it.isClickable }
         if (clickable == null) {
@@ -184,8 +194,12 @@ internal object DshA11y {
      *
      * 三种方式失败的 reason 不同：定位失败是 `not_found`（附上找的是什么），
      * 焦点失败是 `no_input_focus`（附上是哪个窗口）—— 否则"没找到"会被读成"没焦点"。
+     *
+     * [index] 与 [click] 同义：命中多个时挑第几个（0 = 第一个）。默认 0 时仍保留旧行为 ——
+     * 在同批命中里优先挑可编辑的那个；显式给了下标就按点名来（"页面上有两个输入框，
+     * 我要第二个"），否则那句诉求没法表达。
      */
-    fun setText(text: String, target: String?, className: String? = null): JSONObject {
+    fun setText(text: String, target: String?, className: String?, index: Int = 0): JSONObject {
         val svc = service() ?: return fail("no_a11y_service")
         val byFocus = target.isNullOrBlank() && className.isNullOrBlank()
         if (byFocus) {
@@ -201,13 +215,20 @@ internal object DshA11y {
             if (focused == null) return windowDiag(svc, fail("no_input_focus"))
             return writeInto(focused, text)
         }
-        val matches = findAll(svc, target.orEmpty(), className)
-        val node = matches.firstOrNull { it.isEditable } ?: matches.firstOrNull()
+        // 搜**多个窗**（见 searchRoots）：明确寻址不该只在活动窗里找 —— 写入走的是输入焦点窗，
+        // 两者真机上可以不是同一个窗，那就会出现"服务自己刚写进去的字，--target 查不到"。
+        val searched = ArrayList<Int>()
+        val matches = findAll(svc, target.orEmpty(), className, searched)
+        val picked = if (index <= 0) (matches.firstOrNull { it.isEditable } ?: matches.firstOrNull())
+        else matches.getOrNull(index)
+        val node = picked
             ?: return windowDiag(
                 svc,
                 fail("not_found")
                     .put("target", target.orEmpty())
-                    .put("class", className.orEmpty()),
+                    .put("class", className.orEmpty())
+                    .put("matches", matches.size)
+                    .put("searchedWindows", JSONArray(searched)),
             )
         return writeInto(node, text)
     }
@@ -335,13 +356,19 @@ internal object DshA11y {
     /**
      * 这次无障碍动作的风险等级。
      *
-     * 「看」是只读；点按与滑动会改界面状态，算写；**往输入框打字**与**系统级动作**算危险 ——
-     * 前者可能把消息发出去、把密码填进别的应用，后者能直接锁屏或返回桌面，都不该在宽松档
-     * 里悄悄发生。
+     * 「看」是只读（tree/screenshot）；点按、滑动、**打字**与**系统级动作**都算写 ——
+     * 判据与能力档位的读/写分级同源：它们都"改了屏幕状态，但没有一件是改完回不去的"。
+     *
+     * 打字与系统动作原先算危险（"可能把消息发出去、把密码填进别的应用"），代价与虚拟屏当初
+     * "一律危险"完全一样：**不管用户选哪一档、哪怕把它加进了「不再逐条确认」，每次都要弹窗**
+     * —— 用户现场反馈"这个开关没用"就是这么来的。而 `tap`/`click`/`swipe` 早就是写：它们能
+     * 按到屏幕上任何一个"发送/删除/卸载"按钮，比打字更能造成不可逆后果。两处脱钩才是真问题
+     * （同 [DshDisplay] 那次按端点重分级，见 docs/host-bridges.md 的"虚拟屏的风险按端点分级"）。
+     *
+     * 危险档留给**改完回不去**的动作（卸载、重启、清数据 —— 见 [PrivilegedShell.riskOf]）。
      */
     fun riskOf(action: String): PrivRisk = when (action.lowercase()) {
         "tree", "screenshot" -> PrivRisk.READONLY
-        "text", "global" -> PrivRisk.DANGEROUS
         else -> PrivRisk.WRITE
     }
 
@@ -489,25 +516,64 @@ internal object DshA11y {
             .put("height", height)
     }
 
-    private fun findAll(root: AccessibilityService, target: String, className: String?): List<AccessibilityNodeInfo> {
+    /**
+     * 显式寻址（[click] 与 [setText] 的 target/class 两路）要搜的窗，**按优先级**：
+     * 活动窗 → 输入焦点窗 → 读屏焦点窗 → 其余可读窗；自家悬浮窗一律不搜（见 [isOwnOverlay]）。
+     *
+     * ## 为什么不是只搜一个窗
+     *
+     * 真机上这三个"当前窗"可以**不是同一个**：写入走的是输入焦点窗（[setText] 的焦点路径），
+     * 而树读的是活动窗。现场就有 `input.window=29546` 与 `rootWindow=1` 并存的一轮 ——
+     * 那时"服务自己刚写进去的那串字，拿 --target 却查不到"，因为查找只在活动窗里翻了。
+     * 显式寻址的语义是"在这块屏幕上找"，不是"在系统认为的活动窗里找"。
+     *
+     * 顺序固定（活动窗优先），所以 [index] 可复现；`not_found` 会把实际搜过的窗 id 报回来。
+     */
+    private fun searchRoots(svc: AccessibilityService): List<AccessibilityNodeInfo> {
+        val prio = listOfNotNull(
+            runCatching { svc.rootInActiveWindow?.windowId }.getOrNull(),
+            runCatching { svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.windowId }.getOrNull(),
+            runCatching { svc.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)?.windowId }.getOrNull(),
+        ).distinct()
+        return svc.windows
+            .filter { !isOwnOverlay(svc, it) }
+            .sortedBy { w -> prio.indexOf(w.id).let { if (it < 0) prio.size else it } }
+            .mapNotNull { runCatching { it.root }.getOrNull() }
+    }
+
+    /**
+     * 按 target/class 找节点，**遍历 [searchRoots] 的全部窗**。
+     *
+     * [searchedWindows] 收下实际搜过的窗 id（`not_found` 时这是唯一能分辨"没匹配上"与
+     * "根本没搜到那个窗"的东西）。
+     */
+    private fun findAll(
+        svc: AccessibilityService,
+        target: String,
+        className: String?,
+        searchedWindows: MutableList<Int>? = null,
+    ): List<AccessibilityNodeInfo> {
         val out = ArrayList<AccessibilityNodeInfo>()
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        pickRoot(root).first?.let { queue.add(it) }
-        var visited = 0
-        while (queue.isNotEmpty() && visited < MAX_NODES * 8) {
-            val node = queue.removeFirst()
-            visited++
-            val text = node.text?.toString().orEmpty()
-            val desc = node.contentDescription?.toString().orEmpty()
-            val id = node.viewIdResourceName?.substringAfterLast('/').orEmpty()
-            val cls = node.className?.toString().orEmpty()
-            val classOk = className.isNullOrBlank() || cls.endsWith(className)
-            if (classOk && (text == target || desc == target || id == target ||
-                    text.contains(target) || desc.contains(target))
-            ) {
-                out.add(node)
+        for (root in searchRoots(svc)) {
+            searchedWindows?.add(root.windowId)
+            val queue = ArrayDeque<AccessibilityNodeInfo>()
+            queue.add(root)
+            var visited = 0
+            while (queue.isNotEmpty() && visited < MAX_NODES * 8) {
+                val node = queue.removeFirst()
+                visited++
+                val text = node.text?.toString().orEmpty()
+                val desc = node.contentDescription?.toString().orEmpty()
+                val id = node.viewIdResourceName?.substringAfterLast('/').orEmpty()
+                val cls = node.className?.toString().orEmpty()
+                val classOk = className.isNullOrBlank() || cls.endsWith(className)
+                if (classOk && (text == target || desc == target || id == target ||
+                        text.contains(target) || desc.contains(target))
+                ) {
+                    out.add(node)
+                }
+                for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
             }
-            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
         }
         return out
     }
@@ -567,18 +633,13 @@ internal object DshA11y {
     }
 
     /**
-     * 失败时附上"问的是哪个窗口"。
+     * 窗口表：每窗 `package`/`system`/`active`/`focused`/`id`/`type`/`rootAvailable`。
      *
-     * 一次真机就能分开两类 `no_input_focus`：解析到的是**目标 App** 的窗（那问题在 WebView
-     * 的节点契约），还是**我们自己的悬浮窗**（见 [pickRoot]）。没有这两个字段时，两种成因
-     * 在返回值里一模一样。
+     * `rootAvailable` 是必须的：`package` 是从"根"上读的，根拿不到（安全窗、别的 display、
+     * 窗口刚销毁）时它也是空串 —— 不把这两件事分开，"窗口读不到"就会被读成"包名为空"。
+     * 成功（tree）与失败（not_found/no_input_focus）用的是同一份实现，两处不会各说各话。
      */
-    private fun windowDiag(svc: AccessibilityService, out: JSONObject): JSONObject {
-        val active = svc.rootInActiveWindow
-        out.put("window", active?.packageName?.toString().orEmpty())
-        // package 是从"根"上读的：根拿不到（安全窗、别的 display、窗口刚销毁）时它也是空串 ——
-        // 不把这两件事分开，现场就会把"根没拿到"读成"包名为空"（本轮的报告正是这么被带偏的）。
-        out.put("windowReadable", active != null)
+    private fun windowArray(svc: AccessibilityService): JSONArray {
         val ws = JSONArray()
         for (w in svc.windows) {
             val root = runCatching { w.root }.getOrNull()
@@ -593,7 +654,23 @@ internal object DshA11y {
                     .put("rootAvailable", root != null),
             )
         }
-        return out.put("windows", ws)
+        return ws
+    }
+
+    /**
+     * 失败时附上"问的是哪个窗口"。
+     *
+     * 一次真机就能分开两类 `no_input_focus`：解析到的是**目标 App** 的窗（那问题在 WebView
+     * 的节点契约），还是**我们自己的悬浮窗**（见 [pickRoot]）。没有这两个字段时，两种成因
+     * 在返回值里一模一样。
+     */
+    private fun windowDiag(svc: AccessibilityService, out: JSONObject): JSONObject {
+        val active = svc.rootInActiveWindow
+        out.put("window", active?.packageName?.toString().orEmpty())
+        // package 是从"根"上读的：根拿不到时它也是空串 ——
+        // 不把这两件事分开，现场就会把"根没拿到"读成"包名为空"。
+        out.put("windowReadable", active != null)
+        return out.put("windows", windowArray(svc))
     }
 
     private fun fail(reason: String): JSONObject = JSONObject().put("ok", false).put("reason", reason)

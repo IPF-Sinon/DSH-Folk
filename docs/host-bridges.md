@@ -89,7 +89,7 @@ dsh-native shell [--su] [--timeout ms] [--] <命令>   # 走你选的权限通�
 dsh-native a11y tree [--depth N] [--max N]        # 读当前屏幕的节点树
 dsh-native a11y click <文字或 id> [--class C] [--index N]
 dsh-native a11y tap <x> <y> | a11y swipe <x1> <y1> <x2> <y2>
-dsh-native a11y text <文字> [--target <文字或 id>] [--class 类名]
+dsh-native a11y text <文字> [--target <文字或 id>] [--class 类名] [--index N]
 dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>
 dsh-native a11y screenshot               # 截当前屏幕，PNG 落在 /tmp、JSON 里回路径
 dsh-native display status                # 服务起没起、当前会话是哪块屏、走的哪条通道
@@ -221,6 +221,14 @@ view id（`viewIdResourceName` 通常是 null），`class`（如 `EditText`）�
 AOSP 的 `AccessibilityNodeInfo` 里没有 `getInputConnection`/`commitText`，所以"改用
 InputConnection"这条路在 Android 上不存在。
 
+**显式寻址（`--target` / `--class`）搜的是"这块屏幕上的所有可读窗"，不止活动窗**：真机上
+"当前窗"有三个且可以互不相同 —— 活动窗（`tree` 读的那个）、输入焦点窗（`text` 的焦点路径写进去的那个）、
+读屏焦点窗。现场就出现过 `input.window=29546` 与 `rootWindow=1` 并存的一轮：那时"服务自己刚写进去的字，
+拿 `--target` 却查不到"，因为查找只在活动窗里翻。现在按固定优先级遍历（活动窗 → 输入焦点窗 → 读屏焦点窗 →
+其余，自家悬浮窗一律跳过），`not_found` 会带 `searchedWindows`（实际搜过哪些窗）与 `matches`（命中几个），
+`tree` 也**总是**带 `windows[]`。命中多个时用 `--index N` 挑第 N 个（`click` 与 `text` 同义；不写 `--index`
+时 `text` 仍在同批命中里优先挑可编辑的那个）。
+
 **焦点为什么可能"明明有输入框却报没有"**：`AccessibilityService.findFocus(FOCUS_INPUT)` 走
 `ANY_WINDOW_ID`，服务端按 `getFocusedWindowId(FOCUS_INPUT)` 解析，并且**当那个窗不属于调用者的
 display 类型时整个查询作废**（AOSP `resolveAccessibilityWindowIdForFindFocusLocked` →
@@ -261,6 +269,12 @@ shell、短信、通知等所有能力，代价太大，于是多数人只能忍
 用户看不到自己一共免掉了哪几项，想加一项还得先翻到那张卡。两条边界写死在 `PrivPolicy` 里、`check-native-logic.js` 逐格对拍：**危险操作永远要问**（卸载、
 重启、清数据这类改完回不去的动作，不管什么档、不管信不信任都问），而且它**不改变**全局严格程度的语义
 （严格档在没有被信任的能力上仍然每次都问）。
+
+**无障碍的风险也按动作分级**：原先只有 `tree`/`screenshot` 算只读，`click`/`tap`/`swipe` 算写，
+而**打字与系统动作算危险** —— 等于"不管用户选哪一档、哪怕把它加进「不再逐条确认」，`a11y text` 每次都要
+弹窗"，这份名单在无障碍上形同虚设。判据回到与读/写分级同源的那一条：它们都改了屏幕状态，但没有一件是
+改完回不去的（而 `tap`/`click` 早就是写，它们能按到屏幕上任何一个"发送/删除/卸载"按钮）。危险档留给
+卸载、重启、清数据那类。于是现在把无障碍加进名单，它整族都不再逐条问。
 
 **虚拟屏的风险按端点分级**：查询与截图算**只读**，建会话、点击、滑动、按键、启动 App、停止算**写** ——
 与读/写档位用的是同一个判据（`isWriteRequest`），两处脱钩会出现「档位按读放行、严格程度按写弹窗」这种

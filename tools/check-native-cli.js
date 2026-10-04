@@ -140,6 +140,8 @@ const EXPECT = [
   [["a11y", "text", "hi", "--target", "Note"], "POST", "/native/a11y/text", { text: "hi", target: "Note" }],
   // WebView 的编辑框既没有 text 也没有 view id，class 是唯一抓手（见 DshA11y.setText）
   [["a11y", "text", "hi", "--class", "EditText"], "POST", "/native/a11y/text", { text: "hi", class: "EditText" }],
+  // 页面上两个输入框时"写第二个"：--index 要和 click 一样透到底（只声明不传 = 又只能写焦点那个）
+  [["a11y", "text", "hi", "--class", "EditText", "--index", "1"], "POST", "/native/a11y/text", { text: "hi", class: "EditText", index: "1" }],
   [["a11y", "global", "back"], "POST", "/native/a11y/global", { action: "back" }],
   [["a11y", "screenshot"], "GET", "/native/a11y/screenshot", {}],
   [["display", "status"], "GET", "/native/display/status", {}],

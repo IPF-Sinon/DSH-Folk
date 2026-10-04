@@ -1001,7 +1001,12 @@ object DshNativeBridge {
                 "text" -> {
                     val value = params["text"]
                         ?: return 400 to err(str(ctx, R.string.dsh_native_err_a11y_bad_args), "bad_args")
-                    DshA11y.setText(value, text(params["target"]), text(params["class"]))
+                    DshA11y.setText(
+                        value,
+                        text(params["target"]),
+                        text(params["class"]),
+                        params["index"]?.toIntOrNull() ?: 0,
+                    )
                 }
                 "global" -> {
                     val act = text(params["action"])
@@ -1618,7 +1623,8 @@ object DshNativeBridge {
             "/native/a11y/click" -> "a11y click ${value("target")} ${value("class")} ${value("index")}"
             "/native/a11y/swipe" ->
                 "a11y swipe ${value("x1")} ${value("y1")} ${value("x2")} ${value("y2")} ${value("ms")}"
-            "/native/a11y/text" -> "a11y text ${value("text")} ${value("target")} ${value("class")}"
+            "/native/a11y/text" ->
+                "a11y text ${value("text")} ${value("target")} ${value("class")} ${value("index")}"
             "/native/a11y/global" -> "a11y global ${value("action")}"
             else -> "$method $path"
         }
@@ -1641,7 +1647,7 @@ object DshNativeBridge {
             "/native/a11y/tap" -> listOf()
             "/native/a11y/click" -> listOf(option("class"), option("index"))
             "/native/a11y/swipe" -> listOf(option("ms"))
-            "/native/a11y/text" -> listOf(option("target"), option("class"))
+            "/native/a11y/text" -> listOf(option("target"), option("class"), option("index"))
             "/native/a11y/global" -> listOf()
             "/native/tts/speak", "/native/tts/file" -> listOf(option("lang"), option("rate"), option("pitch"))
             "/native/calendar/list" -> listOf(option("days"), option("limit"))

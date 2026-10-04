@@ -116,7 +116,7 @@ const CAP_USAGE = {
     'dsh-native a11y click <text-or-id> [--class C] [--index N]   # tap that node',
     'dsh-native a11y tap <x> <y> [--ms N]            # tap a coordinate from a tree you just read',
     'dsh-native a11y swipe <x1> <y1> <x2> <y2> [--ms N]',
-    'dsh-native a11y text <text> [--target <text-or-id>] [--class C]   # type into an editable field',
+    'dsh-native a11y text <text> [--target <text-or-id>] [--class C] [--index N]   # type into an editable field',
     'dsh-native a11y global <back|home|recents|notifications|quick_settings|lock_screen|power_dialog>',
     'dsh-native a11y screenshot                      # capture the current screen; copies a PNG into /tmp, returns its path',
   ],
@@ -249,7 +249,10 @@ const CAP_CAVEAT = {
     'capture_failed_internal come from the system. ' +
     'For an input box, a11y text takes --target, or just --class (a web element inside a ' +
     'WebView often has no text and no view id, so --class EditText is the only handle), or ' +
-    'neither (writes into the focused node). A locator that matches nothing answers not_found, ' +
+    'neither (writes into the focused node). Addressing searches every readable window, not just ' +
+    'the active one (the input-focus window and the active window can differ on a real device), ' +
+    'so --index N picks the Nth match when a page has several fields; a locator that matches ' +
+    'nothing answers not_found with searchedWindows and matches, ' +
     'a missing input focus answers no_input_focus, and the success says by:set_text or by:paste ' +
     '(when the field refuses ACTION_SET_TEXT we focus it, paste from the clipboard, and put the ' +
     'clipboard back). The tree gives you focused (who holds the keyboard focus), input (what ' +
