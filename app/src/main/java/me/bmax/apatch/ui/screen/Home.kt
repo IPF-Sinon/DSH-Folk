@@ -127,7 +127,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
     // 也只在引导不显示时才走。
     val homeContext = LocalContext.current
 
-    // 一次性策略变更说明。读取（而不是 remember 一次）就够：这个标志只会在迁移那一刻为真，
+    // 一次性策略变更说明。进入 composition 时读一次就够：这个标志只会在迁移那一刻为真，
     // 之后由 dismissPolicyNotice 清掉；进程内不会有人再把它置真。
     var showPolicyNotice by remember { mutableStateOf(PrivPolicy.policyNoticePending(homeContext)) }
     val dismissPolicyNotice: () -> Unit = {
