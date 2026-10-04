@@ -92,6 +92,7 @@ import kotlin.math.roundToInt
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
 import me.bmax.apatch.ui.theme.APatchTheme
 import me.bmax.apatch.util.DshWebCompat
