@@ -265,6 +265,14 @@ waits ≥350ms and retries once here, and still answers `capture_failed_too_soon
 necessarily the shipped one: when diagnosing "where did that button go", check plugins -> userscripts first; switching it
 off restores the page (the manager is native, so it still opens when a script blanks the WebView).
 
+The top half of that same page lists the **Built in** scripts: this app injects five pieces of its own (old-kernel
+JavaScript compatibility, system bar insets, Enter-inserts-a-newline, accessible names for web inputs, blob:/data:
+downloads). The compatibility shim and the newline patch have switches there, the same switches as in Settings
+(one state, two entry points); the other three are always on. **Built-ins ignore the userscripts master switch** —
+switching it off only stops imported scripts (when a script blanks the page, the insets and the accessible names
+still have to be there). So "the UI is not the shipped one" can come from a userscript or from these built-in
+patches: turn the former off on that page, and read the switches and summaries on the built-in rows for the rest.
+
 **When access is missing, the capability call itself is the request**: the bridge does not answer it with a bare 403 — it **holds
 that call open**, shows the dialog in the app, and then either runs the command and hands the real result back, or fails that one call (deny, or no answer within
 60 seconds). The agent never has to file a request and then call again, so "the request succeeded but the call still failed" cannot happen.

@@ -1459,12 +1459,25 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_handoff_done_message">已复制到「%1$s」，提示词已在剪贴板。</string>
     <string name="dsh_userscripts_title">用户脚本</string>
     <string name="dsh_userscripts_scope">只作用于本应用自己的页面（内置的 dsh web）。元数据块、@match / @include / @exclude 与 @run-at（document-start / -end / -idle）按油猴的写法读。关掉下面的总开关，页面立刻恢复出厂样子。</string>
-    <string name="dsh_userscripts_master">启用用户脚本</string>
-    <string name="dsh_userscripts_master_summary">关掉 = 页面回到出厂状态（管理页照样能用：它是原生的，不在 WebView 里 —— 页面被脚本弄坏时的退路）。</string>
+    <string name="dsh_userscripts_master">启用我装的用户脚本</string>
+    <string name="dsh_userscripts_master_summary">关掉 = 只停你自己导入的脚本；应用内置的那几段照常运行。管理页是原生的、不在 WebView 里 —— 脚本把页面弄坏时的退路就是这里。</string>
     <string name="dsh_userscripts_paste">粘贴脚本</string>
     <string name="dsh_userscripts_pick">从文件选</string>
     <string name="dsh_userscripts_empty">还没装脚本。粘贴一个、或选一个 .user.js —— 它会在页面自己的脚本之前运行。</string>
     <string name="dsh_userscripts_count">已装 %1$d 个</string>
+    <string name="dsh_userscripts_builtin_section">应用内置（随应用发布，不可删除）</string>
+    <string name="dsh_userscripts_builtin_hint">与你导入的脚本走同一条注入管道 —— 这就是应用自己往页面里注入的那几段，现在一处看得全。</string>
+    <string name="dsh_userscripts_builtin_always_on">常开</string>
+    <string name="dsh_userscripts_builtin_compat">旧内核 JS 兼容垫片</string>
+    <string name="dsh_userscripts_builtin_compat_summary">在旧内核上补齐 dsh 网页要用的 JS API（Iterator、Promise.try 等）。默认按内核版本自动判断；关掉后旧内核上网页会整页报 Failed to load plugins、连设置都进不去。与「设置 → 旧 WebView 兼容」是同一个开关。</string>
+    <string name="dsh_userscripts_builtin_inset">系统栏内边距</string>
+    <string name="dsh_userscripts_builtin_inset_summary">让网页背景铺到状态栏与手势条后面，交互内容自己避让。没有开关：不注入的话底部输入框会被手势条压住。数值随转屏与键盘变化。</string>
+    <string name="dsh_userscripts_builtin_composer">手机回车换行</string>
+    <string name="dsh_userscripts_builtin_composer_summary">触屏上把输入框里的裸回车从「发送」改成「换行」，发送用发送按钮。与功能设置里那一项是同一个开关。</string>
+    <string name="dsh_userscripts_builtin_a11y">网页输入框的无障碍名字</string>
+    <string name="dsh_userscripts_builtin_a11y_summary">把页面上本来就显示的 placeholder 抄成 aria-label，让无障碍树（以及 agent 的 a11y text --target）能寻址网页输入框。常开。</string>
+    <string name="dsh_userscripts_builtin_blob">blob:/data: 下载落地</string>
+    <string name="dsh_userscripts_builtin_blob_summary">WebView 对 blob:/data: 不触发下载回调，这一段把这类链接读成 base64 交给原生写盘。常开。</string>
     <string name="dsh_userscripts_paste_hint">把 .user.js 的正文贴在这里（连 ==UserScript== 元数据块一起）。</string>
     <string name="dsh_userscripts_install">安装</string>
     <string name="dsh_userscripts_installed">已安装</string>

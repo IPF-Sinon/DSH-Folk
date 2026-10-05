@@ -224,8 +224,10 @@ console.log("\n── 注入体：在假 DOM 里真跑 ──");
 /**
  * 从 Kotlin 里还原 `Userscripts.blob`：它是**函数**返回值（要插入标题/版本/时机/脚本文本），
  * 所以抠出三引号后把 5 个 Kotlin 模板换成具体值。
+ *
+ * 注意签名是 `internal fun` —— 内置那几段（WebScripts）也走这个包装，所以它不再是 private。
  */
-const blobMatch = us.match(/private fun blob\([\s\S]*?= """\n([\s\S]*?)\n"""\.trimIndent\(\)/);
+const blobMatch = us.match(/internal fun blob\([\s\S]*?= """\n([\s\S]*?)\n"""\.trimIndent\(\)/);
 ok(blobMatch !== null, "能从 Userscripts.kt 抠出 blob");
 const blobTemplate = blobMatch ? blobMatch[1] : "";
 
@@ -405,24 +407,76 @@ ok(/File\(d, "\$id\.user\.js"\)\.writeText\(text\)/.test(us) && /setEnabled\(ctx
 ok(/File\(dir\(ctx\), "\$id\.user\.js"\)\.delete\(\)/.test(us) && /setEnabled\(ctx, id, false\)/.test(us),
   "删 = 删文件 + 从启用名单里去掉");
 
-ok(/private fun installUserscripts\(view: WebView, url: String\): Boolean/.test(webui), "有 installUserscripts");
-ok(/scripts\.forEach \{ WebViewCompat\.addDocumentStartJavaScript\(view, it, rules\) \}/.test(webui),
-  "**一段一个脚本**地注册 document-start（一个脚本语法错只毁它自己）");
-ok(/private fun injectUserscriptsNow\(view: WebView\?, url: String\?\)/.test(webui) &&
-  /Userscripts\.injections\(this, url\)\.forEach \{ view\.evaluateJavascript\(it, null\) \}/.test(webui),
+// ── 注入管道：内置（WebScripts.kt 的注册表）与导入的脚本走同一条路 ──
+const webScripts = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/WebScripts.kt", "utf8");
+
+ok(/private fun installScripts\(view: WebView, url: String\): Boolean/.test(webui) &&
+  /scripts\.forEach \{ WebViewCompat\.addDocumentStartJavaScript\(view, it, rules\) \}/.test(webui),
+  "**一段一个脚本**地注册 document-start（一段语法错只毁它自己）");
+ok(/private fun injectScriptsNow\(view: WebView\?, url: String\?\)/.test(webui) &&
+  /WebScripts\.injections\(this, url, currentInsets\(\)\)\.forEach/.test(webui),
   "document-start 装不上时逐段回落");
-ok(/userscriptsInstalled = installUserscripts\(this, url\)/.test(webui), "安装点存在");
+ok(/scriptsInstalled = installScripts\(this, url\)/.test(webui), "安装点存在（内置 + 导入共用一个）");
 {
-  const a = webui.indexOf("userscriptsInstalled = installUserscripts(this, url)");
+  const a = webui.indexOf("scriptsInstalled = installScripts(this, url)");
   const b = webui.indexOf("loadUrl(url)");
   ok(a > 0 && b > a, "装在 loadUrl **之前**（document-start 注册只对之后开始的加载生效）");
 }
-ok(/!userscriptsInstalled && isLoopback\(u\)/.test(webui) && /injectUserscriptsNow\(view, u\)/.test(webui),
+ok(/!scriptsInstalled && isLoopback\(u\)/.test(webui) && /injectScriptsNow\(view, u\)/.test(webui),
   "onPageStarted 的回落只在回环页面上做");
 ok(/val rules = loopbackOriginRules\(url\)[\s\S]{0,200}addDocumentStartJavaScript/.test(webui),
-  "origin 规则：用户脚本只改我们自己的页面");
-ok(/if \(!Userscripts\.masterEnabled\(this\)\)/.test(webui) && /return true \/\/ 关着也算/.test(webui),
-  "总开关关着 = 已处理（不在回落里反复补）");
+  "origin 规则：内置与用户脚本都只改我们自己的页面");
+
+// ── 内置清单：顺序 / 时机 / 开关映射 / 不受总开关 / 参数通道 ──
+{
+  const order = [...webScripts.matchAll(/id = "([\w-]+)",[\s\S]{0,200}?asset = "webui-scripts\/([\w.-]+)"/g)]
+    .map((m) => m[2]);
+  ok(order.length === 5, `注册表里 5 条内置（${order.join(" → ")}）`);
+  ok(order[0] === "compat.js", "compat 排第一（它补的 API 别的脚本与页面都要用）");
+  ok(order[1] === "inset.js", "inset 排第二（第一帧就要就位，晚一点就是一跳）");
+
+  const runAts = [...webScripts.matchAll(/runAt = RunAt\.(\w+)/g)].map((m) => m[1]);
+  ok(runAts.length === 5 && runAts[4] === "END" && runAts.filter((r) => r === "END").length === 1,
+    `只有 blob 用 RunAt.END（其余 ${runAts.filter((r) => r === "START").length} 条必须 document-start）`);
+
+  ok(/if \(!builtinEnabled\(ctx, entry\.id\)\) continue/.test(webScripts),
+    "内置逐条过开关（不是一律注入）");
+  ok(/"compat" -> DshWebCompat\.shouldInject\(ctx\)/.test(webScripts) &&
+    /"composer" -> DshWebCompat\.enterNewline\(ctx\)/.test(webScripts),
+    "有开关的那两条映射到既有 pref（与设置页同一处状态）");
+  ok(/else -> true/.test(webScripts), "其余三条常开（内边距是布局前提，a11y/blob 是补页面缺陷）");
+
+  // 总开关只该关「导入的」那一档：内置绝不能挂在 masterEnabled 上 ——
+  // 一个坏脚本把页面弄白时，内边距/无障碍/兼容垫片还得在。
+  const beforeImported = webScripts.slice(
+    0, webScripts.indexOf("out.addAll(Userscripts.injections(ctx, url))"));
+  ok(beforeImported.length > 0 && !/masterEnabled/.test(beforeImported),
+    "内置那一段不看用户脚本总开关（总开关是「我装的先别跑」）");
+  ok(/out\.addAll\(Userscripts\.injections\(ctx, url\)\)/.test(webScripts),
+    "导入的脚本追加在内置之后（用户脚本看到的是已经打过补丁的页面）");
+
+  ok(/const val BUILTIN_PREFIX = "builtin:"/.test(webScripts) &&
+    /if \(id\.startsWith\(WebScripts\.BUILTIN_PREFIX\)\) return/.test(us),
+    "内置 id 带保留前缀，用户脚本改不动它的开关（setEnabled 直接拒收）");
+  ok(/internal fun blob\(/.test(us), "内置与导入共用同一个包装（一处实现）");
+
+  const marker = webScripts.match(/PARAM_MARKER = "([^"]+)"/);
+  ok(marker !== null && webScripts.includes("text.replace(PARAM_MARKER, value)"),
+    "内边距参数：注入前整体替换占位符");
+  ok(/if \(!entry\.needsParams\) return text/.test(webScripts) &&
+    /if \(!text\.contains\(PARAM_MARKER\)\)/.test(webScripts),
+    "只有声明了 needsParams 的条目走替换；换不到就保持正文（全 0，合法 JS）");
+  ok((webScripts.match(/needsParams = true/g) || []).length === 1,
+    "只有内边距声明需要原生参数（参数通道只有一条）");
+
+  // 管理页：遍历注册表列内置（不写死 5 行），有开关的接同一条 pref，其余显示常开
+  ok(/for \(entry in WebScripts\.BUILTINS\)/.test(screen), "管理页遍历注册表列内置（不写死 5 行）");
+  ok(/DshWebCompat\.setMode\(\s*context,/.test(screen) && /DshWebCompat\.setEnterNewline\(context, on\)/.test(screen),
+    "内置那两条开关落到既有 pref（与设置页同一处状态）");
+  ok(/R\.string\.dsh_userscripts_builtin_always_on/.test(screen), "没有开关的显示「常开」");
+  ok(/stringResource\(entry\.titleRes\)/.test(screen) && /stringResource\(entry\.summaryRes\)/.test(screen),
+    "标题/摘要走字符串资源（内置条目的文案中英都有）");
+}
 ok(/addJavascriptInterface\(UserscriptBridge\(\), USERSCRIPT_BRIDGE\)/.test(webui), "GM_notification 的桥挂上了");
 ok(/private const val USERSCRIPT_BRIDGE = "DshFolkNotify"/.test(webui) &&
   /private inner class UserscriptBridge[\s\S]{0,400}@JavascriptInterface[\s\S]{0,120}fun notify\(/.test(webui),

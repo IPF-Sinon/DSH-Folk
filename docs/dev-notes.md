@@ -26,6 +26,38 @@
 靠一次完整 CI 构建才发现）。这个检查器按字符遍历全部 Kotlin 文件，确认字符串、
 模板与注释都正确闭合。两者都接在 `build.yml` 与 `beta.yml` 的编译之前。
 
+## WebUI 注入的脚本管道（内置 + 用户脚本）
+
+往应用自己的 WebView 里塞 JS 只有**一条**路：`DshWebUiActivity.installScripts` 调
+`WebScripts.injections`（内置在前、用户导入的在后），每段各一次
+`WebViewCompat.addDocumentStartJavaScript`（分别编译，一段语法错只毁它自己），origin 规则是
+`loopbackOriginRules`；内核不支持 document-start 时回落成 `onPageStarted` 里逐段
+`evaluateJavascript`。这一版之前是六条互不相干的路（四段 Kotlin 常量各带一个安装函数与
+`xxxShimInstalled` 布尔量、内边距是函数拼出来的、用户脚本又一套），结果「一共注入了什么」在
+任何一页都看不全。
+
+- **内置五条**写在 `app/src/main/assets/webui-scripts/`，元数据（标题/摘要/时机/开关/顺序）只在
+  `WebScripts.BUILTINS` 里 —— 时机与开关本来就依赖 pref 与 i18n，文件里再写一份 `@run-at` 只会
+  两处不一致。顺序即注入顺序：兼容垫片第一（它补的 API 别的脚本与页面都要用），内边距第二
+  （第一帧就要就位）。
+- **开关**：`compat` → `webui_compat_shim`（auto/on/off，auto 按内核）、`composer` →
+  `web_enter_newline`；其余三条常开（内边距是布局前提，无障碍名字与 blob 下载是补页面缺陷）。
+  管理页那两行与设置页写同一个 pref：一处状态、两个入口。
+- **总开关只管导入的脚本**。内置刻意不看 `dsh_userscripts_on`：一个坏脚本把页面弄白时，内边距、
+  无障碍名字与兼容垫片还得在 —— 那正是「管理页能把界面救回来」的前提。
+- **参数通道只有一条**：内边距需要四个 CSS 像素值且随转屏/键盘变化，正文里留了
+  `WebScripts.PARAM_MARKER`，注入前整体替换；换不到就保持正文自带的全 0（合法 JS，绝不会把占位符
+  注进去）。之后的尺寸变化仍走 `insetUpdateScript` → `window.__dshFolkInsets`。
+- **包装共用** `Userscripts.blob`（GM_* + 幂等哨兵 + try/catch）；`@run-at start` 是同步执行，
+  所以内置拿到的仍是 document-start 语义。内置 id 带 `builtin:` 前缀，`setEnabled` 直接拒收 ——
+  用户脚本改不动它们的开关。
+
+门禁：`tools/check-web-shim.js` 现在读 assets（原来从 Kotlin 常量抠），把每段正文在 Node 的假内核/
+假 DOM 里**真跑**，并对着 API→版本表反向断言；它还反查「Kotlin 里不再有垫片 JS / 只剩一个注入器与
+一个回落」，并检查注册表与 assets 一一对应。`tools/check-userscripts.js` 钉注册表的顺序、时机、
+开关映射、总开关范围、参数通道与管理页遍历。每条断言都反向验证过（删文件、调顺序、把内置挂到总
+开关下、写错替换目标……都能验红）。
+
 ## 测试版通道（应用 / 运行时）
 
 

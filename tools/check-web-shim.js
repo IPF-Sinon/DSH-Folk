@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * WebUI 兼容垫片（COMPAT_SHIM）的门禁。
+ * WebUI 内置注入脚本（`app/src/main/assets/webui-scripts/`）的门禁。
  *
  * ## 为什么要有这个检查器
  *
@@ -14,13 +14,18 @@
  * 连设置都进不去，而 logcat 与 bugreport 里一个字都没有 —— 只能靠用户截图。
  *
  * 这类「垫片缺一项 / 阈值写小了」的问题靠人肉对照版本表根本防不住，所以这里做两件事：
- * 把 Kotlin 里那份 JS 抠出来**在缺 API 的环境里真跑**，再对着 API→版本表反向断言。
+ * 把内置脚本的正文**在缺 API 的环境里真跑**，再对着 API→版本表反向断言。
+ *
+ * 正文现在住在 assets 里（由 `WebScripts.kt` 的注册表管理：顺序 / 开关 / 时机都在那边），
+ * 所以这里读文件而不是从 Kotlin 常量里抠 —— 断言内容一条没改，因为要钉的是**行为**。
  */
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
 const SRC_WEBUI = "app/src/main/java/me/bmax/apatch/ui/DshWebUiActivity.kt";
+const SRC_WEBSCRIPTS = "app/src/main/java/me/bmax/apatch/dsh/WebScripts.kt";
+const ASSET_DIR = "app/src/main/assets/webui-scripts";
 const SRC_COMPAT = "app/src/main/java/me/bmax/apatch/util/DshWebCompat.kt";
 const SRC_ENV = "app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt";
 const SRC_FUNCTION_SETTINGS = "app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt";
@@ -45,27 +50,29 @@ function eq(actual, expected, label) {
 }
 
 const webui = fs.readFileSync(SRC_WEBUI, "utf8");
+const webScripts = fs.readFileSync(SRC_WEBSCRIPTS, "utf8");
 const compat = fs.readFileSync(SRC_COMPAT, "utf8");
 const env = fs.readFileSync(SRC_ENV, "utf8");
 
 /**
- * 把 Kotlin 里 `private const val COMPAT_SHIM = """…"""` 那段原样还原成 JS。
+ * 读一段内置脚本的正文。
  *
- * 用三引号原始字符串，所以只需要去掉首尾空行，不做转义处理 —— 与代码里
- * `addDocumentStartJavaScript(view, COMPAT_SHIM, rules)` 拿到的字面量完全一致。
+ * 这一版之前它是 Kotlin 里的 `private const val XXX_SHIM = """…"""`，门禁按常量名抠出来；
+ * 现在正文在 assets 里（`WebScripts.kt` 的注册表负责顺序/开关/时机），于是直接读文件。
+ * 注入时 runner 会把它包进 IIFE（GM_* 预置 + 幂等哨兵），但**正文本身**才是这些断言要跑的
+ * 东西 —— 包装不改语义（`@run-at start` 是同步执行，见 Userscripts.blob）。
  */
-function rawStringConst(source, name) {
-  const start = source.indexOf(`const val ${name} = """`);
-  if (start < 0) throw new Error(`找不到 ${name}`);
-  const from = start + `const val ${name} = """`.length;
-  const end = source.indexOf('"""', from);
-  if (end < 0) throw new Error(`${name} 三引号没有闭合`);
-  return source.slice(from, end);
+function builtin(name) {
+  const file = path.join(ASSET_DIR, name);
+  if (!fs.existsSync(file)) throw new Error(`找不到内置脚本 ${file}`);
+  return fs.readFileSync(file, "utf8");
 }
+
+const ASSET_FILES = ["compat.js", "inset.js", "composer.js", "a11y-labels.js", "blob-download.js"];
 
 console.log("\n── WebUI 兼容垫片：在缺 API 的环境里真跑 ──");
 
-const shim = rawStringConst(webui, "COMPAT_SHIM");
+const shim = builtin("compat.js");
 ok(shim.length > 1500, `垫片还原成功（${shim.length} 字节）`);
 ok(!/\$\{/.test(shim), "垫片里没有未展开的 Kotlin 模板（三引号里 $ 必须转义或用字面量）");
 
@@ -292,19 +299,25 @@ ok(/for\(const a of \[process\.argv\[1\],require\('path'\)\.join\(process\.argv\
 
 console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
 {
-  // 这一段是**函数**返回值（要带上当次量到的系统栏尺寸），不是 const 字符串，
-  // 所以单独抠函数体里的三引号，再把四个 Kotlin 模板换成具体数字。
-  const m = webui.match(
-    /internal fun insetShimScript\([^)]*\): String = """\n([\s\S]*?)\n"""\.trimIndent\(\)/,
-  );
-  if (!m) {
-    ok(false, "能从 DshWebUiActivity.kt 抠出 insetShimScript");
-  } else {
+  // 这一段需要四个原生像素值，所以正文里留了一个**整体替换**的占位符（Kotlin 侧
+  // WebScripts.PARAM_MARKER，注入前换成真实值）。这里按同一处替换后再真跑。
+  const markerMatch = webScripts.match(/PARAM_MARKER = "([^"]+)"/);
+  if (!markerMatch) ok(false, "能从 WebScripts.kt 抠出 PARAM_MARKER");
+  const MARKER = markerMatch ? markerMatch[1] : null;
+  const insetSrc = builtin("inset.js");
+  ok(MARKER !== null && insetSrc.includes(MARKER),
+    "内边距脚本里的参数占位符与 Kotlin 里那一个逐字相同（两处写死，必须对上）");
+  {
     const INSETS = { top: 24, right: 0, bottom: 48, left: 0 };
-    const js = m[1].replace(/\$(top|right|bottom|left)\b/g, (_, k) => String(INSETS[k]));
+    ok(insetSrc.split(MARKER).length - 1 === 1, "占位符只出现一次（多处替换会漏改）");
+    const js = insetSrc.replace(
+      MARKER,
+      `{ t: ${INSETS.top}, r: ${INSETS.right}, b: ${INSETS.bottom}, l: ${INSETS.left} }`,
+    );
     ok(true, `脚本还原成功（${js.length} 字节）`);
-    ok(!/\$\{/.test(js) && !/\$(top|right|bottom|left)\b/.test(js),
-      "四个尺寸都换成了字面量，没有留下未展开的模板");
+    ok(!/\$\{/.test(js) && !/\$(top|right|bottom|left)\b/.test(js) &&
+      !js.includes("__DSH_PARAMS__"),
+      "四个尺寸都换成了字面量，没有留下未展开的模板 / 占位符");
 
     // 假 DOM：先模拟「文档刚开始、documentElement 还没有」，再让它出现并触发
     // DOMContentLoaded —— 这正是 document-start 注入时的真实时序。
@@ -373,8 +386,8 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
     "键盘由 imeAnimationTarget 一步让开（非逐帧 imePadding）");
   ok(!/\.imePadding\(\)/.test(modifierSrc), "不再用逐帧 imePadding（避免 WebView 逐帧重排卡顿）");
   ok(!/safeDrawing/.test(modifierSrc), "WebView 上不再用 safeDrawing 内边距（那会留出色带）");
-  ok(/installInsetShim\(/.test(webui) && /!insetShimInstalled && isLoopback\(u\)/.test(webui),
-    "装上与否分别有 document-start 与 onPageStarted 两条路径");
+  ok(/installScripts\(/.test(webui) && /!scriptsInstalled && isLoopback\(u\)/.test(webui),
+    "装上与否分别有 document-start 与 onPageStarted 两条路径（内边距也走这条统一管道）");
 }
 
 // ── 手机回车换行：在假 DOM 里真跑一遍 ──
@@ -384,7 +397,7 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
 // 不该拦"上 —— 拦错一次，中文输入法确认候选词就变成换行、或者 `/` 菜单回车选不中，
 // 这些只有真跑事件才测得出来。
 {
-  const composer = rawStringConst(webui, "COMPOSER_SHIM");
+  const composer = builtin("composer.js");
   ok(composer.length > 800, `回车换行脚本还原成功（${composer.length} 字节）`);
   ok(!/\$\{/.test(composer), "脚本里没有未展开的 Kotlin 模板");
 
@@ -515,19 +528,22 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
   vm.runInContext(composer, fine.ctx);
   ok(fine.listeners.length === 0, "非触屏设备上不注册任何监听（桌面 Shift+Enter 本来就能按）");
 
-  // ── 接线：两处注入 + 偏好开关 + 设置入口，缺一处这补丁就到不了用户手里 ──
-  ok(/private fun installComposerShim\(view: WebView, url: String\)/.test(webui),
-    "有 installComposerShim");
-  ok(/WebViewCompat\.addDocumentStartJavaScript\(view, COMPOSER_SHIM, rules\)/.test(webui),
-    "document-start 注入（监听必须排在宿主之前，晚一秒就拦不到）");
-  ok(/!composerShimInstalled && isLoopback\(u\)/.test(webui) && /evaluateJavascript\(COMPOSER_SHIM/.test(webui),
-    "onPageStarted 有回落注入（document-start 不支持时尽力而为）");
-  ok(/if \(!DshWebCompat\.enterNewline\(this\)\)/.test(webui),
-    "注入受用户偏好约束（关掉就不注入）");
+  // ── 接线：注册表条目 + 偏好开关 + 设置入口，缺一处这补丁就到不了用户手里 ──
+  ok(/id = "composer",[\s\S]{0,200}?runAt = RunAt\.START,[\s\S]{0,80}?asset = "webui-scripts\/composer\.js"/.test(webScripts),
+    "注册表里有 composer 条目，时机是 document-start（监听必须排在宿主之前，晚一秒就拦不到）");
+  ok(/"composer" -> DshWebCompat\.enterNewline\(ctx\)/.test(webScripts),
+    "这条的开关就是「手机回车换行」偏好（关掉不注入）");
   // 定义写对了不等于接上了：反向验证时"删掉调用点"曾经漏网（断言只查了函数定义），
   // 所以这里钉**调用现场**本身。
-  ok(/composerShimInstalled = installComposerShim\(this, url\)/.test(webui),
-    "建 WebView 时真的调用了它（只定义不调用=补丁永远装不上）");
+  ok(/scriptsInstalled = installScripts\(this, url\)/.test(webui) &&
+    webui.indexOf("scriptsInstalled = installScripts(this, url)") < webui.indexOf("loadUrl(url)"),
+    "建 WebView 时真的调用了它、且在 loadUrl **之前**（只定义不调用=补丁永远装不上）");
+  ok(/scripts\.forEach \{ WebViewCompat\.addDocumentStartJavaScript\(view, it, rules\) \}/.test(webui),
+    "一段一次 document-start 注册（分别编译，一段语法错只毁它自己）");
+  ok(/!scriptsInstalled && isLoopback\(u\)/.test(webui) &&
+    /injectScriptsNow\(view, u\)/.test(webui) &&
+    /WebScripts\.injections\(this, url, currentInsets\(\)\)\.forEach/.test(webui),
+    "onPageStarted 有回落注入（document-start 不支持时尽力而为），且只对回环 origin");
   ok(/fun enterNewline\(ctx: Context\): Boolean/.test(compat) &&
     /getBoolean\(DshEnv\.KEY_WEB_ENTER_NEWLINE, true\)/.test(compat),
     "偏好默认**开**（手机上这不是可选项，是唯一能换行的办法）");
@@ -548,7 +564,7 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
 // aria-label**（Chromium 映射成 contentDescription）。风险全在"什么时候不该写"上：
 // 覆盖宿主自己的名字、或替一个没名字的框编一个词。所以真跑。
 {
-  const a11yShim = rawStringConst(webui, "A11Y_SHIM");
+  const a11yShim = builtin("a11y-labels.js");
   ok(a11yShim.length > 300, `无障碍名字脚本还原成功（${a11yShim.length} 字节）`);
   ok(!/\$\{/.test(a11yShim), "脚本里没有未展开的 Kotlin 模板");
   ok(/pointer|placeholder/.test(a11yShim) && /aria-label/.test(a11yShim),
@@ -591,43 +607,69 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
   ok(inputs[1].attrs["aria-label"] === "already named", "已有 aria-label 的不动（不覆盖宿主语义）");
   ok(inputs[2].attrs["aria-label"] === undefined, "有 title 的也不动");
   ok(inputs[3].attrs["aria-label"] === undefined, "没名字也没 placeholder 的不硬造名字");
-  ok(ctx.__dshFolkA11yLabel === 1, "装了幂等哨兵（onPageFinished 回落重复注入不会写两遍）");
+  ok(ctx.__dshFolkA11yLabel === 1, "装了幂等哨兵（onPageStarted 回落重复注入不会写两遍）");
 
-  // 注入策略：与另外三段垫片同款 —— document-start 优先，装不上才回落（这里是 onPageFinished）
-  ok(/private fun installA11yShim\(view: WebView, url: String\)/.test(webui), "有 installA11yShim");
-  ok(/WebViewCompat\.addDocumentStartJavaScript\(view, A11Y_SHIM, rules\)/.test(webui),
-    "document-start 注入（观察器要在页面脚本渲染出输入框之前就位）");
+  // 注入策略：与另外几段同款 —— document-start 优先，装不上才回落（统一成 onPageStarted）
+  ok(/id = "a11y-labels",[\s\S]{0,200}?runAt = RunAt\.START,[\s\S]{0,80}?asset = "webui-scripts\/a11y-labels\.js"/.test(webScripts),
+    "注册表里有 a11y-labels 条目，时机是 document-start（观察器要在页面脚本渲染出输入框之前就位）");
   {
     // 钉**顺序**：addDocumentStartJavaScript 只对"调用返回之后才开始加载"的 frame 生效 ——
     // 装在 loadUrl 之后等于对本次加载无效（反向验证：两处都在时会漏）。
-    const installAt = webui.indexOf("a11yShimInstalled = installA11yShim(this, url)");
+    const installAt = webui.indexOf("scriptsInstalled = installScripts(this, url)");
     const loadAt = webui.indexOf("loadUrl(url)");
     ok(installAt > 0 && loadAt > installAt, "loadUrl **之前**安装（晚了就对本次加载无效）");
   }
-  ok(/!a11yShimInstalled && isLoopback\(u\)/.test(webui) && /evaluateJavascript\(A11Y_SHIM/.test(webui),
-    "装不上时有回落（尽力而为），且只对回环 origin");
   {
-    // 只看**这个函数**的函数体：别的三段垫片也用 loopbackOriginRules，全局找不到等于没查
-    const i = webui.indexOf("private fun installA11yShim(");
+    // 只看**统一注入器**的函数体：rules 必须来自 loopbackOriginRules —— 别的站点不该被我们
+    // 改无障碍语义（这一段原来单独一个函数，现在五段共用一条注入路径，所以断言落在它身上）。
+    const i = webui.indexOf("private fun installScripts(");
     const j = webui.indexOf("private fun ", i + 10);
     const body = j > i ? webui.slice(i, j) : webui.slice(i);
-    ok(/WebViewCompat\.addDocumentStartJavaScript\(view, A11Y_SHIM, loopbackOriginRules\(url\)\)/.test(body) ||
-       /val rules = loopbackOriginRules\(url\)[\s\S]{0,120}?A11Y_SHIM, rules/.test(body),
+    ok(/val rules = loopbackOriginRules\(url\)/.test(body) &&
+      /addDocumentStartJavaScript\(view, it, rules\)/.test(body),
       "只改我们自己页面的无障碍语义（rules 来自 loopback，别处也叫这个名字）");
   }
 }
 
-// ── const 垫片的形状：不许在初始化器里调函数 ──
+// ── 反向断言：这些 JS 已经**不在** Kotlin 里了 ──
 //
-// CI 抓到过一次：`private const val A11Y_SHIM = """...""".trimIndent()` —— const 的初始化器
-// 必须是**常量表达式**，函数调用不是（同文件三段垫片都是裸 `"""`，`val FS_BRIDGE_CLI_SCRIPT`
-// 那种非 const 的才用 trimIndent）。这条断言让它在本地就现形，而不是等到 CI 编译。
+// 五段脚本搬进 assets 之后，DshWebUiActivity.kt 里不该再有一份副本（两处写死迟早不一致），
+// 也不该再有「一段一个安装函数 + 一个 xxxShimInstalled 布尔量」的旧形状。门禁在这里反着查：
+// 谁把 JS 又贴回 Kotlin（或者把旧的五路注入恢复回去），这条就红。
 {
-  const decls = [...webui.matchAll(/private const val (\w+) = """([\s\S]*?)"""(\S*)/g)];
-  ok(decls.length >= 4, `抠到 ${decls.length} 个 const 垫片`);
-  const badTail = decls.filter((d) => d[3].startsWith(".")).map((d) => d[1] + d[3].slice(0, 12));
-  ok(badTail.length === 0,
-    "const 垫片的初始化器是裸字符串" + (badTail.length ? `（${badTail.join(", ")} 里调了函数）` : `（${decls.map((d) => d[1]).join(", ")}）`));
+  const leak = [
+    ["__dshFolkCompat", "兼容垫片"],
+    ["__dshFolkComposerEnter", "回车换行"],
+    ["__dshFolkA11yLabel", "无障碍名字"],
+    ["__dshFolkBlobShim", "blob 下载"],
+    ["#root{box-sizing", "内边距"],
+  ].filter(([needle]) => webui.includes(needle)).map(([, label]) => label);
+  ok(leak.length === 0, "垫片 JS 不在 Kotlin 里（" + (leak.length ? leak.join("、") + " 又贴回去了" : "全部只在 assets）"));
+  const staleConsts = [...webui.matchAll(/(?:const val|internal fun)\s+(\w*(?:COMPAT|COMPOSER|A11Y|BLOB|INSET)\w*SHIM\w*)/g)]
+    .map((m) => m[1]);
+  ok(staleConsts.length === 0,
+    "旧的 *_SHIM 常量 / 函数已删除" + (staleConsts.length ? `（还剩 ${staleConsts.join(", ")}）` : ""));
+
+  // 五个内置脚本必须都在，且都进了注册表（注册表 ↔ assets 双射，另一侧在 check-userscripts.js）
+  for (const f of ASSET_FILES) {
+    const exists = fs.existsSync(path.join(ASSET_DIR, f));
+    ok(exists, `assets 里有 ${f}`);
+  }
+  const registered = [...webScripts.matchAll(/asset = "webui-scripts\/([\w.-]+)"/g)].map((m) => m[1]);
+  const missing = ASSET_FILES.filter((f) => !registered.includes(f));
+  const extra = registered.filter((f) => !ASSET_FILES.includes(f));
+  ok(missing.length === 0 && extra.length === 0 && registered.length === ASSET_FILES.length,
+    `注册表与 assets 一一对应（表里 ${registered.length} 条：${registered.join(", ")}）`);
+
+  // 安装的那一步只能有一条路径：五路注入曾经各有各的安装函数
+  const installers = [...webui.matchAll(/private fun (install\w+)\(/g)].map((m) => m[1]);
+  ok(installers.length === 1 && installers[0] === "installScripts",
+    `注入只有一个入口（${installers.join(", ") || "一个都没有"}）`);
+  const fallbacks = [...webui.matchAll(/private fun (inject\w+Now)\(/g)].map((m) => m[1]);
+  ok(fallbacks.length === 1 && fallbacks[0] === "injectScriptsNow",
+    `回落只有一个入口（${fallbacks.join(", ") || "一个都没有"}）`);
+  ok((webui.match(/evaluateJavascript\(/g) || []).length <= 3,
+    "逐段 evaluateJavascript 的地方收拢了（回落 + 内边距数值推送等少量几处）");
 }
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);

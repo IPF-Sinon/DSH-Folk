@@ -92,7 +92,7 @@ import kotlin.math.roundToInt
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
-import me.bmax.apatch.dsh.Userscripts
+import me.bmax.apatch.dsh.WebScripts
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
 import me.bmax.apatch.ui.theme.APatchTheme
 import me.bmax.apatch.util.DshWebCompat
@@ -216,13 +216,14 @@ private fun DshCompatShimDialog(
  * WebView 是可独立升级的组件，系统版本高**不代表**内核新：有真机报过 Android 15
  * 上装着 Chromium 110 的 WebView。dsh 前端用到 `AbortSignal.any`（Chrome 116）与
  * `Promise.withResolvers`（Chrome 119），在这种设备上打开工作区就是
- * `AbortSignal.any is not a function`。[COMPAT_SHIM] 在文档开始前补齐这两个 API，
- * 见 [installCompatShim]。
+ * `AbortSignal.any is not a function`。兼容垫片在文档开始前补齐这些 API，见
+ * [WebScripts.BUILTINS] 与 `assets/webui-scripts/compat.js`。
  *
  * ## 系统栏是沉浸的（网页画到小白条与状态栏后面）
  *
- * WebView 铺满整窗，系统栏后面是**网页自己的背景**；页面本体由 [insetShimScript] 注入的
- * `#root` 内边距让开这两片区域。targetSdk 35 起系统强制 edge-to-edge，Android 侧给
+ * WebView 铺满整窗，系统栏后面是**网页自己的背景**；页面本体由内边距脚本（
+ * `assets/webui-scripts/inset.js`，注入时带上四个方向的原生像素值）加的 `#root`
+ * 内边距让开这两片区域。targetSdk 35 起系统强制 edge-to-edge，Android 侧给
  * WebView 留内边距的老做法只会得到两条主题底色带（手势条上下各一条，正是用户报的
  * 「底部留白」）。键盘例外：那一段由 `windowInsetsPadding(imeAnimationTarget)` 一步让开，见 onCreate 里的注释。
  */
@@ -231,40 +232,15 @@ class DshWebUiActivity : AppCompatActivity() {
     private var webView: WebView? = null
     private var canGoBack = false
 
-    /** document-start 垫片是否已装上；没装上才需要在 onPageStarted 里补注入。 */
-    private var compatShimInstalled = false
-
     /**
-     * 系统栏内边距那一段是否已按 document-start 装上。
+     * 这一批注入脚本是否已按 document-start 装上。
      *
-     * 与 [compatShimInstalled] 分开记：那一个受「旧内核兼容」开关约束，这一段是**无条件**
-     * 的（跟内核新旧无关），失败原因也各自独立。
+     * 只有**一个**布尔量：内置（见 [WebScripts.BUILTINS]）与用户导入的脚本走的是同一条管道、
+     * 同一个注入点，失败原因也只有一个（内核不支持 DOCUMENT_START_SCRIPT，或注册抛异常）——
+     * 以前五段各记一个，是因为它们各有各的开关；开关现在在 [WebScripts] 的注册表里，
+     * 这里只需要知道「注册这一步成没成」。
      */
-    private var insetShimInstalled = false
-
-    /**
-     * 手机回车换行那一段是否已按 document-start 装上。
-     *
-     * 与 [insetShimInstalled] 一样单独记：它的开关是「手机回车换行」这个用户偏好，
-     * 与内核新旧（[compatShimInstalled]）无关。
-     */
-    private var composerShimInstalled = false
-
-    /**
-     * 「给可编辑元素补无障碍名字」那一段是否已按 document-start 装上。
-     *
-     * 与 [composerShimInstalled] 一样：**无条件**（不是用户偏好），跟内核新旧无关，
-     * 失败原因独立。它不改变页面行为，只是让网页输入框在无障碍树里有名字。
-     */
-    private var a11yShimInstalled = false
-
-    /**
-     * 用户脚本这次是否已按 document-start 装上（每个启用的脚本各一段，见 [Userscripts.injections]）。
-     *
-     * 与 [a11yShimInstalled] 一样：无条件、与内核新旧无关（装脚本是用户的决定，不是内核能力），
-     * 失败原因独立。
-     */
-    private var userscriptsInstalled = false
+    private var scriptsInstalled = false
 
     /**
      * 最近一次算出的系统栏内边距（CSS 像素 = dp）。
@@ -349,7 +325,7 @@ class DshWebUiActivity : AppCompatActivity() {
                     )
                 }
 
-                // 系统栏尺寸交给页面自己避让（见 insetShimScript）。
+                // 系统栏尺寸交给页面自己避让（见 assets/webui-scripts/inset.js）。
                 //
                 // 为什么不让 Android 侧给 WebView 加内边距：那样系统栏后面只能垫一层
                 // 主题底色，网页看着像被裁掉了一截（手势条上下各一条色带）。改成 WebView
@@ -464,12 +440,6 @@ class DshWebUiActivity : AppCompatActivity() {
 
                                     override fun onPageFinished(view: WebView?, u: String?) {
                                         progress = 100
-                                        if (isLoopback(u)) view?.evaluateJavascript(BLOB_SHIM, null)
-                                        // 名字那一段的回落：document-start 装不上时至少在这里补一次
-                                        // （观察器仍会盯着后挂上来的输入框）
-                                        if (!a11yShimInstalled && isLoopback(u)) {
-                                            view?.evaluateJavascript(A11Y_SHIM, null)
-                                        }
                                         super.onPageFinished(view, u)
                                     }
 
@@ -481,35 +451,14 @@ class DshWebUiActivity : AppCompatActivity() {
                                         progress = 1
                                         // document-start 装不上时的回落：这里注入虽然已经晚于
                                         // 文档开头，但仍早于绝大多数模块求值，能救回一部分场景。
-                                        // 同样受开关约束 —— compatShimInstalled 为 false 有两种
-                                        // 原因（不该注入 / 想注入但装不上），所以这里要再问一次
-                                        if (!compatShimInstalled && isLoopback(u) &&
-                                            DshWebCompat.shouldInject(this@DshWebUiActivity)
-                                        ) {
-                                            view?.evaluateJavascript(COMPAT_SHIM, null)
-                                        }
-                                        // 内边距那一段的回落：document-start 装不上时，
-                                        // 至少在这一帧之后把样式补进去（页面会跳一下，
-                                        // 但比一直被系统栏压着好）
-                                        if (!insetShimInstalled && isLoopback(u)) {
-                                            view?.evaluateJavascript(
-                                                insetShimScript(
-                                                    cssInsetTop, cssInsetRight, cssInsetBottom, cssInsetLeft,
-                                                ),
-                                                null,
-                                            )
-                                        }
-                                        // 回车换行那一段的回落：晚于文档开头，但监听注册仍
-                                        // 早于页面脚本求值，多半还来得及（与上面两段同待遇）
-                                        if (!composerShimInstalled && isLoopback(u) &&
-                                            DshWebCompat.enterNewline(this@DshWebUiActivity)
-                                        ) {
-                                            view?.evaluateJavascript(COMPOSER_SHIM, null)
-                                        }
-                                        // 用户脚本的回落：document-start 装不上时在这里补
-                                        // （脚本自己的 document-start 语义就退化成"onPageStarted"）
-                                        if (!userscriptsInstalled && isLoopback(u)) {
-                                            injectUserscriptsNow(view, u)
+                                        // 每段脚本自己的 document-start 语义就退化成 onPageStarted。
+                                        //
+                                        // 只判「注册那一步成没成」：该不该注入已经在
+                                        // [WebScripts.injections] 里按各自的开关筛过了，
+                                        // 这里再问一遍开关就会出现「关掉兼容模式 → 注册返回 false
+                                        // → 回落里又把它注进去」这种自相矛盾的路径。
+                                        if (!scriptsInstalled && isLoopback(u)) {
+                                            injectScriptsNow(view, u)
                                         }
                                         super.onPageStarted(view, u, favicon)
                                     }
@@ -598,23 +547,11 @@ class DshWebUiActivity : AppCompatActivity() {
                                 setDownloadListener { dl, userAgent, disposition, mime, _ ->
                                     startHttpDownload(dl, userAgent, disposition, mime)
                                 }
-                                // 兼容垫片必须在 loadUrl 之前装：addDocumentStartJavaScript
-                                // 只对「调用返回之后才开始加载」的 frame 生效
-                                compatShimInstalled = installCompatShim(this, url)
-                                // 系统栏内边距同样要在文档开始前交给页面，否则第一帧是
-                                // 「网页顶到屏幕边缘、然后突然缩回来」的一跳
-                                insetShimInstalled = installInsetShim(
-                                    this, url, cssInsetTop, cssInsetRight, cssInsetBottom, cssInsetLeft,
-                                )
-                                // 手机回车换行同样要在文档开始前装：监听必须**排在宿主
-                                // 自己的 window 监听之前**，否则拦不到那次回车（见 COMPOSER_SHIM）
-                                composerShimInstalled = installComposerShim(this, url)
-                                // 无障碍名字：给网页里的输入框补 aria-label，
-                                // 让 agent 的 a11y text / tree 能寻址（否则网页元素的 text / id 全空）
-                                a11yShimInstalled = installA11yShim(this, url)
-                                // 用户脚本：页面脚本之前跑用户自己的 JS（不打包的扩展方式，
-                                // 见 Userscripts）。每个启用的脚本各一段，互不牵连
-                                userscriptsInstalled = installUserscripts(this, url)
+                                // 必须在 loadUrl 之前装：addDocumentStartJavaScript 只对
+                                // 「调用返回之后才开始加载」的 frame 生效。内置那几段与用户
+                                // 导入的脚本走的是同一条管道（每段一次注册，互不牵连），
+                                // 顺序与开关都在 [WebScripts] 里。
+                                scriptsInstalled = installScripts(this, url)
                                 webView = this
                                 loadUrl(url)
                             }
@@ -707,7 +644,8 @@ class DshWebUiActivity : AppCompatActivity() {
     /**
      * blob:/data: 下载的原生落点：JS 把内容读成 base64 递过来，这里写文件。
      *
-     * 只从回环页面注入（[BLOB_SHIM] 由 onPageFinished 在校验 origin 后执行）。
+     * 只从回环页面注入（blob 下载那段脚本由注入管道按回环 origin 规则装，见
+     * [WebScripts.BUILTINS]）。
      * 即便如此也不信任入参：文件名只取 basename 并过滤路径分隔符，写入目录写死。
      */
     /**
@@ -782,180 +720,56 @@ class DshWebUiActivity : AppCompatActivity() {
     }
 
     /**
-     * 在**文档开始前**给旧内核补上 dsh 前端用到的新 JS API，返回是否装上了。
+     * 在**文档开始前**把所有该注入的脚本装上，返回「注册这一步成没成」。
      *
-     * 必须是 document-start：`AbortSignal.any` 在模块顶层就会被引用路径碰到，
-     * 等到 `onPageFinished` 再补已经晚了（那时异常早就抛完了）。
-     * [WebViewCompat.addDocumentStartJavaScript] 就是干这个的，能力位由
-     * [WebViewFeature.DOCUMENT_START_SCRIPT] 决定；不支持时回落到 `onPageStarted`
-     * 里 `evaluateJavascript`（尽力而为，比什么都不做好）。
+     * 该注入哪几段由 [WebScripts.injections] 决定：内置（compat / inset / composer /
+     * a11y-labels / blob-download，各自的开关在注册表里）+ 用户导入的脚本（总开关 + 逐条
+     * + @match）。这里只做两件原生的事：
      *
-     * 只对回环 origin 生效：origin 规则里端口**必须写出来**，不写会被当成 80/443，
-     * 所以规则从实际要加载的 URL 和 [DshRuntime.port] 现算，不能写死。
+     * - 用 [loopbackOriginRules] 把范围钉死在回环地址（别的站点不该被我们动）；
+     * - **一段一次** [WebViewCompat.addDocumentStartJavaScript]：WebView 分别编译，
+     *   于是一段语法错只毁它自己（拼成一大段的话，一处语法错会让整段静默不执行）。
      *
-     * 是否注入由 [DshWebCompat] 决定（默认只在旧内核上注入，且先问过用户）。
+     * 必须在 loadUrl 之前调用：addDocumentStartJavaScript 只对「调用返回之后才开始加载」
+     * 的 frame 生效。
      */
-    private fun installCompatShim(view: WebView, url: String): Boolean {
-        if (!DshWebCompat.shouldInject(this)) {
-            Log.i(TAG, "compat shim disabled for this WebView")
-            return false
-        }
+    private fun installScripts(view: WebView, url: String): Boolean {
+        val scripts = WebScripts.injections(this, url, currentInsets())
+        if (scripts.isEmpty()) return true // 没什么要注入的：不用在 onPageStarted 里反复补
         val supported = runCatching {
             WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         }.getOrDefault(false)
         if (!supported) {
-            Log.i(TAG, "document-start script unsupported, falling back to onPageStarted")
-            return false
-        }
-        val rules = loopbackOriginRules(url)
-        return runCatching {
-            WebViewCompat.addDocumentStartJavaScript(view, COMPAT_SHIM, rules)
-            true
-        }.getOrElse {
-            // 规则非法（IllegalArgumentException）或内核临时不支持都在这里兜住
-            Log.w(TAG, "addDocumentStartJavaScript failed for $rules", it)
-            false
-        }
-    }
-
-    /**
-     * 把系统栏内边距交给页面（document-start 安装；返回是否装上了）。
-     *
-     * 与 [installCompatShim] 的唯一区别是**没有开关**：内边距不是兼容性补丁，而是页面
-     * 布局的前提 —— 不注入的话网页会一直顶到屏幕边缘，底部输入框被手势条压住。
-     *
-     * 只对回环 origin 生效（规则同兼容垫片）：这是本机 dsh 的界面，别的站点不该被我们
-     * 动样式。
-     */
-    private fun installInsetShim(
-        view: WebView,
-        url: String,
-        top: Int,
-        right: Int,
-        bottom: Int,
-        left: Int,
-    ): Boolean {
-        val supported = runCatching {
-            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
-        }.getOrDefault(false)
-        if (!supported) {
-            Log.i(TAG, "document-start script unsupported, inset shim falls back to onPageStarted")
-            return false
-        }
-        val rules = loopbackOriginRules(url)
-        return runCatching {
-            WebViewCompat.addDocumentStartJavaScript(
-                view,
-                insetShimScript(top, right, bottom, left),
-                rules,
-            )
-            true
-        }.getOrElse {
-            Log.w(TAG, "addDocumentStartJavaScript failed for inset shim $rules", it)
-            false
-        }
-    }
-
-    /**
-     * 装上「手机回车换行」补丁（document-start），返回是否装上了。
-     *
-     * 与 [installCompatShim] 的区别：那一个受「旧内核兼容」模式约束，这一段受用户偏好
-     * [DshWebCompat.enterNewline] 约束 —— 它是输入行为，不是 API 兼容，与内核新旧无关，
-     * 所以**默认开**。关掉之后不注入，下次加载（刷新）即恢复上游原样。
-     *
-     * 只对回环 origin 生效：别的站点不该被我们改输入行为。
-     */
-    /**
-     * 把「给可编辑元素补无障碍名字」装到文档开头。
-     *
-     * 为什么需要：WebView 里的输入框在无障碍树里通常**既没有 text 也没有 view id**
-     * （`viewIdResourceName` 对网页元素是 null），agent 的 `a11y text --target` 因此无从
-     * 下手。这里把页面上已有的 `placeholder` 抄成 `aria-label`（Chromium 会映射成
-     * contentDescription），于是树里能看到它、也能按它定位。抄的是页面上**本来就显示给用户**
-     * 的字，不新造词；只在元素没有任何无障碍名字时才写。
-     *
-     * 只对回环 origin 生效：别的站点不该被我们改无障碍语义。
-     */
-    /**
-     * 把启用的用户脚本按 document-start 装进页面。
-     *
-     * **一段一个脚本**（不是拼成一大段）：WebView 分别编译，于是一个脚本语法错只毁它自己
-     * （拼接的话，一处语法错会让整段都不执行，且静默）。返回"是否已按 document-start 装上"，
-     * 供 [onPageStarted] 的回落判断。
-     *
-     * 只给回环页面：别的站点不该被用户的脚本改（与四段垫片同一条 origin 规则）。
-     */
-    private fun installUserscripts(view: WebView, url: String): Boolean {
-        if (!Userscripts.masterEnabled(this)) {
-            Log.i(TAG, "userscripts disabled by preference")
-            return true // 关着也算"已处理"：不用在 onPageStarted 里反复补
-        }
-        val scripts = Userscripts.injections(this, url)
-        if (scripts.isEmpty()) return true
-        val supported = runCatching {
-            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
-        }.getOrDefault(false)
-        if (!supported) {
-            Log.i(TAG, "document-start script unsupported, userscripts fall back to onPageStarted")
+            Log.i(TAG, "document-start script unsupported, scripts fall back to onPageStarted")
             return false
         }
         val rules = loopbackOriginRules(url)
         return runCatching {
             scripts.forEach { WebViewCompat.addDocumentStartJavaScript(view, it, rules) }
-            Log.i(TAG, "userscripts injected at document-start: " + scripts.size)
+            Log.i(TAG, "scripts injected at document-start: " + scripts.size)
             true
         }.getOrElse {
-            Log.w(TAG, "addDocumentStartJavaScript failed for userscripts", it)
+            Log.w(TAG, "addDocumentStartJavaScript failed for scripts", it)
             false
         }
     }
 
     /** document-start 装不上时的回落：逐段 evaluate（时机退化成 onPageStarted）。 */
-    private fun injectUserscriptsNow(view: WebView?, url: String?) {
-        // 显式判空：智能转换只对"null 检查后的不可变参数"生效，不依赖 stdlib 的契约注解
+    private fun injectScriptsNow(view: WebView?, url: String?) {
+        // 显式判空：智能转换只对「null 检查后的不可变参数」生效，不依赖 stdlib 的契约注解
         if (view == null || url == null || url.isBlank()) return
-        Userscripts.injections(this, url).forEach { view.evaluateJavascript(it, null) }
-    }
-
-    private fun installA11yShim(view: WebView, url: String): Boolean {
-        val supported = runCatching {
-            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
-        }.getOrDefault(false)
-        if (!supported) {
-            Log.i(TAG, "document-start script unsupported, a11y shim falls back to onPageFinished")
-            return false
-        }
-        val rules = loopbackOriginRules(url)
-        return runCatching {
-            WebViewCompat.addDocumentStartJavaScript(view, A11Y_SHIM, rules)
-            true
-        }.getOrElse {
-            Log.w(TAG, "addDocumentStartJavaScript failed for a11y shim", it)
-            false
+        WebScripts.injections(this, url, currentInsets()).forEach {
+            view.evaluateJavascript(it, null)
         }
     }
 
-    private fun installComposerShim(view: WebView, url: String): Boolean {
-        if (!DshWebCompat.enterNewline(this)) {
-            Log.i(TAG, "composer enter-newline patch disabled by preference")
-            return false
-        }
-        val supported = runCatching {
-            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
-        }.getOrDefault(false)
-        if (!supported) {
-            Log.i(TAG, "document-start script unsupported, composer shim falls back to onPageStarted")
-            return false
-        }
-        val rules = loopbackOriginRules(url)
-        return runCatching {
-            WebViewCompat.addDocumentStartJavaScript(view, COMPOSER_SHIM, rules)
-            true
-        }.getOrElse {
-            Log.w(TAG, "addDocumentStartJavaScript failed for composer shim $rules", it)
-            false
-        }
-    }
+    /** 当前系统栏内边距（CSS 像素）。组合期算好存在字段里，注入时现取。 */
+    private fun currentInsets() = WebScripts.Insets(
+        top = cssInsetTop,
+        right = cssInsetRight,
+        bottom = cssInsetBottom,
+        left = cssInsetLeft,
+    )
 
     override fun onDestroy() {
         // 不销毁的话 WebView 会连着 Activity 一起泄漏
@@ -1002,502 +816,14 @@ class DshWebUiActivity : AppCompatActivity() {
             )
         }
 
-        /**
-         * 系统栏内边距脚本：让网页背景铺到状态栏与手势条后面，交互内容让开这两片区域。
-         *
-         * ## 为什么必须由页面自己避让
-         *
-         * Android 侧给 WebView 加内边距（`WindowInsets.safeDrawing`）时，系统栏后面只能垫
-         * 一层主题底色 —— 网页看着被裁掉一截，手势条上下各一条色带。WebView 铺满整窗后
-         * 背景归网页自己画，避让就交给 CSS。
-         *
-         * ## 为什么是 `#root`
-         *
-         * 上游 dsh 前端的外壳是 `html,body,#root{height:100%;margin:0}`，页面背景画在
-         * `body` 上、界面本体挂在 `#root` 里。给 `#root` 加 border-box 的内边距，等于把
-         * 整个界面（连同它的侧栏与底部输入区）整体缩进安全区，而 `body` 的背景照旧铺满
-         * 整窗 —— 这正是「沉浸」要的效果。若改成给 `body` 加内边距，`#root` 的
-         * `height:100%` 会连内边距一起算进去，等于什么都没缩。
-         *
-         * 上游前端里 `position:fixed` 的元素只有弹层类（下拉菜单、hovercard、tooltip、
-         * toast、对话框遮罩、断线提示条），实测都不受 `#root` 内边距影响，逐个核对过：
-         * - 下拉菜单 / hovercard / tooltip 由 JS 按触发元素的位置算坐标，跟着触发元素走；
-         * - 对话框根节点是 `fixed; inset:0` + 居中 + 自带 24px 内边距，居中内容本来就
-         *   不会贴到手势条上；遮罩是它的绝对定位子节点，按 padding box 铺满，不受影响；
-         * - toast 固定 `top:120px`，离开两条系统栏都很远；
-         * - 断线提示条 `fixed; top:0` 是唯一会被状态栏压住的一个，单独补 `top`，见下。
-         *
-         * 文档开始的那一刻 `document.documentElement` 可能还没有，所以先记下尺寸，
-         * 等 DOM 一出现（DOMContentLoaded）再插样式；`window.__dshFolkInsets` 供尺寸变化
-         * 时更新（转屏、折叠、键盘），见 [insetUpdateScript]。
-         */
-        internal fun insetShimScript(top: Int, right: Int, bottom: Int, left: Int): String = """
-(function(){
-  var state = { t: $top, r: $right, b: $bottom, l: $left };
-  function css(){
-    return '#root{box-sizing:border-box!important;padding:' +
-      state.t + 'px ' + state.r + 'px ' + state.b + 'px ' + state.l + 'px!important}' +
-      // 「连接已断开，正在重连」那条提示固定在 top:0，是页面里唯一够得着状态栏的东西。
-      // 用类名子串选（上游的类名带构建哈希，选不中时这条规则自动失效，不会误伤别处）：
-      // 另外两个同样含 _banner_ 的类（markdown 代码块标题栏）都是静态定位，top 对它们
-      // 是空操作，所以这条只可能命中那条提示条。
-      '[class*="_banner_"]{top:' + state.t + 'px!important}';
-  }
-  function render(){
-    if (!document.documentElement) return false;
-    var el = document.getElementById('__dsh_folk_insets__');
-    if (!el) {
-      el = document.createElement('style');
-      el.id = '__dsh_folk_insets__';
-      (document.head || document.documentElement).appendChild(el);
-    }
-    el.textContent = css();
-    return true;
-  }
-  window.__dshFolkInsets = function(t, r, b, l){
-    state.t = t; state.r = r; state.b = b; state.l = l;
-    render();
-  };
-  if (!render()) document.addEventListener('DOMContentLoaded', render);
-})();
-""".trimIndent()
+
 
         /** 尺寸变化时通知页面；脚本还没装上时是空操作（那时由 onPageStarted 补注入）。 */
         internal fun insetUpdateScript(top: Int, right: Int, bottom: Int, left: Int): String =
             "window.__dshFolkInsets&&window.__dshFolkInsets($top,$right,$bottom,$left)"
 
-        /**
-         * 旧 WebView 兼容垫片：把 dsh 前端用到、但内核太老没有的 JS API 补齐。
-         *
-         * 现象是「打开工作区报 `AbortSignal.any is not a function`」。设备上的
-         * WebView 是 Chromium 110（OPPO PJJ110，SDK 35 却带着 110.0.5481.154），
-         * 而 dsh 前端用到：
-         *
-         * | API | 需要 | 用在哪 |
-         * |---|---|---|
-         * | `Iterator`（全局对象本身 + 助手） | Chrome 122 | `dsh-client-ui-sidebar-documentpreview`：`typeof Iterator.prototype.join !== 'function'` 先求值 `Iterator.prototype`，内核没有这个全局就抛 `ReferenceError` |
-         * | `Promise.try` | Chrome 128 | pdf.js（文档预览插件内）：`Promise.try(fn, arg)` |
-         * | `AbortSignal.any` | Chrome 116 | 每个带 signal 的 RPC（`ctx.sessions.search`、`ctx.workspaces.listDirectory`…）、`postJson` 超时合并 |
-         * | `Promise.withResolvers` | Chrome 119 | cordis 的 `ctx.timeout()` / `ctx.interval()` |
-         * | `ArrayBuffer.prototype.transferToFixedLength` | Chrome 114 | pdf.js 编译系统字体信息 |
-         * | `Symbol.dispose` / `Symbol.asyncDispose` | Chrome 134 | 一个客户端 bundle 用它作属性键（缺失时键变成 `undefined`） |
-         * | `crypto.randomUUID` | 任意版本，但只在安全上下文提供 | 会话消息 id、附件草稿 |
-         *
-         * 表里每一项都对应一次真机的「整个 WebUI 加载不出来」：
-         * `Iterator` 缺失时页面直接显示 **Failed to load plugins —
-         * failed to import loader entry …: Iterator is not defined**，
-         * 连设置都进不去（1.9.2 及以前）。所以补齐范围以**上游客户端包的实际用法**为准，
-         * 由 tools/check-web-shim.js 对着同一张表反向断言，漏补会被门禁拦下。
-         *
-         * 判定阈值见 [DshEnv.DSH_COMPAT_MIN_CHROMIUM]。
-         *
-         * 都是纯语言/平台 API，能在主线程用几行 JS 等价实现。前端全部代码里没有
-         * `new Worker` / `SharedWorker` / service worker，所以主文档一份就够。
-         *
-         * 幂等：重复注入（同页多 frame、SPA、刷新）只装一次。
-         * 只补缺的，新内核上什么都不动。
-         */
-        private const val COMPAT_SHIM = """
-(function(){
-  if (window.__dshFolkCompat) return; window.__dshFolkCompat = 1;
-  // AbortSignal.any(signals)：任一 abort 即 abort，并带上原 reason。
-  //
-  // 用 WeakRef 持有返回的 controller：真实实现里「派生 signal」被源 signal 弱引用，
-  // 没人用了就能回收。这里的调用点之一是
-  //   AbortSignal.any([token.abort.signal, callerSignal])
-  // 而 token.abort.signal 活得和整个挂载一样久 —— 若强引用，每次 RPC 都会在它上面
-  // 留下一个永不摘除的闭包，一次长会话累积成千上万个。WeakRef 是 Chrome 84 起有的。
-  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any !== 'function') {
-    AbortSignal.any = function(signals){
-      var list = [];
-      var raw = signals || [];
-      for (var i = 0; i < raw.length; i++) { if (raw[i]) list.push(raw[i]); }
-      var ctrl = new AbortController();
-      for (var n = 0; n < list.length; n++) {
-        // 已经 abort 的输入要立刻反映，不能等事件
-        if (list[n].aborted) { ctrl.abort(list[n].reason); return ctrl.signal; }
-      }
-      var weak = typeof WeakRef === 'function' ? new WeakRef(ctrl) : null;
-      var onAbort = function(ev){
-        var target = weak ? weak.deref() : ctrl;
-        for (var j = 0; j < list.length; j++) {
-          if (list[j].removeEventListener) list[j].removeEventListener('abort', onAbort);
-        }
-        // 派生 signal 已被回收 —— 没人再关心这次 abort，顺手把监听摘掉就行
-        if (!target) return;
-        var src = ev && ev.target ? ev.target : null;
-        if (src) target.abort(src.reason); else target.abort();
-      };
-      for (var k = 0; k < list.length; k++) {
-        if (list[k].addEventListener) list[k].addEventListener('abort', onAbort);
-      }
-      return ctrl.signal;
-    };
-  }
-  // AbortSignal.timeout(ms)：110 已有，仅极旧内核兜底
-  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout !== 'function') {
-    AbortSignal.timeout = function(ms){
-      var ctrl = new AbortController();
-      setTimeout(function(){
-        var err;
-        try { err = new DOMException('signal timed out', 'TimeoutError'); }
-        catch (e) { err = new Error('signal timed out'); }
-        ctrl.abort(err);
-      }, ms);
-      return ctrl.signal;
-    };
-  }
-  // Promise.withResolvers()：把 resolve/reject 掏到外面
-  if (typeof Promise !== 'undefined' && typeof Promise.withResolvers !== 'function') {
-    Promise.withResolvers = function(){
-      var res, rej;
-      var p = new Promise(function(a, b){ res = a; rej = b; });
-      return { promise: p, resolve: res, reject: rej };
-    };
-  }
-  // Iterator：ES2025 的迭代器助手。dsh 前端（documentpreview 插件）里有一句
-  //   if (typeof Iterator.prototype.join !== 'function') Iterator.prototype.join = …
-  // 它先求值 Iterator.prototype —— 内核没有这个全局时 typeof 保护不住，直接
-  // ReferenceError，整个插件 import 失败、页面变成 "Failed to load plugins"。
-  // 所以**全局对象本身**必须存在，助手也一并给全（别的地方可能真调它们）。
-  // 原型取 %IteratorPrototype%（所有内置迭代器的共同原型），比手搓一个更像真货。
-  if (typeof Iterator === 'undefined') {
-    var IteratorPrototype = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()));
-    var defineHelper = function(name, fn){
-      if (typeof IteratorPrototype[name] !== 'function') {
-        Object.defineProperty(IteratorPrototype, name, {
-          value: fn, writable: true, configurable: true
-        });
-      }
-    };
-    var wrap = function(iter){ return Object.assign(Object.create(IteratorPrototype), { __it: iter }); };
-    Object.defineProperty(IteratorPrototype, '__it', {
-      value: null, writable: true, configurable: true
-    });
-    // 迭代器协议本体：Symbol.iterator 返回自己（这才是「迭代器」的定义）
-    if (typeof IteratorPrototype[Symbol.iterator] !== 'function') {
-      Object.defineProperty(IteratorPrototype, Symbol.iterator, {
-        value: function(){ return this; }, writable: true, configurable: true
-      });
-    }
-    defineHelper('next', function(){
-      return this.__it ? this.__it.next() : { done: true, value: undefined };
-    });
-    defineHelper('map', function(fn){
-      var it = this; return wrap({ next: function(){
-        var r = it.next(); return r.done ? r : { done: false, value: fn(r.value) };
-      } });
-    });
-    defineHelper('filter', function(fn){
-      var it = this; return wrap({ next: function(){
-        for (;;) { var r = it.next(); if (r.done) return r; if (fn(r.value)) return r; }
-      } });
-    });
-    defineHelper('take', function(n){
-      var it = this, left = n; return wrap({ next: function(){
-        if (left <= 0) return { done: true, value: undefined };
-        left--; return it.next();
-      } });
-    });
-    defineHelper('drop', function(n){
-      var it = this, left = n; return wrap({ next: function(){
-        while (left > 0) { left--; var r = it.next(); if (r.done) return r; }
-        return it.next();
-      } });
-    });
-    defineHelper('takeWhile', function(fn){
-      var it = this; return wrap({ next: function(){
-        var r = it.next(); if (r.done || !fn(r.value)) return { done: true, value: undefined };
-        return r;
-      } });
-    });
-    defineHelper('dropWhile', function(fn){
-      var it = this, dropping = true; return wrap({ next: function(){
-        for (;;) {
-          var r = it.next(); if (r.done) return r;
-          if (dropping && fn(r.value)) continue;
-          dropping = false; return r;
-        }
-      } });
-    });
-    defineHelper('flatMap', function(fn){
-      var it = this, inner = null; return wrap({ next: function(){
-        for (;;) {
-          if (inner) {
-            var r = inner.next(); if (!r.done) return r; inner = null;
-          }
-          var o = it.next(); if (o.done) return o;
-          var src = fn(o.value);
-          if (!src) { inner = null; continue; }
-          // 既接受可迭代对象（数组、Set、另一个垫片迭代器），也接受裸迭代器
-          inner = typeof src[Symbol.iterator] === 'function' ? src[Symbol.iterator]() : src;
-          if (!inner || typeof inner.next !== 'function') inner = null;
-        }
-      } });
-    });
-    defineHelper('reduce', function(fn, init){
-      var it = this, acc = init, seen = arguments.length > 1;
-      for (;;) {
-        var r = it.next();
-        if (r.done) {
-          if (!seen) throw new TypeError('Reduce of empty iterator with no initial value');
-          return acc;
-        }
-        if (!seen) { acc = r.value; seen = true; } else { acc = fn(acc, r.value); }
-      }
-    });
-    defineHelper('toArray', function(){
-      var out = [], r = this.next(); while (!r.done) { out.push(r.value); r = this.next(); } return out;
-    });
-    defineHelper('forEach', function(fn){
-      var r = this.next(); while (!r.done) { fn(r.value); r = this.next(); }
-    });
-    defineHelper('some', function(fn){
-      var r = this.next(); while (!r.done) { if (fn(r.value)) return true; r = this.next(); } return false;
-    });
-    defineHelper('every', function(fn){
-      var r = this.next(); while (!r.done) { if (!fn(r.value)) return false; r = this.next(); } return true;
-    });
-    defineHelper('find', function(fn){
-      var r = this.next(); while (!r.done) { if (fn(r.value)) return r.value; r = this.next(); }
-    });
-    defineHelper('join', function(sep){
-      var parts = [], r = this.next();
-      while (!r.done) { parts.push(String(r.value)); r = this.next(); }
-      return parts.join(sep === undefined ? ',' : sep);
-    });
-    var IteratorGlobal = { prototype: IteratorPrototype };
-    // Iterator.from(iterable | iterator)：数组、Set、字符串、生成器都吃得下
-    IteratorGlobal.from = function(source){
-      var it = source && typeof source[Symbol.iterator] === 'function'
-        ? source[Symbol.iterator]() : source;
-      if (!it || typeof it.next !== 'function') throw new TypeError('Iterator.from: not iterable');
-      return Object.assign(Object.create(IteratorPrototype), { __it: it });
-    };
-    // 标准里 @@iterator 指回构造器，前端做 instanceof / 鸭子判断时可能碰到
-    IteratorGlobal[Symbol.iterator] = function(){ return IteratorGlobal; };
-    try { globalThis.Iterator = IteratorGlobal; } catch (e) { window.Iterator = IteratorGlobal; }
-  }
-  // Promise.try(fn, …args)：同步异常也要变成 rejected promise（pdf.js 在用）
-  if (typeof Promise !== 'undefined' && typeof Promise.try !== 'function') {
-    Promise.try = function(fn){
-      var args = Array.prototype.slice.call(arguments, 1);
-      return new Promise(function(resolve){ resolve(fn.apply(undefined, args)); });
-    };
-  }
-  // Symbol.dispose / asyncDispose：缺了只会让属性键变成 undefined（不抛），
-  // 但显式定义更像真货，且某些库会做 'dispose' in Symbol 之类的判断
-  if (typeof Symbol === 'function') {
-    if (!Symbol.dispose) {
-      try { Object.defineProperty(Symbol, 'dispose', { value: Symbol('Symbol.dispose') }); } catch (e) {}
-    }
-    if (!Symbol.asyncDispose) {
-      try { Object.defineProperty(Symbol, 'asyncDispose', { value: Symbol('Symbol.asyncDispose') }); } catch (e) {}
-    }
-  }
-  // ArrayBuffer.prototype.transfer / transferToFixedLength：pdf.js 编译系统字体时用。
-  // 真实现会 detach 原 buffer；这里用 slice 复制近似 —— 调用点只取返回值，
-  // 代价是多一份内存，换来老内核上不炸（Chrome 114 起才有）。
-  if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.prototype) {
-    if (typeof ArrayBuffer.prototype.transfer !== 'function') {
-      ArrayBuffer.prototype.transfer = function(newLength){
-        var len = newLength === undefined ? this.byteLength : newLength;
-        var out = new ArrayBuffer(len);
-        new Uint8Array(out).set(new Uint8Array(this, 0, Math.min(len, this.byteLength)));
-        return out;
-      };
-    }
-    if (typeof ArrayBuffer.prototype.transferToFixedLength !== 'function') {
-      ArrayBuffer.prototype.transferToFixedLength = function(newLength){
-        var len = newLength === undefined ? this.byteLength : newLength;
-        var out = new ArrayBuffer(len);
-        new Uint8Array(out).set(new Uint8Array(this, 0, Math.min(len, this.byteLength)));
-        return out;
-      };
-    }
-  }
-  // crypto.randomUUID()：它**只在安全上下文提供**。http://127.0.0.1 算安全，
-  // 但开了「局域网访问」后页面是 http://<手机IP>:<端口>，不算 —— 于是
-  // 前端里直接调它的地方（会话消息 id、附件草稿）会炸。
-  // getRandomValues 在非安全源照常可用，按 RFC 4122 拼一个 v4 出来即可。
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID !== 'function'
-      && typeof crypto.getRandomValues === 'function') {
-    crypto.randomUUID = function(){
-      var b = crypto.getRandomValues(new Uint8Array(16));
-      b[6] = (b[6] & 0x0f) | 0x40;   // version 4
-      b[8] = (b[8] & 0x3f) | 0x80;   // variant 10xx
-      var h = [];
-      for (var i = 0; i < 16; i++) h.push((b[i] + 0x100).toString(16).slice(1));
-      return h[0]+h[1]+h[2]+h[3] + '-' + h[4]+h[5] + '-' + h[6]+h[7]
-        + '-' + h[8]+h[9] + '-' + h[10]+h[11]+h[12]+h[13]+h[14]+h[15];
-    };
-  }
-})();
-"""
 
-        /**
-         * 让**手机上的回车键换行**，而不是发送。
-         *
-         * ## 为什么必须由我们来做
-         *
-         * 上游把输入框（Lexical contenteditable，标记 `[data-composer-input]`）的
-         * 快捷键注册成**只读**绑定：Enter = 发送、Shift+Enter = 换行、Ctrl/Cmd+Enter =
-         * 互补行为（见 `dsh-client-ui-conversation` 的 `fixed.send` / `fixed.newline`；
-         * `dsh-client-shortcuts` 明确写着 `fixed.*` 是 "read-only input action whose keys
-         * cannot be assigned to editable commands"）。而在手机上，软键盘**没有 Shift**，
-         * 于是「换行」这个动作根本按不出来 —— 想写两行都做不到。设置里也没有对应开关
-         * （`settings.enter.*` 只管智能体繁忙时是排队还是插话）。
-         *
-         * ## 手法：借它自己的换行路径，不自己搓编辑器
-         *
-         * 上游把按键监听挂在 `window` 上（capture + bubble 各一个），并且**从不检查
-         * `isTrusted`**。本脚本在 document-start 就注册 window-capture 监听，因此**排在
-         * 它的监听之前**：吃到裸回车后阻止传播，再**合成一个 Shift+Enter** 派发回同一个
-         * 元素 —— 剩下的交给上游自己的 `fixed.newline` 处理。这样换行插入、撤销栈、
-         * 光标位置全是宿主原生行为，我们只改「哪个键等于换行」这一件事。
-         *
-         * ## 三条绝不能碰的边界
-         *
-         * 1. **输入法合成期（`isComposing` / `keyCode 229`）一律放行**：中文输入时回车是
-         *    「确认候选词」，拦了就会把确认变成换行。
-         * 2. **联想菜单打开时放行**：`/`、`@`、`+`、模型等菜单里回车是「选中」。
-         *    判据用宿主自己的无障碍标记 `[aria-haspopup][aria-expanded="true"]`
-         *    （`+` 按钮就是 `aria-haspopup="listbox"` + `aria-expanded={commandMenuOpen}`），
-         *    比猜 `[role="menu"]` 稳。
-         * 3. **只对触屏（`pointer: coarse`）注册监听**：桌面/接了硬键盘的设备上
-         *    Shift+Enter 本来就能按，保持原样。
-         *
-         * ## 兜底与失败模式
-         *
-         * 软键盘若只发 `beforeinput` 而不发 keydown，本脚本不介入 —— 那种情况下上游本来
-         * 就会插入换行（不会误发），所以「不处理」就是安全的一边。
-         * 幂等：重复注入（document-start 与 onPageStarted 回落）只装一次监听。
-         */
-        private const val COMPOSER_SHIM = """
-(function(){
-  if (window.__dshFolkComposerEnter) return; window.__dshFolkComposerEnter = 1;
-  var coarse = false;
-  try { coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches; } catch (e) {}
-  if (!coarse) return;
 
-  var INPUT = '[data-composer-input]';
-  var CARD = '[data-composer-card]';
-
-  // 菜单是否打开：优先信宿主自己的 aria 标记（触发按钮就在输入卡片里），
-  // 再兜一层浮层可见性（菜单本体走 portal 渲染在卡片外）。
-  function menuOpen(el){
-    try {
-      var card = (el && typeof el.closest === 'function' && el.closest(CARD)) || null;
-      if (card !== null && card.querySelector('[aria-haspopup][aria-expanded="true"]') !== null) return true;
-      var list = document.querySelectorAll('[role="menu"],[role="listbox"]');
-      for (var i = 0; i < list.length; i++) {
-        var m = list[i];
-        if (m.getAttribute('aria-hidden') === 'true') continue;
-        if (m.getClientRects && m.getClientRects().length > 0) return true;
-      }
-    } catch (e) {}
-    return false;
-  }
-
-  function onKeyDown(e){
-    try {
-      if (e.key !== 'Enter' && e.code !== 'Enter' && e.keyCode !== 13) return;
-      if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
-      // 合成期：回车属于输入法（确认候选词），绝不动
-      if (e.isComposing || e.keyCode === 229) return;
-      var t = e.target;
-      if (!t || typeof t.closest !== 'function' || t.closest(INPUT) === null) return;
-      if (menuOpen(t)) return;
-      // 拦住上游的"发送"，改发一个 Shift+Enter 走它自己的换行路径。
-      // stopImmediatePropagation 之所以有效：本监听在 document-start 注册，
-      // 排在宿主那些 window 监听之前。
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      t.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter', code: 'Enter', shiftKey: true,
-        bubbles: true, cancelable: true, composed: true
-      }));
-    } catch (err) {}
-  }
-
-  window.addEventListener('keydown', onKeyDown, true);
-})();
-"""
-
-        /**
-         * 给网页里的可编辑元素补一个无障碍名字。
-         *
-         * 为什么需要：WebView 的输入框在无障碍树里通常**既没有 text 也没有 view id**
-         * （`viewIdResourceName` 对网页元素是 null），agent 的 `a11y text --target` 因此
-         * 无从下手 —— 用户现场就是"截图里光标在框里、键盘也弹着，但服务看不见它"。
-         * 这里把页面上**本来就显示给用户**的 `placeholder` 抄成 `aria-label`
-         * （Chromium 会把它映射成 contentDescription），树里于是有名字可读、也能按它定位。
-         *
-         * 三条自我约束：
-         * - 只在元素**没有任何**无障碍名字时才写（aria-label / aria-labelledby / title
-         *   有一个就放行），不覆盖宿主自己的语义；
-         * - 没有名字也没有 placeholder 的，不硬造（宁可没有，也不要一个编出来的词）；
-         * - 用 MutationObserver 盯着后挂上来的输入框（SPA 首屏之后才渲染搜索框）。
-         *
-         * 幂等：重复注入（刷新、SPA 路由、onPageFinished 回落）只装一次。
-         */
-        private const val A11Y_SHIM = """
-(function(){
-  if (window.__dshFolkA11yLabel) return; window.__dshFolkA11yLabel = 1;
-  function label(){
-    var els = document.querySelectorAll('input, textarea, [contenteditable="true"], [data-composer-input]');
-    for (var i = 0; i < els.length; i++) {
-      var el = els[i];
-      try {
-        if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || el.getAttribute('title')) continue;
-        var name = el.getAttribute('placeholder') || el.getAttribute('data-placeholder') || '';
-        if (!name) continue;
-        el.setAttribute('aria-label', name);
-      } catch (e) {}
-    }
-  }
-  function start(){
-    label();
-    try { new MutationObserver(label).observe(document.documentElement, {subtree:true, childList:true}); } catch (e) {}
-  }
-  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', start); } else { start(); }
-})();
-"""
-
-        /**
-         * 拦 blob:/data: 下载。
-         *
-         * WebView 对这两种 scheme 不会触发 DownloadListener（没有网络请求可拦），
-         * 所以在页面里挂一个 `click` 捕获监听：看到带 download 属性、且 href 是
-         * blob:/data: 的锚点就自己读成 base64 交给原生，并阻止默认行为。
-         * 同时兜住 `URL.createObjectURL` + 程序化 click 的写法（那也是一个真锚点）。
-         *
-         * 幂等：重复注入（刷新、SPA 路由）只装一次监听。
-         */
-        private const val BLOB_SHIM = """
-(function(){
-  if (window.__dshFolkBlobShim) return; window.__dshFolkBlobShim = 1;
-  function grab(href, name){
-    fetch(href).then(function(r){return r.blob()}).then(function(b){
-      var fr = new FileReader();
-      fr.onloadend = function(){
-        var s = String(fr.result || '');
-        var i = s.indexOf(',');
-        if (i >= 0) DshFolkDownload.save(s.slice(i+1), name || 'download');
-      };
-      fr.readAsDataURL(b);
-    }).catch(function(e){ console.warn('dsh-folk blob download failed', e); });
-  }
-  document.addEventListener('click', function(ev){
-    var a = ev.target && ev.target.closest ? ev.target.closest('a[download]') : null;
-    if (!a) return;
-    var href = a.getAttribute('href') || '';
-    if (href.indexOf('blob:') !== 0 && href.indexOf('data:') !== 0) return;
-    ev.preventDefault();
-    grab(href, a.getAttribute('download'));
-  }, true);
-})();
-"""
     }
 }
 

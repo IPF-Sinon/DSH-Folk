@@ -12,9 +12,10 @@ import java.io.File
  *
  * WebView 只加载本机 dsh web（`127.0.0.1:<port>`，见 `DshWebUiActivity`），所以油猴里最有
  * 分量的那部分 —— 跨站 `@match`、`GM_xmlhttpRequest` 绕 CORS、地址栏导航 —— 现在都用不上。
- * 真正有用的是另一半：**在页面脚本之前跑一段自己的 JS**，用来改我们自己的界面。这正是四段
- * 垫片（兼容/内边距/回车/BLOB/无障碍）在做的事，区别只在于这里把"贴一段试试"的门槛降到
- * **不用发版**。
+ * 真正有用的是另一半：**在页面脚本之前跑一段自己的 JS**，用来改我们自己的界面。应用内置的
+ * 那几段（兼容/内边距/回车/无障碍名字/blob 下载，见 [WebScripts]）现在也正是这份脚本管道里的
+ * 前五项 —— 同一处注入、同一套 origin 规则、同一个包装；这一档的区别只在于把"贴一段试试"
+ * 的门槛降到**不用发版**。
  *
  * ## 与"插件 client bundle"的关系
  *
@@ -76,6 +77,9 @@ internal object Userscripts {
         prefs(ctx).getStringSet(DshEnv.KEY_USERSCRIPTS_ENABLED, emptySet()) ?: emptySet()
 
     fun setEnabled(ctx: Context, id: String, on: Boolean) {
+        // 内置条目的 id 带保留前缀：用户脚本不可能把它关掉（那是「界面补丁别跟着消失」的前提，
+        // 见 WebScripts 的类 KDoc）。管理页也不会给出这种 id，这里是兜底。
+        if (id.startsWith(WebScripts.BUILTIN_PREFIX)) return
         val next = HashSet(enabledIds(ctx))
         if (on) next.add(id) else next.remove(id)
         prefs(ctx).edit().putStringSet(DshEnv.KEY_USERSCRIPTS_ENABLED, next).apply()
@@ -247,8 +251,13 @@ internal object Userscripts {
         return sb.append('$').toString()
     }
 
-    /** 一个脚本 = 一段自洽的注入体（GM_* 预置 + IIFE + 幂等哨兵 + 出错只影响自己）。 */
-    private fun blob(id: String, code: String, meta: Meta): String = """
+    /**
+     * 一个脚本 = 一段自洽的注入体（GM_* 预置 + IIFE + 幂等哨兵 + 出错只影响自己）。
+     *
+     * internal 而不是 private：应用内置的那几段（见 [WebScripts]）走**同一个包装**，
+     * 于是「一段一个脚本、互不牵连」这条性质对内置同样成立，也只有一处实现。
+     */
+    internal fun blob(id: String, code: String, meta: Meta): String = """
 (function(){
   var NS = ${js(id)};
   var NAME = ${js(meta.title.ifBlank { id })};

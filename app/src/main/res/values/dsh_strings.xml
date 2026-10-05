@@ -1485,12 +1485,25 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_handoff_done_message">Copied to %1$s. The prompt is on the clipboard.</string>
     <string name="dsh_userscripts_title">Userscripts</string>
     <string name="dsh_userscripts_scope">Applies to this app own page (the built-in dsh web UI) only. The metadata block, @match / @include / @exclude and @run-at (document-start / -end / -idle) are read the Greasemonkey way. Turn the switch off to put the page back the way it was.</string>
-    <string name="dsh_userscripts_master">Run userscripts</string>
-    <string name="dsh_userscripts_master_summary">Off = the page is left exactly as shipped (and the manager still works — it is native, not in the WebView).</string>
+    <string name="dsh_userscripts_master">Run my userscripts</string>
+    <string name="dsh_userscripts_master_summary">Off = only the scripts you added are left out; the app built-in ones keep running. The manager is native, not in the WebView — it is the way back when a script breaks the page.</string>
     <string name="dsh_userscripts_paste">Paste a script</string>
     <string name="dsh_userscripts_pick">Pick a file</string>
     <string name="dsh_userscripts_empty">Nothing installed yet. Paste one or pick a .user.js — it runs before the page own scripts.</string>
     <string name="dsh_userscripts_count">%1$d installed</string>
+    <string name="dsh_userscripts_builtin_section">Built in (shipped with the app, cannot be deleted)</string>
+    <string name="dsh_userscripts_builtin_hint">These run through the same injection pipeline as the scripts you add — they are the app own injections, now visible in one place.</string>
+    <string name="dsh_userscripts_builtin_always_on">Always on</string>
+    <string name="dsh_userscripts_builtin_compat">JavaScript compatibility shim (old WebView)</string>
+    <string name="dsh_userscripts_builtin_compat_summary">Adds the JS APIs the dsh web UI needs on old kernels (Iterator, Promise.try and friends). Default: decide by kernel version. Turned off, an old WebView shows Failed to load plugins and never opens. Same switch as Settings → Old-WebView compatibility.</string>
+    <string name="dsh_userscripts_builtin_inset">System bar insets</string>
+    <string name="dsh_userscripts_builtin_inset_summary">Lets the page background reach behind the status bar and the gesture bar while the content keeps clear of them. No switch: without it the bottom input box sits under the gesture bar. Values follow rotation and the keyboard.</string>
+    <string name="dsh_userscripts_builtin_composer">Enter inserts a newline</string>
+    <string name="dsh_userscripts_builtin_composer_summary">On touch screens, a bare Enter in the chat box starts a new line instead of sending — send with the send button. Same switch as the one in Function settings.</string>
+    <string name="dsh_userscripts_builtin_a11y">Accessible names for web inputs</string>
+    <string name="dsh_userscripts_builtin_a11y_summary">Copies the placeholder a page already shows into aria-label, so the accessibility tree (and the agent a11y text --target) can address web input boxes. Always on.</string>
+    <string name="dsh_userscripts_builtin_blob">blob:/data: downloads</string>
+    <string name="dsh_userscripts_builtin_blob_summary">WebView never fires the download callback for blob:/data:, so this one reads those links as base64 and hands them to the native side. Always on.</string>
     <string name="dsh_userscripts_paste_hint">Paste the text of a .user.js, metadata block and all.</string>
     <string name="dsh_userscripts_install">Install</string>
     <string name="dsh_userscripts_installed">Installed</string>

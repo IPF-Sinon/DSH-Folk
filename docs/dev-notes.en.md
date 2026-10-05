@@ -27,6 +27,44 @@ only a full CI build revealed it). The checker walks every Kotlin file character
 comments all close correctly. Both run before compilation in `build.yml` and `beta.yml`.
 
 
+## The WebUI script injection pipeline (built-ins + userscripts)
+
+There is exactly **one** way JS gets into the app own WebView: `DshWebUiActivity.installScripts` calls
+`WebScripts.injections` (built-ins first, imported scripts after), and each piece goes in through its own
+`WebViewCompat.addDocumentStartJavaScript` call (compiled separately, so one syntax error only kills that
+piece) with `loopbackOriginRules` as the rule; when the kernel lacks document-start it falls back to one
+`evaluateJavascript` per piece in `onPageStarted`. Before this version there were six unrelated paths (four
+Kotlin constants, each with its own install function and `xxxShimInstalled` boolean; insets assembled by a
+function; userscripts yet another path), so "what exactly gets injected" was not visible on any single page.
+
+- **The five built-ins** live in `app/src/main/assets/webui-scripts/`; their metadata (title, summary,
+  timing, switch, order) lives only in `WebScripts.BUILTINS` - timing and switches already depend on prefs
+  and i18n, and a second `@run-at` inside the file would only drift. The list order is the injection order:
+  the compatibility shim first (its APIs are used by other scripts and by the page), insets second (they must
+  be right on the first frame).
+- **Switches**: `compat` -> `webui_compat_shim` (auto/on/off, auto by kernel), `composer` ->
+  `web_enter_newline`; the other three are always on (insets are a layout precondition, accessible names and
+  blob downloads patch page defects). The manager rows and the Settings entries write the same pref: one
+  state, two entry points.
+- **The master switch only covers imported scripts.** Built-ins deliberately ignore `dsh_userscripts_on`:
+  when a script blanks the page, the insets, the accessible names and the compatibility shim still have to be
+  there - that is exactly what lets that native manager page bring the UI back.
+- **There is one parameter channel**: insets need four CSS pixel values that change with rotation and the
+  keyboard, so the payload carries `WebScripts.PARAM_MARKER` and it is replaced wholesale before injection;
+  when it cannot be found the payload keeps its own all-zero fallback (valid JS - a placeholder is never
+  injected). Later size changes still go through `insetUpdateScript` -> `window.__dshFolkInsets`.
+- **One wrapper for both kinds**: `Userscripts.blob` (GM_* + idempotence sentinel + try/catch);
+  `@run-at start` runs synchronously, so built-ins still get document-start semantics. Built-in ids carry the
+  `builtin:` prefix and `setEnabled` rejects it - userscripts cannot flip their switches.
+
+Gates: `tools/check-web-shim.js` now reads the assets (it used to slice the JS out of Kotlin constants) and
+**really runs** each payload in a fake old kernel / fake DOM in Node, still asserting the API-to-version table
+in reverse; it also checks that no shim JS is left in Kotlin, that there is exactly one injector and one
+fallback, and that the registry and the assets are one-to-one. `tools/check-userscripts.js` pins the
+registry order, timing, switch mapping, master-switch scope, the parameter channel and the manager page
+iteration. Every assertion was reverse-verified (deleting a file, reordering, hanging built-ins off the
+master switch, aiming the substitution at the wrong string - all of them turn it red).
+
 ## Beta channel (app / runtime)
 
 ### Beta Channel
