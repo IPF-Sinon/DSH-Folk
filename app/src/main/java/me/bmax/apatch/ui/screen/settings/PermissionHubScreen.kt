@@ -334,6 +334,14 @@ private fun searchHits(query: String, context: Context): List<Hit> {
         hits += Hit("perm-adb", adbTitle, context.getString(R.string.dsh_adb_summary), HubTarget.WirelessAdb)
     }
 
+    // 「别看本应用」不是一项能力，而是无障碍**这张卡片里**的一个档位选择 ——
+    // 它没有自己的目的地，命中了就跳到它所在的那一组（屏幕与外部界面）。
+    val a11yOwnTitle = context.getString(R.string.dsh_a11y_own_title)
+    val a11yOwnSummary = context.getString(R.string.dsh_a11y_own_summary)
+    if (a11yOwnTitle.lowercase().contains(q) || a11yOwnSummary.lowercase().contains(q)) {
+        hits += Hit("perm-a11y-own", a11yOwnTitle, a11yOwnSummary, HubTarget.Group(CapGroup.SCREEN))
+    }
+
     val restrictTitle = context.getString(R.string.dsh_priv_restrict_title)
     if (restrictTitle.lowercase().contains(q)) {
         hits += Hit(

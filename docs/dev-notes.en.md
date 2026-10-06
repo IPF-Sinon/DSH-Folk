@@ -128,6 +128,60 @@ accepted only for **https + a greasyfork host**, and the body must contain `==Us
 error comes back as HTML/JSON). `tools/check-market.js` pins all of that, plus the timeouts, the 2MB
 cap, the IO thread and the reload after install.
 
+## Keeping accessibility away from this app (default: only this app's AI)
+
+The a11y reader reads **this app's own screens too** by default (`pickRoot` only skips our own
+`TYPE_SYSTEM` overlay; this app's `TYPE_APPLICATION` windows are kept on purpose — that is how the
+agent normally drives the chat box in here). But when the target is another app, our own window can
+pose as the active one and lead the agent into the wrong tree. Hence a three-level switch
+(settings: the accessibility card; implemented as `A11yOwn`, pref key `a11y_hide_own`, defined once in
+`DshEnv`):
+
+| Level | What it blocks | Who is affected |
+|---|---|---|
+| `off` | nothing | — |
+| `agent` (default) | `/native/a11y/…` reads and writes skip this app's own windows | only our own agent |
+| `all` | plus a view-level `importantForAccessibility = noHideDescendants` | **every** accessibility service (TalkBack included) |
+
+Enforcement points (miss one and a path stays open): `pickRoot` / `searchRoots` drop our own windows
+from the candidate and search lists and must **not** fall back to our own tree (a fallback makes the
+switch a no-op); `setText`'s `findFocus(FOCUS_INPUT)` is a **global** query that does not go through
+`searchRoots`, so it gets its own check; all three of our own windows (main UI / WebUI page in
+`onResume`, the floating overlay **before** `addView`) apply the level.
+
+Diagnostics: the tree carries `hideOwn` (the current level), every `windows[]` entry carries `own`,
+and the `no_window` note says "this is a policy" (with a way out) whenever the filter is on.
+
+Why the wording is "best effort, not a guarantee": the view-level layer is only a **hint** to the
+system (a WebView's virtual tree, a dialog's separate window, `AccessibilityNodeProvider` can still
+report through), and the channel layer only covers `/native/a11y/…` — `a11y screenshot` reads pixels,
+`uiautomator` via `shell` and `display` (which drags the picture into the container) are not covered.
+
+The prompt follows along: the level goes into `host-facts.json` (`a11yHideOwn`) and `dsh-folk-host`
+renders a paragraph for the agent/all levels — "this app is not readable right now, expect
+`no_window`/`not_found` plus `hideOwn`, do not retry and do not route around it". Facts expire by
+mtime, so flipping the switch takes effect on the **next** assemble without restarting dsh.
+`tools/check-a11y-own.js` pins all of the above; `tools/check-host-prompt.js` actually runs `render()`
+against that paragraph.
+
+## Normalizing github URL forms for plugin installs (`insteadOf`)
+
+A `github:owner/name` spec turns into **`git+ssh://git@github.com/…`** by the time pnpm sees it, and
+the container has neither an ssh key nor a known_hosts — a direct attempt only yields
+`Host key verification failed`. Worse, the failure crosses dependency boundaries: when pnpm installs
+an npm spec (say updating `dshmarket`) it re-resolves the whole profile dependency tree, so the
+preinstalled `dsh-folk-cloud` (a `github:` spec) can kill the npm install.
+
+So `DshPluginRepo`'s `insteadOf` must cover **every form** (https / git+https / **git+ssh** / ssh /
+`git@github.com:`) and rewrite all of them to one target, `<line prefix>https://github.com/` (the
+prefix must not be followed by `git+ssh://…` — gh-proxy does not understand that). Two easy traps:
+multiple `insteadOf` values under one target URL require `--add` (without it the later one replaces
+the earlier, leaving only one form rewritten); and the `pnpm add` npm path needs this rewrite around
+it too (it re-resolves git deps the same way). A baseline is also installed at startup
+(`ensureGitCaAtStartup`) so git paths that never go through the install methods — dsh's own
+reconcile, self-heal, and `dsh plugin` run by the agent inside the session — are covered.
+`tools/check-race-channel.js` pins those five points.
+
 ## Beta channel (app / runtime)
 
 ### Beta Channel

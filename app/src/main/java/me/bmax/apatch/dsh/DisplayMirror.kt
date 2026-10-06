@@ -471,6 +471,8 @@ object DisplayMirror {
                     .coerceAtLeast(0)
             }
             params = p
+            // 「别看本应用」：all 档时连悬浮窗也从无障碍树里隐掉（agent 档由 DshA11y 的包名过滤负责）
+            A11yOwn.applyToView(cv)
             windowManager.addView(cv, p)
             view = cv
             shownDisplayId = s.displayId

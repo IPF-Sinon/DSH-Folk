@@ -900,8 +900,10 @@ console.log("\n── 无障碍 ──");
   {
     const i = a11y.indexOf("private fun pickRoot(");
     const seg = a11y.slice(i, a11y.indexOf("private fun isOwnOverlay", i));
-    ok(/if \(active != null && !ownOverlayActive\) return active to false/.test(seg),
+    ok(/if \(active != null && !ownOverlayActive && !\(hideOwn && isOwnWindow\(svc, active\)\)\)/.test(seg),
       "活动窗口不是自家悬浮窗时，照旧用它（自排除不许把正常路径也改道）");
+    ok(/if \(hideOwn\) return other to ownOverlayActive/.test(seg),
+      "开着「别看本应用」时不许退回自家窗（退回 = 开关没生效）");
     ok(/other \?: active \?: svc\.windows/.test(seg) ||
        /other \?: active/.test(seg),
       "没有别的可读窗口就退回活动窗口（读自己的树好过读不到）");

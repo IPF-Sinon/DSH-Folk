@@ -159,6 +159,7 @@ import me.bmax.apatch.ui.component.UpdateDialog
 import me.bmax.apatch.ui.component.DshFileHandoffDialog
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
 import me.bmax.apatch.dsh.DshEnv
+import me.bmax.apatch.dsh.A11yOwn
 import me.bmax.apatch.dsh.DshBackupCrypto
 import me.bmax.apatch.dsh.DshConfigBackup
 import me.bmax.apatch.dsh.DshPhase
@@ -305,6 +306,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // 「别看本应用」档位落在窗口上（all 档才真的隐藏；见 A11yOwn）。
+        // 放在 onResume：用户在设置里改完档位、回到这一页就是新档位，不必重启。
+        A11yOwn.applyToWindow(window)
         showBiometricPromptIfNeeded()
     }
 

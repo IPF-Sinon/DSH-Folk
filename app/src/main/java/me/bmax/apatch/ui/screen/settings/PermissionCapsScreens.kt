@@ -61,6 +61,7 @@ import com.ramcosta.composedestinations.generated.destinations.DisplayManageScre
 import com.ramcosta.composedestinations.generated.destinations.DisplayPreviewScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.A11yOwn
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
@@ -200,6 +201,14 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
     // 那个要在系统页里单独打开，所以两件事各记一份，回到本页时重读权限。
     var displayFloatOn by remember { mutableStateOf(DisplayMirror.enabled(context)) }
     var overlayAllowed by remember { mutableStateOf(DisplayMirror.canOverlay(context)) }
+    // 「别看本应用」档位：读一次、改就落盘（agent/all 两档还要立刻作用到**当前这个窗**，
+    // 否则用户拨到 all 之后"现在这一页到底算不算数"要靠猜）。见 A11yOwn。
+    var a11yOwn by remember { mutableStateOf(A11yOwn.mode(context)) }
+    val setA11yOwn: (String) -> Unit = { mode ->
+        a11yOwn = mode
+        A11yOwn.setMode(context, mode)
+        A11yOwn.applyToWindow((context as? Activity)?.window)
+    }
 
     // 跳某个系统设置页。带包名的 Intent 在少数 ROM 上打不开，逐级后退，
     // 两级都失败时退到应用信息页 —— 总比按下去什么都不发生好。
@@ -412,6 +421,8 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
                     displayFloatOn = displayFloatOn,
                     overlayAllowed = overlayAllowed,
                     onToggleDisplayFloat = toggleDisplayFloat,
+                    a11yOwnMode = a11yOwn,
+                    onSetA11yOwn = setA11yOwn,
                     onRequestOverlay = {
                         openSettingsPage(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true)
                     },
@@ -538,6 +549,9 @@ private fun NativeCapCard(
     displayFloatOn: Boolean,
     overlayAllowed: Boolean,
     onToggleDisplayFloat: (Boolean) -> Unit,
+    /** 「别看本应用」当前档位（见 A11yOwn）；只在无障碍那张卡片上用。 */
+    a11yOwnMode: String,
+    onSetA11yOwn: (String) -> Unit,
     onRequestOverlay: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
@@ -626,8 +640,80 @@ private fun NativeCapCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // 无障碍这张卡片额外带一个三档选择：本应用自己的界面，算不算「可读、可操作」。
+            // 放在**这张卡片里**（而不是另开一张）：它管的就是这一项能力读到的范围 ——
+            // 与"无障碍服务开没开"隔着两行，用户才不会以为它是另一个开关。
+            if (cap == DshNativeBridge.Cap.A11Y) {
+                A11yOwnPicker(mode = a11yOwnMode, onPick = onSetA11yOwn)
+            }
         }
     }
+}
+
+/**
+ * 「别看本应用」的三档选择（见 [A11yOwn]）。
+ *
+ * 三档直接铺开、不做弹层：这是"agent 能不能驱动这一页"的范围开关，选完要立刻能看到
+ * 生效；而且底下的「不保证完全拦截」是**档位的限定词**，藏进弹层就等于藏了免责声明。
+ */
+@Composable
+private fun A11yOwnPicker(mode: String, onPick: (String) -> Unit) {
+    Spacer(Modifier.height(10.dp))
+    Text(
+        text = stringResource(R.string.dsh_a11y_own_title),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    Text(
+        text = stringResource(R.string.dsh_a11y_own_summary),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    for (option in A11yOwn.MODES) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectable(
+                    selected = option == mode,
+                    onClick = { onPick(option) },
+                )
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RadioButton(selected = option == mode, onClick = null)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(a11yOwnLabelRes(option)),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = stringResource(a11yOwnDescRes(option)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(2.dp))
+    Text(
+        text = stringResource(R.string.dsh_a11y_own_note),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.tertiary,
+    )
+}
+
+/** 档位 → 名称串。脏值按默认档（agent）显示，和 [A11yOwn.mode] 的读法一致。 */
+private fun a11yOwnLabelRes(mode: String): Int = when (mode) {
+    A11yOwn.MODE_OFF -> R.string.dsh_a11y_own_off
+    A11yOwn.MODE_ALL -> R.string.dsh_a11y_own_all
+    else -> R.string.dsh_a11y_own_agent
+}
+
+/** 档位 → 一句说明。 */
+private fun a11yOwnDescRes(mode: String): Int = when (mode) {
+    A11yOwn.MODE_OFF -> R.string.dsh_a11y_own_off_desc
+    A11yOwn.MODE_ALL -> R.string.dsh_a11y_own_all_desc
+    else -> R.string.dsh_a11y_own_agent_desc
 }
 
 /** 当前范围的彩色胶囊。颜色只区分「关 / 普通档 / 完全控制」三档，文字才是精确含义。 */

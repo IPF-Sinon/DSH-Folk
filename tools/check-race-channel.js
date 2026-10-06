@@ -258,6 +258,41 @@ console.log('check-race-channel: 通过');
   want(/DshSource\.proxyCandidates\(url\)/.test(updateChecker),
     'APK 校验值获取必须跟 APK 走同一批候选');
 
+  // ── github 写法的归一化：pnpm 把 `github:` 规格解析成 `git+ssh://…`，而容器里
+  // 没有 ssh 私钥/known_hosts —— 漏收这一种写法，update-npm-plugin 就被 profile 里
+  // 别的 git 依赖整死（实测：dshmarket 更新时撞 dsh-folk-cloud 的 git+ssh）。
+  const rewriteBases = (repos.match(/private val GIT_REWRITE_BASES = listOf\(([\s\S]*?)\)/) || [])[1] || '';
+  for (const [needle, why] of [
+    ['"git+ssh://git@github.com/"', 'pnpm 对 `github:` 规格用的正是 git+ssh://（缺它就是 Host key verification failed）'],
+    ['"ssh://git@github.com/"', 'ssh:// 写法'],
+    ['"git@github.com:"', 'scp 写法'],
+    ['"https://github.com/"', 'https 写法'],
+    ['"git+https://github.com/"', 'git+https 写法'],
+  ]) {
+    want(rewriteBases.includes(needle), `GIT_REWRITE_BASES 必须收 ${needle}：${why}`);
+  }
+  want(/private const val GIT_REWRITE_TARGET = "https:\/\/github\.com\/"/.test(repos),
+    '重写目标必须是一条 github https 基址（gh-proxy 前缀后面跟 git+ssh://… 它不认）');
+  const applyBody = (repos.match(/private fun applyGitRewrite\(prefix: String\) \{([\s\S]*?)\n    \}/) || [])[1] || '';
+  want(/val target = prefix \+ GIT_REWRITE_TARGET/.test(applyBody) && /url\.\$target\.insteadOf/.test(applyBody),
+    '重写必须落在"一条 github https 基址 + 前缀"上，而不是"前缀 + 原写法"');
+  // 先剥注释：注释里就写着「必须 `--add`」，不剥的话把命令里的 --add 去掉也照样绿。
+  const applyCode = applyBody.replace(/^\s*\/\/.*$/gm, '');
+  want(/--add/.test(applyCode) && /global --add/.test(applyCode),
+    '同一目标 URL 挂多条 insteadOf 必须 --add（不带它，后一条顶掉前一条，只会剩一种写法）');
+  const clearBody = (repos.match(/private fun clearGitRewrite\(\) \{([\s\S]*?)\n    \}/) || [])[1] || '';
+  want(/GIT_REWRITE_TARGET/.test(clearBody) && !/prefix\.isEmpty\(\)/.test(clearBody),
+    'clearGitRewrite 必须清到"空前缀（直连归一）"那条键（跳过空串 = 留一份改不掉的残留）');
+  const registryBody = (repos.match(/private suspend fun installRegistrySpec\(spec: String([\s\S]*?)\n    \}/) || [])[1] || '';
+  want(/applyGitRewrite\(racePrefixes\(\)/.test(registryBody) && /clearGitRewrite\(\)/.test(registryBody),
+    'npm 规格安装也要配 git 重写：pnpm add 会连带重新解析 profile 里别的 git 依赖');
+  const gitSpecBody = (repos.match(/private suspend fun installGitSpec\(([\s\S]*?)\n    \}/) || [])[1] || '';
+  want(/raceEnabled\(DshRuntime\.RACE_PLUGINS\)\) \{\n\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*applyGitRewrite\(""\)/.test(gitSpecBody),
+    '竞速关掉的那条路也必须归一 git+ssh（容器里没有 ssh 凭据，直连同样是失败）');
+  const startupBody = (repos.match(/fun ensureGitCaAtStartup\(\) \{([\s\S]*?)\n    \}/) || [])[1] || '';
+  want(/applyGitRewrite\(/.test(startupBody),
+    '启动基线必须也写 insteadOf：dsh reconcile / agent 手跑 dsh plugin 不走安装路径');
+
   want(/fun <T> probeAllInParallel\(/.test(src),
     '6 条线路的延迟探测必须并行（串行最坏要等 6 次超时）');
 

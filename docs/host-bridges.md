@@ -210,11 +210,20 @@ view id（`viewIdResourceName` 通常是 null），`class`（如 `EditText`）�
 节点；解析不到时 `found:false`）、`a11y`（`FOCUS_ACCESSIBILITY`，即**读屏光标** —— 与输入焦点不是
 一回事，常常还不在同一个窗里；两者都带 `window` = 回答者所在的窗 id）、`own`（活动窗口本来是我们
 自己的悬浮窗，于是这棵树读的是别的窗）、`rootWindow`/`rootChildren`（这棵树从哪个窗读的、根上有
-几个孩子 —— "怎么才 37 个节点"靠这两个字段分辨是"树被裁了"还是"读错了窗"）。
+几个孩子 —— "怎么才 37 个节点"靠这两个字段分辨是"树被裁了"还是"读错了窗"），以及 `hideOwn`
+（用户那个「无障碍别看本应用」开关当前是 `off`/`agent`/`all`）。
 `no_input_focus` / `not_found` 的返回值里还会带 `window`、`windowReadable` 与 `windows[]`
-（每窗 `package`/`id`/`type`/`system`/`active`/`focused`/`rootAvailable`）。`windowReadable` 的存在
+（每窗 `package`/`own`/`id`/`type`/`system`/`active`/`focused`/`rootAvailable`）。`windowReadable` 的存在
 是因为 `window`/`package` 都是从"根"上读的：**根没拿到与包名为空是两件事**，混在一起会把
 "窗口读不到"误读成"包名为空"。
+
+**「别看本应用」（`hideOwn` 不是 `off` 时）**：用户把设置里的开关拨到 `agent`（默认）或 `all` 之后，
+**本应用自己的窗口**（含我们自己的悬浮窗）不进候选、也不进搜索表 —— 于是 `tree` 可能回 `no_window`
+（"只剩自家窗"的 note 会说明是策略、不是锁屏），`--target`/`--class` 定位本应用界面里的节点一律
+`not_found`（`searchedWindows` 里不会出现自家窗 id），`text` 的全局输入焦点落在自家窗里时也按
+"没有焦点"处理。这是**策略**，不是 bug：不要重试、不要绕开；任务真要求驱动本应用自己的界面时，
+请用户把那一档改成"都不拦"。`all` 档还会在视图层隐藏本应用（连 TalkBack 也读不到），但那只是
+best effort —— 截屏（`a11y screenshot`）、`shell` 里的 `uiautomator`、WebView 的虚拟子树仍可能碰到。
 
 **往输入框写字有两条路，返回值里的 `by` 说明走了哪条**：先 `ACTION_SET_TEXT`（uiautomator 的
 `setText` 也是这一路，WebView 的输入框认它），被宿主拒绝时退到"聚焦 + 系统剪贴板 +

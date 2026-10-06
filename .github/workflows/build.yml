@@ -190,6 +190,7 @@ jobs:
           node tools/check-market.js
           node tools/check-web-permissions.js
           node tools/check-mic-session.js
+          node tools/check-a11y-own.js
 
       # release 包必须真签名。缺任何一项就硬失败 —— 悄悄用 debug key 签出一个
       # 「release」比构建失败危险得多：它装得上、看着正常，但和正式包签名不同，

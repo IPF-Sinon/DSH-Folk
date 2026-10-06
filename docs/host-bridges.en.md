@@ -220,11 +220,21 @@ origin only, so other sites keep their own semantics.
 with `found:false` when it resolves to none), `a11y` (`FOCUS_ACCESSIBILITY`, the screen-reader cursor — a different thing that is
 often in a different window; both carry `window`, the id of the window that answered), `own` (the active window was **our own
 overlay window**, so this tree is a different one) and `rootWindow`/`rootChildren` (which window the tree came from, and how many
-children its root has — that is how "only 37 nodes?" is told apart from "the wrong window was read"). Failures from
-`no_input_focus` / `not_found` also carry `window`, `windowReadable` and `windows[]` (per window: `package`, `id`, `type`,
+children its root has — that is how "only 37 nodes?" is told apart from "the wrong window was read"), plus `hideOwn` (the current
+level of the user's "keep accessibility away from this app" switch: `off`/`agent`/`all`). Failures from
+`no_input_focus` / `not_found` also carry `window`, `windowReadable` and `windows[]` (per window: `package`, `own`, `id`, `type`,
 `system`, `active`, `focused`, `rootAvailable`). `windowReadable` exists because `window`/`package` are read off the root:
 **a missing root and an empty package name are two different things**, and conflating them turns "this window is unreadable"
 into "the package is empty".
+
+**"Keep accessibility away from this app" (`hideOwn` other than `off`)**: once the user sets that switch to `agent` (the
+default) or `all`, **this app's own windows** (including our own overlay) leave the candidate set and the search list — so `tree`
+may answer `no_window` (the note says it is a policy, not a lock screen, when only our own windows are readable),
+`--target`/`--class` aimed at DSH-Folk's own UI always answers `not_found` (our window ids never show up in `searchedWindows`),
+and a global input focus sitting in one of our windows counts as "no input focus". This is a **policy**, not a bug: do not
+retry and do not route around it; if the task really is to drive this app's own UI, ask the user to set that level back to
+"do not filter". The `all` level additionally hides this app at the view level (TalkBack cannot read it either), but that is
+best effort only — screenshots (`a11y screenshot`), `uiautomator` via `shell` and a WebView's virtual tree can still reach it.
 
 **Writing into a field has two paths, and `by` in the reply says which one ran**: `ACTION_SET_TEXT` first (uiautomator setText
 uses it too, and WebView input fields accept it), then — if the host refuses — focus plus the system clipboard plus

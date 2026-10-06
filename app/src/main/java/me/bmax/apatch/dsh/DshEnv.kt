@@ -366,6 +366,15 @@ object DshEnv {
     const val KEY_WEB_ENTER_NEWLINE = "web_enter_newline"
 
     /**
+     * 「无障碍别看本应用内容」的档位：off | agent | all（默认 [A11yOwn.MODE_AGENT]）。
+     *
+     * 见 [A11yOwn]：agent 档只拦我们自己的 a11y 通道（`/native/a11y/…`），all 档再叠一层
+     * 视图级隐藏（对别的无障碍服务也生效）。两档都只承诺"尽量"——WebView 的虚拟子树、
+     * 截屏、`shell`/uiautomator 那几条路仍能碰到本应用自己的界面。
+     */
+    const val KEY_A11Y_OWN = "a11y_hide_own"
+
+    /**
      * 需要垫片的 Chromium 主版本上界（含）。
      *
      * 取上界 = **垫片覆盖项里要求最高的那个版本**，低报会让该修的设备一条都不修

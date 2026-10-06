@@ -111,6 +111,51 @@
 `==UserScript==`（服务端出错时回的是 HTML/JSON）。`tools/check-market.js` 把这些连同超时、
 2MB 上限、IO 线程、装完 reload 一起钉住。
 
+## 无障碍别看本应用（默认只拦自己的 AI）
+
+a11y 读屏默认**连我们自己的界面一起读**（`pickRoot` 只跳自己那个 `TYPE_SYSTEM` 悬浮窗；本应用
+`TYPE_APPLICATION` 的窗是刻意保留的 —— 平时 agent 正是靠它驱动这里的输入框）。可目标在别的 App
+上时，我们自己的窗会冒充活动窗，把 agent 引到错误的一棵树里。于是有了这个档位（设置页：无障碍卡片；
+实现是 `A11yOwn`，prefs 键 `a11y_hide_own`，只在 `DshEnv` 里定义一次）：
+
+| 档位 | 拦什么 | 谁受影响 |
+|---|---|---|
+| `off` | 什么都不拦 | —— |
+| `agent`（默认） | `/native/a11y/…` 的读与写跳过本应用自己的窗口 | 只有我们自己的 agent |
+| `all` | 再叠一层视图级 `importantForAccessibility = noHideDescendants` | **所有**无障碍服务（含 TalkBack） |
+
+落点（缺一个就漏一条路）：`pickRoot` / `searchRoots` 把自家窗从候选与搜索表里去掉，且
+`no_window` 时**不许退回自家树**（退回 = 开关白装）；`setText` 的
+`findFocus(FOCUS_INPUT)` 是**全局**查、不走 `searchRoots`，所以那里单独再挡一次；三个自家的窗
+（主界面 / WebUI 页在 `onResume`、悬浮小窗在 `addView` **之前**）都要落档位。
+
+判因：`tree` 带 `hideOwn`（当前档位），`windows[]` 每项带 `own`，`no_window` 的 note 在过滤开着时
+说清"这是策略"并给出路。
+
+为什么只敢写"不保证完全拦截"：视图级那层只是给系统的**建议**（WebView 的虚拟子树、弹窗的独立窗、
+`AccessibilityNodeProvider` 都可能照旧报到）；通道级只覆盖 `/native/a11y/…` —— `a11y screenshot`
+读像素、`shell` 里的 `uiautomator`、`display` 把画面拖进容器，都不是它管的。
+
+提示词也同步：档位写进 `host-facts.json`（`a11yHideOwn`），`dsh-folk-host` 在 agent/all 档渲染一段
+"现在读不到本应用、会拿到 `no_window`/`not_found` + `hideOwn`，不要重试也不要绕开"。facts 按 mtime
+失效，所以用户拨一下开关，**下一轮**组装就是新的，不必重启 dsh。`tools/check-a11y-own.js` 钉住上面
+每一条；`tools/check-host-prompt.js` 真跑 `render()` 验那段话。
+
+## 插件安装的 github 写法归一（`insteadOf`）
+
+`github:owner/name` 规格到 pnpm 手里会变成 **`git+ssh://git@github.com/…`**，而容器里既没有 ssh
+私钥、也没有 known_hosts —— 直连只会得到 `Host key verification failed`。更坏的是这个错会**跨依赖**
+传染：pnpm 装一个 npm 规格（如更新 `dshmarket`）时会重新解析整个 profile 的依赖树，于是预装的
+`dsh-folk-cloud`（`github:` 规格）能把"装 npm 包"整件事打死。
+
+所以 `DshPluginRepo` 的 `insteadOf` 要收**每一种写法**（https / git+https / **git+ssh** / ssh /
+`git@github.com:`），并且都重写到同一个目标 `<线路前缀>https://github.com/`（不能让前缀后面跟
+`git+ssh://…`，gh-proxy 不认）。两条容易踩的细节：一个目标 URL 下挂多条 `insteadOf` 必须 `--add`
+（不带它后一条会顶掉前一条，只剩一种写法生效）；`pnpm add` 那条 npm 路径**也要**围着这层重写
+（不然它连带解析 git 依赖时同样撞 ssh）。启动时另留一份基线（`ensureGitCaAtStartup`），让 dsh 自身
+reconcile、自愈、以及 agent 在会话里跑 `dsh plugin` 这些**不走安装路径**的 git 也拿得到。
+`tools/check-race-channel.js` 钉住这五条。
+
 ## 测试版通道（应用 / 运行时）
 
 

@@ -57,18 +57,32 @@ internal object DshA11y {
      * 除了树本身，还回三样**判因**用的东西（都是踩出来的坑，见各自说明）：
      * - `own`：活动窗口本来是我们**自己的悬浮窗**、这一棵读的是别的窗；
      * - `input`：当前"键盘输入焦点"落在哪（`FOCUS_INPUT` 解析不到时说 `found:false`）；
-     * - `package`：读的到底是哪个包（`home` 之后仍报自己包名就是这么看出来的）。
+     * - `package`：读的到底是哪个包（`home` 之后仍报自己包名就是这么看出来的）；
+     * - `hideOwn`：本次读/写把「本应用自己的窗口」挡到了什么程度（见 [A11yOwn]）。
      */
     fun snapshot(maxDepth: Int = MAX_DEPTH, maxNodes: Int = MAX_NODES): JSONObject {
         val svc = service() ?: return JSONObject().put("ok", false).put("reason", "no_a11y_service")
         val (root, skippedOwn) = pickRoot(svc)
         if (root == null) {
+            // 开着「别看本应用」时，`no_window` 的最常见成因是**只剩我们自己的窗** ——
+            // 那时窗口表里全是自家包名，不说清楚就会被读成"锁屏/安全窗"。
+            val filtered = A11yOwn.hidesAgent(svc)
             return windowDiag(
                 svc,
                 JSONObject()
                     .put("ok", false)
                     .put("reason", "no_window")
-                    .put("note", "The current window is not readable — a secure or system window (lock screen, password dialog)."),
+                    .put("hideOwn", A11yOwn.mode(svc))
+                    .put(
+                        "note",
+                        if (filtered) {
+                            "Only DSH-Folk's own windows are readable, and the \"keep a11y away from " +
+                                "this app\" switch is filtering them out. Bring the target app to the " +
+                                "front, or ask the user to relax that switch (the app's accessibility card)."
+                        } else {
+                            "The current window is not readable — a secure or system window (lock screen, password dialog)."
+                        },
+                    ),
             )
         }
         val counter = intArrayOf(0)
@@ -80,6 +94,7 @@ internal object DshA11y {
             // 活动窗口本来是我们自己的悬浮窗（于是这棵树读的是别的窗）—— 不写出来，
             // 「package 怎么是自己」就会变成下一个要靠猜的谜
             .put("own", skippedOwn)
+            .put("hideOwn", A11yOwn.mode(svc))
             .put("input", inputDiag(svc))
             // 读屏焦点与输入焦点分开报（见 [focusDiag]）：两者常常不在同一个窗里 ——
             // 现场"tree 说没有可编辑节点、input 却说有"的矛盾，靠这两个字段才分辨得出来
@@ -209,8 +224,12 @@ internal object DshA11y {
             //    windowIdBelongsToDisplayType 为假 → 整个查询作废、返回 null；
             // 2. 退到我们自己选中的那棵树里再问一次（那个窗的 provider 还认 DOM 的 activeElement）；
             // 3. 还没有就问"这棵树里第一个可编辑节点" —— 光标在框里、而宿主没把焦点报上来时靠它。
+            // `svc.findFocus` 是**全局**查（不走 [searchRoots]），所以这里要自己挡一次
+            // 自家节点：开着「别看本应用」时，"焦点在我们自己的框里"不该算数。
             val focused = svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                ?.takeIf { allowed(svc, it) }
                 ?: pickRoot(svc).first?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                ?.takeIf { allowed(svc, it) }
                 ?: firstEditable(pickRoot(svc).first)
             if (focused == null) return windowDiag(svc, fail("no_input_focus"))
             return writeInto(focused, text)
@@ -516,6 +535,7 @@ internal object DshA11y {
      * 顺序固定（活动窗优先），所以 [index] 可复现；`not_found` 会把实际搜过的窗 id 报回来。
      */
     private fun searchRoots(svc: AccessibilityService): List<AccessibilityNodeInfo> {
+        val hideOwn = A11yOwn.hidesAgent(svc)
         val prio = listOfNotNull(
             runCatching { svc.rootInActiveWindow?.windowId }.getOrNull(),
             runCatching { svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.windowId }.getOrNull(),
@@ -523,6 +543,9 @@ internal object DshA11y {
         ).distinct()
         return svc.windows
             .filter { !isOwnOverlay(svc, it) }
+            // 「别看本应用」开着时，自家窗不进搜索表 —— not_found 的 searchedWindows
+            // 因此不会列出我们的窗 id，这就是"找过哪些窗"与"为什么没找到"的判据
+            .filter { !hideOwn || !isOwnWindow(svc, it) }
             .sortedBy { w -> prio.indexOf(w.id).let { if (it < 0) prio.size else it } }
             .mapNotNull { runCatching { it.root }.getOrNull() }
     }
@@ -575,19 +598,40 @@ internal object DshA11y {
      * 只跳"系统窗口"那一类：**本应用自己的界面**（TYPE_APPLICATION）常常正是 agent 要驱动的
      * 目标（本仓的聊天/搜索框就在自己的 WebView 里），跳掉它等于把能力从自己身上拿掉。
      *
+     * 例外是用户在设置里把「别看本应用」拨到 agent/all（[A11yOwn.hidesAgent]）：那时**所有**
+     * 自家窗口都不算，宁可报"读不到"，也不把 agent 引到我们自己的树上。
+     *
      * @return 选中的 root，以及"是否因为活动窗口是自己的悬浮窗而改选了别的"
      */
     private fun pickRoot(svc: AccessibilityService): Pair<AccessibilityNodeInfo?, Boolean> {
+        val hideOwn = A11yOwn.hidesAgent(svc)
         val active = svc.rootInActiveWindow
         val ownOverlayActive = svc.windows.firstOrNull { it.isActive }?.let { isOwnOverlay(svc, it) } ?: false
-        if (active != null && !ownOverlayActive) return active to false
+        if (active != null && !ownOverlayActive && !(hideOwn && isOwnWindow(svc, active))) {
+            return active to false
+        }
         val other = svc.windows.asSequence()
             .filter { !isOwnOverlay(svc, it) }
+            .filter { !hideOwn || !isOwnWindow(svc, it) }
             .mapNotNull { it.root }
             .firstOrNull()
+        // 开着过滤：没有别的窗就说"读不到"，**不**退回我们自己那棵（退回就等于开关没生效）
+        if (hideOwn) return other to ownOverlayActive
         // 没有别的可读窗口就退回活动窗口：读我们自己的树，也好过读不到
         return (other ?: active ?: svc.windows.firstOrNull { it.isActive }?.root) to ownOverlayActive
     }
+
+    /** 本应用自己的窗（应用界面或悬浮窗，按根上的包名认）。 */
+    private fun isOwnWindow(svc: AccessibilityService, window: AccessibilityWindowInfo): Boolean =
+        window.root?.packageName?.toString() == svc.packageName
+
+    /** 同上，从节点上认（[setText] 的全局焦点可能落在自家窗里）。 */
+    private fun isOwnNode(svc: AccessibilityService, node: AccessibilityNodeInfo): Boolean =
+        node.packageName?.toString() == svc.packageName
+
+    /** 开着「别看本应用」时，自家节点算不算 agent 能碰的。 */
+    private fun allowed(svc: AccessibilityService, node: AccessibilityNodeInfo): Boolean =
+        !A11yOwn.hidesAgent(svc) || !isOwnNode(svc, node)
 
     /** 这个窗口是本应用自己的悬浮窗吗（系统窗口 + 自家包名）。 */
     private fun isOwnOverlay(svc: AccessibilityService, window: AccessibilityWindowInfo): Boolean =
@@ -619,7 +663,7 @@ internal object DshA11y {
     }
 
     /**
-     * 窗口表：每窗 `package`/`system`/`active`/`focused`/`id`/`type`/`rootAvailable`。
+     * 窗口表：每窗 `package`/`own`/`system`/`active`/`focused`/`id`/`type`/`rootAvailable`。
      *
      * `rootAvailable` 是必须的：`package` 是从"根"上读的，根拿不到（安全窗、别的 display、
      * 窗口刚销毁）时它也是空串 —— 不把这两件事分开，"窗口读不到"就会被读成"包名为空"。
@@ -629,9 +673,14 @@ internal object DshA11y {
         val ws = JSONArray()
         for (w in svc.windows) {
             val root = runCatching { w.root }.getOrNull()
+            // `own`：这个窗是不是**我们自己**的（应用界面 / 悬浮窗）。开着「别看本应用」时
+            // 它们不进搜索表、也不会被选中 —— 窗口表里留个 own 标记，现场才分得清
+            // "屏幕上只有我们自己的窗"与"什么窗都没有"。
+            val own = root?.packageName?.toString() == svc.packageName
             ws.put(
                 JSONObject()
                     .put("package", root?.packageName?.toString().orEmpty())
+                    .put("own", own)
                     .put("system", w.type == AccessibilityWindowInfo.TYPE_SYSTEM)
                     .put("active", w.isActive)
                     .put("focused", w.isFocused)

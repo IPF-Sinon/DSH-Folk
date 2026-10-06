@@ -258,11 +258,31 @@ object DshPluginRepo {
      */
     private fun ghMirrorPrefixes(): List<String> = DshSource.allProxyPrefixes()
 
-    /** git 的 insteadOf 键里那段被重写的源，覆盖 github 的几种等价写法。 */
+    /**
+     * git 的 insteadOf 要收的「源写法」——github 的每一种等价写法。
+     *
+     * `git+ssh://` 必须在里面：pnpm 把 `github:owner/name` 规格解析成
+     * `git+ssh://git@github.com/…`（pnpm 11 实测），而容器里既没有 ssh 私钥、也没有
+     * known_hosts —— 漏了它就是「Host key verification failed」，而且坏的不只是这一条依赖：
+     * pnpm 会把整个 profile 的依赖树一起解析，实测「更新 npm 规格的 dshmarket」就是被
+     * 预装的 dsh-folk-cloud（`github:` 规格）这条 git 依赖整死的。scp 写法（`git@github.com:`）
+     * 同理 —— 用户 git 配置里怎么写，都得落到同一个目标上。
+     */
     private val GIT_REWRITE_BASES = listOf(
         "https://github.com/",
         "git+https://github.com/",
+        "git+ssh://git@github.com/",
+        "ssh://git@github.com/",
+        "git@github.com:",
     )
+
+    /**
+     * 上面那些写法统一重写到**哪**：线路前缀 + 这一条（前缀由 [applyGitRewrite] 拼）。
+     *
+     * 目标钉死成 github 的 https，而不是「前缀 + 原写法」：gh-proxy 的前缀后面必须跟一个
+     * github https 地址，「https://mirror/git+ssh://git@github.com/…」它不认。
+     */
+    private const val GIT_REWRITE_TARGET = "https://github.com/"
 
     /** 动态加载器失败的输出签名（proot/proroot 下 exec 缺库时长这样）。 */
     private val LDSO_FAILURE_MARKS = listOf(
@@ -1074,8 +1094,13 @@ object DshPluginRepo {
      *
      * 为什么不写 `.npmrc`：那要动 rootfs 里的全局配置，而且换源得再改回来；`--registry` 只是这一次
      * 命令的参数，失败就没了副作用（[DshRuntime.RACE_PLUGINS] 关掉时连这个参数都不传，行为与以前
-     * 完全一致）。npm 规格跟 gh-proxy 那套 git 重写毫无关系 —— 插件镜像开关从来管不到它们，
-     * 国内装 dsh-config-manager / dsh-web-mobile 只能干等官方源，这就是本条要解决的问题。
+     * 完全一致）。npm 规格本身跟 gh-proxy 那套 git 重写无关 —— 插件镜像开关管的是 pnpm 的 registry
+     * 线路，国内装 dsh-config-manager / dsh-web-mobile 只能干等官方源，这就是本条要解决的问题。
+     *
+     * 但这不代表 npm 规格安装可以不管 git：`pnpm add` 会把**整个 profile 的依赖树**一起解析，
+     * 里面只要有一条 git 规格（预装的 `dsh-folk-cloud` 就是），pnpm 就会现场 `git ls-remote`
+     * `git+ssh://…` —— 容器里没有 ssh 凭据，于是"装 npm 包"被一条 git 依赖整死。所以本路径
+     * 也要像 [installGitSpec] 那样配一层 insteadOf（见下面注释）。
      *
      * 回退链：测速排序里的每条 registry 依次试（官方源永远在列表尾），全失败再用**不带 --registry**
      * 的原命令试最后一次 —— 那是「用户自己在容器里配过源」的情形，不该被我们覆盖。
@@ -1087,13 +1112,23 @@ object DshPluginRepo {
             return dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
         }
         var last = ""
-        for (registry in DshSource.rankedNpmRegistries(ctx)) {
-            line(onLine, R.string.dsh_plug_log_npm_registry_try, registry)
-            last = dshPlugin("add ${importFlag()}--registry '$registry' '$spec'", 900_000, onLine)
-            if (exitOk(last)) return last
+        // 装一个 npm 规格，pnpm 也会**重新解析整个 profile 的依赖树**：只要里面有一条 git
+        // 规格（预装的 dsh-folk-cloud 就是），它就会现场 `git ls-remote` 一次 —— 于是
+        // 「装 npm 包」被一条 git 依赖整死（实测日志：更新 dshmarket 时撞
+        // git+ssh://git@github.com/IPF-Sinon/dsh-folk-cloud.git · Host key verification failed）。
+        // 按最快线路配一层 git 重写（与 [installGitSpec] 同一套规则），装完清掉。
+        applyGitRewrite(racePrefixes().firstOrNull { it.isNotEmpty() } ?: "")
+        try {
+            for (registry in DshSource.rankedNpmRegistries(ctx)) {
+                line(onLine, R.string.dsh_plug_log_npm_registry_try, registry)
+                last = dshPlugin("add ${importFlag()}--registry '$registry' '$spec'", 900_000, onLine)
+                if (exitOk(last)) return last
+            }
+            // 全部 registry 都没成：再按原命令试最后一次（不带 --registry，即用户自己在容器里配的源）
+            last = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+        } finally {
+            clearGitRewrite()
         }
-        // 全部 registry 都没成：再按原命令试最后一次（不带 --registry，即用户自己在容器里配的源）
-        last = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
         return last
     }
 
@@ -1106,8 +1141,8 @@ object DshPluginRepo {
      * 时，最后用 tgz 直链（纯 HTTP、绕开 git）再试一次——直链本身也走一遍线路前缀。
      *
      * 线路顺序来自 [DshSource.rankedSources]（测速最快在前，结果带缓存与兜底顺序）。竞速通道关掉
-     * （总开关或「插件」分开关）时，只按原样直连一次、不做任何重写，给能直连 github 的用户留一条
-     * 干净路径。
+     * （总开关或「插件」分开关）时，不走镜像、一次直连 —— 但**归一化**照旧（`git+ssh://` → https），
+     * 给能直连 github 的用户留一条干净路径。
      */
     private suspend fun installGitSpec(
         spec: String,
@@ -1116,8 +1151,12 @@ object DshPluginRepo {
     ): String {
         ensureGitCa(onLine)
         if (!DshRuntime.raceEnabled(DshRuntime.RACE_PLUGINS)) {
+            // 不绕镜像，但**归一化**仍要有：容器里没有 ssh 凭据，`git+ssh://` 规格直连
+            // github 只会得到「Host key verification failed」（见 [GIT_REWRITE_BASES]）。
+            applyGitRewrite("")
+            val out = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
             clearGitRewrite()
-            return dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+            return out
         }
         val prefixes = racePrefixes()
         var last = ""
@@ -1187,33 +1226,51 @@ object DshPluginRepo {
      * verification failed）。在服务启动前无条件重设，任何 git 路径都拿得到 CA。幂等且很快
      * （PEM 已在就只重写一行配置）。运行时侧也会把 CA bundle 直接烤进 rootfs 作双保险。
      */
-    fun ensureGitCaAtStartup() = ensureGitCa {}
+    fun ensureGitCaAtStartup() {
+        ensureGitCa {}
+        // CA 之外还有一条**同因**的配置：容器 git 的 github `insteadOf`。
+        // 它同样写在 /root/.gitconfig（同样被运行时更新清掉），而 dsh 自身 reconcile、
+        // 启动自愈、以及 agent 在会话里跑 `dsh plugin` 都不走 [installGitSpec] —— 只能在这里
+        // 兜住：按当前最快的线路（没开竞速就只归一）留一份重写，让任何 git 路径都拿得到。
+        val best = if (DshRuntime.raceEnabled(DshRuntime.RACE_PLUGINS)) {
+            racePrefixes().firstOrNull { it.isNotEmpty() } ?: ""
+        } else {
+            ""
+        }
+        applyGitRewrite(best)
+    }
 
     /**
-     * 给容器全局 git 配 `insteadOf`，把 github 流量重写到 [prefix]（空串=清空重写）。
+     * 给容器全局 git 配 `insteadOf`：把 [GIT_REWRITE_BASES] 里每种 github 写法都重写到
+     * `<prefix>https://github.com/`（prefix 空 = 直连，即只做归一化）。
      *
      * 写全局是**必须**的：pnpm 在自己的子进程里 fork git，命令行传不进去，只有
-     * `~/.gitconfig` 能被继承。每次装前重设、装后清掉，不给用户留下持久的重写。
+     * `~/.gitconfig` 能被继承。安装路径每次装前重设、装后清掉；[ensureGitCaAtStartup]
+     * 那份是留给"不走安装路径"的 git（dsh reconcile / agent 手跑）的基线，故意留在原地。
      */
     private fun applyGitRewrite(prefix: String) {
         clearGitRewrite()
-        if (prefix.isEmpty()) return
         // git config 键 url.<URL>.insteadOf：首点分 section、末点分变量名，中间整段当子节
         // 逐字保留（点/冒号/斜杠都行）。这些 URL 无 shell 元字符，双引号成一个 token 即可。
+        //
+        // 同一个目标 URL 下挂多条 insteadOf 必须 `--add`：不带它，后一条会**顶掉**前一条
+        // （git 2.x 实测，最后只剩一种写法生效）—— 那正是「https 重写了、git+ssh 漏了」的坑。
+        // 空前缀不是"不重写"，而是"归一到直连"：容器里没有 ssh 凭据，`git+ssh://` 直连
+        // github 必然失败，所以哪条路都得先把写法收束成 https。
+        val target = prefix + GIT_REWRITE_TARGET
         val cmds = GIT_REWRITE_BASES.joinToString("; ") { base ->
-            "git config --global \"url.$prefix$base.insteadOf\" \"$base\""
+            "git config --global --add \"url.$target.insteadOf\" \"$base\""
         }
         DshRuntime.execRootfsForOutput(cmds, 30_000)
     }
 
-    /** 清掉上面配的所有 github insteadOf 重写（幂等，节点不存在时静默返回）。 */
+    /** 清掉上面配的所有 github insteadOf 重写（幂等，前缀不存在时静默返回）。 */
     private fun clearGitRewrite() {
+        // 一个前缀一条键（前缀空 = 直连归一那条）。空前缀必须一起清：漏了它，"清过"的下一次
+        // 安装仍会带着上一轮留下的归一化 —— 无害，但让「清」这个动作名不副实。
         val cmds = buildString {
             for (prefix in ghMirrorPrefixes()) {
-                if (prefix.isEmpty()) continue
-                for (base in GIT_REWRITE_BASES) {
-                    append("git config --global --unset-all \"url.$prefix$base.insteadOf\" 2>/dev/null; ")
-                }
+                append("git config --global --unset-all \"url.${prefix}${GIT_REWRITE_TARGET}.insteadOf\" 2>/dev/null; ")
             }
             append("true")
         }

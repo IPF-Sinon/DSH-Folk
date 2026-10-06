@@ -938,6 +938,15 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_a11y_service_label">DSH-Folk accessibility</string>
     <string name="dsh_a11y_service_summary">Let the AI read the current screen and act on it</string>
     <string name="dsh_a11y_service_desc">When enabled, the AI inside the container can read the text and controls on your current screen and tap, swipe or type as you ask. This is a separate switch from the accessibility service used for boot autostart: that one sees system events only, never screen content. Off by default, and you can turn it off here at any time.</string>
+    <string name="dsh_a11y_own_title">Keep accessibility out of this app</string>
+    <string name="dsh_a11y_own_summary">Whether DSH-Folk\u2019s own screens count as readable, for screen readers and for the AI\u2019s a11y tools. Best effort \u2014 not a guarantee.</string>
+    <string name="dsh_a11y_own_off">Do not filter</string>
+    <string name="dsh_a11y_own_off_desc">The AI\u2019s tree/click/text can read and operate DSH-Folk\u2019s own screens \u2014 that is how it drives this app\u2019s chat box.</string>
+    <string name="dsh_a11y_own_agent">Only this app\u2019s AI (default)</string>
+    <string name="dsh_a11y_own_agent_desc">The AI\u2019s a11y tools skip DSH-Folk\u2019s own windows and address other apps. Other accessibility services are not affected.</string>
+    <string name="dsh_a11y_own_all">Every accessibility service</string>
+    <string name="dsh_a11y_own_all_desc">Also hide this app\u2019s own views from every accessibility service (TalkBack included).</string>
+    <string name="dsh_a11y_own_note">Best effort, not a guarantee: pixel screenshots, shell/uiautomator and a WebView\u2019s virtual tree can still reach this app.</string>
     <string name="dsh_native_cap_shell_need_channel">No permission channel is selected — tap to open the channel settings</string>
     <string name="dsh_native_err_shell_no_command">No command was given (cmd parameter is empty)</string>
     <string name="dsh_native_err_shell_failed">The privileged command could not run: %1$s</string>

@@ -271,7 +271,12 @@ const CAP_CAVEAT = {
     'A click whose node only reports a degenerate rectangle (zero width, or running off screen) ' +
     'answers invalid_bounds instead of tapping a line. Prefer click over tap: ' +
     'a node click survives layout shifts. Do this only when the user asked for it in this ' +
-    'turn, and never drive the UI to work around a permission the user has not granted.',
+    'turn, and never drive the UI to work around a permission the user has not granted. ' +
+    'The user can also keep accessibility away from DSH-Folk itself: with that switch on, this ' +
+    'app\'s own windows are neither readable nor operable — a tree/click/text aimed at DSH-Folk ' +
+    'answers no_window or not_found, the reply carries hideOwn, and each windows[] entry carries ' +
+    'own. That is a policy, not a bug: do not retry or route around it. If the task really is to ' +
+    'drive DSH-Folk\'s own UI, say so and let the user relax the switch.',
   shell:
     'The host runs this for you through the channel the user picked (root / Shizuku / wireless ADB); ' +
     'you never become root inside the container. Read-only commands need the read level, anything ' +
@@ -654,6 +659,29 @@ function render(f) {
     if (caveats.length > 0) {
       lines.push('');
       for (const c of caveats) lines.push('- ' + c);
+    }
+    // 「别看本应用」正开着时，把"本应用自己的内容现在读不到"说成一条**当下事实**：
+    // 上面的常驻说明只讲了有这个开关，不说现在是哪一档。facts 按 mtime 失效，
+    // 所以用户在设置里拨一下，下一轮组装就是新的（不必重启 dsh）。
+    const ownMode = str(f.a11yHideOwn);
+    if (usable.includes('a11y') && (ownMode === 'agent' || ownMode === 'all')) {
+      lines.push('');
+      lines.push(
+        '- Right now the "keep accessibility away from this app" switch is set to ' +
+          (ownMode === 'all' ? 'every accessibility service' : 'this app\'s AI only') +
+          ': DSH-Folk\'s own windows are NOT readable or operable by the a11y tools, so point ' +
+          'tree/click/text at other apps. A request aimed at DSH-Folk answers no_window (nothing ' +
+          'else readable) or not_found, with hideOwn reporting this mode and windows[].own marking ' +
+          'its windows. Do not retry and do not route around it — if the user asked you to drive ' +
+          'DSH-Folk\'s own UI, tell them to set that switch to "do not filter".'
+      );
+      if (ownMode === 'all') {
+        lines.push(
+          '- In that mode other accessibility services (TalkBack) cannot read this app either, and ' +
+            'the hiding is best effort: `dsh-native a11y screenshot`, shell/uiautomator and ' +
+            'a WebView\'s virtual tree can still reach it.'
+        );
+      }
     }
     const off = Object.keys(CAP_USAGE).filter((c) => !usable.includes(c));
     if (off.length > 0) {

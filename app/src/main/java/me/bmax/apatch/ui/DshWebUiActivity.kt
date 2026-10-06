@@ -95,6 +95,7 @@ import androidx.webkit.WebViewFeature
 import java.io.File
 import kotlin.math.roundToInt
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.A11yOwn
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.WebScripts
@@ -865,6 +866,13 @@ class DshWebUiActivity : AppCompatActivity() {
         bottom = cssInsetBottom,
         left = cssInsetLeft,
     )
+
+    override fun onResume() {
+        super.onResume()
+        // 「别看本应用」：all 档时把整页（含 WebView 的虚拟子树）从无障碍树里隐掉。
+        // 每页重进都重设一次，用户在设置里改了档位不必重启 App。
+        A11yOwn.applyToWindow(window)
+    }
 
     override fun onDestroy() {
         // 不销毁的话 WebView 会连着 Activity 一起泄漏

@@ -285,6 +285,38 @@ ok(/if \(body == existing\) return/.test(hpCode), "内容没变就不写盘（�
   ok(render({ ...facts, workspaceStorageMounted: false }).length === text.length,
     "工作区挂载关时不渲染该段（与旧 facts 输出一致，向后兼容）");
 
+  // ── 「别看本应用」档位（a11yHideOwn）：开着时提示词必须**明说**本应用读不到 ──
+  // 只说"有这么个开关"不够 —— agent 会照着 tree 去点、拿到 no_window 才回头猜。
+  const a11yOn = { ...facts, nativeCaps: { a11y: "read_write" } };
+  const ownAgent = render({ ...a11yOn, a11yHideOwn: "agent" });
+  ok(/Right now the/.test(ownAgent) && /this app's AI only/.test(ownAgent),
+    "a11yHideOwn=agent：提示词明说本应用自己的窗口现在读不到、且是哪一档");
+  ok(/hideOwn/.test(ownAgent) && /windows\[\]\.own/.test(ownAgent),
+    "同一段给出判据字段（hideOwn / windows[].own），agent 才知道这不是 bug");
+  ok(/do not retry and do not route around it/i.test(ownAgent),
+    "同一段明确要求不要重试、不要绕开");
+  ok(!/every accessibility service/.test(ownAgent),
+    "agent 档不冒充「所有服务」档（否则用户以为 TalkBack 也被挡了）");
+
+  const ownAll = render({ ...a11yOn, a11yHideOwn: "all" });
+  ok(/every accessibility service/.test(ownAll) && /TalkBack/.test(ownAll),
+    "a11yHideOwn=all：额外说明连别的无障碍服务也读不到本应用");
+  ok(/best effort/.test(ownAll) && /a11y screenshot/.test(ownAll),
+    "all 档说清只是 best effort（截屏等路径仍能碰到）");
+
+  const ownOff = render({ ...a11yOn, a11yHideOwn: "off" });
+  ok(!/Right now the/.test(ownOff),
+    "off 档不出现「现在读不到本应用」那段（关着还说禁用 = 让 agent 白白绕路）");
+  // 注意 fixture 要用「别的能力开着、a11y 没开」：nativeCaps 全空时整段能力说明都不渲染，
+  // 那种 fixture 验不出 a11y 这一项的判断（第一版就是这么漏过去的）。
+  const noCap = render({ ...facts, nativeCaps: { toast: "read_write" }, a11yHideOwn: "agent" });
+  ok(!/Right now the/.test(noCap),
+    "a11y 能力没勾时不渲染该段（能力关着，「读不到」本来就不成立）");
+
+  // 常驻说明（CAP_CAVEAT.a11y）与动态那段是两件事：前者讲有这个开关，后者讲现在是哪一档。
+  ok(/keep accessibility away from DSH-Folk itself/.test(ownOff),
+    "常驻说明始终在（无论哪一档）—— 它讲的是「存在这个开关」，不是当前档位");
+
   console.log(
     `\n${bad === 0 ? "\u2713 全部通过" : "\u2717 有失败"}：${n} 项断言，${bad} 项失败`
   );

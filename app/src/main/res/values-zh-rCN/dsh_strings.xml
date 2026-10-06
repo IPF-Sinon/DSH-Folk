@@ -916,6 +916,15 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_a11y_service_label">DSH-Folk 无障碍</string>
     <string name="dsh_a11y_service_summary">让 AI 读取当前屏幕内容并代为点按</string>
     <string name="dsh_a11y_service_desc">开启后，容器里的 AI 可以读取你当前屏幕上的文字与控件，并按你的要求点按、滑动、输入。它与「开机自启」用的那个无障碍开关是两个独立开关：那一个只看得到系统事件，看不到屏幕内容。默认关闭，随时可以在这里关掉。</string>
+    <string name="dsh_a11y_own_title">无障碍别看本应用</string>
+    <string name="dsh_a11y_own_summary">本应用自己的界面，对读屏（以及 AI 的无障碍工具）算不算「可读、可操作」。只能说尽量 —— 不保证完全拦截。</string>
+    <string name="dsh_a11y_own_off">都不拦</string>
+    <string name="dsh_a11y_own_off_desc">AI 的读屏/点按/输入可以读、也可以操作本应用的界面 —— 平时就是这样驱动这里的输入框。</string>
+    <string name="dsh_a11y_own_agent">只拦本应用的 AI（默认）</string>
+    <string name="dsh_a11y_own_agent_desc">AI 的无障碍工具跳过本应用自己的窗口，只对别的 App 生效；别的读屏服务不受影响。</string>
+    <string name="dsh_a11y_own_all">所有无障碍服务</string>
+    <string name="dsh_a11y_own_all_desc">连视图层也隐藏，所有无障碍服务（含 TalkBack）都读不到本应用。</string>
+    <string name="dsh_a11y_own_note">不保证完全拦截：截屏、shell/uiautomator、WebView 的虚拟子树仍可能读到。</string>
     <string name="dsh_native_cap_shell_need_channel">还没有选权限通道 —— 点这里去选</string>
     <string name="dsh_native_err_shell_no_command">没给命令（cmd 参数为空）</string>
     <string name="dsh_native_err_shell_failed">特权命令没能执行：%1$s</string>

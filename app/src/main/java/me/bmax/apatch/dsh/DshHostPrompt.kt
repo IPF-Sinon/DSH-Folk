@@ -77,7 +77,7 @@ object DshHostPrompt {
      * 读一遍 assets 再全量覆盖。版本号存在 prefs 里，与 rootfs 无关 —— 重装运行时后
      * 文件没了但版本号还在，所以 [ensureInstalled] 另外检查文件是否真的存在。
      */
-    private const val PLUGIN_REV = 13
+    private const val PLUGIN_REV = 14
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =
@@ -296,6 +296,10 @@ object DshHostPrompt {
                 .put("storageHardlinkSupported", DshFileAccess.storageLinkSupported(ctx))
                 // 无障碍服务：和相机一样属于「设备上有没有」的事实
                 .put("a11yService", DshA11y.connected())
+                // 「别看本应用」档位：插件按它决定要不要在提示词里明说"现在读不到本应用"。
+                // 这是**状态**不是能力，所以与 a11yService 并列放在事实里（改档位 → 下一轮
+                // 组装就是新的：插件按 mtime 判失效，见类注释）。
+                .put("a11yHideOwn", A11yOwn.mode(ctx))
                 .toString()
             val f = DshEnv.hostFacts(ctx)
             f.parentFile?.mkdirs()
