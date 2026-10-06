@@ -607,7 +607,7 @@ internal object DshA11y {
         val hideOwn = A11yOwn.hidesAgent(svc)
         val active = svc.rootInActiveWindow
         val ownOverlayActive = svc.windows.firstOrNull { it.isActive }?.let { isOwnOverlay(svc, it) } ?: false
-        if (active != null && !ownOverlayActive && !(hideOwn && isOwnWindow(svc, active))) {
+        if (active != null && !ownOverlayActive && !(hideOwn && isOwnNode(svc, active))) {
             return active to false
         }
         val other = svc.windows.asSequence()

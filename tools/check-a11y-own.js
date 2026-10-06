@@ -95,7 +95,7 @@ console.log("\n── 通道级：读、搜、写、报，四处都要挡 ──
   const pick = A11Y.slice(A11Y.indexOf("private fun pickRoot("), A11Y.indexOf("private fun isOwnOverlay"));
   ok(/val hideOwn = A11yOwn\.hidesAgent\(svc\)/.test(pick),
     "pickRoot 现查档位（不缓存：改档位立刻生效）");
-  ok(/if \(active != null && !ownOverlayActive && !\(hideOwn && isOwnWindow\(svc, active\)\)\)/.test(pick),
+  ok(/if \(active != null && !ownOverlayActive && !\(hideOwn && isOwnNode\(svc, active\)\)\)/.test(pick),
     "活动窗是自家的就不选它（挡住「活动窗优先」这条路）");
   ok(/\.filter \{ !hideOwn \|\| !isOwnWindow\(svc, it\) \}/.test(pick),
     "候选窗表也过滤自家窗（否则「别的窗」里还是自己的）");
