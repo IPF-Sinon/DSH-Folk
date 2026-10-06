@@ -547,6 +547,10 @@ for (const f of SHARED) {
     must(hits >= 2, `build.yml 的 push 与 pull_request 都要包含 ${p}（现在命中 ${hits} 处）`);
   }
   must(/'app\/\*\*'/.test(onBlock), 'build.yml 的 paths 过滤不能把 app/** 丢掉');
+  // beta.yml 同理：它是**发测试版的那条链路**，而它自己不在 paths 里时，只改它的提交
+  // 谁都不验（同一类静默：门禁 check-changelog 会读它、却永远没机会跑）。
+  const betaHits = (onBlock.match(/'\.github\/workflows\/beta\.yml'/g) || []).length;
+  must(betaHits >= 2, `build.yml 的 push 与 pull_request 都要包含 beta.yml（现在命中 ${betaHits} 处）`);
 }
 
 // ── 15. 客户端解码 / 渲染 ──

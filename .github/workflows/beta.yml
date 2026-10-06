@@ -54,8 +54,13 @@ jobs:
       # 里的 -beta.N 才是区分先后的那一位，App 侧的 compareVersions 认它（正式版 > 预发布版）。
       - name: Derive version
         id: v
+        env:
+          # 自由文本输入必须过 env，**不能**直接写进 run:。直接写的话 GitHub 是在**跑脚本
+          # 之前**就把 `${{ … }}` 展开进脚本文本的 —— 一个 `1.9.9"; rm -rf …; echo "` 会在
+          # 下面那行 grep 校验之前就被 shell 当命令执行（校验拦不住已经跑掉的代码）。
+          TARGET_INPUT: ${{ inputs.target_version }}
         run: |
-          TARGET="${{ inputs.target_version }}"
+          TARGET="$TARGET_INPUT"
           # 允许四段式补丁版（1.9.2.2）。正式版的号已经从 10903 走到 109031/109032，
           # 三段的 beta（最高 10999）永远压不过它，装了正式版的用户会撞
           # INSTALL_FAILED_VERSION_DOWNGRADE —— 测试版通道等于失效。
@@ -251,14 +256,18 @@ jobs:
       - name: Publish prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 同 Derive version：说明是自由文本，直接写进 run: 会被 shell 当代码解析 ——
+          # 实测就是这么炸的：说明里的 `git+ssh://…` 被当成文件名、`dsh` 被当命令执行，
+          # 展开后的 body 还超过 GitHub 的 125000 字符上限，release 回 422。
+          BETA_NOTES: ${{ inputs.notes }}
         run: |
           TAG="${{ steps.v.outputs.tag }}"
           {
             printf 'Beta build from `%s` (run #%s).\n\n' "${GITHUB_SHA:0:7}" "$GITHUB_RUN_NUMBER"
             printf 'Signed with the release key, so it upgrades a release install in place.\n'
             printf 'Less tested than a release — report anything odd.\n'
-            if [ -n "${{ inputs.notes }}" ]; then
-              printf '\n%s\n' "${{ inputs.notes }}"
+            if [ -n "$BETA_NOTES" ]; then
+              printf '\n%s\n' "$BETA_NOTES"
             fi
           } > notes.md
           gh release create "$TAG" \

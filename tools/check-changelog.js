@@ -281,7 +281,92 @@ ok(/sha256sum/.test(betaYml),
     `tag 形如 ${sample}，能过 UpdateChecker 的 VERSION_TAG（滚动 tag 会被直接忽略）`);
 }
 
-// ── 7. README ──
+// ── 7. 工作流注入：自由文本输入只能走 env ──
+//
+// 这一条是**真炸过**的：`notes` 直接写进 run: 之后，GitHub 在跑脚本之前就把它展开进脚本
+// 文本，于是说明里的反引号被当命令替换执行（日志里能看到 "git+ssh://…: No such file or
+// directory" 与 "dsh: command not found"），展开后的 body 还超过 GitHub 的 125000 字符
+// 上限，`gh release create` 回 422 —— 包已经构建、签名、验完，却发不出去。
+//
+// 规则：`workflow_dispatch` 里 type 缺省（GitHub 默认就是 string）或 `type: string` 的输入
+// 是**自由文本**，只允许出现在 env: 映射里，绝不允许出现在 run: 正文里。
+function workflowInputs(src) {
+  const lines = src.split("\n");
+  const at = lines.findIndex((l) => /^\s*workflow_dispatch:\s*$/.test(l));
+  if (at < 0) return [];
+  const inAt = lines.findIndex((l, i) => i > at && /^\s*inputs:\s*$/.test(l));
+  if (inAt < 0) return [];
+  const base = lines[inAt].match(/^(\s*)/)[1].length;
+  const out = [];
+  for (let i = inAt + 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (l.trim() === "") continue;
+    const ind = l.match(/^(\s*)/)[1].length;
+    if (ind <= base) break;
+    const m = l.match(/^\s*([A-Za-z_][\w-]*):\s*$/);
+    if (!m || ind !== base + 2) continue;
+    let block = "";
+    for (let j = i + 1; j < lines.length; j++) {
+      const l2 = lines[j];
+      if (l2.trim() === "") continue;
+      if (l2.match(/^(\s*)/)[1].length <= ind) break;
+      block += l2 + "\n";
+    }
+    const ty = block.match(/^\s*type:\s*(\w+)\s*$/m);
+    out.push({ name: m[1], type: ty ? ty[1] : "string" });
+  }
+  return out;
+}
+
+/** `run:` 块的正文行号（`run: |` 缩进之下、缩进回到同级之前的那些行）。 */
+function runBodyLines(src) {
+  const lines = src.split("\n");
+  const inBody = new Set();
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(\s*)run:\s*[|>]-?\s*$/);
+    if (!m) continue;
+    const indent = m[1].length;
+    for (let j = i + 1; j < lines.length; j++) {
+      const l = lines[j];
+      if (l.trim() === "") continue;
+      if (l.match(/^(\s*)/)[1].length <= indent) break;
+      inBody.add(j);
+    }
+  }
+  return inBody;
+}
+
+console.log("\n── 工作流注入（自由文本输入必须走 env） ──");
+{
+  const WF = [".github/workflows/beta.yml", ".github/workflows/runtime.yml", ".github/workflows/build.yml"];
+  /** 当前哪些输入是自由文本：写出来是为了「新增一个 string 输入」时逼人回来审这条规则。 */
+  const EXPECT = {
+    ".github/workflows/beta.yml": ["notes", "target_version"],
+    ".github/workflows/runtime.yml": ["dsh_version", "min_app_version", "node_version", "release_tag"],
+    ".github/workflows/build.yml": [],
+  };
+  for (const wf of WF) {
+    const raw = read(wf);
+    const free = workflowInputs(raw).filter((i) => i.type === "string").map((i) => i.name).sort();
+    ok(free.join(",") === EXPECT[wf].join(","),
+      `${wf} 的自由文本输入清单没变（${free.join(", ") || "无"}）—— 变了就得重看下面两条`);
+    const lines = raw.split("\n");
+    const inBody = runBodyLines(raw);
+    const inRun = [...inBody].map((i) => lines[i]).join("\n");
+    for (const n of EXPECT[wf]) {
+      ok(!new RegExp("\\$\\{\\{\\s*inputs\\." + n + "\\s*\\}\\}").test(inRun),
+        `${wf}: inputs.${n} 不出现在 run: 正文里（展开进脚本 = 允许注入命令）`);
+      // 交给 YAML 层（env:/with: 的映射值）就行：那里是原样传递，不过 shell。
+      // 不要求"值恰好是 ${{ inputs.x }}"——runtime.yml 的 release_tag 是带默认值的表达式。
+      const handed = lines.some((l, i) =>
+        !inBody.has(i) &&
+        new RegExp("^\\s*[A-Za-z_][\\w.-]*:.*\\$\\{\\{\\s*inputs\\." + n + "\\b").test(l));
+      ok(handed, `${wf}: inputs.${n} 通过 YAML 映射（env:/with:）传进去，而不是拼进脚本`);
+    }
+  }
+}
+
+// ── 8. README ──
 //
 // 这三条是最容易「文档说 A、代码做 B」的地方：测试版用哪个变体、artifact 为什么不能用、
 // 更新说明为什么是本地资源。读者按 README 去改代码时，错的文档比没有文档更贵。
