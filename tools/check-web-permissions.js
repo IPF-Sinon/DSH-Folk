@@ -61,8 +61,8 @@ console.log("\n── 授权回调必须落在 WebChromeClient 里 ──");
 
 console.log("\n── 已经授予：直接给（快路径） ──");
 {
-  ok(/private fun grantableMedia\(req: WebChromeClient\.PermissionRequest\): Array<String>/.test(webui),
-    "有 grantableMedia：算出「现在真正授权得了的资源」");
+  ok(/private fun grantableMedia\(req: PermissionRequest\): Array<String>/.test(webui),
+    "有 grantableMedia：算出「现在真正授权得了的资源」（类型是 android.webkit.PermissionRequest，不是 WebChromeClient 的嵌套类）");
   ok(/ContextCompat\.checkSelfPermission\(this, Manifest\.permission\.RECORD_AUDIO\)/.test(webui),
     "麦克风按 RECORD_AUDIO 的实际授权状态判定（不靠缓存标志）");
   ok(/RESOURCE_VIDEO_CAPTURE[\s\S]{0,120}Manifest\.permission\.CAMERA/.test(webui),

@@ -15,6 +15,7 @@ import android.util.Log
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebResourceError
@@ -262,23 +263,23 @@ class DshWebUiActivity : AppCompatActivity() {
     private lateinit var fileChooser: ActivityResultLauncher<Intent>
 
     /**
-     * 网页要麦克风、而系统还没授予时，Chromium 那一次 [WebChromeClient.PermissionRequest] 挂在这里。
+     * 网页要麦克风、而系统还没授予时，Chromium 那一次 [PermissionRequest] 挂在这里。
      *
      * 必须挂住：回调要等**系统授权框**的结果（见 `onCreate` 里注册的 `micPermission`），
      * Chromium 会一直等我们答 grant/deny。丢掉它就是默认拒绝 —— 页面里 `getUserMedia`
      * 恒定抛 `NotAllowedError`，而系统设置里明明是允许的（用户报的正是这个）。
      */
-    private var pendingAudioRequest: WebChromeClient.PermissionRequest? = null
+    private var pendingAudioRequest: PermissionRequest? = null
     private lateinit var micPermission: ActivityResultLauncher<String>
 
     /** 网页要的这批资源里，**现在**真正授权得了的那些（麦克风 / 摄像头）。 */
-    private fun grantableMedia(req: WebChromeClient.PermissionRequest): Array<String> =
+    private fun grantableMedia(req: PermissionRequest): Array<String> =
         req.resources.filter { res ->
             when (res) {
-                WebChromeClient.PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
+                PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
                     ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
                         PackageManager.PERMISSION_GRANTED
-                WebChromeClient.PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
+                PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
                     ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
                         PackageManager.PERMISSION_GRANTED
                 // DRM / MIDI 之类维持 WebView 的默认处理：我们不替用户点头
@@ -576,7 +577,7 @@ class DshWebUiActivity : AppCompatActivity() {
                                      * （Chromium 会一直等 grant/deny，见 [micPermission]）。
                                      */
                                     override fun onPermissionRequest(
-                                        request: WebChromeClient.PermissionRequest?,
+                                        request: PermissionRequest?,
                                     ) {
                                         val req = request ?: return
                                         val granted = grantableMedia(req)
@@ -590,7 +591,7 @@ class DshWebUiActivity : AppCompatActivity() {
                                             return
                                         }
                                         val wantsAudio = req.resources.contains(
-                                            WebChromeClient.PermissionRequest.RESOURCE_AUDIO_CAPTURE,
+                                            PermissionRequest.RESOURCE_AUDIO_CAPTURE,
                                         )
                                         if (wantsAudio) {
                                             // 上一个还没答就放掉，否则那个页面会被永久卡住
