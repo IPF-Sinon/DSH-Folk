@@ -856,6 +856,8 @@ object DshNativeBridge {
             method == "GET" && path == "/native/media/list" -> mediaList(ctx, params)
             method == "GET" && path == "/native/media/read" -> mediaRead(ctx, params)
             method == "POST" && path == "/native/mic/record" -> micRecord(ctx, params)
+            method == "POST" && path == "/native/mic/start" -> micStart(ctx, params)
+            method == "POST" && path == "/native/mic/stop" -> micStop(ctx, params)
             method == "POST" && path == "/native/camera/photo" -> DshCamera.photo(ctx, params)
             method == "POST" && path == "/native/tts/speak" -> DshTts.speak(ctx, params)
             method == "POST" && path == "/native/tts/file" -> DshTts.toFile(ctx, params)
@@ -1119,6 +1121,7 @@ object DshNativeBridge {
         path == "/native/toast" || path == "/native/vibrate" -> true
         path == "/native/share" || path == "/native/open" -> true
         path == "/native/mic/record" || path == "/native/camera/photo" -> true
+        path == "/native/mic/start" || path == "/native/mic/stop" -> true
         path.startsWith("/native/tts/") && path != "/native/tts/voices" -> true
         path == "/native/clipboard" && method == "POST" -> true
         path == "/native/calendar/create" -> true
@@ -1140,7 +1143,7 @@ object DshNativeBridge {
         "/native/share", "/native/open", "/native/dial" -> Cap.INTENT
         "/native/device" -> Cap.DEVICE
         "/native/media/list", "/native/media/read" -> Cap.MEDIA
-        "/native/mic/record" -> Cap.MIC
+        "/native/mic/record", "/native/mic/start", "/native/mic/stop" -> Cap.MIC
         "/native/camera/photo" -> Cap.CAMERA
         "/native/tts/speak", "/native/tts/file", "/native/tts/voices" -> Cap.TTS
         "/native/calendar/list", "/native/calendar/create" -> Cap.CALENDAR
@@ -1593,6 +1596,8 @@ object DshNativeBridge {
             "/native/media/list" -> "media list"
             "/native/media/read" -> "media get ${value("id")}"
             "/native/mic/record" -> "mic record"
+            "/native/mic/start" -> "mic start"
+            "/native/mic/stop" -> "mic stop"
             "/native/camera/photo" -> "camera photo"
             "/native/tts/speak" -> "tts say ${value("text", true)}"
             "/native/tts/file" -> "tts file ${value("text", true)}"
@@ -1644,6 +1649,8 @@ object DshNativeBridge {
             "/native/media/list" -> listOf(option("type"), option("q", true), option("limit"))
             "/native/media/read" -> listOf(option("type"))
             "/native/mic/record" -> listOf(option("ms"))
+            "/native/mic/stop" -> listOf(option("id"))
+            "/native/mic/start" -> listOf()
             "/native/camera/photo" -> listOf(option("facing"), option("max"))
             "/native/shell" -> listOf(option("timeout"))
             "/native/a11y/tree" -> listOf(option("depth"), option("max"))
@@ -2029,6 +2036,27 @@ object DshNativeBridge {
      */
     private val recording = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    /**
+     * 会话式录音（`mic/start` → `mic/stop`）的状态；同一时刻最多一个。
+     *
+     * 为什么要与 [recording] 分开存：那条标志只回答「有没有人在录」，而 stop 需要拿到
+     * **哪一个**录音器（以及它写到哪个文件），才能优雅地 `stop()` 把 MP4 的 moov 写下去。
+     */
+    private class MicSession(
+        val id: String,
+        val out: File,
+        var recorder: MediaRecorder?,
+        val startedAt: Long,
+    )
+
+    /** 当前会话；**读写都在 [micLock] 里**（HTTP 线程与看门狗线程并发）。 */
+    private var micSession: MicSession? = null
+
+    /** 上一次会话的结果（id → 响应体），留给「stop 来晚一步」的客户端；下一次 start 清掉。 */
+    private var micLast: Pair<String, JSONObject>? = null
+
+    private val micLock = Any()
+
     internal fun stageDir(ctx: Context): File =
         File(DshEnv.tmpDir(ctx), STAGE_DIR_NAME).apply { mkdirs() }
 
@@ -2254,21 +2282,37 @@ object DshNativeBridge {
 
     private fun doRecord(ctx: Context, params: Map<String, String>): Pair<Int, String> {
         val ms = (params["ms"]?.toLongOrNull() ?: DEFAULT_RECORD_MS).coerceIn(500L, MAX_RECORD_MS)
-        val dir = stageDir(ctx)
-        val out = File(dir, "rec_${System.currentTimeMillis()}.m4a")
+        val out = File(stageDir(ctx), "rec_${System.currentTimeMillis()}.m4a")
 
+        val started = startMic(ctx, out)
+        val recorder = started.recorder ?: return micFailed(ctx, started)
+
+        runCatching { Thread.sleep(ms) }
+        // 收尾（stop → 落盘 → 校验 → 后台则丢弃）与 /native/mic/stop 共用
+        return finishMic(ctx, recorder, out, ms, id = null)
+    }
+
+    /** 录音器启动结果：失败时带上阶段（建对象 / start）与原始异常。 */
+    private class MicStart(val recorder: MediaRecorder?, val code: String, val cause: Throwable?)
+
+    /**
+     * 建好并启动录音器；失败时清掉半成品文件。
+     *
+     * 两个阶段的文案不同（`recorder_failed` 带上原始 message、`record_failed` 不带），
+     * 所以失败要分阶段返回 —— 合成一句「就是不行」会让「构造器就炸了」与「麦克风被别的
+     * 应用占着、start() 抛」看起来一模一样。
+     */
+    private fun startMic(ctx: Context, out: File): MicStart {
         @Suppress("DEPRECATION")
         val recorder = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(ctx)
             else MediaRecorder()
         }.getOrElse { e ->
-            return 500 to err(
-                str(ctx, R.string.dsh_native_err_mic_init, e.message ?: ""),
-                "recorder_failed",
-            )
+            Log.w(TAG, "录音器创建失败: ${e.message}")
+            return MicStart(null, "recorder_failed", e)
         }
 
-        val started = runCatching {
+        val okStart = runCatching {
             recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -2284,17 +2328,39 @@ object DshNativeBridge {
             out.delete()
             false
         }
-        if (!started) {
-            return 500 to err(str(ctx, R.string.dsh_native_err_mic_start), "record_failed")
+        return if (okStart) MicStart(recorder, "", null) else MicStart(null, "record_failed", null)
+    }
+
+    /** 录音启动失败 → 状态码 + JSON（`mic/record` 与 `mic/start` 共用同一组文案）。 */
+    private fun micFailed(ctx: Context, started: MicStart): Pair<Int, String> =
+        if (started.code == "recorder_failed") {
+            500 to err(
+                str(ctx, R.string.dsh_native_err_mic_init, started.cause?.message ?: ""),
+                started.code,
+            )
+        } else {
+            500 to err(str(ctx, R.string.dsh_native_err_mic_start), "record_failed")
         }
 
-        runCatching { Thread.sleep(ms) }
+    /**
+     * 录音的收尾：stop → 落盘 → 校验 →（中途切到后台则丢弃）。
+     *
+     * `mic/record` 与 `mic/stop` 走**同一条**尾巴，只有 [ms] 的来源不同：前者按请求的
+     * 时长、后者按 start 到现在的实测值。
+     */
+    private fun finishMic(
+        ctx: Context,
+        recorder: MediaRecorder?,
+        out: File,
+        ms: Long,
+        id: String?,
+    ): Pair<Int, String> {
         // stop() 在「一帧都没录到」时会抛，此时产物是个坏文件，必须删掉再报错
-        val stopped = runCatching { recorder.stop(); true }.getOrElse { e ->
+        val stopped = runCatching { recorder?.stop(); true }.getOrElse { e ->
             Log.w(TAG, "录音停止失败: ${e.message}")
             false
         }
-        runCatching { recorder.release() }
+        runCatching { recorder?.release() }
         if (!stopped || !out.isFile || out.length() == 0L) {
             out.delete()
             return 500 to err(str(ctx, R.string.dsh_native_err_mic_empty), "record_empty")
@@ -2304,13 +2370,107 @@ object DshNativeBridge {
             out.delete()
             return backgroundMicDenied(ctx)
         }
-        trimStage(dir)
-        return 200 to JSONObject()
+        trimStage(stageDir(ctx))
+        val body = JSONObject()
             .put("ok", true)
             .put("path", stageGuestPath(out.name))
             .put("bytes", out.length())
             .put("ms", ms)
+        if (id != null) body.put("id", id)
+        return 200 to body.toString()
+    }
+
+    /** 会话 id：够随机（两个并发客户端不会撞），也够短（要打进日志与命令行）。 */
+    private fun nextMicId(): String =
+        java.util.UUID.randomUUID().toString().replace("-", "").take(12)
+
+    /**
+     * 会话式录音的第一半：开始录、**立刻**返回会话 id。
+     *
+     * 与 [micRecord] 的区别是「时长谁定」：`mic/record` 按请求的 ms 录满再答，请求要
+     * 占着一条连接直到录完；这里由调用方在需要的时候 `mic/stop`。按键说话这类交互既要
+     * **零切断**（不必按时长切段，段间就没有那截静默），也要**即时停止**（stop 立刻收尾，
+     * `MediaRecorder.stop()` 会把 MP4 的 moov 写下去 —— 这正是「提前终止会得到坏文件」
+     * 的反面）。
+     *
+     * 看门狗：[MAX_RECORD_MS] 到了会自己 stop 并把文件留在暂存区，所以客户端崩了也不会
+     * 把录音器一直开着（结果留给来晚一步的 [micStop]）。
+     */
+    private fun micStart(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        if (!isForeground(ctx)) return backgroundMicDenied(ctx)
+        if (!recording.compareAndSet(false, true)) {
+            return 409 to err(str(ctx, R.string.dsh_native_err_mic_busy), "already_recording")
+        }
+        val out = File(stageDir(ctx), "rec_${System.currentTimeMillis()}.m4a")
+        val started = startMic(ctx, out)
+        val recorder = started.recorder
+        if (recorder == null) {
+            recording.set(false)
+            return micFailed(ctx, started)
+        }
+        val session = MicSession(nextMicId(), out, recorder, System.currentTimeMillis())
+        synchronized(micLock) {
+            micSession = session
+            micLast = null
+        }
+        val watchdog = Thread {
+            runCatching { Thread.sleep(MAX_RECORD_MS) }
+            synchronized(micLock) {
+                val current = micSession
+                if (current != null && current.id == session.id) {
+                    Log.i(TAG, "录音会话超时，自动停止: ${session.id}")
+                    stopMicSessionLocked(ctx, current)
+                }
+            }
+        }
+        watchdog.isDaemon = true
+        watchdog.name = "dsh-mic-watchdog"
+        watchdog.start()
+        return 200 to JSONObject()
+            .put("ok", true)
+            .put("id", session.id)
+            .put("path", stageGuestPath(out.name))
+            .put("maxMs", MAX_RECORD_MS)
             .toString()
+    }
+
+    /**
+     * 会话式录音的第二半：优雅停止并交出文件。
+     *
+     * 来晚一步（看门狗已按 [MAX_RECORD_MS] 收尾）时把**那一次的结果**再给一遍，而不是
+     * 报错：录到的东西不该因为客户端慢了一拍就丢掉。结果只保留到下一次 start。
+     */
+    private fun micStop(ctx: Context, params: Map<String, String>): Pair<Int, String> {
+        val id = text(params["id"])
+            ?: return 400 to err(str(ctx, R.string.dsh_native_err_missing_param, "id"), "missing_id")
+        synchronized(micLock) {
+            val session = micSession
+            if (session != null) {
+                return if (session.id == id) stopMicSessionLocked(ctx, session)
+                else 409 to err(str(ctx, R.string.dsh_native_err_mic_no_session), "bad_session")
+            }
+            val late = micLast?.takeIf { it.first == id }
+            return if (late != null) 200 to late.second.toString()
+            else 409 to err(str(ctx, R.string.dsh_native_err_mic_no_session), "no_session")
+        }
+    }
+
+    /** 停一次会话并落盘。调用方必须持有 [micLock]（HTTP 线程与看门狗都会进来）。 */
+    private fun stopMicSessionLocked(ctx: Context, session: MicSession): Pair<Int, String> {
+        micSession = null
+        recording.set(false)
+        val result = finishMic(
+            ctx,
+            session.recorder,
+            session.out,
+            System.currentTimeMillis() - session.startedAt,
+            session.id,
+        )
+        session.recorder = null
+        if (result.first == 200) {
+            runCatching { micLast = session.id to JSONObject(result.second) }
+        }
+        return result
     }
 
     private fun backgroundMicDenied(ctx: Context): Pair<Int, String> =

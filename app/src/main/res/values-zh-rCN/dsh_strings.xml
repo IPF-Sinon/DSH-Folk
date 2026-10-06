@@ -851,6 +851,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_err_mic_empty">录音没有拿到任何音频</string>
     <string name="dsh_native_err_mic_busy">已经有一次录音在进行中</string>
     <string name="dsh_native_err_mic_background">录音需要应用处于前台；后台录音 Android 只会给静音，不会报错</string>
+    <string name="dsh_native_err_mic_no_session">没有正在进行的录音会话（已经 stop 过，或已超时结束）</string>
 
 
     <!-- ── 能力分组标题 ──
@@ -1469,11 +1470,12 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_userscripts_builtin_hint">与你导入的脚本走同一条注入管道 —— 这就是应用自己往页面里注入的那几段，现在一处看得全。</string>
     <string name="dsh_userscripts_builtin_always_on">常开</string>
     <string name="dsh_userscripts_builtin_compat">旧内核 JS 兼容垫片</string>
-    <string name="dsh_userscripts_builtin_compat_summary">在旧内核上补齐 dsh 网页要用的 JS API（Iterator、Promise.try 等）。默认按内核版本自动判断；关掉后旧内核上网页会整页报 Failed to load plugins、连设置都进不去。与「设置 → 旧 WebView 兼容」是同一个开关。</string>
+    <string name="dsh_userscripts_builtin_compat_summary">在旧内核上补齐 dsh 网页要用的 JS API（Iterator、Promise.try 等）。选「自动」按内核版本判断，也可以强制开 / 关。关掉后旧内核上网页会整页报 Failed to load plugins、连设置都进不去。</string>
+    <string name="dsh_userscripts_builtin_kernel">应用内 WebView 内核：%1$s</string>
     <string name="dsh_userscripts_builtin_inset">系统栏内边距</string>
     <string name="dsh_userscripts_builtin_inset_summary">让网页背景铺到状态栏与手势条后面，交互内容自己避让。没有开关：不注入的话底部输入框会被手势条压住。数值随转屏与键盘变化。</string>
     <string name="dsh_userscripts_builtin_composer">手机回车换行</string>
-    <string name="dsh_userscripts_builtin_composer_summary">触屏上把输入框里的裸回车从「发送」改成「换行」，发送用发送按钮。与功能设置里那一项是同一个开关。</string>
+    <string name="dsh_userscripts_builtin_composer_summary">触屏上把输入框里的裸回车从「发送」改成「换行」，发送用发送按钮。上游把 Enter/Shift+Enter 注册成只读快捷键，而手机键盘没有 Shift —— 不补这一下就写不出多行消息。刷新页面后生效。</string>
     <string name="dsh_userscripts_builtin_a11y">网页输入框的无障碍名字</string>
     <string name="dsh_userscripts_builtin_a11y_summary">把页面上本来就显示的 placeholder 抄成 aria-label，让无障碍树（以及 agent 的 a11y text --target）能寻址网页输入框。常开。</string>
     <string name="dsh_userscripts_builtin_blob">blob:/data: 下载落地</string>
@@ -1486,4 +1488,19 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_userscripts_delete_confirm">删除</string>
     <string name="dsh_userscripts_entry">用户脚本</string>
     <string name="dsh_userscripts_entry_summary">用一段自己的 JS 改本应用自己的网页 —— 一个 .user.js，不用打包、不用发版。</string>
+    <string name="dsh_userscripts_market_section">脚本市场（GreasyFork）</string>
+    <string name="dsh_userscripts_market_hint">在 greasyfork.org 上搜索，点一下装进上面那份列表 —— 之后和别的脚本一样开关、删除。脚本来自互联网，装之前先看作者与说明。</string>
+    <string name="dsh_userscripts_market_query_hint">搜脚本（翻译、markdown……）</string>
+    <string name="dsh_userscripts_market_search">搜索</string>
+    <string name="dsh_userscripts_market_more">更多结果</string>
+    <string name="dsh_userscripts_market_empty">没有结果</string>
+    <string name="dsh_userscripts_market_by">作者 %1$s</string>
+    <string name="dsh_userscripts_market_installs">%1$s 次安装</string>
+    <string name="dsh_userscripts_market_install">安装</string>
+    <string name="dsh_userscripts_market_installed">已安装</string>
+    <string name="dsh_userscripts_market_page">在浏览器里打开脚本页</string>
+    <string name="dsh_userscripts_market_fail_network">连不上 greasyfork.org（检查网络）</string>
+    <string name="dsh_userscripts_market_fail_server">greasyfork.org 返回了错误（HTTP %1$d）</string>
+    <string name="dsh_userscripts_market_fail_content">拿到的不是 UserScript（可能被网络中间层改过）</string>
+    <string name="dsh_userscripts_market_fail_size">这个脚本超过 2MB</string>
 </resources>

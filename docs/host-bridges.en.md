@@ -73,6 +73,7 @@ dsh-native tts say <text> [--lang zh-CN] [--rate 0.1..3] [--pitch 0.5..2]
 dsh-native tts file <text> [--lang L]    # synthesizes a wav file under /tmp
 dsh-native tts voices                    # languages this device can speak
 dsh-native mic record [--ms N]
+dsh-native mic start | mic stop --id ID   # start returns an id at once; stop flushes the mp4 index
 dsh-native location [--maxAge ms] [--wait ms]
 dsh-native calendar list [--days N] | calendar add <title> --start <epochMs> [--minutes N]
 dsh-native contacts list [--q name-or-number] [--limit N]
@@ -357,6 +358,13 @@ Several tradeoffs only become apparent on real devices:
   5 frames while auto-exposure converges — a single `STILL_CAPTURE` produces a black image on most devices.
 - **Audio recording and photography** strictly require the foreground: Android background recording produces only **silence**, and opening the camera in the background produces only **black frames**, with neither reporting an error.
   Rather than deliver useless data, they return `409 not_foreground` directly.
+- **For push-to-talk use `mic start` + `mic stop`**, not a guessed `mic record` duration:
+  `start` returns an `id` at once (the speaker decides the length, so there is no cut between
+  segments and no silence in between), and when `stop --id` finishes, `MediaRecorder.stop()` writes
+  the MP4 index in full — stopping early still yields a good file. At `maxMs` (30000) a watchdog
+  finishes it and keeps the file in the staging area; if the client stops the same `id` a step late,
+  that result is returned again (valid until the next start). Someone else's `id` answers
+  `409 bad_session`, and a finished session with no result answers `409 no_session`.
 - **Location** first uses a cached fix (`fresh: false` in the response), waking GNSS only when it is stale — active indoor positioning can take tens of seconds
   and still fail. Starting with Android 12, users can grant only “approximate location”; the system then obscures coordinates to kilometer-level precision, and the response's `precise: false`
   states this explicitly. The UI also shows a separate notice instead of repeatedly requesting a permission that is already granted.

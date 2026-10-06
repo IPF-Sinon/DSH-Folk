@@ -28,6 +28,12 @@
          只在应用处于前台时可用 —— 我们的前台服务类型是 specialUse，它**不**授予
          后台录音；Android 9 起后台录音只会拿到静音，而不是报错。 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Chromium M117+ 的 WebView 里做 getUserMedia（对话页的语音输入）要求宿主同时声明
+         这一条：少了它，cr_media 会打 "Requires MODIFY_AUDIO_SETTINGS and RECORD_AUDIO.
+         No audio device will be available for recording"，页面那边拿不到可录音的音轨。
+         normal 级权限，安装即授予、不弹框。RECORD_AUDIO 是网页侧（WebView 的授权回调），
+         这条是音频会话侧，两者都要。 -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- 相机：/native/camera/photo 让宿主无预览地拍一张照。
          同样只在前台可用 —— Android 9 起后台进程访问相机拿不到画面。 -->
     <uses-permission android:name="android.permission.CAMERA" />

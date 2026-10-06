@@ -94,7 +94,6 @@ import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 import me.bmax.apatch.ui.component.ToggleSettingCard
 import me.bmax.apatch.util.DshDocsAccess
-import me.bmax.apatch.util.DshWebCompat
 import me.bmax.apatch.util.ui.showToast
 import me.bmax.apatch.ui.screen.settings.general.CleanStorageDialog
 
@@ -167,14 +166,6 @@ fun FunctionSettingsContent(
     /** WebUI 打开方式：in | browser | ask。 */
     webuiMode: String,
     onWebuiModeChange: (String) -> Unit,
-    /** 旧内核 JS 兼容垫片：auto | on | off。 */
-    webCompatMode: String,
-    onWebCompatModeChange: (String) -> Unit,
-    /** 当前 WebView 内核版本名（读不到时为空），只用于显示。 */
-    webviewVersion: String,
-    /** 手机回车换行：WebUI 输入框里裸回车 = 换行而不是发送（默认开，只对触屏生效）。 */
-    webEnterNewline: Boolean,
-    onWebEnterNewlineChange: (Boolean) -> Unit,
     /**
      * 权限已经齐了的能力集合。
      *
@@ -639,69 +630,6 @@ fun FunctionSettingsContent(
                         summary = stringResource(R.string.dsh_webui_mode_ask_desc),
                         onSelect = { onWebuiModeChange(DshWebUi.MODE_ASK) },
                     )
-                }
-            }
-        }
-
-        // ───────── 旧内核 JS 兼容垫片 ─────────
-        // 只对应用内 WebUI 生效。默认「自动」= 不注入，除非检测到旧内核并经用户同意。
-        item(key = "function_webui_compat", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.Extension, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_webui_compat_section),
-                        summary = stringResource(
-                            R.string.dsh_webui_compat_section_summary,
-                            webviewVersion.ifEmpty { "?" },
-                        ),
-                    )
-                    Spacer(Modifier.height(12.dp))
-
-                    RuntimeOption(
-                        selected = webCompatMode == DshWebCompat.MODE_AUTO,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_webui_compat_auto),
-                        summary = stringResource(R.string.dsh_webui_compat_auto_desc),
-                        onSelect = { onWebCompatModeChange(DshWebCompat.MODE_AUTO) },
-                    )
-                    RuntimeOption(
-                        selected = webCompatMode == DshWebCompat.MODE_ON,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_webui_compat_on),
-                        summary = stringResource(R.string.dsh_webui_compat_on_desc),
-                        onSelect = { onWebCompatModeChange(DshWebCompat.MODE_ON) },
-                    )
-                    RuntimeOption(
-                        selected = webCompatMode == DshWebCompat.MODE_OFF,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_webui_compat_off),
-                        summary = stringResource(R.string.dsh_webui_compat_off_desc),
-                        onSelect = { onWebCompatModeChange(DshWebCompat.MODE_OFF) },
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-                    // 输入行为，不是兼容性：所以与上面三选一分开，且默认开。
-                    // 上游把 Enter/Shift+Enter 注册成只读快捷键（发送/换行），
-                    // 而手机软键盘没有 Shift —— 不补这一下就写不出多行消息。
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.dsh_web_enter_newline_title),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = stringResource(R.string.dsh_web_enter_newline_summary),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        ExpressiveSwitch(
-                            checked = webEnterNewline,
-                            onCheckedChange = onWebEnterNewlineChange,
-                        )
-                    }
                 }
             }
         }

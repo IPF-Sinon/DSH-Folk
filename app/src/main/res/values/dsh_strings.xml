@@ -871,6 +871,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_native_err_mic_empty">Recording produced no audio</string>
     <string name="dsh_native_err_mic_busy">Another recording is already in progress</string>
     <string name="dsh_native_err_mic_background">Recording needs the app in the foreground — in the background Android returns silence, not an error</string>
+    <string name="dsh_native_err_mic_no_session">No recording session in progress (already stopped, or it timed out)</string>
 
 
     <!-- ── 能力分组标题 ── -->
@@ -1495,11 +1496,12 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_builtin_hint">These run through the same injection pipeline as the scripts you add — they are the app own injections, now visible in one place.</string>
     <string name="dsh_userscripts_builtin_always_on">Always on</string>
     <string name="dsh_userscripts_builtin_compat">JavaScript compatibility shim (old WebView)</string>
-    <string name="dsh_userscripts_builtin_compat_summary">Adds the JS APIs the dsh web UI needs on old kernels (Iterator, Promise.try and friends). Default: decide by kernel version. Turned off, an old WebView shows Failed to load plugins and never opens. Same switch as Settings → Old-WebView compatibility.</string>
+    <string name="dsh_userscripts_builtin_compat_summary">Adds the JS APIs the dsh web UI needs on old kernels (Iterator, Promise.try and friends). Pick Automatic to decide by kernel version, or force it on/off. Turned off, an old WebView shows Failed to load plugins and never opens.</string>
+    <string name="dsh_userscripts_builtin_kernel">In-app WebView kernel: %1$s</string>
     <string name="dsh_userscripts_builtin_inset">System bar insets</string>
     <string name="dsh_userscripts_builtin_inset_summary">Lets the page background reach behind the status bar and the gesture bar while the content keeps clear of them. No switch: without it the bottom input box sits under the gesture bar. Values follow rotation and the keyboard.</string>
     <string name="dsh_userscripts_builtin_composer">Enter inserts a newline</string>
-    <string name="dsh_userscripts_builtin_composer_summary">On touch screens, a bare Enter in the chat box starts a new line instead of sending — send with the send button. Same switch as the one in Function settings.</string>
+    <string name="dsh_userscripts_builtin_composer_summary">On touch screens, a bare Enter in the chat box starts a new line instead of sending — send with the send button. Upstream binds Enter/Shift+Enter as read-only shortcuts and phone keyboards have no Shift, so without this you cannot write a multi-line message. Takes effect after a refresh.</string>
     <string name="dsh_userscripts_builtin_a11y">Accessible names for web inputs</string>
     <string name="dsh_userscripts_builtin_a11y_summary">Copies the placeholder a page already shows into aria-label, so the accessibility tree (and the agent a11y text --target) can address web input boxes. Always on.</string>
     <string name="dsh_userscripts_builtin_blob">blob:/data: downloads</string>
@@ -1512,4 +1514,19 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_delete_confirm">Delete</string>
     <string name="dsh_userscripts_entry">Userscripts</string>
     <string name="dsh_userscripts_entry_summary">Run your own JS against this app own web UI — a .user.js, no build, no release.</string>
+    <string name="dsh_userscripts_market_section">Script marketplace (GreasyFork)</string>
+    <string name="dsh_userscripts_market_hint">Search greasyfork.org and install with one tap; installed scripts land in the list above, where they can be toggled or deleted like any other. Scripts come from the internet — read the author and the description before trusting one.</string>
+    <string name="dsh_userscripts_market_query_hint">Search scripts (translate, markdown, …)</string>
+    <string name="dsh_userscripts_market_search">Search</string>
+    <string name="dsh_userscripts_market_more">More results</string>
+    <string name="dsh_userscripts_market_empty">No results</string>
+    <string name="dsh_userscripts_market_by">by %1$s</string>
+    <string name="dsh_userscripts_market_installs">%1$s installs</string>
+    <string name="dsh_userscripts_market_install">Install</string>
+    <string name="dsh_userscripts_market_installed">Installed</string>
+    <string name="dsh_userscripts_market_page">Open the script page in a browser</string>
+    <string name="dsh_userscripts_market_fail_network">Could not reach greasyfork.org (check the network)</string>
+    <string name="dsh_userscripts_market_fail_server">greasyfork.org returned an error (HTTP %1$d)</string>
+    <string name="dsh_userscripts_market_fail_content">What came back is not a UserScript (a proxy may have rewritten it)</string>
+    <string name="dsh_userscripts_market_fail_size">That script is larger than 2MB</string>
 </resources>

@@ -45,6 +45,7 @@ import com.ramcosta.composedestinations.generated.destinations.ModuleSettingsScr
 import com.ramcosta.composedestinations.generated.destinations.MultimediaSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ThemeStoreScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.UserscriptsScreenDestination
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.SearchAppBar
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
@@ -137,6 +138,8 @@ fun SettingsSearchScreen(navigator: DestinationsNavigator) {
                                 // 不在分类页上的设置项：直接开它真正所在的页面
                                 SettingsTarget.THEME_STORE ->
                                     navigator.navigate(ThemeStoreScreenDestination)
+                                SettingsTarget.USERSCRIPTS ->
+                                    navigator.navigate(UserscriptsScreenDestination)
                                 null -> when (category) {
                                     SettingCategory.GENERAL -> navigator.navigate(GeneralSettingsScreenDestination(highlightKey))
                                     SettingCategory.APPEARANCE -> navigator.navigate(AppearanceSettingsScreenDestination(highlightKey))

@@ -130,6 +130,8 @@ const EXPECT = [
   [["media", "list", "--type", "audio", "--limit", "5"], "GET", "/native/media/list", { type: "audio", limit: "5" }],
   [["media", "get", "42", "--type", "video"], "GET", "/native/media/read", { type: "video", id: "42" }],
   [["mic", "record", "--ms", "3000"], "POST", "/native/mic/record", { ms: "3000" }],
+  [["mic", "start"], "POST", "/native/mic/start", {}],
+  [["mic", "stop", "--id", "abc123"], "POST", "/native/mic/stop", { id: "abc123" }],
   [["caps"], "GET", "/native/capabilities", {}],
   // a11y 与 display：权限最大、也最容易漏套 q() 的两组，之前一条用例都没有
   // （`display status` / `display stop` 就是这么漏掉的）。

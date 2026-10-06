@@ -75,6 +75,7 @@ dsh-native tts say <文本> [--lang zh-CN] [--rate 0.1..3] [--pitch 0.5..2]
 dsh-native tts file <文本> [--lang L]    # 合成成 wav 落在 /tmp
 dsh-native tts voices                    # 这台设备能读哪些语言
 dsh-native mic record [--ms N]
+dsh-native mic start | mic stop --id ID   # start 立刻返回 id；stop 优雅收尾（把 mp4 的索引写全）
 dsh-native location [--maxAge ms] [--wait ms]
 dsh-native calendar list [--days N] | calendar add <标题> --start <epochMs> [--minutes N]
 dsh-native contacts list [--q 名字或号码] [--limit N]
@@ -343,6 +344,11 @@ agent 因此不需要「先申请、再调一次」，也不会出现「申请�
   5 帧等自动曝光收敛 —— 单发一张 `STILL_CAPTURE` 在多数机型上就是一张黑图。
 - **录音与拍照**固定要求前台：Android 后台录音只给**静音**、后台开相机只给**黑帧**，两者都不报错。
   与其交一份废数据，不如直接 `409 not_foreground`。
+- **按键说话用 `mic start` + `mic stop`**，不要用 `mic record` 猜时长：`start` 立刻回一个 `id`
+  （时长由说话的人定，不必按时长切段 —— 段间就没有那截静音），`stop --id` 收尾时
+  `MediaRecorder.stop()` 会把 MP4 的索引写全，所以提前停也是好文件。到 `maxMs`（30000）会有
+  看门狗自动收尾、文件留在暂存区；客户端慢一拍才 `stop` 同一个 `id` 时，那次结果会再给一遍
+  （下一次 start 之前有效）。别人的 `id` 回 `409 bad_session`，早已结束又没结果回 `409 no_session`。
 - **位置**先用缓存点位（响应里 `fresh: false`），只有过期了才唤醒 GNSS —— 室内主动定位可能几十秒
   无果。Android 12 起用户可以只给「大致位置」，那时坐标被系统模糊到公里级，响应里 `precise: false`
   说明这一点，界面上也单独一行提示，而不是当成缺权限反复索要。

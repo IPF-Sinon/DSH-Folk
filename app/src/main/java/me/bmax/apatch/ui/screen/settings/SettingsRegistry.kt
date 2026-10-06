@@ -27,6 +27,8 @@ enum class SettingCategory(
  */
 enum class SettingsTarget {
     THEME_STORE,
+    /** 用户脚本页：不在分类页上，搜索结果要直接开它。 */
+    USERSCRIPTS,
 }
 
 data class SettingEntry(
@@ -144,7 +146,15 @@ object SettingsRegistry {
             add(SettingEntry("function_lan", R.string.dsh_lan_title, R.string.dsh_lan_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_gh_mirror", R.string.dsh_race_title, R.string.dsh_race_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_webui_mode", R.string.dsh_webui_mode, R.string.dsh_webui_mode_summary, SettingCategory.FUNCTION))
-            add(SettingEntry("function_webui_compat", R.string.dsh_webui_compat_section, category = SettingCategory.FUNCTION))
+            add(
+                SettingEntry(
+                    "module_userscripts",
+                    R.string.dsh_userscripts_entry,
+                    R.string.dsh_userscripts_entry_summary,
+                    SettingCategory.MODULE,
+                    directTarget = SettingsTarget.USERSCRIPTS,
+                ),
+            )
             add(SettingEntry("function_runtime", R.string.dsh_runtime_section, R.string.dsh_runtime_management_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_repair_plugins", R.string.dsh_plugin_repair, R.string.dsh_plugin_repair_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_verify_install", R.string.dsh_verify_after_install, R.string.dsh_verify_after_install_summary, SettingCategory.FUNCTION))

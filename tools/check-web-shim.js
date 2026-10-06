@@ -31,6 +31,8 @@ const SRC_ENV = "app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt";
 const SRC_FUNCTION_SETTINGS = "app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt";
 const SRC_FUNCTION_SETTINGS_SCREEN =
   "app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt";
+const SRC_USERSCRIPTS =
+  "app/src/main/java/me/bmax/apatch/ui/screen/settings/UserscriptsScreen.kt";
 
 let n = 0;
 let bad = 0;
@@ -551,10 +553,23 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
 
   const fnSettings = fs.readFileSync(SRC_FUNCTION_SETTINGS, "utf8");
   const fnScreen = fs.readFileSync(SRC_FUNCTION_SETTINGS_SCREEN, "utf8");
-  ok(/R\.string\.dsh_web_enter_newline_title/.test(fnSettings) &&
-    /onWebEnterNewlineChange/.test(fnSettings),
-    "设置里有一个能拨的开关（标题 + 回调）");
-  ok(/DshWebCompat\.setEnterNewline\(/.test(fnScreen), "拨开关会落盘");
+  const userscripts = fs.readFileSync(SRC_USERSCRIPTS, "utf8");
+  // 2026-10 起：两项都收进「用户脚本」页（功能设置里那两行删掉）。所以这里钉两件事 ——
+  // ①用户脚本页真的给得出这两个开关（含 compat 的三档，auto 必须仍然可选）；
+  // ②功能设置页**别再**出现它们（不然就是"说删没删"）。
+  ok(/DshWebCompat\.enterNewline\(context\)/.test(userscripts) &&
+    /DshWebCompat\.setEnterNewline\(context, on\)/.test(userscripts),
+    "回车换行的开关在用户脚本页，且拨了就落盘");
+  ok(/DshWebCompat\.MODE_AUTO/.test(userscripts) &&
+    /DshWebCompat\.MODE_ON/.test(userscripts) &&
+    /DshWebCompat\.MODE_OFF/.test(userscripts) &&
+    /DshWebCompat\.setMode\(context, m\)/.test(userscripts),
+    "兼容垫片的三档（含 auto）都在用户脚本页，选了就落盘");
+  ok(/DshWebCompat\.kernel\(context\)\.display/.test(userscripts),
+    "「自动」档旁边给出当前内核版本（否则「自动」等于没说）");
+  ok(!/dsh_web_enter_newline_title|onWebEnterNewlineChange|webCompatMode/.test(fnSettings) &&
+    !/dsh_web_enter_newline_title|onWebEnterNewlineChange|webCompatMode/.test(fnScreen),
+    "功能设置页已经不再有那两行（标题/回调都收干净了）");
 }
 
 // ── 无障碍名字：在假 DOM 里真跑一遍 ──

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +56,7 @@ import com.ramcosta.composedestinations.generated.destinations.PermissionHubScre
 import com.ramcosta.composedestinations.generated.destinations.FileAccessScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.UserscriptsScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -75,7 +77,6 @@ import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.screen.PluginProgressHost
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
-import me.bmax.apatch.util.DshWebCompat
 import me.bmax.apatch.util.PermissionUtils
 import me.bmax.apatch.util.ui.LocalSnackbarHost
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
@@ -142,11 +143,8 @@ internal fun DshSettingsScreen(
     var webuiMode by rememberSaveable {
         mutableStateOf(dshPrefs.getString(DshEnv.KEY_WEBUI_MODE, DshWebUi.MODE_IN_APP) ?: DshWebUi.MODE_IN_APP)
     }
-    var webCompatMode by rememberSaveable { mutableStateOf(DshWebCompat.mode(context)) }
     // 手机回车换行（默认开）：它管的是 WebUI 输入框里回车是换行还是发送
-    var webEnterNewline by rememberSaveable { mutableStateOf(DshWebCompat.enterNewline(context)) }
     // WebView 内核版本只用于显示；读包信息不会触发 WebView 加载，但也没必要每次重组都读
-    val webviewVersion = remember { DshWebCompat.kernel(context).display }
     // 自启动：方式 + 是否同时拉容器。Mode 不是 Parcelable，用 remember 就够
     // （返回本页会重读 prefs，那才是权威值）。
     var autostartMode by remember { mutableStateOf(DshAutostart.mode(context)) }
@@ -336,6 +334,15 @@ internal fun DshSettingsScreen(
                     if (permissionOnly) {
                         IconButton(onClick = { navigator.navigate(PermissionLogScreenDestination) }) {
                             Icon(Icons.Outlined.ReceiptLong, contentDescription = stringResource(R.string.dsh_permission_log_title))
+                        }
+                    } else {
+                        // 用户脚本的入口放在功能页右上角：它管的是「功能设置」这一族，
+                        // 但本身是一整页（内置 + 我装的 + 市场），不该再占一张卡片。
+                        IconButton(onClick = { navigator.navigate(UserscriptsScreenDestination) }) {
+                            Icon(
+                                Icons.Outlined.Extension,
+                                contentDescription = stringResource(R.string.dsh_userscripts_entry),
+                            )
                         }
                     }
                 },
@@ -535,19 +542,6 @@ internal fun DshSettingsScreen(
                     onWebuiModeChange = { mode ->
                         webuiMode = mode
                         DshWebUi.setMode(context.applicationContext, mode)
-                    },
-                    webCompatMode = webCompatMode,
-                    onWebCompatModeChange = { mode ->
-                        webCompatMode = mode
-                        DshWebCompat.setMode(context.applicationContext, mode)
-                    },
-                    webviewVersion = webviewVersion,
-                    webEnterNewline = webEnterNewline,
-                    onWebEnterNewlineChange = { on ->
-                        webEnterNewline = on
-                        // 落盘即生效于**下次加载**：注入发生在页面创建时（document-start），
-                        // 已打开的页面要刷新一次才切过来，这一点在副标题里写明了
-                        DshWebCompat.setEnterNewline(context.applicationContext, on)
                     },
                     capsWithPermission = capsWithPermission,
                     allFilesGranted = allFilesGranted,

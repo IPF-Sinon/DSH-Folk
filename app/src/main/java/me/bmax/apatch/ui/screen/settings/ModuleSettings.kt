@@ -44,7 +44,6 @@ import me.bmax.apatch.ui.component.ToggleSettingCard
 fun ModuleSettingsContent(
     flat: Boolean = false,
     highlightKey: String? = null,
-    onOpenUserscripts: () -> Unit = {},
 ) {
     val prefs = APApplication.sharedPreferences
 
@@ -59,30 +58,6 @@ fun ModuleSettingsContent(
     }
 
     SplicedColumnGroup(flat = flat, highlightKey = highlightKey) {
-        // 用户脚本：不打包的扩展方式（与"插件带 client bundle"并列的那一档）。
-        // 放在插件页，因为要回答的正是"这个应用能怎么扩展"。
-        item(key = "module_userscripts") {
-            ExpressiveCard(flat = flat, onClick = onOpenUserscripts) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Code, null, Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = stringResource(R.string.dsh_userscripts_entry),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = stringResource(R.string.dsh_userscripts_entry_summary),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
-        }
         item(key = "module_disable_update") {
             ToggleSettingCard(
                 icon = Icons.Filled.Update,

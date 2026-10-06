@@ -42,7 +42,9 @@
   （第一帧就要就位）。
 - **开关**：`compat` → `webui_compat_shim`（auto/on/off，auto 按内核）、`composer` →
   `web_enter_newline`；其余三条常开（内边距是布局前提，无障碍名字与 blob 下载是补页面缺陷）。
-  管理页那两行与设置页写同一个 pref：一处状态、两个入口。
+  这三档**只在用户脚本页**（2026-10 起功能设置里那两行收了进来：它们本来就是这两条内置的档位，
+  和旁边几条摆在一起才看得出"页面被注入了什么"），auto 档旁边显示当前内核版本；功能设置页右上角
+  只留一个入口图标。
 - **总开关只管导入的脚本**。内置刻意不看 `dsh_userscripts_on`：一个坏脚本把页面弄白时，内边距、
   无障碍名字与兼容垫片还得在 —— 那正是「管理页能把界面救回来」的前提。
 - **参数通道只有一条**：内边距需要四个 CSS 像素值且随转屏/键盘变化，正文里留了
@@ -57,6 +59,57 @@
 一个回落」，并检查注册表与 assets 一一对应。`tools/check-userscripts.js` 钉注册表的顺序、时机、
 开关映射、总开关范围、参数通道与管理页遍历。每条断言都反向验证过（删文件、调顺序、把内置挂到总
 开关下、写错替换目标……都能验红）。
+
+## WebView 侧的麦克风授权（网页语音输入）
+
+对话页的语音输入是**页面里**的 `getUserMedia`，与容器里的 `mic record` / `mic start` 是两条
+独立的路：前者走 WebView 的 `WebChromeClient`，后者走 `/native/mic/*`。它们可以**同时**都
+"没问题"却仍然用不了，这正是那次报错的样子 —— 系统设置里 RECORD_AUDIO 是开的、页面 JS 也对，
+提示却是"麦克风权限未开启"：
+
+- AOSP 的 `WebChromeClient.onPermissionRequest` 默认实现是 `request.deny()`。宿主不重写，
+  Chromium 就永远收到"拒绝"，`getUserMedia` 恒抛 `NotAllowedError` —— 上游客户端正好在这个
+  错误上显示那句提示。`DshWebUiActivity` 现在重写它：这次要的资源里**已经授予**的直接
+  `grant`（快路径）；网页要麦克风而系统还没给，就弹一次系统授权框并把这次 `PermissionRequest`
+  **挂住**（`pendingAudioRequest`），结果回来再答 —— Chromium 会一直等 grant/deny。上一次还没
+  答就再来一次时，先把旧的那次 `deny` 掉；Activity 走掉时同理，不留 WebView 对象给下一次加载。
+- Chromium M117+ 的 `cr_media` 还要求宿主声明 `MODIFY_AUDIO_SETTINGS`（normal 级、安装即
+  授予）。少了它 logcat 里是 `Requires MODIFY_AUDIO_SETTINGS and RECORD_AUDIO. No audio
+  device will be available for recording`，页面拿到的是**没有音轨**的 stream —— 一样不报错。
+
+两条都是"静默失败"型（不崩、不抛到用户看得懂的地方），所以由 `tools/check-web-permissions.js`
+钉住：清单里两条权限都在、重写落在 `WebChromeClient` 里、已授予走快路径、未授予挂住并弹框、
+结果回来答 grant/deny 只答一次、`onDestroy` 兜底。`ActivityResultContracts.RequestPermission`
+必须在 `onCreate` 里注册（STARTED 之前才能收到回调），门禁连"注册落在哪个函数里"一起查。
+
+## 容器侧的会话式录音（`mic start` / `mic stop`）
+
+`mic/record --ms N` 回答的是"录满 N 毫秒"；按键说话要的是"现在开始、说完了停"，时长由说话的
+人定。`POST /native/mic/start` 立刻回 `{id, path, maxMs}`，`POST /native/mic/stop?id=` 收尾
+并回 `{path, bytes, ms, id}`。三条形状上的约束（门禁逐条钉住）：
+
+- **一条收尾路径**：`finishMic` 同时服务 `record` 与 `stop`（stop → 空文件删除 → 前台复查 →
+  `trimStage`），两者只有"时长怎么来的"不同：前者按请求、后者按实测。
+- **一个状态位**：还是那个 `recording` AtomicBoolean（`compareAndSet` 抢位、启动失败还位、停会话
+  放位），没有第二把锁 —— 两把锁必然让"忙不忙"分叉。
+- **看门狗 + 一次迟到**：`MAX_RECORD_MS` 到点由看门狗走**同一条**收尾把文件留下，结果存进
+  `micLast`；客户端慢一拍才 `stop` 同一个 id，就把那份结果再给一遍（下一次 start 清掉）。id 只认
+  当前会话，别人的 id 回 `409 bad_session`，早已结束又没结果回 `409 no_session`。
+
+## 脚本市场（GreasyFork）
+
+「用户脚本」页底部是原生市场：搜 greasyfork.org、点一下装进"我装的"那份列表（装完仍是同一套
+开关 / 删除）。它**在原生侧发 HTTP、不经过 WebView** —— 一个坏脚本把页面弄白时，这一页照样能用，
+这正是这一页存在的理由。
+
+形状是照着实测的 API 抄的，别按"想当然"改：入口是
+`https://api.greasyfork.org/<locale>/scripts.json`（`greasyfork.org/…/scripts.json` 每个都是
+**308**，而 `HttpURLConnection` 对 308 的支持随版本而变）；响应有两种外壳（`{"query":[…]}` 与
+翻过 2000 条窗口时的**裸 `[]`**）；字段是 `code_url` / `total_installs` /
+`users[0].name`（没有 `author`、`installs`、`code_url_ssl` 这三个"想当然"）；locale 走 URL
+**路径**，不认得的一律 `en`。安装地址只收 **https + greasyfork 的域**，正文必须含
+`==UserScript==`（服务端出错时回的是 HTML/JSON）。`tools/check-market.js` 把这些连同超时、
+2MB 上限、IO 线程、装完 reload 一起钉住。
 
 ## 测试版通道（应用 / 运行时）
 

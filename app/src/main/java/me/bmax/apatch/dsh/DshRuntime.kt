@@ -639,6 +639,8 @@ object DshRuntime {
           '  media list [--type image|video|audio] [--q name] [--limit N]',
           '  media get <id> [--type image|video|audio]   # lands in /tmp; JSON carries path',
           '  mic record [--ms N]                         # 30000 max; lands in /tmp',
+          '  mic start                                   # returns an id; record without a fixed length',
+          '  mic stop --id ID                            # graceful: writes the mp4 index, lands in /tmp',
           '  camera photo [--facing back|front] [--max N]  # no preview; lands in /tmp',
           '  tts say <text> [--lang zh-CN] [--rate 0.1..3] [--pitch 0.5..2]',
           '  tts file <text> [--lang L] [--rate R] [--pitch P]   # wav lands in /tmp',
@@ -869,6 +871,10 @@ object DshRuntime {
             } else if (cmd === 'mic') {
               if (a[0] === 'record') {
                 say(await req('POST', '/native/mic/record' + q({ ms: opt.ms })));
+              } else if (a[0] === 'start') {
+                say(await req('POST', '/native/mic/start' + q({})));
+              } else if (a[0] === 'stop' && opt.id) {
+                say(await req('POST', '/native/mic/stop' + q({ id: opt.id })));
               } else {
                 console.error(USAGE);
                 process.exitCode = 1;

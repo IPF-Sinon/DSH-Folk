@@ -42,7 +42,10 @@ function; userscripts yet another path), so "what exactly gets injected" was not
   and i18n, and a second `@run-at` inside the file would only drift. The list order is the injection order:
   the compatibility shim first (its APIs are used by other scripts and by the page), insets second (they must
   be right on the first frame).
-- **Switches**: `compat` -> `webui_compat_shim` (auto/on/off, auto by kernel), `composer` ->
+- **Switches** (these live **only** on the Userscripts page since 2026-10 — the two rows were folded in
+  from Function settings, where they were a second entry point to the same two prefs; the auto step shows
+  the current kernel version, and Function settings keeps just a top-right entry icon):
+  `compat` → `webui_compat_shim` (auto/on/off, auto decides by kernel), `composer` →
   `web_enter_newline`; the other three are always on (insets are a layout precondition, accessible names and
   blob downloads patch page defects). The manager rows and the Settings entries write the same pref: one
   state, two entry points.
@@ -64,6 +67,66 @@ fallback, and that the registry and the assets are one-to-one. `tools/check-user
 registry order, timing, switch mapping, master-switch scope, the parameter channel and the manager page
 iteration. Every assertion was reverse-verified (deleting a file, reordering, hanging built-ins off the
 master switch, aiming the substitution at the wrong string - all of them turn it red).
+
+## WebView-side microphone permission (voice input in the page)
+
+Voice input on the conversation page is `getUserMedia` **in the page** — a different path from the
+container's `mic record` / `mic start` (`/native/mic/*`): this one goes through WebView's
+`WebChromeClient`. Both can look fine and it still will not work, which is exactly how that report read:
+RECORD_AUDIO granted in system settings, the page JS correct, and the message still "microphone permission
+is not enabled":
+
+- AOSP's default `WebChromeClient.onPermissionRequest` is `request.deny()`. If the host does not
+  override it, Chromium always hears "denied" and `getUserMedia` always throws `NotAllowedError` — which
+  is the error upstream's client shows that message for. `DshWebUiActivity` now overrides it: resources
+  that are **already granted** are granted straight away (fast path); when the page wants the microphone
+  and the system has not allowed it yet, the system permission dialog is launched and this
+  `PermissionRequest` is **held** (`pendingAudioRequest`) until the answer arrives — Chromium waits for
+  grant/deny. A stale pending request is denied before it is overwritten, and so is any request still
+  pending when the Activity goes away (no WebView object is kept for the next load).
+- Chromium M117+'s `cr_media` also requires the host to declare `MODIFY_AUDIO_SETTINGS` (normal,
+  granted at install). Without it logcat says `Requires MODIFY_AUDIO_SETTINGS and RECORD_AUDIO. No audio
+  device will be available for recording`, and the page gets a stream with **no audio track** — again
+  without an error.
+
+Both are silent failures, so `tools/check-web-permissions.js` pins them: both permissions in the
+manifest, the override inside `WebChromeClient`, the granted fast path, holding + prompting when not
+granted, answering grant/deny exactly once, and the `onDestroy` fallback.
+`ActivityResultContracts.RequestPermission` must be registered in `onCreate` (before STARTED), so the
+gate checks which function the registration lands in too.
+
+## Container-side recording sessions (`mic start` / `mic stop`)
+
+`mic/record --ms N` answers "record for N ms"; push-to-talk wants "start now, stop when I am done",
+with the speaker deciding the length. `POST /native/mic/start` returns `{id, path, maxMs}` at once,
+and `POST /native/mic/stop?id=` finishes and returns `{path, bytes, ms, id}`. Three shape rules (each
+pinned by a gate):
+
+- **One finish path**: `finishMic` serves both `record` and `stop` (stop → delete an empty file →
+  re-check the foreground → `trimStage`); only the source of the duration differs (requested vs
+  measured).
+- **One state bit**: still the single `recording` AtomicBoolean (`compareAndSet` to take it, clear it
+  when the start fails, clear it when the session stops) — a second lock would fork "busy".
+- **Watchdog + one late answer**: at `MAX_RECORD_MS` the watchdog finishes through the same path and
+  keeps the file, with the result in `micLast`; a client that stops the same id one step late gets that
+  result again (the next start clears it). The id must be the current session: someone else's id is
+  `409 bad_session`, and a finished session with no result is `409 no_session`.
+
+## The script marketplace (GreasyFork)
+
+The bottom of the Userscripts page is a native marketplace: search greasyfork.org, install with one tap
+into the "mine" list (where the same toggles/deletion apply). It speaks HTTP **natively, never through the
+WebView** — when a bad script blanks the page, this page still works, which is the whole point of it.
+
+The shapes were copied from the measured API; do not "fix" them from memory: the entry point is
+`https://api.greasyfork.org/<locale>/scripts.json` (every `greasyfork.org/…/scripts.json` is a
+**308**, and `HttpURLConnection`'s 308 support varies by version); the response has two shapes
+(`{"query":[…]}`, and a **bare `[]`** past the 2000-result window); the fields are `code_url` /
+`total_installs` / `users[0].name` (there is no `author`, `installs` or `code_url_ssl`, however
+tempting); locale is in the URL **path**, and anything unknown falls back to `en`. The install URL is
+accepted only for **https + a greasyfork host**, and the body must contain `==UserScript==` (a server
+error comes back as HTML/JSON). `tools/check-market.js` pins all of that, plus the timeouts, the 2MB
+cap, the IO thread and the reload after install.
 
 ## Beta channel (app / runtime)
 

@@ -65,7 +65,11 @@ const CAP_USAGE = {
     'dsh-native media list [--type image|video|audio] [--q name] [--limit N]',
     'dsh-native media get <id> [--type image|video|audio]   # copies the file into /tmp, returns its path',
   ],
-  mic: ['dsh-native mic record [--ms N]                         # record up to 30000ms into /tmp'],
+  mic: [
+    'dsh-native mic record [--ms N]                         # record up to 30000ms into /tmp',
+    'dsh-native mic start                                   # returns an id; no fixed length',
+    'dsh-native mic stop --id ID                            # graceful stop; writes the mp4 index',
+  ],
   camera: [
     'dsh-native camera photo [--facing back|front] [--max N]  # no preview; copies a JPEG into /tmp',
   ],
@@ -620,7 +624,7 @@ function render(f) {
     for (const cap of usable) {
       const access = capAccess[cap];
       for (const line of CAP_USAGE[cap]) {
-        const writeCommand = / notify |notify-cancel|notify-dismiss|notify-full-screen| clip set | calendar add | volume set | ringer | settings (brightness|timeout|rotation)| sms send | toast | vibrate | torch | share | open | dial | mic record | camera photo | tts (say|file)/.test(' ' + line);
+        const writeCommand = / notify |notify-cancel|notify-dismiss|notify-full-screen| clip set | calendar add | volume set | ringer | settings (brightness|timeout|rotation)| sms send | toast | vibrate | torch | share | open | dial | mic (record|start|stop) | camera photo | tts (say|file)/.test(' ' + line);
         const readCommand = /notify-list| clip get | calendar list | sms list | tts voices|a11y screenshot/.test(line);
         if ((access === 'read_write') || (access === 'control') || (access === 'write' && writeCommand) ||
             (access === 'read' && !writeCommand) || (!readCommand && !writeCommand)) lines.push(line);

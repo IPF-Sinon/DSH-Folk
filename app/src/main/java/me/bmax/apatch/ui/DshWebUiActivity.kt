@@ -1,10 +1,12 @@
 package me.bmax.apatch.ui
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -19,6 +21,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
@@ -85,6 +88,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.File
@@ -257,6 +261,31 @@ class DshWebUiActivity : AppCompatActivity() {
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     private lateinit var fileChooser: ActivityResultLauncher<Intent>
 
+    /**
+     * 网页要麦克风、而系统还没授予时，Chromium 那一次 [WebChromeClient.PermissionRequest] 挂在这里。
+     *
+     * 必须挂住：回调要等**系统授权框**的结果（见 `onCreate` 里注册的 `micPermission`），
+     * Chromium 会一直等我们答 grant/deny。丢掉它就是默认拒绝 —— 页面里 `getUserMedia`
+     * 恒定抛 `NotAllowedError`，而系统设置里明明是允许的（用户报的正是这个）。
+     */
+    private var pendingAudioRequest: WebChromeClient.PermissionRequest? = null
+    private lateinit var micPermission: ActivityResultLauncher<String>
+
+    /** 网页要的这批资源里，**现在**真正授权得了的那些（麦克风 / 摄像头）。 */
+    private fun grantableMedia(req: WebChromeClient.PermissionRequest): Array<String> =
+        req.resources.filter { res ->
+            when (res) {
+                WebChromeClient.PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                        PackageManager.PERMISSION_GRANTED
+                WebChromeClient.PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+                        PackageManager.PERMISSION_GRANTED
+                // DRM / MIDI 之类维持 WebView 的默认处理：我们不替用户点头
+                else -> false
+            }
+        }.toTypedArray()
+
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -274,6 +303,29 @@ class DshWebUiActivity : AppCompatActivity() {
             // 取消也必须回调（传 null），否则 WebView 认为选择器还开着，
             // 那个 <input> 之后再点就永远没反应了
             cb?.onReceiveValue(parseChooserResult(result.resultCode, result.data))
+        }
+
+        // 网页要麦克风、系统还没授予时弹的那一次授权框。同样必须在 onCreate 里注册
+        // （Activity 还没 STARTED），否则回调收不到、那次 PermissionRequest 会被永久挂住。
+        //
+        // 为什么必须答：Chromium 等我们调 grant/deny，而我们不答的默认就是**拒绝** ——
+        // 页面里 `getUserMedia` 于是恒定抛 `NotAllowedError`，提示「麦克风权限未开启，
+        // 请在浏览器和系统设置中允许访问」，而系统设置里明明是允许的。用户报的正是这个。
+        micPermission = registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            val req = pendingAudioRequest
+            pendingAudioRequest = null
+            if (req == null) return@registerForActivityResult
+            // 授权框允许了、且这次请求本来就要麦克风，就把麦克风（含一并要到的摄像头）
+            // 交给 Chromium；否则明确拒绝 —— 拒绝也要答，否则页面一直等。
+            val resources = if (granted) grantableMedia(req) else emptyArray()
+            if (resources.isNotEmpty()) {
+                Log.i(TAG, "web media permission granted: " + resources.joinToString(","))
+                req.grant(resources)
+            } else {
+                req.deny()
+            }
         }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -508,6 +560,48 @@ class DshWebUiActivity : AppCompatActivity() {
                                             me.bmax.apatch.dsh.DshRuntime.appendLog("[page] " + line)
                                         }
                                         return false
+                                    }
+
+                                    /**
+                                     * 网页要麦克风/摄像头时的授权回调。
+                                     *
+                                     * **不重写它，`getUserMedia` 就是恒定失败**：AOSP 的默认实现
+                                     * 是 `request.deny()`，而对话页的语音输入正是在 `getUserMedia`
+                                     * 抛 `NotAllowedError` 时显示「麦克风权限未开启，请在浏览器和
+                                     * 系统设置中允许访问」—— 系统里允许了也没用，因为 WebView 这
+                                     * 一层从没被点过头。
+                                     *
+                                     * 顺序：已经授予的直接 grant（快速路径）；网页要麦克风而系统
+                                     * 还没给，就弹系统授权框并**挂住**这次请求，等结果回来再答
+                                     * （Chromium 会一直等 grant/deny，见 [micPermission]）。
+                                     */
+                                    override fun onPermissionRequest(
+                                        request: WebChromeClient.PermissionRequest?,
+                                    ) {
+                                        val req = request ?: return
+                                        val granted = grantableMedia(req)
+                                        if (granted.isNotEmpty()) {
+                                            Log.i(
+                                                TAG,
+                                                "web media permission granted: " +
+                                                    granted.joinToString(","),
+                                            )
+                                            req.grant(granted)
+                                            return
+                                        }
+                                        val wantsAudio = req.resources.contains(
+                                            WebChromeClient.PermissionRequest.RESOURCE_AUDIO_CAPTURE,
+                                        )
+                                        if (wantsAudio) {
+                                            // 上一个还没答就放掉，否则那个页面会被永久卡住
+                                            // （同 onShowFileChooser 的写法）
+                                            pendingAudioRequest?.deny()
+                                            pendingAudioRequest = req
+                                            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                            return
+                                        }
+                                        // 其余资源维持 WebView 的默认处理（拒绝）
+                                        super.onPermissionRequest(req)
                                     }
 
                                     /**
@@ -783,6 +877,9 @@ class DshWebUiActivity : AppCompatActivity() {
         // 页面走了但选择器回调还挂着时也要放掉，否则 WebView 内部一直等
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = null
+        // 麦克风那次请求同理：还没答就答「拒绝」，别把一个 WebView 对象留给下一次加载
+        pendingAudioRequest?.deny()
+        pendingAudioRequest = null
         super.onDestroy()
     }
 

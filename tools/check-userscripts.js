@@ -51,6 +51,10 @@ const us = fs.readFileSync(SRC_US, "utf8");
 const webui = fs.readFileSync(SRC_WEBUI, "utf8");
 const env = fs.readFileSync(SRC_ENV, "utf8");
 const moduleSrc = fs.readFileSync(SRC_MODULE, "utf8");
+const fnScreen = fs.readFileSync(
+  "app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt",
+  "utf8",
+);
 const moduleScreen = fs.readFileSync(SRC_MODULE_SCREEN, "utf8");
 const screen = fs.readFileSync(SRC_SCREEN, "utf8");
 
@@ -491,11 +495,14 @@ ok(/const val KEY_USERSCRIPTS_ON = "dsh_userscripts_on"/.test(env) &&
 ok(/internal fun idOf\(title: String, text: String\): String/.test(us) &&
   /Integer\.toHexString\(text\.hashCode\(\)\)/.test(us),
   "文件名 = 标题 slug + 正文哈希（标题进名字，重装同文即覆盖）");
-ok(/onOpenUserscripts: \(\) -> Unit = \{\}/.test(moduleSrc) &&
-  /onClick = onOpenUserscripts/.test(moduleSrc),
-  "插件页多了一张能点的卡（用户脚本）");
-ok(/onOpenUserscripts = \{ navigator\.navigate\(UserscriptsScreenDestination\) \}/.test(moduleScreen),
-  "点了真的会导航（不是画着好看）");
+// 2026-10 起入口在**功能设置页右上角**（插件页那张卡摘了）：一处常驻可见的图标，
+// 比塞进插件列表更找得到 —— 而且它本来就是"功能"这一族。
+ok(/navigator\.navigate\(UserscriptsScreenDestination\)/.test(fnScreen) &&
+  /Icons\.Outlined\.Extension/.test(fnScreen) &&
+  /actions = \{/.test(fnScreen),
+  "功能页右上角有用户脚本入口（点了真的会导航）");
+ok(!/module_userscripts/.test(moduleSrc) && !/onOpenUserscripts/.test(moduleScreen),
+  "插件页那张卡已摘掉（没有两处入口各说各话）");
 
 ok(/if \(script\.runAt\.isNotBlank\(\)|runAt = meta\.runAt/.test(us), "管理页拿得到 run-at");
 ok(/fun list\(ctx: Context\): List<Script>/.test(us) && /\.sortedBy \{ it\.name \}/.test(us),
