@@ -85,6 +85,7 @@ import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.ui.screen.settings.AppTitle
 import me.bmax.apatch.ui.theme.MusicConfig
 import me.bmax.apatch.ui.theme.refreshTheme
+import me.bmax.apatch.util.BirthdayEgg
 import me.bmax.apatch.util.Changelog
 import me.bmax.apatch.util.MusicManager
 import me.bmax.apatch.util.reboot
@@ -145,6 +146,15 @@ fun HomeScreen(navigator: DestinationsNavigator) {
         )
     }
 
+    // 10.8 的彩蛋（[BirthdayEgg]）：判据读一次就够 —— 日期在这一次 composition 里不会变。
+    // 它排在整串互斥分支的**最后**：首启引导、更新说明、策略变更说明都比它重要，
+    // 叠在一起时先弹该弹的那个，关掉之后彩蛋才轮得到。
+    var showBirthday by remember { mutableStateOf(BirthdayEgg.shouldShow(homeContext)) }
+    val dismissBirthday: () -> Unit = {
+        BirthdayEgg.markShown()
+        showBirthday = false
+    }
+
     if (showWelcomeGuide) {
         WelcomeGuideDialog(
             onDismiss = {
@@ -179,6 +189,17 @@ fun HomeScreen(navigator: DestinationsNavigator) {
             confirmButton = {
                 TextButton(onClick = { dismissPolicyNotice() }) {
                     Text(stringResource(R.string.dsh_priv_notice_ok))
+                }
+            },
+        )
+    } else if (showBirthday) {
+        AlertDialog(
+            onDismissRequest = { dismissBirthday() },
+            title = { Text(stringResource(R.string.dsh_birthday_title)) },
+            text = { Text(stringResource(R.string.dsh_birthday_text)) },
+            confirmButton = {
+                TextButton(onClick = { dismissBirthday() }) {
+                    Text(stringResource(R.string.dsh_birthday_ok))
                 }
             },
         )

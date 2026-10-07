@@ -164,11 +164,16 @@ must(/dsh_race_testing_progress/.test(settings),
     'FunctionSettings 必须接精简开关的两个参数');
   must(/LaunchedEffect\([^)]*runtimeSlim[^)]*\)/.test(settings),
     '更新检查的 LaunchedEffect 必须带上 runtimeSlim（否则拨了开关不重查）');
-  must(/R\.string\.dsh_runtime_slim\b/.test(settings) && /R\.string\.dsh_runtime_channel_slim\b/.test(settings),
-    '运行时卡片与版本列表必须用精简版文案');
+  // 精简版在版本菜单里是**滑块的一端**（标题与说明文案各一处），加结束标签；
+  // 原来钉的是被删掉的旧开关标题 dsh_runtime_slim —— 那条断言在改版后等于在钉一个
+  // 不存在的键，只会以"找不到"的形式误导下一个人。
+  must(/R\.string\.dsh_runtime_flavor_slim\b/.test(settings) &&
+    /R\.string\.dsh_runtime_slim_summary\b/.test(settings) &&
+    /R\.string\.dsh_runtime_channel_slim\b/.test(settings),
+    '版本菜单必须用精简版文案（滑块那一端 + 说明 + 通道标签）');
 
   for (const [label, xml] of [['values', stringsEn], ['values-zh-rCN', stringsZh]]) {
-    for (const k of ['dsh_runtime_slim', 'dsh_runtime_slim_summary', 'dsh_runtime_channel_slim', 'dsh_runtime_channel_slim_beta']) {
+    for (const k of ['dsh_runtime_flavor_slim', 'dsh_runtime_slim_summary', 'dsh_runtime_channel_slim', 'dsh_runtime_channel_slim_beta']) {
       must(xml.includes(`name="${k}"`), `${label} 缺字符串 ${k}`);
     }
   }

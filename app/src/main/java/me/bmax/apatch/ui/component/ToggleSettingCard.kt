@@ -27,8 +27,11 @@ import androidx.compose.ui.unit.dp
 /**
  * 设置页的开关卡片。
  *
- * @param onLongClick 长按卡片时触发（给需要二级配置的开关用，如「竞速通道」的通道勾选弹窗）。
- *   传 null 时**不加**长按手势，卡片行为与以前完全一致。
+ * @param onLongClick 长按卡片时触发（给需要二级配置的开关用，如「竞速通道」的通道勾选弹窗、
+ *   运行时卡片的版本菜单）。传 null 时**不加**长按手势，卡片行为与以前完全一致。
+ * @param onClick 整行点一下做**别的**事（运行时卡片：点一下 = 立即检查更新），开关自己仍是
+ *   那个开关。传 null（默认）时保持老语义：点整行 = 拨开关。给了它之后整行不再是
+ *   Switch 角色 —— 否则 TalkBack 会把「检查更新」念成一个开关。
  */
 @Composable
 fun ToggleSettingCard(
@@ -39,14 +42,25 @@ fun ToggleSettingCard(
     flat: Boolean = false,
     icon: ImageVector? = null,
     onLongClick: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    val rowClick = onClick
+    val switchHandlesIt = rowClick != null
     ExpressiveCard(flat = flat) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .run {
-                    if (onLongClick == null) {
+                    if (rowClick != null) {
+                        // 整行点了做别的事：不给 role（它不是开关），长按照旧可以挂；
+                        // 开关由右边那个 Switch 自己负责（见下面的 onCheckedChange）。
+                        combinedClickable(
+                            enabled = enabled,
+                            onLongClick = onLongClick,
+                            onClick = rowClick,
+                        )
+                    } else if (onLongClick == null) {
                         // 没有长按就用原来的 toggleable：语义、涟漪、Switch 角色都不变
                         toggleable(
                             value = checked,
@@ -104,7 +118,12 @@ fun ToggleSettingCard(
 
             ExpressiveSwitch(
                 checked = checked,
-                onCheckedChange = null,
+                // 整行被拿去干别的事时，开关必须自己可点 —— 否则这一页就没法开/关它了
+                onCheckedChange = if (switchHandlesIt) {
+                    { if (enabled) onCheckedChange(it) }
+                } else {
+                    null
+                },
                 enabled = enabled,
             )
         }

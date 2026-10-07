@@ -193,6 +193,64 @@ ok(new RegExp("putString\\(Changelog\\.KEY_SHOWN_FOR").test(home),
     "看完首启引导也记成「更新说明已弹过」（否则关掉引导立刻又弹一个）");
 }
 
+// ── 3b. 10.8 的生日彩蛋 ──
+//
+// 这个彩蛋的判据**一年只跑得到一次**：写错了（记成布尔 → 一辈子只弹一次；或按 UTC 判 →
+// 某些时区差一天）要等到明年 10.8 才有人发现。所以这里把月份、日期、年份比较、prefs 键、
+// 以及它在互斥分支里的位置全部钉住。
+console.log("\n── 生日彩蛋（10.8） ──");
+{
+  const egg = read("app/src/main/java/me/bmax/apatch/util/BirthdayEgg.kt");
+  const home2 = read("app/src/main/java/me/bmax/apatch/ui/screen/Home.kt");
+  const dshEn = read("app/src/main/res/values/dsh_strings.xml");
+  const dshZh = read("app/src/main/res/values-zh-rCN/dsh_strings.xml");
+  ok(/const val MONTH = 10/.test(egg) && /const val DAY = 8/.test(egg),
+    "生日就写在 BirthdayEgg 里：10 月 8 日（不散到界面里）");
+  ok(/today\.monthValue == MONTH && today\.dayOfMonth == DAY/.test(egg),
+    "isBirthday 判的正是这两位");
+  ok(/fun shouldShow\(ctx: Context, today: LocalDate = LocalDate\.now\(\)\)/.test(egg),
+    "shouldShow 的「今天」可以注入（否则这条判据根本没法验）");
+  ok(/isBirthday\(today\) && prefs\(\)\.getInt\(KEY_SHOWN_YEAR, 0\) != today\.year/.test(egg),
+    "该弹 = 今天是 10.8 **且今年还没弹过**");
+  ok(/putInt\(KEY_SHOWN_YEAR, today\.year\)/.test(egg),
+    "弹过记的是年份（记成布尔 → 这辈子只弹一次）");
+  ok(/KEY_SHOWN_YEAR = "birthday_egg_shown_year"/.test(egg) &&
+    (egg.match(/birthday_egg_shown_year/g) || []).length === 1,
+    "prefs 键只有一处字面量（第二处写歪了就是同一个彩蛋弹两次或永不弹）");
+  ok(/import java\.time\.LocalDate/.test(egg) && /LocalDate\.now\(\)/.test(egg),
+    "用设备本地日期（按 UTC 判会在某些时区差一天）");
+  const minSdk = gradle.match(/androidMinSdkVersion by extra\((\d+)\)/);
+  ok(minSdk !== null && Number(minSdk[1]) >= 26,
+    `java.time 要 API 26（minSdk 现在 ${minSdk ? minSdk[1] : "?"}）—— 低于它会在老机器上 NoClassDefFoundError`);
+  // 互斥分支的顺序：彩蛋最不重要，排最后
+  const birthdayAt = home2.indexOf("else if (showBirthday)");
+  const policyAt = home2.indexOf("else if (showPolicyNotice)");
+  const changeAt2 = home2.indexOf("else if (showChangelog)");
+  ok(birthdayAt > 0 && policyAt > 0 && changeAt2 > 0 && policyAt > changeAt2 && birthdayAt > policyAt,
+    "彩蛋排在整串互斥分支的**最后**（引导 → 更新说明 → 策略变更 → 彩蛋）");
+  {
+    const block = home2.slice(birthdayAt, home2.indexOf("ProvideDshHomeState"));
+    // 两条关闭路径都走同一个 dismiss：标记与关闭只有一处，少接一处就会同一天反复弹
+    ok(/val dismissBirthday: \(\) -> Unit = \{[\s\S]{0,120}BirthdayEgg\.markShown\(\)/.test(home2) &&
+      (block.match(/dismissBirthday\(\)/g) || []).length >= 2,
+      "点按钮和点外面都走同一个 dismiss（且那个 dismiss 里真的记了「已弹过」）");
+  }
+  ok(/mutableStateOf\(BirthdayEgg\.shouldShow\(homeContext\)\)/.test(home2),
+    "进首页判一次就够（日期在一次 composition 里不会变）");
+  for (const [label, xml] of [["values", dshEn], ["values-zh-rCN", dshZh]]) {
+    for (const k of ["dsh_birthday_title", "dsh_birthday_text", "dsh_birthday_ok"]) {
+      ok(xml.includes(`name="${k}"`), `${label} 有 ${k}`);
+    }
+  }
+  // 彩蛋不进更新说明 —— 提前写出来就不叫彩蛋了
+  ok(!/生日|birthday/i.test(stringsEn) && !/生日|birthday/i.test(stringsZh),
+    "changelog_items 里不提彩蛋（更新说明是给人看的清单，彩蛋是惊喜）");
+  const rd = read("docs/dev-notes.md");
+  const rdEn = read("docs/dev-notes.en.md");
+  ok(/BirthdayEgg/.test(rd) && /10 月 8 日/.test(rd), "dev-notes 记了彩蛋与其判据（中文）");
+  ok(/BirthdayEgg/.test(rdEn) && /October 8/.test(rdEn), "dev-notes.en 也记了（英文）");
+}
+
 // ── 4. 复用的是同一个壳 ──
 console.log("\n── 对话框复用 ──");
 ok(/fun PagedInfoDialog\(/.test(dialog), "有公用的 PagedInfoDialog");

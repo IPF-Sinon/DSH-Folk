@@ -91,6 +91,12 @@ data class DshMeta(
     val builtAt: String = "",
     /** 这份运行时要求的最低 DSH-Folk App 版本；空 = 无要求（旧 metadata 兼容）。 */
     val minAppVersion: String = "",
+    /**
+     * `full` / `slim`（构建脚本写在 metadata 里的 `flavor`）。
+     *
+     * 空 = 老 metadata 没这一项，那时只能按 tag 猜（见 [RuntimeVersion.flavorOf]）。
+     */
+    val flavor: String = "",
 )
 
 /**
@@ -131,6 +137,8 @@ data class RuntimeVersion(
     val mirrors: List<String> = emptyList(),
     /** release 的发布时间（ISO 串，字典序即时间序）；通道兜底项为空。 */
     val publishedAt: String = "",
+    /** `full` / `slim`；空 = 这份 metadata 没写，筛选时退回按 tag 认（[flavorOf]）。 */
+    val flavor: String = "",
 ) {
     /** 交给安装流程时用的等价 metadata。 */
     fun toMeta(): DshMeta = DshMeta(
@@ -144,6 +152,7 @@ data class RuntimeVersion(
         nodeVersion = nodeVersion,
         builtAt = builtAt,
         minAppVersion = minAppVersion,
+        flavor = flavorOf(this),
     )
 
     companion object {
@@ -153,6 +162,41 @@ data class RuntimeVersion(
         const val CHANNEL_SLIM = "slim"
         const val CHANNEL_SLIM_BETA = "slim-beta"
         const val CHANNEL_ARCHIVE = "archive"
+
+        /** metadata 里的 `flavor` 取值（构建脚本写的就这两个）。 */
+        const val FLAVOR_FULL = "full"
+        const val FLAVOR_SLIM = "slim"
+
+        /**
+         * 这份运行时的版本类型：优先信 metadata 的 `flavor`，没有（老 metadata）就按 tag 猜。
+         *
+         * 按 tag 猜只对四个滚动 tag 成立 —— `runtime-slim-*` 必然是精简版；历史 release
+         * （`runtime-0.1.1-rc.2` 这种）的 tag 里根本没有 flavor，只能当完整版。所以
+         * **能解析 metadata 就别用 tag 猜**：列表筛选靠这个字段。
+         */
+        fun flavorOf(entry: RuntimeVersion): String = when {
+            entry.flavor.isNotEmpty() -> entry.flavor
+            entry.tag.contains("slim") -> FLAVOR_SLIM
+            else -> FLAVOR_FULL
+        }
+
+        /**
+         * 版本菜单那两个滑块筛的到底是哪些行。
+         *
+         * - **版本类型**（精简/完整）：不匹配就整行不显示（这是硬条件，滑块说的就是它）；
+         * - **更新通道**（测试/正式）：四个滚动通道按名字分边；**历史版本两边都留** ——
+         *   它们的 tag 里没有通道信息，只给一边就等于让另一半人找不到降级包（列表里那行
+         *   标着「历史版本」，不会和正式版混淆）。
+         */
+        fun matchesFilter(entry: RuntimeVersion, slim: Boolean, beta: Boolean): Boolean {
+            val want = if (slim) FLAVOR_SLIM else FLAVOR_FULL
+            if (flavorOf(entry) != want) return false
+            return when (entry.channel) {
+                CHANNEL_STABLE, CHANNEL_SLIM -> !beta
+                CHANNEL_BETA, CHANNEL_SLIM_BETA -> beta
+                else -> true
+            }
+        }
 
         /** 列表排序权重：正式 → 精简 → 测试 → 精简测试 → 历史版本。 */
         fun channelRank(channel: String): Int = when (channel) {
@@ -2566,6 +2610,10 @@ object DshRuntime {
                 nodeVersion = json.optString("nodeVersion", ""),
                 builtAt = json.optString("builtAt", ""),
                 minAppVersion = json.optString("minAppVersion", ""),
+                // 构建脚本一直就写着这一项（runtime-builder/build-rootfs.sh 的 "flavor"），
+                // 只是以前不解析 —— 版本列表要按「精简/完整」筛选就得靠它：历史 release 的
+                // tag 里没有 flavor，光看 tag 分不出来。
+                flavor = json.optString("flavor", ""),
             )
         }.getOrNull()
     }
@@ -2702,6 +2750,7 @@ object DshRuntime {
                         url = meta.url,
                         mirrors = meta.mirrors,
                         publishedAt = published,
+                        flavor = meta.flavor,
                     ),
                 )
             }
@@ -2730,6 +2779,7 @@ object DshRuntime {
                     arch = meta.arch,
                     url = meta.url,
                     mirrors = meta.mirrors,
+                    flavor = meta.flavor,
                 )
             }
         }

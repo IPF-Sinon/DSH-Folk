@@ -412,8 +412,8 @@
     <string name="dsh_bk_needs_restart">；需要重启 DSH 生效</string>
     <string name="dsh_bk_snapshot">；回滚快照 %1$s</string>
     <string name="dsh_runtime_section">运行时</string>
-    <string name="dsh_runtime_summary">运行时损坏或想换新版本时重装容器</string>
-    <string name="dsh_runtime_management_summary">查看当前版本、检查或执行更新（长按可选任意历史版本）、重装、导入本地包，并设置自动检查与测试版通道</string>
+    <string name="dsh_runtime_summary">运行时更新：点一下卡片立即检查，长按选择版本</string>
+    <string name="dsh_runtime_management_summary">管理运行时：开关自动检查；点一下卡片立即检查；长按打开版本菜单（精简/完整与测试/正式两个滑块、当前版本可重装、菜单左下角导入本地包）</string>
     <string name="dsh_runtime_installed_version">已安装：%1$s</string>
     <string name="dsh_runtime_not_installed">尚未安装 —— 在首页启动服务即会下载</string>
     <string name="dsh_runtime_reinstall">重装</string>
@@ -426,16 +426,13 @@
     <string name="dsh_runtime_reinstall_confirm_text">会重新下载运行时（约 140 MB）并替换容器系统文件。现有会话、已装插件、ADB 密钥、DSH 配置及插件依赖数据都会保留；即使替换过程被中断，下次启动也会自动恢复暂存数据。开始前会先停止服务。</string>
     <string name="dsh_runtime_reinstall_go">重装</string>
     <string name="dsh_runtime_current">当前版本</string>
-    <string name="dsh_runtime_update_action">更新</string>
     <string name="dsh_runtime_import">导入</string>
     <string name="dsh_runtime_import_confirm_title">确认导入此运行时？</string>
     <string name="dsh_runtime_import_confirm_text">文件：%1$s\n大小：%2$s\n\n仅在信任文件来源时继续。恶意运行时可以执行任意代码并访问 DSH 数据。</string>
     <string name="dsh_runtime_import_size_unknown">未知</string>
     <string name="dsh_runtime_import_confirm">我信任此来源并安装</string>
-    <string name="dsh_runtime_beta">接受测试版运行时更新</string>
     <string name="dsh_runtime_beta_summary">使用独立的 runtime-beta-latest 滚动通道，测试版可能不稳定；默认关闭。</string>
-    <string name="dsh_runtime_slim">使用精简版运行时</string>
-    <string name="dsh_runtime_slim_summary">同一运行时的精简版：砍掉 TypeScript 类型声明、sourcemap、文档与测试夹具，以及负责文档预览/转换的 LibreOffice 引擎。下载体积约小 63MB。该版本无法进行文档预览与转换；与上面的测试版开关可自由组合。</string>
+    <string name="dsh_runtime_slim_summary">同一运行时的精简版：砍掉 TypeScript 类型声明、sourcemap、文档与测试夹具，以及负责文档预览/转换的 LibreOffice 引擎。下载体积约小 63MB。该版本无法进行文档预览与转换。两个滑块各管一维：这个选版本类型，另一个选更新通道。</string>
     <string name="dsh_runtime_preserve_question">是否保留会话、插件、配置及依赖数据？</string>
     <string name="dsh_runtime_preserve">保留数据</string>
     <string name="dsh_runtime_clean">不保留数据</string>
@@ -924,6 +921,11 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_a11y_own_agent_desc">AI 的无障碍工具跳过本应用自己的窗口，只对别的 App 生效；别的读屏服务不受影响。</string>
     <string name="dsh_a11y_own_all">所有无障碍服务</string>
     <string name="dsh_a11y_own_all_desc">连视图层也隐藏，所有无障碍服务（含 TalkBack）都读不到本应用。</string>
+    <!-- 10.8 的彩蛋：那天第一次打开应用时弹一次（判据在 BirthdayEgg，见 tools/check-changelog.js）。
+         不进更新说明 —— 提前写出来就不叫彩蛋了。 -->
+    <string name="dsh_birthday_title">今天是开发者的生日</string>
+    <string name="dsh_birthday_text">10 月 8 日 —— DSH-Folk 的开发者今天生日。谢谢你把这个应用装进手机，也谢谢你替它找到的每一个 bug。</string>
+    <string name="dsh_birthday_ok">生日快乐</string>
     <string name="dsh_a11y_own_note">不保证完全拦截：截屏、shell/uiautomator、WebView 的虚拟子树仍可能读到。</string>
     <string name="dsh_native_cap_shell_need_channel">还没有选权限通道 —— 点这里去选</string>
     <string name="dsh_native_err_shell_no_command">没给命令（cmd 参数为空）</string>
@@ -1217,7 +1219,6 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_plug_no_output">没有输出（可能超时或容器未启动）</string>
     <string name="dsh_log_builds_allowed">已放行构建脚本：%1$s</string>
     <string name="dsh_log_builds_allow_failed">写入 allowBuilds 失败：%1$s</string>
-    <string name="dsh_runtime_long_press_hint">长按「更新」可列出所有运行时版本并切换</string>
     <string name="dsh_runtime_auto_check">自动检查更新</string>
     <string name="dsh_runtime_auto_check_summary">应用启动后自动检查运行时更新，只在发现新版本时提示；下载仍需手动确认。默认开启。</string>
     <string name="dsh_runtime_check_failed">检查失败：网络不可用、GitHub 限流，或本地版本记录缺失</string>
@@ -1232,6 +1233,17 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_runtime_channel_beta">测试通道</string>
     <string name="dsh_runtime_channel_slim_beta">精简测试通道</string>
     <string name="dsh_runtime_channel_archive">历史版本</string>
+    <string name="dsh_runtime_channel_stable_short">正式</string>
+    <string name="dsh_runtime_channel_beta_short">测试</string>
+    <string name="dsh_runtime_flavor_full">完整版</string>
+    <string name="dsh_runtime_flavor_slim">精简版</string>
+    <string name="dsh_runtime_menu_flavor">版本类型</string>
+    <string name="dsh_runtime_menu_channel">更新通道</string>
+    <string name="dsh_runtime_menu_filter_note">列表跟着这两个滑块走；当前已装那一版固定在最上面。</string>
+    <string name="dsh_runtime_menu_empty">这个组合暂时没有可安装的版本。</string>
+    <string name="dsh_runtime_menu_close">关闭</string>
+    <string name="dsh_runtime_row_switch">切换</string>
+    <string name="dsh_runtime_checking">正在检查\u2026</string>
     <string name="dsh_runtime_update_confirm_title">更新运行时？</string>
     <string name="dsh_runtime_switch_confirm_text">目标版本：%1$s\n\n会重新下载运行时并替换容器系统文件。现有会话、已装插件、ADB 密钥、DSH 配置及插件依赖数据都会保留；即使替换过程被中断，下次启动也会自动恢复暂存数据。开始前会先停止服务。</string>
     <string name="dsh_runtime_prompt_title">发现新的运行时</string>

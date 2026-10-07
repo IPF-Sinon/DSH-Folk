@@ -14,6 +14,11 @@ so it must work offline.
 The two dialogs are mutually exclusive, and the first-launch guide also records the current version as “What's New already shown”: a new user needs “what is this app,”
 not “What's New,” and stacking both dialogs would cause them to cover each other's buttons.
 
+Two more one-shot notices hang off the same mutually exclusive chain, in a fixed order: **first-launch guide → What's New → permission-policy change → the October 8
+birthday easter egg** (`ui/screen/Home.kt`). The egg is last because it matters least — the other three should come first. Its own rule lives in
+`util/BirthdayEgg.kt`: it shows once on the first launch of October 8, and what it stores is the **year** (so it appears again next year, but not twice on the same
+day). It is deliberately absent from `changelog_items`: announcing it in the changelog would spoil it.
+
 The version number appears in three places (the baseline in `build.gradle.kts`, `VERSION` in `util/Changelog.kt`, and the entry text itself),
 and `tools/check-changelog.js` keeps them in sync. There is also a runtime fallback: if the versions do not match, the dialog is not shown — presenting
 content from the previous version under a new version number is a confident falsehood, worse than showing nothing. But that fallback means **users of the new version see nothing**,
@@ -189,14 +194,45 @@ reconcile, self-heal, and `dsh plugin` run by the agent inside the session — a
 After enabling **Settings → General → Accept beta updates**, update checks also include prereleases, which are shown with a
 “Beta” badge in the UI. This is disabled by default.
 
-The container runtime beta is a separate channel: after enabling **Settings → Features → Runtime → Accept beta runtime updates**, runtime checks switch to the
-`runtime-beta-latest` rolling channel; this is disabled by default, and beta versions may be unstable. It is independent of the app beta toggle above.
-Easier still: long press **Update** on the runtime card to list every published runtime version (stable channel, beta channel, archived
-versions) and tap one to switch — moving to a beta or back to a specific older version uses the same entry, with no need to flip the channel first.
+The container runtime beta is a separate channel: set the **update channel slider** in the version menu to beta and runtime
+checks switch to the `runtime-beta-latest` rolling channel; the default is stable, and beta versions may be unstable. It is
+independent of the app beta toggle above.
 
+## Runtime card: a switch card plus a version menu
+
+The runtime card is now a **switch card**: tapping the row checks for updates right away (through `confirmAfterCheck`, so the
+confirmation dialog only appears when a build is actually installable), long pressing opens the version menu, and the switch on
+the right only owns "check for runtime updates automatically". The old row of Update / Reinstall / Import buttons and the three
+small toggles moved into that menu — checking is the card tap, reinstalling is the **currently installed row**, and importing is
+the menu's **bottom-left** button (which is where `AlertDialog`'s dismissButton lives anyway). There is no separate manual-check
+button any more: the card tap is it, and opening the menu fetches the list, which is a check too.
+
+Two two-position sliders sit at the top of the menu (`steps = 1` on a `Slider`, so dragging snaps to either end):
+
+- **build**: full ↔ slim;
+- **update channel**: stable ↔ beta.
+
+Both sliders are keys of `LaunchedEffect(reloadKey, slim, beta)` — changing one refetches the list (the list content is filtered
+by them, so not refetching would keep showing the previous selection). A slider commits (persist + refetch) only in
+`onValueChangeFinished` and only when the position actually changed: persisting every drag frame and firing a request per frame
+turns the list into a slideshow.
+
+The filtering rule lives in `RuntimeVersion.matchesFilter`: the build type is a hard condition; the four rolling tags are split by
+name; **archived versions show under both channels** because their tags carry no channel information, and hiding them from one
+side would leave half the users unable to find a downgrade. The build type prefers the metadata `"flavor"` field (the build
+script has always written it, the app just never parsed it) — an archived release's tag has no flavor, so tag-sniffing alone can
+only call it full.
+
+The currently installed version is **pinned on top even when the filter excludes it**: tapping it reinstalls (reusing the existing
+keep-data / clean-reinstall choice), while any other version switches to it. A build requiring a newer app than the current one
+is not installable and only points at the app update. `ToggleSettingCard` gained an optional `onClick` for this: when the row is
+taken over by another action it is no longer a Switch for accessibility (otherwise TalkBack would announce "check for updates" as
+a switch), and the `Switch` itself owns the toggle.
 
 ## Runtime card & workflow internals
 
+Preinstalling plugins makes pnpm print a screen of `missing peer …` warnings, and that is **expected**:
+`@deepseek-ai/dsh-*`, `react` and other peers are resolved by dsh itself and never end up in the profile's
 `node_modules` (installing them would fight the host's versions). Judge preinstall success by the
 「预装完成 <package>」line and `[DSH-Folk-exit] 0` at the end of each plugin, not by those warnings.
 

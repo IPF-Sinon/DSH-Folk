@@ -54,6 +54,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -725,51 +726,27 @@ fun FunctionSettingsContent(
                             Text(text = line, style = MaterialTheme.typography.bodySmall, color = color)
                         }
 
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // 「更新」一个按钮承担三件事：没检测到更新时点它 = 检查更新；
-                            // 检测到更新时点它 = 弹窗确认更新；长按 = 版本列表（可切到
-                            // 任意历史版本，升降级都走这里）。
-                            OutlinedActionButton(
-                                enabled = runtimeInstalled && !checking,
-                                onClick = {
-                                    val result = latest
-                                    when {
-                                        result?.version != null && result.minAppVersion.isEmpty() ->
-                                            updateConfirming = true
-                                        // 新运行时要求更高 App 版本：点了也是被闸门拦下，直接指路
-                                        result?.version != null -> onGoUpdateApp()
-                                        else -> {
-                                            confirmAfterCheck = true
-                                            onCheckRuntimeUpdateRequested()
-                                        }
-                                    }
-                                },
-                                onLongClick = { if (runtimeInstalled) versionListOpen = true },
-                            ) {
-                                if (checking) {
-                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Text(stringResource(R.string.dsh_runtime_update_action))
-                                }
+                        // 手动检查搬到了下面的开关卡片上（点一下卡片 = 检查），这里不再有
+                        // 按钮行：更新 / 重装 / 导入 三件事分别落在 点卡片 / 版本菜单的当前行 /
+                        // 菜单左下角的导入。
+                        if (checking) {
+                            Spacer(Modifier.height(6.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(R.string.dsh_runtime_checking),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
-                            OutlinedButton(onClick = { reinstallChoice = true }, enabled = runtimeInstalled) {
-                                Text(stringResource(R.string.dsh_runtime_reinstall))
-                            }
-                            OutlinedButton(onClick = onImportRuntime) {
-                                Text(stringResource(R.string.dsh_runtime_import))
-                            }
-                        }
-                        if (runtimeInstalled) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(R.string.dsh_runtime_long_press_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                     }
                     Spacer(Modifier.height(8.dp))
+                    // 运行时卡片现在就是一张**开关卡片**：整行点一下 = 立即检查更新
+                    // （结果 / 确认框照旧走 confirmAfterCheck 那条路），长按 = 版本菜单。
+                    // 精简/完整、测试/正式两个滑块搬进了菜单 —— 它们是「要装哪一版」的
+                    // 参数，和版本列表同屏才有意义；留在卡片上就成了第二处状态。
                     ToggleSettingCard(
                         flat = true,
                         icon = Icons.Filled.CloudDownload,
@@ -777,24 +754,24 @@ fun FunctionSettingsContent(
                         description = stringResource(R.string.dsh_runtime_auto_check_summary),
                         checked = runtimeAutoCheck,
                         onCheckedChange = onRuntimeAutoCheckChange,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    ToggleSettingCard(
-                        flat = true,
-                        icon = Icons.Filled.Warning,
-                        title = stringResource(R.string.dsh_runtime_beta),
-                        description = stringResource(R.string.dsh_runtime_beta_summary),
-                        checked = runtimeBeta,
-                        onCheckedChange = onRuntimeBetaChange,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    ToggleSettingCard(
-                        flat = true,
-                        icon = Icons.Filled.CloudDownload,
-                        title = stringResource(R.string.dsh_runtime_slim),
-                        description = stringResource(R.string.dsh_runtime_slim_summary),
-                        checked = runtimeSlim,
-                        onCheckedChange = onRuntimeSlimChange,
+                        onClick = {
+                            val result = latest
+                            when {
+                                // 已经查到有更新：直接弹确认框，别让用户再等一次网络
+                                result?.version != null && result.minAppVersion.isEmpty() ->
+                                    updateConfirming = true
+                                // 新运行时要求更高 App 版本：点下去也是被闸门拦下，直接指路
+                                result?.version != null -> onGoUpdateApp()
+                                else -> {
+                                    // 长按菜单之外的这条检查路径：查完真有可装的更新就弹确认框
+                                    confirmAfterCheck = true
+                                    onCheckRuntimeUpdateRequested()
+                                }
+                            }
+                        },
+                        // 长按**不要求已装**：没装过的人也要能从版本菜单里挑一版装上，
+                        // 而菜单里选任意一行本来就是走 switchRuntimeVersion 的安装路径。
+                        onLongClick = { versionListOpen = true },
                     )
                     if (updateConfirming) {
                         AlertDialog(
@@ -824,15 +801,28 @@ fun FunctionSettingsContent(
                     if (versionListOpen) {
                         RuntimeVersionDialog(
                             currentVersion = runtimeVersion,
+                            slim = runtimeSlim,
+                            beta = runtimeBeta,
+                            onSlimChange = onRuntimeSlimChange,
+                            onBetaChange = onRuntimeBetaChange,
                             onDismiss = { versionListOpen = false },
                             onLoad = onListRuntimeVersions,
                             onInstall = { entry ->
                                 versionListOpen = false
                                 onSwitchRuntimeVersion(entry)
                             },
+                            // 当前那一行 = 重装：沿用卡片原来那个「保留数据 / 全新重装」二选一
+                            onReinstallCurrent = {
+                                versionListOpen = false
+                                reinstallChoice = true
+                            },
                             onGoUpdateApp = {
                                 versionListOpen = false
                                 onGoUpdateApp()
+                            },
+                            onImport = {
+                                versionListOpen = false
+                                onImportRuntime()
                             },
                         )
                     }
@@ -1373,59 +1363,37 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
 internal fun sourceLabelRes(source: String): Int = DshSource.labelRes(source)
 
 /**
- * 外观与 [OutlinedButton] 一致的按钮，但支持长按。
+ * 运行时版本菜单：长按运行时卡片唤出。
  *
- * 为什么不直接用 OutlinedButton 再叠一个 `pointerInput` 长按：Button 内部的 clickable
- * 是另一个手势拥有者，抬手时它照样会触发一次 onClick —— 于是「长按唤出版本列表」会
- * 顺带触发一次「检查更新」。自己画边框 + [combinedClickable]，手势只有一个拥有者，
- * 行为是确定的。
- */
-@Composable
-private fun OutlinedActionButton(
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    onLongClick: (() -> Unit)? = null,
-    content: @Composable () -> Unit,
-) {
-    val shape = RoundedCornerShape(20.dp)
-    val borderColor =
-        if (enabled) MaterialTheme.colorScheme.outline
-        else MaterialTheme.colorScheme.outlineVariant
-    val contentColor =
-        if (enabled) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-    Box(
-        modifier = Modifier
-            .height(40.dp)
-            .clip(shape)
-            .border(1.dp, borderColor, shape)
-            .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        CompositionLocalProvider(LocalContentColor provides contentColor) { content() }
-    }
-}
-
-/**
- * 运行时版本列表：长按「更新」唤出。
+ * 界面按用户 2026-10 定的形状：**两个两档滑块**（完整/精简、正式/测试）在顶上，改一下
+ * 就重拉一次列表；列表只显示所选组合（[RuntimeVersion.matchesFilter]），当前已装那一版
+ * 即使被筛掉也**钉在最上面** —— 否则滑到别的类型/通道时，"我在跑哪一版"就消失了。
+ * 点当前版本 = 重装（沿用保留数据/全新重装二选一），点其它版本 = 切换到那一版。
+ * 左下角是导入本地包（[AlertDialog] 的 dismissButton 就在左下角）。
  *
- * 列出仓库里所有 runtime release —— 滚动通道只有「最新一份」，历史版本只能按各自的
- * tag 取，所以降级 / 回到某个具体版本必须靠这一页。要求比当前 App 更新的版本不给装，
- * 点它只会指路去更新应用（否则装完连容器都起不来）。
+ * 为什么还要列历史版本：滚动 tag 只有四个位置（latest / slim / beta / slim-beta），内容
+ * 会被就地覆盖，降级或回到某个具体版本只能靠带版本号的历史 release。
  */
 @Composable
 private fun RuntimeVersionDialog(
     currentVersion: String,
+    slim: Boolean,
+    beta: Boolean,
+    onSlimChange: (Boolean) -> Unit,
+    onBetaChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onLoad: suspend () -> List<RuntimeVersion>,
     onInstall: (RuntimeVersion) -> Unit,
+    onReinstallCurrent: () -> Unit,
     onGoUpdateApp: () -> Unit,
+    onImport: () -> Unit,
 ) {
     var versions by remember { mutableStateOf<List<RuntimeVersion>?>(null) }
     var failed by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
-    LaunchedEffect(reloadKey) {
+    // 两个滑块也在 key 里：改了就重拉（列表内容由它们筛选，旧的列表已经不代表当前选择）。
+    // 滑块的**落盘**在外面做（onSlimChange/onBetaChange 直接写 prefs），这里只负责重拉。
+    LaunchedEffect(reloadKey, slim, beta) {
         versions = null
         failed = false
         val loaded = runCatching { onLoad() }.getOrNull()
@@ -1435,47 +1403,211 @@ private fun RuntimeVersionDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.dsh_runtime_versions_title)) },
         text = {
-            val list = versions
-            when {
-                failed -> Column {
-                    Text(stringResource(R.string.dsh_runtime_versions_failed))
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { reloadKey++ }) {
-                        Text(stringResource(R.string.dsh_runtime_versions_retry))
+            Column {
+                RuntimeFlavorSlider(slim = slim, onSelect = onSlimChange)
+                // 选了非默认那一端才解释它是什么（精简版砍了什么 / 测试版可能不稳定）。
+                // 常显会把菜单顶下去，而且默认端本来就不需要解释。
+                if (slim) RuntimeSliderNote(text = stringResource(R.string.dsh_runtime_slim_summary))
+                Spacer(Modifier.height(6.dp))
+                RuntimeChannelSlider(beta = beta, onSelect = onBetaChange)
+                if (beta) RuntimeSliderNote(text = stringResource(R.string.dsh_runtime_beta_summary))
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.dsh_runtime_menu_filter_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                val list = versions
+                when {
+                    failed -> Column {
+                        Text(stringResource(R.string.dsh_runtime_versions_failed))
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = { reloadKey++ }) {
+                            Text(stringResource(R.string.dsh_runtime_versions_retry))
+                        }
                     }
-                }
-                list == null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(10.dp))
-                    Text(stringResource(R.string.dsh_runtime_versions_loading))
-                }
-                else -> Column {
-                    Text(
-                        text = stringResource(R.string.dsh_runtime_versions_warning),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    LazyColumn(
-                        modifier = Modifier.heightIn(max = 320.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        items(list, key = { it.tag + "|" + it.version }) { entry ->
-                            RuntimeVersionRow(
-                                entry = entry,
-                                current = entry.version == currentVersion,
-                                onInstall = { onInstall(entry) },
-                                onGoUpdateApp = onGoUpdateApp,
-                            )
+                    list == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(stringResource(R.string.dsh_runtime_versions_loading))
+                    }
+                    else -> {
+                        val visible = list.filter { RuntimeVersion.matchesFilter(it, slim, beta) }
+                        val currentVisible = visible.any { it.version == currentVersion }
+                        Text(
+                            text = stringResource(R.string.dsh_runtime_versions_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 320.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            // 当前已装被筛掉时钉一行在最上面：重装这条路任何时候都要够得着
+                            if (currentVersion.isNotEmpty() && !currentVisible) {
+                                item(key = "current-pinned") {
+                                    RuntimeCurrentVersionRow(
+                                        version = currentVersion,
+                                        onReinstall = onReinstallCurrent,
+                                    )
+                                }
+                            }
+                            if (visible.isEmpty()) {
+                                item(key = "empty") {
+                                    Text(
+                                        text = stringResource(R.string.dsh_runtime_menu_empty),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            items(visible, key = { it.tag + "|" + it.version }) { entry ->
+                                RuntimeVersionRow(
+                                    entry = entry,
+                                    current = entry.version == currentVersion,
+                                    onInstall = { onInstall(entry) },
+                                    onReinstall = onReinstallCurrent,
+                                    onGoUpdateApp = onGoUpdateApp,
+                                )
+                            }
                         }
                     }
                 }
             }
         },
+        // 左下角是导入（dismissButton 就在确认键左边），右下角是关闭
+        dismissButton = {
+            TextButton(onClick = onImport) { Text(stringResource(R.string.dsh_runtime_import)) }
+        },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dsh_runtime_menu_close)) }
         },
     )
+}
+
+/**
+ * 版本类型滑块：完整版 ↔ 精简版。
+ *
+ * 用两档 `Slider`（steps = 1）而不是分段按钮：用户要的就是「滑一下切过去」，而且滑块
+ * 把两端的名字摆在轨道两头，「往哪边滑是什么」一眼可见。
+ */
+@Composable
+private fun RuntimeFlavorSlider(slim: Boolean, onSelect: (Boolean) -> Unit) {
+    RuntimeTwoStopSlider(
+        caption = stringResource(R.string.dsh_runtime_menu_flavor),
+        leftLabel = stringResource(R.string.dsh_runtime_flavor_full),
+        rightLabel = stringResource(R.string.dsh_runtime_flavor_slim),
+        rightSelected = slim,
+        onSelect = onSelect,
+    )
+}
+
+/** 更新通道滑块：正式版 ↔ 测试版。 */
+@Composable
+private fun RuntimeChannelSlider(beta: Boolean, onSelect: (Boolean) -> Unit) {
+    RuntimeTwoStopSlider(
+        caption = stringResource(R.string.dsh_runtime_menu_channel),
+        leftLabel = stringResource(R.string.dsh_runtime_channel_stable_short),
+        rightLabel = stringResource(R.string.dsh_runtime_channel_beta_short),
+        rightSelected = beta,
+        onSelect = onSelect,
+    )
+}
+
+/**
+ * 两档滑块。
+ *
+ * @param rightSelected 当前选的是右边那一档
+ * @param onSelect **只在真的换了档**时回调（落盘 + 重拉列表）；拖动过程中的中间值不回调
+ *   —— 每帧都写 prefs 再触发一次网络请求，会把列表刷成幻灯片。
+ */
+@Composable
+private fun RuntimeTwoStopSlider(
+    caption: String,
+    leftLabel: String,
+    rightLabel: String,
+    rightSelected: Boolean,
+    onSelect: (Boolean) -> Unit,
+) {
+    var dragging by remember { mutableStateOf(rightSelected) }
+    // 外部状态（落盘后的回读、别处改了同一个开关）变了要跟着走，否则滑块会和实际选择不符
+    LaunchedEffect(rightSelected) { dragging = rightSelected }
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            text = caption,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Slider(
+            value = if (dragging) 1f else 0f,
+            onValueChange = { dragging = it >= 0.5f },
+            onValueChangeFinished = { if (dragging != rightSelected) onSelect(dragging) },
+            valueRange = 0f..1f,
+            steps = 1,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            RuntimeSliderEndLabel(text = leftLabel, selected = !dragging)
+            RuntimeSliderEndLabel(text = rightLabel, selected = dragging)
+        }
+    }
+}
+
+@Composable
+private fun RuntimeSliderEndLabel(text: String, selected: Boolean) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (selected) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** 滑块下面那行解释（只在选了非默认端时出现）。 */
+@Composable
+private fun RuntimeSliderNote(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 2.dp),
+    )
+}
+
+/** 当前已装那一版被筛选条件排除时的钉子行：只有版本号和一个「重装」。 */
+@Composable
+private fun RuntimeCurrentVersionRow(version: String, onReinstall: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
+            .combinedClickable(onClick = onReinstall)
+            .padding(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = version,
+                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            RuntimeRowActionLabel(text = stringResource(R.string.dsh_runtime_reinstall))
+        }
+        Spacer(Modifier.height(4.dp))
+        ModuleLabel(
+            text = stringResource(R.string.dsh_runtime_current),
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+    }
 }
 
 /** 版本列表里的一行：版本号 + 通道标签 + dsh/node/体积，点了就切过去。 */
@@ -1484,6 +1616,7 @@ private fun RuntimeVersionRow(
     entry: RuntimeVersion,
     current: Boolean,
     onInstall: () -> Unit,
+    onReinstall: () -> Unit,
     onGoUpdateApp: () -> Unit,
 ) {
     // 这份运行时要求比当前 App 更高的版本：装上也起不来，点它只能去更新应用
@@ -1497,18 +1630,38 @@ private fun RuntimeVersionRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(container)
-            .combinedClickable(onClick = { if (tooOld) onGoUpdateApp() else onInstall() })
+            // 当前版本 = 重装（走保留数据/全新重装二选一），别的版本 = 切换过去
+            .combinedClickable(
+                onClick = {
+                    when {
+                        tooOld -> onGoUpdateApp()
+                        current -> onReinstall()
+                        else -> onInstall()
+                    }
+                },
+            )
             .padding(10.dp),
     ) {
         // 版本号单独占一行：`0.1.5-rc.1-ubuntunoble-r3-beta` 这种串在等宽字体下
         // 已经接近对话框宽度，再和两个标签挤一行就会被压成两行断字
-        Text(
-            text = entry.version,
-            style = MaterialTheme.typography.bodyMedium,
-            fontFamily = FontFamily.Monospace,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = entry.version,
+                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            // 「这一行点下去会发生什么」直接写在行上（当前=重装，其它=切换）
+            if (!tooOld) {
+                RuntimeRowActionLabel(
+                    text = stringResource(
+                        if (current) R.string.dsh_runtime_reinstall else R.string.dsh_runtime_row_switch,
+                    ),
+                )
+            }
+        }
         Spacer(Modifier.height(4.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1547,6 +1700,17 @@ private fun RuntimeVersionRow(
             )
         }
     }
+}
+
+/** 行右侧那个动作标签（重装 / 切换）。 */
+@Composable
+private fun RuntimeRowActionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 8.dp),
+    )
 }
 
 /** 通道标签文案：正式 / 精简 / 测试 / 精简测试 / 历史版本。 */
