@@ -1487,6 +1487,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_userscripts_pick">从文件选</string>
     <string name="dsh_userscripts_empty">还没装脚本。粘贴一个、或选一个 .user.js —— 它会在页面自己的脚本之前运行。</string>
     <string name="dsh_userscripts_count">已装 %1$d 个</string>
+    <string name="dsh_userscripts_empty_filtered">没有匹配的脚本。</string>
+    <string name="dsh_userscripts_count_filtered">命中 %1$d / 共 %2$d 个</string>
     <string name="dsh_userscripts_builtin_section">应用内置（随应用发布，不可删除）</string>
     <string name="dsh_userscripts_builtin_hint">与你导入的脚本走同一条注入管道 —— 这就是应用自己往页面里注入的那几段，现在一处看得全。</string>
     <string name="dsh_userscripts_builtin_always_on">常开</string>

@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +43,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,6 +88,40 @@ import me.bmax.apatch.util.ui.showToast
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserscriptsScreen(navigator: DestinationsNavigator) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.dsh_userscripts_title)) },
+                navigationIcon = {
+                    IconButton(onClick = { navigator.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        UserscriptsContent(modifier = Modifier.padding(padding))
+    }
+}
+
+/**
+ * 用户脚本的正文：内置（应用自带那几段）/ 我装的 / 市场。
+ *
+ * 单独抽出来是因为**插件首页的「用户脚本」那一组直接复用它** —— 入口从「设置 → 功能」
+ * 右上角搬到插件首页之后，同一个页面在两地各留一份实现，很快就会各长各的（这正是「对齐
+ * UI」要防的事）。独立页的顶栏（标题 + 返回）留在 [UserscriptsScreen] 里；插件首页用的是
+ * 它自己的搜索栏。
+ *
+ * @param revealMarket 递增的触发计数：插件首页那个「商店」按钮在脚本这一组时，用它把市场
+ *   那一段滚进视野。用计数而不是布尔，是为了连点两次也各有一次反应。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun UserscriptsContent(
+    modifier: Modifier = Modifier,
+    revealMarket: Int = 0,
+    filter: String = "",
+) {
     val context = LocalContext.current
     var master by remember { mutableStateOf(Userscripts.masterEnabled(context)) }
     var scripts by remember { mutableStateOf(Userscripts.list(context)) }
@@ -207,24 +244,18 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.dsh_userscripts_title)) },
-                navigationIcon = {
-                    IconButton(onClick = { navigator.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-        ) {
+    val scrollState = rememberScrollState()
+    // 市场那一段在列里的纵向偏移（px）：由它自己的 modifier 量出来，供 revealMarket 滚过去
+    var marketOffset by remember { mutableStateOf(0) }
+    LaunchedEffect(revealMarket) {
+        if (revealMarket > 0 && marketOffset > 0) scrollState.animateScrollTo(marketOffset)
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState),
+    ) {
             // ── 应用内置：与「我装的脚本」走同一条注入管道，但**不受总开关约束** ──
             // 所以放在最上面：这段说明的是「页面被注入什么」，与下面「我要不要跑自己的脚本」是
             // 两件事。也是「一处看得全」的那一处 —— 以前这些散在设置与代码里。
@@ -340,21 +371,31 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
             }
 
             HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-            if (scripts.isEmpty()) {
+            // 搜索框（插件首页那个）在这一组里过滤的是「我装的」：内置那几段是随包发的，
+            // 不是"搜出来"的东西，所以不参与过滤。
+            val shown = if (filter.isBlank()) scripts else scripts.filter {
+                it.title.contains(filter, ignoreCase = true) || it.id.contains(filter, ignoreCase = true)
+            }
+            if (shown.isEmpty()) {
                 Text(
-                    stringResource(R.string.dsh_userscripts_empty),
+                    stringResource(
+                        if (filter.isBlank()) R.string.dsh_userscripts_empty
+                        else R.string.dsh_userscripts_empty_filtered
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
                 )
             } else {
                 Text(
-                    stringResource(R.string.dsh_userscripts_count, scripts.size),
+                    // 有过滤词时报「命中几个 / 共几个」：只报总数会让人以为过滤没生效
+                    if (filter.isBlank()) stringResource(R.string.dsh_userscripts_count, shown.size)
+                    else stringResource(R.string.dsh_userscripts_count_filtered, shown.size, scripts.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 2.dp),
                 )
-                for (s in scripts) {
+                for (s in shown) {
                     ScriptRow(
                         script = s,
                         onToggle = { want ->
@@ -368,7 +409,11 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
 
             // ── 脚本市场（GreasyFork）──
             // 放在最后：先把「已经注入/已经装了哪些」说清，再谈「还能装什么」。
-            HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            HorizontalDivider(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .onGloballyPositioned { marketOffset = it.positionInParent().y.toInt() },
+            )
             Text(
                 stringResource(R.string.dsh_userscripts_market_section),
                 style = MaterialTheme.typography.labelMedium,
@@ -442,7 +487,6 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
             }
             Spacer(Modifier.height(24.dp))
         }
-    }
 
     if (showPaste) {
         AlertDialog(

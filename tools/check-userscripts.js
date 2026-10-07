@@ -495,12 +495,42 @@ ok(/const val KEY_USERSCRIPTS_ON = "dsh_userscripts_on"/.test(env) &&
 ok(/internal fun idOf\(title: String, text: String\): String/.test(us) &&
   /Integer\.toHexString\(text\.hashCode\(\)\)/.test(us),
   "文件名 = 标题 slug + 正文哈希（标题进名字，重装同文即覆盖）");
-// 2026-10 起入口在**功能设置页右上角**（插件页那张卡摘了）：一处常驻可见的图标，
-// 比塞进插件列表更找得到 —— 而且它本来就是"功能"这一族。
-ok(/navigator\.navigate\(UserscriptsScreenDestination\)/.test(fnScreen) &&
-  /Icons\.Outlined\.Extension/.test(fnScreen) &&
-  /actions = \{/.test(fnScreen),
-  "功能页右上角有用户脚本入口（点了真的会导航）");
+// 2026-10 起入口在**插件首页**（底栏「插件」那一页）的第二组：用户脚本与 DSH 插件是同一件事
+// 的两半（都往容器/页面里塞东西），分成两处入口等于要用户先记住"它在哪一页"。
+const pluginHome = fs.readFileSync(
+  "app/src/main/java/me/bmax/apatch/ui/screen/DshPluginScreen.kt",
+  "utf8",
+);
+ok(!/UserscriptsScreenDestination/.test(fnScreen),
+  "功能页右上角那个入口已撤（入口搬去插件首页，不留第二处）");
+ok(/internal fun UserscriptsContent\(/.test(screen) && /UserscriptsContent\(/.test(pluginHome),
+  "插件首页与独立页共用同一份正文（UserscriptsContent），不是各写一份");
+// 只看 ModuleGroupRow 那一段：这两句 label 在文件别处也出现（标题栏也按组换），
+// 全文匹配抓不住"把 chip 的标签换成别的资源"这种改动。
+const groupRow = (pluginHome.match(/private fun ModuleGroupRow\([\s\S]*?\n\}/) || [])[0] || "";
+ok(/private const val GROUP_PLUGINS = "plugins"/.test(pluginHome) &&
+  /private const val GROUP_SCRIPTS = "scripts"/.test(pluginHome) &&
+  /FilterChip\(/.test(groupRow) &&
+  /R\.string\.dsh_plugins/.test(groupRow) && /R\.string\.dsh_userscripts_title/.test(groupRow),
+  "插件首页有「DSH 插件 / 用户脚本」两组的切换（FilterChip，与商店分类行同一套视觉）");
+ok(/if \(group == GROUP_SCRIPTS\)[\s\S]{0,80}marketRequest\+\+/.test(pluginHome) &&
+  /navigator\.navigate\(DshPluginStoreScreenDestination\)/.test(pluginHome),
+  "商店按钮按当前显示的那一组分流：插件 → 插件商店；脚本 → 脚本市场");
+ok(/revealMarket = marketRequest/.test(pluginHome) &&
+  /scrollState\.animateScrollTo\(marketOffset\)/.test(screen),
+  "脚本那一组的「商店」是把市场滚进视野（市场就在正文里，不再开一页一样的）");
+ok(/filter = scriptFilter/.test(pluginHome) && /val shown = if \(filter\.isBlank\(\)\)/.test(screen),
+  "一个搜索栏管两组：脚本那组用它过滤「我装的」");
+// DSH 页面（WebUI Activity）的悬浮球也能跳到脚本页 —— 那一页不在导航图里，走 AppNavigation
+const webuiAct = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/DshWebUiActivity.kt", "utf8");
+const appNav = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/AppNavigation.kt", "utf8");
+const mainAct = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt", "utf8");
+ok(/expanded = false; onOpenScripts\(\)/.test(webuiAct) &&
+  /onOpenScripts = \{[\s\S]{0,200}AppNavigation\.openScreen\(/.test(webuiAct) &&
+  /SCREEN_USERSCRIPTS/.test(appNav) && /UserscriptsScreenDestination/.test(mainAct),
+  "WebUI 的悬浮球能跳到用户脚本页（菜单项 → AppNavigation → MainActivity 落地）");
+ok(/fun screenOf\(intent: Intent\?\): String\?/.test(appNav) && /else -> null/.test(appNav),
+  "那一跳走白名单：不认识的值一律 null（MainActivity 是 exported，不收自由路由）");
 ok(!/module_userscripts/.test(moduleSrc) && !/onOpenUserscripts/.test(moduleScreen),
   "插件页那张卡已摘掉（没有两处入口各说各话）");
 

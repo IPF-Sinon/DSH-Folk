@@ -29,6 +29,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,8 +44,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +71,7 @@ import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
+import me.bmax.apatch.ui.screen.settings.UserscriptsContent
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.ui.component.DshPluginDetailSheet
 import me.bmax.apatch.ui.component.DshPluginProgressDialog
@@ -87,6 +92,13 @@ import me.bmax.apatch.util.ui.LocalSnackbarHost
  * - 右上角进 **插件商店**（dsh-market）；
  * - 右下 FAB 是 **本地安装**（选一个 .tgz）。
  */
+/**
+ * 这一页的两组内容。用户脚本的入口原本挂在「设置 → 功能」右上角，现在收到这里 ——
+ * 它和 DSH 插件是同一件事的两半（都往容器/页面里塞东西），分成两页反而要用户记住入口在哪。
+ */
+private const val GROUP_PLUGINS = "plugins"
+private const val GROUP_SCRIPTS = "scripts"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>
 @Composable
@@ -97,6 +109,12 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
     val scope = rememberCoroutineScope()
 
     val runtimeInstalled = remember { DshEnv.isRuntimeInstalled(context) }
+
+    // 当前显示哪一组；以及脚本那一组的过滤词（与插件那边同样是**过滤**语义，所以共用搜索栏）。
+    var group by rememberSaveable { mutableStateOf(GROUP_PLUGINS) }
+    var scriptFilter by rememberSaveable { mutableStateOf("") }
+    // 商店按钮在脚本这一组要把市场滚进视野：用计数触发，连点两次也各有一次反应。
+    var marketRequest by rememberSaveable { mutableIntStateOf(0) }
 
     LaunchedEffect(runtimeInstalled) {
         if (runtimeInstalled && viewModel.plugins.isEmpty()) viewModel.refresh()
@@ -122,41 +140,71 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
     Scaffold(
         topBar = {
             SearchAppBar(
-                title = { Text(stringResource(R.string.dsh_plugins)) },
-                searchText = viewModel.search,
-                onSearchTextChange = { viewModel.search = it },
-                onClearClick = { viewModel.search = "" },
+                title = {
+                    Text(
+                        stringResource(
+                            if (group == GROUP_SCRIPTS) R.string.dsh_userscripts_title
+                            else R.string.dsh_plugins
+                        )
+                    )
+                },
+                // 两组的搜索都是「过滤已加载的列表」：插件过滤已装插件，脚本过滤「我装的」。
+                // 语义一样才敢共用一个框 —— 换成"去 GreasyFork 搜"就必须分开（市场那个框在正文里）。
+                searchText = if (group == GROUP_SCRIPTS) scriptFilter else viewModel.search,
+                onSearchTextChange = {
+                    if (group == GROUP_SCRIPTS) scriptFilter = it else viewModel.search = it
+                },
+                onClearClick = {
+                    if (group == GROUP_SCRIPTS) scriptFilter = "" else viewModel.search = ""
+                },
                 dropdownContent = {
-                    IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = "Refresh")
+                    // 刷新只对插件那组有意义；脚本那组的「重读列表」在安装/删除后自己会做。
+                    if (group != GROUP_SCRIPTS) {
+                        IconButton(onClick = { viewModel.refresh() }) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = "Refresh")
+                        }
                     }
+                    // 同一个按钮按**当前显示的是哪一组**分流：插件 → 插件商店（另一页）；
+                    // 脚本 → 脚本市场。市场那一段就在脚本正文里（搜索框 + 结果 + 安装），
+                    // 所以这里是把它滚进视野，而不是再开一页长得一样的页面。
                     IconButton(onClick = {
-                        navigator.navigate(DshPluginStoreScreenDestination)
+                        if (group == GROUP_SCRIPTS) {
+                            marketRequest++
+                        } else {
+                            navigator.navigate(DshPluginStoreScreenDestination)
+                        }
                     }) {
                         Icon(
                             Icons.Outlined.Storefront,
-                            contentDescription = stringResource(R.string.dsh_plugin_store),
+                            contentDescription = stringResource(
+                                if (group == GROUP_SCRIPTS) R.string.dsh_userscripts_market_section
+                                else R.string.dsh_plugin_store
+                            ),
                         )
                     }
                 },
             )
         },
         floatingActionButton = {
-            // 本地安装：留在右下角，与 FolkPatch 模块页一致
-            FloatingActionButton(
-                onClick = {
-                    pickTarball.launch(
-                        Intent(Intent.ACTION_GET_CONTENT).apply {
-                            type = "*/*"
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                        }
-                    )
-                },
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Icon(Icons.Outlined.FolderOpen, contentDescription = stringResource(R.string.dsh_local_install))
+            // 本地安装：留在右下角，与 FolkPatch 模块页一致。
+            // 只在「插件」那一组出现 —— 它选的是 .tgz（插件包），脚本那一组装的是 .user.js，
+            // 摆在脚本列表上只会让人点错（脚本的安装入口在正文里的粘贴 / 选文件）。
+            if (group != GROUP_SCRIPTS) {
+                FloatingActionButton(
+                    onClick = {
+                        pickTarball.launch(
+                            Intent(Intent.ACTION_GET_CONTENT).apply {
+                                type = "*/*"
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                            }
+                        )
+                    },
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(Icons.Outlined.FolderOpen, contentDescription = stringResource(R.string.dsh_local_install))
+                }
             }
         },
     ) { innerPadding ->
@@ -166,16 +214,61 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                 onGoHome = { navigator.popBackStack() },
             )
         } else {
-            DshPluginList(
-                innerPadding = innerPadding,
-                viewModel = viewModel,
-                snackBarHost = snackBarHost,
-            )
+            Column(Modifier.fillMaxSize().padding(innerPadding)) {
+                ModuleGroupRow(group = group, onSelect = { group = it })
+                when (group) {
+                    // 用户脚本：与「设置 → 用户脚本」那一页**同一份正文**（UserscriptsContent）。
+                    // 入口搬过来之后两处各留一份实现，很快就会各长各的 —— 那正是"对齐 UI"要防的事。
+                    GROUP_SCRIPTS -> UserscriptsContent(
+                        modifier = Modifier.weight(1f),
+                        revealMarket = marketRequest,
+                        filter = scriptFilter,
+                    )
+                    else -> DshPluginList(
+                        // 外层 Column 已经吃掉 scaffold 的 inset，这里不能再吃一遍
+                        innerPadding = PaddingValues(0.dp),
+                        viewModel = viewModel,
+                        snackBarHost = snackBarHost,
+                    )
+                }
+            }
         }
     }
 
     // 安装/卸载进度：pnpm 可能跑几分钟，不能只在结束后弹一条 snackbar
     PluginProgressHost(viewModel)
+}
+
+/**
+ * 两组内容的切换：DSH 插件 / 用户脚本。
+ *
+ * 用 FilterChip 而不是 TabRow / SegmentedButton：商店的分类行就是这一套（同样的选中色与
+ * 间距），两页挨在一起时视觉上才像同一个应用（本项目此前没有用过 TabRow，不新引入一种）。
+ */
+@Composable
+private fun ModuleGroupRow(group: String, onSelect: (String) -> Unit) {
+    val chipColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 1f)
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        FilterChip(
+            selected = group != GROUP_SCRIPTS,
+            onClick = { onSelect(GROUP_PLUGINS) },
+            label = { Text(stringResource(R.string.dsh_plugins)) },
+            colors = chipColors,
+        )
+        FilterChip(
+            selected = group == GROUP_SCRIPTS,
+            onClick = { onSelect(GROUP_SCRIPTS) },
+            label = { Text(stringResource(R.string.dsh_userscripts_title)) },
+            colors = chipColors,
+        )
+    }
 }
 
 /**

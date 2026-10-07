@@ -1513,6 +1513,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_pick">Pick a file</string>
     <string name="dsh_userscripts_empty">Nothing installed yet. Paste one or pick a .user.js — it runs before the page own scripts.</string>
     <string name="dsh_userscripts_count">%1$d installed</string>
+    <string name="dsh_userscripts_empty_filtered">No installed script matches that.</string>
+    <string name="dsh_userscripts_count_filtered">%1$d of %2$d match</string>
     <string name="dsh_userscripts_builtin_section">Built in (shipped with the app, cannot be deleted)</string>
     <string name="dsh_userscripts_builtin_hint">These run through the same injection pipeline as the scripts you add — they are the app own injections, now visible in one place.</string>
     <string name="dsh_userscripts_builtin_always_on">Always on</string>

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,7 +55,6 @@ import com.ramcosta.composedestinations.generated.destinations.PermissionHubScre
 import com.ramcosta.composedestinations.generated.destinations.FileAccessScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.UserscriptsScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -334,15 +332,6 @@ internal fun DshSettingsScreen(
                     if (permissionOnly) {
                         IconButton(onClick = { navigator.navigate(PermissionLogScreenDestination) }) {
                             Icon(Icons.Outlined.ReceiptLong, contentDescription = stringResource(R.string.dsh_permission_log_title))
-                        }
-                    } else {
-                        // 用户脚本的入口放在功能页右上角：它管的是「功能设置」这一族，
-                        // 但本身是一整页（内置 + 我装的 + 市场），不该再占一张卡片。
-                        IconButton(onClick = { navigator.navigate(UserscriptsScreenDestination) }) {
-                            Icon(
-                                Icons.Outlined.Extension,
-                                contentDescription = stringResource(R.string.dsh_userscripts_entry),
-                            )
                         }
                     }
                 },
