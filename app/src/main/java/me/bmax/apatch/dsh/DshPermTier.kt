@@ -46,7 +46,7 @@ object DshPermTier {
 
     const val DEFAULT = FULL
 
-    /** 旧的 / 空的 / 非法的值一律回落 [DEFAULT]（与 [PermissionManager.normalize] 同一纪律）。 */
+    /** 旧的 / 空的 / 非法的值一律回落 [DEFAULT]：认不出的值不能被解释成「更宽」。 */
     fun normalize(value: String?): String =
         if (value != null && OPTIONS.contains(value)) value else DEFAULT
 
