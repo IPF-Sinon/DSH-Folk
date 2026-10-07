@@ -263,6 +263,19 @@ using tags such as `v1.8.1-beta.7` marked as GitHub prereleases. Several decisio
 - When the toggle is on, **query the list before `releases/latest`**. By definition, the latter skips prereleases; querying it first would return the production version,
   conclude “already up to date,” and return immediately, leaving the list no chance to be checked — making the toggle appear ineffective.
 
+**Stable releases** have no workflow of their own (`.github/workflows` holds only build / beta / runtime); the procedure is four manual steps:
+
+1. Bump the version in all three places: `baseVersionName()` / `baseVersionCode()` in `build.gradle.kts` and `VERSION` in `util/Changelog.kt`, and add a
+   one-line summary at the top of `changelog_items`. `tools/check-changelog.js` blocks the commit when the three disagree (it also validates the
+   versionCode formula and monotonicity).
+2. Push to `main` and wait for the push run of **Build DSH-Folk** to go green (a push builds debug only).
+3. Manually dispatch the same workflow with `build_type=release` and take the `dsh-folk-release-<sha>` artifact: release-signed packages for both ABIs plus
+   their `.sha256` files.
+4. Create a **non-prerelease** release. Name the assets `DSH-Folk-<version>-<abi>.apk` and the checksum files `<apk name>.sha256` (recompute after renaming
+   so the filename inside each checksum file matches) — the app’s `pickApkAsset` recognises the ABI **from the asset name** and falls back to a browser
+   download when it cannot pair them; and `releases/latest` only considers non-prereleases, so marking a stable build as `prerelease` means stable users
+   never see an update prompt at all.
+
 APKs are built only by GitHub Actions; no locally packaged artifacts are provided. To produce your own package, manually trigger **Build DSH-Folk** in Actions
 (`workflow_dispatch`, choosing debug / release / both). A release requires the repository secrets
 `KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PRIVATE_PASSWORD`;

@@ -229,6 +229,19 @@ tag 形如 `v1.8.1-beta.7`，标了 GitHub 的 prerelease。几个刻意的选�
 - 开着开关时**先查列表再查 `releases/latest`**。后者定义上跳过 prerelease，先问它会拿到正式版、
   判定「已是最新」直接返回，列表根本没机会被看一眼 —— 开关看起来毫无作用。
 
+**正式版**没有单独的工作流（`.github/workflows` 只有 build / beta / runtime），流程是手动四步：
+
+1. 三处版本号一起改：`build.gradle.kts` 的 `baseVersionName()` / `baseVersionCode()`、
+   `util/Changelog.kt` 的 `VERSION`，并在 `changelog_items` 顶上补一条总述。三处不一致时
+   `tools/check-changelog.js` 会拦住（它同时校验 versionCode 的公式值与单调性）。
+2. 推 `main`，等 **Build DSH-Folk** 的 push 那次跑绿（push 只出 debug）。
+3. 手动派发同一个工作流、`build_type=release`，取 `dsh-folk-release-<sha>` 工件：两个 ABI 的
+   release 签名包 + `.sha256`。
+4. 建一个**非 prerelease** 的 release。资产按正式版命名 `DSH-Folk-<版本>-<abi>.apk`，`.sha256`
+   必须叫 `<apk 名>.sha256`（改名后要重算，让文件里那行的文件名也跟上）—— 应用侧的
+   `pickApkAsset` 是**按资产名**里的 ABI 认的，配对不上就退回浏览器下载；而 `releases/latest`
+   只认非预发布，标错 `prerelease` 的话正式版用户永远收不到更新提示。
+
 APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出包：在 Actions 里手动触发 **Build DSH-Folk**
 （`workflow_dispatch`，可选 debug / release / both）。release 需要在仓库 secrets 里配置
 `KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PRIVATE_PASSWORD`；

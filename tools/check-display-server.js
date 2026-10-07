@@ -542,7 +542,9 @@ for (const f of SHARED) {
 {
   const wf = read('.github/workflows/build.yml');
   const onBlock = wf.slice(0, wf.indexOf('workflow_dispatch'));
-  for (const p of ['displayserver/**', 'tools/**']) {
+  // docs/** 也是门禁的输入（check-native-cli 拿 host-bridges 当命令清单、README 断言也在读
+  // docs/dev-notes.md）：改了文档却不跑门禁，那些断言永远没机会说话。
+  for (const p of ['displayserver/**', 'tools/**', 'docs/**']) {
     const hits = (onBlock.match(new RegExp(`'${p.replace(/[/*]/g, (c) => '\\' + c)}'`, 'g')) || []).length;
     must(hits >= 2, `build.yml 的 push 与 pull_request 都要包含 ${p}（现在命中 ${hits} 处）`);
   }
