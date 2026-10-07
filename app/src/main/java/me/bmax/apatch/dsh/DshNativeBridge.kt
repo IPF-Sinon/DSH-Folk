@@ -663,6 +663,20 @@ object DshNativeBridge {
                 str(ctx, R.string.dsh_native_err_unknown_endpoint, method, path),
                 "unknown_endpoint",
             )
+        // 权限挡位（[DshPermTier]）比下面那道弹窗更靠前：它不回答"要不要允许这一次"，而是
+        // "这一挡里根本不谈"。所以被它挡下时不弹窗 —— 弹了等于把用户刚设的上限又拿回来问一遍。
+        if (isWriteRequest(path) && !DshPermTier.nativeWriteAllowed(ctx)) {
+            val result = 403 to err(
+                str(
+                    ctx,
+                    if (DshPermTier.tier(ctx) == DshPermTier.READ_ONLY) R.string.dsh_perm_tier_blocked_readonly
+                    else R.string.dsh_perm_tier_blocked_workspace
+                ),
+                DshPermTier.blockedReason(ctx),
+            )
+            audit(ctx, method, path, params, cap, reason, result)
+            return result
+        }
         // 档位不够时**不**直接 403，而是阻塞着问用户。用户同意就把这次调用就地执行掉并返回真实
         // 结果 —— agent 不需要「申请 → 再调一次」，也就不会看到「申请成功了但调用还是失败」。
         val need = insufficient(ctx, cap, method, path, params)
@@ -1264,6 +1278,7 @@ object DshNativeBridge {
             .put("fellBackFrom", reach.selected?.let { PrivilegedShell.channelId(it) } ?: JSONObject.NULL)
             // 现在只有一个开关：限制模式。旧字段叫 strictness，语义已经不存在（见 PrivPolicy）
             .put("restrictMode", PrivPolicy.restrictMode(ctx))
+            .put("tier", DshPermTier.tier(ctx))
     }
 
     // ────────────────────────── 能力实现 ──────────────────────────

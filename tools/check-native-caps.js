@@ -371,5 +371,67 @@ console.log("\n── 提示词插件 ──");
   ok(rev !== null, "DshHostPrompt 里有 PLUGIN_REV" + (rev ? ` = ${rev[1]}` : ""));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 权限挡位（DshPermTier）：权限桥的天花板。
+//
+// 这一段的重点是**顺序**与**不弹窗**：挡位排在"要不要问"之前，被它挡下的请求直接 403，
+// 不弹提权框 —— 弹了等于把用户刚设的上限又拿回来问一遍。顺序写反了编译器不会报错，
+// 只有真机点一下才发现"设了仅可查看却还在弹窗"。
+{
+  const tier = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshPermTier.kt", "utf8");
+  const env = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt", "utf8");
+  const policy = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/RestrictModeScreen.kt", "utf8");
+  const zh = fs.readFileSync("app/src/main/res/values-zh-rCN/dsh_strings.xml", "utf8");
+
+  ok(/const val READ_ONLY = "read-only"/.test(tier) && /const val WORKSPACE_WRITE = "workspace-write"/.test(tier) &&
+    /const val FULL = "danger-full-access"/.test(tier) && /const val CUSTOM = "custom"/.test(tier),
+    "四挡的字面量与 dsh 自己的权限模式同词（read-only / workspace-write / danger-full-access + 自定义）");
+  ok(/val OPTIONS = listOf\(READ_ONLY, WORKSPACE_WRITE, FULL, CUSTOM\)/.test(tier) &&
+    /const val DEFAULT = FULL/.test(tier),
+    "界面顺序从严到宽，默认 = 完全权限（与这一版之前的行为一致，升级不悄悄收紧）");
+  ok(/fun normalize\(value: String\?\): String =\s*\n?\s*if \(value != null && OPTIONS.contains\(value\)\) value else DEFAULT/.test(tier),
+    "旧的 / 空的 / 非法的值一律回落 DEFAULT（不留一个「认不出就是最宽」的口子）");
+  ok(/fun nativeWriteAllowed\(ctx: Context\): Boolean = when \(tier\(ctx\)\) \{\s*\n?\s*READ_ONLY, WORKSPACE_WRITE -> false/.test(tier),
+    "权限桥的写类动作在「仅可查看」与「工作区内修改」下都不放行");
+  ok(/const val KEY_PERM_TIER = "perm_tier"/.test(env), "DshEnv 里有 perm_tier 这个键");
+
+  // 顺序：挡位判定必须出现在"问用户"之前（insufficient / 弹窗那一套之后就晚了）
+  const clampAt = bridge.indexOf("DshPermTier.nativeWriteAllowed(ctx)");
+  const askAt = bridge.indexOf("val need = insufficient(ctx, cap, method, path, params)");
+  ok(clampAt > 0 && askAt > 0 && clampAt < askAt,
+    "挡位闸排在提权弹窗之前（设了上限还要弹窗问一遍 = 上限没生效）");
+  ok(/val result = 403 to err\(/.test(bridge.slice(clampAt, clampAt + 600)) &&
+    /audit\(ctx, method, path, params, cap, reason, result\)/.test(bridge.slice(clampAt, clampAt + 700)),
+    "被挡下时直接 403 且进审计（事后要能回答「这条是挡位挡的」）");
+  ok(/\.put\("tier", DshPermTier\.tier\(ctx\)\)/.test(bridge),
+    "capabilities / elevate 的返回里带上挡位（agent 得知道天花板在哪，否则 403 只会被当故障）");
+
+  // 界面：四挡都要能选，且落盘走 setTier
+  ok(/DshPermTier\.OPTIONS/.test(policy) && /permTierLabelRes\(opt\)/.test(policy) &&
+    /DshPermTier\.setTier\(context\.applicationContext, opt\)/.test(policy),
+    "权限策略页按 OPTIONS 铺开四挡，选中即落盘");
+  // 行尾要跟上换行：dsh_perm_tier_full 是 dsh_perm_tier_full_desc 的前缀，不带边界的话把标题
+  // 那行改成 _desc 也照样绿（那说明钉的是「包含」，不是「这一挡的标题」）
+  ok(/DshPermTier\.READ_ONLY -> R\.string\.dsh_perm_tier_readonly\n/.test(policy) &&
+    /DshPermTier\.WORKSPACE_WRITE -> R\.string\.dsh_perm_tier_workspace\n/.test(policy) &&
+    /DshPermTier\.FULL -> R\.string\.dsh_perm_tier_full\n/.test(policy) &&
+    /else -> R\.string\.dsh_perm_tier_custom\n/.test(policy),
+    "四挡的标题都有对应文案（少一个就是空白行）");
+  ok(/dsh_perm_tier_blocked_readonly/.test(zh) && /dsh_perm_tier_blocked_workspace/.test(zh),
+    "两条拒绝理由（仅可查看 / 工作区内修改）都有文案给用户看");
+  // 新设置项必须能在设置搜索里搜到（本仓的既有要求：搜不到等于只有记得路径的人能用）
+  const reg = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/SettingsRegistry.kt", "utf8");
+  const search = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/SettingsSearchScreen.kt", "utf8");
+  ok(/SettingEntry\(\s*"perm_tier",\s*R\.string\.dsh_perm_tier_title,/.test(reg) &&
+    /directTarget = SettingsTarget\.PERM_POLICY/.test(reg) &&
+    /SettingsTarget\.PERM_POLICY ->\s*\n?\s*navigator\.navigate\(RestrictModeScreenDestination\)/.test(search),
+    "设置搜索里能搜到挡位并直达策略页（不然只有记得路径的人找得到）");
+  // 事实与提示词：agent 必须知道天花板，否则会反复重试
+  const facts = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshHostPrompt.kt", "utf8");
+  ok(/\.put\("permTier", DshPermTier\.tier\(ctx\)\)/.test(facts), "宿主事实里有 permTier");
+  ok(/permTier === 'read-only'/.test(prompt) && /permTier === 'workspace-write'/.test(prompt),
+    "提示词按挡位分别说明（被挡下不弹窗，不说清 agent 只会当成故障重试）");
+}
+
 console.log(fail === 0 ? "\n全部通过" : `\n${fail} 项失败`);
 process.exit(fail === 0 ? 0 : 1);

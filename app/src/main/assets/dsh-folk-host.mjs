@@ -856,6 +856,25 @@ function render(f) {
     const restrictedCaps = Array.isArray(f.restrictedCaps)
       ? f.restrictedCaps.filter((c) => typeof c === 'string')
       : [];
+    // 权限挡位：天花板，比"要不要问"更靠前。被它挡下时不开弹窗（弹了等于把用户刚设的上限
+    // 又拿回来问一遍），所以这里必须主动说清 —— 否则 agent 只会把 403 当故障反复重试。
+    if (ready && f.permTier === 'read-only') {
+      lines.push(
+        'The user set the permission tier to **read-only**: every write through the host bridges ' +
+          '(the native capability bridge and the file bridge) is refused with reason ' +
+          '\`tier_readonly\`, and no dialog is offered for it. Reading and searching are fine. ' +
+          'Treat refusals as a setting, not a failure: do not retry, and say what you could not change.'
+      );
+    } else if (ready && f.permTier === 'workspace-write') {
+      lines.push(
+        'The user set the permission tier to **workspace-write**: writes through the file bridge ' +
+          'are allowed only under /root/workspace (anything else is refused with reason ' +
+          '\`tier_workspace\`), and write actions on the native capability bridge are refused the ' +
+          'same way. No dialog is offered for those refusals. Keep changes inside the workspace, and ' +
+          'treat refusals as a setting, not a failure.'
+      );
+    }
+
     if (!ready) {
       // 还没就绪，讲弹窗频率只会让 agent 以为现在就能调
     } else if (f.restrictMode === true && restrictedCaps.length) {

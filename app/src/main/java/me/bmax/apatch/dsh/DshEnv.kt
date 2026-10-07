@@ -287,6 +287,15 @@ object DshEnv {
      * 关：能力启用之后不再逐条问；开：[KEY_PRIV_RESTRICT_CAPS] 里的能力每次都问。
      * 与档位（"允不允许做"）是两件事：档位决定边界，这一项决定"要不要再问一声"。
      */
+    /**
+     * 权限挡位：权限桥在 DSH 内所需的最低权限（见 [DshPermTier]）。
+     *
+     * 与 [KEY_PRIV_RESTRICT_MODE]（要不要问）和逐项能力档位（用不用得上）是三件事：挡位是**天花板**，
+     * 被它挡下的请求不弹窗、直接 403。默认 `danger-full-access` = 与这一版之前的行为一致，
+     * 所以升级不会悄悄收紧谁。
+     */
+    const val KEY_PERM_TIER = "perm_tier"
+
     const val KEY_PRIV_RESTRICT_MODE = "priv_restrict_mode"
 
     /**

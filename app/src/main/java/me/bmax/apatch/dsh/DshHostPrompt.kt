@@ -77,7 +77,7 @@ object DshHostPrompt {
      * 读一遍 assets 再全量覆盖。版本号存在 prefs 里，与 rootfs 无关 —— 重装运行时后
      * 文件没了但版本号还在，所以 [ensureInstalled] 另外检查文件是否真的存在。
      */
-    private const val PLUGIN_REV = 14
+    private const val PLUGIN_REV = 15
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =
@@ -264,6 +264,9 @@ object DshHostPrompt {
                 // 限制模式与能力清单：agent 靠它知道"这条调用还会不会弹窗"。不给的话它会
                 // 一直按旧假设行事 —— 要么不敢调，要么以为用户在故意刁难。
                 .put("restrictMode", PrivPolicy.restrictMode(ctx))
+                // 权限挡位：这是**天花板**（比"要不要问"更靠前）。不写进事实的话，agent 被
+                // 403 只会当成故障重试，而不知道是用户设的那一挡在挡它。
+                .put("permTier", DshPermTier.tier(ctx))
                 .put(
                     "restrictedCaps",
                     JSONArray(if (nativeOn) PrivPolicy.restrictedCaps(ctx).sorted() else emptyList<String>()),

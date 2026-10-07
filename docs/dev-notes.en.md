@@ -350,3 +350,28 @@ The File access scope page keeps the mapping-list editor (`ws_mounts`) but no lo
 switch: that section now shows whether it is currently in effect, according to the master switch. The
 copy has to say so — the user sees one switch that decides two things, and a description that omits
 half of it turns into "I never enabled the workspace, yet it can see my files".
+
+## The permission tier: a layer in front of "do I need to ask" (2026-10)
+
+The native-bridge side already had two layers: **per-capability access levels** (is this capability useful
+at all, long-lived) and **restriction mode** (ask before using it). The tier is a third layer placed in
+front of both: it answers "within this tier we do not negotiate". A request it refuses gets **no dialog**
+— just a 403 naming the reason (`tier_readonly` / `tier_workspace`) — because asking would hand the
+ceiling the user just set back to them, and their answer would override their own setting.
+
+The four tiers live in `DshPermTier`: read-only (both bridges serve reads only), workspace writes only
+(the file bridge accepts writes under /root/workspace only, the native bridge still refuses write
+actions), full access (no extra ceiling: per-capability levels and restriction mode decide), custom
+(the same as full access at this layer, worded differently: do not decide for me, I configure
+capabilities one by one). The default is **full access**: the tier did not exist before this version, and
+a default that is not the old behaviour would silently tighten someone's setup on upgrade.
+
+The workspace-write test normalises `.` and `..` by path segment before comparing prefixes:
+`/root/workspace/../../etc/passwd` looks like it is inside the workspace to a plain string prefix check. The
+file bridge also looks at **every path involved in the request** (move/copy carry src and dst); checking
+one of them leaves a back door — moving a file in from outside, or moving one out.
+
+The tier is written into the host facts (`permTier`) and rendered in the prompt section: an agent that
+gets a 403 without knowing where the ceiling is will treat it as a failure and retry. Changing
+`dsh-folk-host.mjs` means bumping `PLUGIN_REV` and updating the content hash in `check-fs-scope.js`
+(existing installs decide whether to re-materialise from the version number).

@@ -29,6 +29,8 @@ enum class SettingsTarget {
     THEME_STORE,
     /** 用户脚本页：不在分类页上，搜索结果要直接开它。 */
     USERSCRIPTS,
+    /** 权限策略页（挡位 + 限制模式都在那一页）：同样不在分类页上。 */
+    PERM_POLICY,
 }
 
 data class SettingEntry(
@@ -169,6 +171,17 @@ object SettingsRegistry {
             add(SettingEntry("function_permission", R.string.dsh_perm_hub_title, R.string.dsh_perm_hub_summary, SettingCategory.SECURITY))
             // 严格程度就在特权通道那一页里，但用户会按「严格」「宽松」这些词去搜 —— 单列一条
             add(SettingEntry("function_permission", R.string.dsh_priv_restrict_title, R.string.dsh_priv_restrict_summary, SettingCategory.SECURITY))
+            // 挡位与限制模式同页：搜索「仅可查看」「挡位」要能直接到那一页，而不是要用户
+            // 先猜它在「权限策略」里
+            add(
+                SettingEntry(
+                    "perm_tier",
+                    R.string.dsh_perm_tier_title,
+                    R.string.dsh_perm_tier_summary,
+                    SettingCategory.SECURITY,
+                    directTarget = SettingsTarget.PERM_POLICY,
+                ),
+            )
             add(SettingEntry("function_permission", R.string.dsh_native_section, R.string.dsh_native_summary, SettingCategory.SECURITY))
             add(SettingEntry("function_permission", R.string.dsh_adb_section, R.string.dsh_adb_summary, SettingCategory.SECURITY))
             // 共享存储挂在安全页上单独一张卡（不属于原生能力，见 FunctionSettings.kt 的说明）
