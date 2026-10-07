@@ -274,3 +274,20 @@ x86_64 是 `rootfs-x86_64.tar.gz` + `metadata-x86_64.json`（arm64 沿用无后�
 运行时可以在 `metadata.json` 里声明 `minAppVersion`（构建时从 `build.gradle.kts` 的基准版本自动取，
 `workflow_dispatch` 也可手动覆盖）：低于该版本的应用会先被要求更新软件，而不是下载一个装不上的运行时。
 已装运行时的要求会持久化，App 升级后自动放行；空字段 = 无要求，兼容旧 metadata。
+
+## 虚拟屏要的是通道，不是权限
+
+虚拟屏服务端（`displayserver/`）是 `app_process` 起的**独立进程**，以 uid 0（root）或 2000
+（shell/Shizuku）运行 —— 建一块带 `SUPPORTS_TOUCH` 的 TRUSTED 虚拟屏、以及调隐藏的
+`InputManager.injectInputEvent`，要的都是 `INJECT_EVENTS` 这类系统权限。普通 App 无论怎么申请
+都拿不到，所以**不存在**"授予虚拟屏权限"这件事：它要的是一条就绪的提权通道（root / Shizuku /
+无线 ADB）。
+
+这就是为什么缺通道时的引导不能写成"缺少权限，去授权"：那会把用户送去一个系统页，而那里没有
+他需要的开关。现在（2026-10）预览页在**进入时**与**启动失败时**各判一次
+`PrivilegedShell.reach(ctx)?.usable`，未通过就弹 `DisplayChannelGuideDialog` —— 按
+`reach().reason`（`no_channel` / `root_unverified` / `shizuku_unauthorized` / `adb_unpaired`）
+说清还差哪一步，并给两个出口：去权限通道页、重新检测。
+
+「重新检测」不是"知道了"的同义词：用户很可能刚在系统里授完 Shizuku 或配完 ADB 回来，那一下要能
+立刻重判并放行，否则只能退出去再点一次（点了没反应比没有这个按钮更糟）。

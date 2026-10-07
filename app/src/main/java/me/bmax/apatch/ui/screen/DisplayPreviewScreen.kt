@@ -44,12 +44,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.ramcosta.composedestinations.generated.destinations.PrivilegedChannelScreenDestination
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
+import me.bmax.apatch.ui.component.DisplayChannelGuideDialog
+import me.bmax.apatch.ui.component.displayChannelReady
 import me.bmax.apatch.dsh.DisplayMirror
 import me.bmax.apatch.dsh.DisplayServer
 import me.bmax.apatch.dsh.DisplayVideoSink
@@ -92,6 +95,11 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator, displayId: Int? = nul
     var viewH by remember { mutableStateOf(0) }
     var sink by remember { mutableStateOf<DisplayVideoSink?>(null) }
 
+    // 缺提权通道时的引导弹窗（见 DisplayChannelGuideDialog）：进这一页先判一次 —— 服务端
+    // 是 app_process 起的独立进程，没有通道时后面的每一步都只会得到"启动失败"。
+    // 现算而不是 remember：用户可能刚在系统里授完 Shizuku 再回到这一页。
+    var guide by remember { mutableStateOf(!displayChannelReady(context)) }
+
     // 起服务端 + 拿到要看的虚拟屏。两步都是阻塞的特权操作，放 IO 上，别卡住首帧。
     LaunchedEffect(Unit) {
         // 悬浮小窗先让位：服务端一块屏只有一个 sink，两边同时挂会互相顶掉。
@@ -129,6 +137,9 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator, displayId: Int? = nul
             state = context.getString(R.string.dsh_display_preview_session, s.displayId, s.width, s.height)
         }.onFailure { e ->
             state = e.message ?: context.getString(R.string.dsh_display_preview_start_failed)
+            // 通道不可用是这里最常见的失败（其余失败的说明在预览页那行报错里更准确），
+            // 所以再判一次：弹窗给的是"去开哪一个开关"，而不是一句"启动失败"。
+            if (!displayChannelReady(context)) guide = true
         }
     }
 
@@ -161,6 +172,18 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator, displayId: Int? = nul
 
     val toDisplayX: (Float) -> Float = { x -> if (viewW > 0) x * displayW / viewW else x }
     val toDisplayY: (Float) -> Float = { y -> if (viewH > 0) y * displayH / viewH else y }
+
+    DisplayChannelGuideDialog(
+        visible = guide,
+        onDismiss = { guide = false },
+        onOpenChannel = {
+            guide = false
+            navigator.navigate(PrivilegedChannelScreenDestination)
+        },
+        // 「重新检测」：通道这会儿就绪了就照常往下走，还没就绪就继续留着弹窗 ——
+        // 别让用户以为点了个没反应的按钮。
+        onRecheck = { if (displayChannelReady(context)) guide = false },
+    )
 
     Scaffold(
         topBar = {

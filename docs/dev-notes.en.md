@@ -310,3 +310,23 @@ who had the old content at least get one update prompt.
 A runtime can declare `minAppVersion` in its `metadata.json` (auto-detected from the base version in `build.gradle.kts` at build time, manually overridable via the `workflow_dispatch` input): if the app is older than that requirement, it is asked to update the software first instead of downloading a runtime it cannot run.
 The requirement of an installed runtime is persisted and released automatically after the app is upgraded; an empty field means no requirement, keeping old metadata compatible.
 
+
+## The virtual screen needs a channel, not a permission
+
+The virtual-screen server (`displayserver/`) is a **separate process** started with `app_process`
+as uid 0 (root) or 2000 (shell/Shizuku): creating a TRUSTED display with `SUPPORTS_TOUCH` and
+calling the hidden `InputManager.injectInputEvent` both need system permissions such as
+`INJECT_EVENTS`. A regular app cannot obtain them by asking, so there is **no such thing** as
+"granting the virtual screen permission" — it needs one ready elevation channel (root / Shizuku /
+wireless ADB).
+
+That is why the guidance shown without a channel must not read "missing permission, go grant it":
+that would send the user to a system page which holds no switch they need. As of 2026-10 the preview
+screen evaluates `PrivilegedShell.reach(ctx)?.usable` **on entry** and again **when startup fails**;
+if it does not pass, `DisplayChannelGuideDialog` explains which step is missing, using
+`reach().reason` (`no_channel` / `root_unverified` / `shizuku_unauthorized` / `adb_unpaired`),
+and offers two exits: the permission-channel page, and a recheck.
+
+"Recheck" is not a synonym for "got it": the user very likely just granted Shizuku or finished ADB
+pairing in the system UI, and that tap must re-evaluate and let them through — otherwise the only way
+back is to leave and re-enter (a button that does nothing is worse than no button).

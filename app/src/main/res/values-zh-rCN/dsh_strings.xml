@@ -800,6 +800,13 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_display_preview_key_recents">最近任务</string>
     <string name="dsh_display_preview_pkg_label">包名，如 com.android.settings</string>
     <string name="dsh_display_preview_launch">在此屏启动</string>
+    <string name="dsh_display_guide_title">虚拟屏还差一步</string>
+    <string name="dsh_display_guide_no_channel">它以 root 或 shell（uid 0/2000）单独起进程，所以需要一条就绪的提权通道：root / Shizuku / 无线 ADB，任一条即可。</string>
+    <string name="dsh_display_guide_root">这台设备上检测到了 root，但还没验证 —— 去权限通道页验证一下。</string>
+    <string name="dsh_display_guide_shizuku">装了 Shizuku，但还没授权给本应用。</string>
+    <string name="dsh_display_guide_adb">无线 ADB 还没配对完，拿不到 shell（uid 2000）来起服务端。</string>
+    <string name="dsh_display_guide_open_channel">去选权限通道</string>
+    <string name="dsh_display_guide_recheck">重新检测</string>
     <string name="dsh_display_preview_open">打开预览</string>
         <string name="dsh_display_manage_open">管理虚拟屏</string>
     <string name="dsh_display_manage_title">虚拟屏管理</string>

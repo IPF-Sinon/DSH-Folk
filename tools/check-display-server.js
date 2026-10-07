@@ -1145,6 +1145,41 @@ if (jarArgAt >= 0) {
     '那个入口是一个真的按钮，不是只传进来的参数');
 }
 
+// ── 缺提权通道时的引导弹窗 ──
+// 虚拟屏要的**不是**某个 Android 权限，而是一条就绪的提权通道（root / Shizuku / 无线 ADB）：
+// 服务端以 uid 0/2000 单独起进程。没通道时过去的形态是"进去只看到一行启动失败"，这个弹窗
+// 必须说清"还差哪一步"并给一个去处 —— 所以下面钉的是原因映射、判定依据、以及两处真的弹。
+{
+  const guide = read('app/src/main/java/me/bmax/apatch/ui/component/DisplayChannelGuide.kt');
+  must(/internal fun displayChannelReady\(context: Context\): Boolean =\s*\n?\s*PrivilegedShell\.reach\(context\)\?\.usable == true/.test(guide),
+    '判定依据是一条就绪的提权通道（reach().usable），不是某个 Android 权限');
+  must(/REASON_ROOT_UNVERIFIED[\s\S]{0,400}?REASON_SHIZUKU_UNAUTHORIZED[\s\S]{0,200}?REASON_ADB_UNPAIRED/.test(guide),
+    '三种未就绪原因各有各的说法（笼统一句"没权限"指不出该开哪个开关）');
+  must(/REASON_ROOT_UNVERIFIED -> R\.string\.dsh_display_guide_root/.test(guide) &&
+    /REASON_SHIZUKU_UNAUTHORIZED -> R\.string\.dsh_display_guide_shizuku/.test(guide) &&
+    /REASON_ADB_UNPAIRED -> R\.string\.dsh_display_guide_adb/.test(guide) &&
+    /else -> R\.string\.dsh_display_guide_no_channel/.test(guide) &&
+    /Text\(stringResource\(bodyRes\)\)/.test(guide),
+    '四条文案（三种原因 + 兜底）都真的接到了文本上');
+  must(/AlertDialog\(/.test(guide) && /onDismissRequest = onDismiss/.test(guide),
+    '它是一个真的能关掉的 AlertDialog');
+  must(/dsh_display_guide_open_channel/.test(guide) && /dsh_display_guide_recheck/.test(guide),
+    '两个出口：去选通道、重新检测（只给一个"知道了"等于把人退回原处）');
+
+  const preview = read('app/src/main/java/me/bmax/apatch/ui/screen/DisplayPreviewScreen.kt');
+  must(/import me\.bmax\.apatch\.ui\.component\.DisplayChannelGuideDialog/.test(preview) &&
+    /DisplayChannelGuideDialog\(\s*\n\s*visible = guide,/.test(preview),
+    '预览页真的挂了那个弹窗（不是写了个没人用的组件）');
+  must(/var guide by remember \{ mutableStateOf\(!displayChannelReady\(context\)\) \}/.test(preview),
+    '进这一页先判一次通道（没有通道时后面每一步都只会"启动失败"）');
+  must(/onFailure \{ e ->[\s\S]{0,300}?if \(!displayChannelReady\(context\)\) guide = true/.test(preview),
+    '启动失败时再判一次并弹引导（失败原因里通道不可用最常见）');
+  must(/onOpenChannel = \{[\s\S]{0,120}?navigator\.navigate\(PrivilegedChannelScreenDestination\)/.test(preview),
+    '「去选通道」真的导航到权限通道页');
+  must(/onRecheck = \{ if \(displayChannelReady\(context\)\) guide = false \}/.test(preview),
+    '「重新检测」是重判而不是关掉（点了没反应比没有这个按钮更糟）');
+}
+
 if (errors.length) {
   console.error('check-display-server FAILED:');
   for (const e of errors) console.error('  ✗ ' + e);

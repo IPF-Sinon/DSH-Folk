@@ -820,6 +820,13 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_display_preview_key_recents">Recents</string>
     <string name="dsh_display_preview_pkg_label">Package, e.g. com.android.settings</string>
     <string name="dsh_display_preview_launch">Launch here</string>
+    <string name="dsh_display_guide_title">The virtual screen needs one more step</string>
+    <string name="dsh_display_guide_no_channel">It runs as a separate process with root or shell (uid 0/2000), so it needs one ready channel: root, Shizuku, or wireless ADB.</string>
+    <string name="dsh_display_guide_root">Root was detected on this device but is not verified yet — verify it in the channel page.</string>
+    <string name="dsh_display_guide_shizuku">Shizuku is installed but has not granted this app access yet.</string>
+    <string name="dsh_display_guide_adb">The wireless ADB pairing was not finished, so there is no shell (uid 2000) to start the server with.</string>
+    <string name="dsh_display_guide_open_channel">Choose a channel</string>
+    <string name="dsh_display_guide_recheck">Recheck</string>
     <string name="dsh_display_preview_open">Open the preview</string>
         <string name="dsh_display_manage_open">Manage virtual screens</string>
     <string name="dsh_display_manage_title">Virtual screens</string>
