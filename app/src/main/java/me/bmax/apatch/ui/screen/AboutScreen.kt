@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -25,21 +24,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.dropUnlessResumed
+import me.bmax.apatch.util.LauncherIconUtils
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
@@ -69,20 +65,14 @@ fun AboutScreen(navigator: DestinationsNavigator) {
         ) {
             Spacer(modifier = Modifier.height(24.dp))
 
-            // App icon with elevated shadow
-            Surface(
-                modifier = Modifier
-                    .size(100.dp)
-                    .shadow(8.dp, CircleShape),
-                color = colorResource(id = R.color.about_icon_background),
-                shape = CircleShape
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.about),
-                    contentDescription = stringResource(R.string.app_name),
-                    modifier = Modifier.scale(0.7f)
-                )
-            }
+            // 应用图标：**与主屏那个图标同一份资源**（「设置 → 常规 → 备用图标」开着就换成备用那
+            // 一份），见 LauncherIconUtils.currentIconForeground()。以前这里放的是 drawable/about.png
+            // —— 一张独立的旧图，图标改版后它不会跟着变，于是关于页显示的是老 logo。
+            Image(
+                painter = painterResource(id = LauncherIconUtils.currentIconForeground()),
+                contentDescription = stringResource(R.string.app_name),
+                modifier = Modifier.size(100.dp)
+            )
 
             Spacer(modifier = Modifier.height(20.dp))
 

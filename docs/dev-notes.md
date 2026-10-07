@@ -31,6 +31,19 @@
 靠一次完整 CI 构建才发现）。这个检查器按字符遍历全部 Kotlin 文件，确认字符串、
 模板与注释都正确闭合。两者都接在 `build.yml` 与 `beta.yml` 的编译之前。
 
+## 图标：关于页与主屏必须是同一份
+
+关于页那块图标引的是 `LauncherIconUtils.currentIconForeground()` —— 也就是 `mipmap-anydpi-v26/ic_launcher*.xml`
+里 `<foreground>` 引的那张位图，并按「设置 → 常规 → 备用图标」在两份之间选。以前它放的是独立的
+`drawable/about.png`（1.17 MB 的旧 logo）：改图标时没人会想起它，于是关于页长期显示上一代设计 ——
+而"图标不一致"这种事只有用户截图对比才会被发现。现在判据是**资源同一性**（关于页的资源必须是
+adaptive-icon 的 foreground），主屏对了关于页就不可能错。
+
+两个坑：直接引 `R.mipmap.ic_launcher` 在 API 26+ 解析到的是 adaptive-icon XML，Compose 的
+`painterResource` 画不了它（既不是位图也不是 vector，会抛 unsupported type），所以引的是各密度的
+前景位图；`"use_alt_icon"` 这个键**只有一处字面量**（`LauncherIconUtils.KEY_USE_ALT_ICON`），
+分散写就会出现"开关翻了但关于页不跟"。判据在 `tools/check-launcher-icon.js`。
+
 ## WebUI 注入的脚本管道（内置 + 用户脚本）
 
 往应用自己的 WebView 里塞 JS 只有**一条**路：`DshWebUiActivity.installScripts` 调

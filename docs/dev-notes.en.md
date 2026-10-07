@@ -32,6 +32,20 @@ only a full CI build revealed it). The checker walks every Kotlin file character
 comments all close correctly. Both run before compilation in `build.yml` and `beta.yml`.
 
 
+## The app icon: the About page must show the same one as the launcher
+
+The icon on the About page comes from `LauncherIconUtils.currentIconForeground()` — the very bitmap that
+`mipmap-anydpi-v26/ic_launcher*.xml` names as its `<foreground>`, picked between the two sets according to **Settings → General → Alternative
+icon**. It used to point at a standalone `drawable/about.png` (a 1.17 MB copy of the old logo): nobody remembers such a file when the icon is
+redesigned, so the About page kept showing the previous generation — and “the icon does not match” is only ever noticed when a user compares
+screenshots. The rule is now **resource identity** (the About page must use the adaptive icon’s foreground), so if the launcher icon is right the
+About page cannot be wrong.
+
+Two traps: referencing `R.mipmap.ic_launcher` directly resolves to an adaptive-icon XML on API 26+, which Compose’s `painterResource` cannot
+paint (neither a bitmap nor a vector — it throws unsupported type), hence the per-density foreground bitmaps; and the `"use_alt_icon"` key has
+**exactly one literal** (`LauncherIconUtils.KEY_USE_ALT_ICON`), because a second copy means “the switch flipped but the About page did not
+follow”. The assertions live in `tools/check-launcher-icon.js`.
+
 ## The WebUI script injection pipeline (built-ins + userscripts)
 
 There is exactly **one** way JS gets into the app own WebView: `DshWebUiActivity.installScripts` calls

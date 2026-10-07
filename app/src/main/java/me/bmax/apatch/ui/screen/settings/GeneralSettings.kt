@@ -116,7 +116,7 @@ fun GeneralSettingsContent(
     val showLogWindowDialog = remember { mutableStateOf(false) }
     var logWindowIndex by remember { mutableStateOf(0f) }
 
-    val useAltIcon = remember { mutableStateOf(prefs.getBoolean("use_alt_icon", false)) }
+    val useAltIcon = remember { mutableStateOf(prefs.getBoolean(LauncherIconUtils.KEY_USE_ALT_ICON, false)) }
     var autoUpdateCheck by remember { mutableStateOf(prefs.getBoolean("auto_update_check", true)) }
     var betaUpdate by remember { mutableStateOf(prefs.getBoolean(UpdateChecker.KEY_ACCEPT_BETA, false)) }
     var folkXEngineEnabled by remember { mutableStateOf(prefs.getBoolean("folkx_engine_enabled", true)) }
@@ -341,7 +341,7 @@ fun GeneralSettingsContent(
             description = launcherIconSummary,
             checked = useAltIcon.value,
             onCheckedChange = {
-                prefs.edit { putBoolean("use_alt_icon", it) }
+                prefs.edit { putBoolean(LauncherIconUtils.KEY_USE_ALT_ICON, it) }
                 LauncherIconUtils.updateLauncherState(context)
                 useAltIcon.value = it
             }
