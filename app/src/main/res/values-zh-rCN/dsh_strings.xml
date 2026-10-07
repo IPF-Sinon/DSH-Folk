@@ -718,7 +718,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_storage_cap_desc">通过 dsh-fs 读写整个共享存储（/sdcard）。Android 规定这项只能在系统设置页里授予。</string>
     <string name="dsh_storage_need_perm">尚未授予「所有文件访问」，点这里去系统设置开启</string>
     <string name="dsh_storage_granted">已授予「所有文件访问」</string>
-    <string name="dsh_storage_mount_hint">把 /sdcard 挂进容器并开放 dsh-fs（两者都受黑白名单约束）。长按可编辑黑白名单目录。</string>
+    <string name="dsh_storage_mount_hint">把 /sdcard 挂进容器并开放 dsh-fs（两者都受黑白名单约束）。「文件访问范围」页里那些工作区映射也跟着它一起生效/失效。长按可编辑黑白名单目录。</string>
     <string name="dsh_storage_restart_hint">改动此开关或黑白名单后，容器挂载需重启 dsh 才生效（dsh-fs 立即生效）。</string>
 
     <!-- ── 文件访问范围（黑白名单，挂载层生效） ── -->
@@ -744,7 +744,9 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_ws_mount_header">挂载进工作区</string>
     <string name="dsh_ws_mount_source">源</string>
     <string name="dsh_ws_mount_destination">目标</string>
-    <string name="dsh_ws_mount_desc">把手机存储作为一个文件夹映到 /root/workspace 下，在 dsh 工作区文件树里直接可见。默认关闭；仍沿用上面的黑白名单。</string>
+    <string name="dsh_ws_mount_desc">把手机存储作为一个文件夹映到 /root/workspace 下，在 dsh 工作区文件树里直接可见。与「共享存储」共用同一个开关（2026-10 合并）；仍沿用上面的黑白名单。</string>
+    <string name="dsh_ws_mount_follows_on">共享存储已开启，下面的映射生效。</string>
+    <string name="dsh_ws_mount_follows_off">共享存储已关闭，下面的映射不生效（去「功能 → 共享存储」打开）。</string>
     <string name="dsh_ws_mount_empty">暂无映射——添加一条，指定哪个手机目录挂到工作区的哪个位置。</string>
     <string name="dsh_ws_mount_add">添加映射</string>
     <string name="dsh_ws_mount_note">注意：该文件夹位于共享存储，无符号/硬链接/可执行位。dsh 的 write 工具用「临时文件 + 原子 link」发布，在此会失败（EINVAL），请改用 edit 或 shell 重定向。请勿在此放 node_modules 或 git 仓库（pnpm install / git / chmod +x 会失败）。</string>

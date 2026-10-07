@@ -330,3 +330,23 @@ and offers two exits: the permission-channel page, and a recheck.
 "Recheck" is not a synonym for "got it": the user very likely just granted Shizuku or finished ADB
 pairing in the system UI, and that tap must re-evaluate and let them through — otherwise the only way
 back is to leave and re-enter (a button that does nothing is worse than no button).
+
+## The two file-access switches became one (2026-10)
+
+There used to be two: **Shared storage** (`storage_mount`, on by default, on the Features page) and
+**Mount into the workspace** (`ws_mount`, off by default, on the File access scope page). Both
+answered the same question — can the container see phone storage — one for `/sdcard` inside the
+container, one for the workspace file tree. Two switches over one question guarantee a contradictory
+state: master off (nothing mounted) while the sub-switch is on (still visible in the workspace), with
+neither side technically wrong.
+
+Now `DshFileAccess.mountEnabled` is the only judge: both mount paths
+(`ContainerRuntime.storageBinds` and `ContainerRuntime.workspaceBinds`), dsh-fs acceptance
+(`DshFsBridge.storageGate`), the guest→host mapping used by file handoff, and the
+`workspaceStorageMounted` host fact all consult it. The `ws_mount` key and its accessors are gone
+(no migration needed: its value never expressed anything the master switch did not already cover).
+
+The File access scope page keeps the mapping-list editor (`ws_mounts`) but no longer offers a second
+switch: that section now shows whether it is currently in effect, according to the master switch. The
+copy has to say so — the user sees one switch that decides two things, and a description that omits
+half of it turns into "I never enabled the workspace, yet it can see my files".

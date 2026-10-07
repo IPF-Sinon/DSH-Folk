@@ -71,12 +71,14 @@ interface ContainerRuntime {
         }
 
         /**
-         * 「在工作区中挂载手机存储」的 bind 对（host:guest），已套用黑白名单。子开关关 → 空表。
-         * 独立于 [storageBinds]：即使不改顶层 /sdcard 挂载，也能把手机存储额外映到
-         * [DshEnv.WORKSPACE_GUEST] 下。见 [DshFileAccess.workspaceBinds]。
+         * 「在工作区中挂载手机存储」的 bind 对（host:guest），已套用黑白名单。
+         *
+         * 与 [storageBinds] 同看一个开关（2026-10 两个开关合并成一个）：共享存储关着就一条都不给
+         * —— 否则会出现「总开关关着、工作区却能看到 /sdcard」这种自相矛盾的状态。见
+         * [DshFileAccess.workspaceBinds]。
          */
         fun workspaceBinds(ctx: Context): List<Pair<String, String>> {
-            if (!DshFileAccess.wsMountEnabled(ctx)) return emptyList()
+            if (!DshFileAccess.mountEnabled(ctx)) return emptyList()
             val mask = DshEnv.fsMaskDir(ctx)
             mask.mkdirs()
             return DshFileAccess.workspaceBinds(ctx, mask.absolutePath)

@@ -178,7 +178,9 @@ object DshEnv {
      * 共享存储挂载总开关（默认开）。
      *
      * 开＝把 /sdcard 按黑白名单挂进容器、且 dsh-fs 桥受理请求（同样受黑白名单约束）；
-     * 关＝**既不挂载、dsh-fs 也拒绝**，容器彻底看不到手机文件。挂载在容器启动那一刻定死，
+     * 关＝**既不挂载、dsh-fs 也拒绝**，容器彻底看不到手机文件。2026-10 起它也是「挂进工作区」
+     * （[KEY_WS_MOUNTS]）的唯一开关：那一块原来是独立子开关，两个开关各说同一件事的一半，
+     * 合成一个之后只看这里。挂载在容器启动那一刻定死，
      * 改这个开关（及黑白名单）后**容器侧要重启 dsh 才生效**；dsh-fs 侧立即生效。
      */
     const val KEY_STORAGE_MOUNT = "storage_mount"
@@ -203,20 +205,11 @@ object DshEnv {
     const val WORKSPACE_GUEST = "/root/workspace"
 
     /**
-     * 「在工作区中挂载手机存储」子开关（默认**关**）。
-     *
-     * 独立于 [KEY_STORAGE_MOUNT]：开启后把手机存储按 [KEY_WS_MOUNTS] 的映射额外 bind 到
-     * [WORKSPACE_GUEST] 下（默认 `/root/workspace/sdcard`），使 dsh Web UI 的工作区文件树里
-     * 直接能看到手机文件。仍**沿用**同一套黑白名单（[KEY_FS_ALLOW_DIRS] / [KEY_FS_DENY_DIRS]）。
-     * 挂载在容器启动那一刻定死，改这个开关或映射后**要重启 dsh 才生效**。
-     */
-    const val KEY_WS_MOUNT = "ws_mount"
-
-    /**
      * 工作区挂载映射（JSON 数组，元素 `{ "src": <相对 /sdcard>, "dest": <相对 /root/workspace> }`）。
      *
      * `src` 空串 = 整棵 /sdcard；`dest` 是工作区下的子路径（禁止 `..` 越界，空则回落 `sdcard`）。
-     * **缺失 / 空数组** 且子开关开 → 用默认单条映射 `{src:"", dest:"sdcard"}`。见 [DshFileAccess]。
+     * **缺失 / 空数组** → 用默认单条映射 `{src:"", dest:"sdcard"}`。生效与否只看
+     * [KEY_STORAGE_MOUNT]（2026-10 与那个总开关合并成一个）。见 [DshFileAccess]。
      */
     const val KEY_WS_MOUNTS = "ws_mounts"
 

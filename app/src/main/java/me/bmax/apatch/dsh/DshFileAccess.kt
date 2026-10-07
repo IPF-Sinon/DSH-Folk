@@ -177,15 +177,6 @@ object DshFileAccess {
     /** 默认映射：整棵 /sdcard → /root/workspace/sdcard。 */
     val DEFAULT_WS_MOUNTS: List<WsMount> = listOf(WsMount("", "sdcard"))
 
-    /** 「在工作区中挂载手机存储」子开关（默认关）。 */
-    fun wsMountEnabled(ctx: Context): Boolean =
-        prefs(ctx).getBoolean(DshEnv.KEY_WS_MOUNT, false)
-
-    fun setWsMountEnabled(ctx: Context, on: Boolean) {
-        prefs(ctx).edit().putBoolean(DshEnv.KEY_WS_MOUNT, on).apply()
-        DshHostPrompt.writeFacts(ctx.applicationContext)
-    }
-
     /**
      * 规整 dest（工作区下的相对子路径）：转 `/`、去首尾 `/`、丢弃 `.`/`..` 段（禁止越界），
      * 结果为空则回落 `sdcard`。
@@ -243,7 +234,10 @@ object DshFileAccess {
      *   其余一律不进工作区——不因走了工作区这条路就绕过白名单（避免「假隔离」）。
      */
     fun workspaceBinds(ctx: Context, maskPath: String): List<Pair<String, String>> {
-        if (!wsMountEnabled(ctx)) return emptyList()
+        // 2026-10：这一块与「共享存储」合并成一个开关，所以只看总开关 —— 两个开关说的是
+        // 同一件事（容器能不能看到手机文件）的两半，分开就一定会出现「总开关关着、工作区
+        // 却能看到」这种自相矛盾的状态。
+        if (!mountEnabled(ctx)) return emptyList()
         val allow = allowDirs(ctx)
         val deny = denyDirs(ctx)
         val out = ArrayList<Pair<String, String>>()

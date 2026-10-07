@@ -738,7 +738,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_storage_cap_desc">Read and write the whole of shared storage (/sdcard) through dsh-fs. Android requires this to be granted on a system settings page.</string>
     <string name="dsh_storage_need_perm">All files access not granted — tap to open system settings</string>
     <string name="dsh_storage_granted">All files access granted</string>
-    <string name="dsh_storage_mount_hint">Mount /sdcard into the container and expose dsh-fs (both obey the allow/deny lists). Long-press to edit the allow/deny directories.</string>
+    <string name="dsh_storage_mount_hint">Mount /sdcard into the container and expose dsh-fs (both obey the allow/deny lists). The workspace mappings under File access scope live and die with this switch. Long-press to edit the allow/deny directories.</string>
     <string name="dsh_storage_restart_hint">Changes to this switch or the allow/deny lists take effect in the container mount only after restarting dsh (dsh-fs applies them immediately).</string>
 
     <!-- ── 文件访问范围（黑白名单，挂载层生效） ── -->
@@ -764,7 +764,9 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_ws_mount_header">Mount into the workspace</string>
     <string name="dsh_ws_mount_source">Source</string>
     <string name="dsh_ws_mount_destination">Target</string>
-    <string name="dsh_ws_mount_desc">Expose phone storage as a folder inside /root/workspace, so it shows up in the dsh workspace file tree. Off by default; still obeys the allow/deny lists above.</string>
+    <string name="dsh_ws_mount_desc">Expose phone storage as a folder inside /root/workspace, so it shows up in the dsh workspace file tree. Shares the one Shared storage switch (merged 2026-10); still obeys the allow/deny lists above.</string>
+    <string name="dsh_ws_mount_follows_on">Shared storage is on, so the mappings below are active.</string>
+    <string name="dsh_ws_mount_follows_off">Shared storage is off, so the mappings below do nothing (turn it on under Features, Shared storage).</string>
     <string name="dsh_ws_mount_empty">No mapping — add one to choose which phone folder appears where in the workspace.</string>
     <string name="dsh_ws_mount_add">Add mapping</string>
     <string name="dsh_ws_mount_note">Note: this folder lives on shared storage and has no symlink/hardlink/exec bits. The dsh write tool publishes a file through a temporary file plus an atomic link, so it fails here (EINVAL) — use edit or a shell redirect instead. Do not put node_modules or git repos here (pnpm install / git / chmod +x will fail).</string>

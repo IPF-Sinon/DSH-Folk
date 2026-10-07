@@ -51,10 +51,16 @@ ok(/fun storageBinds\(/.test(fa) && /maskPath to "\$alias\/\$d"/.test(fa),
 console.log("\u2500 #3b 工作区挂载：把手机存储额外映到 /root/workspace 下");
 ok(/const val WORKSPACE_GUEST = "\/root\/workspace"/.test(env),
   "DshEnv 有 WORKSPACE_GUEST 常量（工作区挂载目的根）");
-ok(/const val KEY_WS_MOUNT\b/.test(env) && /const val KEY_WS_MOUNTS\b/.test(env),
-  "DshEnv 有工作区挂载子开关键与映射列表键");
-ok(/fun wsMountEnabled\(/.test(fa) && /getBoolean\(DshEnv\.KEY_WS_MOUNT, false\)/.test(fa),
-  "工作区挂载子开关默认关（false）");
+ok(/const val KEY_WS_MOUNTS\b/.test(env),
+  "DshEnv 有工作区映射列表键");
+// 2026-10：原来的「在工作区中挂载手机存储」子开关与「共享存储」合并成一个 —— 两处开关管
+// 同一件事，分开就会出现「总开关关着、工作区却能看到」这种自相矛盾的状态。所以下面钉的是
+// **子开关必须已经不存在**，而且判据只认总开关。
+ok(!/KEY_WS_MOUNT\b/.test(env) && !/fun wsMountEnabled\(/.test(fa) && !/fun setWsMountEnabled\(/.test(fa),
+  "子开关键与它的读写入口都已撤掉（不留一个没人用的键）");
+ok(/const val KEY_STORAGE_MOUNT/.test(env) && /fun mountEnabled\(ctx: Context\): Boolean/.test(fa) &&
+  /getBoolean\(DshEnv\.KEY_STORAGE_MOUNT, true\)/.test(fa),
+  "共享存储总开关仍在，且默认开");
 ok(/fun workspaceMounts\(/.test(fa) && /fun setWorkspaceMounts\(/.test(fa),
   "工作区映射有读写入口");
 ok(/DEFAULT_WS_MOUNTS[\s\S]{0,60}WsMount\("", "sdcard"\)/.test(fa),
@@ -62,8 +68,14 @@ ok(/DEFAULT_WS_MOUNTS[\s\S]{0,60}WsMount\("", "sdcard"\)/.test(fa),
 ok(/fun normalizeDest\(/.test(fa) && /it != "\.\." /.test(fa),
   "dest 规整禁止 .. 越界");
 ok(/fun workspaceBinds\(/.test(fa) &&
-  /if \(!wsMountEnabled\(ctx\)\) return emptyList\(\)/.test(fa),
-  "workspaceBinds 在子开关关时返回空表");
+  /if \(!mountEnabled\(ctx\)\) return emptyList\(\)/.test(fa),
+  "workspaceBinds 只看共享存储总开关（合并之后它不再有自己的闸）");
+// 只钉「存在」是不够的：这个文件里有两处一模一样的闸（共享存储 / 工作区），改掉其中一处
+// 另一处还在，全文匹配照样绿。所以按函数切开，各自钉住自己的那一条。
+const crFn = (name) => (cr.match(new RegExp("fun " + name + "\\(ctx: Context\\)[\\s\\S]*?\\n        \\}")) || [])[0] || "";
+ok(/if \(!DshFileAccess\.mountEnabled\(ctx\)\) return emptyList\(\)/.test(crFn("storageBinds")) &&
+  /if \(!DshFileAccess\.mountEnabled\(ctx\)\) return emptyList\(\)/.test(crFn("workspaceBinds")),
+  "容器的两条挂载路（共享存储 / 工作区）都跟同一个总开关");
 ok(/if \(deny\.any \{ isUnderOrEqual\(src, it\) \}\) continue/.test(fa),
   "工作区映射：src 命中黑名单整条跳过");
 ok(/maskPath to "\$guestBase\/\$\{relUnder\(d, src\)\}"/.test(fa) &&
@@ -149,11 +161,28 @@ ok(/DshFileAccess\.DEFAULT_DENY/.test(faScreen) && /dsh_fs_reset_deny_default/.t
   "支持一键恢复默认黑名单");
 ok(/DshRuntime\.restart\(\)/.test(faScreen) && /dsh_fs_restart_needed/.test(faScreen),
   "改动后提示需重启并给「重启 DSH」");
-ok(/dsh_ws_mount_header/.test(faScreen) && /DshFileAccess\.setWsMountEnabled\(/.test(faScreen) &&
-  /DshFileAccess\.setWorkspaceMounts\(/.test(faScreen),
-  "文件访问页有「挂载进工作区」段（子开关 + 映射列表）");
-ok(/wsMount != initialWsMount \|\| wsMounts\.toList\(\) != initialWsMounts/.test(faScreen),
-  "工作区挂载改动也纳入 dirty（触发需重启横幅）");
+ok(/dsh_ws_mount_header/.test(faScreen) && /DshFileAccess\.setWorkspaceMounts\(/.test(faScreen),
+  "文件访问页仍保留「挂载进工作区」段与映射列表编辑");
+ok(!/Switch\(checked = wsMount/.test(faScreen) && /dsh_ws_mount_follows_on/.test(faScreen) &&
+  /dsh_ws_mount_follows_off/.test(faScreen),
+  "那一段不再有自己的 Switch，而是按总开关显示「现在生不生效」");
+ok(/wsMounts\.toList\(\) != initialWsMounts/.test(faScreen) && !/initialWsMount\b/.test(faScreen),
+  "映射列表改动仍纳入 dirty（触发需重启横幅），且已无 wsMount 快照");
+// 合并之后「共享存储」这一个开关的文案必须把工作区那一半也说进去：用户看到的开关只有一个，
+// 而它现在同时决定容器挂载与工作区映射，文案不说清就变成「我明明没开工作区，它却看得到」。
+{
+  const zh = read("app/src/main/res/values-zh-rCN/dsh_strings.xml");
+  const en = read("app/src/main/res/values/dsh_strings.xml");
+  // 精确到属性名：少一个字母的后缀（follows_off_x）也是"包含"，那样的断言拦不住改名
+  ok(/name="dsh_ws_mount_follows_on">/.test(zh) && /name="dsh_ws_mount_follows_off">/.test(zh) &&
+    /name="dsh_ws_mount_follows_on">/.test(en) && /name="dsh_ws_mount_follows_off">/.test(en),
+    "两行状态文案中英各有（页面按总开关显示「现在生不生效」）");
+  ok(/name="dsh_storage_mount_hint">[^<]*工作区映射/.test(zh) &&
+    /name="dsh_storage_mount_hint">[^<]*workspace mappings/.test(en) &&
+    /name="dsh_ws_mount_desc">[^<]*共享存储/.test(zh) &&
+    /name="dsh_ws_mount_desc">[^<]*Shared storage/.test(en),
+    "共享存储那张卡的说明与工作区那段的说明都点明了「是同一个开关」（中英各一份）");
+}
 ok(/onOpenFileAccess/.test(fn) && /FileAccessScreenDestination/.test(fnScreen),
   "权限页有入口跳到文件访问范围子页");
 

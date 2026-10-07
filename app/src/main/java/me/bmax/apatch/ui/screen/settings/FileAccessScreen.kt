@@ -30,7 +30,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -70,11 +69,11 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
     // 初始快照，用来判断「有没有改动过、要不要提示重启」
     val initialAllow = remember { DshFileAccess.allowDirs(context) }
     val initialDeny = remember { DshFileAccess.denyDirs(context) }
-    val initialWsMount = remember { DshFileAccess.wsMountEnabled(context) }
     val initialWsMounts = remember { DshFileAccess.workspaceMounts(context) }
     val allow = remember { mutableStateListOf<String>().apply { addAll(initialAllow) } }
     val deny = remember { mutableStateListOf<String>().apply { addAll(initialDeny) } }
-    var wsMount by remember { mutableStateOf(initialWsMount) }
+    // 「挂进工作区」没有自己的开关了（2026-10 与共享存储合并成一个）：这里只显示它现在生不生效
+    val storageMount = remember { DshFileAccess.mountEnabled(context) }
     val wsMounts = remember {
         mutableStateListOf<DshFileAccess.WsMount>().apply { addAll(initialWsMounts) }
     }
@@ -87,12 +86,11 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
     var storageLinkOk by remember { mutableStateOf(DshFileAccess.storageLinkSupported(context)) }
 
     val dirty = allow.toList() != initialAllow || deny.toList() != initialDeny ||
-        wsMount != initialWsMount || wsMounts.toList() != initialWsMounts
+        wsMounts.toList() != initialWsMounts
 
     fun persist() {
         DshFileAccess.setAllowDirs(context, allow.toList())
         DshFileAccess.setDenyDirs(context, deny.toList())
-        DshFileAccess.setWsMountEnabled(context, wsMount)
         DshFileAccess.setWorkspaceMounts(context, wsMounts.toList())
     }
 
@@ -180,22 +178,31 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
 
             // ── 挂载进工作区 ──
             Spacer(Modifier.height(16.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.dsh_ws_mount_header),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        stringResource(R.string.dsh_ws_mount_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = wsMount, onCheckedChange = { wsMount = it; persist() })
+            Column(Modifier.fillMaxWidth()) {
+                Text(
+                    stringResource(R.string.dsh_ws_mount_header),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    stringResource(R.string.dsh_ws_mount_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            if (wsMount) {
+            // 生效与否只看「共享存储」那一个开关（功能 → 共享存储）。这里说的是"现在生不生效"，
+            // 而不是再给一个开关 —— 两个开关管同一件事，就一定会出现自相矛盾的状态。
+            Text(
+                stringResource(
+                    if (storageMount) R.string.dsh_ws_mount_follows_on
+                    else R.string.dsh_ws_mount_follows_off
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (storageMount) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            run {
                 Spacer(Modifier.height(8.dp))
                 if (wsMounts.isEmpty()) {
                     Text(

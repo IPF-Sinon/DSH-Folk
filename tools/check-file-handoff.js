@@ -102,7 +102,8 @@ const ho = code(read("app/src/main/java/me/bmax/apatch/dsh/DshFileHandoff.kt"));
 ok(/storages\/workspace\.json/.test(ho), "读 $DSH_HOME/storages/workspace.json");
 ok(/"tables"[\s\S]*?"workspaces"/.test(ho), "解析 tables.workspaces");
 ok(/"global"[\s\S]*?"workspaceIds"/.test(ho), "用 global.workspaceIds 排序");
-ok(/wsMountEnabled/.test(ho) && /GUEST_ALIASES/.test(ho) && /DshEnv\.rootfs/.test(ho), "guest→host 三分支（工作区挂载 / 共享存储别名 / rootfs 内）都在");
+ok(/DshFileAccess\.mountEnabled/.test(ho) && /GUEST_ALIASES/.test(ho) && /DshEnv\.rootfs/.test(ho), "guest→host 三分支（工作区挂载 / 共享存储别名 / rootfs 内）都在");
+ok(!/wsMountEnabled/.test(ho), "判据跟的是共享存储总开关（子开关 2026-10 已合并掉）");
 ok(/ordered\.add\(0,/.test(ho), "默认工作区缺失时前插，保证永远有可选项");
 
 // ─────────────────────────────────────────────────────────────────────────────

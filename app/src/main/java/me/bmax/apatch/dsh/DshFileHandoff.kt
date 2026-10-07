@@ -101,7 +101,7 @@ object DshFileHandoff {
      */
     internal fun guestToHost(ctx: Context, guest: String): File {
         val g = normalizeGuest(guest)
-        if (DshFileAccess.wsMountEnabled(ctx)) {
+        if (DshFileAccess.mountEnabled(ctx)) {
             for (m in DshFileAccess.workspaceMounts(ctx)) {
                 val base = normalizeGuest("${DshEnv.WORKSPACE_GUEST}/${m.dest}")
                 if (g == base || g.startsWith("$base/")) {

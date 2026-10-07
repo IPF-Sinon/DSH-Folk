@@ -228,7 +228,8 @@ object DshHostPrompt {
             if (nativeOn) {
                 for ((cap, access) in DshNativeBridge.onceGrants()) once.put(cap.id, access.id)
             }
-            val workspaceStorageMounted = DshFileAccess.wsMountEnabled(ctx)
+            // 与共享存储同一个开关（2026-10 合并）
+            val workspaceStorageMounted = DshFileAccess.mountEnabled(ctx)
             val workspaceStorageMappings = JSONArray()
             if (workspaceStorageMounted) {
                 for (m in DshFileAccess.workspaceMounts(ctx)) {
