@@ -90,12 +90,20 @@ The app updates itself under **Settings → General → Check for updates**: it 
 
 ## Runtime management
 
-The **Settings → Features → Runtime** card:
+The **Settings → Features → Runtime** card is a **switch card**:
 
-- **Update**: one button, three uses. With no update detected it acts as “check for updates”; with one detected it first shows a confirmation (target version and preserved data) before downloading; **long-press** lists every runtime version in the repo, switchable freely (downgrade included). Versions that require a newer App are flagged and point you to update the app first — those cannot even start the container.
-- **Reinstall**: re-downloads the latest runtime on the current channel, optionally keeping or wiping sessions, plugins, config, and dependency data.
-- **Import**: installs a local tar.gz (trusted source), showing file name and size for confirmation first.
-- **Auto-check for updates**: an independent switch, **on** by default. It checks on app launch and only prompts when a new version exists; downloads still require manual confirmation. It runs in parallel with the app-update check but queues its dialog so two “update available” dialogs never stack.
+- **Tap the card**: check for updates right now. The confirmation dialog (target version and preserved data) only appears when there really is an installable
+  version; when there is none, or when that package requires a newer App than this one (those cannot even start the container), you just get a one-line
+  result instead of an interruption.
+- **Long-press the card**: open the version menu. Two two-position sliders at the top — full vs slim, and stable vs beta — each refetch the list when changed;
+  the list then shows only that combination, with **the build you have installed pinned on top**: tapping it reinstalls, tapping any other version switches
+  to it (downgrades included). The menu’s bottom-left button is **Import**: install a local tar.gz (trusted source), showing file name and size for
+  confirmation first.
+- **Reinstall** (that pinned top row): re-downloads the latest runtime on the current channel, optionally keeping or wiping sessions, plugins, config, and
+  dependency data.
+- **The switch on the right**: auto-check for updates, **on** by default. It checks on app launch and only prompts when a new version exists; downloads still
+  require manual confirmation. It only owns the automatic check — checking now is a tap on the card. It runs in parallel with the app-update check but queues
+  its dialog so two “update available” dialogs never stack.
 
 The `dsh web: http://127.0.0.1:3080/?token=…` line in the log is the token used to open the WebUI, equivalent to this instance's password (LAN access is off by default, reachable only on-device) — strip it before pasting logs for help.
 

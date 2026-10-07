@@ -241,6 +241,24 @@ console.log("\n── 文档 ──");
     "dev-notes.en 也记了（英文）");
 }
 
+console.log("\n── README（用户看到的说明） ──");
+{
+  // README 是最容易滞后的一份：卡片改完、dev-notes 写对了，README 里还留着「一个按钮三种用法」。
+  const rdZh = read("README.md");
+  const rdEn = read("README.en.md");
+  ok(/点一下卡片[\s\S]{0,40}立即检查更新/.test(rdZh) && /长按卡片[\s\S]{0,40}版本菜单/.test(rdZh),
+    "中文 README 说清了 点卡片=检查 / 长按=菜单");
+  ok(/Tap the card[\s\S]{0,120}check for updates right now/i.test(rdEn) &&
+     /Long-press the card[\s\S]{0,80}version menu/i.test(rdEn),
+    "英文 README 同（Tap the card / Long-press the card）");
+  ok(/完整版 \/ 精简版、正式 \/ 测试/.test(rdZh) && /full vs slim, and stable vs beta/.test(rdEn),
+    "两个滑块在两个 README 里都写了");
+  ok(/固定在最上面/.test(rdZh) && /pinned on top/.test(rdEn),
+    "「当前已装那一版钉在最上面」两个 README 都写了");
+  ok(!/一个按钮三种用法/.test(rdZh) && !/one button, three uses/i.test(rdEn),
+    "旧说法（一个按钮三种用法）已从两个 README 清掉");
+}
+
 console.log(
   "\n" + (bad === 0 ? "✓ 全部通过" : "✗ 有失败") + "：" + n + " 项断言，" + bad + " 项失败",
 );

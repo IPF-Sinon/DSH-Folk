@@ -129,8 +129,13 @@ if (baseName && baseCode) {
   // 公式值是**下限**：正式版可以显式抬高 versionCode，以便盖过此前测试版线里已用掉的号
   // （测试版 1.9.2.34-beta.101 的 vc 已是 10936，公式给正式版 1.9.5 只有 10905 会被系统当降级、
   // 装了 beta 的用户无法覆盖更新）。所以只要求 ≥ 公式下限、且不小于本项目已发布过的最高号。
-  // 注意：手动抬高后，后续走 beta.yml 公式推导的测试版号可能低于它，需要人工确认单调递增。
-  const PUBLISHED_FLOOR = 10950; // 已发布过的最高 versionCode（正式版 1.9.5）
+  // 注意：手动抬高后，后续走 beta.yml 公式推导的测试版号可能低于它，需要人工确认单调递增
+  // （beta.yml 会拿 baseVersionCode() 当下限取 max，所以这个数也是测试版号的输入）。
+  //
+  // **每发一个正式版就把它抬到那版的 baseVersionCode()** —— 它记的是已经发出去的最高号，
+  // 不是"当前版本号"。抬晚了（或忘了抬）就会出现「新版本的号低于用户已装的号」：系统按降级
+  // 拒绝安装、App 的 compareVersions 也不会提示，整个更新通道静默失效。2.0.0 → 20000。
+  const PUBLISHED_FLOOR = 20000; // 已发布过的最高 baseVersionCode（正式版 2.0.0；抬到 20000 前是 1.9.5 的 10950）
   ok(floor !== null && Number(baseCode[1]) >= floor && Number(baseCode[1]) >= PUBLISHED_FLOOR,
     `baseVersionCode() 不低于公式下限且盖过已发布最高号（${baseName[1]} → 下限 ${floor} / 已发 ${PUBLISHED_FLOOR}，实际 ${baseCode[1]}）`);
 }
