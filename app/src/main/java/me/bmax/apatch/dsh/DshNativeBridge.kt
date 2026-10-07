@@ -665,7 +665,10 @@ object DshNativeBridge {
             )
         // 权限挡位（[DshPermTier]）比下面那道弹窗更靠前：它不回答"要不要允许这一次"，而是
         // "这一挡里根本不谈"。所以被它挡下时不弹窗 —— 弹了等于把用户刚设的上限又拿回来问一遍。
-        if (isWriteRequest(path) && !DshPermTier.nativeWriteAllowed(ctx)) {
+        // 写/读的判定必须跟桥本身**同一处**（isWriteRequest 三参重载）：/native/shell 还要看
+        // 命令本身 —— dumpsys/getprop 是读，settings put 才是写。用按路径一刀切的那个重载，
+        // 「仅可查看」这一挡就连 dumpsys 都用不了，而那一挡存在的意义正是"只允许看"。
+        if (isWriteRequest(method, path, params) && !DshPermTier.nativeWriteAllowed(ctx)) {
             val result = 403 to err(
                 str(
                     ctx,

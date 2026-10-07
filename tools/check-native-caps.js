@@ -400,6 +400,10 @@ console.log("\n── 提示词插件 ──");
   const askAt = bridge.indexOf("val need = insufficient(ctx, cap, method, path, params)");
   ok(clampAt > 0 && askAt > 0 && clampAt < askAt,
     "挡位闸排在提权弹窗之前（设了上限还要弹窗问一遍 = 上限没生效）");
+  // 判据必须带 params：/native/shell 的读/写要看命令本身（dumpsys 是读），按路径一刀切会把
+  // 「仅可查看」这一挡的 read 也挡掉 —— 编译器只保证参数个数，语义要靠这条钉住。
+  ok(/isWriteRequest\(method, path, params\) && !DshPermTier\.nativeWriteAllowed\(ctx\)/.test(bridge),
+    "写/读判定用的是带 params 的那个重载（/native/shell 要看命令本身）");
   ok(/val result = 403 to err\(/.test(bridge.slice(clampAt, clampAt + 600)) &&
     /audit\(ctx, method, path, params, cap, reason, result\)/.test(bridge.slice(clampAt, clampAt + 700)),
     "被挡下时直接 403 且进审计（事后要能回答「这条是挡位挡的」）");
