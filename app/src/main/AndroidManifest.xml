@@ -149,6 +149,17 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <!-- 数据目录直授（缺陷 ROM 兼容通道）的候选名单按能力算：能选文件夹的（系统文件
+             管理器在这一类）与能打开文件夹的。缺了这两段声明，Android 11+ 的包可见性会让
+             queryIntentActivities 返回空名单 —— 弹窗里一个候选都没有。MT 管理器不声明这两
+             个能力，按包名另查，不需要在这里声明。 -->
+        <intent>
+            <action android:name="android.intent.action.OPEN_DOCUMENT_TREE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="vnd.android.document/directory" />
+        </intent>
     </queries>
 
     <application

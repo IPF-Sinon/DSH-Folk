@@ -601,17 +601,21 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
 
     <!-- 免 root 文件访问（DocumentsProvider） -->
     <string name="dsh_docs_access_title">Let other apps access the data directory</string>
-    <string name="dsh_docs_access_summary">File managers reach DSH-Folk\'s private data directory (rootfs, sessions, profiles) over the system document picker. MT Manager has its own quirk - it often reports no persistable permission after you pick the folder - and the direct grant covers that case.</string>
+    <string name="dsh_docs_access_summary">File managers reach DSH-Folk\'s private data directory (rootfs, sessions, profiles) over the system document picker. On some ROMs that picker runs as the system process and the grant issued on its behalf is dropped silently - MT Manager then reports no persistable permission. The compatibility path below issues the same grant from DSH-Folk itself, for as many apps as you tick.</string>
     <string name="dsh_docs_open_action">Open with the system picker</string>
-    <string name="dsh_docs_grant_action">Grant directly to MT Manager</string>
+    <string name="dsh_docs_grant_action">Defective-ROM compatibility: grant directly…</string>
     <string name="dsh_docs_open_failed">Could not open the file picker. Open your system Files app and choose the DSH-Folk root in the sidebar.</string>
-    <string name="dsh_docs_grant_title">Grant data directory to MT Manager</string>
-    <string name="dsh_docs_grant_message">This grants %1$s read and write access to DSH-Folk\'s private data directory, including the container rootfs. Only do this if you trust that app; you can revoke it here at any time.</string>
+    <string name="dsh_docs_grant_title">Defective-ROM compatibility: grant the data directory</string>
+    <string name="dsh_docs_grant_message">On some ROMs the picker shares the system uid, so the grant the system issues on its behalf is dropped silently and the file manager then reports no persistable permission. This grants the apps you tick read and write access to DSH-Folk\'s private data directory (including the container rootfs) from DSH-Folk itself - the same permission the picker would have handed out. Only tick apps you trust; you can revoke it here at any time.</string>
     <string name="dsh_docs_grant_confirm">Grant</string>
-    <string name="dsh_docs_grant_revoke">Revoke</string>
-    <string name="dsh_docs_grant_done">Granted. In MT Manager, add the local storage again — it should no longer fail.</string>
+    <string name="dsh_docs_grant_revoke">Revoke all</string>
+    <string name="dsh_docs_grant_done">Granted. Add or open the folder again in the file manager - it should no longer report no persistable permission.</string>
     <string name="dsh_docs_grant_failed">Could not grant access.</string>
     <string name="dsh_docs_grant_revoked">Access revoked.</string>
+    <string name="dsh_docs_granted_label">Granted directly to: %1$s</string>
+    <string name="dsh_docs_grant_search">Search apps</string>
+    <string name="dsh_docs_grant_empty">No matching app</string>
+    <string name="dsh_docs_grant_none">No app is ticked.</string>
 
     <!-- 旧 WebView 内核的 JS 兼容垫片 -->
     <string name="dsh_webui_compat_ok">Got it</string>

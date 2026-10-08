@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -237,7 +238,9 @@ fun FunctionSettingsContent(
     val context = LocalContext.current
     val showCleanStorageDialog = remember { mutableStateOf(false) }
     val showGrantDocsDialog = remember { mutableStateOf(false) }
-    val mtCandidates = remember { DshDocsAccess.installedCandidates(context) }
+    val docsCandidates = remember { DshDocsAccess.candidates(context) }
+    // 已直接授权的包名（本对象自己记的）：授权/撤销后就地刷新
+    val docsGranted = remember { mutableStateOf(DshDocsAccess.grantedPackages(context)) }
 
     SplicedColumnGroup(flat = flat, highlightKey = highlightKey) {
         // ───────── 运行方式 ─────────
@@ -945,12 +948,29 @@ fun FunctionSettingsContent(
                                 showToast(context, R.string.dsh_docs_open_failed)
                             }
                         }) { Text(stringResource(R.string.dsh_docs_open_action)) }
-                        // 路二：直接授权（只在装了 MT 管理器时才有意义 —— 授的是它的包名）
-                        if (mtCandidates.isNotEmpty()) {
+                        // 路二：缺陷 ROM 兼容通道（由本应用自己发放同一份授权）。
+                        // 候选按「能力」算，见 DshDocsAccess.candidates —— 默认勾选系统文件
+                        // 管理器与 MT 管理器，其余能打开文件夹的应用列出来由用户勾。
+                        // 已经授过（哪怕被授权方后来卸了）也要留着这个入口：撤销只在弹窗里。
+                        if (docsCandidates.isNotEmpty() || docsGranted.value.isNotEmpty()) {
                             TextButton(onClick = { showGrantDocsDialog.value = true }) {
                                 Text(stringResource(R.string.dsh_docs_grant_action))
                             }
                         }
+                    }
+                    // 已授权时把「授给了谁」写在卡片上：弹窗只在候选非空或已授权时才打得开，
+                    // 而那行提示是用户判断"要不要撤销"的唯一线索。被授权方卸载后名字查不到，
+                    // 退化成包名也要显示出来。
+                    if (docsGranted.value.isNotEmpty()) {
+                        val labels = docsGranted.value.joinToString("、") { pkg ->
+                            docsCandidates.firstOrNull { it.packageName == pkg }?.label ?: pkg
+                        }
+                        Text(
+                            text = stringResource(R.string.dsh_docs_granted_label, labels),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
                     }
                 }
             }
@@ -1055,32 +1075,124 @@ fun FunctionSettingsContent(
 
     if (showCleanStorageDialog.value) CleanStorageDialog(showCleanStorageDialog)
     if (showGrantDocsDialog.value) {
-        val names = mtCandidates.joinToString("、") { it.label }
-        AlertDialog(
-            onDismissRequest = { showGrantDocsDialog.value = false },
-            title = { Text(stringResource(R.string.dsh_docs_grant_title)) },
-            text = { Text(stringResource(R.string.dsh_docs_grant_message, names)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showGrantDocsDialog.value = false
-                    val granted = mtCandidates.count { DshDocsAccess.grant(context, it.packageName) }
-                    showToast(context, if (granted > 0) R.string.dsh_docs_grant_done else R.string.dsh_docs_grant_failed)
-                }) { Text(stringResource(R.string.dsh_docs_grant_confirm)) }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        showGrantDocsDialog.value = false
-                        DshDocsAccess.revokeAll(context)
-                        showToast(context, R.string.dsh_docs_grant_revoked)
-                    }) { Text(stringResource(R.string.dsh_docs_grant_revoke)) }
-                    TextButton(onClick = { showGrantDocsDialog.value = false }) {
-                        Text(stringResource(android.R.string.cancel))
-                    }
-                }
-            },
+        DocsGrantDialog(
+            candidates = docsCandidates,
+            onDismiss = { showGrantDocsDialog.value = false },
+            onChanged = { docsGranted.value = DshDocsAccess.grantedPackages(context) },
         )
     }
+}
+
+/**
+ * 「兼容缺陷 ROM：直接授权」弹窗 —— 多选 + 搜索。
+ *
+ * 候选名单由 `DshDocsAccess.candidates` 按能力算好（能选文件夹的、能打开文件夹的、以及
+ * MT 管理器），默认勾选系统文件管理器与 MT。这里只负责收集勾选、逐个授权、整体撤销。
+ *
+ * 「撤销全部」撤的是**本对象记录下来的**那些包（不是勾选项）：一次授权可能横跨几次弹窗，
+ * 勾选状态只反映这一次的操作，撤销要跟着实际授过的记录走才不会漏。
+ */
+@Composable
+private fun DocsGrantDialog(
+    candidates: List<DshDocsAccess.Candidate>,
+    onDismiss: () -> Unit,
+    onChanged: () -> Unit,
+) {
+    val context = LocalContext.current
+    var checked by remember {
+        mutableStateOf(candidates.filter { it.defaultOn }.map { it.packageName }.toSet())
+    }
+    var query by remember { mutableStateOf("") }
+    val shown = candidates.filter {
+        query.isBlank() || it.label.contains(query, true) || it.packageName.contains(query, true)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dsh_docs_grant_title)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.dsh_docs_grant_message),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.dsh_docs_grant_search)) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                if (shown.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.dsh_docs_grant_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                } else {
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 280.dp).padding(top = 4.dp)) {
+                        items(shown, key = { it.packageName }) { candidate ->
+                            val on = candidate.packageName in checked
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .toggleable(
+                                        value = on,
+                                        role = Role.Checkbox,
+                                        onValueChange = {
+                                            checked =
+                                                if (it) checked + candidate.packageName
+                                                else checked - candidate.packageName
+                                        },
+                                    )
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // 点击与语义交给整行的 toggleable，Checkbox 本身不再吃点击
+                                Checkbox(checked = on, onCheckedChange = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = candidate.label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val picked = candidates.filter { it.packageName in checked }
+                if (picked.isEmpty()) {
+                    // 不关弹窗：勾一个再点，比"点了没反应"清楚
+                    showToast(context, R.string.dsh_docs_grant_none)
+                } else {
+                    val granted = picked.count { DshDocsAccess.grant(context, it.packageName) }
+                    onChanged()
+                    onDismiss()
+                    showToast(
+                        context,
+                        if (granted > 0) R.string.dsh_docs_grant_done else R.string.dsh_docs_grant_failed,
+                    )
+                }
+            }) { Text(stringResource(R.string.dsh_docs_grant_confirm)) }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = {
+                    DshDocsAccess.revokeAll(context)
+                    onChanged()
+                    onDismiss()
+                    showToast(context, R.string.dsh_docs_grant_revoked)
+                }) { Text(stringResource(R.string.dsh_docs_grant_revoke)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+            }
+        },
+    )
 }
 
 @Composable

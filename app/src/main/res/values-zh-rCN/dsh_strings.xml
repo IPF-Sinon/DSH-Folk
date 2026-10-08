@@ -581,17 +581,21 @@
 
     <!-- 免 root 文件访问（DocumentsProvider） -->
     <string name="dsh_docs_access_title">允许第三方应用访问数据目录</string>
-    <string name="dsh_docs_access_summary">文件管理器通过系统选择器就能浏览 DSH-Folk 的私有数据目录（rootfs、会话、配置）。MT 管理器那边另有一个坑：在侧栏选中本应用后再点选择，它常报「没有可持久化的授权」，下面的直接授权就是为这种情况准备的。</string>
+    <string name="dsh_docs_access_summary">文件管理器通过系统选择器就能浏览 DSH-Folk 的私有数据目录（rootfs、会话、配置）。某些 ROM 的文件选择器由系统进程提供，它发出的授权会被系统静默丢弃（表现为 MT 管理器报「没有可持久化的授权」）—— 下面的兼容通道改由本应用自己发放同一份授权，可勾选多个应用。</string>
     <string name="dsh_docs_open_action">用系统选择器打开</string>
-    <string name="dsh_docs_grant_action">直接授权给 MT 管理器</string>
+    <string name="dsh_docs_grant_action">兼容缺陷 ROM：直接授权…</string>
     <string name="dsh_docs_open_failed">无法打开文件选择器。请在系统「文件」应用侧栏选择 DSH-Folk。</string>
-    <string name="dsh_docs_grant_title">直接授权数据目录给 MT 管理器</string>
-    <string name="dsh_docs_grant_message">将把 DSH-Folk 私有数据目录（含容器 rootfs）的读写权限授予 %1$s。请只在信任该应用时授权，随时可在此撤销。</string>
+    <string name="dsh_docs_grant_title">兼容缺陷 ROM：直接授权数据目录</string>
+    <string name="dsh_docs_grant_message">某些 ROM 的文件选择器与系统同 uid，系统替它发放的授权会被静默丢掉，文件管理器随后报「没有可持久化的授权」。这里改由 DSH-Folk 自己把数据目录（含容器 rootfs）的读写权限直接授给你勾选的应用 —— 与系统选择器会授出去的是同一份权限。请只勾选信任的应用，随时可撤销。</string>
     <string name="dsh_docs_grant_confirm">授权</string>
-    <string name="dsh_docs_grant_revoke">撤销</string>
-    <string name="dsh_docs_grant_done">已授权。回到 MT 管理器重新「添加本地存储」即可，不会再报错。</string>
+    <string name="dsh_docs_grant_revoke">撤销全部</string>
+    <string name="dsh_docs_grant_done">已授权。回到文件管理器重新添加或打开即可，不会再报「没有可持久化的授权」。</string>
     <string name="dsh_docs_grant_failed">授权失败。</string>
     <string name="dsh_docs_grant_revoked">已撤销授权。</string>
+    <string name="dsh_docs_granted_label">已直接授权：%1$s</string>
+    <string name="dsh_docs_grant_search">搜索应用</string>
+    <string name="dsh_docs_grant_empty">没有匹配的应用</string>
+    <string name="dsh_docs_grant_none">没有勾选任何应用。</string>
 
     <!-- 旧 WebView 内核的 JS 兼容垫片 -->
     <string name="dsh_webui_compat_ok">知道了</string>

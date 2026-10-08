@@ -243,14 +243,16 @@ function fsScopeBranchBody(src, header) {
     "「重新检测」也在同一分支里（有硬链接时不需要它）");
 }
 
-// ── 数据目录：一个入口两条路（原来是两个卡片） ──
+// ── 数据目录：一个入口 + 两条路，其中直授是「缺陷 ROM 兼容通道」 ──
 //
-// 用户问「怎么还有在文件管理器中打开数据目录和直接授权给 MT 管理器？不是合并成一个了吗」——
-// 原来确实是两张卡：一张系统选择器、一张 MT 直授。对用户这是同一件事（让第三方应用能访问
-// 数据目录），第二张还只在装了 MT 管理器时出现，看起来像另一个功能。现在合成一张卡。
+// 用户先问「怎么还有两个入口」，合成一条之后又把「直接授权给 MT 管理器」这个特例改成
+// 「兼容缺陷 ROM」的一般通道：候选按**能力**算（能选文件夹的、能打开文件夹的），默认勾选
+// 系统文件管理器与 MT 管理器，可多选、可搜索。下面钉的是这条通道的骨架 —— 尤其候选名单的
+// 判据（不能退回硬编码厂商包名）和 Android 11+ 的包可见性声明（少了它名单恒为空）。
 {
   const fn = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt");
   const reg = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/SettingsRegistry.kt");
+  const docs = read("app/src/main/java/me/bmax/apatch/util/DshDocsAccess.kt");
   const manifest = read("app/src/main/AndroidManifest.xml");
   const zhS = read("app/src/main/res/values-zh-rCN/dsh_strings.xml");
   const enS = read("app/src/main/res/values/dsh_strings.xml");
@@ -258,18 +260,76 @@ function fsScopeBranchBody(src, header) {
   const itemBlock = fsScopeBranchBody(fn, 'item(key = "function_docs_access"');
   ok(itemBlock.length > 0 && /ACTION_OPEN_DOCUMENT_TREE/.test(itemBlock) &&
     /showGrantDocsDialog\.value = true/.test(itemBlock),
-    "合并后的那一个入口里两条路都在：系统选择器 + 直接授权（MT 那条只在装了 MT 时显示）");
+    "合并后的那一个入口里两条路都在：系统选择器 + 兼容通道");
   ok(!/function_open_data_dir/.test(fn) && !/function_open_data_dir/.test(reg) &&
     !/function_grant_docs_mt/.test(fn) && !/function_grant_docs_mt/.test(reg),
     "原来那两个 item key 已经不存在（否则就是两处入口各说各话）");
   ok((reg.match(/SettingEntry\(\s*"function_docs_access"/g) || []).length === 1 &&
     /R\.string\.dsh_docs_access_title/.test(reg),
     "设置搜索只剩一条，标题就是「允许第三方应用访问数据目录」");
+
+  // 候选名单：按能力查，不按厂商包名。三处都要钉「用在哪」，只查符号存在会被绕过：
+  //   1) 能选文件夹的那一类，默认判据必须是 isSystemApp（不能退回硬编码包名）
+  //   2) MT 那一路必须真的去查安装状态（写成 for (pkg in MT_PACKAGES) 空转也算"提到了"）
+  //   3) 判据要真的喂进默认勾选集合（defaults += pkg 两处：能力那类 + MT）
+  ok(/queryIntentActivities/.test(docs) &&
+    /collect\(Intent\(Intent\.ACTION_OPEN_DOCUMENT_TREE\)\)/.test(docs) &&
+    /collect\(Intent\(Intent\.ACTION_VIEW\)\.setType\(DocumentsContract\.Document\.MIME_TYPE_DIR\)\)/.test(docs) &&
+    /for \(pkg in MT_PACKAGES\) \{[\s\S]{0,160}?installed\(pm, pkg\)/.test(docs),
+    "候选名单 = 能选文件夹的 + 能打开文件夹的 + MT 管理器（MT 不声明前两个能力，只能按包名找）");
+  ok(/FLAG_SYSTEM or ApplicationInfo\.FLAG_UPDATED_SYSTEM_APP/.test(docs) &&
+    /collect\(Intent\(Intent\.ACTION_OPEN_DOCUMENT_TREE\)\) \{ isSystemApp\(pm, it\) \}/.test(docs) &&
+    /if \(found\.putIfAbsent\(pkg, labelOf\(pm, pkg\)\) == null && byDefault\(pkg\)\) \{\s*\n\s*defaults \+= pkg/.test(docs) &&
+    /for \(pkg in MT_PACKAGES\) \{[\s\S]{0,200}?defaults \+= pkg/.test(docs),
+    "默认勾选的判据是「系统应用」，且真的喂进默认集合（能力那一类 + MT 各一处），没有硬编码 OEM 包名");
+  ok(/<action android:name="android\.intent\.action\.OPEN_DOCUMENT_TREE" \/>/.test(manifest) &&
+    /<data android:mimeType="vnd\.android\.document\/directory" \/>/.test(manifest),
+    "manifest 声明了这两类查询（Android 11+ 不声明就查不到，弹窗里一个候选都没有）");
+
+  // 多选弹窗：断言限定在 DocsGrantDialog 函数体内 —— 这个文件里别的 UI 也有
+  // role = Role.Checkbox / Checkbox(，全文件范围查会张冠李戴。
+  const dialogAt = fn.indexOf("private fun DocsGrantDialog(");
+  const dialogEnd = dialogAt > 0 ? fn.indexOf("\n@Composable", dialogAt + 10) : -1;
+  const dialog = dialogAt > 0 && dialogEnd > dialogAt ? fn.slice(dialogAt, dialogEnd) : "";
+  ok(dialog.length > 0 && /toggleable\(/.test(dialog) && /role = Role\.Checkbox/.test(dialog) &&
+    /Checkbox\(checked = on, onCheckedChange = null\)/.test(dialog) &&
+    /mutableStateOf\(candidates\.filter \{ it\.defaultOn \}\.map \{ it\.packageName \}\.toSet\(\)\)/.test(dialog),
+    "弹窗是多选（整行 toggleable + Checkbox），默认勾选 defaultOn 那些");
+  ok(/OutlinedTextField\(/.test(dialog) && /R\.string\.dsh_docs_grant_search/.test(dialog) &&
+    /R\.string\.dsh_docs_grant_empty/.test(dialog),
+    "多选之上有搜索与空名单提示（候选可能有几十个）");
+  ok(/val picked = candidates\.filter \{ it\.packageName in checked \}/.test(dialog) &&
+    /picked\.count \{ DshDocsAccess\.grant\(context, it\.packageName\) \}/.test(dialog),
+    "「授权」作用于勾选项，而不是全部候选");
+  ok(/DshDocsAccess\.revokeAll\(context\)/.test(dialog) &&
+    /docsGranted\.value = DshDocsAccess\.grantedPackages\(context\)/.test(fn),
+    "撤销作用于记下来的授权记录，撤销后卡片就地刷新");
+  ok(/R\.string\.dsh_docs_granted_label/.test(itemBlock) &&
+    /docsCandidates\.firstOrNull \{ it\.packageName == pkg \}\?\.label \?: pkg/.test(itemBlock),
+    "卡片上写出「已直接授权：谁」（被授权方卸载后名字退化成包名）");
+  ok(/docsCandidates\.isNotEmpty\(\) \|\| docsGranted\.value\.isNotEmpty\(\)/.test(itemBlock),
+    "候选为空但还有授权记录时入口仍在（否则卸载 MT 之后撤不掉）");
+
+  // 授权对象的安全边界：名单之外不授，且不再只认 MT
+  ok(!/if \(packageName !in MT_PACKAGES\)/.test(docs) &&
+    /candidates\(ctx\)\.none \{ it\.packageName == packageName \}/.test(docs),
+    "grant 的安全边界从「只认 MT」改成「必须在候选名单里」");
+  ok(/getStringSet\(KEY_GRANTED, emptySet\(\)\)/.test(docs) &&
+    (docs.match(/putStringSet\(KEY_GRANTED/g) || []).length === 2,
+    "授过谁记在本对象自己的 prefs 里，记上/忘掉两条路都在（撤销要跟着记录走，不能只撤这一次勾的）");
+
   ok(/dsh_docs_access_title/.test(zhS) && /dsh_docs_access_title/.test(enS) &&
     /dsh_docs_access_summary/.test(zhS) && /dsh_docs_access_summary/.test(enS) &&
     /dsh_docs_open_action/.test(zhS) && /dsh_docs_open_action/.test(enS) &&
-    /dsh_docs_grant_action/.test(zhS) && /dsh_docs_grant_action/.test(enS),
-    "新标题、说明与两个按钮的文案中英各一份");
+    /dsh_docs_grant_action/.test(zhS) && /dsh_docs_grant_action/.test(enS) &&
+    /dsh_docs_grant_title/.test(zhS) && /dsh_docs_grant_title/.test(enS) &&
+    /dsh_docs_grant_message/.test(zhS) && /dsh_docs_grant_message/.test(enS) &&
+    /dsh_docs_grant_revoke/.test(zhS) && /dsh_docs_grant_revoke/.test(enS) &&
+    /dsh_docs_granted_label/.test(zhS) && /dsh_docs_granted_label/.test(enS) &&
+    /dsh_docs_grant_search/.test(zhS) && /dsh_docs_grant_search/.test(enS) &&
+    /dsh_docs_grant_empty/.test(zhS) && /dsh_docs_grant_empty/.test(enS) &&
+    /dsh_docs_grant_none/.test(zhS) && /dsh_docs_grant_none/.test(enS),
+    "这条通道的文案（卡片、两个按钮、弹窗、搜索、空名单）中英各一份");
   ok(!/dsh_docs_open_title/.test(zhS) && !/dsh_docs_open_summary/.test(zhS) &&
     !/dsh_docs_grant_summary/.test(zhS) && !/dsh_docs_open_title/.test(enS) &&
     !/dsh_docs_open_summary/.test(enS) && !/dsh_docs_grant_summary/.test(enS),
