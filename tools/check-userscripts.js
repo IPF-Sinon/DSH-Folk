@@ -591,11 +591,12 @@ ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
     /contentDescription = stringResource\(R\.string\.dsh_pip_button\)/.test(activity),
     "悬浮菜单里有画中画按钮（带无障碍名）");
   ok(/private fun enterPip\(\): Boolean/.test(activity) &&
-    /if \(!pipSupported\(\) \|\| !pipAllowed\(\)\) return false/.test(activity) &&
+    /return runCatching \{ enterPictureInPictureMode\(builder\.build\(\)\) \}\.getOrDefault\(false\)/.test(activity) &&
+    /switchOff = pipSupported\(\) && !pipAllowed\(\)/.test(activity) &&
     /hasSystemFeature\(PackageManager\.FEATURE_PICTURE_IN_PICTURE\)/.test(activity) &&
     /OPSTR_PICTURE_IN_PICTURE/.test(activity) && /unsafeCheckOpNoThrow/.test(activity) &&
     /checkOpNoThrow/.test(activity),
-    "进入前同时判「设备有没有这个能力」与「系统有没有关掉本应用的画中画」");
+    "以系统的实际答复为准（不预判），并区分「能力不支持」与「本应用开关被关」来写引导");
   ok(/onEnterPip = \{ if \(!enterPip\(\)\) showPipGuide\.value = true \}/.test(activity) &&
     /if \(showPipGuide\.value\) \{\s*\n\s*PipGuideDialog\(/.test(activity),
     "进不去就弹引导，不硬撞");

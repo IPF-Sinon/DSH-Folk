@@ -691,7 +691,7 @@ class DshWebUiActivity : AppCompatActivity() {
 
                     if (showPipGuide.value) {
                         PipGuideDialog(
-                            supported = pipSupported(),
+                            switchOff = pipSupported() && !pipAllowed(),
                             onDismiss = { showPipGuide.value = false },
                             onOpenSettings = {
                                 showPipGuide.value = false
@@ -717,10 +717,12 @@ class DshWebUiActivity : AppCompatActivity() {
      * （[pipAllowed]，应用信息页里的那个开关）。引导文案据此二选一，所以这里也分开判。
      */
     private fun enterPip(): Boolean {
-        if (!pipSupported() || !pipAllowed()) return false
         val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(9, 16))
         // 12+ 的无缝缩放：小窗与大窗之间的过渡不会闪一下
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) builder.setSeamlessResizeEnabled(true)
+        // 以系统给的答复为准，不拿 AppOps 预判：个别 ROM 把它报成 MODE_IGNORED 却实际允许，
+        // 预判会把本来能进的用户直接挡进引导里。[pipSupported] / [pipAllowed] 只用来决定
+        // 引导怎么说（是不支持，还是本应用的开关被关了）。
         return runCatching { enterPictureInPictureMode(builder.build()) }.getOrDefault(false)
     }
 
@@ -1177,7 +1179,7 @@ private fun WebUiFloatingBall(
  */
 @Composable
 private fun PipGuideDialog(
-    supported: Boolean,
+    switchOff: Boolean,
     onDismiss: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -1187,13 +1189,13 @@ private fun PipGuideDialog(
         text = {
             Text(
                 stringResource(
-                    if (supported) R.string.dsh_pip_guide_text_supported
+                    if (switchOff) R.string.dsh_pip_guide_text_supported
                     else R.string.dsh_pip_guide_text_unsupported
                 )
             )
         },
         confirmButton = {
-            if (supported) {
+            if (switchOff) {
                 TextButton(onClick = onOpenSettings) {
                     Text(stringResource(R.string.dsh_pip_guide_settings))
                 }
@@ -1201,7 +1203,7 @@ private fun PipGuideDialog(
                 TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.ok)) }
             }
         },
-        dismissButton = if (supported) {
+        dismissButton = if (switchOff) {
             { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } }
         } else {
             null

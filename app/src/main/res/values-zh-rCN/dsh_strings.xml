@@ -598,7 +598,7 @@
     <string name="dsh_pip_button">画中画</string>
     <string name="dsh_pip_guide_title">开启画中画</string>
     <string name="dsh_pip_guide_text_supported">系统把本应用的画中画关掉了。到 系统设置 → 应用 → DSH-Folk → 画中画（有的 ROM 放在「特殊应用权限」里）打开它，再点一次画中画按钮。</string>
-    <string name="dsh_pip_guide_text_unsupported">这台设备的系统没有提供画中画能力，没法把页面缩成小窗。</string>
+    <string name="dsh_pip_guide_text_unsupported">现在进不了画中画：这台设备的系统没有提供这项能力，或者当前被别的应用占着。可以稍后再点一次。</string>
     <string name="dsh_pip_guide_settings">去设置</string>
     <string name="dsh_troubleshoot_intro">权限桥疑难解答（DSH-Folk 按当前语言生成）：先看报错里的那个词，对到下面相应的一段；每段末尾都说了要回哪个界面做什么。</string>
     <string name="dsh_troubleshoot_no_channel">【通道不可用】报错里有 no_channel —— root / Shizuku / 无线 ADB 三种提权通道一个都没就绪。到 设置 → 权限通道 挑一种按提示配好。虚拟屏、/native/elevate 与 shell 都依赖它。</string>
