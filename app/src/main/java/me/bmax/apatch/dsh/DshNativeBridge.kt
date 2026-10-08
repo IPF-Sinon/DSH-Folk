@@ -664,18 +664,24 @@ object DshNativeBridge {
                 "unknown_endpoint",
             )
         // 权限挡位（[DshPermTier]）比下面那道弹窗更靠前：它不回答"要不要允许这一次"，而是
-        // "这一挡里根本不谈"。所以被它挡下时不弹窗 —— 弹了等于把用户刚设的上限又拿回来问一遍。
-        // 写/读的判定必须跟桥本身**同一处**（isWriteRequest 三参重载）：/native/shell 还要看
-        // 命令本身 —— dumpsys/getprop 是读，settings put 才是写。用按路径一刀切的那个重载，
-        // 「仅可查看」这一挡就连 dumpsys 都用不了，而那一挡存在的意义正是"只允许看"。
-        if (isWriteRequest(method, path, params) && !DshPermTier.nativeWriteAllowed(ctx)) {
+        // "这一级根本不用桥"。所以被它挡下时不弹窗 —— 弹窗只会把问题问错人。
+        //
+        // 判据用的是桥**自己**那张表：neededAccess 说出这条请求至少要哪一级、levelCovers 说出
+        // 某一级能不能覆盖它。于是「完全权限」= READ_WRITE 恰好到读写为止，需要 CONTROL 的动作
+        // （系统通知开关那个端点）仍会被挡，要「自定义」才放行；而 neededAccess 对 /native/shell
+        // 会看**命令本身**（dumpsys 是读、settings put 才是写），「仅可查看」这一挡因此仍然能用
+        // dumpsys/getprop —— 那一挡存在的意义正是"只允许看"。
+        val tierCap = DshPermTier.nativeCap(ctx)
+        val tierNeed = neededAccess(cap, method, path, params)
+        if (tierCap != null && !levelCovers(tierCap, tierNeed)) {
+            val msgRes = when {
+                tierNeed == Access.CONTROL -> R.string.dsh_perm_tier_blocked_control
+                DshPermTier.tier(ctx) == DshPermTier.READ_ONLY -> R.string.dsh_perm_tier_blocked_readonly
+                else -> R.string.dsh_perm_tier_blocked_workspace
+            }
             val result = 403 to err(
-                str(
-                    ctx,
-                    if (DshPermTier.tier(ctx) == DshPermTier.READ_ONLY) R.string.dsh_perm_tier_blocked_readonly
-                    else R.string.dsh_perm_tier_blocked_workspace
-                ),
-                DshPermTier.blockedReason(ctx),
+                str(ctx, msgRes),
+                DshPermTier.blockedReason(ctx, needControl = tierNeed == Access.CONTROL),
             )
             audit(ctx, method, path, params, cap, reason, result)
             return result

@@ -71,9 +71,11 @@ Failure does not prevent startup; plugins can be installed manually later, and u
 root / Shizuku / wireless ADB are all **optional** and **disabled by default**. DSH-Folk only detects and reuses existing su (Magisk / KernelSU / APatch) and already-authorized Shizuku / Sui;
 it does not patch the kernel, install su, or bundle a Shizuku Server.
 
-How much the AI may change is a separate **permission tier** (**Settings → Security → Permission policy**):
-read-only / workspace writes only / full access / custom. It is a ceiling that sits in front of "do I need to ask you":
-what it refuses gets no dialog, just a refusal naming the tier (default: full access, i.e. what older builds did). To use one, go to **Settings → Security → Permission Channel → Preferred Channel** (or “Automatic”, choosing root > Shizuku > wireless ADB).
+Whether the AI may use the bridges at all is a separate **permission tier** (**Settings → Security → Permission policy**):
+read-only / workspace writes only / full access / custom. It only decides whether a permission may use the bridge - it
+changes neither the per-capability access levels nor whether a call asks first. What it refuses gets no dialog, just a refusal
+naming the tier. The tiers follow the bridges own ladder: full access stops at read and write, and **custom sits one rung above
+it and is the default** (the per-capability settings decide, as older builds did). To use one, go to **Settings → Security → Permission Channel → Preferred Channel** (or “Automatic”, choosing root > Shizuku > wireless ADB).
 
 Once a channel is picked, both the App itself (hardware monitoring, bugreport dmesg/tombstones, restart menu) and **the AI inside the container** (via `dsh-native shell`, run by the App on its behalf) can use it; the container itself never needs root. Strictness decides whether you are asked first, and defaults to **strict** (every privileged call opens a dialog). The full permission model, the two wireless-ADB locks, and which host capabilities the AI can reach through the bridge are in [What the Container Can Access on the Host](docs/host-bridges.en.md).
 
