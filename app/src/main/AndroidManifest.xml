@@ -274,12 +274,17 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- 内置 WebUI：只加载本机 127.0.0.1，不对外暴露 -->
+        <!-- 内置 WebUI：只加载本机 127.0.0.1，不对外暴露。
+             画中画（悬浮小窗）要 supportsPictureInPicture + resizeableActivity；上面那串
+             configChanges 已经覆盖 PiP 需要的方向/尺寸变化，所以缩成小窗不会重建 Activity
+             （重建会丢掉 WebView 里的 dsh 会话）。应用级「画中画」开关是 AppOps，代码里判。 -->
         <activity
             android:name=".ui.DshWebUiActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:exported="false"
-            android:label="@string/dsh_open_webui" />
+            android:label="@string/dsh_open_webui"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true" />
 
         <activity
             android:name=".ui.CrashHandleActivity"

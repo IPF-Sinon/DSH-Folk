@@ -302,6 +302,9 @@ object DshRuntime {
     /** web profile 在 rootfs 内的相对路径（guest 侧是 /root/.dsh/profiles/web）。 */
     private const val PROFILE_GUEST_REL = "root/.dsh/profiles/web"
 
+    /** 权限桥疑难解答在容器里的文件名（与 CLI 里那个路径必须一致）。 */
+    private const val TROUBLESHOOT_DOC_NAME = "dsh-native-troubleshoot.txt"
+
     /**
      * 首启预装的插件（npm 包名，已人工验证可装）。
      *
@@ -680,6 +683,7 @@ object DshRuntime {
           '  open <https URL>',
           '  dial <number>                              # fills the dialer; user presses call',
           '  device',
+          '  troubleshoot                              # privilege/bridge errors: what to try next',
           '  media list [--type image|video|audio] [--q name] [--limit N]',
           '  media get <id> [--type image|video|audio]   # lands in /tmp; JSON carries path',
           '  mic record [--ms N]                         # 30000 max; lands in /tmp',
@@ -867,6 +871,12 @@ object DshRuntime {
                 console.error(USAGE);
                 process.exitCode = 1;
               }
+            } else if (cmd === 'troubleshoot') {
+              // 这份清单由 App 按应用内语言写进 /root/.dsh（见 nativeTroubleshootDoc），
+              // 不是写死在这里：本脚本的字符串字面量不许有 CJK。
+              const doc = '/root/.dsh/dsh-native-troubleshoot.txt';
+              try { process.stdout.write(fs.readFileSync(doc, 'utf8')); }
+              catch (e) { process.stderr.write('troubleshoot: cannot read ' + doc + '\n'); process.exitCode = 1; }
             } else if (cmd === 'device') {
               say(await req('GET', '/native/device' + q({})));
             } else if (cmd === 'notify') {
@@ -2266,6 +2276,41 @@ object DshRuntime {
                 f.setExecutable(true, false)
             }.onFailure { android.util.Log.w(TAG, "写 $name 失败: ${it.message}") }
         }
+        // 权限桥疑难解答：agent 报错时用 `dsh-native troubleshoot` 读它。和上面的脚本一样
+        // 按内容比对再写 —— 换应用语言后这份清单必须跟着变，否则 agent 拿到的是上一门语言的步骤。
+        runCatching {
+            val doc = File(DshEnv.dshHome(appContext), TROUBLESHOOT_DOC_NAME)
+            val text = nativeTroubleshootDoc()
+            doc.parentFile?.mkdirs()
+            if (doc.isFile && runCatching { doc.readText() }.getOrNull() == text) return@runCatching
+            doc.writeText(text, StandardCharsets.UTF_8)
+        }.onFailure { android.util.Log.w(TAG, "写 $TROUBLESHOOT_DOC_NAME 失败: ${it.message}") }
+    }
+
+    /**
+     * 容器里的权限桥疑难解答（agent 用 `dsh-native troubleshoot` 读它）。
+     *
+     * 为什么是 App 写进容器、而不是写死在 CLI 脚本里：那个脚本的字符串字面量不许有 CJK
+     * （check-native-cli 门禁），而这份清单要跟着**应用内语言**走 —— 只有资源系统能做到。
+     * 写在 [DshEnv.dshHome]（保留清单里），所以更新运行时也不会丢。
+     *
+     * 三个 reason 常量是从 [PrivilegedShell] 插进文案的：报错里出现的就是它们的值
+     * （root_unverified / shizuku_unauthorized / adb_unpaired），照抄进清单 agent 才对得上。
+     */
+    private fun nativeTroubleshootDoc(): String = buildString {
+        appendLine(appContext.appString(R.string.dsh_troubleshoot_intro))
+        appendLine()
+        appendLine(appContext.appString(R.string.dsh_troubleshoot_no_channel))
+        appendLine()
+        appendLine(appContext.appString(R.string.dsh_troubleshoot_root, PrivilegedShell.REASON_ROOT_UNVERIFIED))
+        appendLine(appContext.appString(R.string.dsh_troubleshoot_shizuku, PrivilegedShell.REASON_SHIZUKU_UNAUTHORIZED))
+        appendLine(appContext.appString(R.string.dsh_troubleshoot_adb, PrivilegedShell.REASON_ADB_UNPAIRED))
+        appendLine()
+        appendLine(appContext.appString(R.string.dsh_troubleshoot_cap))
+        appendLine()
+        appendLine(appContext.appString(R.string.dsh_troubleshoot_perm))
+        appendLine()
+        appendLine(appContext.appString(R.string.dsh_troubleshoot_rom))
     }
 
     /** 启动回环桥（选空闲端口 + 写配置 + 监听）。文件端点与原生端点共用它。 */

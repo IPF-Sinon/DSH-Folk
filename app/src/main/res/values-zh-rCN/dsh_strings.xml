@@ -595,6 +595,19 @@
     <string name="dsh_docs_granted_label">已直接授权：%1$s</string>
     <string name="dsh_docs_grant_search">搜索应用</string>
     <string name="dsh_docs_grant_empty">没有匹配的应用</string>
+    <string name="dsh_pip_button">画中画</string>
+    <string name="dsh_pip_guide_title">开启画中画</string>
+    <string name="dsh_pip_guide_text_supported">系统把本应用的画中画关掉了。到 系统设置 → 应用 → DSH-Folk → 画中画（有的 ROM 放在「特殊应用权限」里）打开它，再点一次画中画按钮。</string>
+    <string name="dsh_pip_guide_text_unsupported">这台设备的系统没有提供画中画能力，没法把页面缩成小窗。</string>
+    <string name="dsh_pip_guide_settings">去设置</string>
+    <string name="dsh_troubleshoot_intro">权限桥疑难解答（DSH-Folk 按当前语言生成）：先看报错里的那个词，对到下面相应的一段；每段末尾都说了要回哪个界面做什么。</string>
+    <string name="dsh_troubleshoot_no_channel">【通道不可用】报错里有 no_channel —— root / Shizuku / 无线 ADB 三种提权通道一个都没就绪。到 设置 → 权限通道 挑一种按提示配好。虚拟屏、/native/elevate 与 shell 都依赖它。</string>
+    <string name="dsh_troubleshoot_root">【%1$s】root 授权还没验证过：在 Magisk / KernelSU 里给 DSH-Folk 放行，然后回 设置 → 权限通道 点「重新检测」。部分 ROM 还要求关掉该应用的「随机化包名」之类隐藏功能。</string>
+    <string name="dsh_troubleshoot_shizuku">【%1$s】Shizuku 未授权：先启动 Shizuku（有 root 可直接启动，否则用无线调试启动），再在 Shizuku 里给 DSH-Folk 授权，然后回本应用重新检测。注意 Shizuku 会被系统杀掉，重启手机后要重新启动它。</string>
+    <string name="dsh_troubleshoot_adb">【%1$s】无线调试没配对：设置 → 开发者选项 → 无线调试，先「使用配对码配对设备」，手机与调试方要在同一网络。配对码两分钟失效，失败就重新生成；这个通道要求 Android 11 以上。</string>
+    <string name="dsh_troubleshoot_cap">【未知端点 / 403】报错里有 unknown_endpoint 或 access denied —— 对应的原生能力开关没开，或者被限制模式拦下了。到 设置 → 功能 → 原生能力 里找到那一项打开（每项都写明了它需要什么）。</string>
+    <string name="dsh_troubleshoot_perm">【权限被拒】报错里有 permission denied / SecurityException —— 那一项能力要的运行时权限没给。在 设置 → 功能 → 原生能力 里点开该能力按提示授权；如果之前选了「拒绝且不再询问」，只能去系统设置 → 应用 → DSH-Folk → 权限 里改。</string>
+    <string name="dsh_troubleshoot_rom">【仍失败】上面都对还失败，多半是 ROM 限制：省电优化 / 后台限制会杀掉提权通道（给它「无限制」后台）；MIUI、HyperOS 一类还要关掉「USB 调试（安全设置）」或允许后台弹窗；同时装了两个管理工具（如两个 Shizuku）互相抢占时，只留一个再试。</string>
     <string name="dsh_docs_grant_none">没有勾选任何应用。</string>
 
     <!-- 旧 WebView 内核的 JS 兼容垫片 -->

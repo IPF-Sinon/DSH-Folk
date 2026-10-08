@@ -89,6 +89,7 @@ import com.ramcosta.composedestinations.generated.destinations.BehaviorSettingsS
 import com.ramcosta.composedestinations.generated.destinations.DshTerminalScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.RestoreWizardScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.LanguagePickerScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ModuleSettingsScreenDestination
@@ -175,6 +176,7 @@ import me.bmax.apatch.ui.component.rememberLoadingDialog
 
 
 import me.bmax.apatch.ui.screen.settings.appearance.ThemeImportDialog
+import me.bmax.apatch.ui.screen.settings.RuntimeBackupAdviceDialog
 import me.bmax.apatch.ui.navigation.BottomBar
 import me.bmax.apatch.ui.navigation.NavigationRailBar
 import me.bmax.apatch.ui.navigation.LocalScrollState
@@ -622,6 +624,9 @@ class MainActivity : AppCompatActivity() {
                 val runtimePrompt = remember { mutableStateOf<RuntimeCheckResult?>(null) }
                 val runtimePromptVersion = remember { mutableStateOf("") }
                 val showRuntimeDialog = remember { mutableStateOf(false) }
+                // 运行时替换（重装/切版本/导入）前的「建议先备份」：确认更新后不直接跑，
+                // 先摆一次这个提示（与设置里运行时卡片同一条路），用户决定后再启动并回首页。
+                val pendingRuntimeOp = remember { mutableStateOf<(() -> Unit)?>(null) }
                 // 「应用更新检测正在进行中」——只有检测期间才知道，所以用状态变量传出来
                 val appCheckRunning = remember { mutableStateOf(false) }
 
@@ -763,8 +768,9 @@ class MainActivity : AppCompatActivity() {
                         confirmButton = {
                             TextButton(onClick = {
                                 showRuntimeDialog.value = false
-                                // 通道 metadata 就是刚查到的那个版本，重装即更新
-                                DshRuntime.reinstallRuntime(true)
+                                // 通道 metadata 就是刚查到的那个版本，重装即更新。这里不直接跑：
+                                // 先过「建议先备份」，用户点「继续」后再启动并回首页看进度。
+                                pendingRuntimeOp.value = { DshRuntime.reinstallRuntime(true) }
                             }) { Text(stringResource(R.string.dsh_runtime_update_go)) }
                         },
                         dismissButton = {
@@ -772,6 +778,23 @@ class MainActivity : AppCompatActivity() {
                                 Text(stringResource(android.R.string.cancel))
                             }
                         },
+                    )
+                }
+
+                // 与设置里运行时卡片同一条路：替换 rootfs 之前先给一次备份的机会。
+                // 这个提示是 Activity 级的（可能在任何页面弹出），所以「继续」之后要主动回首页 ——
+                // 下载/解压的进度只在首页看得到。
+                pendingRuntimeOp.value?.let { op ->
+                    RuntimeBackupAdviceDialog(
+                        onContinue = {
+                            pendingRuntimeOp.value = null
+                            op()
+                            navigator.navigate(HomeScreenDestination) {
+                                popUpTo(NavGraphs.root)
+                                launchSingleTop = true
+                            }
+                        },
+                        onCancel = { pendingRuntimeOp.value = null },
                     )
                 }
 

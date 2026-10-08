@@ -259,6 +259,26 @@ console.log("\n── README（用户看到的说明） ──");
     "旧说法（一个按钮三种用法）已从两个 README 清掉");
 }
 
+
+// ── 首页那条运行时更新提示：也要先建议备份、再回首页 ──
+//
+// 用户报「更新运行时弹窗点击更新后没有提示备份，也没有跳转首页」。设置里那张卡早就走
+// pendingRuntimeOp → RuntimeBackupAdviceDialog → 启动 + 回首页；而首页那条（Activity 级弹窗，
+// 可能在任何页面弹出）是直接 DshRuntime.reinstallRuntime —— 两条入口行为不一致。
+{
+  const main = read("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt");
+  const screen = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt");
+  ok(/pendingRuntimeOp\.value = \{ DshRuntime\.reinstallRuntime\(true\) \}/.test(main) &&
+    /RuntimeBackupAdviceDialog\(/.test(main),
+    "首页的运行时提示不直接启动替换，而是先摆「建议先备份」");
+  ok(/pendingRuntimeOp\.value = null\n\s*op\(\)[\s\S]{0,240}?navigator\.navigate\(HomeScreenDestination\)/.test(main),
+    "点「继续」之后启动替换并回首页（下载/解压的进度只在首页看得到）");
+  ok((main.match(/DshRuntime\.reinstallRuntime\(true\)/g) || []).length === 1,
+    "首页只有一处启动替换，就是 pendingRuntimeOp 里那一处");
+  ok(/internal fun RuntimeBackupAdviceDialog\(/.test(screen),
+    "那个弹窗是 internal：两条入口共用同一份提示（private 的话首页用不上）");
+}
+
 console.log(
   "\n" + (bad === 0 ? "✓ 全部通过" : "✗ 有失败") + "：" + n + " 项断言，" + bad + " 项失败",
 );

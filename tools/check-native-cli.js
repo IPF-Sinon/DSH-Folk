@@ -294,6 +294,40 @@ const server = http.createServer((req, res) => {
     }
   }
 
+  // ── 权限桥疑难解答：agent 的一条命令 ──
+  //
+  // 报错里会出现 no_channel / root_unverified / shizuku_unauthorized / adb_unpaired 这类状态词，
+  // agent 需要一份「照做就行」的清单。清单由 App 按**应用内语言**写进容器（CLI 的字符串字面量
+  // 不许有 CJK，所以不能写死在脚本里），这里钉「命令—文件—三个 reason—提示词—资源」五处对齐：
+  // 三个 reason 常量必须都被插进文案，否则以后加了第四种状态就等于悄悄漏了一段。
+  {
+    ok(/cmd === 'troubleshoot'/.test(script) && /readFileSync\(doc, 'utf8'\)/.test(script),
+      "dsh-native troubleshoot 读容器里的清单文件，而不是把内容写死在脚本里");
+    ok(/const doc = '\/root\/\.dsh\/dsh-native-troubleshoot\.txt'/.test(script),
+      "清单路径固定在容器内 /root/.dsh/dsh-native-troubleshoot.txt");
+    ok(/TROUBLESHOOT_DOC_NAME = "dsh-native-troubleshoot\.txt"/.test(kt) &&
+      /File\(DshEnv\.dshHome\(appContext\), TROUBLESHOOT_DOC_NAME\)/.test(kt) &&
+      /doc\.writeText\(text, StandardCharsets\.UTF_8\)/.test(kt),
+      "App 侧把清单写进 rootfs/root/.dsh（DshEnv.dshHome），与 CLI 的路径一致");
+    ok(/private fun nativeTroubleshootDoc\(\): String = buildString/.test(kt) &&
+      /appContext\.appString\(R\.string\.dsh_troubleshoot_/.test(kt),
+      "清单用资源串组装（跟着应用内语言走，不写死一种语言）");
+    for (const reason of ["REASON_ROOT_UNVERIFIED", "REASON_SHIZUKU_UNAUTHORIZED", "REASON_ADB_UNPAIRED"]) {
+      ok(kt.includes("PrivilegedShell." + reason + "))"),
+        reason + " 的值被插进清单（agent 才能把报错词对到那一段）");
+    }
+    const prompt = fs.readFileSync("app/src/main/assets/dsh-folk-host.mjs", "utf8");
+    ok(/dsh-native troubleshoot/.test(prompt) && /which screen to open, in what order/.test(prompt),
+      "提示词在「这些状态词怎么修」的地方指到这条命令");
+    for (const f of ["app/src/main/res/values/dsh_strings.xml", "app/src/main/res/values-zh-rCN/dsh_strings.xml"]) {
+      const res = fs.readFileSync(f, "utf8");
+      ok(["intro", "no_channel", "root", "shizuku", "adb", "cap", "perm", "rom"]
+        .every((k) => res.includes('name="dsh_troubleshoot_' + k + '"')),
+        f + "：八个段落都在");
+    }
+  }
+
+
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log(fail === 0 ? "\n全部通过" : `\n${fail} 项失败`);

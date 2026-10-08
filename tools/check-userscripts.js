@@ -570,5 +570,46 @@ ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
   /Userscripts\.read\(context, uri\)/.test(screen),
   "选文件：ACTION_GET_CONTENT + read(content://)");
 
+
+// ── 悬浮菜单的画中画（把页面缩成悬浮小窗） ──
+//
+// 用户要的是「像视频画中画那样把页面缩成小窗」，没有权限时先引导。这里钉五件事：
+// 清单开了能力、菜单里有按钮、进得去才进（进不去弹引导）、引导能跳到设置、小窗里不画悬浮球。
+{
+  const manifest = fs.readFileSync("app/src/main/AndroidManifest.xml", "utf8");
+  const activity = fs.readFileSync(SRC_WEBUI, "utf8");
+  const zhS = fs.readFileSync("app/src/main/res/values-zh-rCN/dsh_strings.xml", "utf8");
+  const enS = fs.readFileSync("app/src/main/res/values/dsh_strings.xml", "utf8");
+  const block = manifest.slice(
+    manifest.indexOf(".ui.DshWebUiActivity"),
+    manifest.indexOf("MTDataFilesWakeUpActivity")
+  );
+  ok(/android:supportsPictureInPicture="true"/.test(block) &&
+    /android:resizeableActivity="true"/.test(block),
+    "WebUI 的 Activity 声明了画中画（supportsPictureInPicture + resizeableActivity）");
+  ok(/Icons\.Outlined\.PictureInPictureAlt/.test(activity) &&
+    /contentDescription = stringResource\(R\.string\.dsh_pip_button\)/.test(activity),
+    "悬浮菜单里有画中画按钮（带无障碍名）");
+  ok(/private fun enterPip\(\): Boolean/.test(activity) &&
+    /if \(!pipSupported\(\) \|\| !pipAllowed\(\)\) return false/.test(activity) &&
+    /hasSystemFeature\(PackageManager\.FEATURE_PICTURE_IN_PICTURE\)/.test(activity) &&
+    /OPSTR_PICTURE_IN_PICTURE/.test(activity) && /unsafeCheckOpNoThrow/.test(activity) &&
+    /checkOpNoThrow/.test(activity),
+    "进入前同时判「设备有没有这个能力」与「系统有没有关掉本应用的画中画」");
+  ok(/onEnterPip = \{ if \(!enterPip\(\)\) showPipGuide\.value = true \}/.test(activity) &&
+    /if \(showPipGuide\.value\) \{\s*\n\s*PipGuideDialog\(/.test(activity),
+    "进不去就弹引导，不硬撞");
+  ok(/override fun onPictureInPictureModeChanged\(/.test(activity) &&
+    /if \(!inPip\.value\) \{\s*\n\s*WebUiFloatingBall\(/.test(activity),
+    "画中画时把悬浮球藏起来（那么小的窗口里它只会挡内容）");
+  ok(/Settings\.ACTION_APPLICATION_DETAILS_SETTINGS/.test(activity),
+    "引导里的「去设置」真的能打开应用信息页");
+  for (const k of ["dsh_pip_button", "dsh_pip_guide_title", "dsh_pip_guide_text_supported",
+                   "dsh_pip_guide_text_unsupported", "dsh_pip_guide_settings"]) {
+    ok(zhS.includes('name="' + k + '"') && enS.includes('name="' + k + '"'),
+      "文案 " + k + " 中英各一份");
+  }
+}
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

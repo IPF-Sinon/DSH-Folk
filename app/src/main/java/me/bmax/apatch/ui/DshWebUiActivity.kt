@@ -5,12 +5,18 @@ import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.app.AppOpsManager
+import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.util.Base64
+import android.os.Process
+import android.provider.Settings
+import android.util.Rational
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -60,6 +66,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DragIndicator
 import androidx.compose.material.icons.outlined.OpenInBrowser
+import androidx.compose.material.icons.outlined.PictureInPictureAlt
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -664,20 +671,96 @@ class DshWebUiActivity : AppCompatActivity() {
                         )
                     }
 
-                    WebUiFloatingBall(
-                        onBack = { onBackPressedDispatcher.onBackPressed() },
-                        onClose = { finish() },
-                        onReload = { webView?.reload() },
-                        // 交给外部浏览器时**现取**当前地址，而不是用本页进来时那个 [url]：
-                        // dsh 每次重启都会生成新 token（旧地址的 token 随之失效），而本页
-                        // 可以一直开着 —— 用进来时那份就等于把一个过期 token 递给浏览器。
-                        onOpenExternal = {
-                            DshWebUi.openExternal(this@DshWebUiActivity, DshRuntime.webUrl())
-                        },
-                    )
+                    // 画中画时连外壳一起藏起来：悬浮球属于「页面外壳」，在那么小的窗口里只会挡住内容
+                    if (!inPip.value) {
+                        WebUiFloatingBall(
+                            onBack = { onBackPressedDispatcher.onBackPressed() },
+                            onClose = { finish() },
+                            onReload = { webView?.reload() },
+                            // 交给外部浏览器时**现取**当前地址，而不是用本页进来时那个 [url]：
+                            // dsh 每次重启都会生成新 token（旧地址的 token 随之失效），而本页
+                            // 可以一直开着 —— 用进来时那份就等于把一个过期 token 递给浏览器。
+                            onOpenExternal = {
+                                DshWebUi.openExternal(this@DshWebUiActivity, DshRuntime.webUrl())
+                            },
+                            // 进不去（设备不支持 / 应用级开关被关）就先给引导，不硬撞
+                            onEnterPip = { if (!enterPip()) showPipGuide.value = true },
+                        )
+                    }
+
+                    if (showPipGuide.value) {
+                        PipGuideDialog(
+                            supported = pipSupported(),
+                            onDismiss = { showPipGuide.value = false },
+                            onOpenSettings = {
+                                showPipGuide.value = false
+                                openAppDetails()
+                            },
+                        )
+                    }
                 }
             }
         }
+    }
+
+    /** 是否正在画中画：那种小窗里不画悬浮球。由 [onPictureInPictureModeChanged] 更新。 */
+    private val inPip = mutableStateOf(false)
+
+    /** 「开不了画中画」的引导弹窗是否可见。 */
+    private val showPipGuide = mutableStateOf(false)
+
+    /**
+     * 进画中画。返回 false = 现在进不去，调用方去弹引导。
+     *
+     * 两种「进不去」要分开说：设备没有这个能力（[pipSupported]）与系统把本应用的画中画关了
+     * （[pipAllowed]，应用信息页里的那个开关）。引导文案据此二选一，所以这里也分开判。
+     */
+    private fun enterPip(): Boolean {
+        if (!pipSupported() || !pipAllowed()) return false
+        val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(9, 16))
+        // 12+ 的无缝缩放：小窗与大窗之间的过渡不会闪一下
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) builder.setSeamlessResizeEnabled(true)
+        return runCatching { enterPictureInPictureMode(builder.build()) }.getOrDefault(false)
+    }
+
+    private fun pipSupported(): Boolean =
+        packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+
+    /**
+     * 应用级画中画开关（AppOps 的 picture_in_picture 项）。
+     *
+     * MODE_DEFAULT 是「没被单独关掉」，按允许算：只有显式 MODE_IGNORED 才算被关。
+     * 29 起用 unsafeCheckOpNoThrow（不打权限日志），26-28 只能走已废弃的 checkOpNoThrow。
+     */
+    private fun pipAllowed(): Boolean {
+        val ops = getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return true
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_PICTURE_IN_PICTURE, Process.myUid(), packageName)
+        } else {
+            @Suppress("DEPRECATION")
+            ops.checkOpNoThrow(AppOpsManager.OPSTR_PICTURE_IN_PICTURE, Process.myUid(), packageName)
+        }
+        return mode == AppOpsManager.MODE_ALLOWED || mode == AppOpsManager.MODE_DEFAULT
+    }
+
+    /** 引导里的「去设置」：应用信息页，用户在里面能找到「画中画」那一项。 */
+    private fun openAppDetails() {
+        runCatching {
+            startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", packageName, null),
+                )
+            )
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPip.value = isInPictureInPictureMode
     }
 
     /** 选择结果 → WebView 要的 Uri 数组。取消或无数据一律 null。 */
@@ -945,6 +1028,7 @@ private fun WebUiFloatingBall(
     onClose: () -> Unit,
     onReload: () -> Unit,
     onOpenExternal: () -> Unit,
+    onEnterPip: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember {
@@ -1058,6 +1142,12 @@ private fun WebUiFloatingBall(
                                     contentDescription = stringResource(R.string.dsh_webui_reload),
                                 )
                             }
+                            IconButton(onClick = { expanded = false; onEnterPip() }) {
+                                Icon(
+                                    Icons.Outlined.PictureInPictureAlt,
+                                    contentDescription = stringResource(R.string.dsh_pip_button),
+                                )
+                            }
                             IconButton(onClick = { expanded = false; onOpenExternal() }) {
                                 Icon(
                                     Icons.Outlined.OpenInBrowser,
@@ -1076,4 +1166,44 @@ private fun WebUiFloatingBall(
             }
         }
     }
+}
+
+/**
+ * 「开不了画中画」的引导。
+ *
+ * 分两种：设备没有画中画能力（只能说明情况），与系统把本应用的画中画关掉了（给一条去设置的
+ * 路 —— 那个开关在应用信息页里，没有可直接打开的公开入口，所以不猜 ROM 的跳转）。
+ */
+@Composable
+private fun PipGuideDialog(
+    supported: Boolean,
+    onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dsh_pip_guide_title)) },
+        text = {
+            Text(
+                stringResource(
+                    if (supported) R.string.dsh_pip_guide_text_supported
+                    else R.string.dsh_pip_guide_text_unsupported
+                )
+            )
+        },
+        confirmButton = {
+            if (supported) {
+                TextButton(onClick = onOpenSettings) {
+                    Text(stringResource(R.string.dsh_pip_guide_settings))
+                }
+            } else {
+                TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.ok)) }
+            }
+        },
+        dismissButton = if (supported) {
+            { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } }
+        } else {
+            null
+        },
+    )
 }

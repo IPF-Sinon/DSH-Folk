@@ -80,7 +80,7 @@ object DshHostPrompt {
      * 17 这一次是**回退**：内容退回到 14 那份（权限挡位整段撤了），但版本号只能往上走 ——
      * 已经落盘了 15/16 的安装如果看到"版本一样"，就不会被覆盖，旧段落会一直留在设备上。
      */
-    private const val PLUGIN_REV = 17
+    private const val PLUGIN_REV = 18
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =

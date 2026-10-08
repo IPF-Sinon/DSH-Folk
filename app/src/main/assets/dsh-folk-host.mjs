@@ -284,7 +284,9 @@ const CAP_CAVEAT = {
     'restriction mode the user chose (with it on, a listed capability pops a dialog every call; ' +
     'dangerous commands always pop one). Reasons such as ' +
     'no_channel, adb_write_disabled, root_unavailable, root_lost, timeout, busy, denied_by_user ' +
-    'are states to report, not errors to retry. `dsh-native caps` lists the exact read-only ' +
+    'are states to report, not errors to retry. When the user asks how to fix one of them, run ' +
+    '`dsh-native troubleshoot`: it prints a checklist (which screen to open, in what order) in the ' +
+    'app language. `dsh-native caps` lists the exact read-only ' +
     'commands (and whether the channel is ready) — check it before assuming a command needs ' +
     'permission, because when a capability is on the restriction list a wrong guess costs the user a tap.',
   sms:

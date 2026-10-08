@@ -673,9 +673,12 @@ internal fun DshSettingsScreen(
  * 这些操作会换掉整个 rootfs（且 `rootfs/tmp` 等不在保留清单），出问题不易回退，所以先提示。
  * 「导出备份」就地打开备份页同一套导出组件（[BackupExportOptionsDialog]），导完仍留在本框，
  * 用户再点「继续」跑真正的运行时操作；导出走 [DshConfigBackup.exportArchive]（与备份页同一通路）。
+ *
+ * `internal` 而不是 `private`：首页那条运行时更新提示（MainActivity 的 Activity 级弹窗，可能在
+ * 任何页面弹出）也走它 —— 两条入口必须给同一份提示，否则从首页点更新的人看不到备份建议。
  */
 @Composable
-private fun RuntimeBackupAdviceDialog(
+internal fun RuntimeBackupAdviceDialog(
     onContinue: () -> Unit,
     onCancel: () -> Unit,
 ) {

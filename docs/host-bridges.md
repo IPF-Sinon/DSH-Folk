@@ -52,6 +52,7 @@ protectionLevel 是 `signature|appop`，应用申请不到）。没授予时上�
 命令：
 
 ```
+dsh-native troubleshoot                              # 权限桥报错时：打印一份排查清单（按当前应用语言生成）
 dsh-native notify <标题> [正文] [--id N] [--ongoing]
 dsh-native notify-cancel [--id N]
 dsh-native notify-list [--limit N]                    # 读活跃系统通知

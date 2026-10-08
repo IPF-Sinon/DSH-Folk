@@ -50,6 +50,7 @@ Change system state    volume / settings / install / usage / shell (privileged c
 Commands:
 
 ```
+dsh-native troubleshoot                        # on privilege/bridge errors: print a checklist in the app language
 dsh-native notify <title> [body] [--id N] [--ongoing]
 dsh-native notify-cancel [--id N]
 dsh-native notify-list [--limit N]              # read active system notifications
