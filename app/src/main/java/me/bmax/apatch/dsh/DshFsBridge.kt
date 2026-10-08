@@ -162,18 +162,6 @@ object DshFsBridge {
                     // 云备份补包接口：dsh-folk-cloud 插件经此请 App 出/收含软件数据的整包。
                     // 与 /fs、/native 共用同一 token 与回环守卫 —— 能调到这里 = 容器内可信代码。
                     path.startsWith("/cloud/") -> dispatchCloud(method, path, params, input, headers)
-                    // 权限挡位（[DshPermTier]）：它是天花板，所以排在具体端点之前 ——「仅可查看」
-                    // 下写类端点一律拒绝，「工作区内修改」只放行工作区里的路径。读类端点不看挡位
-                    // （挡位管的是"能改什么"，不是"能看什么"）。被挡下时不弹窗，理由写进 reason。
-                    DshPermTier.fsWriteBlocked(appCtx, method, params) -> {
-                        val tierReason = DshPermTier.blockedReason(appCtx)
-                        val msg = if (tierReason == "tier_readonly") {
-                            str(R.string.dsh_perm_tier_blocked_readonly)
-                        } else {
-                            str(R.string.dsh_perm_tier_blocked_workspace)
-                        }
-                        403 to errorJson(msg, tierReason)
-                    }
                     method == "GET" && path == "/health" -> handleHealth()
                     method == "GET" && path == "/list" -> handleList(params)
                     method == "GET" && path == "/stat" -> handleStat(params["path"])

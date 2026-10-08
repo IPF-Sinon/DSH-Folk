@@ -171,9 +171,7 @@ console.log("\n── 提示词：状态进事实、开着就明说 ──");
 {
   ok(/\.put\("a11yHideOwn", A11yOwn\.mode\(ctx\)\)/.test(PROMPT),
     "host-facts 里带上当前档位（插件按 mtime 失效，改档位下一轮就生效）");
-  // 16（2026-10 权限挡位改成桥档位梯子口径：完全权限不含 CONTROL、自定义在它之上且是默认）：
-  // a11y 段落要求插件至少是这个修订
-  ok(/private const val PLUGIN_REV = 16/.test(PROMPT),
+  ok(/private const val PLUGIN_REV = 17/.test(PROMPT),
     "插件内容版本 +1（改了 .mjs 必须抬，否则落盘的还是旧内容）");
   ok(/keep accessibility away from DSH-Folk itself/.test(MJS),
     "常驻说明提到这个开关（讲「存在」，不讲当前档位）");

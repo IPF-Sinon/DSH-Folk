@@ -350,39 +350,3 @@ The File access scope page keeps the mapping-list editor (`ws_mounts`) but no lo
 switch: that section now shows whether it is currently in effect, according to the master switch. The
 copy has to say so — the user sees one switch that decides two things, and a description that omits
 half of it turns into "I never enabled the workspace, yet it can see my files".
-
-## The permission tier: it only decides whether a permission may use the bridge (2026-10)
-
-The native-bridge side already had two layers: **per-capability access levels** (is this capability
-useful at all, long-lived) and **restriction mode** (ask before using it). The tier is a third layer
-placed in front of both, but it answers **one** question only: **may this permission use the bridge**.
-It changes neither the per-capability levels nor whether a call asks first. A request it refuses gets
-**no dialog** - just a 403 naming the reason (`tier_readonly` / `tier_workspace` / `tier_control`) -
-because a dialog would put the question to the wrong person.
-
-The test is the bridge **own** access ladder (`DshNativeBridge.neededAccess` and `levelCovers`), not
-a hand-rolled read/write check: `neededAccess` knows that `/native/shell` has to look at the **command
-itself** (`dumpsys` is a read, `settings put` is a write) and it recognises the CONTROL rung. The four
-tiers therefore land on that same ladder:
-
-| Tier | Native bridge (/native) | File bridge (/fs) |
-| --- | --- | --- |
-| read-only | serves reads only | serves reads only |
-| workspace writes only | serves reads only (a native write is not a workspace change) | only writes under `/root/workspace` are served |
-| full access | serves reads and writes, **not** CONTROL (the system notification endpoint is still refused) | serves reads and writes |
-| custom (default) | no ceiling: the per-capability levels (CONTROL included) decide | same |
-
-**Custom is one rung above full access, and it is the default** - the two go together: there was no tier
-before this version, the per-capability configuration decided (and the system notification endpoint needs
-the CONTROL rung), so a default of full access would silently block a capability the user had already
-configured and granted. A default must equal the old behaviour; in this repo that is an unwritten rule.
-
-The workspace-write test normalises `.` and `..` by path segment before comparing prefixes:
-`/root/workspace/../../etc/passwd` looks like it is inside the workspace to a plain string prefix check. The
-file bridge also looks at **every path involved in the request** (move/copy carry src and dst); checking
-one of them leaves a back door — moving a file in from outside, or moving one out.
-
-The tier is written into the host facts (`permTier`) and rendered in the prompt section: an agent that
-gets a 403 without knowing where the ceiling is will treat it as a failure and retry. Changing
-`dsh-folk-host.mjs` means bumping `PLUGIN_REV` and updating the content hash in `check-fs-scope.js`
-(existing installs decide whether to re-materialise from the version number).

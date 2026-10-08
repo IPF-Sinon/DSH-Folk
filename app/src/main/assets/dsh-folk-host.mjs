@@ -856,33 +856,6 @@ function render(f) {
     const restrictedCaps = Array.isArray(f.restrictedCaps)
       ? f.restrictedCaps.filter((c) => typeof c === 'string')
       : [];
-    // 权限挡位：只决定“这一级能不能用桥”，比“要不要问”更靠前。被它挡下时不开弹窗（弹窗只会
-    // 把问题问错人），所以这里必须主动说清 —— 否则 agent 只会把 403 当故障反复重试。
-    // 四挡对着桥自己的梯子：read < write(read_write) < control；custom 在最高一级且是默认。
-    if (ready && f.permTier === 'read-only') {
-      lines.push(
-        'The user set the permission tier to **read-only**: the host bridges only serve reads, so ' +
-          'every write is refused with reason `tier_readonly` and no dialog is offered for it. ' +
-          'Reading, listing and read-only shell commands (dumpsys, getprop) still work. ' +
-          'Treat refusals as a setting, not a failure: do not retry, and say what you could not change.'
-      );
-    } else if (ready && f.permTier === 'workspace-write') {
-      lines.push(
-        'The user set the permission tier to **workspace-write**: the file bridge only serves reads ' +
-          'and writes under /root/workspace (anything else is refused with reason `tier_workspace`), ' +
-          'and the native capability bridge still serves reads only — its write actions are not ' +
-          'workspace changes. No dialog is offered for those refusals. Keep changes inside the ' +
-          'workspace, and treat refusals as a setting, not a failure.'
-      );
-    } else if (ready && f.permTier === 'danger-full-access') {
-      lines.push(
-        'The user set the permission tier to **full access**: the bridges serve reads and writes, ' +
-          'but not the control level — a call that needs it (the system notification endpoint, for ' +
-          'example) is refused with reason `tier_control`, and no dialog is offered for it. Only the ' +
-          'custom tier allows that level. Treat such a refusal as a setting, not a failure.'
-      );
-    }
-
     if (!ready) {
       // 还没就绪，讲弹窗频率只会让 agent 以为现在就能调
     } else if (f.restrictMode === true && restrictedCaps.length) {

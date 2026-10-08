@@ -127,7 +127,7 @@ const hostMjs = read("app/src/main/assets/dsh-folk-host.mjs");
 // 它照样绿，而老设备的 ensureInstalled 认为「版本没变」，落盘的还是旧插件。现在钉内容：
 // 改了 .mjs 就必须抬 PLUGIN_REV 并同步这里的哈希（重算：sha256sum app/src/main/assets/dsh-folk-host.mjs）。
 const mjsSha = require("crypto").createHash("sha256").update(hostMjs, "utf8").digest("hex");
-const MJS_SHA = "0156b9c76cbb9da3107f20d73601092c0d01b40677d6934cd4636220d0ce57c7";
+const MJS_SHA = "90ac8608a7e8cd5354878811a5f553b08da2d9ac400b22de09e9c62eaf86c4cb";
 console.log("\u2500 #3d 宿主提示词：把工作区挂载与硬链接限制注入 AI（不落在大块 UI 里）");
 ok(/workspaceStorageMounted/.test(hostPrompt) && /workspaceStorageMappings/.test(hostPrompt) &&
   /storageHardlinkSupported/.test(hostPrompt),
@@ -137,7 +137,7 @@ ok(/if \(f\.workspaceStorageMounted === true\)/.test(hostMjs) &&
   "宿主提示词仅在工作区挂载开且不支持硬链接时渲染工作区挂载段");
 ok(/### Phone storage inside the workspace/.test(hostMjs) && /EINVAL/.test(hostMjs),
   "宿主提示词明说 write 工具会撞 EINVAL、推荐 edit/shell 重定向");
-ok(/PLUGIN_REV = 16/.test(hostPrompt) && mjsSha === MJS_SHA,
+ok(/PLUGIN_REV = 17/.test(hostPrompt) && mjsSha === MJS_SHA,
   "改了 .mjs 就必须同时抬 PLUGIN_REV 并更新这里的内容哈希（抬版本是 ensureInstalled 重新落盘的唯一依据）");
 
 console.log("\u2500 #3 ContainerRuntime：存储绑定改为动态、两个运行时都用");
@@ -217,65 +217,6 @@ ok(/val busy = phase is AppUpdater\.Phase\.Downloading \|\|\s*\n\s*phase is AppU
   "busy 只含下载/校验，不含测速（测速不锁选择与下载）");
 ok(/speedJob\?\.cancel\(\)\s*\n\s*testing = false/.test(updDialog),
   "点「开始下载」会取消剩余测速、用当前选中线路直接下");
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 权限挡位在文件桥这一侧（[DshPermTier]）：写类端点先过后挡位那道闸。
-//
-// 「工作区内修改」的判据要能挡住 /root/workspace/../.. 这种写着像在工作区里、实际落在 /etc 的
-// 路径 —— 所以下面复刻一遍 Kotlin 那份按目录段归一化的实现，并用样例真跑（只钉字符串在场是
-// 拦不住这类错的）。
-{
-  const tier = read("app/src/main/java/me/bmax/apatch/dsh/DshPermTier.kt");
-  const fsb = read("app/src/main/java/me/bmax/apatch/dsh/DshFsBridge.kt");
-  ok(/internal val WRITE_METHODS = setOf\("PUT", "POST", "DELETE"\)/.test(tier),
-    "写类方法 = PUT / POST / DELETE（GET 一律不算写）");
-  ok(/fun fsWriteBlocked\(ctx: Context\?, method: String, params: Map<String, String>\): Boolean/.test(tier) &&
-    /pathParams\(params\)\.any \{ !isUnderWorkspace\(it\) \}/.test(tier) &&
-    /listOfNotNull\(params\["path"\], params\["src"\], params\["dst"\]\)/.test(tier),
-    "「工作区内修改」要求这次请求涉及的每个路径（path / src / dst）都在工作区里",
-    "move/copy 有两个路径，只查一个等于留了个后门（搬进来或搬出去）");
-  const guardAt = fsb.indexOf("DshPermTier.fsWriteBlocked(appCtx, method, params)");
-  const writeAt = fsb.indexOf('method == "PUT" && path == "/write"');
-  ok(guardAt > 0 && writeAt > 0 && guardAt < writeAt,
-    "挡位那道闸排在写端点之前（排在后面 = 端点已经执行了）");
-  ok(/DshPermTier\.tier\(appCtx!!\)/.test(fsb) === false &&
-    /DshPermTier\.blockedReason\(appCtx\)/.test(fsb) &&
-    /dsh_perm_tier_blocked_readonly/.test(fsb) && /dsh_perm_tier_blocked_workspace/.test(fsb),
-    "被挡下时 403 并给出对应挡位的理由（不弹窗）");
-
-  // 上面那些样例跑的是**这份复刻**，所以还得钉住 Kotlin 那一份的形状：复刻与实现漂移时，
-  // 样例再全也只是在测门禁自己。
-  ok(/"", "\." -> \{\}/.test(tier) &&
-    /"\.\." -> if \(segs\.isEmpty\(\)\) return false else segs\.removeAt\(segs\.size - 1\)/.test(tier) &&
-    /val p = "\/" \+ segs\.joinToString\("\/"\)/.test(tier) &&
-    /p == DshEnv\.WORKSPACE_GUEST \|\| p\.startsWith\("\$\{DshEnv\.WORKSPACE_GUEST\}\/"\)/.test(tier),
-    "Kotlin 那份同样按目录段归一化（消 . 与 ..、越出根即判否），且工作区根含等号边界");
-  // 复刻 Kotlin 的 isUnderWorkspace（按目录段消 . 与 ..，再比前缀）
-  function isUnderWorkspace(guest) {
-    const segs = [];
-    for (const raw of String(guest).replace(/\\/g, "/").split("/")) {
-      const seg = raw.trim();
-      if (seg === "" || seg === ".") continue;
-      if (seg === "..") { if (segs.length === 0) return false; segs.pop(); continue; }
-      segs.push(seg);
-    }
-    const p = "/" + segs.join("/");
-    return p === "/root/workspace" || p.startsWith("/root/workspace/");
-  }
-  const cases = [
-    ["/root/workspace", true],
-    ["/root/workspace/a/b.txt", true],
-    ["/root/workspace/./a.txt", true],
-    ["/root/workspace/../etc/passwd", false],
-    ["/root/workspace/../../etc/passwd", false],
-    ["/root/workspaces", false],
-    ["/sdcard/DCIM/a.jpg", false],
-    ["/..", false],
-  ];
-  for (const [p, want] of cases) {
-    ok(isUnderWorkspace(p) === want, "工作区判定：" + p + " → " + (want ? "放行" : "拒绝"));
-  }
-}
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

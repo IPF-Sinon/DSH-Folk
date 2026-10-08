@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -20,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -32,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -40,7 +36,6 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
-import me.bmax.apatch.dsh.DshPermTier
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.PrivPolicy
@@ -70,8 +65,6 @@ import me.bmax.apatch.ui.component.SearchAppBar
 fun RestrictModeScreen(navigator: DestinationsNavigator) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
-    // 权限挡位：比"要不要问"更靠前的那一层（见 [DshPermTier]）
-    var tier by remember { mutableStateOf(DshPermTier.tier(context)) }
     var restrictMode by remember { mutableStateOf(PrivPolicy.restrictMode(context)) }
     var restricted by remember { mutableStateOf(PrivPolicy.restrictedCaps(context)) }
     var danger by remember { mutableStateOf(PrivPolicy.activeDanger(context)) }
@@ -116,35 +109,6 @@ fun RestrictModeScreen(navigator: DestinationsNavigator) {
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // ── 权限挡位：先决定"这一挡里谈不谈"，再决定"谈的时候要不要问" ──
-            // 顺序不能反：挡位是天花板，被它挡下的请求连弹窗都不会有（见 DshPermTier）。
-            Text(
-                text = stringResource(R.string.dsh_perm_tier_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 16.dp, top = 14.dp),
-            )
-            Text(
-                text = stringResource(R.string.dsh_perm_tier_summary),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
-            )
-            for (opt in DshPermTier.OPTIONS) {
-                PermTierOption(
-                    selected = tier == opt,
-                    title = stringResource(permTierLabelRes(opt)),
-                    summary = stringResource(permTierDescRes(opt)),
-                    onSelect = {
-                        tier = opt
-                        // setTier 内部会刷新宿主事实：agent 靠提示词里的字知道天花板在哪，
-                        // 漏了这一步它会把 403 当故障反复重试
-                        DshPermTier.setTier(context.applicationContext, opt)
-                    },
-                )
-            }
-            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-
             // ── 开关：唯一决定"要不要再问"的全局项 ──
             Row(
                 modifier = Modifier
@@ -343,49 +307,6 @@ fun RestrictModeScreen(navigator: DestinationsNavigator) {
                 Text(stringResource(R.string.dsh_priv_danger_reset))
             }
             Spacer(Modifier.height(20.dp))
-        }
-    }
-}
-
-/** 挡位 → 文案。用 when 而不是把资源 id 塞进 [DshPermTier]：那个对象要被桥引用，不该依赖 UI 资源。 */
-private fun permTierLabelRes(option: String): Int = when (option) {
-    DshPermTier.READ_ONLY -> R.string.dsh_perm_tier_readonly
-    DshPermTier.WORKSPACE_WRITE -> R.string.dsh_perm_tier_workspace
-    DshPermTier.FULL -> R.string.dsh_perm_tier_full
-    else -> R.string.dsh_perm_tier_custom
-}
-
-private fun permTierDescRes(option: String): Int = when (option) {
-    DshPermTier.READ_ONLY -> R.string.dsh_perm_tier_readonly_desc
-    DshPermTier.WORKSPACE_WRITE -> R.string.dsh_perm_tier_workspace_desc
-    DshPermTier.FULL -> R.string.dsh_perm_tier_full_desc
-    else -> R.string.dsh_perm_tier_custom_desc
-}
-
-/** 一挡一行（与权限通道页那套单选同一形态：整行可点 + RadioButton）。 */
-@Composable
-private fun PermTierOption(
-    selected: Boolean,
-    title: String,
-    summary: String,
-    onSelect: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, onClick = onSelect)
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = onSelect)
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = summary,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

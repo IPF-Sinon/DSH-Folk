@@ -45,7 +45,6 @@ import com.ramcosta.composedestinations.generated.destinations.ModuleSettingsScr
 import com.ramcosta.composedestinations.generated.destinations.MultimediaSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ThemeStoreScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.RestrictModeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.UserscriptsScreenDestination
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.SearchAppBar
@@ -141,8 +140,6 @@ fun SettingsSearchScreen(navigator: DestinationsNavigator) {
                                     navigator.navigate(ThemeStoreScreenDestination)
                                 SettingsTarget.USERSCRIPTS ->
                                     navigator.navigate(UserscriptsScreenDestination)
-                                SettingsTarget.PERM_POLICY ->
-                                    navigator.navigate(RestrictModeScreenDestination)
                                 null -> when (category) {
                                     SettingCategory.GENERAL -> navigator.navigate(GeneralSettingsScreenDestination(highlightKey))
                                     SettingCategory.APPEARANCE -> navigator.navigate(AppearanceSettingsScreenDestination(highlightKey))
