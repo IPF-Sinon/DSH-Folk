@@ -135,7 +135,7 @@ if (baseName && baseCode) {
   // **每发一个正式版就把它抬到那版的 baseVersionCode()** —— 它记的是已经发出去的最高号，
   // 不是"当前版本号"。抬晚了（或忘了抬）就会出现「新版本的号低于用户已装的号」：系统按降级
   // 拒绝安装、App 的 compareVersions 也不会提示，整个更新通道静默失效。2.0.0 → 20000。
-  const PUBLISHED_FLOOR = 21000; // 已发布过的最高 baseVersionCode（正式版 2.1.0；抬到 21000 前是 2.0.0 的 20000）
+  const PUBLISHED_FLOOR = 21001; // 已发布过的最高 baseVersionCode（正式版 2.1.1；抬到 21001 前是 2.1.0 的 21000）
   ok(floor !== null && Number(baseCode[1]) >= floor && Number(baseCode[1]) >= PUBLISHED_FLOOR,
     `baseVersionCode() 不低于公式下限且盖过已发布最高号（${baseName[1]} → 下限 ${floor} / 已发 ${PUBLISHED_FLOOR}，实际 ${baseCode[1]}）`);
 }
