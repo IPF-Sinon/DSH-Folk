@@ -116,8 +116,6 @@ ok(!/dsh_ws_mount_warn_body/.test(faScreen),
 ok(/DshFileAccess\.resetStorageLinkProbe\(\)/.test(faScreen) &&
   /storageLinkOk = DshFileAccess\.storageLinkSupported\(context\)/.test(faScreen),
   "「重新检测」清缓存后重探");
-ok(/dsh_ws_mount_note/.test(faScreen) && /dsh_ws_mount_recheck/.test(faScreen),
-  "常驻说明与「重新检测」按钮都在");
 ok(/dsh_ws_mount_source/.test(faScreen) && /dsh_ws_mount_destination/.test(faScreen),
   "映射显示拆成「源/目标」两行，路径不再在窄屏中间被折行截断");
 
@@ -217,6 +215,68 @@ ok(/val busy = phase is AppUpdater\.Phase\.Downloading \|\|\s*\n\s*phase is AppU
   "busy 只含下载/校验，不含测速（测速不锁选择与下载）");
 ok(/speedJob\?\.cancel\(\)\s*\n\s*testing = false/.test(updDialog),
   "点「开始下载」会取消剩余测速、用当前选中线路直接下");
+
+// ── 共享存储那条说明必须整段在 !storageLinkOk 分支里 ──
+//
+// 用户报过：设备上硬链接其实可用（上面那行"重新检测"也因此不显示），"无硬链接 / 无 exec 位"
+// 那段说明却照样挂着 —— 与事实不符，也与宿主提示词那一侧（storageHardlinkSupported === false
+// 才渲染）不一致。判据用**括号配对**取那块分支，再要求 note 只出现在这块里。
+function fsScopeBranchBody(src, header) {
+  const at = src.indexOf(header);
+  if (at < 0) return "";
+  const open = src.indexOf("{", at);
+  if (open < 0) return "";
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}") { depth--; if (depth === 0) return src.slice(open, i + 1); }
+  }
+  return "";
+}
+{
+  const linkWarn = fsScopeBranchBody(faScreen, "if (!storageLinkOk) {");
+  const noteAll = (faScreen.match(/R\.string\.dsh_ws_mount_note/g) || []).length;
+  const noteInWarn = (linkWarn.match(/R\.string\.dsh_ws_mount_note/g) || []).length;
+  ok(linkWarn.length > 0 && noteInWarn === 1 && noteAll === noteInWarn,
+    "「共享存储不支持硬链接」那段说明整段在 !storageLinkOk 分支里（硬链接可用时不该出现）");
+  ok(/R\.string\.dsh_ws_mount_recheck/.test(linkWarn) && /resetStorageLinkProbe\(\)/.test(linkWarn),
+    "「重新检测」也在同一分支里（有硬链接时不需要它）");
+}
+
+// ── 数据目录：一个入口两条路（原来是两个卡片） ──
+//
+// 用户问「怎么还有在文件管理器中打开数据目录和直接授权给 MT 管理器？不是合并成一个了吗」——
+// 原来确实是两张卡：一张系统选择器、一张 MT 直授。对用户这是同一件事（让第三方应用能访问
+// 数据目录），第二张还只在装了 MT 管理器时出现，看起来像另一个功能。现在合成一张卡。
+{
+  const fn = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt");
+  const reg = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/SettingsRegistry.kt");
+  const manifest = read("app/src/main/AndroidManifest.xml");
+  const zhS = read("app/src/main/res/values-zh-rCN/dsh_strings.xml");
+  const enS = read("app/src/main/res/values/dsh_strings.xml");
+
+  const itemBlock = fsScopeBranchBody(fn, 'item(key = "function_docs_access"');
+  ok(itemBlock.length > 0 && /ACTION_OPEN_DOCUMENT_TREE/.test(itemBlock) &&
+    /showGrantDocsDialog\.value = true/.test(itemBlock),
+    "合并后的那一个入口里两条路都在：系统选择器 + 直接授权（MT 那条只在装了 MT 时显示）");
+  ok(!/function_open_data_dir/.test(fn) && !/function_open_data_dir/.test(reg) &&
+    !/function_grant_docs_mt/.test(fn) && !/function_grant_docs_mt/.test(reg),
+    "原来那两个 item key 已经不存在（否则就是两处入口各说各话）");
+  ok((reg.match(/SettingEntry\(\s*"function_docs_access"/g) || []).length === 1 &&
+    /R\.string\.dsh_docs_access_title/.test(reg),
+    "设置搜索只剩一条，标题就是「允许第三方应用访问数据目录」");
+  ok(/dsh_docs_access_title/.test(zhS) && /dsh_docs_access_title/.test(enS) &&
+    /dsh_docs_access_summary/.test(zhS) && /dsh_docs_access_summary/.test(enS) &&
+    /dsh_docs_open_action/.test(zhS) && /dsh_docs_open_action/.test(enS) &&
+    /dsh_docs_grant_action/.test(zhS) && /dsh_docs_grant_action/.test(enS),
+    "新标题、说明与两个按钮的文案中英各一份");
+  ok(!/dsh_docs_open_title/.test(zhS) && !/dsh_docs_open_summary/.test(zhS) &&
+    !/dsh_docs_grant_summary/.test(zhS) && !/dsh_docs_open_title/.test(enS) &&
+    !/dsh_docs_open_summary/.test(enS) && !/dsh_docs_grant_summary/.test(enS),
+    "旧那两张卡的文案已删（留着就是死资源，也不该再有第二个说法）");
+  ok(/android:name="\.util\.DshDocumentsProvider"/.test(manifest) && /\.documents"/.test(manifest),
+    "文档提供器仍在（同 DSHA 的方案：一个窄 provider 给文件管理器浏览数据目录）");
+}
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

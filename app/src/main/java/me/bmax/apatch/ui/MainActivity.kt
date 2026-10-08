@@ -96,7 +96,6 @@ import com.ramcosta.composedestinations.generated.destinations.MultimediaSetting
 import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.SecuritySettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.SettingScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.UserscriptsScreenDestination
 import com.ramcosta.composedestinations.DestinationsNavHost
 import com.ramcosta.composedestinations.animations.NavHostAnimatedDestinationStyle
 import com.ramcosta.composedestinations.generated.NavGraphs
@@ -243,25 +242,18 @@ class MainActivity : AppCompatActivity() {
         super.attachBaseContext(me.bmax.apatch.util.DPIUtils.updateContext(newBase))
     }
 
-    /**
-     * [AppNavigation] 交过来的「落在哪一页」。onCreate 与 onNewIntent 都写它，导航图那边
-     * 消费一次就清空 —— 留着的话，之后每次切回前台都会再跳一次。
-     */
-    private val pendingScreen = androidx.compose.runtime.mutableStateOf<String?>(null)
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // 仍然要把新 intent 交回给系统：分享/安装那条路读的是 getIntent()，
+        // 少了这一句，应用已经开着时再分享进来拿到的还是进来时那一个。
         setIntent(intent)
-        // 已经开着 MainActivity 时会被走到这里：不读的话第二次点悬浮球就没反应
-        pendingScreen.value = AppNavigation.screenOf(intent)
     }
 
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     override fun onCreate(savedInstanceState: Bundle?) {
 
         installSplashScreen().setKeepOnScreenCondition { isLoading }
-        // 从 WebUI 的悬浮球跳过来时带着它（见 [AppNavigation]）
-        pendingScreen.value = AppNavigation.screenOf(intent)
 
         // Safety net: force dismiss splash after 15 seconds to prevent permanent hang
         Handler(Looper.getMainLooper()).postDelayed({
@@ -449,15 +441,6 @@ class MainActivity : AppCompatActivity() {
 
             val navController = rememberNavController()
             val navigator = navController.rememberDestinationsNavigator()
-            // AppNavigation 那一跳：白名单在 AppNavigation.screenOf 里，这里只负责落地。
-            val pending = pendingScreen.value
-            LaunchedEffect(pending) {
-                if (pending == null) return@LaunchedEffect
-                pendingScreen.value = null
-                when (pending) {
-                    AppNavigation.SCREEN_USERSCRIPTS -> navigator.navigate(UserscriptsScreenDestination)
-                }
-            }
             val snackBarHostState = remember { SnackbarHostState() }
             val bottomBarRoutes = remember {
                 BottomBarDestination.entries.map { it.direction.route }.toSet()

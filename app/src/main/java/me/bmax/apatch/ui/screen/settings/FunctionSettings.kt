@@ -903,46 +903,54 @@ fun FunctionSettingsContent(
         }
 
         // ───────── 数据目录 ─────────
-        item(key = "function_open_data_dir", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat, onClick = {
-                val authority = "${BuildConfig.APPLICATION_ID}.documents"
-                val dshHome = DshEnv.dshHome(context)
-                val base = context.dataDir.canonicalFile.path
-                val initialDocId = runCatching {
-                    val p = dshHome.absolutePath
-                    if (dshHome.isDirectory && p.startsWith("$base/")) "/" + p.removePrefix("$base/") else "/"
-                }.getOrDefault("/")
-                val target = DocumentsContract.buildDocumentUri(authority, initialDocId)
-                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                    .putExtra(DocumentsContract.EXTRA_INITIAL_URI, target)
-                    .addFlags(
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
-                    )
-                if (!runCatching { context.startActivity(intent) }.isSuccess) {
-                    showToast(context, R.string.dsh_docs_open_failed)
-                }
-            }) {
-                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(stringResource(R.string.dsh_docs_open_title), style = MaterialTheme.typography.bodyLarge)
-                        Spacer(Modifier.height(4.dp))
-                        Text(stringResource(R.string.dsh_docs_open_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        //
+        // **一个入口两条路**。原来是两个卡片（「在文件管理器中打开」/「直接授权给 MT 管理器」），
+        // 但对用户这是同一件事：让第三方应用能访问本应用的数据目录。第二个卡片还只在装了
+        // MT 管理器时出现，看起来像另一个功能，其实只是 MT 那套持久化授权的替代路径 ——
+        // 它在侧栏选中本应用后会报"没有可持久化的授权"（见 [DshDocsAccess]）。
+        // 所以合成一张卡：说明说一次，两条路各一个按钮，装没装 MT 只影响第二个按钮在不在。
+        item(key = "function_docs_access", visible = !permissionOnly) {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text(stringResource(R.string.dsh_docs_access_title), style = MaterialTheme.typography.bodyLarge)
+                            Spacer(Modifier.height(4.dp))
+                            Text(stringResource(R.string.dsh_docs_access_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
-                }
-            }
-        }
-        item(key = "function_grant_docs_mt", visible = !permissionOnly && mtCandidates.isNotEmpty()) {
-            ExpressiveCard(flat = flat, onClick = { showGrantDocsDialog.value = true }) {
-                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Key, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(stringResource(R.string.dsh_docs_grant_title), style = MaterialTheme.typography.bodyLarge)
-                        Spacer(Modifier.height(4.dp))
-                        Text(stringResource(R.string.dsh_docs_grant_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // 路一：系统选择器（任何文件管理器都走这条）
+                        TextButton(onClick = {
+                            val authority = "${BuildConfig.APPLICATION_ID}.documents"
+                            val dshHome = DshEnv.dshHome(context)
+                            val base = context.dataDir.canonicalFile.path
+                            val initialDocId = runCatching {
+                                val p = dshHome.absolutePath
+                                if (dshHome.isDirectory && p.startsWith("$base/")) "/" + p.removePrefix("$base/") else "/"
+                            }.getOrDefault("/")
+                            val target = DocumentsContract.buildDocumentUri(authority, initialDocId)
+                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                                .putExtra(DocumentsContract.EXTRA_INITIAL_URI, target)
+                                .addFlags(
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                                )
+                            if (!runCatching { context.startActivity(intent) }.isSuccess) {
+                                showToast(context, R.string.dsh_docs_open_failed)
+                            }
+                        }) { Text(stringResource(R.string.dsh_docs_open_action)) }
+                        // 路二：直接授权（只在装了 MT 管理器时才有意义 —— 授的是它的包名）
+                        if (mtCandidates.isNotEmpty()) {
+                            TextButton(onClick = { showGrantDocsDialog.value = true }) {
+                                Text(stringResource(R.string.dsh_docs_grant_action))
+                            }
+                        }
                     }
                 }
             }

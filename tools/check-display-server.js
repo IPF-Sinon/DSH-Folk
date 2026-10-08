@@ -1163,8 +1163,13 @@ if (jarArgAt >= 0) {
     '四条文案（三种原因 + 兜底）都真的接到了文本上');
   must(/AlertDialog\(/.test(guide) && /onDismissRequest = onDismiss/.test(guide),
     '它是一个真的能关掉的 AlertDialog');
-  must(/dsh_display_guide_open_channel/.test(guide) && /dsh_display_guide_recheck/.test(guide),
-    '两个出口：去选通道、重新检测（只给一个"知道了"等于把人退回原处）');
+  // 第三个出口是用户要的：这个弹窗是**进页面时自己弹的**，只给"去配通道"和"再检测一次"的话，
+  // 想先退出去看看别处的人没有路（只能按系统返回键）。取消 = 关掉弹窗并返回上级。
+  must(/dsh_display_guide_open_channel/.test(guide) && /dsh_display_guide_recheck/.test(guide) &&
+    /android\.R\.string\.cancel/.test(guide) && /TextButton\(onClick = onCancel\)/.test(guide),
+    '三个出口：去选通道、重新检测、取消（少了取消就只能在弹窗里打转）');
+  must(/dismissButton = \{\s*\n\s*Row \{/.test(guide),
+    '重新检测与取消并排摆在 dismissButton 那一行（AlertDialog 只给两个位置，第三个要自己排）');
 
   const preview = read('app/src/main/java/me/bmax/apatch/ui/screen/DisplayPreviewScreen.kt');
   must(/import me\.bmax\.apatch\.ui\.component\.DisplayChannelGuideDialog/.test(preview) &&
@@ -1178,6 +1183,8 @@ if (jarArgAt >= 0) {
     '「去选通道」真的导航到权限通道页');
   must(/onRecheck = \{ if \(displayChannelReady\(context\)\) guide = false \}/.test(preview),
     '「重新检测」是重判而不是关掉（点了没反应比没有这个按钮更糟）');
+  must(/onCancel = \{[\s\S]{0,140}?navigator\.navigateUp\(\)/.test(preview),
+    '「取消」= 关掉弹窗并返回上一级（它是自动弹出来的，得给一条明确退路）');
 }
 
 if (errors.length) {

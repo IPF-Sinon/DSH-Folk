@@ -240,6 +240,11 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
                     }
                 }
                 // 详细限制注入 AI 的宿主提示词；这里给人类保留紧凑提醒，避免占满屏幕。
+                //
+                // 整段都只在**探测到共享存储不支持硬链接**时出现。以前这条 note 漏在 if 外面：
+                // 设备上硬链接其实可用（storageLinkOk == true，上面的"重新检测"行也因此不显示），
+                // 这段"无硬链接/无 exec 位"的警告却照样挂着 —— 与事实不符，也与宿主提示词那一侧
+                // （storageHardlinkSupported === false 才渲染）不一致。
                 if (!storageLinkOk) {
                     Spacer(Modifier.height(6.dp))
                     Row(
@@ -257,13 +262,13 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
                             storageLinkOk = DshFileAccess.storageLinkSupported(context)
                         }) { Text(stringResource(R.string.dsh_ws_mount_recheck)) }
                     }
+                    Text(
+                        text = stringResource(R.string.dsh_ws_mount_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
-                Text(
-                    text = stringResource(R.string.dsh_ws_mount_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
                 TextButton(onClick = { pickerFor = "ws" }) {
                     Text(stringResource(R.string.dsh_ws_mount_add))
                 }

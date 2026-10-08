@@ -158,8 +158,7 @@ object SettingsRegistry {
             add(SettingEntry("function_runtime", R.string.dsh_runtime_section, R.string.dsh_runtime_management_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_repair_plugins", R.string.dsh_plugin_repair, R.string.dsh_plugin_repair_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_verify_install", R.string.dsh_verify_after_install, R.string.dsh_verify_after_install_summary, SettingCategory.FUNCTION))
-            add(SettingEntry("function_open_data_dir", R.string.dsh_docs_open_title, R.string.dsh_docs_open_summary, SettingCategory.FUNCTION))
-            add(SettingEntry("function_grant_docs_mt", R.string.dsh_docs_grant_title, R.string.dsh_docs_grant_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_docs_access", R.string.dsh_docs_access_title, R.string.dsh_docs_access_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_clean_storage", R.string.settings_clean_storage, R.string.settings_clean_storage_summary, SettingCategory.FUNCTION))
 
             // === Permissions ===

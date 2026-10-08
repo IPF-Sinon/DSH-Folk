@@ -59,7 +59,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DragIndicator
-import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
@@ -675,11 +674,6 @@ class DshWebUiActivity : AppCompatActivity() {
                         onOpenExternal = {
                             DshWebUi.openExternal(this@DshWebUiActivity, DshRuntime.webUrl())
                         },
-                        // 跳到用户脚本页：本页是独立 Activity，不在导航图里，只能把目的地交给
-                        // MainActivity（见 [AppNavigation]）。不加 NEW_TASK，返回键回到这一页。
-                        onOpenScripts = {
-                            AppNavigation.openScreen(this@DshWebUiActivity, AppNavigation.SCREEN_USERSCRIPTS)
-                        },
                     )
                 }
             }
@@ -951,7 +945,6 @@ private fun WebUiFloatingBall(
     onClose: () -> Unit,
     onReload: () -> Unit,
     onOpenExternal: () -> Unit,
-    onOpenScripts: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember {
@@ -1069,14 +1062,6 @@ private fun WebUiFloatingBall(
                                 Icon(
                                     Icons.Outlined.OpenInBrowser,
                                     contentDescription = stringResource(R.string.dsh_webui_open_external),
-                                )
-                            }
-                            // 脚本页：WebUI 的输入框/按钮常被坏脚本弄坏，而用户脚本页能一段段关掉它们
-                            // —— 从这个球直接过去，比"返回 → 底栏 → 插件 → 用户脚本"少三步。
-                            IconButton(onClick = { expanded = false; onOpenScripts() }) {
-                                Icon(
-                                    Icons.Outlined.Extension,
-                                    contentDescription = stringResource(R.string.dsh_userscripts_title),
                                 )
                             }
                             IconButton(onClick = onClose) {

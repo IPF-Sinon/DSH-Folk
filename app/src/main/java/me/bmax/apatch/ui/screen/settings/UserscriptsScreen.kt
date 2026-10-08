@@ -21,7 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.OpenInBrowser
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -563,43 +566,67 @@ private fun BuiltinRow(
     onToggle: ((Boolean) -> Unit)?,
     extra: (@Composable () -> Unit)? = null,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
-                if (autoTag != null) {
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        autoTag,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+    ScriptCard {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, style = MaterialTheme.typography.bodyLarge)
+                    if (autoTag != null) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            autoTag,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                Text(
+                    summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (extra != null) {
+                    Spacer(Modifier.height(4.dp))
+                    extra()
                 }
             }
-            Text(
-                summary,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (extra != null) {
-                Spacer(Modifier.height(4.dp))
-                extra()
+            if (checked != null && onToggle != null) {
+                Switch(checked = checked, onCheckedChange = onToggle)
+            } else if (extra == null) {
+                // 只有「真的没有控件」的行才标常开：compat 的控件在 extra 里（三档）
+                Text(
+                    stringResource(R.string.dsh_userscripts_builtin_always_on),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                )
             }
         }
-        if (checked != null && onToggle != null) {
-            Switch(checked = checked, onCheckedChange = onToggle)
-        } else if (extra == null) {
-            // 只有「真的没有控件」的行才标常开：compat 的控件在 extra 里（三档）
-            Text(
-                stringResource(R.string.dsh_userscripts_builtin_always_on),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.outline,
-            )
-        }
     }
+}
+
+/**
+ * 脚本卡片的外壳：与插件页 [me.bmax.apatch.ui.screen.DshPluginScreen] 的插件卡片**同一套几何**。
+ *
+ * 插件那边是 `LazyColumn`（contentPadding 左右 16dp + spacedBy(12.dp)），脚本这一页是
+ * 带 verticalScroll 的 `Column`，每一行自己加 padding —— 于是以前脚本是**裸行**、插件是卡片：
+ * 左右起点虽然都是 16dp，但没有卡片背景、右边收到 8dp，看起来与插件页不是一套东西。
+ * 这里把宿主几何收进一个壳里：左右 16dp、上下各 6dp（合起来正好 12dp，与插件列表的间距一致），
+ * 卡片形状与底色照抄插件卡片。
+ */
+@Composable
+private fun ScriptCard(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f),
+        ),
+    ) { content() }
 }
 
 /** 一行：名字 + 版本/时机/大小 + 说明与 `@match` + 开关 + 删除。 */
@@ -609,39 +636,41 @@ private fun ScriptRow(
     onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(script.title, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                listOfNotNull(
-                    script.version.takeIf { it.isNotBlank() }?.let { "v$it" },
-                    "run-at " + script.runAt,
-                    "${script.bytes} B",
-                ).joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (script.description.isNotBlank()) {
+    ScriptCard {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(script.title, style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    script.description,
+                    listOfNotNull(
+                        script.version.takeIf { it.isNotBlank() }?.let { "v$it" },
+                        "run-at " + script.runAt,
+                        "${script.bytes} B",
+                    ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (script.description.isNotBlank()) {
+                    Text(
+                        script.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (script.matches.isNotEmpty()) {
+                    Text(
+                        script.matches.joinToString("  "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
             }
-            if (script.matches.isNotEmpty()) {
-                Text(
-                    script.matches.joinToString("  "),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                )
+            Switch(checked = script.enabled, onCheckedChange = onToggle)
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.dsh_userscripts_delete))
             }
-        }
-        Switch(checked = script.enabled, onCheckedChange = onToggle)
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.dsh_userscripts_delete))
         }
     }
 }
@@ -702,57 +731,70 @@ private fun MarketRow(
     onInstall: () -> Unit,
     onOpen: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            // 与上面那两种卡片同一套外边距（左右 16dp、上下各 6dp）
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        // 市场是「搜出来的东西」，所以用插件商店那张卡的样式（18dp / surfaceContainer），
+        // 与「已经装好的」那两张卡区分开 —— 这也是本仓既有的两种列表语法。
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                hit.name,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                listOfNotNull(
-                    hit.version.takeIf { it.isNotBlank() }?.let { "v$it" },
-                    hit.author.takeIf { it.isNotBlank() }
-                        ?.let { stringResource(R.string.dsh_userscripts_market_by, it) },
-                    hit.installs.takeIf { it > 0 }
-                        ?.let { stringResource(R.string.dsh_userscripts_market_installs, formatCount(it)) },
-                    hit.updated.takeIf { it.isNotBlank() },
-                ).joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (hit.description.isNotBlank()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    hit.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
+                    hit.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Text(
+                    listOfNotNull(
+                        hit.version.takeIf { it.isNotBlank() }?.let { "v$it" },
+                        hit.author.takeIf { it.isNotBlank() }
+                            ?.let { stringResource(R.string.dsh_userscripts_market_by, it) },
+                        hit.installs.takeIf { it > 0 }
+                            ?.let { stringResource(R.string.dsh_userscripts_market_installs, formatCount(it)) },
+                        hit.updated.takeIf { it.isNotBlank() },
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (hit.description.isNotBlank()) {
+                    Text(
+                        hit.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-        }
-        if (installed) {
-            Text(
-                stringResource(R.string.dsh_userscripts_market_installed),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.outline,
-            )
-        } else if (installing) {
-            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-        } else {
-            TextButton(onClick = onInstall, enabled = !busy) {
-                Text(stringResource(R.string.dsh_userscripts_market_install))
+            if (installed) {
+                Text(
+                    stringResource(R.string.dsh_userscripts_market_installed),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+            } else if (installing) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            } else {
+                TextButton(onClick = onInstall, enabled = !busy) {
+                    Text(stringResource(R.string.dsh_userscripts_market_install))
+                }
             }
-        }
-        IconButton(onClick = onOpen) {
-            Icon(
-                Icons.Outlined.OpenInBrowser,
-                contentDescription = stringResource(R.string.dsh_userscripts_market_page),
-            )
+            IconButton(onClick = onOpen) {
+                Icon(
+                    Icons.Outlined.OpenInBrowser,
+                    contentDescription = stringResource(R.string.dsh_userscripts_market_page),
+                )
+            }
         }
     }
 }

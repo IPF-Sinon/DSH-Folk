@@ -521,16 +521,37 @@ ok(/revealMarket = marketRequest/.test(pluginHome) &&
   "脚本那一组的「商店」是把市场滚进视野（市场就在正文里，不再开一页一样的）");
 ok(/filter = scriptFilter/.test(pluginHome) && /val shown = if \(filter\.isBlank\(\)\)/.test(screen),
   "一个搜索栏管两组：脚本那组用它过滤「我装的」");
-// DSH 页面（WebUI Activity）的悬浮球也能跳到脚本页 —— 那一页不在导航图里，走 AppNavigation
+// 悬浮球里那个入口按用户要求撤掉了 —— 连同它专用的 AppNavigation 一跳。留着反向断言：
+// 同一个功能两处表达的旧形态不能再回来（入口只该是插件首页那一组 + 设置搜索）。
 const webuiAct = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/DshWebUiActivity.kt", "utf8");
-const appNav = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/AppNavigation.kt", "utf8");
 const mainAct = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt", "utf8");
-ok(/expanded = false; onOpenScripts\(\)/.test(webuiAct) &&
-  /onOpenScripts = \{[\s\S]{0,200}AppNavigation\.openScreen\(/.test(webuiAct) &&
-  /SCREEN_USERSCRIPTS/.test(appNav) && /UserscriptsScreenDestination/.test(mainAct),
-  "WebUI 的悬浮球能跳到用户脚本页（菜单项 → AppNavigation → MainActivity 落地）");
-ok(/fun screenOf\(intent: Intent\?\): String\?/.test(appNav) && /else -> null/.test(appNav),
-  "那一跳走白名单：不认识的值一律 null（MainActivity 是 exported，不收自由路由）");
+ok(!/onOpenScripts/.test(webuiAct) && !/Icons\.Outlined\.Extension/.test(webuiAct),
+  "WebUI 悬浮球里的用户脚本入口已删（要去那一页走插件首页或设置搜索）");
+ok(!/AppNavigation/.test(webuiAct) && !/AppNavigation/.test(mainAct) &&
+  !fs.existsSync("app/src/main/java/me/bmax/apatch/ui/AppNavigation.kt"),
+  "连带撤掉 AppNavigation 那一跳：它只为悬浮球而写，没有第二个调用方");
+// 用户报「用户脚本的卡片没对齐插件页」：脚本页那一列是带 verticalScroll 的 Column（每行自己加
+// padding），插件页是 LazyColumn（contentPadding 左右 16dp + spacedBy 12dp）。所以几何要一对：
+// 卡片壳外边距左右 16dp、上下各 6dp（合起来 12dp），形状与底色照抄插件卡片。
+const cardAt = screen.indexOf("private fun ScriptCard(");
+// 取到下一个 @Composable 为止 = 这个函数的体（不带上后面的 BuiltinRow）
+// 注意要带换行的 "@Composable"：参数里的 content: @Composable () -> Unit 也在同一行附近，
+// 不带边界会把函数体截断成一行，断言就自己把自己坑了。
+const cardEnd = cardAt > 0 ? screen.indexOf("\n@Composable", cardAt + 10) : -1;
+const cardBody = cardAt > 0 && cardEnd > cardAt ? screen.slice(cardAt, cardEnd) : "";
+ok(cardBody.length > 0 && /padding\(horizontal = 16\.dp, vertical = 6\.dp\)/.test(cardBody) &&
+  /shape = RoundedCornerShape\(20\.dp\)/.test(cardBody) &&
+  /secondaryContainer\.copy\(alpha = 0\.2f\)/.test(cardBody),
+  "脚本卡片壳与插件卡片同一套几何（16dp 外边距 / 20dp 圆角 / secondaryContainer 0.2）");
+ok(/contentPadding = PaddingValues\([\s\S]{0,140}start = 16\.dp[\s\S]{0,120}end = 16\.dp/.test(pluginHome) &&
+  /spacedBy\(12\.dp\)/.test(pluginHome) &&
+  /ScriptCard \{[\s\S]{0,160}padding\(start = 16\.dp/.test(screen),
+  "外边距对着插件列表那一侧（contentPadding 左右 16dp + 间距 12dp）");
+ok((screen.match(/ScriptCard \{/g) || []).length >= 2,
+  "内置那几段与「我装的」都用同一个壳（同一页不能一半卡片一半裸行）");
+ok(!/Modifier\.fillMaxWidth\(\)\.padding\(start = 16\.dp, end = 16\.dp, top = 8\.dp, bottom = 8\.dp\)/.test(screen) &&
+  !/Modifier\.fillMaxWidth\(\)\.padding\(start = 16\.dp, end = 8\.dp, top = 8\.dp, bottom = 8\.dp\)/.test(screen),
+  "旧的裸行 padding 形态已不存在（否则就是两套几何并存）");
 ok(!/module_userscripts/.test(moduleSrc) && !/onOpenUserscripts/.test(moduleScreen),
   "插件页那张卡已摘掉（没有两处入口各说各话）");
 

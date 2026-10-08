@@ -1,6 +1,7 @@
 package me.bmax.apatch.ui.component
 
 import android.content.Context
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,6 +34,10 @@ internal fun displayChannelReady(context: Context): Boolean =
  *
  * 原因串没有对上的（例如通道就绪却仍然起不来服务端）回落到一句通用说明：那种情况该看的是
  * 预览页那行报错，而不是这个弹窗。
+ *
+ * 三个出口：去权限通道页、重新检测、**取消（返回上级）**。第三个是必要的 —— 弹窗是在进这一页
+ * 时自己弹出来的（不是用户点了什么），只给"去配通道"和"再检测一次"的话，用户想先退出去看看
+ * 别的地方就没有路，只能按系统返回键；这里给一个明确的出口。
  */
 @Composable
 fun DisplayChannelGuideDialog(
@@ -40,6 +45,7 @@ fun DisplayChannelGuideDialog(
     onDismiss: () -> Unit,
     onOpenChannel: () -> Unit,
     onRecheck: () -> Unit,
+    onCancel: () -> Unit,
 ) {
     if (!visible) return
     val context = LocalContext.current
@@ -60,10 +66,16 @@ fun DisplayChannelGuideDialog(
             }
         },
         dismissButton = {
-            // 「重新检测」不是重复那句说明：用户可能刚在系统里授了 Shizuku / 配好了 ADB 再回来，
-            // 那一下要能立刻重判，否则只能退出去再点一次。
-            TextButton(onClick = onRecheck) {
-                Text(stringResource(R.string.dsh_display_guide_recheck))
+            Row {
+                // 「重新检测」不是重复那句说明：用户可能刚在系统里授了 Shizuku / 配好了 ADB 再回来，
+                // 那一下要能立刻重判，否则只能退出去再点一次。
+                TextButton(onClick = onRecheck) {
+                    Text(stringResource(R.string.dsh_display_guide_recheck))
+                }
+                // 「取消」= 关掉弹窗并返回上级（调用方负责 navigateUp）：
+                TextButton(onClick = onCancel) {
+                    Text(stringResource(android.R.string.cancel))
+                }
             }
         },
     )

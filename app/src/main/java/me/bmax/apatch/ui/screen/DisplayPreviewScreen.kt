@@ -183,6 +183,11 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator, displayId: Int? = nul
         // 「重新检测」：通道这会儿就绪了就照常往下走，还没就绪就继续留着弹窗 ——
         // 别让用户以为点了个没反应的按钮。
         onRecheck = { if (displayChannelReady(context)) guide = false },
+        // 「取消」= 不配通道也不留在这里：关掉弹窗并退回上一级（它是自己弹出来的，得给条退路）。
+        onCancel = {
+            guide = false
+            navigator.navigateUp()
+        },
     )
 
     Scaffold(
