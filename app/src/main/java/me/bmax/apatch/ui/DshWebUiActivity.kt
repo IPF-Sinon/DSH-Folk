@@ -16,8 +16,9 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Process
 import android.provider.Settings
-import android.util.Rational
+import android.util.Base64
 import android.util.Log
+import android.util.Rational
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
