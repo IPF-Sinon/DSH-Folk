@@ -4,6 +4,9 @@ import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
 import java.io.RandomAccessFile
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 统一文本日志存取：内存环形缓冲（tail / 行数计数无需读盘）+ 批量落盘（低频 flush）。
@@ -11,10 +14,33 @@ import java.io.RandomAccessFile
  * 原实现每次 append 都打开/关闭文件、tail 每次全量 readLines，在进程输出转发、
  * 下载进度、诊断轮询、启动日志轮询等高频路径上造成大量磁盘 I/O。本组件把高频读
  * 全部收敛到内存，磁盘只做低频批量写，显著降低 I/O 与 GC 压力。
+ *
+ * **每一行都带写入时刻的前缀**（本地时区 `yyyy-MM-dd HH:mm:ss.SSS`，见 [stamp]）：bugreport
+ * 的「时间窗口」要按时间裁日志，而 dsh 的 stdout 本身不带时间。挂在写入方是唯一能保证
+ * 「每一行都有时间」的位置；[parseStamp] 是它的逆运算，两处共用一个格式常量 —— 各写一份
+ * 必然有一天对不上。
  */
 object LogStore {
     private const val MAX_MEM_LINES = 600
     private const val FLUSH_THRESHOLD = 32
+
+    /** 行首时间戳的格式；同时也是 [parseStamp] 认的格式（长度固定 23）。 */
+    private const val STAMP_PATTERN = "yyyy-MM-dd HH:mm:ss.SSS"
+
+    /** 时间戳在行首占的字符数（`yyyy-MM-dd HH:mm:ss.SSS` 恰好 23）。 */
+    private const val STAMP_LEN = 23
+
+    /** 当前时刻 → 行首时间戳。每次新建 formatter：SimpleDateFormat 不是线程安全的。 */
+    internal fun stamp(millis: Long): String =
+        SimpleDateFormat(STAMP_PATTERN, Locale.US).format(Date(millis))
+
+    /** 行首时间戳 → epoch 毫秒；这行没有时间戳（旧版本写的、或不是我们写的）返回 null。 */
+    internal fun parseStamp(line: String): Long? {
+        if (line.length < STAMP_LEN) return null
+        return runCatching {
+            SimpleDateFormat(STAMP_PATTERN, Locale.US).parse(line.substring(0, STAMP_LEN))?.time
+        }.getOrNull()
+    }
 
     /**
      * 单个日志文件的体积上限。
@@ -50,20 +76,23 @@ object LogStore {
 
         @Synchronized
         fun append(line: String) {
+            // 行首挂写入时刻：内存与磁盘**存的是同一份**（tail 读回来的也是带时间戳的行），
+            // 否则时间窗口在「内存里那一份」和「文件里那一份」上会得出不同结果。
+            val stamped = LogStore.stamp(System.currentTimeMillis()) + " " + line
             if (memLines < MAX_MEM_LINES) {
-                mem.addLast(line)
+                mem.addLast(stamped)
                 memLines++
             } else {
                 mem.removeFirst()
-                mem.addLast(line)
+                mem.addLast(stamped)
             }
             totalAppended++
             try {
                 val w = writer()
-                w.write(line)
+                w.write(stamped)
                 w.newLine()
                 pending++
-                if (knownBytes >= 0) knownBytes += line.toByteArray().size + 1
+                if (knownBytes >= 0) knownBytes += stamped.toByteArray().size + 1
                 if (pending >= FLUSH_THRESHOLD) {
                     w.flush()
                     pending = 0

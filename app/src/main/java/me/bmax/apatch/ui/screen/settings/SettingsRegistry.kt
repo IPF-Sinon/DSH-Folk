@@ -29,6 +29,8 @@ enum class SettingsTarget {
     THEME_STORE,
     /** 用户脚本页：不在分类页上，搜索结果要直接开它。 */
     USERSCRIPTS,
+    /** 深度清理页：入口是功能页那张卡的长按，搜索结果也直接开它。 */
+    DEEP_CLEAN,
 }
 
 data class SettingEntry(
@@ -162,6 +164,16 @@ object SettingsRegistry {
             add(SettingEntry("function_verify_install", R.string.dsh_verify_after_install, R.string.dsh_verify_after_install_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_docs_access", R.string.dsh_docs_access_title, R.string.dsh_docs_access_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_clean_storage", R.string.settings_clean_storage, R.string.settings_clean_storage_summary, SettingCategory.FUNCTION))
+            // 深度清理：入口不在分类页上（是上面那张卡的**长按**），所以走 directTarget 直接开页
+            add(
+                SettingEntry(
+                    "function_deep_clean",
+                    R.string.dsh_clean_title,
+                    R.string.dsh_clean_registry_summary,
+                    SettingCategory.FUNCTION,
+                    directTarget = SettingsTarget.DEEP_CLEAN,
+                ),
+            )
 
             // === Permissions ===
             // 通道、配对与原生能力现在都收在「权限管理」这一个入口后面，安全页上只剩那一张卡片。

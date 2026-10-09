@@ -70,6 +70,11 @@ console.log("\n── 卡片：一张开关卡片，点=检查、长按=菜单 �
   // 点一下 = 检查：走 confirmAfterCheck 那条路（查完真有才弹确认框）
   ok(/confirmAfterCheck = true[\s\S]{0,80}onCheckRuntimeUpdateRequested\(\)/.test(toggle),
     "点一下卡片 = 立即检查（先 bump revision，查到可装的才弹确认框）");
+  // 用户报「运行时那张外层卡片点了没反应」：里层开关卡片自己接走了它那一块的点击，
+  // 外层这圈（标题行 / 版本行 / 留白）原来根本没有接点。所以外层整卡也要 combinedClickable，
+  // 且 onClick 与里层同一个动作（置 confirmAfterCheck 再 bump revision）。
+  ok(/combinedClickable\(onClick = \{\s*\n\s*confirmAfterCheck = true\s*\n\s*onCheckRuntimeUpdateRequested\(\)/.test(card),
+    "外层整卡点一下也 = 检查更新（combinedClickable 的 onClick 接 confirmAfterCheck + onCheckRuntimeUpdateRequested）");
   ok(/result\?\.version != null && result\.minAppVersion\.isEmpty\(\) ->\s*\n\s*updateConfirming = true/.test(toggle),
     "已知有可装更新时点一下直接弹确认框（不再白等一次网络）");
   ok(/onLongClick = \{ versionListOpen = true \}/.test(toggle),

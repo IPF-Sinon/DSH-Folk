@@ -16,10 +16,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -27,16 +30,17 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,7 +55,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
-import com.ramcosta.composedestinations.generated.destinations.ScriptDetailScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ScriptMarketScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
@@ -59,6 +62,8 @@ import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.dsh.WebScripts
 import me.bmax.apatch.ui.component.ModuleLabel
+import me.bmax.apatch.ui.component.UserscriptLinkInstallDialog
+import me.bmax.apatch.ui.screen.ScriptDetailSheet
 import me.bmax.apatch.util.DshWebCompat
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 import kotlinx.coroutines.Dispatchers
@@ -80,7 +85,12 @@ import me.bmax.apatch.util.ui.showToast
  * - **上：应用内置**（不可删，逐条开关在行上）。它回答「应用往页面里注入了什么」；
  *   兼容垫片的**三档（自动/始终/从不）与当前内核版本**也只在这里选 —— 功能设置页那两行
  *   收进来了，因为它们本来就是这两条内置的档位。
- * - **下：我装的脚本**（总开关 + 粘贴/选文件 + 已导入列表）。它回答「我要不要跑自己的 JS」。
+ * - **下：我装的脚本**（总开关 + 已导入列表）。它回答「我要不要跑自己的 JS」。
+ *
+ * 安装入口与脚本市场**同一套形态**：右下角 FAB 选本地 `.user.js`，顶栏链接图标弹「从链接
+ * 安装」。以前这两件事只存在于市场那一页（外加卡片底部那两个「粘贴脚本 / 从文件选」按钮）——
+ * 页面里摆一套、市场里又摆一套，用户要先知道"该去哪一页"；现在卡片底部那两个按钮撤掉，
+ * 两页的入口长得一模一样。
  *
  * 脚本市场（GreasyFork 搜索 + 一键安装）搬去了独立页
  * [me.bmax.apatch.ui.screen.ScriptMarketScreen]：它是「去别处找东西」，与这一页「本机现在注入/
@@ -95,7 +105,29 @@ import me.bmax.apatch.util.ui.showToast
 @Composable
 fun UserscriptsScreen(navigator: DestinationsNavigator) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var hideBuiltins by remember { mutableStateOf(DshEnv.userscriptsHideBuiltins(context)) }
+    // 装完（FAB 或链接）要让下面那份列表重读一次：scripts 状态住在 UserscriptsContent 里
+    // （插件首页也复用它），所以这里只递一个计数过去。
+    var refreshKey by remember { mutableStateOf(0) }
+    var showLinkInstall by remember { mutableStateOf(false) }
+
+    /** 本地安装：选一个 `.user.js`（与市场那个 FAB 走同一套 read / install）。 */
+    val pickLocal = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != android.app.Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = withContext(Dispatchers.IO) { Userscripts.read(context, uri) }
+            if (text.isNullOrBlank() || Userscripts.install(context, text) == null) {
+                showToast(context, context.getString(R.string.dsh_userscripts_read_failed))
+            } else {
+                refreshKey++
+                showToast(context, context.getString(R.string.dsh_userscripts_installed))
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -123,6 +155,13 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
                             ),
                         )
                     }
+                    // 「从链接安装」与脚本市场同一个位置（顶栏右侧的链接图标、同一套弹窗）
+                    IconButton(onClick = { showLinkInstall = true }) {
+                        Icon(
+                            Icons.Outlined.Link,
+                            contentDescription = stringResource(R.string.dsh_userscripts_market_link_install),
+                        )
+                    }
                     IconButton(onClick = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) }) {
                         Icon(
                             Icons.Outlined.Storefront,
@@ -132,37 +171,80 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
                 },
             )
         },
+        floatingActionButton = {
+            // 本地安装：与脚本市场那个 FAB 同形（同样的图标、文案与配色），选一个 .user.js
+            FloatingActionButton(
+                onClick = {
+                    pickLocal.launch(
+                        Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "*/*"
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                        }
+                    )
+                },
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Icon(
+                    Icons.Outlined.FolderOpen,
+                    contentDescription = stringResource(R.string.dsh_local_install),
+                )
+            }
+        },
     ) { padding ->
         UserscriptsContent(
             modifier = Modifier.padding(padding),
             hideBuiltins = hideBuiltins,
-            onOpen = { navigator.navigate(ScriptDetailScreenDestination(scriptId = it.id)) },
+            refreshKey = refreshKey,
             // 没记来源的那条：更新只能去市场按名字找一遍（市场页支持带一个初始查询进来）
             onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },
+        )
+    }
+
+    if (showLinkInstall) {
+        UserscriptLinkInstallDialog(
+            onDismiss = { showLinkInstall = false },
+            onInstall = { url ->
+                scope.launch {
+                    val id = withContext(Dispatchers.IO) { Userscripts.installFromUrl(context, url) }
+                    if (id == null) {
+                        showToast(context, context.getString(R.string.dsh_userscripts_read_failed))
+                    } else {
+                        refreshKey++
+                        showToast(context, context.getString(R.string.dsh_userscripts_installed))
+                    }
+                }
+            },
         )
     }
 }
 
 /**
- * 用户脚本的正文：内置（应用自带那几段）/ 我装的 / 市场。
+ * 用户脚本的正文：内置（应用自带那几段）/ 我装的。
  *
  * 单独抽出来是因为**插件首页的「用户脚本」那一组直接复用它** —— 入口从「设置 → 功能」
  * 右上角搬到插件首页之后，同一个页面在两地各留一份实现，很快就会各长各的（这正是「对齐
- * UI」要防的事）。独立页的顶栏（标题 + 返回 + 市场入口）留在 [UserscriptsScreen] 里；
+ * UI」要防的事）。独立页的顶栏（标题 + 返回 + 市场/安装入口）留在 [UserscriptsScreen] 里；
  * 插件首页用的是它自己的搜索栏与「商店」按钮。
  *
  * 列表几何与插件列表**逐项一致**：`LazyColumn` + contentPadding 左右 16dp + 12dp 行距，
- * 卡片抄插件卡片那一套（见 [ScriptCard]）。两地本来就是同一份正文，几何再分叉会一眼看出。
+ * 卡片抄插件卡片那一套（见 [ScriptCard]）。
+ *
+ * 详情不再是二级目的地：整行点开就地弹 [ScriptDetailSheet]（与插件详情弹层同一形态），
+ * 动作（开关 / 更新 / 移除）都收在层里。
+ *
+ * @param refreshKey 外部装完脚本后 +1，用来触发列表重读（状态在这里，外部写不到）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun UserscriptsContent(
     modifier: Modifier = Modifier,
     filter: String = "",
-    onOpen: (Userscripts.Script) -> Unit = {},
     onOpenMarket: (String) -> Unit = {},
     /** 是否隐藏「应用内置」那几段（顶栏那个开关控制，默认显示）。 */
     hideBuiltins: Boolean = false,
+    refreshKey: Int = 0,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -173,12 +255,18 @@ internal fun UserscriptsContent(
     // 兼容垫片的档位：auto / on / off。**只在这一页选**（功能设置里那两行已收起）。
     var compatMode by remember { mutableStateOf(DshWebCompat.mode(context)) }
     var composerOn by remember { mutableStateOf(DshWebCompat.enterNewline(context)) }
-    var showPaste by remember { mutableStateOf(false) }
-    var pasted by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
+    // 详情弹层：只存 id，实体每次从 scripts 取 —— 装/卸/开关之后列表会刷新，
+    // 存快照的话弹层里的开关会停在打开那一刻的状态（与插件详情弹层同一纪律）。
+    var detailId by remember { mutableStateOf<String?>(null) }
 
     fun reload() {
         scripts = Userscripts.list(context)
+    }
+
+    // 外部（独立页的 FAB / 链接安装）装完之后重读一次。首次组合 refreshKey = 0，不重读。
+    LaunchedEffect(refreshKey) {
+        if (refreshKey > 0) reload()
     }
 
     /**
@@ -206,26 +294,6 @@ internal fun UserscriptsContent(
             }
         }
     }
-
-
-    val pickFile = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode != android.app.Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
-        val text = Userscripts.read(context, uri)
-        if (text.isNullOrBlank()) {
-            showToast(context, context.getString(R.string.dsh_userscripts_read_failed))
-            return@rememberLauncherForActivityResult
-        }
-        if (Userscripts.install(context, text) == null) {
-            showToast(context, context.getString(R.string.dsh_userscripts_read_failed))
-        } else {
-            reload()
-            showToast(context, context.getString(R.string.dsh_userscripts_installed))
-        }
-    }
-
 
     // 与插件页**同一套列表几何**：LazyColumn + contentPadding 左右 16dp + spacedBy 12dp，
     // 卡片只管自己的形状与底色（见 [ScriptCard]）。以前这里是带 verticalScroll 的 Column、
@@ -322,28 +390,6 @@ internal fun UserscriptsContent(
             )
         }
 
-        // ── 装：贴一段，或从文件选 ──
-        item(key = "install-actions") {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TextButton(onClick = { showPaste = true }) {
-                    Text(stringResource(R.string.dsh_userscripts_paste))
-                }
-                TextButton(onClick = {
-                    pickFile.launch(
-                        Intent(Intent.ACTION_GET_CONTENT).apply {
-                            type = "*/*"
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                        }
-                    )
-                }) {
-                    Text(stringResource(R.string.dsh_userscripts_pick))
-                }
-            }
-        }
-
         // 搜索框（插件首页那个）在这一组里过滤的是「我装的」：内置那几段是随包发的，
         // 不是"搜出来"的东西，所以不参与过滤。
         val shown = if (filter.isBlank()) scripts else scripts.filter {
@@ -361,15 +407,6 @@ internal fun UserscriptsContent(
                 )
             }
         } else {
-            item(key = "count") {
-                Text(
-                    // 有过滤词时报「命中几个 / 共几个」：只报总数会让人以为过滤没生效
-                    if (filter.isBlank()) stringResource(R.string.dsh_userscripts_count, shown.size)
-                    else stringResource(R.string.dsh_userscripts_count_filtered, shown.size, scripts.size),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
             items(shown, key = { it.id }) { s ->
                 ScriptRow(
                     script = s,
@@ -378,7 +415,7 @@ internal fun UserscriptsContent(
                         reload()
                     },
                     onDelete = { pendingDelete = s.id },
-                    onOpen = { onOpen(s) },
+                    onOpen = { detailId = s.id },
                     onUpdate = { update(s) },
                 )
             }
@@ -387,43 +424,29 @@ internal fun UserscriptsContent(
         item { HomeBottomSpacer() }
     }
 
-    if (showPaste) {
-        AlertDialog(
-            onDismissRequest = { showPaste = false },
-            title = { Text(stringResource(R.string.dsh_userscripts_paste)) },
-            text = {
-                Column {
-                    Text(stringResource(R.string.dsh_userscripts_paste_hint))
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = pasted,
-                        onValueChange = { pasted = it },
-                        placeholder = { Text("==UserScript==") },
-                        minLines = 4,
-                        maxLines = 10,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = pasted.isNotBlank(),
-                    onClick = {
-                        if (Userscripts.install(context, pasted) == null) {
-                            showToast(context, context.getString(R.string.dsh_userscripts_read_failed))
-                        } else {
-                            pasted = ""
-                            showPaste = false
-                            reload()
-                            showToast(context, context.getString(R.string.dsh_userscripts_installed))
-                        }
-                    },
-                ) { Text(stringResource(R.string.dsh_userscripts_install)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPaste = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
+    // 详情弹层：与插件详情同一形态（底部弹层），正文预览按需读一次。
+    detailId?.let { id ->
+        scripts.firstOrNull { it.id == id }?.let { s ->
+            val code = remember(s.id) { Userscripts.code(context, s.id) }
+            ScriptDetailSheet(
+                script = s,
+                code = code,
+                onDismiss = { detailId = null },
+                onToggle = { want ->
+                    Userscripts.setEnabled(context, s.id, want)
+                    reload()
+                },
+                // 更新可能换 id（正文哈希进文件名）：先关层，结果按既有 toast 报
+                onUpdate = {
+                    detailId = null
+                    update(s)
+                },
+                onRemove = {
+                    detailId = null
+                    pendingDelete = s.id
+                },
+            )
+        }
     }
 
     val deleting = pendingDelete
@@ -659,4 +682,3 @@ private fun modeLabel(mode: String): Int = when (mode) {
     DshWebCompat.MODE_OFF -> R.string.dsh_webui_compat_off
     else -> R.string.dsh_webui_compat_auto
 }
-

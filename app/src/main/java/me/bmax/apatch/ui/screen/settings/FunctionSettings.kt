@@ -188,6 +188,8 @@ fun FunctionSettingsContent(
     onOpenAllFilesSettings: () -> Unit,
     /** 打开「细化文件访问范围（黑白名单）」子页。 */
     onOpenFileAccess: () -> Unit = {},
+    /** 打开「深度清理」页（长按「清理资源和缓存」那张卡进来）。 */
+    onOpenDeepClean: () -> Unit = {},
     /** 打开「权限管理」：特权通道、无线 ADB 与各项原生能力都在那一页里分类 + 可搜索。 */
     onOpenPermissionHub: () -> Unit = {},
     /** 共享存储挂载总开关（挂载 /sdcard + dsh-fs 桥，两者都受黑白名单约束）。 */
@@ -681,7 +683,22 @@ fun FunctionSettingsContent(
         // 而好几处报错文案（缺 pnpm / 缺 dsh）都写着「请在设置中重装运行时」。
         item(key = "function_runtime", visible = !permissionOnly) {
             ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                // 「点一下 = 立即检查」这个标志要挂在**外层整卡**的点击上（见下面的 Column），
+                // 而它同时要被卡片里的那次检查读到，所以声明在 Column 之前。
+                var confirmAfterCheck by remember { mutableStateOf(false) }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        // 用户报「运行时那张外层卡片点了没反应」：里层的开关卡片（下面的
+                        // ToggleSettingCard）自己接走了它那一块的点击，而外层这圈（标题行、
+                        // 版本行、留白）根本没有点击接点。整张卡点一下 = 检查更新：
+                        // 与里层同一个动作，查完真有可装的更新才弹确认框。
+                        .combinedClickable(onClick = {
+                            confirmAfterCheck = true
+                            onCheckRuntimeUpdateRequested()
+                        })
+                        .padding(16.dp),
+                ) {
                     SectionHeader(
                         icon = { Icon(Icons.Filled.Refresh, null, Modifier.size(20.dp)) },
                         title = stringResource(R.string.dsh_runtime_section),
@@ -704,9 +721,7 @@ fun FunctionSettingsContent(
                     // r1 的 git 依赖不全，修好了也没人告诉用户该更新。
                     var latest by remember { mutableStateOf<RuntimeCheckResult?>(null) }
                     var checking by remember { mutableStateOf(false) }
-                    // 点「更新」触发的那次检查：查完真有可装的更新就直接弹确认框，
-                    // 没有就只在卡片上报结果（已最新 / 失败）。
-                    var confirmAfterCheck by remember { mutableStateOf(false) }
+                    // confirmAfterCheck 声明在外层（整卡点击要用），这里只声明其余状态。
                     var updateConfirming by remember { mutableStateOf(false) }
                     var versionListOpen by remember { mutableStateOf(false) }
                     LaunchedEffect(runtimeInstalled, runtimeVersion, runtimeBeta, runtimeSlim, runtimeCheckRevision) {
@@ -1014,8 +1029,22 @@ fun FunctionSettingsContent(
             }
         }
         item(key = "function_clean_storage", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat, onClick = { showCleanStorageDialog.value = true }) {
-                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            // 点 = 原有的浅清理（主题 / 媒体 / 音效 / 应用缓存）；长按 = 深度清理页
+            // （运行时临时文件、apt/npm 缓存、日志，以及共享存储的大文件/大文件夹）。
+            // 长按挂在内层 Row 上：ExpressiveCard 的 onClick 不接受 onLongClick，而这张卡里
+            // 没有别的可点元素、Row 又铺满整卡，所以触摸范围就是整张卡（与共享存储那张卡
+            // 同一个写法）。
+            ExpressiveCard(flat = flat) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .combinedClickable(
+                            onClick = { showCleanStorageDialog.value = true },
+                            onLongClick = onOpenDeepClean,
+                        )
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Icon(Icons.Filled.CleaningServices, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(16.dp))
                     Column {

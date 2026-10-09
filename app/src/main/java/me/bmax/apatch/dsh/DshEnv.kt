@@ -117,6 +117,20 @@ object DshEnv {
      */
     fun serverLogPrev(ctx: Context): File = File(ctx.filesDir, "logs/dsh-web.prev.log")
 
+    /** 应用日志目录：上面两份都在这里。 */
+    fun logsDir(ctx: Context): File = File(ctx.filesDir, "logs")
+
+    /**
+     * 这一目录下的**全部**日志文件，按文件名稳定排序。
+     *
+     * 时间窗口裁切必须跨文件（窗口的起点可能落在轮转出去的那一份里），所以给的是列表而不是
+     * 单个 `serverLog` —— 只读当前那一份，正是"时间窗口只覆盖半段历史"的来源。
+     */
+    fun logFiles(ctx: Context): List<File> =
+        (logsDir(ctx).listFiles() ?: emptyArray())
+            .filter { it.isFile && it.name.endsWith(".log") }
+            .sortedBy { it.name }
+
     /** APK 提取出的可执行 .so 所在目录（proot/proroot 必须从这里执行）。 */
     fun nativeLibDir(ctx: Context): File = File(ctx.applicationInfo.nativeLibraryDir)
 

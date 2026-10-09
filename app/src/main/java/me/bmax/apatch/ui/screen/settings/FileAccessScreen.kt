@@ -1,7 +1,10 @@
 package me.bmax.apatch.ui.screen.settings
 
+import android.content.Intent
 import android.os.Build
 import android.os.Environment
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,6 +55,7 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshFileAccess
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.util.ui.showToast
 import java.io.File
 
 /**
@@ -109,6 +113,64 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
         wsMounts.addAll(filtered)
         wsMounts.add(DshFileAccess.WsMount(src, d))
         persist()
+    }
+
+    /**
+     * 选完目录之后的共同落点：页内浏览器与系统文件选择器**走同一条**路（先选 src、再填 dest，
+     * 或直接进黑白名单），所以只写这一处。
+     */
+    fun handlePicked(rel: String) {
+        val which = pickerFor
+        pickerFor = null
+        when (which) {
+            // 工作区映射：选完 src，接着填 dest（根 = 整棵 /sdcard，src 为空串）
+            "ws" -> wsPendingSrc = rel
+            // 黑白名单要求进到子目录再选：根目录对这两份名单没有意义
+            // （白名单空本来就是"全放行"；黑名单加根会把整棵树都禁掉）
+            "allow", "deny" ->
+                if (rel.isEmpty()) {
+                    showToast(context, context.getString(R.string.dsh_fs_picker_need_subdir))
+                } else {
+                    addTo(which, rel)
+                }
+        }
+    }
+
+    /**
+     * 系统文件选择器（`ACTION_OPEN_DOCUMENT_TREE`）：不限定提供器 —— 系统文件、MT 管理器、
+     * 其它 SAF 提供器都能进来选目录，页内那个只能翻 /sdcard 的浏览器不再是唯一入口。
+     *
+     * 两件事必须做对：
+     * 1. **持久化授权**：拿到 tree URI 立刻 `takePersistableUriPermission`（授权位原样 take）。
+     *    不 take 的话，进程重启后这个 URI 就失效了 —— 而用户选它正是为了"以后一直能用"。
+     *    发起时也带上 persistable/prefix 两个 flag（与「允许第三方应用访问数据目录」那条路
+     *    完全相同的写法，见 FunctionSettings 的 `function_docs_access`）。
+     * 2. **换算成相对 /sdcard 的路径**再交给 [handlePicked]：既有落盘与挂载逻辑存的就是这个
+     *    形状；不在共享存储里的目录映射不了，如实说一句，不悄悄落一条错的。
+     */
+    val systemPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        val uri = data?.data
+        // data 也要一起判空：`ActivityResult.data` 是可空的 Intent，只判 uri 的话
+        // 下面读 `data.flags` 过不了编译（可空接收者）。
+        if (result.resultCode != android.app.Activity.RESULT_OK || data == null || uri == null) {
+            return@rememberLauncherForActivityResult
+        }
+        val take = data.flags and (
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        )
+        if (take != 0) {
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, take) }
+        }
+        val rel = DshFileAccess.relativeFromTreeUri(uri)
+        if (rel == null) {
+            pickerFor = null
+            showToast(context, context.getString(R.string.dsh_fs_picker_outside))
+            return@rememberLauncherForActivityResult
+        }
+        handlePicked(rel)
     }
 
     Scaffold(topBar = {
@@ -280,13 +342,17 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
         DirPickerDialog(
             allowRoot = pickerFor == "ws",
             onDismiss = { pickerFor = null },
-            onPick = { rel ->
-                val which = pickerFor
-                pickerFor = null
-                when (which) {
-                    "ws" -> wsPendingSrc = rel // 选完 src，接着填 dest
-                    "allow", "deny" -> if (rel.isNotEmpty()) addTo(which, rel)
-                }
+            onPick = { rel -> handlePicked(rel) },
+            // 左下角那个按钮：换系统文件选择器（不限定提供器），选回来走同一条落盘路
+            onPickSystem = {
+                systemPicker.launch(
+                    Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                    )
+                )
             },
         )
     }
@@ -400,6 +466,8 @@ private fun WsDestDialog(
 private fun DirPickerDialog(
     onDismiss: () -> Unit,
     onPick: (String) -> Unit,
+    /** 左下角：切到系统文件选择器（`ACTION_OPEN_DOCUMENT_TREE`），可选任意提供器的目录。 */
+    onPickSystem: () -> Unit,
     /** 允许直接选「当前目录」（含根 /sdcard）——工作区映射用它把整棵 /sdcard 挂进去。 */
     allowRoot: Boolean = false,
 ) {
@@ -471,7 +539,14 @@ private fun DirPickerDialog(
             ) { Text(stringResource(R.string.dsh_fs_picker_choose)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+            // 左下角：换系统文件选择器。页内这个浏览器只能翻 /sdcard（而且要有「所有文件访问」），
+            // 系统选择器不限定提供器 —— 系统文件、MT 管理器、别的 SAF 提供器都能选。
+            Row {
+                TextButton(onClick = onPickSystem) {
+                    Text(stringResource(R.string.dsh_fs_picker_system))
+                }
+                TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+            }
         },
     )
 }

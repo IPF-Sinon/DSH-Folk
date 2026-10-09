@@ -199,13 +199,27 @@ ok(/fun clearLog\(\)[\s\S]{0,500}?copyTo\(DshEnv\.serverLogPrev\(appContext\), o
   "clearLog 先轮转再清空（清空发生在每次起服务时）");
 ok(/fun tailPrevLog\(lines: Int = 2000\)/.test(runtime), "DshRuntime 能读回上一次运行的日志");
 
-// 采集项本身
-ok(/val dshPrevLogFile = File\(bugreportDir, "dsh-prev\.log"\)/.test(code), "归档带 dsh-prev.log");
-ok(/tailPrevLog\(2000\)/.test(code), "dsh-prev.log 取最近 2000 行");
+// 采集项本身。设计已换（任务 2）：归档**不再单独放 dsh-prev.log** —— 那一份被「跨所有 *.log
+// 文件、按行首时间戳合并、按 [now − 用户选择窗口, 最新一条] 闭区间裁切」的 dsh.log 覆盖。
+ok(!/dsh-prev\.log/.test(code) && !/tailPrevLog\(2000\)/.test(code),
+  "归档不再单独放 dsh-prev.log（按行数 tail(2000) 那条旧路已撤）");
+ok(fs.existsSync("app/src/main/java/me/bmax/apatch/dsh/DshLogWindow.kt") &&
+  /me\.bmax\.apatch\.dsh\.DshRuntime\.windowedLog\(window\.minutes\)/.test(code),
+  "归档的 dsh.log 改走新的窗口裁切（DshLogWindow 存在，并且被 LogEvent 的 windowedLog 调用）");
+ok(/fun appLogFiles\(\)[\s\S]{0,200}?DshEnv\.logFiles\(appContext\)/.test(runtime) &&
+  /windowedLog\(minutes: Int\): DshLogWindow\.Result = DshLogWindow\.read\(appLogFiles\(\), minutes\)/.test(runtime),
+  "参与裁切的是全部日志文件（DshEnv.logFiles / appLogFiles()），不是单独某一份");
 ok(/val dshHomeLogFile = File\(bugreportDir, "dsh-home-logs\.txt"\)/.test(code), "归档带容器内 dsh 自己的日志");
 ok(/execRootfsForOutput\(DshHomeLogsCommand, 60_000L\)/.test(code), "容器日志用容器内执行采集");
-ok(/redactInPlace\(dshPrevLogFile, notes\)/.test(code) && /redactInPlace\(dshHomeLogFile, notes\)/.test(code),
-  "这两项也过脱敏（容器日志里可能有别的凭据）");
+ok(/redactInPlace\(dshLogFile, notes\)/.test(code) && /redactInPlace\(dshHomeLogFile, notes\)/.test(code),
+  "dsh.log 与容器日志都过脱敏（容器日志里可能有别的凭据）");
+// 归档里不能再有第二个未脱敏的日志文件：凡是写进 bugreportDir 的 *.log 都要过 redactInPlace，
+// 否则就是把凭据原样寄出去。
+const archivedLogs = [...code.matchAll(/val\s+(\w+)\s*=\s*File\(bugreportDir,\s*"([^"]+\.log)"\)/g)]
+  .map((m) => ({ v: m[1], name: m[2] }));
+ok(archivedLogs.length > 0 && archivedLogs.every((x) =>
+  new RegExp("redactInPlace\\(\\s*" + x.v + ", notes\\)").test(code)),
+  "归档里每个 *.log 都过脱敏（" + archivedLogs.map((x) => x.name).join(" / ") + "）");
 ok(/容器日志采集失败: \$\{it\.message\}/.test(code), "采集失败记进 notes（在 basic.txt 里能看见）");
 // 虚拟屏服务端自己的日志：界面在失败时会让用户"去看这个日志"，报告里必须有它，否则
 // 「服务端到底起来没有、卡在哪一步」只能靠来回问（2026-10-03 那次就是这么绕了一圈）。
@@ -318,6 +332,40 @@ ok(
   const named = ["dmesg", "kallsyms", "mounts", "filesystems", "cmdline", "packages", "defconfig", "ap_tree", "tombstones", "dropbox", "pstore"];
   const missing = named.filter((n) => !seg.includes(n));
   ok(missing.length === 0, "说明里点名了会受影响的采集项（缺 " + (missing.join(",") || "无") + "）");
+}
+
+// ── 日志时间窗口裁切（任务 2）：跨全部 *.log、闭区间、毫秒级、读盘前 flush ──
+//
+// 旧的「两份文件各读各的 tail(2000)」是按**行数**裁：换过文件或重启过时窗口起点落在哪一份
+// 上完全看不出来，而且内存缓冲里那几十行根本不在文件里。改成 DshLogWindow 之后，下面每一条
+// 都是这次设计里不能退掉的形状。
+console.log("── 日志时间窗口裁切（DshLogWindow） ──");
+{
+  const lw = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshLogWindow.kt", "utf8");
+  const lwCode = lw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+
+  // ① 闭区间：Kotlin 的 `..` 两端都含（写 until/`< since` 就是开区间，边界那一行会漏掉）
+  ok(/in since\.\.until/.test(lwCode), "窗口是闭区间（`in since..until`，两端都含）");
+  // ② 毫秒级：now 用 System.currentTimeMillis()，窗口按毫秒算（不是按秒/按行）
+  ok(/nowMillis: Long = System\.currentTimeMillis\(\)/.test(lwCode) &&
+    /nowMillis - minutes \* 60_000L/.test(lwCode),
+    "毫秒级（now = System.currentTimeMillis()，窗口乘 60_000L）");
+  // ③ 合并**所有**文件后按行首时间戳排序（同一毫秒保持读取顺序）
+  ok(/for \(file in files\)/.test(lwCode) && /entries\.sortedBy \{ it\.first \}/.test(lwCode),
+    "把给进来的全部日志文件合并后按行首时间戳排序");
+  // ④ 读盘前先 flush：漏掉缓冲区里那几十行就等于漏掉最现场的一段
+  ok(/flushForExit\(\)/.test(lwCode) &&
+    lwCode.indexOf("flushForExit()") < lwCode.indexOf("file.readLines()"),
+    "读盘前先 flushForExit()（缓冲区里的行不能在文件外）");
+  // 无时间戳的旧行按当前语义保留，并如实计入 untimed
+  ok(/untimed\+\+/.test(lwCode) && /val untimed: Int/.test(lwCode) &&
+    /it\.first == Long\.MIN_VALUE \|\| it\.first in since\.\.until/.test(lwCode),
+    "无时间戳的旧行原样保留（MIN_VALUE 走保留分支）并计入 untimed");
+  ok(/if \(minutes <= 0\)/.test(lwCode),
+    "窗口 minutes <= 0（全部）时不裁，只做跨文件合并排序");
+  // 计数要真的写进 notes：否则读报告的人会以为窗口没生效
+  ok(/dshWindow\.untimed > 0/.test(code) && /没有时间戳/.test(code),
+    "untimed 计数写进 notes（报告里看得见，不是只算不报）");
 }
 
 console.log("");

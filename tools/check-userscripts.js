@@ -570,10 +570,17 @@ ok(/val source: String\? = null/.test(userscripts) &&
 ok(/Icons\.Outlined\.Refresh\b/.test(screen) && /onUpdate/.test(screen) &&
   /onOpen/.test(screen) && /combinedClickable/.test(screen),
   "列表行有「更新」+ 整行进详情（列表仍保留快捷开关）");
-ok(/^@Destination<RootGraph>/m.test(detail) && /scriptId: String/.test(detail) &&
-  /R\.string\.dsh_userscripts_update/.test(detail) &&
-  /R\.string\.dsh_userscripts_remove|R\.string\.dsh_userscripts_delete/.test(detail),
-  "详情页是二级目的地（带 scriptId 参数），页内有更新与移除两个动作");
+// 设计已换：脚本详情**不再是二级目的地**，改成与插件详情（ui/component/DshPluginDetail.kt 的
+// DshPluginDetailSheet）同形态的底部弹层。所以旧断言里的「@Destination + scriptId 参数」这条
+// 路整个不成立 —— 现在钉三件事：那个 internal 函数在、用的是 ModalBottomSheet、文件里没有
+// @Destination（去掉二级目的地这条旧路），以及两个动作的字符串仍在。
+// 判据扫剥过注释的正文：KDoc 里正拿 `@Destination ScriptDetailScreen` 当「以前是什么」的反例。
+const detailCode = detail.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+ok(/internal fun ScriptDetailSheet\(/.test(detailCode) && /ModalBottomSheet\(/.test(detailCode) &&
+  !/@Destination/.test(detailCode) &&
+  /R\.string\.dsh_userscripts_update/.test(detailCode) &&
+  /R\.string\.dsh_userscripts_remove|R\.string\.dsh_userscripts_delete/.test(detailCode),
+  "详情是底部弹层（internal fun ScriptDetailSheet + ModalBottomSheet，不再是二级目的地），层内有更新与移除两个动作");
 ok(/heightIn\(max = 320\.dp\)/.test(detail) && /verticalScroll/.test(detail),
   "正文预览限高的同时给了滚动出路（限高不给路会被 check-text-clipping 抓）");
 ok((screen.match(/ScriptCard \{/g) || []).length >= 2,
@@ -593,11 +600,20 @@ ok(/var pendingDelete by remember \{ mutableStateOf<String\?>\(null\) \}/.test(s
 ok(/Userscripts\.setEnabled\(context, s\.id, want\)/.test(screen) &&
   /Userscripts\.setMasterEnabled\(context, it\)/.test(screen),
   "逐条开关 + 总开关都接到了引擎");
-ok(/Userscripts\.install\(context, pasted\)/.test(screen) && /Userscripts\.install\(context, text\)/.test(screen),
-  "粘贴与选文件两条路都走 install");
+// 设计已换：卡片底部「粘贴脚本 / 从文件选」两个按钮撤掉（粘贴那条路整条没了），改成与脚本
+// 市场同一套 —— 本地 `.user.js` 走 install(context, text)，链接走新的 installFromUrl(...)。
+ok(/Userscripts\.install\(context, text\)/.test(screen) &&
+  /Userscripts\.installFromUrl\(/.test(screen) &&
+  !/Userscripts\.install\(context, pasted\)/.test(screen),
+  "本地文件走 Userscripts.install(text)、链接走 installFromUrl；「粘贴脚本」那条路已撤掉");
 ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
   /Userscripts\.read\(context, uri\)/.test(screen),
   "选文件：ACTION_GET_CONTENT + read(content://)");
+// 任务 1 的删除项：卡片底部那两个按钮（粘贴 / 从文件选）连同它们的计数串整条撤掉，页面里
+// 不许再引用这几个资源名 —— 留着引用就是「按钮删了、文案还挂在别处」的两套说法。
+ok(!/dsh_userscripts_paste/.test(screen) && !/dsh_userscripts_pick/.test(screen) &&
+  !/dsh_userscripts_count\b/.test(screen) && !/dsh_userscripts_count_filtered/.test(screen),
+  "页面不再引用 dsh_userscripts_paste / _pick / _count / _count_filtered（粘贴与计数那条路已撤）");
 
 
 // ── 悬浮菜单的画中画（把页面缩成悬浮小窗） ──

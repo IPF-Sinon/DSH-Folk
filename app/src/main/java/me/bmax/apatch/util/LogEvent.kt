@@ -26,6 +26,7 @@ import me.bmax.apatch.R
  * |---|---|
  * | `logcat.txt` | `logcat -d -T '<起点>'`，ROM 不认 `-T` 时回落到按行首时间戳过滤 |
  * | `dmesg.txt` | 行首是相对开机秒，按 `/proc/uptime` 换算下界后过滤 |
+ * | `dsh.log` | 应用自己**全部**日志文件（当前那份 + 轮转出去的上一份）按行首时间戳合并排序后，只留 `[当前系统时间 − 窗口, 最新一条]` 内的行（见 `DshLogWindow`；不再按行数各读各的） |
  * | `tombstones` / `dropbox` / `pstore` / `diag` / `oplus` / `bootlog` | `find -mmin` 出清单交给 `tar -T` |
  * | `kallsyms.txt` | 窗口内没有任何崩溃转储就不采集（它只用于符号化） |
  *
@@ -344,16 +345,31 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
             )
         }
 
-        // DSH 启动日志（替代原来的内核模块列表）
+        // DSH 启动日志（替代原来的内核模块列表）。
+        //
+        // 窗口裁切走 DshLogWindow：**所有**应用日志文件（当前那份 + 起服务时轮转出去的上一份 +
+        // 以后新加的）按行首时间戳合并排序，只留 `[当前系统时间 − 窗口, 最新一条]` 内的行。
+        // 以前是两份文件各读各的 tail(2000) 行 —— 按行数裁，窗口的起点落在哪一份上完全看不出来；
+        // 而且内存里还没落盘的几十行不在文件里（DshLogWindow 读之前先 flush，否则漏掉的正是
+        // 最现场的那一段）。
         val dshLogFile = File(bugreportDir, "dsh.log")
-        dshLogFile.writeText(runCatching { me.bmax.apatch.dsh.DshRuntime.tailLog(2000) }.getOrDefault(""))
-
-        // 上一次运行的那份（起服务时轮转过来的）。少了它，「重启之后再采集」就永远看不到
-        // 重启之前发生的错误 —— 真机上导入会话的报错就这么凭空消失了。
-        val dshPrevLogFile = File(bugreportDir, "dsh-prev.log")
-        dshPrevLogFile.writeText(
-            runCatching { me.bmax.apatch.dsh.DshRuntime.tailPrevLog(2000) }.getOrDefault("")
-        )
+        val dshWindow = runCatching {
+            me.bmax.apatch.dsh.DshRuntime.windowedLog(window.minutes)
+        }.getOrNull()
+        dshLogFile.writeText(dshWindow?.text.orEmpty())
+        if (dshWindow == null) {
+            notes += "dsh 日志时间裁切失败，归档里这一项为空"
+        } else {
+            // 旧版本写的行没有时间戳：参加不了严格比较，按「宁可多给不漏」原样保留。
+            // 不写这一句，读报告的人会以为窗口没生效。
+            if (dshWindow.untimed > 0) {
+                notes += "dsh 日志有 ${dshWindow.untimed} 行没有时间戳（旧版本写入），未按时间裁切、原样保留"
+            }
+            if (dshWindow.dropped > 0) {
+                notes += "dsh 日志按时间窗口裁掉 ${dshWindow.dropped} 行" +
+                    "（共 ${dshWindow.total} 行，窗口 ${window.minutes} 分钟）"
+            }
+        }
 
         // 容器里 dsh **自己**写的日志（/root/.dsh 下的 *.log）。应用那份 dsh.log 收的只是
         // dsh 进程的 stdout；插件自己落盘的日志与 dsh 内部的结构化日志都不在里面，而
@@ -465,8 +481,10 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         // 打包之前过一遍脱敏：dsh.log 里有 WebUI 的 token（dsh 服务端自己打印的启动地址），
         // 容器日志里可能还有别的凭据，props / cmdline 里有设备稳定标识。
         // 归档是要发给别人的，这些不能在里面。
+        //
+        // dsh.log 现在是**全部**应用日志文件合并裁切后的那一份（上一份的内容已在里面），
+        // 所以不再有单独的 dsh-prev.log —— 两份内容重叠只会让归档变大、还要各自脱敏一遍。
         redactInPlace(dshLogFile, notes)
-        redactInPlace(dshPrevLogFile, notes)
         redactInPlace(dshHomeLogFile, notes)
         // 服务端日志里会出现交接 token 与启动命令行，必须一起脱敏
         redactInPlace(displayServerLogFile, notes)

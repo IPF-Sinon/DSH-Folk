@@ -53,6 +53,7 @@ import com.ramcosta.composedestinations.generated.NavGraphs
 import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionHubScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FileAccessScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.DshDeepCleanScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
@@ -554,6 +555,7 @@ internal fun DshSettingsScreen(
                     allFilesGranted = allFilesGranted,
                     onOpenAllFilesSettings = { openAllFilesSettings() },
                     onOpenFileAccess = { navigator.navigate(FileAccessScreenDestination) },
+                    onOpenDeepClean = { navigator.navigate(DshDeepCleanScreenDestination) },
                     onOpenPermissionHub = { navigator.navigate(PermissionHubScreenDestination) },
                     mountEnabled = storageMount,
                     onSetMount = { on ->

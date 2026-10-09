@@ -172,6 +172,22 @@ internal object Userscripts {
      */
     fun rememberSource(ctx: Context, id: String, url: String) = setSource(ctx, id, url)
 
+    /**
+     * 从一个正文地址装：拉正文 → 落盘 → 记来源，一步到位。返回 id（失败 null）。
+     *
+     * 「从链接安装」有**两个入口**（脚本市场顶栏 / 用户脚本页顶栏），而这一步在两边必须
+     * 完全一样：只按 URL 装、装完必须记来源（否则列表上那个「更新」不知道去哪拉新的）。
+     * 所以放在这里一处实现，界面那边只管线程与提示。
+     *
+     * 阻塞（HTTP + 落盘）：调用方必须在 IO 线程上调，与市场页同一条规矩。
+     */
+    fun installFromUrl(ctx: Context, url: String): String? {
+        val text = runCatching { ScriptMarket.fetch(ctx, url) }.getOrNull() ?: return null
+        val id = install(ctx, text) ?: return null
+        rememberSource(ctx, id, url)
+        return id
+    }
+
     /** 某个脚本的正文（详情页要预览它）；读不到返回 null。 */
     fun code(ctx: Context, id: String): String? =
         runCatching { File(dir(ctx), "$id.user.js").readText() }.getOrNull()

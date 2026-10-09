@@ -46,6 +46,7 @@ import com.ramcosta.composedestinations.generated.destinations.MultimediaSetting
 import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ThemeStoreScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.UserscriptsScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.DshDeepCleanScreenDestination
 import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.SearchAppBar
 import me.bmax.apatch.util.ui.NavigationBarsSpacer
@@ -140,6 +141,10 @@ fun SettingsSearchScreen(navigator: DestinationsNavigator) {
                                     navigator.navigate(ThemeStoreScreenDestination)
                                 SettingsTarget.USERSCRIPTS ->
                                     navigator.navigate(UserscriptsScreenDestination)
+                                // 深度清理也不在分类页上（它挂在功能页那张卡的长按里），
+                                // 搜索结果直接开它
+                                SettingsTarget.DEEP_CLEAN ->
+                                    navigator.navigate(DshDeepCleanScreenDestination)
                                 null -> when (category) {
                                     SettingCategory.GENERAL -> navigator.navigate(GeneralSettingsScreenDestination(highlightKey))
                                     SettingCategory.APPEARANCE -> navigator.navigate(AppearanceSettingsScreenDestination(highlightKey))

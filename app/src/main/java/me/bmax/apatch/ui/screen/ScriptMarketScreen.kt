@@ -27,7 +27,6 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.OpenInBrowser
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,7 +36,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.DshWebViewScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -66,6 +65,7 @@ import me.bmax.apatch.dsh.ScriptMarket
 import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.ui.component.SearchAppBar
+import me.bmax.apatch.ui.component.UserscriptLinkInstallDialog
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.showToast
 
@@ -110,10 +110,9 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
     // 标题显示什么、以及「更多」该去取搜索的下一页还是热门的下一页。
     var popular by remember { mutableStateOf(false) }
 
-    // 「从链接安装」弹窗（粘贴 greasyfork 脚本页 / .user.js 地址）
+    // 「从链接安装」弹窗（粘贴 greasyfork 脚本页 / .user.js 地址）：输入与标红状态住在
+    // 共用的 UserscriptLinkInstallDialog 里，这里只留「开没开」。
     var showLinkInstall by remember { mutableStateOf(false) }
-    var linkInput by remember { mutableStateOf("") }
-    var linkError by remember { mutableStateOf(false) }
 
     // 一次只发一个请求：手机上的网络本来就慢，并发只会让两边都超时。
     fun runSearch(next: Int, reset: Boolean) {
@@ -220,8 +219,8 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
 
     /**
      * 从链接安装（弹窗那条路）：把用户粘贴的东西先归一成可取的正文地址
-     * （[ScriptMarket.normalizeInstallUrl]，认不出就不装、弹窗里标红），再走与点结果卡
-     * 完全相同的 install + 记来源。
+     * （[ScriptMarket.normalizeInstallUrl]，认不出就不装、弹窗里标红），再走「拉正文 + 落盘 +
+     * 记来源」这一条**与用户脚本页共用**的 [Userscripts.installFromUrl]。
      */
     fun installFromUrl(normalized: String) {
         if (installing != 0L) return
@@ -230,11 +229,7 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
         fail = null
         scope.launch {
             val outcome = withContext(Dispatchers.IO) {
-                runCatching {
-                    val id = Userscripts.install(context, ScriptMarket.fetch(context, normalized))
-                    if (id != null) Userscripts.rememberSource(context, id, normalized)
-                    id
-                }
+                runCatching { Userscripts.installFromUrl(context, normalized) }
             }
             outcome.onSuccess { id ->
                 if (id == null) {
@@ -269,8 +264,19 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
         }
     }
 
-    /** 去浏览器看那一页（作者、说明、评分都在那儿）。 */
-    fun openMarketPage(url: String) {
+    /**
+     * 镜像源的浏览入口：**应用内**打开（见 [DshWebViewScreen]），不再交给系统浏览器。
+     *
+     * 只给镜像站这一条路用：它是主源失败后的静态导航页，用户点它的全部意图就是"接着刚才那次
+     * 失败往下看" —— 甩去浏览器再回来，这一页的状态全没了。脚本页那条另说（见 [openInBrowser]）。
+     */
+    fun openMirrorPage(url: String) {
+        if (url.isBlank()) return
+        navigator.navigate(DshWebViewScreenDestination(url = url))
+    }
+
+    /** 去看某个脚本的页面（作者、说明、评分都在那儿）：交给系统浏览器。 */
+    fun openInBrowser(url: String) {
         if (url.isBlank()) return
         runCatching {
             context.startActivity(
@@ -289,51 +295,12 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
         }
     }
 
-    // 「从链接安装」：粘贴脚本页 / .user.js 地址 → 归一 → 安装。与插件商店那个弹窗同一套
-    // 交互（顶栏 Link 图标唤出、认不出就标红），只是归一函数换成纯 regex 的
-    // ScriptMarket.normalizeInstallUrl。
+    // 「从链接安装」：与用户脚本页**共用同一个弹窗**（[UserscriptLinkInstallDialog]）——
+    // 归一、标红、安装三件事只写一遍，两处入口的手感与边界因此不会漂移。
     if (showLinkInstall) {
-        AlertDialog(
-            onDismissRequest = { showLinkInstall = false },
-            title = { Text(stringResource(R.string.dsh_userscripts_market_link_install)) },
-            text = {
-                Column {
-                    Text(stringResource(R.string.dsh_userscripts_market_link_desc))
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = linkInput,
-                        onValueChange = { linkInput = it; linkError = false },
-                        singleLine = true,
-                        isError = linkError,
-                        placeholder = { Text("https://greasyfork.org/scripts/…") },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    if (linkError) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            stringResource(R.string.dsh_userscripts_market_link_invalid),
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val url = ScriptMarket.normalizeInstallUrl(linkInput)
-                    if (url == null) {
-                        linkError = true
-                    } else {
-                        showLinkInstall = false
-                        linkInput = ""
-                        installFromUrl(url)
-                    }
-                }) { Text(stringResource(R.string.dsh_userscripts_market_install)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLinkInstall = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
+        UserscriptLinkInstallDialog(
+            onDismiss = { showLinkInstall = false },
+            onInstall = { url -> installFromUrl(url) },
         )
     }
 
@@ -401,9 +368,11 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
                     failText = failText,
                 )
                 // 主源失败时的**浏览入口**：镜像站是静态导航页（没有脚本正文/JSON），
-                // 所以只能交给系统浏览器看，不能拿来装 —— 这也正是它只出现在这里的原因。
+                // 所以只能看、不能拿来装 —— 这也正是它只出现在这里的原因。看这一页在
+                // **应用内**打开（见 openMirrorPage）：它是"接着刚才那次失败往下看"，
+                // 甩去浏览器再回来这一页的状态就全没了。
                 if (failText != null) {
-                    TextButton(onClick = { openMarketPage(ScriptMarket.MIRROR_INDEX) }) {
+                    TextButton(onClick = { openMirrorPage(ScriptMarket.MIRROR_INDEX) }) {
                         Text(stringResource(R.string.dsh_userscripts_market_mirror))
                     }
                 }
@@ -427,7 +396,7 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
                     busy = busy,
                     installing = installing == hit.id,
                     onInstall = { installHit(hit) },
-                    onOpen = { openMarketPage(hit.pageUrl) },
+                    onOpen = { openInBrowser(hit.pageUrl) },
                 )
             }
             if (full && hits.isNotEmpty()) {

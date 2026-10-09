@@ -68,7 +68,7 @@
 
     <string name="send_log">发送日志</string>
     <string name="settings_clean_storage">清理资源与缓存</string>
-    <string name="settings_clean_storage_summary">删除已下载主题、导入媒体、音效和缓存</string>
+    <string name="settings_clean_storage_summary">删除已下载主题、导入媒体、音效和缓存；长按进入深度清理</string>
     <string name="settings_clean_storage_confirm">将删除以下内容：\n\n• 已下载的主题\n• 导入的音乐\n• 导入的音效\n• 全部临时缓存文件\n\n应用设置、DSH 运行时、会话、插件、模型配置和无线 ADB 密钥都会保留。随后会重建相关资源目录。是否继续？</string>
     <string name="settings_clean_storage_done">清理完成</string>
     <string name="github">GitHub</string>

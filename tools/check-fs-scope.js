@@ -338,5 +338,80 @@ function fsScopeBranchBody(src, header) {
     "文档提供器仍在（同 DSHA 的方案：一个窄 provider 给文件管理器浏览数据目录）");
 }
 
+// ── 任务 3：挂载映射的目录选择改用**系统文件选择器**（ACTION_OPEN_DOCUMENT_TREE） ──
+//
+// 页内那个只能翻 /sdcard 的浏览器不再是唯一入口：系统文件、MT 管理器、别的 SAF 提供器都能
+// 选目录。两件事错了都只在真机上才暴露：不 take 持久化授权 → 进程重启后 URI 失效；把 SAF 的
+// document id 当路径存 → 重启容器时 bind 一个不存在的目录。所以下面分别钉选择器本身、
+// 换算函数（只认 primary: / 必须含冒号 / 拒 .. / 宿主目录必须存在）。
+console.log("\u2500 #3f 挂载映射：系统文件选择器 + tree URI 换算");
+{
+  const systemPicker = fsScopeBranchBody(faScreen, "val systemPicker = rememberLauncherForActivityResult(");
+  const faScreenCode = code(faScreen);
+  ok(/ACTION_OPEN_DOCUMENT_TREE/.test(faScreenCode) &&
+    systemPicker.length > 0 &&
+    /takePersistableUriPermission\(uri, take\)/.test(systemPicker) &&
+    /DshFileAccess\.relativeFromTreeUri\(uri\)/.test(systemPicker),
+    "系统文件选择器：ACTION_OPEN_DOCUMENT_TREE + takePersistableUriPermission + 换算回相对路径");
+  // 不限定 provider：Intent(ACTION_OPEN_DOCUMENT_TREE) 之外不许再窄化到某个包/组件。
+  ok(!/setPackage\(/.test(faScreenCode) && !/setComponent\(/.test(faScreenCode),
+    "选择器不限定包名/组件（没有 setPackage/setComponent 这种 pick 窄化）");
+
+  const rfAt = fa.indexOf("fun relativeFromTreeUri(");
+  const rfEnd = rfAt > 0 ? fa.indexOf("\n    /** 共享存储挂载总开关", rfAt) : -1;
+  const rf = rfAt > 0 && rfEnd > rfAt ? fa.slice(rfAt, rfEnd) : "";
+  ok(rf.length > 0 && /volume\.equals\("primary", ignoreCase = true\)/.test(rf),
+    "relativeFromTreeUri 只认 primary: 卷（SD 卡/别的提供器没有确定的宿主路径 → null）");
+  ok(/if \(sep <= 0\) return null/.test(rf),
+    "relativeFromTreeUri 要求 id 必须含冒号（没冒号的 id 不能当根）");
+  ok(/segs\.any \{ it == "\.\." \}/.test(rf),
+    "relativeFromTreeUri 拒绝 .. 越界段");
+  ok(/return if \(host\.isDirectory\) mapped else null/.test(rf),
+    "relativeFromTreeUri 宿主目录不存在时返回 null（不 bind 一个不存在的目录）");
+}
+
+// ── 任务 4：深度清理（长按进、搜索直达、删除纪律、清单不含禁区） ──
+console.log("\u2500 #4 深度清理：长按入口 + 搜索 + 删除纪律");
+{
+  const reg = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/SettingsRegistry.kt");
+  const search = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/SettingsSearchScreen.kt");
+  const dc = read("app/src/main/java/me/bmax/apatch/dsh/DshDeepClean.kt");
+  const dcScreen = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/DshDeepCleanScreen.kt");
+  const dcCode = code(dc);
+
+  // ① 入口 = 清理卡的**长按**（点仍是原来的浅清理），回调接到深度清理页
+  const cleanCard = fsScopeBranchBody(fn, 'item(key = "function_clean_storage"');
+  ok(cleanCard.length > 0 && /combinedClickable\(/.test(cleanCard) &&
+    /onLongClick = onOpenDeepClean/.test(cleanCard) &&
+    /onClick = \{ showCleanStorageDialog\.value = true \}/.test(cleanCard),
+    "深度清理的入口是清理卡的长按（combinedClickable：点=浅清理、长按=深度清理）");
+  ok(/onOpenDeepClean = \{ navigator\.navigate\(DshDeepCleanScreenDestination\) \}/.test(fnScreen),
+    "长按回调接到 DshDeepCleanScreenDestination（不是只声明一个没人用的参数）");
+
+  // ② 设置搜索里有它，且搜索结果真的会开页
+  ok(/SettingEntry\(\s*"function_deep_clean"[\s\S]{0,240}?directTarget = SettingsTarget\.DEEP_CLEAN/.test(reg) &&
+    /DEEP_CLEAN,/.test(reg),
+    "设置搜索里有 function_deep_clean，并走 directTarget = DEEP_CLEAN");
+  ok(/SettingsTarget\.DEEP_CLEAN ->\s*\n\s*navigator\.navigate\(DshDeepCleanScreenDestination\)/.test(search),
+    "搜索结果真的会开深度清理页（枚举加了但没接导航 = 搜到跳不过去）");
+
+  // ③ 常驻警告：删除立刻生效、没有回收站
+  ok(/R\.string\.dsh_clean_warning/.test(dcScreen),
+    "页面常驻引用 dsh_clean_warning（删除不可撤销，得先说）");
+
+  // ④ 删除纪律：canonicalPath 白名单 + 不跟随符号链接
+  ok(/canonicalPath/.test(dcCode) && /!insideRoots\(canonical, roots\)/.test(dcCode),
+    "删除前逐条过 canonicalPath 白名单（扫描到点击之间隔着一次交互，越界检查不能省）");
+  ok(/S_ISLNK\(Os\.lstat\(f\.path\)\.st_mode\)/.test(dcCode),
+    "不跟随符号链接（lstat + S_ISLNK，不用跟随链接的 File.isDirectory）");
+
+  // ⑤ 清单里不许出现「绝不能整目录删」的那几项
+  const junk = (dc.match(/RUNTIME_JUNK = listOf\(([\s\S]*?)\)/) || [null, ""])[1];
+  ok(junk.length > 0, "找得到 RUNTIME_JUNK 清单（否则下面那条是空转通过）");
+  ok(!/"root\/\.dsh"/.test(junk) && !/"root\/\.local"/.test(junk) &&
+    !/"\.l2s"/.test(junk) && !/"root\/workspace"/.test(junk),
+    "清单里没有绝不能被整目录删的四项（root/.dsh、root/.local、.l2s、root/workspace）");
+}
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

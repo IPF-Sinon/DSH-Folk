@@ -763,6 +763,36 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_fs_picker_choose">选择此目录</string>
     <string name="dsh_fs_picker_need_perm">需要「所有文件访问」权限才能浏览目录。</string>
     <string name="dsh_fs_picker_up">..（上一级）</string>
+    <string name="dsh_fs_picker_system">系统文件选择器</string>
+    <string name="dsh_fs_picker_outside">这个目录不在共享存储（/sdcard）里，不能挂进容器。</string>
+    <string name="dsh_fs_picker_need_subdir">黑白名单要选一个子目录（整棵 /sdcard 在这里没有意义）。</string>
+
+    <!-- ── 深度清理（长按「清理资源和缓存」进来） ── -->
+    <string name="dsh_clean_title">深度清理</string>
+    <string name="dsh_clean_registry_summary">扫描运行时临时文件、缓存与日志，以及大文件 / 大文件夹</string>
+    <string name="dsh_clean_warning">这里的删除立刻生效、不进回收站。请自行确认这些目录里没有你要保留的东西；正在运行的 dsh 或插件也可能正占用其中的文件。</string>
+    <string name="dsh_clean_scanning">正在扫描…</string>
+    <string name="dsh_clean_rescan">重新扫描</string>
+    <string name="dsh_clean_section_runtime">运行时（rootfs）</string>
+    <string name="dsh_clean_section_app">应用内部存储</string>
+    <string name="dsh_clean_section_shared">共享存储（大文件与大文件夹）</string>
+    <string name="dsh_clean_partition">%1$s · 可用 %2$s / 共 %3$s</string>
+    <string name="dsh_clean_selected">已选 %1$d 项 · %2$s</string>
+    <string name="dsh_clean_action">清理选中</string>
+    <string name="dsh_clean_confirm_title">清理选中的项目？</string>
+    <string name="dsh_clean_confirm_text">将永久删除 %1$s，没有回收站。请再确认一次里面没有你要保留的东西。</string>
+    <string name="dsh_clean_done">已清理 %1$d 项</string>
+    <string name="dsh_clean_failed_title">有 %1$d 项没能删掉</string>
+    <string name="dsh_clean_failed_hint">常见原因：文件正被 dsh 或插件占用，或应用没有「所有文件访问」权限。</string>
+    <string name="dsh_clean_empty">没有找到可清理的项目。</string>
+    <string name="dsh_clean_note_no_perm">未扫描共享存储：应用没有「所有文件访问」权限。</string>
+    <string name="dsh_clean_note_none">共享存储里没有可展示的大文件或大文件夹。</string>
+    <string name="dsh_clean_kind_temp">临时文件</string>
+    <string name="dsh_clean_kind_cache">缓存</string>
+    <string name="dsh_clean_kind_log">日志</string>
+    <string name="dsh_clean_kind_pkg">包管理器缓存</string>
+    <string name="dsh_clean_kind_large_file">大文件</string>
+    <string name="dsh_clean_kind_large_dir">大文件夹</string>
 
     <!-- ── 在工作区中挂载手机存储 ── -->
     <string name="dsh_ws_mount_header">挂载进工作区</string>
@@ -1516,12 +1546,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_userscripts_scope">只作用于本应用自己的页面（内置的 dsh web）。元数据块、@match / @include / @exclude 与 @run-at（document-start / -end / -idle）按油猴的写法读。关掉下面的总开关，页面立刻恢复出厂样子。</string>
     <string name="dsh_userscripts_master">启用我装的用户脚本</string>
     <string name="dsh_userscripts_master_summary">关掉 = 只停你自己导入的脚本；应用内置的那几段照常运行。管理页是原生的、不在 WebView 里 —— 脚本把页面弄坏时的退路就是这里。</string>
-    <string name="dsh_userscripts_paste">粘贴脚本</string>
-    <string name="dsh_userscripts_pick">从文件选</string>
-    <string name="dsh_userscripts_empty">还没装脚本。粘贴一个、或选一个 .user.js —— 它会在页面自己的脚本之前运行。</string>
-    <string name="dsh_userscripts_count">已装 %1$d 个</string>
+    <string name="dsh_userscripts_empty">还没装脚本。右下角按钮装本地 .user.js，顶栏链接图标粘地址装 —— 两种都会在页面自己的脚本之前运行。</string>
     <string name="dsh_userscripts_empty_filtered">没有匹配的脚本。</string>
-    <string name="dsh_userscripts_count_filtered">命中 %1$d / 共 %2$d 个</string>
     <string name="dsh_userscripts_hide_builtin">隐藏内置</string>
     <string name="dsh_userscripts_show_builtin">显示内置</string>
     <string name="dsh_userscripts_builtin_section">应用内置（随应用发布，不可删除）</string>
@@ -1538,8 +1564,6 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_userscripts_builtin_a11y_summary">把页面上本来就显示的 placeholder 抄成 aria-label，让无障碍树（以及 agent 的 a11y text --target）能寻址网页输入框。常开。</string>
     <string name="dsh_userscripts_builtin_blob">blob:/data: 下载落地</string>
     <string name="dsh_userscripts_builtin_blob_summary">WebView 对 blob:/data: 不触发下载回调，这一段把这类链接读成 base64 交给原生写盘。常开。</string>
-    <string name="dsh_userscripts_paste_hint">把 .user.js 的正文贴在这里（连 ==UserScript== 元数据块一起）。</string>
-    <string name="dsh_userscripts_install">安装</string>
     <string name="dsh_userscripts_installed">已安装</string>
     <string name="dsh_userscripts_read_failed">读不出文本内容（不是文本文件？）</string>
     <string name="dsh_userscripts_update">更新</string>
@@ -1547,8 +1571,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_userscripts_update_same">已经是最新版本</string>
     <string name="dsh_userscripts_update_failed">更新失败：拉不到脚本正文，检查网络后重试</string>
     <string name="dsh_userscripts_update_check_market">这条没记下来源，去市场按名字找一遍</string>
-    <string name="dsh_userscripts_detail_title">脚本详情</string>
-    <string name="dsh_userscripts_detail_source">来源</string>
+    <string name="dsh_userscripts_detail_source">来源：%1$s</string>
     <string name="dsh_userscripts_detail_source_unknown">来源未知（从文件导入，或由旧版本安装）</string>
     <string name="dsh_userscripts_detail_code">正文</string>
     <string name="dsh_userscripts_delete">移除脚本</string>
@@ -1577,4 +1600,6 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_userscripts_market_fail_server">greasyfork.org 返回了错误（HTTP %1$d）</string>
     <string name="dsh_userscripts_market_fail_content">拿到的不是 UserScript（可能被网络中间层改过）</string>
     <string name="dsh_userscripts_market_fail_size">这个脚本超过 2MB</string>
+    <string name="dsh_webview_title">网页</string>
+    <string name="dsh_webview_failed">这一页在这里打不开。检查网络后重试。</string>
 </resources>

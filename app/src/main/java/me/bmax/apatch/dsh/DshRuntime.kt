@@ -3775,6 +3775,18 @@ object DshRuntime {
     fun tailPrevLog(lines: Int = 2000): String =
         if (::appContext.isInitialized) LogStore.named(DshEnv.serverLogPrev(appContext)).tail(lines) else ""
 
+    /** 应用自己**全部**日志文件（当前那份 + 轮转出去的上一份 + 以后新加的）。 */
+    fun appLogFiles(): List<java.io.File> =
+        if (::appContext.isInitialized) DshEnv.logFiles(appContext) else emptyList()
+
+    /**
+     * 全部日志文件**合并排序后按时间窗口裁切**（见 [DshLogWindow]）。
+     *
+     * 与 [tailLog] 的区别是"按时间"而不是"按行数"、且跨文件：bugreport 的窗口选 10 分钟时，
+     * 只有这一次运行的最后 10 分钟该进归档 —— 上一份里窗口内的那几行也要带上。
+     */
+    internal fun windowedLog(minutes: Int): DshLogWindow.Result = DshLogWindow.read(appLogFiles(), minutes)
+
     /**
      * 清空本次运行的日志 —— 但**先把上一份轮转成 [DshEnv.serverLogPrev]**。
      *

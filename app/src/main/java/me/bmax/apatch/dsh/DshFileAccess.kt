@@ -1,6 +1,8 @@
 package me.bmax.apatch.dsh
 
 import android.content.Context
+import android.net.Uri
+import android.provider.DocumentsContract
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -83,6 +85,44 @@ object DshFileAccess {
     internal fun isUnderOrEqual(child: String, parent: String): Boolean {
         if (child == parent) return true
         return child.startsWith("$parent/")
+    }
+
+    /**
+     * SAF 目录（`ACTION_OPEN_DOCUMENT_TREE` 选出来的 tree URI）→ **相对 /sdcard** 的相对路径。
+     *
+     * 名单与工作区映射存的都是「相对 /sdcard」的路径（挂载层 bind 的也是宿主 /sdcard 下的真实
+     * 目录），所以把目录选择器从页内那个 `java.io.File` 浏览器换成系统文件选择器之后，落盘前
+     * 必须做这一步换算 —— 不然 SAF 的 document id 会被当成路径存进去，重启容器时 bind 一个
+     * 不存在的目录。
+     *
+     * 只认共享存储（`externalstorage` 提供器的 `primary:` 卷）：
+     *
+     * - `content://com.android.externalstorage.documents/tree/primary%3ADownload%2Ffoo`
+     *   → `Download/foo`；根（`primary:`）→ `""`。
+     * - 别的卷 / 别的提供器（SD 卡、云盘、某个文件管理器自己的提供器）没有确定的宿主文件系统
+     *   路径，映射不进去 → null。由界面如实说"这个目录不在共享存储里"，而不是悄悄落一条错的。
+     *
+     * 判据只看 document id、不看 authority：换一个文件管理器（MT 管理器、系统文件）去浏览共享
+     * 存储时，拿回来的同样是 `primary:` 的 id。但"恰好长得像"还不够——映射出来的宿主目录必须
+     * 真的存在（[HOST_ROOT] 下），否则一律 null。这一条同时挡住两种坏情况：别的提供器（云盘 /
+     * 相册提供器）偶然给出 `primary:…` 形状的 id，以及 bind 一个根本不存在的目录。
+     */
+    fun relativeFromTreeUri(uri: Uri?): String? {
+        if (uri == null) return null
+        val docId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return null
+        // 必须形如 `卷:相对路径`。没有冒号 = 不是共享存储那种 id（`substringBefore` 会把
+        // 整串当卷名，于是"primary"这种无冒号的 id 会被当成根 → 落一条错的名单）。
+        val sep = docId.indexOf(':')
+        if (sep <= 0) return null
+        val volume = docId.substring(0, sep)
+        if (!volume.equals("primary", ignoreCase = true)) return null
+        val rel = docId.substring(sep + 1).replace('\\', '/').trim('/')
+        val segs = rel.split('/').filter { it.isNotEmpty() && it != "." }
+        // `..` 越界段一律拒（与 normalizeDest 同一条纪律）
+        if (segs.any { it == ".." }) return null
+        val mapped = segs.joinToString("/")
+        val host = if (mapped.isEmpty()) File(HOST_ROOT) else File(HOST_ROOT, mapped)
+        return if (host.isDirectory) mapped else null
     }
 
     /** 共享存储挂载总开关（默认开）。关＝不挂载 + dsh-fs 也拒绝。 */

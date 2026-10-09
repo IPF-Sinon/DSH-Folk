@@ -783,6 +783,36 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_fs_picker_choose">Choose this folder</string>
     <string name="dsh_fs_picker_need_perm">All files access is required to browse folders.</string>
     <string name="dsh_fs_picker_up">.. (up one level)</string>
+    <string name="dsh_fs_picker_system">System file picker</string>
+    <string name="dsh_fs_picker_outside">That folder is not on shared storage (/sdcard), so it cannot be mounted into the container.</string>
+    <string name="dsh_fs_picker_need_subdir">Pick a subfolder for these lists (the whole /sdcard makes no sense here).</string>
+
+    <!-- ── Deep clean (long-press "Clean resources and cache") ── -->
+    <string name="dsh_clean_title">Deep clean</string>
+    <string name="dsh_clean_registry_summary">Scan runtime temp files, caches and logs, plus large files and folders</string>
+    <string name="dsh_clean_warning">Deleting here takes effect at once and there is no recycle bin. Check for yourself that these folders hold nothing you want to keep; a running dsh or plugin may also be holding files inside them.</string>
+    <string name="dsh_clean_scanning">Scanning…</string>
+    <string name="dsh_clean_rescan">Scan again</string>
+    <string name="dsh_clean_section_runtime">Runtime (rootfs)</string>
+    <string name="dsh_clean_section_app">App internal storage</string>
+    <string name="dsh_clean_section_shared">Shared storage (large files and folders)</string>
+    <string name="dsh_clean_partition">%1$s · %2$s free of %3$s</string>
+    <string name="dsh_clean_selected">%1$d selected · %2$s</string>
+    <string name="dsh_clean_action">Clean selected</string>
+    <string name="dsh_clean_confirm_title">Clean the selected items?</string>
+    <string name="dsh_clean_confirm_text">%1$s will be deleted for good; there is no recycle bin. Please confirm once more that nothing in there matters.</string>
+    <string name="dsh_clean_done">Cleaned %1$d item(s)</string>
+    <string name="dsh_clean_failed_title">%1$d item(s) could not be deleted</string>
+    <string name="dsh_clean_failed_hint">Usual causes: the file is in use by dsh or a plugin, or the app lacks All files access.</string>
+    <string name="dsh_clean_empty">Nothing to clean up was found.</string>
+    <string name="dsh_clean_note_no_perm">Shared storage was not scanned: the app has no All files access.</string>
+    <string name="dsh_clean_note_none">No large files or folders to show on shared storage.</string>
+    <string name="dsh_clean_kind_temp">Temporary files</string>
+    <string name="dsh_clean_kind_cache">Cache</string>
+    <string name="dsh_clean_kind_log">Logs</string>
+    <string name="dsh_clean_kind_pkg">Package manager cache</string>
+    <string name="dsh_clean_kind_large_file">Large file</string>
+    <string name="dsh_clean_kind_large_dir">Large folder</string>
 
     <!-- ── Mount phone storage into the workspace ── -->
     <string name="dsh_ws_mount_header">Mount into the workspace</string>
@@ -1542,12 +1572,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_scope">Applies to this app own page (the built-in dsh web UI) only. The metadata block, @match / @include / @exclude and @run-at (document-start / -end / -idle) are read the Greasemonkey way. Turn the switch off to put the page back the way it was.</string>
     <string name="dsh_userscripts_master">Run my userscripts</string>
     <string name="dsh_userscripts_master_summary">Off = only the scripts you added are left out; the app built-in ones keep running. The manager is native, not in the WebView — it is the way back when a script breaks the page.</string>
-    <string name="dsh_userscripts_paste">Paste a script</string>
-    <string name="dsh_userscripts_pick">Pick a file</string>
-    <string name="dsh_userscripts_empty">Nothing installed yet. Paste one or pick a .user.js — it runs before the page own scripts.</string>
-    <string name="dsh_userscripts_count">%1$d installed</string>
+    <string name="dsh_userscripts_empty">Nothing installed yet. Install a local .user.js with the button at the bottom right, or paste a link with the top bar icon — either way it runs before the page own scripts.</string>
     <string name="dsh_userscripts_empty_filtered">No installed script matches that.</string>
-    <string name="dsh_userscripts_count_filtered">%1$d of %2$d match</string>
     <string name="dsh_userscripts_hide_builtin">Hide built-ins</string>
     <string name="dsh_userscripts_show_builtin">Show built-ins</string>
     <string name="dsh_userscripts_builtin_section">Built in (shipped with the app, cannot be deleted)</string>
@@ -1564,8 +1590,6 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_builtin_a11y_summary">Copies the placeholder a page already shows into aria-label, so the accessibility tree (and the agent a11y text --target) can address web input boxes. Always on.</string>
     <string name="dsh_userscripts_builtin_blob">blob:/data: downloads</string>
     <string name="dsh_userscripts_builtin_blob_summary">WebView never fires the download callback for blob:/data:, so this one reads those links as base64 and hands them to the native side. Always on.</string>
-    <string name="dsh_userscripts_paste_hint">Paste the text of a .user.js, metadata block and all.</string>
-    <string name="dsh_userscripts_install">Install</string>
     <string name="dsh_userscripts_installed">Installed</string>
     <string name="dsh_userscripts_read_failed">Could not read that as text (not a text file?)</string>
     <string name="dsh_userscripts_update">Update</string>
@@ -1573,8 +1597,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_update_same">Already up to date</string>
     <string name="dsh_userscripts_update_failed">Update failed: could not fetch the script. Check the network and retry.</string>
     <string name="dsh_userscripts_update_check_market">No recorded source for this one - searching the market by name</string>
-    <string name="dsh_userscripts_detail_title">Script details</string>
-    <string name="dsh_userscripts_detail_source">Source</string>
+    <string name="dsh_userscripts_detail_source">Source: %1$s</string>
     <string name="dsh_userscripts_detail_source_unknown">Source unknown (imported from a file, or installed by an older version)</string>
     <string name="dsh_userscripts_detail_code">Script text</string>
     <string name="dsh_userscripts_delete">Remove script</string>
@@ -1603,4 +1626,6 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_market_fail_server">greasyfork.org returned an error (HTTP %1$d)</string>
     <string name="dsh_userscripts_market_fail_content">What came back is not a UserScript (a proxy may have rewritten it)</string>
     <string name="dsh_userscripts_market_fail_size">That script is larger than 2MB</string>
+    <string name="dsh_webview_title">Page</string>
+    <string name="dsh_webview_failed">This page could not be loaded here. Check the network and retry.</string>
 </resources>
