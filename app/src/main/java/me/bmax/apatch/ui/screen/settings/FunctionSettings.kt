@@ -168,6 +168,8 @@ fun FunctionSettingsContent(
     /** WebUI 打开方式：in | browser | ask。 */
     webuiMode: String,
     onWebuiModeChange: (String) -> Unit,
+    webuiPipAuto: Boolean,
+    onWebuiPipAutoChange: (Boolean) -> Unit,
     /**
      * 权限已经齐了的能力集合。
      *
@@ -634,6 +636,27 @@ fun FunctionSettingsContent(
                         summary = stringResource(R.string.dsh_webui_mode_ask_desc),
                         onSelect = { onWebuiModeChange(DshWebUi.MODE_ASK) },
                     )
+
+                    // 画中画那条「自动」的路：关掉只是不再自动缩，手动按钮照旧（说明里写了）。
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.dsh_webui_pip_auto),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.dsh_webui_pip_auto_summary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        ExpressiveSwitch(
+                            checked = webuiPipAuto,
+                            onCheckedChange = onWebuiPipAutoChange,
+                        )
+                    }
                 }
             }
         }

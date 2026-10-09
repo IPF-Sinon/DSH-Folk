@@ -30,6 +30,8 @@
     <string name="dsh_webui_ball">Web UI controls</string>
     <string name="dsh_webui_close">Close</string>
     <!-- WebUI 打开方式设置 -->
+    <string name="dsh_webui_pip_auto">Shrink to a small window when leaving</string>
+    <string name="dsh_webui_pip_auto_summary">Automatically shrink the page into a picture-in-picture window that keeps showing after you leave the app. When off it no longer shrinks by itself, but the picture-in-picture button in the floating menu still works.</string>
     <string name="dsh_webui_mode">How to open the Web UI</string>
     <string name="dsh_webui_mode_summary">The Web UI runs on 127.0.0.1 and is only reachable from this device</string>
     <string name="dsh_webui_mode_in_app">In app</string>

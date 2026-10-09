@@ -26,6 +26,8 @@
     <string name="dsh_webui_ball">Web 界面控制</string>
     <string name="dsh_webui_close">关闭</string>
     <!-- WebUI 打开方式设置 -->
+    <string name="dsh_webui_pip_auto">离开时缩成小窗</string>
+    <string name="dsh_webui_pip_auto_summary">离开应用时自动把页面缩成画中画小窗继续显示。关掉后不会再自动缩，但仍然可以手动点悬浮球里的画中画按钮。</string>
     <string name="dsh_webui_mode">Web 界面打开方式</string>
     <string name="dsh_webui_mode_summary">Web 界面只监听 127.0.0.1，仅本机可访问</string>
     <string name="dsh_webui_mode_in_app">应用内打开</string>

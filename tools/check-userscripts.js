@@ -640,8 +640,8 @@ ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
     /builder\.setAutoEnterEnabled\(autoEnter\)/.test(activity) &&
     /Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.S/.test(activity),
     "自动进入走 pipParams(autoEnter)：31+ 才 setAutoEnterEnabled（12 起才有这个 API）");
-  ok(/setPictureInPictureParams\(pipParams\(autoEnter = true\)\)/.test(activity),
-    "onResume 里把「自动进入」写进参数，划走时由系统留在小窗（30 以下靠 onUserLeaveHint）");
+  ok(/setPictureInPictureParams\(pipParams\(autoEnter = DshEnv\.webuiPipAuto\(this\)\)\)/.test(activity),
+    "onResume 里按用户开关把「自动进入」写进参数（这个参数有粘性：关掉时也必须写一次 false）");
   ok(/override fun onUserLeaveHint\(\)/.test(activity) &&
     /enterPip\(\)/.test(activity) &&
     !/onUserLeaveHint\(\)[\s\S]{0,400}showPipGuide\.value = true/.test(activity),
@@ -653,6 +653,26 @@ ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
     /!suppressAutoPip|&& suppressAutoPip|\|\| suppressAutoPip/.test(activity) &&
     /suppressAutoPip = false/.test(activity),
     "主动跳外部页面（邮件/外链/选文件）时立旗压住自动画中画，回来再撤");
+  // 「离开时缩成小窗」开关（默认开）。默认值必须钉住：改成 false 就是静默回退成「不再自动缩」。
+  ok(/fun webuiPipAuto\(ctx: Context\): Boolean/.test(env) &&
+    /KEY_WEBUI_PIP_AUTO = "webui_pip_auto"/.test(env) &&
+    /getBoolean\(KEY_WEBUI_PIP_AUTO, true\)/.test(env),
+    "开关存在且默认开（getBoolean 的默认值是 true）");
+  ok(/onUserLeaveHint\(\)[\s\S]{0,300}DshEnv\.webuiPipAuto\(this\)/.test(activity),
+    "12 以下那条自动路径也读这个开关，关掉后静默不动");
+  const funcSettings = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt", "utf8");
+  const funcScreen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt", "utf8");
+  const registry = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/SettingsRegistry.kt", "utf8");
+  ok(/R\.string\.dsh_webui_pip_auto\b/.test(funcSettings) && /checked = webuiPipAuto/.test(funcSettings) &&
+    /putBoolean\(DshEnv\.KEY_WEBUI_PIP_AUTO, on\)/.test(funcScreen) &&
+    /SettingEntry\("function_webui_pip_auto"/.test(registry),
+    "开关在设置里可改（写 pref）且能被设置搜索搜到（注册表条目）");
+  // 这个开关只管「自动」：手动按钮那条路（enterPip 的函数体）不能读它，否则等于把手动也关了。
+  const enterPipAt = activity.indexOf("private fun enterPip(");
+  const enterPipEnd = enterPipAt > 0 ? activity.indexOf("\n    }", enterPipAt) : -1;
+  const enterPipBody = enterPipAt > 0 && enterPipEnd > enterPipAt ? activity.slice(enterPipAt, enterPipEnd) : "";
+  ok(enterPipBody.length > 0 && !/webuiPipAuto/.test(enterPipBody) && /onEnterPip/.test(activity),
+    "开关只管「自动」：手动点按钮那条路不看这个开关");
   for (const k of ["dsh_pip_button", "dsh_pip_guide_title", "dsh_pip_guide_text_supported",
                    "dsh_pip_guide_text_unsupported", "dsh_pip_guide_settings"]) {
     ok(zhS.includes('name="' + k + '"') && enS.includes('name="' + k + '"'),

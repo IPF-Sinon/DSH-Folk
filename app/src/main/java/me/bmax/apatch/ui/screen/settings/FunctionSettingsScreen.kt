@@ -141,6 +141,8 @@ internal fun DshSettingsScreen(
     var webuiMode by rememberSaveable {
         mutableStateOf(dshPrefs.getString(DshEnv.KEY_WEBUI_MODE, DshWebUi.MODE_IN_APP) ?: DshWebUi.MODE_IN_APP)
     }
+    // 离开应用时自动缩成画中画小窗（默认开）：只管「自动」这条路，手动按钮不受它影响
+    var webuiPipAuto by rememberSaveable { mutableStateOf(DshEnv.webuiPipAuto(context)) }
     // 手机回车换行（默认开）：它管的是 WebUI 输入框里回车是换行还是发送
     // WebView 内核版本只用于显示；读包信息不会触发 WebView 加载，但也没必要每次重组都读
     // 自启动：方式 + 是否同时拉容器。Mode 不是 Parcelable，用 remember 就够
@@ -531,6 +533,11 @@ internal fun DshSettingsScreen(
                     onWebuiModeChange = { mode ->
                         webuiMode = mode
                         DshWebUi.setMode(context.applicationContext, mode)
+                    },
+                    webuiPipAuto = webuiPipAuto,
+                    onWebuiPipAutoChange = { on ->
+                        webuiPipAuto = on
+                        dshPrefs.edit().putBoolean(DshEnv.KEY_WEBUI_PIP_AUTO, on).apply()
                     },
                     capsWithPermission = capsWithPermission,
                     allFilesGranted = allFilesGranted,

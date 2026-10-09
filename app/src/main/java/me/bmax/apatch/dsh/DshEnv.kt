@@ -349,6 +349,17 @@ object DshEnv {
     const val KEY_WEBUI_COMPAT_NOTICED = "webui_compat_noticed"
 
     /**
+     * 离开应用时是否自动缩成画中画小窗（默认开）。
+     *
+     * 只管「自动」这一条路：关掉之后，手动点悬浮球里的画中画按钮、以及进不去时的引导都不受影响。
+     */
+    const val KEY_WEBUI_PIP_AUTO = "webui_pip_auto"
+
+    /** 读 [KEY_WEBUI_PIP_AUTO]。没写过这个 pref 时按「开」算（默认开）。 */
+    fun webuiPipAuto(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_WEBUI_PIP_AUTO, true)
+
+    /**
      * 手机回车换行：把 WebUI 输入框里的裸回车从「发送」改成「换行」（默认开）。
      *
      * 上游把 Enter/Shift+Enter 注册成**只读**快捷键（发送 / 换行），而手机软键盘没有

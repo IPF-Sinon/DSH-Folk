@@ -803,7 +803,11 @@ class DshWebUiActivity : AppCompatActivity() {
      */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && !suppressAutoPip) enterPip()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && !suppressAutoPip &&
+            DshEnv.webuiPipAuto(this)
+        ) {
+            enterPip()
+        }
     }
 
     /** 选择结果 → WebView 要的 Uri 数组。取消或无数据一律 null。 */
@@ -1001,7 +1005,8 @@ class DshWebUiActivity : AppCompatActivity() {
         // 画中画「自动进入」：31+ 靠这个参数生效 —— 设一次之后，用户按 home / 划走时系统自己
         // 缩成小窗（应用外也看得见）。每页重进都重设一次，用户改了系统那个开关也不必重启。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && pipSupported()) {
-            runCatching { setPictureInPictureParams(pipParams(autoEnter = true)) }
+            // 关掉时必须也调一次（autoEnter=false）—— 这个参数是有粘性的，不覆盖就还是上次那个值。
+            runCatching { setPictureInPictureParams(pipParams(autoEnter = DshEnv.webuiPipAuto(this))) }
         }
         // 回到前台：上一轮那两次"主动离开"的豁免用完就撤
         suppressAutoPip = false
