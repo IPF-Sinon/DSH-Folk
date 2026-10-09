@@ -168,7 +168,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                     // 一段，这个按钮只能把列表滚过去；它搬成独立页之后，两条路的手感一致了。
                     IconButton(onClick = {
                         navigator.navigate(
-                            if (group == GROUP_SCRIPTS) ScriptMarketScreenDestination
+                            if (group == GROUP_SCRIPTS) ScriptMarketScreenDestination(initialQuery = "")
                             else DshPluginStoreScreenDestination
                         )
                     }) {

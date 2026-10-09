@@ -513,7 +513,7 @@ ok(/private const val GROUP_PLUGINS = "plugins"/.test(pluginHome) &&
   /FilterChip\(/.test(groupRow) &&
   /R\.string\.dsh_plugins/.test(groupRow) && /R\.string\.dsh_userscripts_title/.test(groupRow),
   "插件首页有「DSH 插件 / 用户脚本」两组的切换（FilterChip，与商店分类行同一套视觉）");
-ok(/if \(group == GROUP_SCRIPTS\) ScriptMarketScreenDestination[\s\S]{0,40}else DshPluginStoreScreenDestination/.test(pluginHome),
+ok(/if \(group == GROUP_SCRIPTS\) ScriptMarketScreenDestination\(initialQuery = ""\)[\s\S]{0,40}else DshPluginStoreScreenDestination/.test(pluginHome),
   "商店按钮按当前显示的那一组分流：插件 → 插件商店；脚本 → 脚本市场（两边都是开一页）");
 const marketScreen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/ScriptMarketScreen.kt", "utf8");
 ok(/@Destination<RootGraph>/.test(marketScreen) && /ScriptMarket\./.test(marketScreen) &&

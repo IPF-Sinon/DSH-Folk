@@ -102,7 +102,7 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
                 // 市场入口与插件首页那个「商店」按钮同一形态（同样的图标与无障碍名）：
                 // 同一件事在两处出现时，长得一样才不用重新认一遍。
                 actions = {
-                    IconButton(onClick = { navigator.navigate(ScriptMarketScreenDestination) }) {
+                    IconButton(onClick = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) }) {
                         Icon(
                             Icons.Outlined.Storefront,
                             contentDescription = stringResource(R.string.dsh_userscripts_market_section),
