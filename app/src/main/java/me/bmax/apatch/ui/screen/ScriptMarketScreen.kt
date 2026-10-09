@@ -1,7 +1,10 @@
 package me.bmax.apatch.ui.screen
 
+import android.app.Activity.RESULT_OK
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,20 +19,25 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.OpenInBrowser
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -98,6 +106,14 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
     var fail by remember { mutableStateOf<ScriptMarket.Fail?>(null) }
     var code by remember { mutableStateOf(0) }
     var installing by remember { mutableStateOf(0L) }
+    // 当前列的是不是「热门」：热门与搜索结果共用 hits / page / full，靠这个标志区分
+    // 标题显示什么、以及「更多」该去取搜索的下一页还是热门的下一页。
+    var popular by remember { mutableStateOf(false) }
+
+    // 「从链接安装」弹窗（粘贴 greasyfork 脚本页 / .user.js 地址）
+    var showLinkInstall by remember { mutableStateOf(false) }
+    var linkInput by remember { mutableStateOf("") }
+    var linkError by remember { mutableStateOf(false) }
 
     // 一次只发一个请求：手机上的网络本来就慢，并发只会让两边都超时。
     fun runSearch(next: Int, reset: Boolean) {
@@ -113,6 +129,8 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
                 page = next
                 full = found.size >= ScriptMarket.PER_PAGE
                 searched = true
+                // 搜索结果一出来就不再是「热门」：标题与「更多」都按搜索走
+                popular = false
             }.onFailure { e ->
                 val me = e as? ScriptMarket.MarketException
                 fail = me?.fail ?: ScriptMarket.Fail.NETWORK
@@ -128,9 +146,46 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
         }
     }
 
-    // 带初始查询进来的，进来就搜一次（只一次：initialQuery 在本页生命周期里不再变）
+    /**
+     * 热门（精选）第一页/下一页。走 [ScriptMarket.popular]，与搜索同一个外壳。
+     *
+     * 失败处理与 [runSearch] 逐条一致：reset 那次才把已有结果清掉，翻页失败保留已看到的；
+     * 失败文案就是主源失败的文案，旁边还给一个「去镜像站」的入口（见列表头部）。
+     */
+    fun runPopular(next: Int, reset: Boolean) {
+        if (busy) return
+        busy = true
+        fail = null
+        scope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching { ScriptMarket.popular(context, next) }
+            }
+            outcome.onSuccess { found ->
+                hits = if (reset) found else (hits + found).distinctBy { it.id }
+                page = next
+                full = found.size >= ScriptMarket.PER_PAGE
+                searched = true
+                popular = true
+            }.onFailure { e ->
+                val me = e as? ScriptMarket.MarketException
+                fail = me?.fail ?: ScriptMarket.Fail.NETWORK
+                code = me?.code ?: 0
+                if (reset) {
+                    hits = emptyList()
+                    searched = false
+                    full = false
+                    popular = false
+                }
+            }
+            busy = false
+        }
+    }
+
+    // 带初始查询进来的，进来就搜一次（只一次：initialQuery 在本页生命周期里不再变）；
+    // 没带查询（从「脚本市场」按钮直接进来）就先列一页热门 —— 空屏幕对着一个输入框
+    // 是最差的首屏。
     LaunchedEffect(initialQuery) {
-        if (initialQuery.isNotBlank()) runSearch(1, reset = true)
+        if (initialQuery.isNotBlank()) runSearch(1, reset = true) else runPopular(1, reset = true)
     }
 
     fun installHit(hit: ScriptMarket.Hit) {
@@ -163,6 +218,57 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
         }
     }
 
+    /**
+     * 从链接安装（弹窗那条路）：把用户粘贴的东西先归一成可取的正文地址
+     * （[ScriptMarket.normalizeInstallUrl]，认不出就不装、弹窗里标红），再走与点结果卡
+     * 完全相同的 install + 记来源。
+     */
+    fun installFromUrl(normalized: String) {
+        if (installing != 0L) return
+        // -1 是「链接安装」的哨兵值：结果卡的 id 都是正数，所以不会有卡片显示成正在装
+        installing = -1L
+        fail = null
+        scope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching {
+                    val id = Userscripts.install(context, ScriptMarket.fetch(context, normalized))
+                    if (id != null) Userscripts.rememberSource(context, id, normalized)
+                    id
+                }
+            }
+            outcome.onSuccess { id ->
+                if (id == null) {
+                    fail = ScriptMarket.Fail.CONTENT
+                } else {
+                    reload()
+                    showToast(context, context.getString(R.string.dsh_userscripts_installed))
+                }
+            }.onFailure { e ->
+                val me = e as? ScriptMarket.MarketException
+                fail = me?.fail ?: ScriptMarket.Fail.NETWORK
+                code = me?.code ?: 0
+            }
+            installing = 0L
+        }
+    }
+
+    /** 本地安装：选一个 `.user.js`（与「用户脚本」页那条路同一套 read / install）。 */
+    val pickLocal = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@rememberLauncherForActivityResult
+        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = withContext(Dispatchers.IO) { Userscripts.read(context, uri) }
+            if (text.isNullOrBlank() || Userscripts.install(context, text) == null) {
+                showToast(context, context.getString(R.string.dsh_userscripts_read_failed))
+            } else {
+                reload()
+                showToast(context, context.getString(R.string.dsh_userscripts_installed))
+            }
+        }
+    }
+
     /** 去浏览器看那一页（作者、说明、评分都在那儿）。 */
     fun openMarketPage(url: String) {
         if (url.isBlank()) return
@@ -183,6 +289,54 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
         }
     }
 
+    // 「从链接安装」：粘贴脚本页 / .user.js 地址 → 归一 → 安装。与插件商店那个弹窗同一套
+    // 交互（顶栏 Link 图标唤出、认不出就标红），只是归一函数换成纯 regex 的
+    // ScriptMarket.normalizeInstallUrl。
+    if (showLinkInstall) {
+        AlertDialog(
+            onDismissRequest = { showLinkInstall = false },
+            title = { Text(stringResource(R.string.dsh_userscripts_market_link_install)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.dsh_userscripts_market_link_desc))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = linkInput,
+                        onValueChange = { linkInput = it; linkError = false },
+                        singleLine = true,
+                        isError = linkError,
+                        placeholder = { Text("https://greasyfork.org/scripts/…") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (linkError) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            stringResource(R.string.dsh_userscripts_market_link_invalid),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val url = ScriptMarket.normalizeInstallUrl(linkInput)
+                    if (url == null) {
+                        linkError = true
+                    } else {
+                        showLinkInstall = false
+                        linkInput = ""
+                        installFromUrl(url)
+                    }
+                }) { Text(stringResource(R.string.dsh_userscripts_market_install)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLinkInstall = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
     Scaffold(
         topBar = {
             SearchAppBar(
@@ -195,17 +349,36 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
                 // 键盘上的「搜索」与右上角那个放大镜走同一个入口（都是重新搜第一页）
                 onConfirm = { runSearch(1, reset = true) },
                 dropdownContent = {
-                    IconButton(
-                        onClick = { runSearch(1, reset = true) },
-                        enabled = marketQuery.isNotBlank() && !busy,
-                    ) {
+                    // 「从链接安装」与插件商店同一个位置（顶栏右侧的链接图标）
+                    IconButton(onClick = { showLinkInstall = true }) {
                         Icon(
-                            Icons.Outlined.Search,
-                            contentDescription = stringResource(R.string.dsh_userscripts_market_search),
+                            Icons.Outlined.Link,
+                            contentDescription = stringResource(R.string.dsh_userscripts_market_link_install),
                         )
                     }
                 },
             )
+        },
+        floatingActionButton = {
+            // 本地安装：与插件页那个 FAB 同形（同样的图标、文案与配色），选一个 .user.js
+            FloatingActionButton(
+                onClick = {
+                    pickLocal.launch(
+                        Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "*/*"
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                        }
+                    )
+                },
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Icon(
+                    Icons.Outlined.FolderOpen,
+                    contentDescription = stringResource(R.string.dsh_local_install),
+                )
+            }
         },
     ) { innerPadding ->
         LazyVerticalStaggeredGrid(
@@ -227,6 +400,24 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
                     showEmpty = searched && hits.isEmpty() && failText == null,
                     failText = failText,
                 )
+                // 主源失败时的**浏览入口**：镜像站是静态导航页（没有脚本正文/JSON），
+                // 所以只能交给系统浏览器看，不能拿来装 —— 这也正是它只出现在这里的原因。
+                if (failText != null) {
+                    TextButton(onClick = { openMarketPage(ScriptMarket.MIRROR_INDEX) }) {
+                        Text(stringResource(R.string.dsh_userscripts_market_mirror))
+                    }
+                }
+            }
+            // 「热门」这一列是首屏默认内容（没带查询时自动拉）：给一行标题，
+            // 否则用户会以为这是自己搜出来的结果
+            if (popular && hits.isNotEmpty()) {
+                item(span = StaggeredGridItemSpan.FullLine, key = "market-popular") {
+                    Text(
+                        stringResource(R.string.dsh_userscripts_market_popular),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             items(hits, key = { it.id }) { hit ->
                 MarketTile(
@@ -242,7 +433,11 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
             if (full && hits.isNotEmpty()) {
                 item(span = StaggeredGridItemSpan.FullLine, key = "market-more") {
                     TextButton(
-                        onClick = { runSearch(page + 1, reset = false) },
+                        // 当前列的是热门就接着取热门的下一页，否则取搜索的下一页
+                        onClick = {
+                            if (popular) runPopular(page + 1, reset = false)
+                            else runSearch(page + 1, reset = false)
+                        },
                         enabled = !busy,
                     ) { Text(stringResource(R.string.dsh_userscripts_market_more)) }
                 }

@@ -474,7 +474,8 @@ ok(/val rules = loopbackOriginRules\(url\)[\s\S]{0,200}addDocumentStartJavaScrip
     "只有内边距声明需要原生参数（参数通道只有一条）");
 
   // 管理页：遍历注册表列内置（不写死 5 行），有开关的接同一条 pref，其余显示常开
-  ok(/for \(entry in WebScripts\.BUILTINS\)/.test(screen), "管理页遍历注册表列内置（不写死 5 行）");
+  ok(/for \(entry in (if \(hideBuiltins\) emptyList\(\) else )?WebScripts\.BUILTINS\)/.test(screen),
+    "管理页遍历注册表列内置（不写死 5 行；可以按「隐藏内置」开关条件取值）");
   ok(/DshWebCompat\.setMode\(\s*context,/.test(screen) && /DshWebCompat\.setEnterNewline\(context, on\)/.test(screen),
     "内置那两条开关落到既有 pref（与设置页同一处状态）");
   ok(/R\.string\.dsh_userscripts_builtin_always_on/.test(screen), "没有开关的显示「常开」");
@@ -567,7 +568,7 @@ ok(/val source: String\? = null/.test(userscripts) &&
   /NO_SOURCE/.test(userscripts) && /UP_TO_DATE/.test(userscripts),
   "来源存进 prefs、更新按 outcome 分流（没来源 → NO_SOURCE，正文没变 → UP_TO_DATE）");
 ok(/Icons\.Outlined\.Refresh\b/.test(screen) && /onUpdate/.test(screen) &&
-  /onOpen/.test(screen) && /clickable/.test(screen),
+  /onOpen/.test(screen) && /combinedClickable/.test(screen),
   "列表行有「更新」+ 整行进详情（列表仍保留快捷开关）");
 ok(/^@Destination<RootGraph>/m.test(detail) && /scriptId: String/.test(detail) &&
   /R\.string\.dsh_userscripts_update/.test(detail) &&
@@ -628,9 +629,34 @@ ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
   ok(/onEnterPip = \{ if \(!enterPip\(\)\) showPipGuide\.value = true \}/.test(activity) &&
     /if \(showPipGuide\.value\) \{\s*\n\s*PipGuideDialog\(/.test(activity),
     "进不去就弹引导，不硬撞");
-  ok(/override fun onPictureInPictureModeChanged\(/.test(activity) &&
-    /if \(!inPip\.value\) \{\s*\n\s*WebUiFloatingBall\(/.test(activity),
-    "画中画时把悬浮球藏起来（那么小的窗口里它只会挡内容）");
+  // 产品要求变了（用户报「缩成小窗后再点画中画按钮不放大，反而提示被占用」）：画中画里必须
+  // **保留**悬浮球，否则小窗里根本没有那个按钮可用；按钮本身改成切换（在 PiP 里点 = 回全屏），
+  // 而且这条切换路径不能弹引导（它 return true，不落进 showPipGuide 那条分支）。
+  ok(!/if \(!inPip\.value\) \{\s*\n\s*WebUiFloatingBall\(/.test(activity) &&
+    /exitPictureInPictureMode\(\)/.test(activity) &&
+    /isInPictureInPictureMode/.test(activity),
+    "画中画里保留悬浮球，且画中画按钮是切换（再点回全屏，不弹引导）");
+  // 用户报「离开应用后画中画不显示」。根因（代码可证）：suppressAutoPip 一旦被某次失败的
+  // 外部跳转立起却没人撤，就会一直压住 onUserLeaveHint；而且 31+ 只靠 setAutoEnterEnabled，
+  // ROM 不认时完全没有兜底。现在：所有版本都从 onUserLeaveHint 兜底，且旗子是一次性消费的。
+  {
+    const at = activity.indexOf("override fun onUserLeaveHint()");
+    const hint = at > 0 ? activity.slice(at, at + 700) : "";
+    ok(hint.length > 0 && /!suppressAutoPip/.test(hint) && /suppressAutoPip = false/.test(hint) &&
+      !/Build\.VERSION\.SDK_INT < Build\.VERSION_CODES\.S/.test(hint),
+      "onUserLeaveHint 在所有版本兜底，且 suppressAutoPip 是一次性消费（不会卡住导致永远不自动进）");
+  }
+  ok(/setPictureInPictureParams[\s\S]{0,240}Log\.w\(/.test(activity),
+    "onResume 那次 setPictureInPictureParams 的异常要写日志，不再静默吞掉");
+  // 主开关（用户要求把画中画开关拆成主/副）：主开关默认开；副开关的读值被主开关与住，
+  // 所以主开关一关，onResume 的参数与 onUserLeaveHint 两条路都停；按钮也不再画。
+  ok(/fun webuiPipMain\(/.test(env) && /KEY_WEBUI_PIP = "webui_pip"/.test(env) &&
+    /getBoolean\(KEY_WEBUI_PIP, true\)/.test(env),
+    "画中画主开关存在且默认开");
+  ok(/fun webuiPipAuto\(ctx: Context\): Boolean/.test(env) && /webuiPipMain\(ctx\)\s*&&/.test(env),
+    "副开关（离开时缩成小窗）被主开关与住：主开关一关，自动进入就停");
+  ok(/showPip/.test(activity) && /if \(showPip\) \{/.test(activity),
+    "主开关关掉时悬浮菜单里不出现画中画按钮");
   ok(/Settings\.ACTION_APPLICATION_DETAILS_SETTINGS/.test(activity),
     "引导里的「去设置」真的能打开应用信息页");
   // 自动进入画中画（用户要的是「离开应用后小窗还在」）：31+ 交给系统（setAutoEnterEnabled +

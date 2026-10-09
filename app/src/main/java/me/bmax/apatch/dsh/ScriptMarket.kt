@@ -56,6 +56,20 @@ internal object ScriptMarket {
 
     private const val TAG = "ScriptMarket"
     private const val API = "https://api.greasyfork.org"
+
+    /** 脚本正文的规范地址前缀；[normalizeInstallUrl] 用它把脚本页链接拼成可直接取正文的地址。 */
+    private const val UPDATE_BASE = "https://update.greasyfork.org"
+
+    /**
+     * 镜像站**浏览入口**。
+     *
+     * 它是一张**静态导航页**（GitHub Pages），不是 JSON API，也没有镜像的脚本正文：实测
+     * `…/scripts/<id>/x.user.js`、`…/en/scripts.json` 全是 404，页面里只有一个跳去第三方站点的
+     * 链接。所以这里只用它做「主源失败时的浏览入口」—— 交给系统浏览器打开，绝不进我们的
+     * HTTP 客户端、更不拿它装脚本。正文层面的镜像回落**做不到**：没有可改写的镜像路径。
+     */
+    internal const val MIRROR_INDEX = "https://greasyfork-mirror.github.io/index.html"
+
     /** 一页多少条；界面用它判断「还有下一页」——两处必须一致，所以是同一个常量。 */
     internal const val PER_PAGE = 20
 
@@ -92,6 +106,57 @@ internal object ScriptMarket {
                 "&per_page=$PER_PAGE",
         )
         return parseHits(httpGet(ctx, url))
+    }
+
+    /**
+     * 热门一页（「精选」的脚本侧来源）：同一个 `scripts.json` 外壳，加 `sort=total_installs`
+     * 要「按安装量排」。q 留空是有意的 —— 服务端把它当 `term:"*"`（看返回的 `term` 字段）。
+     *
+     * 实测（2026-10）返回 200、`order.total_installs = desc`，结果形状与搜索**完全一样**，
+     * 所以直接走 [parseHits]：热门与搜索共用一份解析，不会各自漂。
+     */
+    fun popular(ctx: Context, page: Int): List<Hit> {
+        val url = URL(
+            "$API/" + localePath(ctx) + "/scripts.json?q=&sort=total_installs" +
+                "&page=" + page.coerceAtLeast(1) +
+                "&per_page=$PER_PAGE",
+        )
+        return parseHits(httpGet(ctx, url))
+    }
+
+    /** `https://update.greasyfork.org/scripts/<id>/<name>.user.js`（name 里不含 `/`）。 */
+    private val CODE_URL_RE = Regex(
+        "^https://update\\.greasyfork\\.org/scripts/\\d+/[^/?#]+\\.user\\.js$"
+    )
+
+    /** 脚本页：`greasyfork.org[/<locale>]/scripts/<id>[-<slug>][?query][#frag]`（https 由调用方认）。 */
+    private val PAGE_URL_RE = Regex(
+        "^https?://greasyfork\\.org/(?:[A-Za-z][A-Za-z0-9-]*/)?scripts/(\\d+)(?:-[^/?#]*)?/?(?:[?#][^\\s]*)?$"
+    )
+
+    /**
+     * 把用户粘贴的 greasyfork 链接归一成**可直接取正文**的地址；认不出返回 null。
+     *
+     * 纯函数（只做字符串判断，显式 regex），收两种形状（都实测过）：
+     *  - 脚本页 `greasyfork.org/scripts/<id>-<slug>`（也认带 locale 的
+     *    `/zh-CN/scripts/…`）→ `https://update.greasyfork.org/scripts/<id>/script.user.js`；
+     *  - 正文地址 `https://update.greasyfork.org/scripts/<id>/<任意名>.user.js` → 原样返回。
+     *
+     * 为什么脚本页那条敢自己拼：服务端**忽略** URL 里的 slug/文件名 —— 实测把名字换成 `x`
+     * 照样回同一段正文。所以不必再打一次 API 就能拿到正文地址。
+     *
+     * 只认 https 的 greasyfork 域：归一结果接下来交给 [fetch]，而 [fetch] 只收 `https` +
+     * `*.greasyfork.org`；在这里先挡一道，用户看到的是「链接认不出」而不是一条网络失败。
+     * http 的脚本页会**升到 https**（旧书签里常见），但只拼到 greasyfork 自己的域上，
+     * 不会把任意 URL 拉进来。
+     */
+    internal fun normalizeInstallUrl(raw: String): String? {
+        val s = raw.trim()
+        if (s.isEmpty() || s.any { it.isWhitespace() }) return null
+        // 正文地址：已经是要取的那个东西，原样收
+        if (CODE_URL_RE.matches(s)) return s
+        val id = PAGE_URL_RE.matchEntire(s)?.groupValues?.get(1) ?: return null
+        return "$UPDATE_BASE/scripts/$id/script.user.js"
     }
 
     /**

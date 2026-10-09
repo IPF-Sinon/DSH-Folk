@@ -349,15 +349,52 @@ object DshEnv {
     const val KEY_WEBUI_COMPAT_NOTICED = "webui_compat_noticed"
 
     /**
-     * 离开应用时是否自动缩成画中画小窗（默认开）。
+     * 画中画**主开关**（默认开）。
+     *
+     * 关掉后：悬浮菜单里不再显示画中画按钮，[webuiPipAuto] 也一律为 false（离开应用不自动缩）
+     * —— 也就是「这台设备上不要画中画」这一个意思。
+     */
+    const val KEY_WEBUI_PIP = "webui_pip"
+
+    /** 读 [KEY_WEBUI_PIP]。没写过按「开」算（默认开）。 */
+    fun webuiPipMain(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_WEBUI_PIP, true)
+
+    /** 写 [KEY_WEBUI_PIP]。 */
+    fun setWebuiPipMain(ctx: Context, on: Boolean) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_WEBUI_PIP, on).apply()
+    }
+
+    /**
+     * 离开应用时是否自动缩成画中画小窗（副开关，默认开）。
      *
      * 只管「自动」这一条路：关掉之后，手动点悬浮球里的画中画按钮、以及进不去时的引导都不受影响。
      */
     const val KEY_WEBUI_PIP_AUTO = "webui_pip_auto"
 
-    /** 读 [KEY_WEBUI_PIP_AUTO]。没写过这个 pref 时按「开」算（默认开）。 */
+    /**
+     * 读 [KEY_WEBUI_PIP_AUTO]。没写过这个 pref 时按「开」算（默认开）。
+     *
+     * **同时受主开关 [KEY_WEBUI_PIP] 约束**：主开关关掉 = 不自动进小窗。两条路的调用点
+     * （[me.bmax.apatch.ui.DshWebUiActivity.onResume] 写参数、`onUserLeaveHint` 兜底）都只问
+     * 这一个函数，主/副两个开关就不会各带一条分叉。副开关自己的原始值仍然单独存，
+     * 设置页要用它显示那个 Switch，所以读原始值请直接用 `getBoolean(KEY_WEBUI_PIP_AUTO, true)`。
+     */
     fun webuiPipAuto(ctx: Context): Boolean =
-        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_WEBUI_PIP_AUTO, true)
+        webuiPipMain(ctx) &&
+            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_WEBUI_PIP_AUTO, true)
+
+    /** 脚本页「隐藏内置」：默认**显示**（true 才是隐藏）。 */
+    const val KEY_USERSCRIPTS_HIDE_BUILTINS = "userscripts_hide_builtins"
+
+    fun userscriptsHideBuiltins(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_USERSCRIPTS_HIDE_BUILTINS, false)
+
+    fun setUserscriptsHideBuiltins(ctx: Context, hide: Boolean) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_USERSCRIPTS_HIDE_BUILTINS, hide).apply()
+    }
 
     /**
      * 手机回车换行：把 WebUI 输入框里的裸回车从「发送」改成「换行」（默认开）。

@@ -30,6 +30,10 @@
     <string name="dsh_webui_ball">Web UI controls</string>
     <string name="dsh_webui_close">Close</string>
     <!-- WebUI 打开方式设置 -->
+    <string name="dsh_webui_pip">Picture-in-picture</string>
+    <string name="dsh_webui_pip_summary">Picture-in-picture settings for the built-in Web UI</string>
+    <string name="dsh_webui_pip_main">Enable picture-in-picture</string>
+    <string name="dsh_webui_pip_main_summary">Show the picture-in-picture button in the floating menu and allow the page to shrink into a small window. Turn it off to disable picture-in-picture for this app entirely.</string>
     <string name="dsh_webui_pip_auto">Shrink to a small window when leaving</string>
     <string name="dsh_webui_pip_auto_summary">Automatically shrink the page into a picture-in-picture window that keeps showing after you leave the app. When off it no longer shrinks by itself, but the picture-in-picture button in the floating menu still works.</string>
     <string name="dsh_webui_mode">How to open the Web UI</string>
@@ -1544,6 +1548,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_count">%1$d installed</string>
     <string name="dsh_userscripts_empty_filtered">No installed script matches that.</string>
     <string name="dsh_userscripts_count_filtered">%1$d of %2$d match</string>
+    <string name="dsh_userscripts_hide_builtin">Hide built-ins</string>
+    <string name="dsh_userscripts_show_builtin">Show built-ins</string>
     <string name="dsh_userscripts_builtin_section">Built in (shipped with the app, cannot be deleted)</string>
     <string name="dsh_userscripts_builtin_hint">These run through the same injection pipeline as the scripts you add — they are the app own injections, now visible in one place.</string>
     <string name="dsh_userscripts_builtin_always_on">Always on</string>
@@ -1573,12 +1579,19 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_detail_code">Script text</string>
     <string name="dsh_userscripts_delete">Remove script</string>
     <string name="dsh_userscripts_delete_confirm">Remove</string>
+    <string name="dsh_userscripts_toggle_on">Enable script</string>
+    <string name="dsh_userscripts_toggle_off">Disable script</string>
     <string name="dsh_userscripts_entry">Userscripts</string>
     <string name="dsh_userscripts_entry_summary">Run your own JS against this app own web UI — a .user.js, no build, no release.</string>
     <string name="dsh_userscripts_market_section">Script marketplace (GreasyFork)</string>
-    <string name="dsh_userscripts_market_hint">Search greasyfork.org and install with one tap; installed scripts land in the list on the userscripts page, where they can be toggled or deleted like any other. Scripts come from the internet — read the author and the description before trusting one.</string>
+    <string name="dsh_userscripts_market_hint">Search greasyfork.org and install with one tap; installed scripts land in the list on the userscripts page.</string>
     <string name="dsh_userscripts_market_query_hint">Search scripts (translate, markdown, …)</string>
     <string name="dsh_userscripts_market_search">Search</string>
+    <string name="dsh_userscripts_market_popular">Popular scripts</string>
+    <string name="dsh_userscripts_market_link_install">Install from a link</string>
+    <string name="dsh_userscripts_market_link_desc">Paste a greasyfork script page address, or a .user.js address.</string>
+    <string name="dsh_userscripts_market_link_invalid">That link cannot be recognized (greasyfork script pages and .user.js addresses work).</string>
+    <string name="dsh_userscripts_market_mirror">Open the mirror site</string>
     <string name="dsh_userscripts_market_more">More results</string>
     <string name="dsh_userscripts_market_empty">No results</string>
     <string name="dsh_userscripts_market_by">by %1$s</string>

@@ -155,6 +155,16 @@ fun ScriptDetailScreen(navigator: DestinationsNavigator, scriptId: String) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        // 开关旁边给一句话：与插件详情弹层同一套手感（那边也是「启用插件 / 停用插件」），
+                        // 光一个 Switch 说不清拨过去会发生什么
+                        Text(
+                            text = stringResource(
+                                if (current.enabled) R.string.dsh_userscripts_toggle_off
+                                else R.string.dsh_userscripts_toggle_on
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Switch(
                             checked = current.enabled,
                             onCheckedChange = { want ->

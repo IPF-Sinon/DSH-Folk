@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.outlined.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -168,6 +169,10 @@ fun FunctionSettingsContent(
     /** WebUI 打开方式：in | browser | ask。 */
     webuiMode: String,
     onWebuiModeChange: (String) -> Unit,
+    /** 画中画**主开关**（默认开）：关掉后悬浮菜单不显示画中画按钮，也不自动进小窗。 */
+    webuiPipMain: Boolean,
+    onWebuiPipMainChange: (Boolean) -> Unit,
+    /** 画中画副开关：离开应用时自动缩成小窗（默认开）。主开关关掉时置灰。 */
     webuiPipAuto: Boolean,
     onWebuiPipAutoChange: (Boolean) -> Unit,
     /**
@@ -636,27 +641,37 @@ fun FunctionSettingsContent(
                         summary = stringResource(R.string.dsh_webui_mode_ask_desc),
                         onSelect = { onWebuiModeChange(DshWebUi.MODE_ASK) },
                     )
+                }
+            }
+        }
 
-                    // 画中画那条「自动」的路：关掉只是不再自动缩，手动按钮照旧（说明里写了）。
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.dsh_webui_pip_auto),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = stringResource(R.string.dsh_webui_pip_auto_summary),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        ExpressiveSwitch(
-                            checked = webuiPipAuto,
-                            onCheckedChange = onWebuiPipAutoChange,
-                        )
-                    }
+        // ───────── 画中画（主/副两个开关，独立一张卡）─────────
+        // 主开关管「这个应用能不能进小窗」：悬浮菜单里的按钮、以及离开时自动进入都看它。
+        // 副开关只管「离开应用时自动缩」——两者是包含关系，所以摆在同一个卡里，
+        // 主开关关掉时副开关置灰（留着可点的副开关会让人以为「关了它还能自动缩」）。
+        item(key = "function_webui_pip", visible = !permissionOnly) {
+            ExpressiveCard(flat = flat) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    SectionHeader(
+                        icon = { Icon(Icons.Outlined.PictureInPictureAlt, null, Modifier.size(20.dp)) },
+                        title = stringResource(R.string.dsh_webui_pip),
+                        summary = stringResource(R.string.dsh_webui_pip_summary),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    PipSwitchRow(
+                        title = stringResource(R.string.dsh_webui_pip_main),
+                        summary = stringResource(R.string.dsh_webui_pip_main_summary),
+                        checked = webuiPipMain,
+                        enabled = true,
+                        onCheckedChange = onWebuiPipMainChange,
+                    )
+                    PipSwitchRow(
+                        title = stringResource(R.string.dsh_webui_pip_auto),
+                        summary = stringResource(R.string.dsh_webui_pip_auto_summary),
+                        checked = webuiPipAuto,
+                        enabled = webuiPipMain,
+                        onCheckedChange = onWebuiPipAutoChange,
+                    )
                 }
             }
         }
@@ -1272,6 +1287,49 @@ private fun RuntimeOption(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * 画中画卡里的一行开关（主/副两条共用）。
+ *
+ * 与 [RuntimeOption] 同一套行几何（左侧文字、右侧控件、vertical 8dp）；[enabled] 为 false 时
+ * 文字一起变淡 —— 只把开关灰掉、字还正常黑，会让人以为「这行还能点」。
+ */
+@Composable
+private fun PipSwitchRow(
+    title: String,
+    summary: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+            )
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        ExpressiveSwitch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+        )
     }
 }
 

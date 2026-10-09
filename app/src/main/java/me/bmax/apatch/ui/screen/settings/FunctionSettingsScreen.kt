@@ -141,8 +141,14 @@ internal fun DshSettingsScreen(
     var webuiMode by rememberSaveable {
         mutableStateOf(dshPrefs.getString(DshEnv.KEY_WEBUI_MODE, DshWebUi.MODE_IN_APP) ?: DshWebUi.MODE_IN_APP)
     }
-    // 离开应用时自动缩成画中画小窗（默认开）：只管「自动」这条路，手动按钮不受它影响
-    var webuiPipAuto by rememberSaveable { mutableStateOf(DshEnv.webuiPipAuto(context)) }
+    // 画中画主开关（默认开）：关掉后悬浮菜单不显示按钮、也不自动进小窗
+    var webuiPipMain by rememberSaveable { mutableStateOf(DshEnv.webuiPipMain(context)) }
+    // 离开应用时自动缩成画中画小窗（默认开）：只管「自动」这条路，手动按钮不受它影响。
+    // 读的是**副开关自己的原始值**（不是 DshEnv.webuiPipAuto —— 那个已经把主开关乘进去了），
+    // 否则主开关关着时这一行会显示成「本来就是关的」。
+    var webuiPipAuto by rememberSaveable {
+        mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_WEBUI_PIP_AUTO, true))
+    }
     // 手机回车换行（默认开）：它管的是 WebUI 输入框里回车是换行还是发送
     // WebView 内核版本只用于显示；读包信息不会触发 WebView 加载，但也没必要每次重组都读
     // 自启动：方式 + 是否同时拉容器。Mode 不是 Parcelable，用 remember 就够
@@ -533,6 +539,11 @@ internal fun DshSettingsScreen(
                     onWebuiModeChange = { mode ->
                         webuiMode = mode
                         DshWebUi.setMode(context.applicationContext, mode)
+                    },
+                    webuiPipMain = webuiPipMain,
+                    onWebuiPipMainChange = { on ->
+                        webuiPipMain = on
+                        DshEnv.setWebuiPipMain(context, on)
                     },
                     webuiPipAuto = webuiPipAuto,
                     onWebuiPipAutoChange = { on ->

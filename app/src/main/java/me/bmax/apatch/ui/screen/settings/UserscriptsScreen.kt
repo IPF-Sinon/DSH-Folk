@@ -3,7 +3,7 @@ package me.bmax.apatch.ui.screen.settings
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,14 +13,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
@@ -52,6 +55,7 @@ import com.ramcosta.composedestinations.generated.destinations.ScriptDetailScree
 import com.ramcosta.composedestinations.generated.destinations.ScriptMarketScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.dsh.WebScripts
 import me.bmax.apatch.ui.component.ModuleLabel
@@ -90,6 +94,9 @@ import me.bmax.apatch.util.ui.showToast
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserscriptsScreen(navigator: DestinationsNavigator) {
+    val context = LocalContext.current
+    var hideBuiltins by remember { mutableStateOf(DshEnv.userscriptsHideBuiltins(context)) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -102,6 +109,20 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
                 // 市场入口与插件首页那个「商店」按钮同一形态（同样的图标与无障碍名）：
                 // 同一件事在两处出现时，长得一样才不用重新认一遍。
                 actions = {
+                    // 与插件首页那个「商店」同一行（都在右上角 actions 里）。状态持久化，默认显示。
+                    IconButton(onClick = {
+                        val next = !hideBuiltins
+                        hideBuiltins = next
+                        DshEnv.setUserscriptsHideBuiltins(context, next)
+                    }) {
+                        Icon(
+                            Icons.Outlined.VisibilityOff,
+                            contentDescription = stringResource(
+                                if (hideBuiltins) R.string.dsh_userscripts_show_builtin
+                                else R.string.dsh_userscripts_hide_builtin
+                            ),
+                        )
+                    }
                     IconButton(onClick = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) }) {
                         Icon(
                             Icons.Outlined.Storefront,
@@ -114,6 +135,7 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
     ) { padding ->
         UserscriptsContent(
             modifier = Modifier.padding(padding),
+            hideBuiltins = hideBuiltins,
             onOpen = { navigator.navigate(ScriptDetailScreenDestination(scriptId = it.id)) },
             // 没记来源的那条：更新只能去市场按名字找一遍（市场页支持带一个初始查询进来）
             onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },
@@ -139,6 +161,8 @@ internal fun UserscriptsContent(
     filter: String = "",
     onOpen: (Userscripts.Script) -> Unit = {},
     onOpenMarket: (String) -> Unit = {},
+    /** 是否隐藏「应用内置」那几段（顶栏那个开关控制，默认显示）。 */
+    hideBuiltins: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -214,23 +238,9 @@ internal fun UserscriptsContent(
         // ── 应用内置：与「我装的脚本」走同一条注入管道，但**不受总开关约束** ──
         // 所以放在最上面：这段说明的是「页面被注入什么」，与下面「我要不要跑自己的脚本」是
         // 两件事。也是「一处看得全」的那一处 —— 以前这些散在设置与代码里。
-        item(key = "builtin-header") {
-            Column {
-                Text(
-                    stringResource(R.string.dsh_userscripts_builtin_section),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    stringResource(R.string.dsh_userscripts_builtin_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
         // 内置那几段的行数与内容都来自注册表（见 WebScripts.BUILTINS），不写死 5 行；
         // 每条一个列表项，与「我装的」共用同一个卡片壳与 12dp 行距。
-        for (entry in WebScripts.BUILTINS) {
+        for (entry in if (hideBuiltins) emptyList() else WebScripts.BUILTINS) {
             // 这条内置有没有开关、接到哪：与 WebScripts.builtinEnabled 的分支一一对应
             // （compat / composer 有；inset / a11y-labels / blob-download 常开）。
             val onToggle: ((Boolean) -> Unit)?
@@ -517,7 +527,15 @@ private fun ScriptCard(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** 一行：名字 + 版本/时机/大小 + 说明与 `@match` + 开关 + 更新 + 移除。点整行进详情页。 */
+/**
+ * 一行：名字 + 版本/时机/大小 + 说明与 `@match` + 开关 + 更新 + 移除。
+ *
+ * 手感照插件页的 [me.bmax.apatch.ui.screen.DshPluginScreen] 插件卡片（那张卡的 KDoc 见
+ * DshPluginItem）：**单击进详情、长按行内展开说明**，动作按钮收在卡片底部一行 ——
+ * 原来把「更新 / 移除」两个图标挤在开关两边，一行里四个控件每个都难点，
+ * 而且插件卡片那边根本不是这个形状。说明按插件页那样截断（收起 3 行 / 展开 12 行），
+ * 长按才展开，否则长说明会把列表顶得很长。
+ */
 @Composable
 private fun ScriptRow(
     script: Userscripts.Script,
@@ -526,48 +544,75 @@ private fun ScriptRow(
     onOpen: () -> Unit,
     onUpdate: () -> Unit,
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
     ScriptCard {
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        // 整卡手势挂在内容列上（插件卡片挂在外壳上，但这里内容列铺满整卡、手势在 padding 之外，
+        // 触摸范围完全一样）；用 combinedClickable 才有长按 —— 单击进详情，长按行内展开说明。
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onOpen,
+                    onLongClick = { expanded = !expanded },
+                )
+                .padding(16.dp),
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    script.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    listOfNotNull(
-                        script.version.takeIf { it.isNotBlank() }?.let { "v$it" },
-                        "run-at " + script.runAt,
-                        "${script.bytes} B",
-                    ).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (script.description.isNotBlank()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
                     Text(
-                        script.description,
+                        script.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        listOfNotNull(
+                            script.version.takeIf { it.isNotBlank() }?.let { "v$it" },
+                            "run-at " + script.runAt,
+                            "${script.bytes} B",
+                        ).joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (script.matches.isNotEmpty()) {
-                    Text(
-                        script.matches.joinToString("  "),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
+                Switch(checked = script.enabled, onCheckedChange = onToggle)
+            }
+            if (script.description.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    script.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (expanded) 12 else 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (script.matches.isNotEmpty()) {
+                Text(
+                    script.matches.joinToString("  "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            // 动作收在底部右侧，与插件卡片那一行同形（图标 16dp + 6dp 间距 + 文案）
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onUpdate) {
+                    Icon(Icons.Outlined.Refresh, null, Modifier.size(16.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text(stringResource(R.string.dsh_userscripts_update))
                 }
-            }
-            // 更新放在开关左边：它是"内容层面"的动作，开关是"跑不跑"的动作，先内容后开关
-            IconButton(onClick = onUpdate) {
-                Icon(Icons.Outlined.Refresh, contentDescription = stringResource(R.string.dsh_userscripts_update))
-            }
-            Switch(checked = script.enabled, onCheckedChange = onToggle)
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.dsh_userscripts_delete))
+                TextButton(onClick = onDelete) {
+                    Icon(Icons.Outlined.Delete, null, Modifier.size(16.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text(stringResource(R.string.dsh_userscripts_delete))
+                }
             }
         }
     }

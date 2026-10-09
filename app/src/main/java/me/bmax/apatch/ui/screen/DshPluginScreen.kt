@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -114,6 +115,8 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
     // 当前显示哪一组；以及脚本那一组的过滤词（与插件那边同样是**过滤**语义，所以共用搜索栏）。
     var group by rememberSaveable { mutableStateOf(GROUP_PLUGINS) }
     var scriptFilter by rememberSaveable { mutableStateOf("") }
+    // 「隐藏内置」与脚本页那一页共用同一个 pref（两处看的是同一件事）。
+    var hideBuiltins by remember { mutableStateOf(DshEnv.userscriptsHideBuiltins(context)) }
 
     LaunchedEffect(runtimeInstalled) {
         if (runtimeInstalled && viewModel.plugins.isEmpty()) viewModel.refresh()
@@ -166,6 +169,19 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                     // 同一个按钮按**当前显示的是哪一组**分流，两边都是**开一页** —— 插件 →
                     // 插件商店，脚本 → 脚本市场（ScriptMarketScreen）。市场以前是脚本正文里的
                     // 一段，这个按钮只能把列表滚过去；它搬成独立页之后，两条路的手感一致了。
+                    IconButton(onClick = {
+                        val next = !hideBuiltins
+                        hideBuiltins = next
+                        DshEnv.setUserscriptsHideBuiltins(context, next)
+                    }) {
+                        Icon(
+                            Icons.Outlined.VisibilityOff,
+                            contentDescription = stringResource(
+                                if (hideBuiltins) R.string.dsh_userscripts_show_builtin
+                                else R.string.dsh_userscripts_hide_builtin
+                            ),
+                        )
+                    }
                     IconButton(onClick = {
                         navigator.navigate(
                             if (group == GROUP_SCRIPTS) ScriptMarketScreenDestination(initialQuery = "")
@@ -220,6 +236,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                     GROUP_SCRIPTS -> UserscriptsContent(
                         modifier = Modifier.weight(1f),
                         filter = scriptFilter,
+                        hideBuiltins = hideBuiltins,
                         onOpen = { navigator.navigate(ScriptDetailScreenDestination(scriptId = it.id)) },
                         // 没记来源的那条：更新去市场按名字找一遍
                         onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },

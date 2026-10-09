@@ -145,8 +145,13 @@ object DshWebUi {
         }
     }
 
-    /** 交给系统浏览器；没有可用浏览器时提示。 */
-    fun openExternal(ctx: Context, url: String) {
+    /**
+     * 交给系统浏览器；没有可用浏览器时提示。
+     *
+     * 返回是否真的打开了：调用方（WebUI 主界面）用它决定要不要撤掉「这次离开不要缩小窗」
+     * 那个旗 —— 打不开还留着旗，下一次用户按 home 就不会自动进小窗了。
+     */
+    fun openExternal(ctx: Context, url: String): Boolean {
         val ok = runCatching {
             ctx.startActivity(
                 Intent(Intent.ACTION_VIEW, Uri.parse(url))
@@ -154,6 +159,7 @@ object DshWebUi {
             )
         }.isSuccess
         if (!ok) showToast(ctx, ctx.getString(R.string.dsh_no_browser))
+        return ok
     }
 }
 
@@ -350,6 +356,9 @@ class DshWebUiActivity : AppCompatActivity() {
             }
         })
 
+        // 首帧就要按主开关决定画不画那个按钮（onResume 还会再读一次，设置改完回来即生效）
+        pipMainEnabled.value = DshEnv.webuiPipMain(this)
+
         setContent {
             // allowCustomBackground = false：WebUI 是别人的页面，
             // 背后垫一张自定义壁纸只会让内容看不清
@@ -480,16 +489,22 @@ class DshWebUiActivity : AppCompatActivity() {
                                         if (scheme != "http" && scheme != "https") {
                                             // mailto: / intent: 之类交给系统，别在 WebView 里报错
                                             suppressAutoPip = true
-                                            return runCatching {
+                                            val opened = runCatching {
                                                 startActivity(
                                                     Intent(Intent.ACTION_VIEW, target)
                                                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                                 )
                                             }.isSuccess
+                                            // 没打开成功就立刻撤旗：留着它会让下一次「离开应用」也不缩小窗
+                                            if (!opened) suppressAutoPip = false
+                                            return opened
                                         }
                                         if (isLoopback(target.toString())) return false
                                         suppressAutoPip = true
-                                        DshWebUi.openExternal(this@DshWebUiActivity, target.toString())
+                                        if (!DshWebUi.openExternal(this@DshWebUiActivity, target.toString())) {
+                                            // 同上：没有浏览器时不能把旗留着
+                                            suppressAutoPip = false
+                                        }
                                         return true
                                     }
 
@@ -641,6 +656,8 @@ class DshWebUiActivity : AppCompatActivity() {
                                             true
                                         } catch (e: ActivityNotFoundException) {
                                             Log.w(TAG, "no file picker activity", e)
+                                            // 选择器没起来就没有「离开」这回事：撤旗，否则卡到下次 onResume
+                                            suppressAutoPip = false
                                             fileChooserCallback = null
                                             callback?.onReceiveValue(null)
                                             showToast(
@@ -676,22 +693,25 @@ class DshWebUiActivity : AppCompatActivity() {
                         )
                     }
 
-                    // 画中画时连外壳一起藏起来：悬浮球属于「页面外壳」，在那么小的窗口里只会挡住内容
-                    if (!inPip.value) {
-                        WebUiFloatingBall(
-                            onBack = { onBackPressedDispatcher.onBackPressed() },
-                            onClose = { finish() },
-                            onReload = { webView?.reload() },
-                            // 交给外部浏览器时**现取**当前地址，而不是用本页进来时那个 [url]：
-                            // dsh 每次重启都会生成新 token（旧地址的 token 随之失效），而本页
-                            // 可以一直开着 —— 用进来时那份就等于把一个过期 token 递给浏览器。
-                            onOpenExternal = {
-                                DshWebUi.openExternal(this@DshWebUiActivity, DshRuntime.webUrl())
-                            },
-                            // 进不去（设备不支持 / 应用级开关被关）就先给引导，不硬撞
-                            onEnterPip = { if (!enterPip()) showPipGuide.value = true },
-                        )
-                    }
+                    // 悬浮球在画中画里**也留着**：那是小窗里唯一的出口 —— 点画中画按钮 =
+                    // 切回全屏（见 [enterPip]）。以前这里按 inPip 把它藏起来，用户在小窗里
+                    // 就再也点不到这个按钮，只剩系统那几个手势可用（用户报的正是这个）。
+                    WebUiFloatingBall(
+                        onBack = { onBackPressedDispatcher.onBackPressed() },
+                        onClose = { finish() },
+                        onReload = { webView?.reload() },
+                        // 交给外部浏览器时**现取**当前地址，而不是用本页进来时那个 [url]：
+                        // dsh 每次重启都会生成新 token（旧地址的 token 随之失效），而本页
+                        // 可以一直开着 —— 用进来时那份就等于把一个过期 token 递给浏览器。
+                        onOpenExternal = {
+                            DshWebUi.openExternal(this@DshWebUiActivity, DshRuntime.webUrl())
+                        },
+                        // 主开关关掉时不画这个按钮（自动进入那条路已经在 DshEnv.webuiPipAuto 里挡掉）
+                        showPip = pipMainEnabled.value,
+                        // 进不去（设备不支持 / 应用级开关被关）就先给引导，不硬撞。
+                        // 已经在画中画里时 enterPip 走的是「切回全屏」，不会走到这里弹引导。
+                        onEnterPip = { if (!enterPip()) showPipGuide.value = true },
+                    )
 
                     if (showPipGuide.value) {
                         PipGuideDialog(
@@ -708,8 +728,16 @@ class DshWebUiActivity : AppCompatActivity() {
         }
     }
 
-    /** 是否正在画中画：那种小窗里不画悬浮球。由 [onPictureInPictureModeChanged] 更新。 */
+    /** 是否正在画中画。由 [onPictureInPictureModeChanged] 维护（个别 ROM 不回调，见 [enterPip]）。 */
     private val inPip = mutableStateOf(false)
+
+    /**
+     * 画中画**主开关**的当前值。
+     *
+     * onResume 每次重读：用户在设置里关掉之后回到本页，悬浮菜单里的按钮立刻消失，
+     * 不必重启 Activity。
+     */
+    private val pipMainEnabled = mutableStateOf(true)
 
     /** 「开不了画中画」的引导弹窗是否可见。 */
     private val showPipGuide = mutableStateOf(false)
@@ -724,17 +752,42 @@ class DshWebUiActivity : AppCompatActivity() {
     private var suppressAutoPip = false
 
     /**
-     * 进画中画。返回 false = 现在进不去，调用方去弹引导。
+     * 画中画按钮的动作：**不在**小窗里就进小窗，**在**小窗里就切回全屏。返回 false = 真的进不去，
+     * 调用方去弹引导。
      *
      * 两种「进不去」要分开说：设备没有这个能力（[pipSupported]）与系统把本应用的画中画关了
      * （[pipAllowed]，应用信息页里的那个开关）。引导文案据此二选一，所以这里也分开判。
+     *
+     * 已经是画中画时**绝不能**返回 false：那条路是「切回全屏」，把它说成「进不了画中画」
+     * 就会弹一个文不对题的引导（用户报的「提示被占用」就是这里返回 false 造成的）。
+     * [inPip] 由 [onPictureInPictureModeChanged] 维护，个别 ROM 不回调它，所以用系统状态
+     * `isInPictureInPictureMode` 兜住。
      */
     private fun enterPip(): Boolean {
-        // 已经在画中画里就不再"进"一次：那会把小窗内容重建一遍
-        if (isInPictureInPictureMode) return false
         // 以系统给的答复为准，不拿 AppOps 预判：个别 ROM 把它报成 MODE_IGNORED 却实际允许，
         // 预判会把本来能进的用户直接挡进引导里。[pipSupported] / [pipAllowed] 只用来决定
         // 引导怎么说（是不支持，还是本应用的开关被关了）。
+        val inPipNow = isInPictureInPictureMode
+        if (inPipNow || inPip.value) {
+            inPip.value = false
+            val exited = runCatching { exitPictureInPictureMode() }.getOrElse {
+                Log.w(TAG, "exitPictureInPictureMode 抛异常", it)
+                false
+            }
+            if (!exited && inPipNow) {
+                // 极少数 ROM 上 exit 不展开回全屏：显式把本 Activity 拉到前台。
+                // REORDER_TO_FRONT 复用已有实例（不新建、不重建），先立旗免得这次「离开」
+                // 又触发 onUserLeaveHint 把我们送回小窗；onResume 会把旗撤掉。
+                suppressAutoPip = true
+                runCatching {
+                    startActivity(
+                        Intent(this, DshWebUiActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    )
+                }
+            }
+            return true
+        }
         return runCatching { enterPictureInPictureMode(pipParams(autoEnter = true)) }.getOrDefault(false)
     }
 
@@ -796,18 +849,21 @@ class DshWebUiActivity : AppCompatActivity() {
     }
 
     /**
-     * 31 以下没有 setAutoEnterEnabled，只能在用户离开时自己进小窗。
+     * 用户离开时的兜底：**所有版本**都在这里再进一次小窗。
      *
-     * **静默**：这里弹引导会在用户正要走的时候糊一脸；不支持 / 被系统关掉时 [enterPip] 自己
-     * 会失败，什么都不做就是对的。我们自己调外部页面那两次已经用 [suppressAutoPip] 挡掉。
+     * 31+ 虽然写了 `setAutoEnterEnabled`，但那是系统说了算（个别 ROM 不认），而用户报的
+     * 「离开应用后小窗不显示」在最新系统上也复现 —— 所以两条路都要有，不能只靠它。
+     *
+     * **静默**：这里弹引导会在用户正要走的时候糊一脸；进不去就算了，什么都不做。
+     * [suppressAutoPip]（我们自己调外部页面时立的旗）在这里**一次性消费**，用完立刻清掉 ——
+     * 那个旗卡在 true 上正好造成「怎么都不自动进」。
      */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && !suppressAutoPip &&
-            DshEnv.webuiPipAuto(this)
-        ) {
-            enterPip()
-        }
+        val allow = !suppressAutoPip
+        suppressAutoPip = false
+        if (!allow || isInPictureInPictureMode || !DshEnv.webuiPipAuto(this)) return
+        if (!enterPip()) Log.w(TAG, "onUserLeaveHint: enterPictureInPictureMode 返回 false")
     }
 
     /** 选择结果 → WebView 要的 Uri 数组。取消或无数据一律 null。 */
@@ -1003,10 +1059,18 @@ class DshWebUiActivity : AppCompatActivity() {
         // 每页重进都重设一次，用户在设置里改了档位不必重启 App。
         A11yOwn.applyToWindow(window)
         // 画中画「自动进入」：31+ 靠这个参数生效 —— 设一次之后，用户按 home / 划走时系统自己
-        // 缩成小窗（应用外也看得见）。每页重进都重设一次，用户改了系统那个开关也不必重启。
+        // 缩成小窗（应用外也看得见）。每页重进都重设一次，用户改了设置也不必重启。
+        //
+        // 失败不再静默吞掉：这个参数写不进去 = 按 home 什么都不会发生，而日志里一个字都没有。
+        // 主/副两个开关都由 DshEnv.webuiPipAuto 合成（主开关关掉一律 false）。
+        pipMainEnabled.value = DshEnv.webuiPipMain(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && pipSupported()) {
             // 关掉时必须也调一次（autoEnter=false）—— 这个参数是有粘性的，不覆盖就还是上次那个值。
-            runCatching { setPictureInPictureParams(pipParams(autoEnter = DshEnv.webuiPipAuto(this))) }
+            try {
+                setPictureInPictureParams(pipParams(autoEnter = DshEnv.webuiPipAuto(this)))
+            } catch (e: Exception) {
+                Log.w(TAG, "setPictureInPictureParams(autoEnter) 失败", e)
+            }
         }
         // 回到前台：上一轮那两次"主动离开"的豁免用完就撤
         suppressAutoPip = false
@@ -1072,10 +1136,13 @@ class DshWebUiActivity : AppCompatActivity() {
 }
 
 /**
- * 贴边的半透明悬浮球，点开展出返回 / 刷新 / 外部打开 / 关闭。
+ * 贴边的半透明悬浮球，点开展出返回 / 刷新 / 画中画 / 外部打开 / 关闭。
  *
  * 位置持久化成「哪一侧 + 纵向比例」而不是绝对像素：换了屏幕方向或分屏尺寸后，
  * 绝对坐标会把球留在屏幕外，比例不会。
+ *
+ * [showPip] 为 false（画中画主开关被关掉）时**不画**画中画那一个按钮 —— 关掉开关的人
+ * 不该还看到一个点了没用的入口。
  */
 @Composable
 private fun WebUiFloatingBall(
@@ -1084,6 +1151,7 @@ private fun WebUiFloatingBall(
     onReload: () -> Unit,
     onOpenExternal: () -> Unit,
     onEnterPip: () -> Unit,
+    showPip: Boolean = true,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember {
@@ -1197,11 +1265,15 @@ private fun WebUiFloatingBall(
                                     contentDescription = stringResource(R.string.dsh_webui_reload),
                                 )
                             }
-                            IconButton(onClick = { expanded = false; onEnterPip() }) {
-                                Icon(
-                                    Icons.Outlined.PictureInPictureAlt,
-                                    contentDescription = stringResource(R.string.dsh_pip_button),
-                                )
+                            // 主开关关掉时这一条不出现：不是灰掉，是根本不画（点了没用的入口
+                            // 只会让人以为功能坏了）。其余按钮照旧。
+                            if (showPip) {
+                                IconButton(onClick = { expanded = false; onEnterPip() }) {
+                                    Icon(
+                                        Icons.Outlined.PictureInPictureAlt,
+                                        contentDescription = stringResource(R.string.dsh_pip_button),
+                                    )
+                                }
                             }
                             IconButton(onClick = { expanded = false; onOpenExternal() }) {
                                 Icon(
