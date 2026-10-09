@@ -1539,7 +1539,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_userscripts_entry">用户脚本</string>
     <string name="dsh_userscripts_entry_summary">用一段自己的 JS 改本应用自己的网页 —— 一个 .user.js，不用打包、不用发版。</string>
     <string name="dsh_userscripts_market_section">脚本市场（GreasyFork）</string>
-    <string name="dsh_userscripts_market_hint">在 greasyfork.org 上搜索，点一下装进上面那份列表 —— 之后和别的脚本一样开关、删除。脚本来自互联网，装之前先看作者与说明。</string>
+    <string name="dsh_userscripts_market_hint">在 greasyfork.org 上搜索，点一下装进「用户脚本」那一页的列表 —— 之后和别的脚本一样开关、删除。脚本来自互联网，装之前先看作者与说明。</string>
     <string name="dsh_userscripts_market_query_hint">搜脚本（翻译、markdown……）</string>
     <string name="dsh_userscripts_market_search">搜索</string>
     <string name="dsh_userscripts_market_more">更多结果</string>

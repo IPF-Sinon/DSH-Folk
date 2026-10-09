@@ -1565,7 +1565,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_entry">Userscripts</string>
     <string name="dsh_userscripts_entry_summary">Run your own JS against this app own web UI — a .user.js, no build, no release.</string>
     <string name="dsh_userscripts_market_section">Script marketplace (GreasyFork)</string>
-    <string name="dsh_userscripts_market_hint">Search greasyfork.org and install with one tap; installed scripts land in the list above, where they can be toggled or deleted like any other. Scripts come from the internet — read the author and the description before trusting one.</string>
+    <string name="dsh_userscripts_market_hint">Search greasyfork.org and install with one tap; installed scripts land in the list on the userscripts page, where they can be toggled or deleted like any other. Scripts come from the internet — read the author and the description before trusting one.</string>
     <string name="dsh_userscripts_market_query_hint">Search scripts (translate, markdown, …)</string>
     <string name="dsh_userscripts_market_search">Search</string>
     <string name="dsh_userscripts_market_more">More results</string>

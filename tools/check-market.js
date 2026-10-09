@@ -26,7 +26,7 @@ const MARKET = fs.readFileSync(
   "utf8",
 );
 const SCREEN = fs.readFileSync(
-  require("path").join(ROOT, "app/src/main/java/me/bmax/apatch/ui/screen/settings/UserscriptsScreen.kt"),
+  require("path").join(ROOT, "app/src/main/java/me/bmax/apatch/ui/screen/ScriptMarketScreen.kt"),
   "utf8",
 );
 

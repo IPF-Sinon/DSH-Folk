@@ -133,9 +133,10 @@ pinned by a gate):
 
 ## The script marketplace (GreasyFork)
 
-The bottom of the Userscripts page is a native marketplace: search greasyfork.org, install with one tap
-into the "mine" list (where the same toggles/deletion apply). It speaks HTTP **natively, never through the
-WebView** — when a bad script blanks the page, this page still works, which is the whole point of it.
+The script marketplace is a **page of its own** (`ScriptMarketScreen`, opened from the Userscripts page):
+search greasyfork.org, install with one tap into the "mine" list (where the same toggles/deletion apply).
+It speaks HTTP **natively, never through the WebView** — when a bad script blanks the page, this page
+still works, which is the whole point of it.
 
 The shapes were copied from the measured API; do not "fix" them from memory: the entry point is
 `https://api.greasyfork.org/<locale>/scripts.json` (every `greasyfork.org/…/scripts.json` is a

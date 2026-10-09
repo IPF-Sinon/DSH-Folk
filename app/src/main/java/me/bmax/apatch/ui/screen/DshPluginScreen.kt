@@ -44,7 +44,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -62,6 +61,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.DshPluginStoreScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.ScriptMarketScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -113,8 +113,6 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
     // 当前显示哪一组；以及脚本那一组的过滤词（与插件那边同样是**过滤**语义，所以共用搜索栏）。
     var group by rememberSaveable { mutableStateOf(GROUP_PLUGINS) }
     var scriptFilter by rememberSaveable { mutableStateOf("") }
-    // 商店按钮在脚本这一组要把市场滚进视野：用计数触发，连点两次也各有一次反应。
-    var marketRequest by rememberSaveable { mutableIntStateOf(0) }
 
     LaunchedEffect(runtimeInstalled) {
         if (runtimeInstalled && viewModel.plugins.isEmpty()) viewModel.refresh()
@@ -149,7 +147,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                     )
                 },
                 // 两组的搜索都是「过滤已加载的列表」：插件过滤已装插件，脚本过滤「我装的」。
-                // 语义一样才敢共用一个框 —— 换成"去 GreasyFork 搜"就必须分开（市场那个框在正文里）。
+                // 语义一样才敢共用一个框 —— 换成"去 GreasyFork 搜"就必须分开（那个框在市场那一页上）。
                 searchText = if (group == GROUP_SCRIPTS) scriptFilter else viewModel.search,
                 onSearchTextChange = {
                     if (group == GROUP_SCRIPTS) scriptFilter = it else viewModel.search = it
@@ -164,15 +162,14 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                             Icon(Icons.Outlined.Refresh, contentDescription = "Refresh")
                         }
                     }
-                    // 同一个按钮按**当前显示的是哪一组**分流：插件 → 插件商店（另一页）；
-                    // 脚本 → 脚本市场。市场那一段就在脚本正文里（搜索框 + 结果 + 安装），
-                    // 所以这里是把它滚进视野，而不是再开一页长得一样的页面。
+                    // 同一个按钮按**当前显示的是哪一组**分流，两边都是**开一页** —— 插件 →
+                    // 插件商店，脚本 → 脚本市场（ScriptMarketScreen）。市场以前是脚本正文里的
+                    // 一段，这个按钮只能把列表滚过去；它搬成独立页之后，两条路的手感一致了。
                     IconButton(onClick = {
-                        if (group == GROUP_SCRIPTS) {
-                            marketRequest++
-                        } else {
-                            navigator.navigate(DshPluginStoreScreenDestination)
-                        }
+                        navigator.navigate(
+                            if (group == GROUP_SCRIPTS) ScriptMarketScreenDestination
+                            else DshPluginStoreScreenDestination
+                        )
                     }) {
                         Icon(
                             Icons.Outlined.Storefront,
@@ -221,7 +218,6 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                     // 入口搬过来之后两处各留一份实现，很快就会各长各的 —— 那正是"对齐 UI"要防的事。
                     GROUP_SCRIPTS -> UserscriptsContent(
                         modifier = Modifier.weight(1f),
-                        revealMarket = marketRequest,
                         filter = scriptFilter,
                     )
                     else -> DshPluginList(

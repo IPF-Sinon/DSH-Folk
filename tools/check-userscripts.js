@@ -513,12 +513,13 @@ ok(/private const val GROUP_PLUGINS = "plugins"/.test(pluginHome) &&
   /FilterChip\(/.test(groupRow) &&
   /R\.string\.dsh_plugins/.test(groupRow) && /R\.string\.dsh_userscripts_title/.test(groupRow),
   "插件首页有「DSH 插件 / 用户脚本」两组的切换（FilterChip，与商店分类行同一套视觉）");
-ok(/if \(group == GROUP_SCRIPTS\)[\s\S]{0,80}marketRequest\+\+/.test(pluginHome) &&
-  /navigator\.navigate\(DshPluginStoreScreenDestination\)/.test(pluginHome),
-  "商店按钮按当前显示的那一组分流：插件 → 插件商店；脚本 → 脚本市场");
-ok(/revealMarket = marketRequest/.test(pluginHome) &&
-  /scrollState\.animateScrollTo\(marketOffset\)/.test(screen),
-  "脚本那一组的「商店」是把市场滚进视野（市场就在正文里，不再开一页一样的）");
+ok(/if \(group == GROUP_SCRIPTS\) ScriptMarketScreenDestination[\s\S]{0,40}else DshPluginStoreScreenDestination/.test(pluginHome),
+  "商店按钮按当前显示的那一组分流：插件 → 插件商店；脚本 → 脚本市场（两边都是开一页）");
+const marketScreen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/ScriptMarketScreen.kt", "utf8");
+ok(/@Destination<RootGraph>/.test(marketScreen) && /ScriptMarket\./.test(marketScreen) &&
+  !/revealMarket/.test(screen) && !/scrollState\.animateScrollTo\(/.test(screen) &&
+  !/marketQuery/.test(screen),
+  "市场是独立一页（脚本页里既没有页内市场，也没有「把它滚进视野」那套机制）");
 ok(/filter = scriptFilter/.test(pluginHome) && /val shown = if \(filter\.isBlank\(\)\)/.test(screen),
   "一个搜索栏管两组：脚本那组用它过滤「我装的」");
 // 悬浮球里那个入口按用户要求撤掉了 —— 连同它专用的 AppNavigation 一跳。留着反向断言：
@@ -539,14 +540,22 @@ const cardAt = screen.indexOf("private fun ScriptCard(");
 // 不带边界会把函数体截断成一行，断言就自己把自己坑了。
 const cardEnd = cardAt > 0 ? screen.indexOf("\n@Composable", cardAt + 10) : -1;
 const cardBody = cardAt > 0 && cardEnd > cardAt ? screen.slice(cardAt, cardEnd) : "";
-ok(cardBody.length > 0 && /padding\(horizontal = 16\.dp, vertical = 6\.dp\)/.test(cardBody) &&
+ok(cardBody.length > 0 && !/padding\(/.test(cardBody) &&
   /shape = RoundedCornerShape\(20\.dp\)/.test(cardBody) &&
   /secondaryContainer\.copy\(alpha = 0\.2f\)/.test(cardBody),
-  "脚本卡片壳与插件卡片同一套几何（16dp 外边距 / 20dp 圆角 / secondaryContainer 0.2）");
-ok(/contentPadding = PaddingValues\([\s\S]{0,140}start = 16\.dp[\s\S]{0,120}end = 16\.dp/.test(pluginHome) &&
-  /spacedBy\(12\.dp\)/.test(pluginHome) &&
-  /ScriptCard \{[\s\S]{0,160}padding\(start = 16\.dp/.test(screen),
-  "外边距对着插件列表那一侧（contentPadding 左右 16dp + 间距 12dp）");
+  "脚本卡片壳与插件卡片同一套几何（边距交给列表 / 20dp 圆角 / secondaryContainer 0.2）");
+// 列表度量要跟插件页那一侧一致：LazyColumn + contentPadding 左右 16dp + spacedBy 12dp。
+ok(/LazyColumn\(/.test(screen) &&
+  /contentPadding = PaddingValues\([\s\S]{0,160}start = 16\.dp[\s\S]{0,120}end = 16\.dp/.test(screen) &&
+  /spacedBy\(12\.dp\)/.test(screen),
+  "列表容器与插件页同一套（LazyColumn，contentPadding 左右 16dp + 间距 12dp）");
+// 不可卸载的内置脚本复用插件页那套标签与措辞（不另造同义串）。
+const builtinAt = screen.indexOf("private fun BuiltinRow(");
+const builtinEnd = builtinAt > 0 ? screen.indexOf("\n@Composable", builtinAt + 10) : -1;
+const builtinRow = builtinAt > 0 && builtinEnd > builtinAt ? screen.slice(builtinAt, builtinEnd) : "";
+ok(builtinRow.length > 0 && /R\.string\.dsh_plugin_builtin_label/.test(builtinRow) &&
+  /R\.string\.dsh_host_plugin_version/.test(builtinRow) && !/autoTag/.test(screen),
+  "不可卸载的内置脚本用插件页那套「内置」标签 + 「DSH-Folk 内置 · 不可卸载」措辞");
 ok((screen.match(/ScriptCard \{/g) || []).length >= 2,
   "内置那几段与「我装的」都用同一个壳（同一页不能一半卡片一半裸行）");
 ok(!/Modifier\.fillMaxWidth\(\)\.padding\(start = 16\.dp, end = 16\.dp, top = 8\.dp, bottom = 8\.dp\)/.test(screen) &&

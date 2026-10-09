@@ -1,7 +1,6 @@
 package me.bmax.apatch.ui.screen.settings
 
 import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -13,21 +12,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.outlined.OpenInBrowser
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,32 +33,26 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.ScriptMarketScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
-import me.bmax.apatch.dsh.ScriptMarket
 import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.dsh.WebScripts
+import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.util.DshWebCompat
+import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.showToast
 
 /**
@@ -75,14 +64,17 @@ import me.bmax.apatch.util.ui.showToast
  * 重跑、同名不覆盖）都写在 [Userscripts] 的 KDoc 里。
  *
  * 这一页**故意是原生的**（不在 WebView 里）：一个坏脚本把页面弄白时，这里是唯一的退路。
- * 所以页面分成上下两段，顺序是有意的：
+ * 所以页面按「注入什么 / 我装了什么」分成两段，顺序是有意的：
  *
  * - **上：应用内置**（不可删，逐条开关在行上）。它回答「应用往页面里注入了什么」；
  *   兼容垫片的**三档（自动/始终/从不）与当前内核版本**也只在这里选 —— 功能设置页那两行
  *   收进来了，因为它们本来就是这两条内置的档位。
- * - **中：我装的脚本**（总开关 + 粘贴/选文件 + 已导入列表）。它回答「我要不要跑自己的 JS」。
- * - **下：脚本市场**（GreasyFork 搜索 + 一键安装）。它回答「还有哪些能装」；装进来的东西
- *   落进**中段**那份列表，开关与删除都还是同一套。
+ * - **下：我装的脚本**（总开关 + 粘贴/选文件 + 已导入列表）。它回答「我要不要跑自己的 JS」。
+ *
+ * 脚本市场（GreasyFork 搜索 + 一键安装）搬去了独立页
+ * [me.bmax.apatch.ui.screen.ScriptMarketScreen]：它是「去别处找东西」，与这一页「本机现在注入/
+ * 装了哪些」不是一件事 —— 混在一列里既把页面拉长，又让插件首页那个「商店」按钮只能把列表
+ * 滚过去。现在两处按钮都是直接开那一页，装回来的东西落进**下段**那份列表。
  *
  * 总开关只管下段：一个坏脚本把页面弄白时，内边距/无障碍/兼容垫片还得在 —— 那正是这一页
  * 能把界面救回来的前提。
@@ -100,6 +92,16 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
                 },
+                // 市场入口与插件首页那个「商店」按钮同一形态（同样的图标与无障碍名）：
+                // 同一件事在两处出现时，长得一样才不用重新认一遍。
+                actions = {
+                    IconButton(onClick = { navigator.navigate(ScriptMarketScreenDestination) }) {
+                        Icon(
+                            Icons.Outlined.Storefront,
+                            contentDescription = stringResource(R.string.dsh_userscripts_market_section),
+                        )
+                    }
+                },
             )
         },
     ) { padding ->
@@ -112,17 +114,16 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
  *
  * 单独抽出来是因为**插件首页的「用户脚本」那一组直接复用它** —— 入口从「设置 → 功能」
  * 右上角搬到插件首页之后，同一个页面在两地各留一份实现，很快就会各长各的（这正是「对齐
- * UI」要防的事）。独立页的顶栏（标题 + 返回）留在 [UserscriptsScreen] 里；插件首页用的是
- * 它自己的搜索栏。
+ * UI」要防的事）。独立页的顶栏（标题 + 返回 + 市场入口）留在 [UserscriptsScreen] 里；
+ * 插件首页用的是它自己的搜索栏与「商店」按钮。
  *
- * @param revealMarket 递增的触发计数：插件首页那个「商店」按钮在脚本这一组时，用它把市场
- *   那一段滚进视野。用计数而不是布尔，是为了连点两次也各有一次反应。
+ * 列表几何与插件列表**逐项一致**：`LazyColumn` + contentPadding 左右 16dp + 12dp 行距，
+ * 卡片抄插件卡片那一套（见 [ScriptCard]）。两地本来就是同一份正文，几何再分叉会一眼看出。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun UserscriptsContent(
     modifier: Modifier = Modifier,
-    revealMarket: Int = 0,
     filter: String = "",
 ) {
     val context = LocalContext.current
@@ -141,93 +142,6 @@ internal fun UserscriptsContent(
         scripts = Userscripts.list(context)
     }
 
-    // ── 脚本市场（GreasyFork）──────────────────────────────────────────────
-    //
-    // 状态全留在这一页：搜一页、列出来、装了就 [reload]。市场只负责「把一段 .user.js
-    // 拿回来」（见 [ScriptMarket]），落盘/同名覆盖/开关都还是 [Userscripts] 那一套。
-    // 一次只发一个请求：手机上的网络本来就慢，并发只会让两边都超时。
-    var marketQuery by remember { mutableStateOf("") }
-    var marketHits by remember { mutableStateOf<List<ScriptMarket.Hit>>(emptyList()) }
-    var marketPage by remember { mutableStateOf(1) }
-    var marketFull by remember { mutableStateOf(false) }
-    var marketBusy by remember { mutableStateOf(false) }
-    var marketSearched by remember { mutableStateOf(false) }
-    var marketFail by remember { mutableStateOf<ScriptMarket.Fail?>(null) }
-    var marketCode by remember { mutableStateOf(0) }
-    var installing by remember { mutableStateOf(0L) }
-    val scope = rememberCoroutineScope()
-
-    fun runSearch(next: Int, reset: Boolean) {
-        if (marketBusy) return
-        marketBusy = true
-        marketFail = null
-        scope.launch {
-            val outcome = withContext(Dispatchers.IO) {
-                runCatching { ScriptMarket.search(context, marketQuery.trim(), next) }
-            }
-            outcome.onSuccess { hits ->
-                marketHits = if (reset) hits else (marketHits + hits).distinctBy { it.id }
-                marketPage = next
-                marketFull = hits.size >= ScriptMarket.PER_PAGE
-                marketSearched = true
-            }.onFailure { e ->
-                val me = e as? ScriptMarket.MarketException
-                marketFail = me?.fail ?: ScriptMarket.Fail.NETWORK
-                marketCode = me?.code ?: 0
-                // 「更多」失败时保留已有那一页，别把用户已经看到的清掉
-                if (reset) {
-                    marketHits = emptyList()
-                    marketSearched = false
-                    marketFull = false
-                }
-            }
-            marketBusy = false
-        }
-    }
-
-    fun installHit(hit: ScriptMarket.Hit) {
-        if (installing != 0L) return
-        installing = hit.id
-        marketFail = null
-        scope.launch {
-            val outcome = withContext(Dispatchers.IO) {
-                runCatching { Userscripts.install(context, ScriptMarket.fetch(context, hit.codeUrl)) }
-            }
-            outcome.onSuccess { id ->
-                if (id == null) {
-                    // 落盘失败（同名覆盖、目录不可写）：按内容问题报，细节在 Userscripts 里
-                    marketFail = ScriptMarket.Fail.CONTENT
-                } else {
-                    reload()
-                    showToast(context, context.getString(R.string.dsh_userscripts_installed))
-                }
-            }.onFailure { e ->
-                val me = e as? ScriptMarket.MarketException
-                marketFail = me?.fail ?: ScriptMarket.Fail.NETWORK
-                marketCode = me?.code ?: 0
-            }
-            installing = 0L
-        }
-    }
-
-    /** 去浏览器看那一页（作者、说明、评分都在那儿）。 */
-    fun openMarketPage(url: String) {
-        runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        }
-    }
-
-    val marketFailText: String? = marketFail?.let { fail ->
-        when (fail) {
-            ScriptMarket.Fail.NETWORK -> context.getString(R.string.dsh_userscripts_market_fail_network)
-            ScriptMarket.Fail.SERVER ->
-                context.getString(R.string.dsh_userscripts_market_fail_server, marketCode)
-            ScriptMarket.Fail.CONTENT -> context.getString(R.string.dsh_userscripts_market_fail_content)
-            ScriptMarket.Fail.SIZE -> context.getString(R.string.dsh_userscripts_market_fail_size)
-        }
-    }
 
     val pickFile = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -247,87 +161,89 @@ internal fun UserscriptsContent(
         }
     }
 
-    val scrollState = rememberScrollState()
-    // 市场那一段在列里的纵向偏移（px）：由它自己的 modifier 量出来，供 revealMarket 滚过去
-    var marketOffset by remember { mutableStateOf(0) }
-    LaunchedEffect(revealMarket) {
-        if (revealMarket > 0 && marketOffset > 0) scrollState.animateScrollTo(marketOffset)
-    }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState),
+    // 与插件页**同一套列表几何**：LazyColumn + contentPadding 左右 16dp + spacedBy 12dp，
+    // 卡片只管自己的形状与底色（见 [ScriptCard]）。以前这里是带 verticalScroll 的 Column、
+    // 每一行自己加 padding，于是脚本是裸行、插件是卡片 —— 同一屏里出现两套几何。
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = 8.dp, start = 16.dp, end = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-            // ── 应用内置：与「我装的脚本」走同一条注入管道，但**不受总开关约束** ──
-            // 所以放在最上面：这段说明的是「页面被注入什么」，与下面「我要不要跑自己的脚本」是
-            // 两件事。也是「一处看得全」的那一处 —— 以前这些散在设置与代码里。
-            Text(
-                stringResource(R.string.dsh_userscripts_builtin_section),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 2.dp),
-            )
-            Text(
-                stringResource(R.string.dsh_userscripts_builtin_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-            for (entry in WebScripts.BUILTINS) {
-                // 这条内置有没有开关、接到哪：与 WebScripts.builtinEnabled 的分支一一对应
-                // （compat / composer 有；inset / a11y-labels / blob-download 常开）。
-                val onToggle: ((Boolean) -> Unit)?
-                val checked: Boolean?
-                val extra: (@Composable () -> Unit)?
-                when (entry.id) {
-                    "compat" -> {
-                        // 三档都在 extra 里，所以这里不给 Switch：一个状态两个控件只会
-                        // 让人猜「到底哪个才算数」
-                        onToggle = null
-                        checked = null
-                        extra = {
-                            CompatPicker(
-                                mode = compatMode,
-                                kernel = DshWebCompat.kernel(context).display,
-                                onPick = { m ->
-                                    compatMode = m
-                                    DshWebCompat.setMode(context, m)
-                                },
-                            )
-                        }
-                    }
-                    "composer" -> {
-                        onToggle = { on ->
-                            composerOn = on
-                            DshWebCompat.setEnterNewline(context, on)
-                        }
-                        checked = composerOn
-                        extra = null
-                    }
-                    // 其余三条没有开关：内边距是布局前提，无障碍名字/blob 下载是补页面缺陷
-                    // （见 WebScripts 的类 KDoc）。给它们开关只会多出「用户关了之后来报 bug」。
-                    else -> {
-                        onToggle = null
-                        checked = null
-                        extra = null
+        // ── 应用内置：与「我装的脚本」走同一条注入管道，但**不受总开关约束** ──
+        // 所以放在最上面：这段说明的是「页面被注入什么」，与下面「我要不要跑自己的脚本」是
+        // 两件事。也是「一处看得全」的那一处 —— 以前这些散在设置与代码里。
+        item(key = "builtin-header") {
+            Column {
+                Text(
+                    stringResource(R.string.dsh_userscripts_builtin_section),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    stringResource(R.string.dsh_userscripts_builtin_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        // 内置那几段的行数与内容都来自注册表（见 WebScripts.BUILTINS），不写死 5 行；
+        // 每条一个列表项，与「我装的」共用同一个卡片壳与 12dp 行距。
+        for (entry in WebScripts.BUILTINS) {
+            // 这条内置有没有开关、接到哪：与 WebScripts.builtinEnabled 的分支一一对应
+            // （compat / composer 有；inset / a11y-labels / blob-download 常开）。
+            val onToggle: ((Boolean) -> Unit)?
+            val checked: Boolean?
+            val extra: (@Composable () -> Unit)?
+            when (entry.id) {
+                "compat" -> {
+                    // 三档都在 extra 里，所以这里不给 Switch：一个状态两个控件只会
+                    // 让人猜「到底哪个才算数」
+                    onToggle = null
+                    checked = null
+                    extra = {
+                        CompatPicker(
+                            mode = compatMode,
+                            kernel = DshWebCompat.kernel(context).display,
+                            onPick = { m ->
+                                compatMode = m
+                                DshWebCompat.setMode(context, m)
+                            },
+                        )
                     }
                 }
+                "composer" -> {
+                    onToggle = { on ->
+                        composerOn = on
+                        DshWebCompat.setEnterNewline(context, on)
+                    }
+                    checked = composerOn
+                    extra = null
+                }
+                // 其余三条没有开关：内边距是布局前提，无障碍名字/blob 下载是补页面缺陷
+                // （见 WebScripts 的类 KDoc）。给它们开关只会多出「用户关了之后来报 bug」。
+                else -> {
+                    onToggle = null
+                    checked = null
+                    extra = null
+                }
+            }
+            item(key = "builtin:" + entry.id) {
                 BuiltinRow(
                     title = stringResource(entry.titleRes),
                     summary = stringResource(entry.summaryRes),
                     checked = checked,
-                    autoTag = null,
                     onToggle = onToggle,
                     extra = extra,
                 )
             }
+        }
 
-            HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
 
-            // ── 总开关：只管「我装的」那些脚本 ──
+        // ── 总开关：只管「我装的」那些脚本 ──
+        item(key = "master") {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
@@ -346,16 +262,19 @@ internal fun UserscriptsContent(
                     },
                 )
             }
+        }
+        item(key = "scope") {
             Text(
                 stringResource(R.string.dsh_userscripts_scope),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
+        }
 
-            // ── 装：贴一段，或从文件选 ──
+        // ── 装：贴一段，或从文件选 ──
+        item(key = "install-actions") {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 TextButton(onClick = { showPaste = true }) {
@@ -372,14 +291,15 @@ internal fun UserscriptsContent(
                     Text(stringResource(R.string.dsh_userscripts_pick))
                 }
             }
+        }
 
-            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-            // 搜索框（插件首页那个）在这一组里过滤的是「我装的」：内置那几段是随包发的，
-            // 不是"搜出来"的东西，所以不参与过滤。
-            val shown = if (filter.isBlank()) scripts else scripts.filter {
-                it.title.contains(filter, ignoreCase = true) || it.id.contains(filter, ignoreCase = true)
-            }
-            if (shown.isEmpty()) {
+        // 搜索框（插件首页那个）在这一组里过滤的是「我装的」：内置那几段是随包发的，
+        // 不是"搜出来"的东西，所以不参与过滤。
+        val shown = if (filter.isBlank()) scripts else scripts.filter {
+            it.title.contains(filter, ignoreCase = true) || it.id.contains(filter, ignoreCase = true)
+        }
+        if (shown.isEmpty()) {
+            item(key = "empty") {
                 Text(
                     stringResource(
                         if (filter.isBlank()) R.string.dsh_userscripts_empty
@@ -387,109 +307,32 @@ internal fun UserscriptsContent(
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp),
                 )
-            } else {
+            }
+        } else {
+            item(key = "count") {
                 Text(
                     // 有过滤词时报「命中几个 / 共几个」：只报总数会让人以为过滤没生效
                     if (filter.isBlank()) stringResource(R.string.dsh_userscripts_count, shown.size)
                     else stringResource(R.string.dsh_userscripts_count_filtered, shown.size, scripts.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 2.dp),
-                )
-                for (s in shown) {
-                    ScriptRow(
-                        script = s,
-                        onToggle = { want ->
-                            Userscripts.setEnabled(context, s.id, want)
-                            reload()
-                        },
-                        onDelete = { pendingDelete = s.id },
-                    )
-                }
-            }
-
-            // ── 脚本市场（GreasyFork）──
-            // 放在最后：先把「已经注入/已经装了哪些」说清，再谈「还能装什么」。
-            HorizontalDivider(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .onGloballyPositioned { marketOffset = it.positionInParent().y.toInt() },
-            )
-            Text(
-                stringResource(R.string.dsh_userscripts_market_section),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 2.dp),
-            )
-            Text(
-                stringResource(R.string.dsh_userscripts_market_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = marketQuery,
-                    onValueChange = { marketQuery = it },
-                    singleLine = true,
-                    placeholder = { Text(stringResource(R.string.dsh_userscripts_market_query_hint)) },
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(
-                    onClick = { runSearch(1, reset = true) },
-                    enabled = marketQuery.isNotBlank() && !marketBusy,
-                ) { Text(stringResource(R.string.dsh_userscripts_market_search)) }
-            }
-            if (marketFailText != null) {
-                Text(
-                    marketFailText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
-            if (marketBusy) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                }
-            }
-            if (!marketBusy && marketSearched && marketHits.isEmpty() && marketFailText == null) {
-                Text(
-                    stringResource(R.string.dsh_userscripts_market_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp),
+            items(shown, key = { it.id }) { s ->
+                ScriptRow(
+                    script = s,
+                    onToggle = { want ->
+                        Userscripts.setEnabled(context, s.id, want)
+                        reload()
+                    },
+                    onDelete = { pendingDelete = s.id },
                 )
             }
-            for (hit in marketHits) {
-                MarketRow(
-                    hit = hit,
-                    installed = scripts.any { it.title == hit.name },
-                    busy = installing != 0L || marketBusy,
-                    installing = installing == hit.id,
-                    onInstall = { installHit(hit) },
-                    onOpen = { if (hit.pageUrl.isNotBlank()) openMarketPage(hit.pageUrl) },
-                )
-            }
-            if (marketFull && marketHits.isNotEmpty()) {
-                TextButton(
-                    onClick = { runSearch(marketPage + 1, reset = false) },
-                    enabled = !marketBusy,
-                    modifier = Modifier.padding(start = 8.dp),
-                ) { Text(stringResource(R.string.dsh_userscripts_market_more)) }
-            }
-            Spacer(Modifier.height(24.dp))
         }
+
+        item { HomeBottomSpacer() }
+    }
 
     if (showPaste) {
         AlertDialog(
@@ -552,76 +395,78 @@ internal fun UserscriptsContent(
 }
 
 /**
- * 内置脚本一行：标题 + 摘要 + （有开关就给开关，没有就标「常开」）。
+ * 内置脚本一行：与插件页的内置条目（[me.bmax.apatch.ui.screen.DshPluginScreen] 的
+ * BuiltInHostPluginItem）同一套长相 —— 「内置」标签 + 「不可卸载」那行版本文案 + 标题/开关，
+ * 最后是摘要。这几个内置的正文随包发布（见 [WebScripts.BUILTINS]），只能开关、不能删，
+ * 所以这里没有删除按钮；标签与那行文案直接复用插件页的两个字符串，不再造同义的新串。
  *
- * [checked] 为 null 表示这条没有开关（常开）；[autoTag] 是 compat 在 auto 档时的标记，
- * 说明勾选状态是**按内核自动算出来的**，不是用户上次点的那一下。
+ * [checked] 为 null 表示这条没有开关（常开）。
  */
 @Composable
 private fun BuiltinRow(
     title: String,
     summary: String,
     checked: Boolean?,
-    autoTag: String?,
     onToggle: ((Boolean) -> Unit)?,
     extra: (@Composable () -> Unit)? = null,
 ) {
     ScriptCard {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, style = MaterialTheme.typography.bodyLarge)
-                    if (autoTag != null) {
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            autoTag,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            ModuleLabel(
+                text = stringResource(R.string.dsh_plugin_builtin_label),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        stringResource(R.string.dsh_host_plugin_version),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                Text(
-                    summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (extra != null) {
-                    Spacer(Modifier.height(4.dp))
-                    extra()
+                if (checked != null && onToggle != null) {
+                    Switch(checked = checked, onCheckedChange = onToggle)
+                } else if (extra == null) {
+                    // 只有「真的没有控件」的行才标常开：compat 的控件在 extra 里（三档）
+                    Text(
+                        stringResource(R.string.dsh_userscripts_builtin_always_on),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
                 }
             }
-            if (checked != null && onToggle != null) {
-                Switch(checked = checked, onCheckedChange = onToggle)
-            } else if (extra == null) {
-                // 只有「真的没有控件」的行才标常开：compat 的控件在 extra 里（三档）
-                Text(
-                    stringResource(R.string.dsh_userscripts_builtin_always_on),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.outline,
-                )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (extra != null) {
+                Spacer(Modifier.height(8.dp))
+                extra()
             }
         }
     }
 }
 
 /**
- * 脚本卡片的外壳：与插件页 [me.bmax.apatch.ui.screen.DshPluginScreen] 的插件卡片**同一套几何**。
+ * 脚本卡片的外壳：与插件页 [me.bmax.apatch.ui.screen.DshPluginScreen] 的插件卡片**同一套几何**
+ * —— `fillMaxWidth()` + 20dp 圆角 + `secondaryContainer` 0.2，抄自那张卡。
  *
- * 插件那边是 `LazyColumn`（contentPadding 左右 16dp + spacedBy(12.dp)），脚本这一页是
- * 带 verticalScroll 的 `Column`，每一行自己加 padding —— 于是以前脚本是**裸行**、插件是卡片：
- * 左右起点虽然都是 16dp，但没有卡片背景、右边收到 8dp，看起来与插件页不是一套东西。
- * 这里把宿主几何收进一个壳里：左右 16dp、上下各 6dp（合起来正好 12dp，与插件列表的间距一致），
- * 卡片形状与底色照抄插件卡片。
+ * 左右 16dp 与行间 12dp 交给列表（`LazyColumn` 的 contentPadding + spacedBy），与插件页一样：
+ * 卡片自己不夹带外边距，否则两页的左右起点、行距都会各差一层。
  */
 @Composable
 private fun ScriptCard(content: @Composable () -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f),
@@ -638,11 +483,15 @@ private fun ScriptRow(
 ) {
     ScriptCard {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(script.title, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    script.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
                 Text(
                     listOfNotNull(
                         script.version.takeIf { it.isNotBlank() }?.let { "v$it" },
@@ -717,91 +566,3 @@ private fun modeLabel(mode: String): Int = when (mode) {
     else -> R.string.dsh_webui_compat_auto
 }
 
-/**
- * 市场一行：名字 + 版本/作者/安装量/更新日 + 说明 + 安装（或「已安装」）/ 去浏览器。
- *
- * 说明压到 3 行：GreasyFork 的 description 有的很长，任它铺开会把一页挤成一条。
- */
-@Composable
-private fun MarketRow(
-    hit: ScriptMarket.Hit,
-    installed: Boolean,
-    busy: Boolean,
-    installing: Boolean,
-    onInstall: () -> Unit,
-    onOpen: () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            // 与上面那两种卡片同一套外边距（左右 16dp、上下各 6dp）
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        // 市场是「搜出来的东西」，所以用插件商店那张卡的样式（18dp / surfaceContainer），
-        // 与「已经装好的」那两张卡区分开 —— 这也是本仓既有的两种列表语法。
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        ),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    hit.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    listOfNotNull(
-                        hit.version.takeIf { it.isNotBlank() }?.let { "v$it" },
-                        hit.author.takeIf { it.isNotBlank() }
-                            ?.let { stringResource(R.string.dsh_userscripts_market_by, it) },
-                        hit.installs.takeIf { it > 0 }
-                            ?.let { stringResource(R.string.dsh_userscripts_market_installs, formatCount(it)) },
-                        hit.updated.takeIf { it.isNotBlank() },
-                    ).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (hit.description.isNotBlank()) {
-                    Text(
-                        hit.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            if (installed) {
-                Text(
-                    stringResource(R.string.dsh_userscripts_market_installed),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.outline,
-                )
-            } else if (installing) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            } else {
-                TextButton(onClick = onInstall, enabled = !busy) {
-                    Text(stringResource(R.string.dsh_userscripts_market_install))
-                }
-            }
-            IconButton(onClick = onOpen) {
-                Icon(
-                    Icons.Outlined.OpenInBrowser,
-                    contentDescription = stringResource(R.string.dsh_userscripts_market_page),
-                )
-            }
-        }
-    }
-}
-
-/** 安装量：四位数以上折成 `4.7k` —— 一行里塞六位数字会把它挤成两行。 */
-private fun formatCount(n: Long): String {
-    if (n < 1_000) return n.toString()
-    val k = n / 1000.0
-    return if (k < 10) String.format(Locale.US, "%.1fk", k) else String.format(Locale.US, "%.0fk", k)
-}

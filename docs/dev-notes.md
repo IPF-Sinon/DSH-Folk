@@ -116,9 +116,9 @@ adaptive-icon 的 foreground），主屏对了关于页就不可能错。
 
 ## 脚本市场（GreasyFork）
 
-「用户脚本」页底部是原生市场：搜 greasyfork.org、点一下装进"我装的"那份列表（装完仍是同一套
-开关 / 删除）。它**在原生侧发 HTTP、不经过 WebView** —— 一个坏脚本把页面弄白时，这一页照样能用，
-这正是这一页存在的理由。
+「用户脚本」页右上角的「脚本市场」是**独立一页**（`ScriptMarketScreen`）：搜 greasyfork.org、
+点一下装进"我装的"那份列表（装完仍是同一套开关 / 删除）。它**在原生侧发 HTTP、不经过 WebView** ——
+一个坏脚本把页面弄白时，这一页照样能用，这正是这一页存在的理由。
 
 形状是照着实测的 API 抄的，别按"想当然"改：入口是
 `https://api.greasyfork.org/<locale>/scripts.json`（`greasyfork.org/…/scripts.json` 每个都是
