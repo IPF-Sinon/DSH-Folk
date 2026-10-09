@@ -61,6 +61,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.DshPluginStoreScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.ScriptDetailScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ScriptMarketScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
@@ -219,6 +220,9 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                     GROUP_SCRIPTS -> UserscriptsContent(
                         modifier = Modifier.weight(1f),
                         filter = scriptFilter,
+                        onOpen = { navigator.navigate(ScriptDetailScreenDestination(scriptId = it.id)) },
+                        // 没记来源的那条：更新去市场按名字找一遍
+                        onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },
                     )
                     else -> DshPluginList(
                         // 外层 Column 已经吃掉 scaffold 的 inset，这里不能再吃一遍

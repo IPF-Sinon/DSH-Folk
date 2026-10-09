@@ -3,6 +3,7 @@ package me.bmax.apatch.ui.screen.settings
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -36,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.ScriptDetailScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.ScriptMarketScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
@@ -53,6 +57,9 @@ import me.bmax.apatch.dsh.WebScripts
 import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.util.DshWebCompat
 import me.bmax.apatch.util.ui.HomeBottomSpacer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.bmax.apatch.util.ui.showToast
 
 /**
@@ -105,7 +112,12 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
             )
         },
     ) { padding ->
-        UserscriptsContent(modifier = Modifier.padding(padding))
+        UserscriptsContent(
+            modifier = Modifier.padding(padding),
+            onOpen = { navigator.navigate(ScriptDetailScreenDestination(scriptId = it.id)) },
+            // 没记来源的那条：更新只能去市场按名字找一遍（市场页支持带一个初始查询进来）
+            onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },
+        )
     }
 }
 
@@ -125,8 +137,11 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
 internal fun UserscriptsContent(
     modifier: Modifier = Modifier,
     filter: String = "",
+    onOpen: (Userscripts.Script) -> Unit = {},
+    onOpenMarket: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var master by remember { mutableStateOf(Userscripts.masterEnabled(context)) }
     var scripts by remember { mutableStateOf(Userscripts.list(context)) }
     // 内置那两条有开关的：勾选状态取**当前生效值**（compat 在 auto 下就是按内核算出来的结果）。
@@ -140,6 +155,32 @@ internal fun UserscriptsContent(
 
     fun reload() {
         scripts = Userscripts.list(context)
+    }
+
+    /**
+     * 「更新」：记了来源的直接重拉并替换（[Userscripts.update] 会把旧文件删掉、开关搬过去）；
+     * 没记来源的（从文件导入、或旧版本装的）去市场按名字找一遍 —— 不给一个点了没反应的按钮，
+     * 也不假装能原地更新。网络与落盘都在 IO 线程上（与市场页同一条规矩）。
+     */
+    fun update(script: Userscripts.Script) {
+        val ctx = context
+        scope.launch {
+            val outcome = withContext(Dispatchers.IO) { Userscripts.update(ctx, script.id) }
+            when (outcome) {
+                Userscripts.UpdateOutcome.NO_SOURCE -> {
+                    showToast(ctx, ctx.getString(R.string.dsh_userscripts_update_check_market))
+                    onOpenMarket(script.title)
+                }
+                Userscripts.UpdateOutcome.FETCH_FAILED ->
+                    showToast(ctx, ctx.getString(R.string.dsh_userscripts_update_failed))
+                Userscripts.UpdateOutcome.UP_TO_DATE ->
+                    showToast(ctx, ctx.getString(R.string.dsh_userscripts_update_same))
+                Userscripts.UpdateOutcome.UPDATED -> {
+                    reload()
+                    showToast(ctx, ctx.getString(R.string.dsh_userscripts_update_done))
+                }
+            }
+        }
     }
 
 
@@ -327,6 +368,8 @@ internal fun UserscriptsContent(
                         reload()
                     },
                     onDelete = { pendingDelete = s.id },
+                    onOpen = { onOpen(s) },
+                    onUpdate = { update(s) },
                 )
             }
         }
@@ -474,16 +517,18 @@ private fun ScriptCard(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** 一行：名字 + 版本/时机/大小 + 说明与 `@match` + 开关 + 删除。 */
+/** 一行：名字 + 版本/时机/大小 + 说明与 `@match` + 开关 + 更新 + 移除。点整行进详情页。 */
 @Composable
 private fun ScriptRow(
     script: Userscripts.Script,
     onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit,
+    onOpen: () -> Unit,
+    onUpdate: () -> Unit,
 ) {
     ScriptCard {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -515,6 +560,10 @@ private fun ScriptRow(
                         color = MaterialTheme.colorScheme.outline,
                     )
                 }
+            }
+            // 更新放在开关左边：它是"内容层面"的动作，开关是"跑不跑"的动作，先内容后开关
+            IconButton(onClick = onUpdate) {
+                Icon(Icons.Outlined.Refresh, contentDescription = stringResource(R.string.dsh_userscripts_update))
             }
             Switch(checked = script.enabled, onCheckedChange = onToggle)
             IconButton(onClick = onDelete) {

@@ -34,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,7 +77,7 @@ import me.bmax.apatch.util.ui.showToast
 @OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>
 @Composable
-fun ScriptMarketScreen(navigator: DestinationsNavigator) {
+fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = "") {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -87,7 +88,8 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator) {
         scripts = Userscripts.list(context)
     }
 
-    var marketQuery by remember { mutableStateOf("") }
+    // 从脚本页那条「没记来源」的更新进来时带一个初始查询：直接帮用户搜一遍同名脚本
+    var marketQuery by remember { mutableStateOf(initialQuery) }
     var hits by remember { mutableStateOf<List<ScriptMarket.Hit>>(emptyList()) }
     var page by remember { mutableStateOf(1) }
     var full by remember { mutableStateOf(false) }
@@ -126,13 +128,23 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator) {
         }
     }
 
+    // 带初始查询进来的，进来就搜一次（只一次：initialQuery 在本页生命周期里不再变）
+    LaunchedEffect(initialQuery) {
+        if (initialQuery.isNotBlank()) runSearch(1, reset = true)
+    }
+
     fun installHit(hit: ScriptMarket.Hit) {
         if (installing != 0L) return
         installing = hit.id
         fail = null
         scope.launch {
             val outcome = withContext(Dispatchers.IO) {
-                runCatching { Userscripts.install(context, ScriptMarket.fetch(context, hit.codeUrl)) }
+                runCatching {
+                    val id = Userscripts.install(context, ScriptMarket.fetch(context, hit.codeUrl))
+                    // 记下来源：脚本页那条「更新」才知道去哪拉新的（不往用户正文里塞字段）
+                    if (id != null) Userscripts.rememberSource(context, id, hit.codeUrl)
+                    id
+                }
             }
             outcome.onSuccess { id ->
                 if (id == null) {

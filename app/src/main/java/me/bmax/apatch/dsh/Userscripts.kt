@@ -58,9 +58,32 @@ internal object Userscripts {
         val description: String,
         val enabled: Boolean,
         val bytes: Long,
+        /**
+         * 装它时记下来的来源 URL（市场条目取正文那个地址）；null = 没记（从文件导入、或由
+         * 没有来源功能的旧版本装的）。有了它，[update] 才能真的去拉一份新的。
+         */
+        val source: String? = null,
     )
 
     fun dir(ctx: Context): File = File(ctx.filesDir, DIR)
+
+    /**
+     * 来源 URL 存在 prefs 里的键前缀：`userscript_source_<id>` → url。
+     *
+     * 为什么不写进脚本正文（比如加一行 `// @source`）：正文是用户的东西，往里塞字段等于改
+     * 用户文件；而 id 本身含正文哈希（见 [idOf]），正文一改 id 就变，所以来源必须挂在 prefs
+     * 上，并且**更新时跟着 id 一起搬**（见 [update]）。
+     */
+    private const val KEY_SOURCE_PREFIX = "userscript_source_"
+
+    fun sourceOf(ctx: Context, id: String): String? =
+        prefs(ctx).getString(KEY_SOURCE_PREFIX + id, null)?.takeIf { it.isNotBlank() }
+
+    private fun setSource(ctx: Context, id: String, url: String?) {
+        val e = prefs(ctx).edit()
+        if (url.isNullOrBlank()) e.remove(KEY_SOURCE_PREFIX + id) else e.putString(KEY_SOURCE_PREFIX + id, url)
+        e.apply()
+    }
 
     private fun prefs(ctx: Context) =
         ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
@@ -104,6 +127,7 @@ internal object Userscripts {
                     description = meta.description,
                     enabled = id in on,
                     bytes = f.length(),
+                    source = sourceOf(ctx, id),
                 )
             }
     }
@@ -113,8 +137,10 @@ internal object Userscripts {
      *
      * 幂等：同一个标题 + 同一份正文 = 同一个 id = 同一个文件（重装即覆盖）。标题故意进
      * 文件名（还有一小段正文哈希），这样在文件管理器里也认得出是谁。
+     *
+     * [source] 只在「从市场装」时给：它是 [update] 唯一的依据，也让管理页知道这条能更新。
      */
-    fun install(ctx: Context, text: String, fallbackTitle: String? = null): String? {
+    fun install(ctx: Context, text: String, fallbackTitle: String? = null, source: String? = null): String? {
         if (text.isBlank()) return null
         val meta = parse(text)
         val title = meta.title.ifBlank { fallbackTitle?.trim().orEmpty().ifBlank { "userscript" } }
@@ -127,12 +153,53 @@ internal object Userscripts {
         }.getOrDefault(false)
         if (!wrote) return null
         setEnabled(ctx, id, true)
+        // 只有"知道来源"时才记：从文件导入的没有来源，不能把上一次的来源留在同名 id 上。
+        if (!source.isNullOrBlank()) setSource(ctx, id, source)
         return id
     }
 
     fun remove(ctx: Context, id: String) {
         runCatching { File(dir(ctx), "$id.user.js").delete() }
         setEnabled(ctx, id, false)
+        setSource(ctx, id, null)
+    }
+
+    /**
+     * 装完之后补记一条来源。
+     *
+     * 市场页是「先装、后记」：这样那条 install 调用保持原样（门禁按它认"走的是同一个安装
+     * 入口"），而来源照样落在 prefs 上。正文是用户的东西，不往里面塞 `@source` 字段。
+     */
+    fun rememberSource(ctx: Context, id: String, url: String) = setSource(ctx, id, url)
+
+    /** 某个脚本的正文（详情页要预览它）；读不到返回 null。 */
+    fun code(ctx: Context, id: String): String? =
+        runCatching { File(dir(ctx), "$id.user.js").readText() }.getOrNull()
+
+    /** 一次「更新」的结果：界面照这个翻文案，不猜。 */
+    enum class UpdateOutcome { NO_SOURCE, FETCH_FAILED, UP_TO_DATE, UPDATED }
+
+    /**
+     * 用记下来的来源重新拉一次正文，替换本机上那一份。
+     *
+     * 为什么要把旧的那份删掉：文件名是「标题 + **正文哈希**」（见 [idOf]），正文一改 id 就变
+     * —— 只把新的装进去会留下两份、页面里注入两遍。所以这里把旧的删掉，并把开关状态搬过去。
+     * 正文一字未改时直接回 [UpdateOutcome.UP_TO_DATE]，不动任何文件。
+     *
+     * 阻塞（HTTP + 落盘）：调用方必须在 IO 线程上调，与市场页同一条规矩。
+     */
+    fun update(ctx: Context, id: String): UpdateOutcome {
+        val url = sourceOf(ctx, id) ?: return UpdateOutcome.NO_SOURCE
+        val old = code(ctx, id) ?: return UpdateOutcome.FETCH_FAILED
+        val text = runCatching { ScriptMarket.fetch(ctx, url) }.getOrNull()
+            ?: return UpdateOutcome.FETCH_FAILED
+        if (text == old) return UpdateOutcome.UP_TO_DATE
+        val wasOn = id in enabledIds(ctx)
+        val newId = install(ctx, text, source = url) ?: return UpdateOutcome.FETCH_FAILED
+        // 新 id 已经记好了来源；删旧的只会清掉旧 id 那个键，搬不走新的。
+        if (newId != id) remove(ctx, id)
+        setEnabled(ctx, newId, wasOn)
+        return UpdateOutcome.UPDATED
     }
 
     /** 从 `content://`（文件选择器）读一段正文；读不到返回 null。 */

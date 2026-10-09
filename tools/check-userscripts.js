@@ -556,6 +556,25 @@ const builtinRow = builtinAt > 0 && builtinEnd > builtinAt ? screen.slice(builti
 ok(builtinRow.length > 0 && /R\.string\.dsh_plugin_builtin_label/.test(builtinRow) &&
   /R\.string\.dsh_host_plugin_version/.test(builtinRow) && !/autoTag/.test(screen),
   "不可卸载的内置脚本用插件页那套「内置」标签 + 「DSH-Folk 内置 · 不可卸载」措辞");
+// 用户报「脚本页缺少更新和移除按钮」+ 要一个脚本详情页。三件事的实质：
+// 更新必须知道来源（Script 原来没有来源字段，id 含正文 hash，重新 install 会留下两份），
+// 所以来源存 prefs、更新拉新→装新→删旧→搬开关；没有来源的（文件导入/旧版本装的）不假造原地更新。
+const userscripts = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/Userscripts.kt", "utf8");
+const detail = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/ScriptDetailScreen.kt", "utf8");
+ok(/val source: String\? = null/.test(userscripts) &&
+  /fun rememberSource\(/.test(userscripts) &&
+  /fun update\(ctx: Context, id: String\): UpdateOutcome/.test(userscripts) &&
+  /NO_SOURCE/.test(userscripts) && /UP_TO_DATE/.test(userscripts),
+  "来源存进 prefs、更新按 outcome 分流（没来源 → NO_SOURCE，正文没变 → UP_TO_DATE）");
+ok(/Icons\.Outlined\.Refresh\b/.test(screen) && /onUpdate/.test(screen) &&
+  /onOpen/.test(screen) && /clickable/.test(screen),
+  "列表行有「更新」+ 整行进详情（列表仍保留快捷开关）");
+ok(/^@Destination<RootGraph>/m.test(detail) && /scriptId: String/.test(detail) &&
+  /R\.string\.dsh_userscripts_update/.test(detail) &&
+  /R\.string\.dsh_userscripts_remove|R\.string\.dsh_userscripts_delete/.test(detail),
+  "详情页是二级目的地（带 scriptId 参数），页内有更新与移除两个动作");
+ok(/heightIn\(max = 320\.dp\)/.test(detail) && /verticalScroll/.test(detail),
+  "正文预览限高的同时给了滚动出路（限高不给路会被 check-text-clipping 抓）");
 ok((screen.match(/ScriptCard \{/g) || []).length >= 2,
   "内置那几段与「我装的」都用同一个壳（同一页不能一半卡片一半裸行）");
 ok(!/Modifier\.fillMaxWidth\(\)\.padding\(start = 16\.dp, end = 16\.dp, top = 8\.dp, bottom = 8\.dp\)/.test(screen) &&
@@ -600,7 +619,7 @@ ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
     /contentDescription = stringResource\(R\.string\.dsh_pip_button\)/.test(activity),
     "悬浮菜单里有画中画按钮（带无障碍名）");
   ok(/private fun enterPip\(\): Boolean/.test(activity) &&
-    /return runCatching \{ enterPictureInPictureMode\(builder\.build\(\)\) \}\.getOrDefault\(false\)/.test(activity) &&
+    /return runCatching \{ enterPictureInPictureMode\(pipParams\(autoEnter = true\)\) \}\.getOrDefault\(false\)/.test(activity) &&
     /switchOff = pipSupported\(\) && !pipAllowed\(\)/.test(activity) &&
     /hasSystemFeature\(PackageManager\.FEATURE_PICTURE_IN_PICTURE\)/.test(activity) &&
     /OPSTR_PICTURE_IN_PICTURE/.test(activity) && /unsafeCheckOpNoThrow/.test(activity) &&
@@ -614,6 +633,26 @@ ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
     "画中画时把悬浮球藏起来（那么小的窗口里它只会挡内容）");
   ok(/Settings\.ACTION_APPLICATION_DETAILS_SETTINGS/.test(activity),
     "引导里的「去设置」真的能打开应用信息页");
+  // 自动进入画中画（用户要的是「离开应用后小窗还在」）：31+ 交给系统（setAutoEnterEnabled +
+  // setPictureInPictureParams），31 以下用 onUserLeaveHint 兜底；两条路都必须是**静默**的
+  // —— 自动进入时弹引导是错的（用户只是按了 home）。
+  ok(/private fun pipParams\(autoEnter: Boolean\): PictureInPictureParams/.test(activity) &&
+    /builder\.setAutoEnterEnabled\(autoEnter\)/.test(activity) &&
+    /Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.S/.test(activity),
+    "自动进入走 pipParams(autoEnter)：31+ 才 setAutoEnterEnabled（12 起才有这个 API）");
+  ok(/setPictureInPictureParams\(pipParams\(autoEnter = true\)\)/.test(activity),
+    "onResume 里把「自动进入」写进参数，划走时由系统留在小窗（30 以下靠 onUserLeaveHint）");
+  ok(/override fun onUserLeaveHint\(\)/.test(activity) &&
+    /enterPip\(\)/.test(activity) &&
+    !/onUserLeaveHint\(\)[\s\S]{0,400}showPipGuide\.value = true/.test(activity),
+    "30 以下的兜底是 onUserLeaveHint，且自动进入不弹引导（引导只属于手动按钮那条路）");
+  ok(/if \(!inPip\.value\)/.test(activity) || /isInPictureInPictureMode/.test(activity),
+    "已经在画中画时不再触发一次进入");
+  ok(/private var suppressAutoPip/.test(activity) &&
+    (activity.match(/suppressAutoPip = true/g) || []).length >= 3 &&
+    /!suppressAutoPip|&& suppressAutoPip|\|\| suppressAutoPip/.test(activity) &&
+    /suppressAutoPip = false/.test(activity),
+    "主动跳外部页面（邮件/外链/选文件）时立旗压住自动画中画，回来再撤");
   for (const k of ["dsh_pip_button", "dsh_pip_guide_title", "dsh_pip_guide_text_supported",
                    "dsh_pip_guide_text_unsupported", "dsh_pip_guide_settings"]) {
     ok(zhS.includes('name="' + k + '"') && enS.includes('name="' + k + '"'),

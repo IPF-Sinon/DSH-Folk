@@ -479,6 +479,7 @@ class DshWebUiActivity : AppCompatActivity() {
                                         val scheme = target.scheme?.lowercase()
                                         if (scheme != "http" && scheme != "https") {
                                             // mailto: / intent: 之类交给系统，别在 WebView 里报错
+                                            suppressAutoPip = true
                                             return runCatching {
                                                 startActivity(
                                                     Intent(Intent.ACTION_VIEW, target)
@@ -487,6 +488,7 @@ class DshWebUiActivity : AppCompatActivity() {
                                             }.isSuccess
                                         }
                                         if (isLoopback(target.toString())) return false
+                                        suppressAutoPip = true
                                         DshWebUi.openExternal(this@DshWebUiActivity, target.toString())
                                         return true
                                     }
@@ -633,6 +635,8 @@ class DshWebUiActivity : AppCompatActivity() {
                                             type = "*/*"
                                         }
                                         return try {
+                                            // 选择器要盖在最上面：这一次别自动缩成小窗
+                                            suppressAutoPip = true
                                             fileChooser.launch(intent)
                                             true
                                         } catch (e: ActivityNotFoundException) {
@@ -711,19 +715,44 @@ class DshWebUiActivity : AppCompatActivity() {
     private val showPipGuide = mutableStateOf(false)
 
     /**
+     * 下一次 [onUserLeaveHint] 不要自动进小窗。
+     *
+     * 31 以下没有「自动进入画中画」那个开关，只能靠 onUserLeaveHint 补；而**我们自己**去调
+     * 外部页面（文件选择器、浏览器）时它也可能来一次 —— 那时候缩成小窗是错的（选择器会开在
+     * 一个小窗上）。所以这两处出手前先立个旗，回到前台（[onResume]）再撤掉。
+     */
+    private var suppressAutoPip = false
+
+    /**
      * 进画中画。返回 false = 现在进不去，调用方去弹引导。
      *
      * 两种「进不去」要分开说：设备没有这个能力（[pipSupported]）与系统把本应用的画中画关了
      * （[pipAllowed]，应用信息页里的那个开关）。引导文案据此二选一，所以这里也分开判。
      */
     private fun enterPip(): Boolean {
-        val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(9, 16))
-        // 12+ 的无缝缩放：小窗与大窗之间的过渡不会闪一下
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) builder.setSeamlessResizeEnabled(true)
+        // 已经在画中画里就不再"进"一次：那会把小窗内容重建一遍
+        if (isInPictureInPictureMode) return false
         // 以系统给的答复为准，不拿 AppOps 预判：个别 ROM 把它报成 MODE_IGNORED 却实际允许，
         // 预判会把本来能进的用户直接挡进引导里。[pipSupported] / [pipAllowed] 只用来决定
         // 引导怎么说（是不支持，还是本应用的开关被关了）。
-        return runCatching { enterPictureInPictureMode(builder.build()) }.getOrDefault(false)
+        return runCatching { enterPictureInPictureMode(pipParams(autoEnter = true)) }.getOrDefault(false)
+    }
+
+    /**
+     * 画中画参数。
+     *
+     * 31+ 带 [PictureInPictureParams.Builder.setAutoEnterEnabled]：设过一次之后，用户按 home /
+     * 划走时系统自己把小窗留在应用外 —— 这正是「在应用外也看得见」要的那一步，不再依赖用户
+     * 先点一次悬浮菜单里的按钮。31 以下这个字段不存在，只能走 [onUserLeaveHint] 兜底。
+     * 12+ 的无缝缩放：小窗与大窗之间过渡不闪一下。
+     */
+    private fun pipParams(autoEnter: Boolean): PictureInPictureParams {
+        val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(9, 16))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setSeamlessResizeEnabled(true)
+            builder.setAutoEnterEnabled(autoEnter)
+        }
+        return builder.build()
     }
 
     private fun pipSupported(): Boolean =
@@ -764,6 +793,17 @@ class DshWebUiActivity : AppCompatActivity() {
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         inPip.value = isInPictureInPictureMode
+    }
+
+    /**
+     * 31 以下没有 setAutoEnterEnabled，只能在用户离开时自己进小窗。
+     *
+     * **静默**：这里弹引导会在用户正要走的时候糊一脸；不支持 / 被系统关掉时 [enterPip] 自己
+     * 会失败，什么都不做就是对的。我们自己调外部页面那两次已经用 [suppressAutoPip] 挡掉。
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && !suppressAutoPip) enterPip()
     }
 
     /** 选择结果 → WebView 要的 Uri 数组。取消或无数据一律 null。 */
@@ -958,6 +998,13 @@ class DshWebUiActivity : AppCompatActivity() {
         // 「别看本应用」：all 档时把整页（含 WebView 的虚拟子树）从无障碍树里隐掉。
         // 每页重进都重设一次，用户在设置里改了档位不必重启 App。
         A11yOwn.applyToWindow(window)
+        // 画中画「自动进入」：31+ 靠这个参数生效 —— 设一次之后，用户按 home / 划走时系统自己
+        // 缩成小窗（应用外也看得见）。每页重进都重设一次，用户改了系统那个开关也不必重启。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && pipSupported()) {
+            runCatching { setPictureInPictureParams(pipParams(autoEnter = true)) }
+        }
+        // 回到前台：上一轮那两次"主动离开"的豁免用完就撤
+        suppressAutoPip = false
     }
 
     override fun onDestroy() {
