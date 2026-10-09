@@ -633,7 +633,7 @@ ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
   // **保留**悬浮球，否则小窗里根本没有那个按钮可用；按钮本身改成切换（在 PiP 里点 = 回全屏），
   // 而且这条切换路径不能弹引导（它 return true，不落进 showPipGuide 那条分支）。
   ok(!/if \(!inPip\.value\) \{\s*\n\s*WebUiFloatingBall\(/.test(activity) &&
-    /exitPictureInPictureMode\(\)/.test(activity) &&
+    /FLAG_ACTIVITY_REORDER_TO_FRONT/.test(activity) &&
     /isInPictureInPictureMode/.test(activity),
     "画中画里保留悬浮球，且画中画按钮是切换（再点回全屏，不弹引导）");
   // 用户报「离开应用后画中画不显示」。根因（代码可证）：suppressAutoPip 一旦被某次失败的

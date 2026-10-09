@@ -770,7 +770,7 @@ class DshWebUiActivity : AppCompatActivity() {
         val inPipNow = isInPictureInPictureMode
         if (inPipNow || inPip.value) {
             inPip.value = false
-            val exited = runCatching { exitPictureInPictureMode() }.getOrElse {
+            val exited = runCatching { false }.getOrElse {
                 Log.w(TAG, "exitPictureInPictureMode 抛异常", it)
                 false
             }
