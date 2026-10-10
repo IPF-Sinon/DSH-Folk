@@ -396,7 +396,7 @@ internal fun UserscriptsContent(
         scripts.firstOrNull { it.id == id }?.let { s ->
             // 正文可能几千行：读盘不能挂在主线程上（重组一次读一次）。用 produceState 在 IO
             // 线程读，读完换进来；加载中先给占位 —— 与列表那条路同一条规矩。
-            val preview by produceState(CodePreview(loading = true), s.id) {
+            val preview by produceState(CodePreview(loading = true, text = ""), s.id) {
                 value = CodePreview(
                     loading = false,
                     text = withContext(Dispatchers.IO) { Userscripts.code(context, s.id) },
