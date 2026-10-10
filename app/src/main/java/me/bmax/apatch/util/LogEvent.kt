@@ -360,10 +360,10 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         if (dshWindow == null) {
             notes += "dsh 日志时间裁切失败，归档里这一项为空"
         } else {
-            // 旧版本写的行没有时间戳：参加不了严格比较，按「宁可多给不漏」原样保留。
-            // 不写这一句，读报告的人会以为窗口没生效。
+            // 旧版本写的行没有时间戳：参加不了严格比较，直接丢弃（严格按时间，见 DshLogWindow）。
+            // 不写这一句，读报告的人就看不出这一段有内容被丢掉。
             if (dshWindow.untimed > 0) {
-                notes += "dsh 日志有 ${dshWindow.untimed} 行没有时间戳（旧版本写入），未按时间裁切、原样保留"
+                notes += "dsh 日志有 ${dshWindow.untimed} 行没有时间戳（旧版本写入），已直接丢弃（严格按时间）"
             }
             if (dshWindow.dropped > 0) {
                 notes += "dsh 日志按时间窗口裁掉 ${dshWindow.dropped} 行" +

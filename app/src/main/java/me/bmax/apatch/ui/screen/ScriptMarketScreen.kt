@@ -108,6 +108,9 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
     // 当前列的是不是「热门」：热门与搜索结果共用 hits / page / full，靠这个标志区分
     // 标题显示什么、以及「更多」该去取搜索的下一页还是热门的下一页。
     var popular by remember { mutableStateOf(false) }
+    // 失败后「重试」按上一次那条路重来：true = 热门，false = 搜索。不能复用 popular ——
+    // 热门失败时 popular 会被重置成 false，重试就会悄悄变成一次空查询的搜索。
+    var retryPopular by remember { mutableStateOf(true) }
 
     // 「从链接安装」弹窗（粘贴 greasyfork 脚本页 / .user.js 地址）：输入与标红状态住在
     // 共用的 UserscriptLinkInstallDialog 里，这里只留「开没开」。
@@ -116,6 +119,7 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
     // 一次只发一个请求：手机上的网络本来就慢，并发只会让两边都超时。
     fun runSearch(next: Int, reset: Boolean) {
         if (busy || marketQuery.isBlank()) return
+        retryPopular = false
         busy = true
         fail = null
         scope.launch {
@@ -152,6 +156,7 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
      */
     fun runPopular(next: Int, reset: Boolean) {
         if (busy) return
+        retryPopular = true
         busy = true
         fail = null
         scope.launch {
@@ -184,6 +189,11 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
     // 是最差的首屏。
     LaunchedEffect(initialQuery) {
         if (initialQuery.isNotBlank()) runSearch(1, reset = true) else runPopular(1, reset = true)
+    }
+
+    /** 失败后的「重试」：按上一次那条路原样重来一次（首屏热门失败 = 重新拉热门）。 */
+    fun retry() {
+        if (retryPopular) runPopular(1, reset = true) else runSearch(1, reset = true)
     }
 
     fun installHit(hit: ScriptMarket.Hit) {
@@ -362,11 +372,20 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
                 MarketHead(
                     hint = stringResource(R.string.dsh_userscripts_market_hint),
                     queryHint = stringResource(R.string.dsh_userscripts_market_query_hint),
-                    emptyText = stringResource(R.string.dsh_userscripts_market_empty),
+                    // 加载态与失败态都要有字，不能只留一个转圈（首屏一次请求慢/被墙时，
+                    // 「只有一行灰字、底下全空」看起来就和白屏一样）——见用户报的那个 bug。
+                    loadingText = stringResource(R.string.dsh_userscripts_market_loading),
+                    retryText = stringResource(R.string.dsh_userscripts_market_retry),
+                    emptyText = stringResource(
+                        // 热门空了说「热门暂时没有」，搜索空了才是「没有结果」：两种空态不是一回事
+                        if (retryPopular) R.string.dsh_userscripts_market_empty_popular
+                        else R.string.dsh_userscripts_market_empty
+                    ),
                     busy = busy,
                     searched = searched,
                     showEmpty = searched && hits.isEmpty() && failText == null,
                     failText = failText,
+                    onRetry = { retry() },
                 )
                 // 主源失败时的**浏览入口**：镜像站是静态导航页（没有脚本正文/JSON），
                 // 所以只能看、不能拿来装 —— 这也正是它只出现在这里的原因。看这一页在
@@ -417,19 +436,24 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
 }
 
 /**
- * 结果之前的那一段：说明 + 当前状态（还没搜 / 正在搜 / 搜失败 / 没结果）。
+ * 结果之前的那一段：说明 + 当前状态（加载中 / 失败 / 空 / 还没搜）。
  *
  * 四态分开写，合成一条会把「还没搜」说成「没有结果」——那正是用户第一次进来时看到的画面。
+ * **每一种状态都必须有可见文字**：加载中只画一个 16dp 的转圈，在首屏请求慢或被网络挡住时
+ * 看起来就是"底下全空"（用户报的正是这个）；失败态除了文案还给一个重试。
  */
 @Composable
 private fun MarketHead(
     hint: String,
     queryHint: String,
+    loadingText: String,
+    retryText: String,
     emptyText: String,
     busy: Boolean,
     searched: Boolean,
     showEmpty: Boolean,
     failText: String?,
+    onRetry: () -> Unit,
 ) {
     Column {
         Text(
@@ -445,10 +469,20 @@ private fun MarketHead(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
+                // 失败必须可重试：镜像站那条路只能看、装不了，没有重试等于把用户丢在这儿
+                TextButton(onClick = onRetry) { Text(retryText) }
             }
             busy -> {
                 Spacer(Modifier.height(8.dp))
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        loadingText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             showEmpty -> {
                 Spacer(Modifier.height(8.dp))

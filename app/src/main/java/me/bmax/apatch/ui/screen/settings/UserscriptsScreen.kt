@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -29,6 +30,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -85,10 +88,15 @@ import me.bmax.apatch.util.ui.showToast
  *   收进来了，因为它们本来就是这两条内置的档位。
  * - **下：我装的脚本**（已导入列表）。它回答「我要不要跑自己的 JS」。
  *
- * 安装入口与脚本市场**同一套形态**（本地 `.user.js` 文件 / 从链接安装），见
- * [UserscriptsContent] 顶部那张卡：正文是两处共用的（独立页 + 插件首页的「用户脚本」分组），
- * 所以**入口也只能有一份**。以前它只长在独立页的 Scaffold 上（右下角 FAB + 顶栏链接图标），
- * 而用户从底栏进的是插件首页那一组 —— 那边既没有 FAB 也没有链接图标，于是"看不到安装入口"。
+ * 安装入口与脚本市场**同一套形态**（本地 `.user.js` 文件 / 从链接安装）：正文由两处宿主共用
+ * （独立页 + 插件首页的「用户脚本」分组），所以安装逻辑也只能有一份 —— [UserscriptsContent]
+ * 持有选择器与弹窗，宿主（这里的 Scaffold 与插件首页的 Scaffold）只通过
+ * [UserscriptInstallRequest] 发「本地安装 / 从链接安装」两个请求。
+ *
+ * 用户明确要求**不要**正文顶部那张「安装脚本」卡片，改成**右下角 FAB**（照插件页那个
+ * `Icons.Outlined.FolderOpen` 圆形按钮）。所以入口是「两处宿主各一个 FAB + 顶栏一个链接图标」，
+ * 不再有卡片。上一轮把入口做成正文第一个列表项时，独立页与插件首页确实都看得到；但用户要的是
+ * FAB 形态 —— 这一轮按 FAB 重做，两处都由宿主提供，正文里不再有安装项。
  *
  * 脚本市场（GreasyFork 搜索 + 一键安装）搬去了独立页
  * [me.bmax.apatch.ui.screen.ScriptMarketScreen]：它是「去别处找东西」，与这一页「本机现在注入/
@@ -100,6 +108,7 @@ import me.bmax.apatch.util.ui.showToast
 @Composable
 fun UserscriptsScreen(navigator: DestinationsNavigator) {
     val context = LocalContext.current
+    val installRequest = rememberUserscriptInstallRequest()
     var hideBuiltins by remember { mutableStateOf(DshEnv.userscriptsHideBuiltins(context)) }
 
     Scaffold(
@@ -128,6 +137,14 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
                             ),
                         )
                     }
+                    // 「从链接安装」：与市场同一个位置（顶栏右侧的链接图标）。安装卡撤掉之后，
+                    // 链接安装就剩这一个入口 —— 独立页与插件首页都必须有。
+                    IconButton(onClick = { installRequest.requestLink() }) {
+                        Icon(
+                            Icons.Outlined.Link,
+                            contentDescription = stringResource(R.string.dsh_userscripts_market_link_install),
+                        )
+                    }
                     IconButton(onClick = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) }) {
                         Icon(
                             Icons.Outlined.Storefront,
@@ -137,10 +154,26 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
                 },
             )
         },
+        floatingActionButton = {
+            // 本地安装：与插件页那个 FAB 同形（图标 / 圆形 / 配色），选一个 `.user.js`。
+            // 这里只发请求，真正的选择器与安装仍只有 [UserscriptsContent] 里那一份。
+            FloatingActionButton(
+                onClick = { installRequest.requestLocal() },
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Icon(
+                    Icons.Outlined.FolderOpen,
+                    contentDescription = stringResource(R.string.dsh_userscripts_install_file),
+                )
+            }
+        },
     ) { padding ->
         UserscriptsContent(
             modifier = Modifier.padding(padding),
             hideBuiltins = hideBuiltins,
+            installRequest = installRequest,
             // 没记来源的那条：更新只能去市场按名字找一遍（市场页支持带一个初始查询进来）
             onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },
         )
@@ -148,17 +181,59 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
 }
 
 /**
- * 用户脚本的正文：安装入口 + 内置（应用自带那几段）/ 我装的。
+ * 安装入口的「请求」：宿主的右下角 FAB 与顶栏链接图标只置一个待办标志，真正的选择器（本地
+ * `.user.js`）与弹窗（从链接安装）仍只有 [UserscriptsContent] 里那一份实现。
+ *
+ * 为什么不让两处宿主各自持有一个 `rememberLauncherForActivityResult`：那样安装逻辑会变成
+ * 三份（两个宿主 + 正文），这正是"对齐 UI"要防的事。为什么用「置位 + 消费」而不是自增计数：
+ * 正文会在切组时离开再回到组合（插件首页的「插件 / 用户脚本」两组），自增计数会让**上一次**
+ * 请求在重新进入组合时被重放一次；置位标志由正文消费后即清，重放不会发生。
+ */
+internal class UserscriptInstallRequest {
+    /** 有待处理的「本地 .user.js」请求。 */
+    var local by mutableStateOf(false)
+        private set
+
+    /** 有待处理的「从链接安装」请求。 */
+    var link by mutableStateOf(false)
+        private set
+
+    fun requestLocal() {
+        local = true
+    }
+
+    fun requestLink() {
+        link = true
+    }
+
+    /** 正文已经拉起本地选择器，清掉这次请求（见类 KDoc 的防重放说明）。 */
+    fun consumeLocal() {
+        local = false
+    }
+
+    /** 正文已经打开链接安装弹窗，清掉这次请求。 */
+    fun consumeLink() {
+        link = false
+    }
+}
+
+/** 供宿主持有：与 [UserscriptsContent] 的生命周期同域（`remember`）。 */
+@Composable
+internal fun rememberUserscriptInstallRequest(): UserscriptInstallRequest =
+    remember { UserscriptInstallRequest() }
+
+/**
+ * 用户脚本的正文：内置（应用自带那几段）/ 我装的。
  *
  * 单独抽出来是因为**插件首页的「用户脚本」那一组直接复用它** —— 入口从「设置 → 功能」
  * 右上角搬到插件首页之后，同一个页面在两地各留一份实现，很快就会各长各的（这正是「对齐
- * UI」要防的事）。独立页的顶栏（标题 + 返回 + 市场按钮）留在 [UserscriptsScreen] 里；
- * 插件首页用的是它自己的搜索栏与「商店」按钮。
+ * UI」要防的事）。独立页的顶栏（标题 + 返回 + 市场 + 链接）留在 [UserscriptsScreen] 里；
+ * 插件首页用的是它自己的搜索栏与按钮。
  *
- * **安装入口是正文的第一项**（本地 `.user.js` 文件 / 从链接安装两条路都在那一张卡上）：
- * 它必须跟着正文走 —— 以前它只长在独立页的 Scaffold 上，而底栏进的是插件首页那一组，
- * 那边没有 FAB、也没有顶栏链接图标，用户报的「脚本页看不到安装入口」就是这个；而且内置
- * 那五条会把「我装的」推下去，入口要是摆在它们后面，等于还是要先滚一下才看得见。
+ * **安装入口不在这份正文里**：用户要求撤掉正文顶部那张「安装脚本」卡片，改成宿主 Scaffold
+ * 的**右下角 FAB**（本地 `.user.js`）与**顶栏链接图标**（从链接安装）——两处宿主都要有。
+ * 正文只接宿主的 [UserscriptInstallRequest]，真正干活的选择器与弹窗在这一份实现里
+ * （本函数里的 `pickLocal` 与 [UserscriptLinkInstallDialog]），所以三处不会各写一套安装逻辑。
  *
  * 列表几何与插件列表**逐项一致**：`LazyColumn` + contentPadding 左右 16dp + 12dp 行距，
  * 卡片抄插件卡片那一套（见 [ScriptCard]）。
@@ -174,6 +249,8 @@ internal fun UserscriptsContent(
     onOpenMarket: (String) -> Unit = {},
     /** 是否隐藏「应用内置」那几段（顶栏那个开关控制，默认显示）。 */
     hideBuiltins: Boolean = false,
+    /** 宿主的安装请求（FAB = 本地 / 顶栏链接图标 = 从链接）；null = 这份正文不接请求。 */
+    installRequest: UserscriptInstallRequest? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -207,6 +284,29 @@ internal fun UserscriptsContent(
             } else {
                 reload()
                 showToast(context, context.getString(R.string.dsh_userscripts_installed))
+            }
+        }
+    }
+
+    // 宿主 Scaffold 的 FAB / 顶栏链接图标只发「请求」：正文在这里把它翻译成选择器与弹窗，
+    // 安装逻辑因此仍然只有这一份（独立页与插件首页共用）。请求用置位标志 + 消费，
+    // 切组回来时不会把上一次请求重放一次（见 [UserscriptInstallRequest] 的 KDoc）。
+    if (installRequest != null) {
+        LaunchedEffect(installRequest.local) {
+            if (installRequest.local) {
+                installRequest.consumeLocal()
+                pickLocal.launch(
+                    Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "*/*"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                    }
+                )
+            }
+        }
+        LaunchedEffect(installRequest.link) {
+            if (installRequest.link) {
+                installRequest.consumeLink()
+                showLinkInstall = true
             }
         }
     }
@@ -245,49 +345,9 @@ internal fun UserscriptsContent(
         contentPadding = PaddingValues(top = 8.dp, start = 16.dp, end = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // ── 安装入口：这一页唯一的一份，两处（独立页 / 插件首页那一组）共用 ──
-        // 摆在最前：内置那五条会把「我装的」推下去，入口要是跟它们排在一起就成了"要滚一下
-        // 才看得到"。两条路与原设计一致：本地 `.user.js` 文件、或从链接装。
-        item(key = "install") {
-            ScriptCard {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text(
-                        stringResource(R.string.dsh_userscripts_install_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        stringResource(R.string.dsh_userscripts_install_summary),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        TextButton(onClick = {
-                            pickLocal.launch(
-                                Intent(Intent.ACTION_GET_CONTENT).apply {
-                                    type = "*/*"
-                                    addCategory(Intent.CATEGORY_OPENABLE)
-                                }
-                            )
-                        }) {
-                            Icon(Icons.Outlined.FolderOpen, null, Modifier.size(16.dp))
-                            Spacer(Modifier.size(6.dp))
-                            Text(stringResource(R.string.dsh_userscripts_install_file))
-                        }
-                        TextButton(onClick = { showLinkInstall = true }) {
-                            Icon(Icons.Outlined.Link, null, Modifier.size(16.dp))
-                            Spacer(Modifier.size(6.dp))
-                            Text(stringResource(R.string.dsh_userscripts_market_link_install))
-                        }
-                    }
-                }
-            }
-        }
+        // 安装入口不在这里：用户要求撤掉正文顶部那张「安装脚本」卡，改成宿主 Scaffold 的
+        // 右下角 FAB 与顶栏链接图标（两处宿主 —— 独立页与插件首页那一组 —— 都有）。
+        // 正文只接宿主的安装请求，选择器与弹窗仍是这一份实现（见上面的 installRequest 分支）。
 
         // ── 应用内置：与「我装的脚本」走同一条注入管道，但**不受用户脚本总开关约束** ──
         // 所以放在最上面：这段说明的是「页面被注入什么」，与下面「我要不要跑自己的脚本」是
@@ -346,9 +406,11 @@ internal fun UserscriptsContent(
 
 
         // ── 「我装的」那一段的说明 ──
-        // 这里原来还有一张「启用我装的用户脚本」总开关卡：按用户要求撤掉了。pref
+        // 这一页原来有一张「启用我装的用户脚本」总开关卡：按用户要求撤掉了；后来它搬进设置，
+        // 用户又说不要 —— 现在**界面上没有任何地方能改总开关**。pref
         // （DshEnv.KEY_USERSCRIPTS_ON）与读取路径（Userscripts.masterEnabled，注入管道里那道闸）
-        // 原样保留，总开关的 UI 在「设置 → 功能 → Web 界面打开方式」卡里，这里只读它 —— 现有值仍然生效。
+        // 原样保留：以前关过它的设备仍然一段用户脚本都不注入，而界面里没有开关能再打开
+        // —— 这是用户明确要求的取舍（不要这个开关）。
         item(key = "scope") {
             Text(
                 stringResource(R.string.dsh_userscripts_scope),

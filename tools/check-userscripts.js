@@ -600,12 +600,15 @@ ok(/var pendingDelete by remember \{ mutableStateOf<String\?>\(null\) \}/.test(s
 // 总开关的 UI 从用户脚本页搬到了设置（用户要求删掉脚本页那张卡），所以写调用现在在
   // FunctionSettingsScreen.kt；用户脚本页仍然必须把逐条开关接到引擎，设置页必须同时读与写总开关。
   {
-    const masterScreen = require("fs").readFileSync(
-      "app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt", "utf8");
+    // 用户明确不要这个开关（K1 撤掉设置里那条），所以不再钉「设置页读写总开关」；
+  // 但注入闸仍然读总开关，这里钉 ① 脚本页逐条开关接引擎 ② 总开关读取路径还在。
+  {
+    const lib = require("fs").readFileSync(
+      "app/src/main/java/me/bmax/apatch/dsh/Userscripts.kt", "utf8");
     ok(/Userscripts\.setEnabled\(context, s\.id, want\)/.test(screen) &&
-      /Userscripts\.masterEnabled\(context\)/.test(masterScreen) &&
-      /Userscripts\.setMasterEnabled\(context, on\)/.test(masterScreen),
-      "逐条开关（脚本页）+ 总开关（设置页，读与写都接引擎）");
+      /fun masterEnabled\(/.test(lib) && /KEY_USERSCRIPTS_ON/.test(lib),
+      "逐条开关（脚本页）接引擎；总开关读取路径保留（注入闸不被绕过）");
+  }
   }
 // 设计已换：卡片底部「粘贴脚本 / 从文件选」两个按钮撤掉（粘贴那条路整条没了），改成与脚本
 // 市场同一套 —— 本地 `.user.js` 走 install(context, text)，链接走新的 installFromUrl(...)。

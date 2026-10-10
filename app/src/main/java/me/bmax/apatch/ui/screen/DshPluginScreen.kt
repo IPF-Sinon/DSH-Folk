@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SystemUpdate
@@ -73,6 +74,7 @@ import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
 import me.bmax.apatch.ui.screen.settings.UserscriptsContent
+import me.bmax.apatch.ui.screen.settings.rememberUserscriptInstallRequest
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.ui.component.DshPluginDetailSheet
 import me.bmax.apatch.ui.component.DshPluginProgressDialog
@@ -90,8 +92,8 @@ import me.bmax.apatch.util.ui.LocalSnackbarHost
  * 但内容与逻辑换成 DSH 插件：
  * - 标签从「大小 / 模块 id」换成 **下载量 + 星标**；
  * - 保留 **可更新** 标签；
- * - 右上角进 **插件商店**（dsh-market）；
- * - 右下 FAB 是 **本地安装**（选一个 .tgz）。
+ * - 右上角进 **插件商店**（dsh-market）；脚本那一组则进 **脚本市场**；
+ * - 右下 FAB 是 **本地安装**，两组都有：插件组选一个 `.tgz`，脚本组选一个 `.user.js`。
  */
 /**
  * 这一页的两组内容。用户脚本的入口原本挂在「设置 → 功能」右上角，现在收到这里 ——
@@ -116,6 +118,9 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
     var scriptFilter by rememberSaveable { mutableStateOf("") }
     // 「隐藏内置」与脚本页那一页共用同一个 pref（两处看的是同一件事）。
     var hideBuiltins by remember { mutableStateOf(DshEnv.userscriptsHideBuiltins(context)) }
+    // 脚本那组的安装请求：这一页的顶栏链接图标与右下角 FAB 只发请求，选择器与弹窗仍在
+    // 共用的 UserscriptsContent 里（两处宿主不会各写一套安装逻辑）。
+    val scriptInstall = rememberUserscriptInstallRequest()
 
     LaunchedEffect(runtimeInstalled) {
         if (runtimeInstalled && viewModel.plugins.isEmpty()) viewModel.refresh()
@@ -181,6 +186,16 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                             ),
                         )
                     }
+                    // 脚本那一组的「从链接安装」：与市场同一个位置（顶栏右侧链接图标）。
+                    // 插件组没有这一项（插件从商店/本地 .tgz 装，没有"粘贴链接"这条路）。
+                    if (group == GROUP_SCRIPTS) {
+                        IconButton(onClick = { scriptInstall.requestLink() }) {
+                            Icon(
+                                Icons.Outlined.Link,
+                                contentDescription = stringResource(R.string.dsh_userscripts_market_link_install),
+                            )
+                        }
+                    }
                     IconButton(onClick = {
                         navigator.navigate(
                             if (group == GROUP_SCRIPTS) ScriptMarketScreenDestination(initialQuery = "")
@@ -199,27 +214,38 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
             )
         },
         floatingActionButton = {
-            // 本地安装：留在右下角，与 FolkPatch 模块页一致。
-            // 只在「插件」那一组出现 —— 它选的是 .tgz（插件包）；脚本那一组的安装入口是
-            // 正文顶部那张共用卡（UserscriptsContent 里的「安装脚本」：本地 .user.js / 从链接
-            // 两条路都在上面）。以前那两条路只长在独立页的 Scaffold 上，从底栏进这一组的人
-            // 既没有 FAB 也没有顶栏链接图标，用户报的「脚本页看不到安装入口」就是这个。
-            if (group != GROUP_SCRIPTS) {
-                FloatingActionButton(
-                    onClick = {
+            // 本地安装：留在右下角，与 FolkPatch 模块页一致。**两组都有**：
+            //   - 插件组 → 选一个 .tgz（插件包）；
+            //   - 脚本组 → 选一个 .user.js。后者的安装逻辑在共用的 UserscriptsContent 里，
+            //     这里只发一个请求（以前这里是 `if (group != GROUP_SCRIPTS)`，脚本组既没有
+            //     FAB 也没有顶栏链接图标，用户报的「脚本页看不到安装入口」就是这个）。
+            FloatingActionButton(
+                onClick = {
+                    if (group == GROUP_SCRIPTS) {
+                        // 正文（UserscriptsContent）只在运行时已装时组合；没装时这一组的界面是
+                        // 「需要先装运行时」，这时不发请求 —— 否则请求会一直挂着，等以后回到
+                        // 这一组时突然弹出选择器。
+                        if (runtimeInstalled) scriptInstall.requestLocal()
+                    } else {
                         pickTarball.launch(
                             Intent(Intent.ACTION_GET_CONTENT).apply {
                                 type = "*/*"
                                 addCategory(Intent.CATEGORY_OPENABLE)
                             }
                         )
-                    },
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ) {
-                    Icon(Icons.Outlined.FolderOpen, contentDescription = stringResource(R.string.dsh_local_install))
-                }
+                    }
+                },
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Icon(
+                    Icons.Outlined.FolderOpen,
+                    contentDescription = stringResource(
+                        if (group == GROUP_SCRIPTS) R.string.dsh_userscripts_install_file
+                        else R.string.dsh_local_install
+                    ),
+                )
             }
         },
     ) { innerPadding ->
@@ -238,6 +264,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                         modifier = Modifier.weight(1f),
                         filter = scriptFilter,
                         hideBuiltins = hideBuiltins,
+                        installRequest = scriptInstall,
                         // 没记来源的那条：更新去市场按名字找一遍
                         onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },
                     )

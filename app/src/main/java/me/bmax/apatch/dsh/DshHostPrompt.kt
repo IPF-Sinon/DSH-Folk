@@ -79,8 +79,11 @@ object DshHostPrompt {
      *
      * 17 这一次是**回退**：内容退回到 14 那份（权限挡位整段撤了），但版本号只能往上走 ——
      * 已经落盘了 15/16 的安装如果看到"版本一样"，就不会被覆盖，旧段落会一直留在设备上。
+     *
+     * 19 这一次是「工作区存储映射」：绝对路径（SD 卡 / U 盘）按自身渲染，不再被整条略去；
+     * 同时撤销 host-facts 里「绝对路径不写」的 workaround。18 那次是本文件的上一版内容。
      */
-    private const val PLUGIN_REV = 18
+    private const val PLUGIN_REV = 19
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =
@@ -236,12 +239,10 @@ object DshHostPrompt {
             val workspaceStorageMappings = JSONArray()
             if (workspaceStorageMounted) {
                 for (m in DshFileAccess.workspaceMounts(ctx)) {
-                    // 第二卷（SD 卡 / U 盘）不算「共享存储」：这条事实由 dsh-folk-host.mjs 渲染，
-                    // 而它对 src 固定拼 `/sdcard/` 前缀（`m.src ? "/sdcard/" + m.src : "/sdcard"`），
-                    // 把绝对路径塞进去会渲染出一条根本不存在的 `/sdcard//storage/<卷>/…`。
-                    // 宁可不说，也不告诉 agent 一条假路径（要渲染它得改 .mjs，而门禁钉了它的
-                    // 内容哈希与 PLUGIN_REV）。
-                    if (DshFileAccess.isHostPath(m.src)) continue
+                    // 两种形态（相对 /sdcard 的路径、第二卷的真实宿主绝对路径）都原样写进事实，
+                    // 由 dsh-folk-host.mjs 按形态渲染：绝对路径照它本身写，相对路径才补 `/sdcard/`
+                    // 前缀。以前这里把绝对路径整条跳过（.mjs 固定拼前缀，会渲染出假的
+                    // `/sdcard//storage/…`），于是 SD 卡 / U 盘映射对 agent 完全不可见。
                     workspaceStorageMappings.put(
                         JSONObject().put("src", m.src).put("dest", m.dest)
                     )

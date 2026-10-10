@@ -1572,10 +1572,6 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_handoff_done_message">Copied to %1$s. The prompt is on the clipboard.</string>
     <string name="dsh_userscripts_title">Userscripts</string>
     <string name="dsh_userscripts_scope">Applies to this app own page (the built-in dsh web UI) only. The metadata block, @match / @include / @exclude and @run-at (document-start / -end / -idle) are read the Greasemonkey way.</string>
-    <string name="dsh_userscripts_master">Run my userscripts</string>
-    <string name="dsh_userscripts_master_summary">Off = only the scripts you added are left out; the app built-in ones keep running. The manager is native, not in the WebView — it is the way back when a script breaks the page.</string>
-    <string name="dsh_userscripts_install_title">Install a script</string>
-    <string name="dsh_userscripts_install_summary">A local .user.js file, or a greasyfork script page / .user.js address.</string>
     <string name="dsh_userscripts_install_file">Install from a file</string>
     <string name="dsh_userscripts_code_loading">Loading the source…</string>
     <string name="dsh_userscripts_empty">Nothing installed yet. Use the install card above to pick a local .user.js, or install from a link — either way it runs before the page own scripts.</string>
@@ -1613,7 +1609,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_entry">Userscripts</string>
     <string name="dsh_userscripts_entry_summary">Run your own JS against this app own web UI — a .user.js, no build, no release.</string>
     <string name="dsh_userscripts_market_section">Script marketplace (GreasyFork)</string>
-    <string name="dsh_userscripts_market_hint">Search greasyfork.org and install with one tap; installed scripts land in the list on the userscripts page.</string>
+    <string name="dsh_userscripts_market_hint">Search greasyfork.org: tap Install on a result to add it to the Userscripts list; the button at the bottom right installs a local .user.js, and the link icon in the top bar takes a pasted address.</string>
     <string name="dsh_userscripts_market_query_hint">Search scripts (translate, markdown, …)</string>
     <string name="dsh_userscripts_market_search">Search</string>
     <string name="dsh_userscripts_market_popular">Popular scripts</string>
@@ -1623,6 +1619,9 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_market_mirror">Open the mirror site</string>
     <string name="dsh_userscripts_market_more">More results</string>
     <string name="dsh_userscripts_market_empty">No results</string>
+    <string name="dsh_userscripts_market_empty_popular">No popular scripts right now — try the search above.</string>
+    <string name="dsh_userscripts_market_loading">Loading scripts…</string>
+    <string name="dsh_userscripts_market_retry">Retry</string>
     <string name="dsh_userscripts_market_by">by %1$s</string>
     <string name="dsh_userscripts_market_installs">%1$s installs</string>
     <string name="dsh_userscripts_market_install">Install</string>

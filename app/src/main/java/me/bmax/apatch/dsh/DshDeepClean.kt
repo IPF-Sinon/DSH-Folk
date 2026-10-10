@@ -24,10 +24,12 @@ import java.io.File
  * - **应用自己的日志**（`filesDir/logs` 下的 `*.log`）也在清单里，但**不走文件删除**：LogStore 持有
  *   写句柄，落点改走 [DshRuntime.clearAppLogs]（flush → 关句柄 → 原地截断），见 [delete]。
  * - **绝不列入**的东西（列进去就是数据事故）：`root/.dsh`（会话 / 插件 / 配置）、
- *   `root/.local`（pnpm 的内容存储：**删掉 store 不会立刻让已装插件的文件消失** —— pnpm 默认
- *   硬链接进 `node_modules`，数据还挂在那份链接上 —— 代价是丢缓存与去重、下次安装重新下载、
- *   完整性检查可能报错；本应用在无硬链接设备上会主动降级成 copy 导入（见 DshPluginRepo），
- *   那种情况下删 store 对已装文件没影响、只是白删。无论哪种都没有回收这点空间的理由）、
+ *   `root/.local`（整目录；pnpm 的内容存储：**删掉 store 不会立刻让已装插件的文件消失** ——
+ *   pnpm 默认硬链接进 `node_modules`，数据还挂在那份链接上 —— 代价是丢缓存与去重、下次安装
+ *   重新下载、完整性检查可能报错；本应用在无硬链接设备上会主动降级成 copy 导入（见
+ *   DshPluginRepo），那种情况下删 store 对已装文件没影响、只是白删。无论哪种，store 本体都
+ *   没有回收这点空间的理由；清单里唯一碰到 `root/.local` 的，是 store **各版本目录下的 `tmp`
+ *   临时目录**（`files` / `index.db` / `projects` 一动不动，见 [RUNTIME_JUNK]））、
  *   `.l2s`（proot 的 link2symlink 真身目录：`link()` 被改写成符号链接后真身在这，删了容器里
  *   那些链接全断）、`root/workspace`（用户挂进来的手机目录），以及
  *   `filesDir/runtime-download.tar.gz`（它可能是**正在下载**的运行时，删了会变成一次 SHA
@@ -85,7 +87,19 @@ internal object DshDeepClean {
     /** 共享存储往下翻的层数：够看到 `Download/xxx/` 这一档，又不至于把整张卡翻一遍。 */
     private const val LARGE_SCAN_DEPTH = 3
 
-    /** 运行时里的垃圾清单（rootfs 内相对路径 → 界面上的类别）。 */
+    /**
+     * 运行时垃圾清单（rootfs 内相对路径 → 界面上的类别）。
+     *
+     * 路径里**某一层**可以写成 `*` = 「这一层里的任意一个目录名」（只匹配目录、只匹配一层、
+     * 不跟符号链接），用来收那些带版本段 / 易变名的缓存：pnpm 10 的内容存储临时目录是
+     * `root/.local/share/pnpm/store/v10/tmp`，版本段不能写死（升一个大版本就变成 `v11`）。
+     * 不含 `*` 的条目是精确路径，语义与以前的清单逐字相同。
+     *
+     * **只列明确的缓存 / 临时子目录**，绝不整目录收：`store` 本体（`files` / `index.db` /
+     * `projects` 是 pnpm 的内容存储）、`root/.dsh`、`root/.local` 整目录、`.l2s`、
+     * `root/workspace`、正在下载的运行时包、应用日志（走 [DshRuntime.clearAppLogs]）都不在内
+     * —— 理由见类 KDoc。
+     */
     private val RUNTIME_JUNK = listOf(
         "tmp" to R.string.dsh_clean_kind_temp,
         "var/tmp" to R.string.dsh_clean_kind_temp,
@@ -95,6 +109,10 @@ internal object DshDeepClean {
         "root/.npm" to R.string.dsh_clean_kind_pkg,
         "root/.cache" to R.string.dsh_clean_kind_cache,
         "root/.node-gyp" to R.string.dsh_clean_kind_cache,
+        // pnpm 内容存储里**只有 tmp 是临时目录**（store/<版本>/ 下的真实布局是
+        // files / index.db / projects / tmp，本地实测 pnpm 10/11 的 store 都是这四项）。
+        // 版本段用 `*`：pnpm 升一个大版本就换名字，写死 v10 会在升级后失效。
+        "root/.local/share/pnpm/store/*/tmp" to R.string.dsh_clean_kind_temp,
     )
 
     /** 扫描三块区域。**阻塞**（rootfs 是十万级文件），调用方必须在 IO 线程上跑。 */
@@ -104,9 +122,13 @@ internal object DshDeepClean {
         // ── 1. 运行时（rootfs） ──
         val rootfs = DshEnv.rootfs(ctx)
         val runtime = ArrayList<Target>()
+        val junk = ArrayList<Pair<File, Int>>()
         for ((rel, kind) in RUNTIME_JUNK) {
-            val f = File(rootfs, rel)
-            if (!f.exists() && !isSymlink(f)) continue
+            for (f in expandJunk(rootfs, rel)) junk.add(f to kind)
+        }
+        for ((f, kind) in junk) {
+            // 父子关系照旧：命中父目录就不再列它的子项（同一块空间在清单里只出现一次）
+            if (junk.any { (p, _) -> isUnder(f.absolutePath, p.absolutePath) }) continue
             val (bytes, files) = sizeOf(f)
             runtime.add(Target(f.absolutePath, kind, bytes, files))
         }
@@ -217,6 +239,30 @@ internal object DshDeepClean {
         if (!f.exists() && !isSymlink(f)) return
         val (bytes, files) = sizeOf(f)
         out.add(Target(f.absolutePath, kind, bytes, files))
+    }
+
+    /**
+     * 把一条 [RUNTIME_JUNK] 规则展开成 rootfs 内真实存在的路径。
+     *
+     * `*` 只匹配**该层的目录**（不跟符号链接，否则会顺着链接跑到 rootfs 外）；末层与旧写法
+     * 一致：`exists() || isSymlink()` 才算（链接本身也是要删的条目）。中间层不额外做
+     * `isDirectory` 判断 —— 拼出来的整条路径本来就要过 `exists()`，与旧代码
+     * `File(rootfs, rel)` 的解析结果逐字相同。
+     */
+    private fun expandJunk(rootfs: File, rel: String): List<File> {
+        val segs = rel.split('/')
+        var level = listOf(rootfs)
+        for ((i, seg) in segs.withIndex()) {
+            level = when {
+                seg == "*" -> level.flatMap { dir ->
+                    (dir.listFiles() ?: emptyArray<File>())
+                        .filter { it.isDirectory && !isSymlink(it) }
+                }
+                i == segs.lastIndex -> level.map { File(it, seg) }.filter { it.exists() || isSymlink(it) }
+                else -> level.map { File(it, seg) }
+            }
+        }
+        return level
     }
 
     /**

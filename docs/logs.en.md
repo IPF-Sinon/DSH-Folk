@@ -47,8 +47,10 @@ both ends inclusive at millisecond precision. The timestamp is written by `LogSt
 otherwise the lines that matter most would be exactly the ones missing. Previously the two files were
 read separately as `tail(2000)` lines: that is a line count, and it makes it impossible to tell which
 file the window start falls into. Lines written by older versions carry no timestamp and cannot take
-part in a strict comparison, so they are kept as-is ("better too much than a silent gap") and their
-count is written into the Notes of `basic.txt`; that is the only exception to the rule.
+part in a strict comparison, so they are **dropped outright** (strictly by time); the number dropped
+is written into the Notes of `basic.txt`. A window of `minutes <= 0` ("all") does not trim the time
+range, but those untimestamped lines are **still dropped** — "all" is about the time range, not about
+keeping every line.
 
 **The capability-call audit log (`audit-log.txt`) goes into the archive too**: who called what, when, and what came back — the same data as the
 on-device "privilege call log". It exists because of the 2026-10-04 accessibility report: "the service cannot find the string it just wrote with

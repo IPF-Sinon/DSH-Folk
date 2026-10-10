@@ -150,10 +150,6 @@ object SettingsRegistry {
             add(SettingEntry("function_lan", R.string.dsh_lan_title, R.string.dsh_lan_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_gh_mirror", R.string.dsh_race_title, R.string.dsh_race_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_webui_mode", R.string.dsh_webui_mode, R.string.dsh_webui_mode_summary, SettingCategory.FUNCTION))
-            // 用户脚本总开关（注入管道里那道闸）。功能页上没有用户脚本自己的卡片，UI 就挂在
-            // 紧邻的「Web 界面打开方式」那张卡里（用户脚本只作用于本应用自己的 Web 界面）；
-            // 这条注册表条目是为了让它能被设置搜索搜到。
-            add(SettingEntry("function_userscripts_master", R.string.dsh_userscripts_master, R.string.dsh_userscripts_master_summary, SettingCategory.FUNCTION))
             add(
                 SettingEntry(
                     "module_userscripts",

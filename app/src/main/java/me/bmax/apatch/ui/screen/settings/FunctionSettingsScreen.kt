@@ -73,7 +73,6 @@ import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
-import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.ui.DshWebUi
 import me.bmax.apatch.ui.screen.PluginProgressHost
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
@@ -151,9 +150,6 @@ internal fun DshSettingsScreen(
     var webuiPipAuto by rememberSaveable {
         mutableStateOf(dshPrefs.getBoolean(DshEnv.KEY_WEBUI_PIP_AUTO, true))
     }
-    // 用户脚本总开关（默认开）：注入管道里那道闸，关掉后一段用户脚本都不注入
-    //（随包发的内置那几段不受它约束）。原来在用户脚本页上，按用户要求搬到设置里。
-    var userscriptsMaster by rememberSaveable { mutableStateOf(Userscripts.masterEnabled(context)) }
     // 手机回车换行（默认开）：它管的是 WebUI 输入框里回车是换行还是发送
     // WebView 内核版本只用于显示；读包信息不会触发 WebView 加载，但也没必要每次重组都读
     // 自启动：方式 + 是否同时拉容器。Mode 不是 Parcelable，用 remember 就够
@@ -554,11 +550,6 @@ internal fun DshSettingsScreen(
                     onWebuiPipAutoChange = { on ->
                         webuiPipAuto = on
                         dshPrefs.edit().putBoolean(DshEnv.KEY_WEBUI_PIP_AUTO, on).apply()
-                    },
-                    userscriptsMaster = userscriptsMaster,
-                    onUserscriptsMasterChange = { on ->
-                        userscriptsMaster = on
-                        Userscripts.setMasterEnabled(context, on)
                     },
                     capsWithPermission = capsWithPermission,
                     allFilesGranted = allFilesGranted,

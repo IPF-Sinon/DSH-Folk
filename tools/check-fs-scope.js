@@ -125,7 +125,7 @@ const hostMjs = read("app/src/main/assets/dsh-folk-host.mjs");
 // 它照样绿，而老设备的 ensureInstalled 认为「版本没变」，落盘的还是旧插件。现在钉内容：
 // 改了 .mjs 就必须抬 PLUGIN_REV 并同步这里的哈希（重算：sha256sum app/src/main/assets/dsh-folk-host.mjs）。
 const mjsSha = require("crypto").createHash("sha256").update(hostMjs, "utf8").digest("hex");
-const MJS_SHA = "9489e29c6638ce27341f460a44b0d338ff881630f1eb32fba8cf00639f0ea187";
+const MJS_SHA = "89e186da32221d6c5491089b23c6108352c6a8495cb5f50172ea8cc1f75c05fc";
 console.log("\u2500 #3d 宿主提示词：把工作区挂载与硬链接限制注入 AI（不落在大块 UI 里）");
 ok(/workspaceStorageMounted/.test(hostPrompt) && /workspaceStorageMappings/.test(hostPrompt) &&
   /storageHardlinkSupported/.test(hostPrompt),
@@ -135,7 +135,7 @@ ok(/if \(f\.workspaceStorageMounted === true\)/.test(hostMjs) &&
   "宿主提示词仅在工作区挂载开且不支持硬链接时渲染工作区挂载段");
 ok(/### Phone storage inside the workspace/.test(hostMjs) && /EINVAL/.test(hostMjs),
   "宿主提示词明说 write 工具会撞 EINVAL、推荐 edit/shell 重定向");
-ok(/PLUGIN_REV = 18/.test(hostPrompt) && mjsSha === MJS_SHA,
+ok(/PLUGIN_REV = 19/.test(hostPrompt) && mjsSha === MJS_SHA,
   "改了 .mjs 就必须同时抬 PLUGIN_REV 并更新这里的内容哈希（抬版本是 ensureInstalled 重新落盘的唯一依据）");
 
 console.log("\u2500 #3 ContainerRuntime：存储绑定改为动态、两个运行时都用");

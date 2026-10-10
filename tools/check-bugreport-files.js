@@ -359,8 +359,9 @@ console.log("── 日志时间窗口裁切（DshLogWindow） ──");
     "读盘前先 flushForExit()（缓冲区里的行不能在文件外）");
   // 无时间戳的旧行按当前语义保留，并如实计入 untimed
   ok(/untimed\+\+/.test(lwCode) && /val untimed: Int/.test(lwCode) &&
-    /it\.first == Long\.MIN_VALUE \|\| it\.first in since\.\.until/.test(lwCode),
-    "无时间戳的旧行原样保留（MIN_VALUE 走保留分支）并计入 untimed");
+    /filter \{ it\.first in since\.\.until \}/.test(lwCode) &&
+    !/it\.first == Long\.MIN_VALUE/.test(lwCode),
+    "无时间戳的旧行按严格时间语义直接丢弃（只计数、不再保留）");
   ok(/if \(minutes <= 0\)/.test(lwCode),
     "窗口 minutes <= 0（全部）时不裁，只做跨文件合并排序");
   // 计数要真的写进 notes：否则读报告的人会以为窗口没生效

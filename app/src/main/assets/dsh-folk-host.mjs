@@ -449,10 +449,24 @@ function render(f) {
       lines.push('### Phone storage inside the workspace');
       lines.push('');
       if (mappings.length > 0) {
+        // src has two shapes: a path relative to /sdcard (the emulated volume — also visible in
+        // the container as /sdcard/…), or a real host absolute path such as
+        // /storage/0123-4567/Download (a second volume: SD card / USB drive, which is NOT under
+        // /sdcard in the container). Render each as itself — never glue the two together, or an
+        // absolute source would come out as the non-existent `/sdcard//storage/…`.
         lines.push(
           'The user has bind-mounted parts of the phone\u2019s shared storage into the workspace: ' +
-            mappings.map((m) => '`' + (m.src ? '/sdcard/' + m.src : '/sdcard') + '` \u2192 `/root/workspace/' + m.dest + '`').join(', ') +
-            '.'
+            mappings
+              .map((m) => {
+                const src = typeof m.src === 'string' ? m.src : '';
+                const label = src === '' ? '/sdcard' : src.startsWith('/') ? src : '/sdcard/' + src;
+                return '`' + label + '` \u2192 `/root/workspace/' + m.dest + '`';
+              })
+              .join(', ') +
+            '. ' +
+            'Read and write them through the workspace paths on the right of each arrow: a second-volume ' +
+            'source (an absolute path outside /sdcard) is mounted only there, so do not try to open it ' +
+            'under /sdcard.'
         );
       }
       if (f.storageHardlinkSupported === false) {

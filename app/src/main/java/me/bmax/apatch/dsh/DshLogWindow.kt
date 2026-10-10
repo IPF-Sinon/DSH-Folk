@@ -26,8 +26,11 @@ import java.io.File
  * - 时间戳由**写入方** [LogStore.append] 落在行首（本地时区的 `uuuu-MM-dd HH:mm:ss.SSS`），
  *   读写用的是同一个格式、同一个时区，且由 [LogStore.parseStamp] **严格**解析（畸形前缀不再被
  *   lenient 地滚成某个合法日期）；解析返回的是 epoch 毫秒，比较因此与夏令时无关。
- * - **没有时间戳的行**（这个改动上线前写下的旧日志）无法参加"严格比较"，按"宁可多给不漏"
- *   原样保留，数量记在 [Result.untimed] 里、由调用方写进报告说明。这是本实现唯一的例外。
+ * - **没有时间戳的行**（这个改动上线前写下的旧日志）**直接丢弃**：它们参加不了"严格比较"，
+ *   留着就等于在一个按时间排序的归档里混进一段时间未知的内容。丢了多少如实记在
+ *   [Result.untimed] 里、由调用方写进报告说明。
+ * - **`minutes <= 0`（「全部」）** = 不做时间窗口裁剪，但**没有时间戳的行照样丢** ——
+ *   「全部」说的是时间范围，不是"什么行都收"。
  * - 用的是**写入时的系统时间**：用户改过设备时间/时区时，旧行的语义会跟着变（本地时间格式），
  *   与 logcat 那条按行首解析的路径同一个前提。
  */
@@ -37,9 +40,9 @@ internal object DshLogWindow {
      * 裁切结果。
      *
      * @param text 合并排序 + 裁切之后的正文（行之间用 `\n`）。
-     * @param total 参与裁切的日志行总数（所有文件）。
-     * @param dropped 因超出时间窗口被丢掉的行数。
-     * @param untimed 没有可解析时间戳而被原样保留的行数（见类 KDoc 的例外）。
+     * @param total 读到的日志行总数（所有文件，含被丢弃的无时间戳行）。
+     * @param dropped 因超出时间窗口被丢掉的行数（`minutes <= 0` 时为 0）。
+     * @param untimed 没有可解析时间戳而被丢弃的行数（见类 KDoc）。
      */
     data class Result(
         val text: String,
@@ -48,24 +51,27 @@ internal object DshLogWindow {
         val untimed: Int,
     )
 
-    /** 起点 = now − minutes；[minutes] <= 0（全部）时只做跨文件合并排序，不裁。 */
+    /**
+     * 起点 = now − minutes；[minutes] <= 0（「全部」）时不做窗口裁剪，但仍然丢弃无时间戳的行。
+     */
     fun read(
         files: List<File>,
         minutes: Int,
         nowMillis: Long = System.currentTimeMillis(),
     ): Result {
-        // 时间未知的旧行排在**最前**：它们必然写在有时间戳的行之前（时间戳是这个改动才加的）。
         val entries = ArrayList<Pair<Long, String>>()
+        var total = 0
         var untimed = 0
         for (file in files) {
             // 内存里还没落盘的行先刷出去（见类 KDoc 第 3 点）
             runCatching { LogStore.named(file).flushForExit() }
             val lines = runCatching { file.readLines() }.getOrDefault(emptyList())
             for (line in lines) {
+                total++
                 val ts = LogStore.parseStamp(line)
                 if (ts == null) {
+                    // 严格按时间：解析不出时间戳的行直接丢，只计数（见类 KDoc）
                     untimed++
-                    entries.add(Long.MIN_VALUE to line)
                 } else {
                     entries.add(ts to line)
                 }
@@ -74,14 +80,15 @@ internal object DshLogWindow {
         // 稳定排序：同一时间戳的行保持原来的读取顺序
         val sorted = entries.sortedBy { it.first }
         if (minutes <= 0) {
-            return Result(sorted.joinToString("\n") { it.second }, sorted.size, 0, untimed)
+            // 「全部」= 不裁时间窗口，但无时间戳的行已经在上面的循环里丢掉了
+            return Result(sorted.joinToString("\n") { it.second }, total, 0, untimed)
         }
         val since = nowMillis - minutes * 60_000L
-        val until = sorted.lastOrNull { it.first != Long.MIN_VALUE }?.first ?: nowMillis
-        val kept = sorted.filter { it.first == Long.MIN_VALUE || it.first in since..until }
+        val until = sorted.lastOrNull()?.first ?: nowMillis
+        val kept = sorted.filter { it.first in since..until }
         return Result(
             text = kept.joinToString("\n") { it.second },
-            total = sorted.size,
+            total = total,
             dropped = sorted.size - kept.size,
             untimed = untimed,
         )

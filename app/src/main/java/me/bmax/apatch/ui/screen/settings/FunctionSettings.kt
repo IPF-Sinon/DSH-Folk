@@ -176,14 +176,6 @@ fun FunctionSettingsContent(
     webuiPipAuto: Boolean,
     onWebuiPipAutoChange: (Boolean) -> Unit,
     /**
-     * 用户脚本**总开关**（默认开）。
-     *
-     * 就是注入管道里那道闸（`Userscripts.masterEnabled`）：关掉后本应用自己的页面一段用户脚本
-     * 都不注入；随包发的内置那几段不受它约束。原来在用户脚本页上，按用户要求搬到设置里。
-     */
-    userscriptsMaster: Boolean,
-    onUserscriptsMasterChange: (Boolean) -> Unit,
-    /**
      * 权限已经齐了的能力集合。
      *
      * 原来是三个布尔（通知/媒体/麦克风），加到十几项之后那种写法会变成一串参数 ——
@@ -650,19 +642,6 @@ fun FunctionSettingsContent(
                         title = stringResource(R.string.dsh_webui_mode_ask),
                         summary = stringResource(R.string.dsh_webui_mode_ask_desc),
                         onSelect = { onWebuiModeChange(DshWebUi.MODE_ASK) },
-                    )
-
-                    // 用户脚本总开关（默认开）：用户脚本只作用于本应用自己的 Web 界面，所以
-                    // 与上面「怎么打开它」同处一张卡。开关行几何与画中画卡一致（见 PipSwitchRow）。
-                    Spacer(Modifier.height(12.dp))
-                    HorizontalDivider()
-                    Spacer(Modifier.height(4.dp))
-                    PipSwitchRow(
-                        title = stringResource(R.string.dsh_userscripts_master),
-                        summary = stringResource(R.string.dsh_userscripts_master_summary),
-                        checked = userscriptsMaster,
-                        enabled = true,
-                        onCheckedChange = onUserscriptsMasterChange,
                     )
                 }
             }

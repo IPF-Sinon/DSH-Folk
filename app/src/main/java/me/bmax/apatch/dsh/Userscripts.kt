@@ -88,7 +88,12 @@ internal object Userscripts {
     private fun prefs(ctx: Context) =
         ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
 
-    /** 总开关；页面被脚本搞坏时，管理页（原生）把它关掉即可恢复。 */
+    /**
+     * 注入闸：关掉后本应用自己的页面一段用户脚本都不注入（随包发的内置那几段不受它约束）。
+     *
+     * 用户明确要求界面上**不放这个开关**，所以现在没有任何 UI 能改它 —— 只有 [setMasterEnabled]
+     * 这个写入点（注入行为本身一字未动）。曾经关过的用户无法从界面打开，这是有意的取舍。
+     */
     fun masterEnabled(ctx: Context): Boolean =
         prefs(ctx).getBoolean(DshEnv.KEY_USERSCRIPTS_ON, true)
 
