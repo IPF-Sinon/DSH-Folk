@@ -773,6 +773,25 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_fs_picker_diag_title">没有挂载 —— 诊断信息</string>
     <string name="dsh_fs_picker_diag_hint">报障时截图或复制下面这一段即可：它写明了提供器、document id、根信息，以及我们在哪一步拒绝的。</string>
 
+    <!-- ── 「挂不上」不等于「读不到」：用 SAF 把内容复制进来（详见 DshSafImport）── -->
+    <string name="dsh_copy_ws_action">复制进工作区</string>
+    <string name="dsh_copy_ws_progress_title">正在复制进工作区</string>
+    <string name="dsh_copy_ws_counts">已复制 %1$d 个，跳过 %2$d 个，失败 %3$d 个</string>
+    <string name="dsh_copy_ws_current">当前：%1$s</string>
+    <string name="dsh_copy_ws_cancel">取消复制</string>
+    <string name="dsh_copy_ws_done_title">复制完成</string>
+    <string name="dsh_copy_ws_cancelled_title">复制已取消</string>
+    <string name="dsh_copy_ws_dest">已复制到容器里的 %1$s —— 容器里的 agent 直接就能读到。</string>
+    <string name="dsh_copy_ws_once">这是一次性复制，不是实时同步：手机那边的后续改动不会跟过来。</string>
+    <string name="dsh_copy_ws_again">要更新内容时，回到这里再点一次「复制进工作区」—— 第二次会用一个新名字，不会覆盖这一份。</string>
+    <string name="dsh_copy_ws_runtime_rebuild">重装运行时 / 切换版本会重建容器文件系统，物理复制进来的内容可能被清掉（挂载进工作区的映射不受影响）；重要数据请另外备份。</string>
+    <string name="dsh_copy_ws_first_error">首个失败：%1$s</string>
+    <string name="dsh_copy_ws_stopped_entries">条目数到达上限（%1$d 个）就停了，只复制了一部分。</string>
+    <string name="dsh_copy_ws_stopped_bytes">累计大小到达上限（%1$d MB）就停了，只复制了一部分。</string>
+    <string name="dsh_copy_ws_stopped_space">手机可用空间低于 %1$d MB 就停了，只复制了一部分。</string>
+    <string name="dsh_copy_ws_stopped_depth">比 %1$d 层更深的子目录没有复制；其余照常复制。</string>
+    <string name="dsh_copy_ws_error">复制没能开始：%1$s</string>
+
     <!-- ── 深度清理（长按「清理资源和缓存」进来） ── -->
     <string name="dsh_clean_title">深度清理</string>
     <string name="dsh_clean_registry_summary">扫描运行时临时文件、缓存与日志，以及大文件 / 大文件夹</string>

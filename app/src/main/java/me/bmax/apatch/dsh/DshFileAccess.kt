@@ -311,6 +311,17 @@ object DshFileAccess {
      * [PickerHostDir.Unreadable]）。
      */
     private fun ownHostDir(ctx: Context, docId: String): PickerHostDir? {
+        val path = ownCandidatePath(ctx, docId) ?: return null
+        return resolveHostDir(File(path))
+    }
+
+    /**
+     * 自家提供器的文档 id 推出的**候选路径**（不解析、不判定），与 [ownHostDir] 用的是同一条
+     * 换算 —— 判定与诊断各写一份必然有一天对不上（诊断里会出现"候选是空、状态却有值"这种
+     * 自相矛盾的组合，见 [pickerDiagnostics]）。返回 null 表示"这条 id 压根不该出现在这个
+     * 提供器下"（越界 / 段非法）。
+     */
+    private fun ownCandidatePath(ctx: Context, docId: String): String? {
         val base = runCatching { ctx.dataDir.canonicalFile }.getOrNull() ?: return null
         val rel = safeSegments(docId) ?: return null
         val target = if (rel.isEmpty()) base else File(base, rel)
@@ -320,7 +331,7 @@ object DshFileAccess {
         ) {
             return null
         }
-        return resolveHostDir(target)
+        return target.path
     }
 
     /**
@@ -338,6 +349,17 @@ object DshFileAccess {
      * [PickerHostDir.Unreadable]，调用方据此给"这个目录本应用用不了"那句提示 —— 不假装挂上。
      */
     private fun shapeHostDir(docId: String): PickerHostDir? {
+        val path = shapeCandidatePath(docId) ?: return null
+        return resolveHostDir(File(path))
+    }
+
+    /**
+     * [shapeHostDir] 认出来的**候选路径**（`raw:` / 绝对 / `storage/` / `sdcard/` 形状），
+     * 不解析、不判定。判定与诊断共用这一处换算：诊断里 `candidate:` 那一行必须是**这个**
+     * 路径，而不是"另一条路算出来的东西"（见 [pickerDiagnostics]）。返回 null = 形状不成立
+     * （没命中任一约定，或路径为空）。
+     */
+    private fun shapeCandidatePath(docId: String): String? {
         val clean = docId.replace('\\', '/')
         val path = when {
             clean.startsWith("raw:") -> clean.removePrefix("raw:")
@@ -348,7 +370,7 @@ object DshFileAccess {
         // safeSegments 返回空串表示"根"——绝对路径的根（`/`）不是可挂的目录，拒。
         val rel = safeSegments(path) ?: return null
         if (rel.isEmpty()) return null
-        return resolveHostDir(File("/$rel"))
+        return "/$rel"
     }
 
     /**
@@ -578,8 +600,13 @@ object DshFileAccess {
      *   （`buildRootsUri`）—— 有些提供器只在 root 的 summary 或 documentId 里暴露路径线索
      *   （自家那个 summary 就是 `rootfs/root/.dsh (sessions, profiles)`）；
      * - **我们自己走到哪一步**：`own` / `raw` / `absolute` / `relative-storage` /
-     *   `volume-candidate` / `no-candidate`，以及卷候选那一步的现场（候选路径、存在 / 是目录 /
-     *   读得到、SAF 子项名、宿主子项名、显示名对不对得上 —— 显示名只是弱证据）。
+     *   `volume-candidate` / `no-candidate`；
+     * - `candidate` / `candidateState`：**每个分支都填**（`raw` / `absolute` /
+     *   `relative-storage` / `own` 这些"id 自己就是路径证据"的分支同样要给候选），候选一律取
+     *   自**判定那一侧用的同一条换算**，状态（exists / dir / readable）说的就是**那个候选**。
+     *   确实推不出候选（`no-uri` / `no-authority` / `no-id` / `no-candidate`，或 id 形状非法）
+     *   时两行都写 [DIAG_NONE] —— 不留"候选是空、状态却有值"这种自相矛盾的组合；
+     * - SAF 子项名 / 宿主子项名 / 显示名对不对得上（显示名只是弱证据，从不单独当判据）。
      *
      * **所有 query 都 try/catch**（提供器不认某一列、权限没了都是家常便饭）：拿不到就记
      * [DIAG_QUERY_FAILED]，绝不让诊断自己抛异常。逐列单独查，一家少一列不影响其余列。
@@ -621,7 +648,8 @@ object DshFileAccess {
 
         // ── 我们自己走到哪一步（与 resolvePickerHostDir 的分支顺序逐条对应）──
         val isOwn = authority != null && ownDocsAuthority().equals(authority, ignoreCase = true)
-        val shape = if (!isOwn && clean.isNotEmpty()) shapeHostDir(clean) else null
+        val shape = if (!isOwn && clean.isNotEmpty()) shapeCandidatePath(clean) else null
+        val volume = if (shape == null && !isOwn && clean.isNotEmpty()) candidateHostDir(clean) else null
         val branch = when {
             uri == null -> "no-uri"
             authority == null -> "no-authority"
@@ -632,14 +660,26 @@ object DshFileAccess {
                 clean.startsWith("storage/") || clean.startsWith("sdcard/") -> "relative-storage"
                 else -> "absolute"
             }
-            candidateHostDir(clean) != null -> "volume-candidate"
+            volume != null -> "volume-candidate"
             else -> "no-candidate"
         }
 
-        // ── 卷候选那一步的现场 ──
-        val candidate = candidateHostDir(clean)
-        val canon = candidate?.let {
-            runCatching { File(normalizeHostAlias(it.path)).canonicalFile }.getOrNull()
+        // ── 候选路径 + **它自己**的现场 ──
+        //
+        // 每个分支都要给出候选，而且候选与状态必须来自**同一个**路径：以前只在卷候选那一支算
+        // candidate，`absolute`（真实路径就是 document id）那支就出现"candidate: (none)"配上
+        // "exists=false dir=false readable=false" —— 用户看到的是自相矛盾的两行（2026-10 真机
+        // 截图：Termux 的 id 明明就是真实路径，却显示没有候选）。现在候选按 branch 从
+        // **判定那一侧用的同一条换算**里取（[ownCandidatePath] / [shapeCandidatePath] /
+        // [candidateHostDir]），确实推不出来时才两边都写 [DIAG_NONE]。
+        val candidatePath: String? = when (branch) {
+            "own" -> ownCandidatePath(ctx, treeId)
+            "raw", "absolute", "relative-storage" -> shape
+            "volume-candidate" -> volume?.path
+            else -> null
+        }
+        val canon = candidatePath?.let {
+            runCatching { File(normalizeHostAlias(it)).canonicalFile }.getOrNull()
         }
         val candDir = canon != null && canon.isDirectory
         val candReadable = if (canon != null && canon.isDirectory) hostDirReadable(canon.path) else false
@@ -671,8 +711,14 @@ object DshFileAccess {
             "root" to rootText,
             "roots" to if (allRoots.isEmpty()) DIAG_NONE else allRoots.joinToString(" ; "),
             "branch" to branch,
-            "candidate" to (candidate?.path ?: DIAG_NONE),
-            "candidateState" to "exists=${canon?.exists() == true} dir=$candDir readable=$candReadable",
+            "candidate" to (candidatePath ?: DIAG_NONE),
+            // 没有候选（= 路径压根推不出来）时状态同样写 (none)：不留"候选是空、状态却有值"
+            // 这种组合。有候选时这三项说的就是**那个候选**的状态。
+            "candidateState" to if (candidatePath == null) {
+                DIAG_NONE
+            } else {
+                "exists=${canon?.exists() == true} dir=$candDir readable=$candReadable"
+            },
             "safChildren" to if (safNames == null) DIAG_QUERY_FAILED else "${safNames.size}: ${namesPreview(safNames)}",
             "hostChildren" to if (hostNames == null) DIAG_QUERY_FAILED else "${hostNames.size}: ${namesPreview(hostNames)}",
             "nameMatch" to "${nameMatch?.toString() ?: DIAG_NONE} (weak, never the sole reason)",
