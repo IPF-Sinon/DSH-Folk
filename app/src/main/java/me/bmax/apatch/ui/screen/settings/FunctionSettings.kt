@@ -176,6 +176,14 @@ fun FunctionSettingsContent(
     webuiPipAuto: Boolean,
     onWebuiPipAutoChange: (Boolean) -> Unit,
     /**
+     * 用户脚本**总开关**（默认开）。
+     *
+     * 就是注入管道里那道闸（`Userscripts.masterEnabled`）：关掉后本应用自己的页面一段用户脚本
+     * 都不注入；随包发的内置那几段不受它约束。原来在用户脚本页上，按用户要求搬到设置里。
+     */
+    userscriptsMaster: Boolean,
+    onUserscriptsMasterChange: (Boolean) -> Unit,
+    /**
      * 权限已经齐了的能力集合。
      *
      * 原来是三个布尔（通知/媒体/麦克风），加到十几项之后那种写法会变成一串参数 ——
@@ -642,6 +650,19 @@ fun FunctionSettingsContent(
                         title = stringResource(R.string.dsh_webui_mode_ask),
                         summary = stringResource(R.string.dsh_webui_mode_ask_desc),
                         onSelect = { onWebuiModeChange(DshWebUi.MODE_ASK) },
+                    )
+
+                    // 用户脚本总开关（默认开）：用户脚本只作用于本应用自己的 Web 界面，所以
+                    // 与上面「怎么打开它」同处一张卡。开关行几何与画中画卡一致（见 PipSwitchRow）。
+                    Spacer(Modifier.height(12.dp))
+                    HorizontalDivider()
+                    Spacer(Modifier.height(4.dp))
+                    PipSwitchRow(
+                        title = stringResource(R.string.dsh_userscripts_master),
+                        summary = stringResource(R.string.dsh_userscripts_master_summary),
+                        checked = userscriptsMaster,
+                        enabled = true,
+                        onCheckedChange = onUserscriptsMasterChange,
                     )
                 }
             }
@@ -1320,7 +1341,7 @@ private fun RuntimeOption(
 }
 
 /**
- * 画中画卡里的一行开关（主/副两条共用）。
+ * 卡片里的一行布尔开关（画中画主/副两条与「Web 界面打开方式」卡里的用户脚本总开关共用）。
  *
  * 与 [RuntimeOption] 同一套行几何（左侧文字、右侧控件、vertical 8dp）；[enabled] 为 false 时
  * 文字一起变淡 —— 只把开关灰掉、字还正常黑，会让人以为「这行还能点」。

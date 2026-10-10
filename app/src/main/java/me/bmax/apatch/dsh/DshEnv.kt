@@ -44,12 +44,17 @@ object DshEnv {
      *   凡是经 `link()` 落盘的文件（dsh 会话的原子提交、pnpm 的部分导入路径），
      *   真身都在 `.l2s` 里。删掉它 = `.dsh` 里那些文件全变悬空链接。
      * - `root/.local`：pnpm 的内容存储默认在 `$HOME/.local/share/pnpm/store`
-     *   （容器里 HOME=/root，代码里没有任何 store-dir 覆盖）。历史上以硬链接方式
-     *   导入的依赖指向它。删掉存储 = 那些依赖同样变悬空链接。
+     *   （容器里 HOME=/root，代码里没有任何 store-dir 覆盖）。删它不是"删掉已装插件"：
+     *   pnpm 默认用**硬链接**把 store 里的文件链进 `node_modules`，硬链接不是符号链接，
+     *   删掉 store 的目录项不会立刻让那些文件消失（数据还挂在 `node_modules` 那一份上），
+     *   代价是 pnpm 丢掉缓存与去重、下次安装要重新下载、它自己的完整性检查可能报错；而在
+     *   本应用会主动降级到的 copy 导入下（无硬链接设备，见 `DshPluginRepo` 的
+     *   `--package-import-method copy`），已装文件与 store 根本无关 —— 删了不影响，只是白删
+     *   且下次全量重下。没有回收这点空间的理由，所以同样保留。
      *
-     * 两种情况下 node 的 `existsSync(node_modules/<pkg>/package.json)` 都会因为
-     * 跟随悬空链接而返回 false，而 `dsh.profile.bundles` 里还列着这个包 ——
-     * dsh 于是在启动第一步就抛 `cannot resolve profile bundle` 退出。
+     * 两者里**只有 `.l2s` 会直接让文件消失**（node 的 `existsSync(node_modules/<pkg>/package.json)`
+     * 跟随悬空链接返回 false，而 `dsh.profile.bundles` 里还列着这个包 → dsh 启动第一步就抛
+     * `cannot resolve profile bundle` 退出）；`root/.local` 是"不想为此冒 pnpm 完整性风险"。
      *
      * 顺序无关：每一项都独立 rename 出去再 rename 回来。
      */

@@ -46,6 +46,7 @@ import me.bmax.apatch.dsh.Userscripts
  * 文件名保留 `ScriptDetailScreen.kt`（历史）；里面已经没有一个 `@Destination`。
  *
  * @param code 正文预览（[Userscripts.code] 读出来的原文），读不到给 null。
+ * @param codeLoading 正文还在读（调用方在 IO 线程上取）：先显示一句占位，别让层里空着。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +57,7 @@ internal fun ScriptDetailSheet(
     onToggle: (Boolean) -> Unit,
     onUpdate: () -> Unit,
     onRemove: () -> Unit,
+    codeLoading: Boolean = false,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -134,7 +136,12 @@ internal fun ScriptDetailSheet(
                     .verticalScroll(rememberScrollState()),
             ) {
                 Text(
-                    text = code.orEmpty(),
+                    // 还在读（IO 上）时给一句占位；读不到才是空白 —— 两种状态不是一回事
+                    text = if (codeLoading) {
+                        stringResource(R.string.dsh_userscripts_code_loading)
+                    } else {
+                        code.orEmpty()
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

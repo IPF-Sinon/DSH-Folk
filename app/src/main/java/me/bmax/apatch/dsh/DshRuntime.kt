@@ -3803,6 +3803,28 @@ object DshRuntime {
         LogStore.named(log).clear()
     }
 
+    /**
+     * 清空应用自己的**全部**日志文件（深度清理那条路用它）。
+     *
+     * 与 [clearLog] 的关系：clearLog 是**起服务时**用的，它把当前那份轮转进
+     * [DshEnv.serverLogPrev] 再清空当前那份 —— 那是为了 bugreport 能回溯上一次运行，代价是
+     * 磁盘上仍然留着全部内容（上一份），**不回收空间**。深度清理要的是真的清掉，所以这里：
+     *
+     * 1. 当前那份先走 [clearLog]（复用它同一条安全通道：flush 积压 → 关句柄 → 截断）；
+     * 2. 轮转出去的那一份，以及 [DshEnv.logFiles] 里以后新增的任何 `*.log`，逐个走
+     *    [LogStore.NamedLog.clear]。
+     *
+     * **绝不直接删文件**：这些文件被 [LogStore] 持有写句柄，`File.delete()` 之后后续输出会写进
+     * 已被删除的 inode（内存里还在、盘上没了，而且新行永远不再落盘）。`NamedLog.clear` 先
+     * flush、再关句柄、然后原地截断并把行数/体积基线归零，之后 append 自然重开 —— 正在被写的
+     * 日志因此是"清空后继续写"，而不是"删掉再续写"。
+     */
+    fun clearAppLogs() {
+        if (!::appContext.isInitialized) return
+        clearLog()
+        for (f in appLogFiles()) LogStore.named(f).clear()
+    }
+
     fun appendLog(line: String) {
         if (::appContext.isInitialized) LogStore.named(DshEnv.serverLog(appContext)).append(line)
     }

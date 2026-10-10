@@ -784,7 +784,9 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_fs_picker_need_perm">All files access is required to browse folders.</string>
     <string name="dsh_fs_picker_up">.. (up one level)</string>
     <string name="dsh_fs_picker_system">System file picker</string>
-    <string name="dsh_fs_picker_outside">That folder is not on shared storage (/sdcard), so it cannot be mounted into the container.</string>
+    <string name="dsh_fs_picker_no_local_path">This provider has no local path, so it cannot be mounted: cloud drives and photo apps are virtual folders; an SD card or USB drive must be mounted and this app needs all-files access.</string>
+    <string name="dsh_fs_picker_volume_missing">That folder cannot be mounted right now: its volume (or the folder itself) is gone — check that the SD card or USB drive is inserted and the folder still exists.</string>
+    <string name="dsh_fs_picker_list_needs_sdcard">These lists only take folders on shared storage (/sdcard); for an SD card or USB drive, use the workspace mapping below.</string>
     <string name="dsh_fs_picker_need_subdir">Pick a subfolder for these lists (the whole /sdcard makes no sense here).</string>
 
     <!-- ── Deep clean (long-press "Clean resources and cache") ── -->
@@ -1569,10 +1571,14 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_handoff_copy_failed">Copy failed: %1$s</string>
     <string name="dsh_handoff_done_message">Copied to %1$s. The prompt is on the clipboard.</string>
     <string name="dsh_userscripts_title">Userscripts</string>
-    <string name="dsh_userscripts_scope">Applies to this app own page (the built-in dsh web UI) only. The metadata block, @match / @include / @exclude and @run-at (document-start / -end / -idle) are read the Greasemonkey way. Turn the switch off to put the page back the way it was.</string>
+    <string name="dsh_userscripts_scope">Applies to this app own page (the built-in dsh web UI) only. The metadata block, @match / @include / @exclude and @run-at (document-start / -end / -idle) are read the Greasemonkey way.</string>
     <string name="dsh_userscripts_master">Run my userscripts</string>
     <string name="dsh_userscripts_master_summary">Off = only the scripts you added are left out; the app built-in ones keep running. The manager is native, not in the WebView — it is the way back when a script breaks the page.</string>
-    <string name="dsh_userscripts_empty">Nothing installed yet. Install a local .user.js with the button at the bottom right, or paste a link with the top bar icon — either way it runs before the page own scripts.</string>
+    <string name="dsh_userscripts_install_title">Install a script</string>
+    <string name="dsh_userscripts_install_summary">A local .user.js file, or a greasyfork script page / .user.js address.</string>
+    <string name="dsh_userscripts_install_file">Install from a file</string>
+    <string name="dsh_userscripts_code_loading">Loading the source…</string>
+    <string name="dsh_userscripts_empty">Nothing installed yet. Use the install card above to pick a local .user.js, or install from a link — either way it runs before the page own scripts.</string>
     <string name="dsh_userscripts_empty_filtered">No installed script matches that.</string>
     <string name="dsh_userscripts_hide_builtin">Hide built-ins</string>
     <string name="dsh_userscripts_show_builtin">Show built-ins</string>
@@ -1621,11 +1627,12 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_market_installs">%1$s installs</string>
     <string name="dsh_userscripts_market_install">Install</string>
     <string name="dsh_userscripts_market_installed">Installed</string>
-    <string name="dsh_userscripts_market_page">Open the script page in a browser</string>
+    <string name="dsh_userscripts_market_page">Open the script page in the app</string>
     <string name="dsh_userscripts_market_fail_network">Could not reach greasyfork.org (check the network)</string>
     <string name="dsh_userscripts_market_fail_server">greasyfork.org returned an error (HTTP %1$d)</string>
     <string name="dsh_userscripts_market_fail_content">What came back is not a UserScript (a proxy may have rewritten it)</string>
     <string name="dsh_userscripts_market_fail_size">That script is larger than 2MB</string>
     <string name="dsh_webview_title">Page</string>
     <string name="dsh_webview_failed">This page could not be loaded here. Check the network and retry.</string>
+    <string name="dsh_webview_cannot_handle">This screen is for reading pages only: download and install links, and non-web links, cannot be opened here. To install a script, use Install in the script marketplace, or Install from a link on the userscripts page.</string>
 </resources>

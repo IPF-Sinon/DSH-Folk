@@ -2,7 +2,6 @@ package me.bmax.apatch.ui.screen
 
 import android.app.Activity.RESULT_OK
 import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -267,22 +266,24 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
     /**
      * 镜像源的浏览入口：**应用内**打开（见 [DshWebViewScreen]），不再交给系统浏览器。
      *
-     * 只给镜像站这一条路用：它是主源失败后的静态导航页，用户点它的全部意图就是"接着刚才那次
-     * 失败往下看" —— 甩去浏览器再回来，这一页的状态全没了。脚本页那条另说（见 [openInBrowser]）。
+     * 这条路的全部意义就是"接着刚才那次失败往下看" —— 甩去浏览器再回来，这一页的状态全没了。
      */
     fun openMirrorPage(url: String) {
         if (url.isBlank()) return
         navigator.navigate(DshWebViewScreenDestination(url = url))
     }
 
-    /** 去看某个脚本的页面（作者、说明、评分都在那儿）：交给系统浏览器。 */
-    fun openInBrowser(url: String) {
+    /**
+     * 去看某个脚本的页面（作者、说明、评分都在那儿）：**同一个应用内网页页**（[DshWebViewScreen]），
+     * 不再交给系统浏览器。
+     *
+     * 用户要求两处统一：镜像站与应用内脚本页都是"看一眼就回来"的动作，交给系统浏览器就等于
+     * 把用户甩出应用、回来时市场这页的搜索与滚动位置全丢。页面里的跳转也留在那一层；那里
+     * 处理不了的（下载 .user.js、非网页协议）会给一句明确提示，不假装能装（见 [DshWebViewScreen]）。
+     */
+    fun openScriptPage(url: String) {
         if (url.isBlank()) return
-        runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        }
+        navigator.navigate(DshWebViewScreenDestination(url = url))
     }
 
     val failText: String? = fail?.let { f ->
@@ -369,8 +370,7 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
                 )
                 // 主源失败时的**浏览入口**：镜像站是静态导航页（没有脚本正文/JSON），
                 // 所以只能看、不能拿来装 —— 这也正是它只出现在这里的原因。看这一页在
-                // **应用内**打开（见 openMirrorPage）：它是"接着刚才那次失败往下看"，
-                // 甩去浏览器再回来这一页的状态就全没了。
+                // **应用内**打开（见 openMirrorPage）：它是"接着刚才那次失败往下看"。
                 if (failText != null) {
                     TextButton(onClick = { openMirrorPage(ScriptMarket.MIRROR_INDEX) }) {
                         Text(stringResource(R.string.dsh_userscripts_market_mirror))
@@ -396,7 +396,7 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
                     busy = busy,
                     installing = installing == hit.id,
                     onInstall = { installHit(hit) },
-                    onOpen = { openInBrowser(hit.pageUrl) },
+                    onOpen = { openScriptPage(hit.pageUrl) },
                 )
             }
             if (full && hits.isNotEmpty()) {
@@ -475,8 +475,9 @@ private fun MarketHead(
  *
  * 卡片样式照 [DshPluginStoreScreen] 的商店瓦片（18dp / `surfaceContainer` / 内边距 14dp），
  * 与「已经装好的」那两张卡（20dp / `secondaryContainer` 0.2）区分开 —— 这是本仓既有的两种
- * 列表语法。两个动作都是显式的：装（或「已安装」）与去浏览器看脚本页；没做成整卡点击，
- * 因为点一下就把用户带出应用比点一个明确的图标更容易误触。
+ * 列表语法。两个动作都是显式的：装（或「已安装」）与在**应用内**看脚本页
+ * （[DshWebViewScreen]，与镜像站同一条路）；没做成整卡点击，因为点一下就把用户带出这一页
+ * 比点一个明确的图标更容易误触。
  */
 @Composable
 private fun MarketTile(

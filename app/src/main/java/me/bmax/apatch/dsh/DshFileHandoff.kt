@@ -94,8 +94,9 @@ object DshFileHandoff {
 
     /**
      * 容器内路径 → 宿主可写路径。
-     * 1) 落在某条**工作区挂载** `/root/workspace/<dest>` 下 → 映到挂载源 `HOST_ROOT/<src>/…`
-     *    （运行时该挂载点被 bind 遮住，必须写真正的源，否则写进去容器看不到）；
+     * 1) 落在某条**工作区挂载** `/root/workspace/<dest>` 下 → 映到挂载源（[DshFileAccess.wsHostDir]：
+     *    主卷是 `HOST_ROOT/<src>/…`，第二卷 SD/U 盘是它的真实宿主绝对路径）。运行时该挂载点被
+     *    bind 遮住，必须写真正的源，否则写进去容器看不到；
      * 2) 落在 `/sdcard` 或 `/storage/emulated/0` 下 → `HOST_ROOT/…`；
      * 3) 其余（rootfs 内，如 `/root/workspace` 本身）→ `<rootfs>/<path>`（App 私有、可写）。
      */
@@ -106,7 +107,7 @@ object DshFileHandoff {
                 val base = normalizeGuest("${DshEnv.WORKSPACE_GUEST}/${m.dest}")
                 if (g == base || g.startsWith("$base/")) {
                     val rest = g.removePrefix(base).trimStart('/')
-                    val hostBase = if (m.src.isEmpty()) HOST_ROOT else "$HOST_ROOT/${m.src}"
+                    val hostBase = DshFileAccess.wsHostDir(m.src)
                     return File(if (rest.isEmpty()) hostBase else "$hostBase/$rest")
                 }
             }

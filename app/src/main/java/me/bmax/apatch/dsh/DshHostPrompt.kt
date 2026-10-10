@@ -236,6 +236,12 @@ object DshHostPrompt {
             val workspaceStorageMappings = JSONArray()
             if (workspaceStorageMounted) {
                 for (m in DshFileAccess.workspaceMounts(ctx)) {
+                    // 第二卷（SD 卡 / U 盘）不算「共享存储」：这条事实由 dsh-folk-host.mjs 渲染，
+                    // 而它对 src 固定拼 `/sdcard/` 前缀（`m.src ? "/sdcard/" + m.src : "/sdcard"`），
+                    // 把绝对路径塞进去会渲染出一条根本不存在的 `/sdcard//storage/<卷>/…`。
+                    // 宁可不说，也不告诉 agent 一条假路径（要渲染它得改 .mjs，而门禁钉了它的
+                    // 内容哈希与 PLUGIN_REV）。
+                    if (DshFileAccess.isHostPath(m.src)) continue
                     workspaceStorageMappings.put(
                         JSONObject().put("src", m.src).put("dest", m.dest)
                     )

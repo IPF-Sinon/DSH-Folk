@@ -597,9 +597,16 @@ ok(/fun list\(ctx: Context\): List<Script>/.test(us) && /\.sortedBy \{ it\.name 
 ok(/var pendingDelete by remember \{ mutableStateOf<String\?>\(null\) \}/.test(screen) &&
   /AlertDialog\(/.test(screen) && /Userscripts\.remove\(context, deleting\)/.test(screen),
   "删除有确认（脚本是用户的文本，误删没有撤销）");
-ok(/Userscripts\.setEnabled\(context, s\.id, want\)/.test(screen) &&
-  /Userscripts\.setMasterEnabled\(context, it\)/.test(screen),
-  "逐条开关 + 总开关都接到了引擎");
+// 总开关的 UI 从用户脚本页搬到了设置（用户要求删掉脚本页那张卡），所以写调用现在在
+  // FunctionSettingsScreen.kt；用户脚本页仍然必须把逐条开关接到引擎，设置页必须同时读与写总开关。
+  {
+    const masterScreen = require("fs").readFileSync(
+      "app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt", "utf8");
+    ok(/Userscripts\.setEnabled\(context, s\.id, want\)/.test(screen) &&
+      /Userscripts\.masterEnabled\(context\)/.test(masterScreen) &&
+      /Userscripts\.setMasterEnabled\(context, on\)/.test(masterScreen),
+      "逐条开关（脚本页）+ 总开关（设置页，读与写都接引擎）");
+  }
 // 设计已换：卡片底部「粘贴脚本 / 从文件选」两个按钮撤掉（粘贴那条路整条没了），改成与脚本
 // 市场同一套 —— 本地 `.user.js` 走 install(context, text)，链接走新的 installFromUrl(...)。
 ok(/Userscripts\.install\(context, text\)/.test(screen) &&

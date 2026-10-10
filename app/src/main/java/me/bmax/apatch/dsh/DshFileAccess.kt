@@ -42,6 +42,16 @@ object DshFileAccess {
     /** 宿主共享存储根。 */
     private const val HOST_ROOT = "/storage/emulated/0"
 
+    /**
+     * SAF 的 externalstorage 提供器 authority。
+     *
+     * 只有它给出的 `<卷>:<路径>` document id 能确定**宿主文件系统路径**：主卷的 `primary:` →
+     * [HOST_ROOT]，其余卷 → `/storage/<卷>/<路径>`（Android 把第二卷挂在那里，卷名就是冒号前
+     * 那一段 —— 见 [hostPathFromTreeUri]）。别的 authority（云盘、相册、某个应用自己的提供器）
+     * 即便 document id 长得一样，也没有可确定的宿主路径。
+     */
+    private const val EXT_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
+
     /** 容器内看到共享存储的两个别名（历史上一直双挂）。 */
     private val GUEST_ALIASES = listOf("/sdcard", "/storage/emulated/0")
 
@@ -90,25 +100,29 @@ object DshFileAccess {
     /**
      * SAF 目录（`ACTION_OPEN_DOCUMENT_TREE` 选出来的 tree URI）→ **相对 /sdcard** 的相对路径。
      *
-     * 名单与工作区映射存的都是「相对 /sdcard」的路径（挂载层 bind 的也是宿主 /sdcard 下的真实
-     * 目录），所以把目录选择器从页内那个 `java.io.File` 浏览器换成系统文件选择器之后，落盘前
-     * 必须做这一步换算 —— 不然 SAF 的 document id 会被当成路径存进去，重启容器时 bind 一个
-     * 不存在的目录。
-     *
-     * 只认共享存储（`externalstorage` 提供器的 `primary:` 卷）：
+     * 名单与工作区映射（主卷那一半）存的都是「相对 /sdcard」的路径（挂载层 bind 的也是宿主
+     * /sdcard 下的真实目录），所以把目录选择器从页内那个 `java.io.File` 浏览器换成系统文件
+     * 选择器之后，落盘前必须做这一步换算 —— 不然 SAF 的 document id 会被当成路径存进去，
+     * 重启容器时 bind 一个不存在的目录。
      *
      * - `content://com.android.externalstorage.documents/tree/primary%3ADownload%2Ffoo`
      *   → `Download/foo`；根（`primary:`）→ `""`。
-     * - 别的卷 / 别的提供器（SD 卡、云盘、某个文件管理器自己的提供器）没有确定的宿主文件系统
-     *   路径，映射不进去 → null。由界面如实说"这个目录不在共享存储里"，而不是悄悄落一条错的。
+     * - **第二卷**（SD 卡 / U 盘）不在这里：它不在 /sdcard 这棵树上，走 [hostPathFromTreeUri]。
+     * - 别的卷 / 别的提供器（云盘、相册、某个文件管理器自己的提供器）没有确定的宿主文件系统
+     *   路径，映射不进去 → null。
      *
-     * 判据只看 document id、不看 authority：换一个文件管理器（MT 管理器、系统文件）去浏览共享
-     * 存储时，拿回来的同样是 `primary:` 的 id。但"恰好长得像"还不够——映射出来的宿主目录必须
-     * 真的存在（[HOST_ROOT] 下），否则一律 null。这一条同时挡住两种坏情况：别的提供器（云盘 /
-     * 相册提供器）偶然给出 `primary:…` 形状的 id，以及 bind 一个根本不存在的目录。
+     * 判据有两条，缺一不可：
+     *
+     * 1. **authority 必须是 `com.android.externalstorage.documents`**。只按 document id 形状认
+     *    是不够的：云盘/相册提供器也可能回一个 `primary:Pictures` 形状的 id，而那个目录其实是
+     *    虚拟的 —— 一旦 /sdcard/Pictures 恰好存在，就会把用户选的"云盘里的 Pictures"当成
+     *    /sdcard/Pictures 挂进容器。
+     * 2. 映射出来的宿主目录必须**真的存在**。这条同时挡住"提供器给的路径已不存在"与
+     *    "bind 一个根本不存在的目录"。
      */
     fun relativeFromTreeUri(uri: Uri?): String? {
         if (uri == null) return null
+        if (!EXT_STORAGE_AUTHORITY.equals(uri.authority, ignoreCase = true)) return null
         val docId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return null
         // 必须形如 `卷:相对路径`。没有冒号 = 不是共享存储那种 id（`substringBefore` 会把
         // 整串当卷名，于是"primary"这种无冒号的 id 会被当成根 → 落一条错的名单）。
@@ -125,6 +139,42 @@ object DshFileAccess {
         return if (host.isDirectory) mapped else null
     }
 
+    /**
+     * SAF 目录 → **真实宿主绝对路径**（第二卷：SD 卡 / U 盘）。
+     *
+     * document id 是 `<卷>:<路径>`，而 Android 把非 `primary` 的卷挂在 `/storage/<卷>`，卷名
+     * 就是冒号前那一段 —— 这是 externalstorage 提供器自己的约定。所以
+     * `content://com.android.externalstorage.documents/tree/0123-4567%3ADownload`
+     * → `/storage/0123-4567/Download`。
+     *
+     * 这是**唯一**能挂真实第二卷的路：容器里 `/sdcard` 映的始终是主卷（`/storage/emulated/0`），
+     * SD 卡不在那棵树里，所以调用方拿到的是宿主绝对路径而不是"相对 /sdcard"的字符串。
+     *
+     * 拒绝（返回 null）的情形：
+     * - 不是 externalstorage 的 tree（别的 authority 的卷名推不出宿主目录）；
+     * - `primary:`（主卷走 [relativeFromTreeUri]，它的宿主根是 /sdcard 而不是 /storage/primary）；
+     * - 卷名含 `/`、`.` 之类不该进路径的字符，或路径里有 `..`/`.`/空段；
+     * - 宿主目录当前不存在（卡没插 / 没挂载 / 没权限看到 → 不 bind 一个不存在的目录；界面会
+     *   如实提示，而不是悄悄落一条错路径）。
+     */
+    fun hostPathFromTreeUri(uri: Uri?): String? {
+        if (uri == null) return null
+        if (!EXT_STORAGE_AUTHORITY.equals(uri.authority, ignoreCase = true)) return null
+        val docId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return null
+        val sep = docId.indexOf(':')
+        if (sep <= 0) return null
+        val volume = docId.substring(0, sep)
+        if (volume.equals("primary", ignoreCase = true)) return null
+        // 卷名要拼进路径：只收字母/数字/-/_（不认就拒，绝不把一个能越界的名字拼进去）
+        if (volume.isEmpty() || !volume.all { it.isLetterOrDigit() || it == '-' || it == '_' }) return null
+        val rel = docId.substring(sep + 1).replace('\\', '/').trim('/')
+        val segs = rel.split('/').filter { it.isNotEmpty() && it != "." }
+        if (segs.any { it == ".." }) return null
+        val mapped = segs.joinToString("/")
+        val host = if (mapped.isEmpty()) File("/storage/$volume") else File("/storage/$volume", mapped)
+        return if (host.isDirectory) host.absolutePath else null
+    }
+
     /** 共享存储挂载总开关（默认开）。关＝不挂载 + dsh-fs 也拒绝。 */
     fun mountEnabled(ctx: Context): Boolean =
         prefs(ctx).getBoolean(DshEnv.KEY_STORAGE_MOUNT, true)
@@ -132,6 +182,16 @@ object DshFileAccess {
     fun setMountEnabled(ctx: Context, on: Boolean) {
         prefs(ctx).edit().putBoolean(DshEnv.KEY_STORAGE_MOUNT, on).apply()
     }
+
+    /**
+     * 这个 tree URI 是不是系统 externalstorage 提供器给的。
+     *
+     * 界面用它把两种"换不出宿主路径"分开：[relativeFromTreeUri] / [hostPathFromTreeUri] 都返回
+     * null 时，externalstorage 的目录是"卷/目录此刻不成立"（比如卡没插、目录已不存在），别的
+     * authority 才是"这个提供器根本没有本地路径"（云盘 / 相册）。
+     */
+    internal fun isExternalStorageTree(uri: Uri?): Boolean =
+        EXT_STORAGE_AUTHORITY.equals(uri?.authority, ignoreCase = true)
 
     /**
      * 某个相对 /sdcard 的路径在当前黑白名单下是否放行——供 [DshFsBridge] 用，使桥的可见范围
@@ -211,11 +271,79 @@ object DshFileAccess {
     //  工作区挂载：把手机存储按自定义映射额外 bind 到 /root/workspace 下
     // ──────────────────────────────────────────────────────────────────────────
 
-    /** 一条工作区挂载映射：把 /sdcard/[src] 挂到 /root/workspace/[dest]。src 空串 = 整棵 /sdcard。 */
+    /**
+     * 一条工作区挂载映射：把宿主目录挂到 `/root/workspace/[dest]`。
+     *
+     * [src] 有两种形态（[isHostPath] 判）：
+     * - **不以 `/` 开头** = 相对 `/sdcard` 的路径（空串 = 整棵 /sdcard）。历史形状，黑白名单与
+     *   遮蔽都按同一套相对路径比较，行为一字未改；旧数据全是这一种。
+     * - **以 `/` 开头** = 真实宿主绝对路径（第二卷：SD 卡 / U 盘，见 [hostPathFromTreeUri]）。
+     *   容器里 `/sdcard` 映的始终是主卷，SD 卡不在那棵树里，所以"相对 /sdcard"对它没有意义 ——
+     *   落盘/挂载用的就是这个绝对路径本身；黑白名单（相对 /sdcard 的条目）也不套在它上面。
+     */
     data class WsMount(val src: String, val dest: String)
 
     /** 默认映射：整棵 /sdcard → /root/workspace/sdcard。 */
     val DEFAULT_WS_MOUNTS: List<WsMount> = listOf(WsMount("", "sdcard"))
+
+    /** 这条映射源是不是**真实宿主绝对路径**（第二卷）——不以 `/` 开头的一律按相对 /sdcard 读。 */
+    internal fun isHostPath(src: String): Boolean = src.startsWith("/")
+
+    /**
+     * 映射源 → 宿主绝对目录。绝对路径（第二卷）原样用；相对路径按 [HOST_ROOT] 推出（空 = 整棵）。
+     *
+     * bind 组装（[workspaceBinds]）与容器→宿主反查（`DshFileHandoff.guestToHost`）都走这一个
+     * 换算 —— 两处各写一份必然有一天对不上（SD 卡那条路就是这么冒出来的）。
+     */
+    internal fun wsHostDir(src: String): String =
+        when {
+            isHostPath(src) -> src
+            src.isEmpty() -> HOST_ROOT
+            else -> "$HOST_ROOT/$src"
+        }
+
+    /** 映射源在界面上的显示形态：绝对路径照原样，相对路径写成 `/sdcard[/…]`。 */
+    internal fun wsSourceLabel(src: String): String =
+        when {
+            isHostPath(src) -> src
+            src.isEmpty() -> "/sdcard"
+            else -> "/sdcard/$src"
+        }
+
+    /**
+     * 规整一条映射源（读偏好与写偏好都过它）。
+     *
+     * 绝对路径形态（第二卷）按 [sanitizeHostPath] 校验，**形状不对返回 null —— 这条映射丢掉**，
+     * 不把一条越界/畸形的记录 bind 进容器。（整个清单都为空时，[workspaceMounts] 仍按既有语义
+     * 回落到 [DEFAULT_WS_MOUNTS] 的"整棵 /sdcard"——那是"没配过映射"的默认值。）
+     * 相对形态沿用 [normalize]（同黑白名单条目语义），但额外拒 `..`。
+     */
+    internal fun normalizeSrc(raw: String): String? {
+        val p = raw.trim().replace('\\', '/')
+        if (isHostPath(p)) return sanitizeHostPath(p)
+        // 相对形态也拒 `..`（与 [normalizeDest] 同一条纪律）：[normalize] 只做去空白/去重，
+        // 不认越界段 —— 留着它，`HOST_ROOT + "/../…"` 就能跑到 /sdcard 之外
+        if (p.split('/').any { it == ".." }) return null
+        return normalize(listOf(p)).firstOrNull() ?: ""
+    }
+
+    /**
+     * 第二卷宿主路径的校验/规整：只收 `/storage/<卷>/…` 形状，段里不许有空段、`.`、`..`，
+     * 卷名只收字母/数字/`-`/`_`。形状不对返回 null。
+     *
+     * 这里**不查目录是否存在**：卡被拔掉/没挂载时它本来就不在，那不该把用户存好的映射抹掉 ——
+     * 挂载那一刻再按 `isDirectory` 跳过（见 [workspaceBinds]）。
+     */
+    internal fun sanitizeHostPath(raw: String): String? {
+        val p = raw.trim().replace('\\', '/')
+        if (!p.startsWith("/storage/")) return null
+        val segs = p.trim('/').split('/')
+        if (segs.size < 2) return null
+        if (segs.any { it.isEmpty() || it == "." || it == ".." }) return null
+        val volume = segs[1]
+        if (volume.isEmpty() || !volume.all { it.isLetterOrDigit() || it == '-' || it == '_' }) return null
+        return "/" + segs.joinToString("/")
+    }
 
     /**
      * 规整 dest（工作区下的相对子路径）：转 `/`、去首尾 `/`、丢弃 `.`/`..` 段（禁止越界），
@@ -231,8 +359,10 @@ object DshFileAccess {
 
     /**
      * 当前工作区挂载映射（已规整）。缺失 / 空数组 → [DEFAULT_WS_MOUNTS]。
-     * src 按 [normalize] 规整（同黑白名单条目语义），dest 按 [normalizeDest] 规整；
-     * 按 dest 去重（同一目的只保留第一条，避免两条映射抢同一挂载点）。
+     *
+     * src 按 [normalizeSrc] 规整（相对 /sdcard，或第二卷的真实宿主绝对路径 —— 见 [WsMount]），
+     * dest 按 [normalizeDest] 规整；按 dest 去重（同一目的只保留第一条，避免两条映射抢同一
+     * 挂载点）。旧数据（src 全是相对路径、没有 `/` 开头）走的分支与以前逐字相同。
      */
     fun workspaceMounts(ctx: Context): List<WsMount> {
         val raw = prefs(ctx).getString(DshEnv.KEY_WS_MOUNTS, null)
@@ -240,7 +370,8 @@ object DshFileAccess {
             val a = JSONArray(raw)
             (0 until a.length()).mapNotNull { i ->
                 val o = a.optJSONObject(i) ?: return@mapNotNull null
-                val src = normalize(listOf(o.optString("src", ""))).firstOrNull() ?: ""
+                // 形状不对的 src（越界的绝对路径等）整条丢掉，不回落到"整棵 /sdcard"
+                val src = normalizeSrc(o.optString("src", "")) ?: return@mapNotNull null
                 val dest = normalizeDest(o.optString("dest", ""))
                 WsMount(src, dest)
             }
@@ -254,7 +385,7 @@ object DshFileAccess {
         val a = JSONArray()
         val seen = HashSet<String>()
         for (m in list) {
-            val src = normalize(listOf(m.src)).firstOrNull() ?: ""
+            val src = normalizeSrc(m.src) ?: continue
             val dest = normalizeDest(m.dest)
             if (!seen.add(dest)) continue
             a.put(JSONObject().put("src", src).put("dest", dest))
@@ -267,10 +398,13 @@ object DshFileAccess {
      * 组装工作区挂载的 bind 列表（host, guest），已套用黑白名单。子开关关 → 空表。
      *
      * 每条映射 `{src, dest}`（guestBase = `/root/workspace/<dest>`）：
-     * - src 命中黑名单（等于或落在某被禁目录之下）→ 整条跳过；
-     * - **无白名单**：把整个 `/storage/emulated/0[/src]` 映到 guestBase，再把落在 src 内部的
+     * - **src 是真实宿主绝对路径**（第二卷 SD/U 盘）：用户点的是这一个具体目录，目录此刻存在
+     *   就直接挂在 guestBase（卡不在就跳过）。黑白名单存的是"相对 /sdcard"的条目，套不到另一棵
+     *   树上，所以这条分支不做名单比较。
+     * - src 是相对 /sdcard 的路径：命中黑名单（等于或落在某被禁目录之下）→ 整条跳过；
+     *   **无白名单**：把整个 `/storage/emulated/0[/src]` 映到 guestBase，再把落在 src 内部的
      *   被禁子目录用空目录（[maskPath]）盖住（base 在前、mask 在后覆盖）；
-     * - **有白名单**（黑名单优先）：只映「落在 src 内」的白名单目录到 guestBase 下对应位置，
+     *   **有白名单**（黑名单优先）：只映「落在 src 内」的白名单目录到 guestBase 下对应位置，
      *   其余一律不进工作区——不因走了工作区这条路就绕过白名单（避免「假隔离」）。
      */
     fun workspaceBinds(ctx: Context, maskPath: String): List<Pair<String, String>> {
@@ -284,11 +418,16 @@ object DshFileAccess {
         for (m in workspaceMounts(ctx)) {
             val src = m.src
             val guestBase = "${DshEnv.WORKSPACE_GUEST}/${m.dest}"
+            // 第二卷（SD 卡 / U 盘）：源就是这条真实宿主路径，名单不适用（另一棵树）
+            if (isHostPath(src)) {
+                if (File(src).isDirectory) out.add(src to guestBase)
+                continue
+            }
             // src 本身被黑名单覆盖 → 整条不挂
             if (deny.any { isUnderOrEqual(src, it) }) continue
             if (allow.isEmpty()) {
                 // 无白名单：整个 src 映进来，再遮蔽落在 src 内部的被禁子目录
-                out.add(hostUnder(src) to guestBase)
+                out.add(wsHostDir(src) to guestBase)
                 for (d in deny) if (contains(src, d) && d != src) {
                     out.add(maskPath to "$guestBase/${relUnder(d, src)}")
                 }
@@ -299,7 +438,7 @@ object DshFileAccess {
                     if (deny.any { isUnderOrEqual(a, it) }) continue // a 被黑名单盖掉
                     val relA = relUnder(a, src)
                     val guest = if (relA.isEmpty()) guestBase else "$guestBase/$relA"
-                    out.add(hostUnder(a) to guest)
+                    out.add(wsHostDir(a) to guest)
                     // a 内部的被禁子目录仍要遮蔽
                     for (d in deny) if (isUnderOrEqual(d, a) && d != a) {
                         out.add(maskPath to "$guest/${relUnder(d, a)}")
@@ -313,10 +452,6 @@ object DshFileAccess {
     /** [base] 是否包含 [child]（base 空串 = /sdcard 根，包含一切）。 */
     private fun contains(base: String, child: String): Boolean =
         base.isEmpty() || isUnderOrEqual(child, base)
-
-    /** 宿主共享存储下某相对路径的绝对路径（空串 = 整棵 [HOST_ROOT]）。 */
-    private fun hostUnder(rel: String): String =
-        if (rel.isEmpty()) HOST_ROOT else "$HOST_ROOT/$rel"
 
     /** [child] 相对 [parent] 的路径（child 落在 parent 内/相等；parent 空 = 相对 /sdcard 根）。 */
     private fun relUnder(child: String, parent: String): String =

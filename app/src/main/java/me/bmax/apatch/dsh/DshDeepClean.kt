@@ -21,11 +21,17 @@ import java.io.File
  *   `var/lib/apt/lists`（apt 索引，`apt update` 会重下）、`var/log`、`root/.npm`（npm 的
  *   `_cacache` 与 `_logs`）、`root/.cache`、`root/.node-gyp`，以及 `root/.dsh` 下三层内的
  *   `*.log`（dsh 与插件自己落盘的日志）。
+ * - **应用自己的日志**（`filesDir/logs` 下的 `*.log`）也在清单里，但**不走文件删除**：LogStore 持有
+ *   写句柄，落点改走 [DshRuntime.clearAppLogs]（flush → 关句柄 → 原地截断），见 [delete]。
  * - **绝不列入**的东西（列进去就是数据事故）：`root/.dsh`（会话 / 插件 / 配置）、
- *   `root/.local`（pnpm 的内容存储 —— `dsh` 原子提交与 pnpm 的硬链接真身都在里面，
- *   删了 `node_modules` 全变悬空链接）、`.l2s`（proot 的 link2symlink 真身目录）、
- *   `root/workspace`（用户挂进来的手机目录），以及 `filesDir/runtime-download.tar.gz`
- *   （它可能是**正在下载**的运行时，删了会变成一次 SHA 校验失败）。
+ *   `root/.local`（pnpm 的内容存储：**删掉 store 不会立刻让已装插件的文件消失** —— pnpm 默认
+ *   硬链接进 `node_modules`，数据还挂在那份链接上 —— 代价是丢缓存与去重、下次安装重新下载、
+ *   完整性检查可能报错；本应用在无硬链接设备上会主动降级成 copy 导入（见 DshPluginRepo），
+ *   那种情况下删 store 对已装文件没影响、只是白删。无论哪种都没有回收这点空间的理由）、
+ *   `.l2s`（proot 的 link2symlink 真身目录：`link()` 被改写成符号链接后真身在这，删了容器里
+ *   那些链接全断）、`root/workspace`（用户挂进来的手机目录），以及
+ *   `filesDir/runtime-download.tar.gz`（它可能是**正在下载**的运行时，删了会变成一次 SHA
+ *   校验失败）。
  *
  * 删除走的是与 [DshDocumentsProvider.deleteTree]、[DshFsBridge] 同一条安全纪律：只删白名单
  * 根（rootfs / filesDir / cacheDir / 共享存储）**canonicalPath 之内**的路径；**不跟随符号
@@ -112,14 +118,19 @@ internal object DshDeepClean {
         out.add(section(rootfs, R.string.dsh_clean_section_runtime, runtime, null))
 
         // ── 2. 应用内部存储 ──
-        // 只有应用缓存这一项。三条刻意不列的：
+        // 应用自己的 dsh 日志（`filesDir/logs` 下的 `*.log`）也列进来 —— 但删除时**不能走 deleteTree**：
+        // LogStore 持有它们的写句柄，直接删文件会让后续输出写进已被删除的 inode（内存里还在、
+        // 盘上没了）。落点改走 DshRuntime.clearAppLogs（flush → 关句柄 → 原地截断），见 [delete]。
+        // 两条刻意不列的：
         //   - `filesDir/runtime-download.tar.gz`：它可能是**正在下载**的那一份，删了会变成一次
         //     SHA 校验失败；
-        //   - `filesDir/logs`（应用自己的 dsh 日志）：LogStore 持有它们的写句柄，直接删文件会让
-        //     后续输出写进已被删除的 inode（内存里还在、盘上没了），要清得走 DshRuntime.clearLog；
         //   - `cacheDir/shm` 与 `filesDir` 下的其它目录：前者就在缓存里，后者是数据不是垃圾。
         val app = ArrayList<Target>()
         addIfPresent(app, ctx.cacheDir, R.string.dsh_clean_kind_cache)
+        for (f in DshEnv.logFiles(ctx)) {
+            val (bytes, files) = sizeOf(f)
+            app.add(Target(f.absolutePath, R.string.dsh_clean_kind_log, bytes, files))
+        }
         out.add(section(ctx.filesDir, R.string.dsh_clean_section_app, app, null))
 
         // ── 3. 共享存储的大文件 / 大文件夹 ──
@@ -159,7 +170,18 @@ internal object DshDeepClean {
             // 白名单根**本身**不删那个目录项：删掉 `/data/…/cache` 会让后续
             // `File(cacheDir, "x").createNewFile()` 直接抛 IOException（并非每个调用点都会先
             // mkdirs）。清空内容、目录留着 —— 与浅清理那边的做法一致。
-            val ok = if (roots.any { it == canonical }) clearChildren(f) else deleteTree(f)
+            //
+            // 应用日志（`filesDir/logs` 下的 `*.log`）另走一条：LogStore 持有写句柄，删文件等于让后续
+            // 输出写进已被删除的 inode。它们由 [DshRuntime.clearAppLogs] 清空（同一份流的当前段
+            // 与轮转段一起清 —— 只清一段留一段没有意义，而且不清的那一段照样占着空间）。
+            val ok = when {
+                isAppLogFile(ctx, canonical) -> {
+                    DshRuntime.clearAppLogs()
+                    true
+                }
+                roots.any { it == canonical } -> clearChildren(f)
+                else -> deleteTree(f)
+            }
             if (ok) deleted++ else failed.add(p)
         }
         return DeleteResult(deleted, failed)
@@ -301,4 +323,8 @@ internal object DshDeepClean {
 
     private fun insideRoots(canonical: String, roots: List<String>): Boolean =
         roots.any { canonical == it || canonical.startsWith(it.trimEnd('/') + "/") }
+
+    /** 这个 canonical 路径是不是应用自己的日志文件（[DshEnv.logFiles] 里的某一个）。 */
+    private fun isAppLogFile(ctx: Context, canonical: String): Boolean =
+        DshEnv.logFiles(ctx).any { runCatching { it.canonicalPath }.getOrNull() == canonical }
 }

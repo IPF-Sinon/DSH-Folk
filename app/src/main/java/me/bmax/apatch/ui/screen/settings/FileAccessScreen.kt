@@ -6,7 +6,6 @@ import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -84,7 +83,8 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
 
     // 目录选择器：pickerFor = "allow" | "deny" | "ws" | null
     var pickerFor by remember { mutableStateOf<String?>(null) }
-    // 工作区映射：选完 src 后填 dest 的挂起态
+    // 工作区映射：选完 src 后填 dest 的挂起态。主卷是"相对 /sdcard"的路径，第二卷（SD/U 盘）
+    // 是真实宿主绝对路径 —— 两种都由 DshFileAccess 落盘时各归各的形态（见 WsMount）。
     var wsPendingSrc by remember { mutableStateOf<String?>(null) }
     // 共享存储是否支持真硬链接（决定要不要提示「write 工具在此会失败」）。可在页内重新检测。
     var storageLinkOk by remember { mutableStateOf(DshFileAccess.storageLinkSupported(context)) }
@@ -118,6 +118,9 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
     /**
      * 选完目录之后的共同落点：页内浏览器与系统文件选择器**走同一条**路（先选 src、再填 dest，
      * 或直接进黑白名单），所以只写这一处。
+     *
+     * [rel] 对黑白名单永远是"相对 /sdcard"的路径（第二卷在那两处会被挡在前面）；对工作区映射
+     * 则可能是主卷的相对路径，也可能是第二卷的真实宿主绝对路径（`/storage/<卷>/…`）。
      */
     fun handlePicked(rel: String) {
         val which = pickerFor
@@ -145,8 +148,10 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
      *    不 take 的话，进程重启后这个 URI 就失效了 —— 而用户选它正是为了"以后一直能用"。
      *    发起时也带上 persistable/prefix 两个 flag（与「允许第三方应用访问数据目录」那条路
      *    完全相同的写法，见 FunctionSettings 的 `function_docs_access`）。
-     * 2. **换算成相对 /sdcard 的路径**再交给 [handlePicked]：既有落盘与挂载逻辑存的就是这个
-     *    形状；不在共享存储里的目录映射不了，如实说一句，不悄悄落一条错的。
+     * 2. **换算成能挂的宿主路径**再交给 [handlePicked]：主卷（`primary:`）换成"相对 /sdcard"；
+     *    真第二卷（SD 卡 / U 盘）换成真实宿主绝对路径 `/storage/<卷>/…`（见
+     *    [DshFileAccess.hostPathFromTreeUri]）。两种都对不上就是虚拟提供器（云盘 / 相册），
+     *    宿主文件系统里没有它，容器挂不了 —— 如实说一句，不悄悄落一条错的。
      */
     val systemPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -165,12 +170,32 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, take) }
         }
         val rel = DshFileAccess.relativeFromTreeUri(uri)
-        if (rel == null) {
-            pickerFor = null
-            showToast(context, context.getString(R.string.dsh_fs_picker_outside))
+        if (rel != null) {
+            handlePicked(rel)
             return@rememberLauncherForActivityResult
         }
-        handlePicked(rel)
+        // 主卷之外再看第二卷：SD 卡 / U 盘（externalstorage 提供器的非 primary 卷）能给出真实
+        // 宿主路径；云盘 / 相册这类虚拟提供器给不出，容器挂不了 —— 提示要分开说。
+        val vol = DshFileAccess.hostPathFromTreeUri(uri)
+        when {
+            // 挂载映射按"具体目录"走，能直接吃下这个绝对路径
+            vol != null && pickerFor == "ws" -> handlePicked(vol)
+            // 黑白名单存的只有"相对 /sdcard"的条目，第二卷不是那棵树；指路，不含糊
+            vol != null -> {
+                pickerFor = null
+                showToast(context, context.getString(R.string.dsh_fs_picker_list_needs_sdcard))
+            }
+            // 系统存储提供器给的路径现在不成立（卡没插 / 目录已不在 / id 里带 ..）
+            DshFileAccess.isExternalStorageTree(uri) -> {
+                pickerFor = null
+                showToast(context, context.getString(R.string.dsh_fs_picker_volume_missing))
+            }
+            // 虚拟提供器（云盘 / 相册 SPA）：没有宿主文件系统路径，容器挂不了
+            else -> {
+                pickerFor = null
+                showToast(context, context.getString(R.string.dsh_fs_picker_no_local_path))
+            }
+        }
     }
 
     Scaffold(topBar = {
@@ -282,8 +307,9 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
                             Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
+                                    // 主卷显示成 /sdcard/…；第二卷（SD/U 盘）显示它真实的宿主路径
                                     text = stringResource(R.string.dsh_ws_mount_source) + "  " +
-                                        (if (m.src.isEmpty()) "/sdcard" else "/sdcard/" + m.src),
+                                        DshFileAccess.wsSourceLabel(m.src),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontFamily = FontFamily.Monospace,
                                 )
@@ -427,7 +453,9 @@ private fun WsDestDialog(
         text = {
             Column(Modifier.fillMaxWidth()) {
                 Text(
-                    text = "/sdcard/" + src,
+                    // src 可能是"相对 /sdcard"的路径，也可能是第二卷的真实宿主绝对路径，
+                    // 显示换算交给 DshFileAccess 那一处（不在界面里各拼一份）
+                    text = DshFileAccess.wsSourceLabel(src),
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

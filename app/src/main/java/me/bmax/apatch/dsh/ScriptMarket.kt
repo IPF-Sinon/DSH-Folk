@@ -45,7 +45,7 @@ internal object ScriptMarket {
         val updated: String,
         /** 直接取 `.user.js` 的地址（来自响应的 `code_url`）。 */
         val codeUrl: String,
-        /** 人在浏览器里看的那一页。 */
+        /** 人去浏览器 / 应用内网页页看的那一页（脚本的作者、说明、评分都在那儿）。 */
         val pageUrl: String,
     )
 
@@ -65,8 +65,9 @@ internal object ScriptMarket {
      *
      * 它是一张**静态导航页**（GitHub Pages），不是 JSON API，也没有镜像的脚本正文：实测
      * `…/scripts/<id>/x.user.js`、`…/en/scripts.json` 全是 404，页面里只有一个跳去第三方站点的
-     * 链接。所以这里只用它做「主源失败时的浏览入口」—— 交给系统浏览器打开，绝不进我们的
-     * HTTP 客户端、更不拿它装脚本。正文层面的镜像回落**做不到**：没有可改写的镜像路径。
+     * 链接。所以这里只用它做「主源失败时的浏览入口」—— 由界面用一个应用内网页页打开
+     * （见 ScriptMarketScreen 的 `openMirrorPage`），绝不进我们的 HTTP 客户端、更不拿它装脚本。
+     * 正文层面的镜像回落**做不到**：没有可改写的镜像路径。
      */
     internal const val MIRROR_INDEX = "https://greasyfork-mirror.github.io/index.html"
 

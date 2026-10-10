@@ -200,8 +200,10 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
         },
         floatingActionButton = {
             // 本地安装：留在右下角，与 FolkPatch 模块页一致。
-            // 只在「插件」那一组出现 —— 它选的是 .tgz（插件包），脚本那一组装的是 .user.js，
-            // 摆在脚本列表上只会让人点错（脚本的安装入口在正文里的粘贴 / 选文件）。
+            // 只在「插件」那一组出现 —— 它选的是 .tgz（插件包）；脚本那一组的安装入口是
+            // 正文顶部那张共用卡（UserscriptsContent 里的「安装脚本」：本地 .user.js / 从链接
+            // 两条路都在上面）。以前那两条路只长在独立页的 Scaffold 上，从底栏进这一组的人
+            // 既没有 FAB 也没有顶栏链接图标，用户报的「脚本页看不到安装入口」就是这个。
             if (group != GROUP_SCRIPTS) {
                 FloatingActionButton(
                     onClick = {

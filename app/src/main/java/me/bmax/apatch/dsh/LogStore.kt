@@ -4,8 +4,11 @@ import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
 import java.io.RandomAccessFile
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.ResolverStyle
 import java.util.Locale
 
 /**
@@ -15,30 +18,57 @@ import java.util.Locale
  * 下载进度、诊断轮询、启动日志轮询等高频路径上造成大量磁盘 I/O。本组件把高频读
  * 全部收敛到内存，磁盘只做低频批量写，显著降低 I/O 与 GC 压力。
  *
- * **每一行都带写入时刻的前缀**（本地时区 `yyyy-MM-dd HH:mm:ss.SSS`，见 [stamp]）：bugreport
+ * **每一行都带写入时刻的前缀**（本地时区 `uuuu-MM-dd HH:mm:ss.SSS`，见 [stamp]）：bugreport
  * 的「时间窗口」要按时间裁日志，而 dsh 的 stdout 本身不带时间。挂在写入方是唯一能保证
- * 「每一行都有时间」的位置；[parseStamp] 是它的逆运算，两处共用一个格式常量 —— 各写一份
- * 必然有一天对不上。
+ * 「每一行都有时间」的位置；[parseStamp] 是它的逆运算，两处共用一个不可变的 formatter ——
+ * 各写一份（以及 lenient 解析）必然有一天对不上。
  */
 object LogStore {
     private const val MAX_MEM_LINES = 600
     private const val FLUSH_THRESHOLD = 32
 
-    /** 行首时间戳的格式；同时也是 [parseStamp] 认的格式（长度固定 23）。 */
-    private const val STAMP_PATTERN = "yyyy-MM-dd HH:mm:ss.SSS"
+    /**
+     * 行首时间戳的格式；同时也是 [parseStamp] 认的格式（长度固定 23）。
+     *
+     * `uuuu` 而不是 `yyyy`：严格解析（[ResolverStyle.STRICT]）下 `yyyy` 是 year-of-era，要求
+     * 同时给出纪元，只写年份的串会直接被判为畸形。`uuuu` 是同一段数字的 proleptic year 写法，
+     * 格式化输出与 `yyyy` 逐字符相同。
+     */
+    private const val STAMP_PATTERN = "uuuu-MM-dd HH:mm:ss.SSS"
 
-    /** 时间戳在行首占的字符数（`yyyy-MM-dd HH:mm:ss.SSS` 恰好 23）。 */
+    /** 时间戳在行首占的字符数（`uuuu-MM-dd HH:mm:ss.SSS` 恰好 23）。 */
     private const val STAMP_LEN = 23
 
-    /** 当前时刻 → 行首时间戳。每次新建 formatter：SimpleDateFormat 不是线程安全的。 */
-    internal fun stamp(millis: Long): String =
-        SimpleDateFormat(STAMP_PATTERN, Locale.US).format(Date(millis))
+    /**
+     * 唯一的（写入与解析共用的）formatter。
+     *
+     * 原实现每次 append 都 `new SimpleDateFormat`、每解析一行也新建一个：`SimpleDateFormat`
+     * **不是线程安全**的，只能靠"用一次就扔"绕开。换成不可变的 `java.time` formatter 之后
+     * 一份就够、也不再分配。`ResolverStyle.STRICT` 是这次要的语义：畸形前缀（`2026-13-45 …`）
+     * **不再**被 lenient 地"滚动"成某个合法日期 —— 认不出来就是没有时间戳（[parseStamp] 返回
+     * null，由调用方按"无时间戳"处理），而不是悄悄当成一个凭空多出来的时间点。
+     */
+    private val STAMP_FORMATTER: DateTimeFormatter =
+        DateTimeFormatter.ofPattern(STAMP_PATTERN, Locale.US)
+            .withResolverStyle(ResolverStyle.STRICT)
 
-    /** 行首时间戳 → epoch 毫秒；这行没有时间戳（旧版本写的、或不是我们写的）返回 null。 */
+    /** 当前时刻 → 行首时间戳。formatter 不可变且线程安全，所以全局复用一份。 */
+    internal fun stamp(millis: Long): String =
+        STAMP_FORMATTER.format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()))
+
+    /**
+     * 行首时间戳 → epoch 毫秒；这行没有时间戳（旧版本写的、或不是我们写的）返回 null。
+     *
+     * **严格解析**：日期/时间任一段越界（`2026-02-30`、`25:00`）都算认不出来，而不是被
+     * 调整成一个别的时间点。返回的毫秒按**当前**默认时区还原，与写入端同一套换算。
+     */
     internal fun parseStamp(line: String): Long? {
         if (line.length < STAMP_LEN) return null
         return runCatching {
-            SimpleDateFormat(STAMP_PATTERN, Locale.US).parse(line.substring(0, STAMP_LEN))?.time
+            LocalDateTime.parse(line.substring(0, STAMP_LEN), STAMP_FORMATTER)
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
         }.getOrNull()
     }
 
