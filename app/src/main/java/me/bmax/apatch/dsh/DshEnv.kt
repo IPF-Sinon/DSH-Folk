@@ -571,14 +571,11 @@ object DshEnv {
     const val KEY_RACE_MIRRORS = "race_mirrors"
 
     /**
-     * 用户脚本（油猴 `.user.js`）总开关；默认开 —— 脚本只有用户自己装了才会存在。
+     * 用户脚本里**逐个启用**的那些（StringSet，存脚本 id）；不在集合里 = 只装不跑。
      *
-     * 它的用处是**页面被脚本搞坏时的退路**：管理页是原生的，不依赖 WebView，所以把这里
-     * 关掉就能让页面恢复原样（见 Userscripts）。
+     * 注不注入只看这一份名单：原来的「用户脚本总开关」已按用户要求连同逻辑一起删除
+     * （见 Userscripts）；旧设备上残留的 `dsh_userscripts_on` 值现在被忽略，等于永远视为开。
      */
-    const val KEY_USERSCRIPTS_ON = "dsh_userscripts_on"
-
-    /** 用户脚本里**逐个启用**的那些（StringSet，存脚本 id）；不在集合里 = 只装不跑。 */
     const val KEY_USERSCRIPTS_ENABLED = "dsh_userscripts_enabled"
 
     /** 宿主事实文件（JSON），由 App 写、dsh-folk-host 插件读。 */

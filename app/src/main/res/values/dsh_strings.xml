@@ -1611,7 +1611,6 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_market_section">Script marketplace (GreasyFork)</string>
     <string name="dsh_userscripts_market_hint">Search greasyfork.org: tap Install on a result to add it to the Userscripts list; the button at the bottom right installs a local .user.js, and the link icon in the top bar takes a pasted address.</string>
     <string name="dsh_userscripts_market_query_hint">Search scripts (translate, markdown, …)</string>
-    <string name="dsh_userscripts_market_search">Search</string>
     <string name="dsh_userscripts_market_popular">Popular scripts</string>
     <string name="dsh_userscripts_market_link_install">Install from a link</string>
     <string name="dsh_userscripts_market_link_desc">Paste a greasyfork script page address, or a .user.js address.</string>
@@ -1633,5 +1632,5 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_market_fail_size">That script is larger than 2MB</string>
     <string name="dsh_webview_title">Page</string>
     <string name="dsh_webview_failed">This page could not be loaded here. Check the network and retry.</string>
-    <string name="dsh_webview_cannot_handle">This screen is for reading pages only: download and install links, and non-web links, cannot be opened here. To install a script, use Install in the script marketplace, or Install from a link on the userscripts page.</string>
+    <string name="dsh_webview_cannot_handle">This screen is for reading pages only: downloads, install links and non-web links cannot be opened here. To install a script, tap Install in the script marketplace, or tap the link icon in the userscripts page top bar and paste the address.</string>
 </resources>

@@ -88,19 +88,6 @@ internal object Userscripts {
     private fun prefs(ctx: Context) =
         ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
 
-    /**
-     * 注入闸：关掉后本应用自己的页面一段用户脚本都不注入（随包发的内置那几段不受它约束）。
-     *
-     * 用户明确要求界面上**不放这个开关**，所以现在没有任何 UI 能改它 —— 只有 [setMasterEnabled]
-     * 这个写入点（注入行为本身一字未动）。曾经关过的用户无法从界面打开，这是有意的取舍。
-     */
-    fun masterEnabled(ctx: Context): Boolean =
-        prefs(ctx).getBoolean(DshEnv.KEY_USERSCRIPTS_ON, true)
-
-    fun setMasterEnabled(ctx: Context, on: Boolean) {
-        prefs(ctx).edit().putBoolean(DshEnv.KEY_USERSCRIPTS_ON, on).apply()
-    }
-
     private fun enabledIds(ctx: Context): Set<String> =
         prefs(ctx).getStringSet(DshEnv.KEY_USERSCRIPTS_ENABLED, emptySet()) ?: emptySet()
 
@@ -232,10 +219,11 @@ internal object Userscripts {
      * 这次页面加载要注入的**每一段** JS（已按 [Meta.runAt] 自行安排时机）。
      *
      * 一段一个脚本，而不是拼成一大段：WebView 分别编译，于是**一个脚本语法错不会拖垮别的**。
-     * 空列表 = 没什么要注入的（总开关关着、没装、或都被 `@match` 挡掉）。
+     * 空列表 = 没什么要注入的（一条都没启用、或都被 `@match` 挡掉）。
+     *
+     * 没有"总开关"这一层：注不注入**只由逐条开关**（[setEnabled]）决定。
      */
     fun injections(ctx: Context, url: String): List<String> {
-        if (!masterEnabled(ctx)) return emptyList()
         // list() 已经把"在启用集合里"算成了每条的 enabled
         return list(ctx)
             .filter { it.enabled }

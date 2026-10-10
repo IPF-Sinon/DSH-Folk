@@ -1005,7 +1005,7 @@ class DshWebUiActivity : AppCompatActivity() {
      * 在**文档开始前**把所有该注入的脚本装上，返回「注册这一步成没成」。
      *
      * 该注入哪几段由 [WebScripts.injections] 决定：内置（compat / inset / composer /
-     * a11y-labels / blob-download，各自的开关在注册表里）+ 用户导入的脚本（总开关 + 逐条
+     * a11y-labels / blob-download，各自的开关在注册表里）+ 用户导入的脚本（逐条开关
      * + @match）。这里只做两件原生的事：
      *
      * - 用 [loopbackOriginRules] 把范围钉死在回环地址（别的站点不该被我们动）；

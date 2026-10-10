@@ -186,8 +186,10 @@ ok(/if \(patterns\.isEmpty\(\)\) return false/.test(us),
   "锚点：matchesAny 对空模式返回 false（「没写模式」由 applies 决定放行，不是 matchesAny 自作主张）");
 ok(/\(meta\.matches\.isEmpty\(\) \|\| matchesAny\(url, meta\.matches\)\) &&[\s\S]{0,80}!matchesAny\(url, meta\.excludes\)/.test(us),
   "锚点：applies = （没写模式 或 命中）且 未被 @exclude 命中（排除优先）");
-ok(/getBoolean\(DshEnv\.KEY_USERSCRIPTS_ON, true\)/.test(us),
-  "锚点：总开关默认**开**（装了脚本却默认不跑是最难查的那种坑）");
+// 用户要求把总开关连逻辑一起删（2026-10）：注入只由逐条开关决定，引擎与 DshEnv 里都不该
+  // 再出现任何总开关键/读取函数。
+  ok(!/KEY_USERSCRIPTS_ON/.test(us) && !/masterEnabled/.test(us),
+    "总开关逻辑已删除（用户脚本注入不再受任何总开关影响）");
 ok(/url\.substringBefore\('#'\)\.substringBefore\('\?'\)/.test(us) &&
   /it\.substringBefore\('#'\)\.substringBefore\('\?'\)/.test(us),
   "锚点：匹配前 URL 与模式**两侧**都去掉 #fragment 与 ?query（@match 不管查询串）");
@@ -401,7 +403,9 @@ function run(js, ctx) {
 console.log("\n── 管线：注入 / 回落 / 桥 / 管理页 ──");
 
 ok(/fun injections\(ctx: Context, url: String\): List<String>/.test(us), "injections 返回**多段**（不是一大段）");
-ok(/if \(!masterEnabled\(ctx\)\) return emptyList\(\)/.test(us), "总开关关着：一段都不注入");
+// 注入闸现在只看逐条开关（总开关那一段判断已随逻辑一起删除）。
+  ok(!/masterEnabled/.test(us) && /KEY_USERSCRIPTS_ENABLED/.test(us),
+    "注入只由逐条开关决定（总开关逻辑已删）");
 ok(/\.filter \{ it\.enabled \}/.test(us) && /if \(!applies\(url, meta\)\) return@mapNotNull null/.test(us),
   "逐条过滤：启用的 + 匹配这次 URL 的");
 ok(/fun read\(ctx: Context, uri: Uri\): String\?/.test(us), "从 content:// 读文本（文件选择器那条路）");
@@ -490,9 +494,9 @@ ok(/runOnUiThread \{ showToast\(this@DshWebUiActivity, body\) \}/.test(webui) &&
   /\.take\(200\)/.test(webui),
   "落到 Toast，且截断长度（一个脚本刷不了屏）");
 
-ok(/const val KEY_USERSCRIPTS_ON = "dsh_userscripts_on"/.test(env) &&
-  /const val KEY_USERSCRIPTS_ENABLED = "dsh_userscripts_enabled"/.test(env),
-  "两个 prefs 键落在 DshEnv（总开关 + 逐个启用）");
+ok(/const val KEY_USERSCRIPTS_ENABLED = "dsh_userscripts_enabled"/.test(env) &&
+    !/KEY_USERSCRIPTS_ON/.test(env),
+    "只剩「逐个启用」这一个 prefs 键（总开关键已从 DshEnv 删除）");
 ok(/internal fun idOf\(title: String, text: String\): String/.test(us) &&
   /Integer\.toHexString\(text\.hashCode\(\)\)/.test(us),
   "文件名 = 标题 slug + 正文哈希（标题进名字，重装同文即覆盖）");
@@ -600,14 +604,13 @@ ok(/var pendingDelete by remember \{ mutableStateOf<String\?>\(null\) \}/.test(s
 // 总开关的 UI 从用户脚本页搬到了设置（用户要求删掉脚本页那张卡），所以写调用现在在
   // FunctionSettingsScreen.kt；用户脚本页仍然必须把逐条开关接到引擎，设置页必须同时读与写总开关。
   {
-    // 用户明确不要这个开关（K1 撤掉设置里那条），所以不再钉「设置页读写总开关」；
-  // 但注入闸仍然读总开关，这里钉 ① 脚本页逐条开关接引擎 ② 总开关读取路径还在。
+    // 总开关连逻辑一起删掉之后：只剩「脚本页逐条开关接引擎」这一件事要钉。
   {
     const lib = require("fs").readFileSync(
       "app/src/main/java/me/bmax/apatch/dsh/Userscripts.kt", "utf8");
     ok(/Userscripts\.setEnabled\(context, s\.id, want\)/.test(screen) &&
-      /fun masterEnabled\(/.test(lib) && /KEY_USERSCRIPTS_ON/.test(lib),
-      "逐条开关（脚本页）接引擎；总开关读取路径保留（注入闸不被绕过）");
+      !/masterEnabled/.test(lib) && !/KEY_USERSCRIPTS_ON/.test(lib),
+      "逐条开关（脚本页）接引擎；总开关逻辑已从引擎删除");
   }
   }
 // 设计已换：卡片底部「粘贴脚本 / 从文件选」两个按钮撤掉（粘贴那条路整条没了），改成与脚本

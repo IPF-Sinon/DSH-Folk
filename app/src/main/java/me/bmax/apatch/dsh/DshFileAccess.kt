@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
+import me.bmax.apatch.BuildConfig
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -47,8 +48,10 @@ object DshFileAccess {
      *
      * 只有它给出的 `<卷>:<路径>` document id 能确定**宿主文件系统路径**：主卷的 `primary:` →
      * [HOST_ROOT]，其余卷 → `/storage/<卷>/<路径>`（Android 把第二卷挂在那里，卷名就是冒号前
-     * 那一段 —— 见 [hostPathFromTreeUri]）。别的 authority（云盘、相册、某个应用自己的提供器）
-     * 即便 document id 长得一样，也没有可确定的宿主路径。
+     * 那一段 —— 见 [hostPathFromTreeUri]）。别的 authority（云盘、相册）即便 document id 长得
+     * 一样，也不因为"形状像"就被接受：自家提供器走 [hostPathFromPickerUri] 的第一条分支，
+     * 第三方提供器只有在 id 形状本身就是宿主路径证据（`raw:` / 绝对路径）或子项名交叉验证
+     * 通过时才接受（见 [hostPathFromPickerUri]）。
      */
     private const val EXT_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
 
@@ -193,6 +196,201 @@ object DshFileAccess {
     internal fun isExternalStorageTree(uri: Uri?): Boolean =
         EXT_STORAGE_AUTHORITY.equals(uri?.authority, ignoreCase = true)
 
+    // ──────────────────────────────────────────────────────────────────────────
+    //  其余提供器的 tree URI：自家文档提供器 / raw: 等真实路径形状 / 交叉验证
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 自家文档提供器的 authority：manifest 里 `DshDocumentsProvider` 的
+     * `${applicationId}.documents`（与 util 里 DshDocsAccess 用的是同一个算法）。
+     */
+    private fun ownDocsAuthority(): String = "${BuildConfig.APPLICATION_ID}.documents"
+
+    /**
+     * 系统选择器给的 tree URI → 真实宿主绝对路径，覆盖 [relativeFromTreeUri] /
+     * [hostPathFromTreeUri] 管不到的那些提供器。三条互斥的路，每条都以"这是宿主文件系统里
+     * 真实存在的目录"为**接受前提**：
+     *
+     * 1. **自家文档提供器**（[ownDocsAuthority]）。`DshDocumentsProvider.getDocIdForFile` 把
+     *    id 编成 `ROOT_DOC_ID + <相对 dataDir 的路径>`（根是 `"/"`），所以
+     *    `/files/rootfs/root/.dsh` → `context.dataDir/files/rootfs/root/.dsh`。
+     *    映射后仍须落在 canonical `dataDir` 内 —— 与提供器自己的 `resolveLexical` 同一条边界。
+     * 2. **document id 形状本身就是宿主路径证据**（见 [shapeHostDir]）：`raw:` 前缀、
+     *    `/` 开头的绝对形状、`storage/` / `sdcard/` 开头的相对形状。
+     * 3. **形状不足为凭**（例如第三方提供器回一个 `primary:Download`）：由 [candidateHostDir]
+     *    推出候选，再拿 SAF 那棵树列出的子项名与候选目录 `listFiles()` 的名字交叉验证
+     *    （见 [crossCheckedHostDir]）。验证不过就拒 —— 绝不挂一个可能错的目录。
+     *
+     * 云盘 / 相册这类虚拟文档三条都过不了，调用方据此给「没有本地路径」的提示。
+     */
+    fun hostPathFromPickerUri(ctx: Context, uri: Uri?): String? {
+        if (uri == null) return null
+        val authority = uri.authority ?: return null
+        val docId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+            ?.takeIf { it.isNotBlank() } ?: return null
+        if (ownDocsAuthority().equals(authority, ignoreCase = true)) {
+            return ownHostDir(ctx, docId)?.path
+        }
+        shapeHostDir(docId)?.let { return it.path }
+        return crossCheckedHostDir(ctx, uri, docId)?.path
+    }
+
+    /**
+     * 路径段：转 `/`、去首尾 `/`、丢弃空段与 `.`；出现 `..` 就整条拒（与 [normalizeDest]
+     * 同一条纪律）。返回拼好的相对路径 —— **空串是合法结果**（表示"就是这个根"），
+     * null 才表示形状不合法。
+     */
+    private fun safeSegments(rel: String): String? {
+        val segs = rel.replace('\\', '/').trim('/').split('/')
+            .filter { it.isNotEmpty() && it != "." }
+        if (segs.any { it == ".." }) return null
+        return segs.joinToString("/")
+    }
+
+    /**
+     * 自家提供器的文档 id → dataDir 下的真实目录。
+     *
+     * id 是绝对形状（`/` 或 `/files/rootfs/…`），去掉前导 `/` 直接拼到 canonical `dataDir`
+     * 下；canonicalize 之后仍须落在 `dataDir` 内（软链也逃不出去），且必须存在、是目录。
+     * 提供器自己的 `resolveLexical` 用的就是这条边界 —— 这里不额外放宽也不额外收紧。
+     */
+    private fun ownHostDir(ctx: Context, docId: String): File? {
+        val base = runCatching { ctx.dataDir.canonicalFile }.getOrNull() ?: return null
+        val rel = safeSegments(docId) ?: return null
+        val target = if (rel.isEmpty()) base else File(base, rel)
+        return allowedHostDir(target, listOf(base))
+    }
+
+    /**
+     * document id 的形状**本身就是**"这条 id 指向真实宿主路径"的证据时，给出宿主目录。
+     * 只认这几种线上真实存在的约定，别的一律 null（交给 [crossCheckedHostDir] 去验证，
+     * 不在这里猜）：
+     *
+     * - `raw:/storage/emulated/0/Download`（`com.android.providers.downloads.documents`
+     *   的 Downloads root 用的就是这种 id）；
+     * - `/storage/…`、`/sdcard/…`（id 直接就是绝对路径）；
+     * - `storage/…`、`sdcard/…`（少一个前导 `/` 的同一种形状）。
+     */
+    private fun shapeHostDir(docId: String): File? {
+        val clean = docId.replace('\\', '/')
+        val path = when {
+            clean.startsWith("raw:") -> clean.removePrefix("raw:")
+            clean.startsWith("/") -> clean
+            clean.startsWith("storage/") || clean.startsWith("sdcard/") -> "/$clean"
+            else -> return null
+        }
+        // safeSegments 返回空串表示"根"——绝对路径的根（`/`）不是可挂的目录，拒。
+        val rel = safeSegments(path) ?: return null
+        if (rel.isEmpty()) return null
+        return allowedHostDir(File("/$rel"), hostRoots())
+    }
+
+    /**
+     * 形状不足为凭时的**候选**目录 —— 只按 `<卷>:<相对路径>` 这一种约定推（`primary:` →
+     * [HOST_ROOT]，其余卷 → `/storage/<卷>`）。它**不是**接受依据，必须再经
+     * [crossCheckedHostDir] 的子项名比对。
+     */
+    private fun candidateHostDir(docId: String): File? {
+        val clean = docId.replace('\\', '/')
+        val sep = clean.indexOf(':')
+        if (sep <= 0) return null
+        val volume = clean.substring(0, sep)
+        if (!volume.all { it.isLetterOrDigit() || it == '-' || it == '_' }) return null
+        val rel = safeSegments(clean.substring(sep + 1)) ?: return null
+        val base = if (volume.equals("primary", ignoreCase = true)) HOST_ROOT else "/storage/$volume"
+        return if (rel.isEmpty()) File(base) else File(base, rel)
+    }
+
+    /**
+     * 交叉验证：把 SAF 那棵树列出的子项名字，跟候选宿主目录 `listFiles()` 的名字比对。
+     *
+     * 判据（保守 —— 「比对不通过就拒绝」）：
+     * - SAF 列不出子项、或一个都没有 → 不接受（空目录没有可核对的证据）；
+     * - SAF 的**每个**子项名都要能在候选目录里找到同名条目（子集关系）；
+     * - 提供器若报了这棵树自己的显示名，还要与候选目录名相同（忽略大小写）—— 只多一道
+     *   更严的门，不放松任何一条。
+     *
+     * 残留风险：一个虚拟目录的内容恰好与某个宿主目录同名同子项时会被误认（形状证据那条路
+     * 不存在这个问题）。所以候选必须先在 [hostRoots] 白名单里真实存在，才会走到这里。
+     */
+    private fun crossCheckedHostDir(ctx: Context, uri: Uri, docId: String): File? {
+        val candidate = candidateHostDir(docId) ?: return null
+        val host = allowedHostDir(candidate, hostRoots()) ?: return null
+        safDisplayName(ctx, uri, docId)?.let { name ->
+            if (!name.equals(host.name, ignoreCase = true)) return null
+        }
+        val safNames = safChildNames(ctx, uri, docId)
+        if (safNames.isEmpty()) return null
+        val hostNames = runCatching { host.listFiles()?.map { it.name }?.toSet() }.getOrNull()
+            ?: return null
+        return if (safNames.all { it in hostNames }) host else null
+    }
+
+    /**
+     * 可以挂给容器的**共享存储**宿主根（真实路径白名单）。绝对形状的 id 与交叉验证的候选都
+     * 必须落在其中之一：
+     *
+     * - [HOST_ROOT]（`/storage/emulated/0`，主卷）；
+     * - `/storage`（SD 卡 / U 盘卷挂在这里；`/sdcard` 是软链，[allowedHostDir] 先
+     *   canonicalize 再比，于是归到 [HOST_ROOT] 那一支）。
+     *
+     * 自家提供器的 sandbox 根（canonical `dataDir`）**不在这里** —— 它只在 [ownHostDir] 里
+     * 单独传：一个第三方 id 不该把本应用的私有目录（shared_prefs、databases 等）挂进容器。
+     */
+    private fun hostRoots(): List<File> = listOf(File(HOST_ROOT), File("/storage"))
+
+    /**
+     * 候选目录 → 通过校验的真实目录：
+     * - canonicalize（`/sdcard`、`/storage/self/primary` 这类软链归一到真实路径，也堵住
+     *   软链逃逸）；
+     * - 必须落在 [roots] 之一内（相等或在其下，按目录段边界）；
+     * - 必须存在且是目录。
+     *
+     * 任一不满足返回 null —— 调用方据此拒绝，而不是 bind 一个可能错的目录。
+     */
+    private fun allowedHostDir(candidate: File, roots: List<File>): File? {
+        val canon = runCatching { candidate.canonicalFile }.getOrNull() ?: return null
+        val inside = roots.any { root ->
+            val r = runCatching { root.canonicalFile }.getOrNull() ?: return@any false
+            canon.path == r.path || canon.path.startsWith(r.path + File.separator)
+        }
+        if (!inside) return null
+        return if (canon.isDirectory) canon else null
+    }
+
+    /** SAF 那棵树自己的显示名（列不出来 / 提供器没报 → null）。 */
+    private fun safDisplayName(ctx: Context, uri: Uri, docId: String): String? {
+        val docUri = runCatching { DocumentsContract.buildDocumentUriUsingTree(uri, docId) }
+            .getOrNull() ?: return null
+        return runCatching {
+            ctx.contentResolver.query(
+                docUri,
+                arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null, null, null,
+            )?.use { c -> if (c.moveToFirst()) c.getString(0)?.takeIf { it.isNotBlank() } else null }
+        }.getOrNull()
+    }
+
+    /** SAF 那棵树的直接子项显示名（列不出来 → 空集，交叉验证会因此拒绝）。 */
+    private fun safChildNames(ctx: Context, uri: Uri, docId: String): Set<String> {
+        val childUri = runCatching {
+            DocumentsContract.buildChildDocumentsUriUsingTree(uri, docId)
+        }.getOrNull() ?: return emptySet()
+        val names = HashSet<String>()
+        runCatching {
+            ctx.contentResolver.query(
+                childUri,
+                arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null, null, null,
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    c.getString(0)?.takeIf { it.isNotBlank() }?.let { names.add(it) }
+                }
+            }
+        }
+        return names
+    }
+
     /**
      * 某个相对 /sdcard 的路径在当前黑白名单下是否放行——供 [DshFsBridge] 用，使桥的可见范围
      * 与挂载遮罩**语义一致**（这是把「假隔离」补成真隔离的关键：桥不再绕过名单）。
@@ -311,16 +509,46 @@ object DshFileAccess {
         }
 
     /**
+     * 宿主绝对路径若本来就落在**主卷**（[HOST_ROOT] / `/sdcard`）里，折回"相对 /sdcard"的
+     * 形态；不在主卷里（第二卷 SD/U 盘、自家 dataDir）返回 null。
+     *
+     * 为什么要折：[workspaceBinds] 对"绝对宿主路径"那一支**不套黑白名单**（名单条目是相对
+     * /sdcard 的，第二卷不在那棵树上，套不上）。第三方提供器回一个
+     * `raw:/storage/emulated/0/DCIM` 时，若原样按绝对路径存下去，就等于用一条绝对路径绕过
+     * 了黑名单 —— 折回相对形态后，它和用户在页内浏览器里选的同一个目录**行为完全一致**。
+     *
+     * canonicalize 后再比：`/sdcard`、`/storage/self/primary` 这些软链归一到同一个根。
+     * 含空段 / `.` / `..` 的路径返回 null（调用方按原绝对路径继续走既有校验）。
+     */
+    internal fun relativeUnderHostRoot(raw: String): String? {
+        val p = raw.trim().replace('\\', '/')
+        if (!p.startsWith("/")) return null
+        val root = runCatching { File(HOST_ROOT).canonicalPath }.getOrNull() ?: return null
+        val canon = runCatching { File(p).canonicalPath }.getOrNull() ?: return null
+        if (canon == root) return ""
+        if (!canon.startsWith("$root/")) return null
+        val rel = canon.removePrefix("$root/")
+        if (rel.split('/').any { it.isEmpty() || it == "." || it == ".." }) return null
+        return rel
+    }
+
+    /**
      * 规整一条映射源（读偏好与写偏好都过它）。
      *
-     * 绝对路径形态（第二卷）按 [sanitizeHostPath] 校验，**形状不对返回 null —— 这条映射丢掉**，
-     * 不把一条越界/畸形的记录 bind 进容器。（整个清单都为空时，[workspaceMounts] 仍按既有语义
-     * 回落到 [DEFAULT_WS_MOUNTS] 的"整棵 /sdcard"——那是"没配过映射"的默认值。）
+     * 绝对路径形态先折回主卷相对形态（见 [relativeUnderHostRoot]），折不动（第二卷 / 自家
+     * 文档提供器）再按 [sanitizeHostPath] 校验，**形状不对返回 null —— 这条映射丢掉**，
+     * 不把一条越界/畸形的记录 bind 进容器。（整个清单都为空时，[workspaceMounts] 仍按既有
+     * 语义回落到 [DEFAULT_WS_MOUNTS] 的"整棵 /sdcard"——那是"没配过映射"的默认值。）
      * 相对形态沿用 [normalize]（同黑白名单条目语义），但额外拒 `..`。
      */
-    internal fun normalizeSrc(raw: String): String? {
+    internal fun normalizeSrc(ctx: Context, raw: String): String? {
         val p = raw.trim().replace('\\', '/')
-        if (isHostPath(p)) return sanitizeHostPath(p)
+        if (isHostPath(p)) {
+            // 主卷内的绝对路径折回相对形态：绝对形态在 workspaceBinds 里不套黑白名单，
+            // 折回去才不会比"用户在页内浏览器里选同一个目录"更宽。
+            relativeUnderHostRoot(p)?.let { return normalize(listOf(it)).firstOrNull() ?: "" }
+            return sanitizeHostPath(ctx, p)
+        }
         // 相对形态也拒 `..`（与 [normalizeDest] 同一条纪律）：[normalize] 只做去空白/去重，
         // 不认越界段 —— 留着它，`HOST_ROOT + "/../…"` 就能跑到 /sdcard 之外
         if (p.split('/').any { it == ".." }) return null
@@ -328,21 +556,30 @@ object DshFileAccess {
     }
 
     /**
-     * 第二卷宿主路径的校验/规整：只收 `/storage/<卷>/…` 形状，段里不许有空段、`.`、`..`，
-     * 卷名只收字母/数字/`-`/`_`。形状不对返回 null。
+     * 宿主绝对路径的校验/规整，收两种形状，别的绝对路径一律拒：
+     * - **第二卷（SD 卡 / U 盘）**：`/storage/<卷>/…`；段里不许有空段、`.`、`..`，卷名只收
+     *   字母/数字/`-`/`_`。
+     * - **自家文档提供器**映射出来的路径（见 [hostPathFromPickerUri] 第 1 条）：canonical
+     *   `dataDir` 本身或它下面的路径 —— 与提供器自己的边界一致。第三方 id 拿不到这一支。
      *
      * 这里**不查目录是否存在**：卡被拔掉/没挂载时它本来就不在，那不该把用户存好的映射抹掉 ——
      * 挂载那一刻再按 `isDirectory` 跳过（见 [workspaceBinds]）。
      */
-    internal fun sanitizeHostPath(raw: String): String? {
+    internal fun sanitizeHostPath(ctx: Context, raw: String): String? {
         val p = raw.trim().replace('\\', '/')
-        if (!p.startsWith("/storage/")) return null
-        val segs = p.trim('/').split('/')
-        if (segs.size < 2) return null
-        if (segs.any { it.isEmpty() || it == "." || it == ".." }) return null
-        val volume = segs[1]
-        if (volume.isEmpty() || !volume.all { it.isLetterOrDigit() || it == '-' || it == '_' }) return null
-        return "/" + segs.joinToString("/")
+        if (p.startsWith("/storage/")) {
+            val segs = p.trim('/').split('/')
+            if (segs.size < 2) return null
+            if (segs.any { it.isEmpty() || it == "." || it == ".." }) return null
+            val volume = segs[1]
+            if (volume.isEmpty() || !volume.all { it.isLetterOrDigit() || it == '-' || it == '_' }) return null
+            return "/" + segs.joinToString("/")
+        }
+        val base = runCatching { ctx.dataDir.canonicalFile.path }.getOrNull() ?: return null
+        if (p == base) return base
+        if (!p.startsWith("$base/")) return null
+        if (p.trim('/').split('/').any { it.isEmpty() || it == "." || it == ".." }) return null
+        return p.trimEnd('/')
     }
 
     /**
@@ -371,7 +608,7 @@ object DshFileAccess {
             (0 until a.length()).mapNotNull { i ->
                 val o = a.optJSONObject(i) ?: return@mapNotNull null
                 // 形状不对的 src（越界的绝对路径等）整条丢掉，不回落到"整棵 /sdcard"
-                val src = normalizeSrc(o.optString("src", "")) ?: return@mapNotNull null
+                val src = normalizeSrc(ctx, o.optString("src", "")) ?: return@mapNotNull null
                 val dest = normalizeDest(o.optString("dest", ""))
                 WsMount(src, dest)
             }
@@ -385,7 +622,7 @@ object DshFileAccess {
         val a = JSONArray()
         val seen = HashSet<String>()
         for (m in list) {
-            val src = normalizeSrc(m.src) ?: continue
+            val src = normalizeSrc(ctx, m.src) ?: continue
             val dest = normalizeDest(m.dest)
             if (!seen.add(dest)) continue
             a.put(JSONObject().put("src", src).put("dest", dest))

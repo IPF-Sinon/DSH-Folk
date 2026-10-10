@@ -148,10 +148,16 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
      *    不 take 的话，进程重启后这个 URI 就失效了 —— 而用户选它正是为了"以后一直能用"。
      *    发起时也带上 persistable/prefix 两个 flag（与「允许第三方应用访问数据目录」那条路
      *    完全相同的写法，见 FunctionSettings 的 `function_docs_access`）。
-     * 2. **换算成能挂的宿主路径**再交给 [handlePicked]：主卷（`primary:`）换成"相对 /sdcard"；
-     *    真第二卷（SD 卡 / U 盘）换成真实宿主绝对路径 `/storage/<卷>/…`（见
-     *    [DshFileAccess.hostPathFromTreeUri]）。两种都对不上就是虚拟提供器（云盘 / 相册），
-     *    宿主文件系统里没有它，容器挂不了 —— 如实说一句，不悄悄落一条错的。
+     * 2. **换算成能挂的宿主路径**再交给 [handlePicked]。三条已知约定按顺序试：
+     *    主卷（externalstorage 的 `primary:`）换成"相对 /sdcard"；真第二卷（SD 卡 / U 盘）
+     *    换成真实宿主绝对路径 `/storage/<卷>/…`（见 [DshFileAccess.hostPathFromTreeUri]）；
+     *    其余提供器交给 [DshFileAccess.hostPathFromPickerUri] —— 自家文档提供器和 `raw:` /
+     *    绝对路径形状能直接定出宿主路径，形状不足为凭的第三方提供器要过子项名交叉验证。
+     *    换出来的绝对路径若落在主卷里，还会折回"相对 /sdcard"（见
+     *    [DshFileAccess.relativeUnderHostRoot]）——与页内浏览器选同一个目录是同一种形态，
+     *    黑白名单也照常生效。
+     *    三条都对不上才是真正没有宿主路径的虚拟提供器（云盘 / 相册 SPA）：容器挂不了，如实
+     *    说一句，不悄悄落一条错的。
      */
     val systemPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -174,13 +180,19 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
             handlePicked(rel)
             return@rememberLauncherForActivityResult
         }
-        // 主卷之外再看第二卷：SD 卡 / U 盘（externalstorage 提供器的非 primary 卷）能给出真实
-        // 宿主路径；云盘 / 相册这类虚拟提供器给不出，容器挂不了 —— 提示要分开说。
+        // 主卷之外再看别的来源：第二卷（SD 卡 / U 盘）与自家文档提供器 / raw: 等形状都能给出
+        // 真实宿主绝对路径；只有三条都换不出来才落到"虚拟提供器"那句提示。
         val vol = DshFileAccess.hostPathFromTreeUri(uri)
+            ?: DshFileAccess.hostPathFromPickerUri(context, uri)
+        // 主卷内的绝对路径折回"相对 /sdcard"：与页内浏览器选同一个目录时是同一种形态，
+        // 黑白名单也因此照常生效（绝对形态在挂载层不套名单，见 DshFileAccess.workspaceBinds）。
+        val sdcardRel = vol?.let { DshFileAccess.relativeUnderHostRoot(it) }
         when {
+            // 主卷内的目录：走和 externalstorage primary 完全相同的那条路
+            sdcardRel != null -> handlePicked(sdcardRel)
             // 挂载映射按"具体目录"走，能直接吃下这个绝对路径
             vol != null && pickerFor == "ws" -> handlePicked(vol)
-            // 黑白名单存的只有"相对 /sdcard"的条目，第二卷不是那棵树；指路，不含糊
+            // 黑白名单存的只有"相对 /sdcard"的条目，别的宿主路径不是那棵树；指路，不含糊
             vol != null -> {
                 pickerFor = null
                 showToast(context, context.getString(R.string.dsh_fs_picker_list_needs_sdcard))
