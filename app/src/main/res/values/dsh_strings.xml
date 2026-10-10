@@ -793,25 +793,6 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_fs_picker_diag_title">Folder not mounted — diagnostics</string>
     <string name="dsh_fs_picker_diag_hint">When reporting this, screenshot or copy the block below: it names the provider, the document id, the root info, and the step that refused it.</string>
 
-    <!-- ── "Not mountable" is not the same as "not readable": copy the content in over SAF ── -->
-    <string name="dsh_copy_ws_action">Copy into the workspace</string>
-    <string name="dsh_copy_ws_progress_title">Copying into the workspace</string>
-    <string name="dsh_copy_ws_counts">Copied %1$d, skipped %2$d, failed %3$d</string>
-    <string name="dsh_copy_ws_current">Now: %1$s</string>
-    <string name="dsh_copy_ws_cancel">Cancel the copy</string>
-    <string name="dsh_copy_ws_done_title">Copy finished</string>
-    <string name="dsh_copy_ws_cancelled_title">Copy cancelled</string>
-    <string name="dsh_copy_ws_dest">Copied into the container at %1$s — the agent inside the container can read it right there.</string>
-    <string name="dsh_copy_ws_once">This is a one-time copy, not a live sync: later changes on the phone will not follow.</string>
-    <string name="dsh_copy_ws_again">To refresh it, come back here and copy it again — a second copy gets its own new name instead of overwriting this one.</string>
-    <string name="dsh_copy_ws_runtime_rebuild">Reinstalling or switching the runtime rebuilds the container filesystem, so content copied in physically may be wiped (folders you mounted instead are unaffected). Keep another backup of anything important.</string>
-    <string name="dsh_copy_ws_first_error">First failure: %1$s</string>
-    <string name="dsh_copy_ws_stopped_entries">Stopped at the entry limit (%1$d items), so only part of the folder was copied.</string>
-    <string name="dsh_copy_ws_stopped_bytes">Stopped at the size limit (%1$d MB), so only part of the folder was copied.</string>
-    <string name="dsh_copy_ws_stopped_space">Stopped because free space on the phone fell below %1$d MB, so only part of the folder was copied.</string>
-    <string name="dsh_copy_ws_stopped_depth">Folders nested deeper than %1$d levels were skipped; everything else was copied.</string>
-    <string name="dsh_copy_ws_error">The copy could not start: %1$s</string>
-
     <!-- ── Deep clean (long-press "Clean resources and cache") ── -->
     <string name="dsh_clean_title">Deep clean</string>
     <string name="dsh_clean_registry_summary">Scan runtime temp files, caches and logs, plus large files and folders</string>

@@ -36,9 +36,8 @@ object DshEnv {
     /**
      * 更新运行时时必须跨越 rootfs 替换的子树（rootfs 内相对路径）。
      *
-     * 只保 `root/.dsh` 是不够的 —— `.dsh` 里的文件**内容不一定在 `.dsh` 里**
-     * （它可以指到下面两个外部位置）；`root/workspace` 里还可能有用户自己放进去的东西。
-     * 下面每一项都必须跨过 rootfs 替换：
+     * 只保 `root/.dsh` 是不够的 —— `.dsh` 里的文件**内容不一定在 `.dsh` 里**，
+     * 它可以指到两个外部位置：
      *
      * - `.l2s`（[l2sDir]）：无硬链接时 proot 的 `--link2symlink` 把 `link(a,b)`
      *   实现成「把真实文件挪进 l2s 目录，a 和 b 都变成指向它的符号链接」。所以
@@ -52,19 +51,14 @@ object DshEnv {
      *   本应用会主动降级到的 copy 导入下（无硬链接设备，见 `DshPluginRepo` 的
      *   `--package-import-method copy`），已装文件与 store 根本无关 —— 删了不影响，只是白删
      *   且下次全量重下。没有回收这点空间的理由，所以同样保留。
-     * - `root/workspace`：SAF 复制（失败对话框里的「复制进工作区」，见 `DshSafImport`）把第三方
-     *   提供器的内容**物理**落在这里。「挂进工作区」的映射每次启动重新 bind，容器里看到的是宿主
-     *   别处的目录，rootfs 里不留实体文件；只有这份复制是 rootfs 里的真实文件，整个 rootfs 一换
-     *   就没了 —— 用户自己点过复制、东西却凭空消失，没有任何办法让他事先知道。
      *
-     * 这几项里只有 `.l2s` 会**立刻**让已有文件失效（node 的 `existsSync(node_modules/<pkg>/package.json)`
+     * 两者里**只有 `.l2s` 会直接让文件消失**（node 的 `existsSync(node_modules/<pkg>/package.json)`
      * 跟随悬空链接返回 false，而 `dsh.profile.bundles` 里还列着这个包 → dsh 启动第一步就抛
-     * `cannot resolve profile bundle` 退出）；`root/.local` 是"不想为此冒 pnpm 完整性风险"，
-     * `root/workspace` 则是"用户自己放进去的数据，丢了没法解释"。
+     * `cannot resolve profile bundle` 退出）；`root/.local` 是"不想为此冒 pnpm 完整性风险"。
      *
      * 顺序无关：每一项都独立 rename 出去再 rename 回来。
      */
-    val PRESERVED_PATHS = listOf("root/.dsh", "root/.local", ".l2s", "root/workspace")
+    val PRESERVED_PATHS = listOf("root/.dsh", "root/.local", ".l2s")
 
     /** 运行时替换期间暂存上述子树的目录（rootfs 之外；rename 原子搬移，零拷贝）。 */
     fun dshPreserve(ctx: Context): File = File(ctx.filesDir, ".dsh-preserve")

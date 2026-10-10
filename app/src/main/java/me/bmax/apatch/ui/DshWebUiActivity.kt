@@ -795,8 +795,9 @@ class DshWebUiActivity : AppCompatActivity() {
      * 画中画参数。
      *
      * 31+ 带 [PictureInPictureParams.Builder.setAutoEnterEnabled]：设过一次之后，用户按 home /
-     * 划走时系统自己把小窗留在应用外 —— 这正是「在应用外也看得见」要的那一步，不再依赖用户
-     * 先点一次悬浮菜单里的按钮。31 以下这个字段不存在，只能走 [onUserLeaveHint] 兜底。
+     * 手势返回桌面时系统自己把小窗留在应用外（官方文档把这一项挂在「swipe up to home」那条
+     * 手势上）—— 不再依赖用户先点一次悬浮菜单里的按钮。离开本应用去别的 App 那一半它管不到，
+     * 由 [onUserLeaveHint] + [enterPipOnLeave] 负责；31 以下这个字段不存在，也是这条路兜底。
      * 12+ 的无缝缩放：小窗与大窗之间过渡不闪一下。
      */
     private fun pipParams(autoEnter: Boolean): PictureInPictureParams {
@@ -807,6 +808,28 @@ class DshWebUiActivity : AppCompatActivity() {
         }
         return builder.build()
     }
+
+    /**
+     * [onUserLeaveHint] 那条路专用的小窗入口：**不带** auto-enter 请求。
+     *
+     * 平台规则（AOSP `ActivityTaskManagerService#enterPictureInPictureMode`，android16-release）：
+     * 客户端在 Activity 已经 PAUSING 时调进来、而参数里 `autoEnterEnabled` 为 true，平台**直接
+     * 拒绝**并 return false，原话是「If the app is using auto-enter, and it explicitly requests
+     * entering PiP while pausing, return false immediately since auto-enter should take in place
+     * instead.」；`onUserLeaveHint` 恰好在这个 PAUSING 窗口里执行，所以那里带 auto-enter 的调用
+     * 必然失败 —— 等于自己把兜底废掉：系统自动进入没管的那些场合（切到别的 App、从通知进别的 App）
+     * 就一条路都不剩了。
+     *
+     * 所以这里按 12 以前的「客户端发起」入口进（`autoEnter = false`，平台在 PAUSING 时接受这条，
+     * 见同一函数里 legacy-entry 那段注释：*a client-request that was actually a server-request
+     * (via pause(userLeaving=true))*）。滑回桌面那条路不受影响：那里继续由 [onResume] 写下的粘性
+     * 参数交给系统自动进（设过一次就一直有效）。
+     *
+     * 30 及以下这个参数根本不参与构建（[pipParams] 只在 31+ 才写 setAutoEnterEnabled），
+     * 所以传 false 与传 true 在那些版本上产出的参数完全相同，行为不变。
+     */
+    private fun enterPipOnLeave(): Boolean =
+        runCatching { enterPictureInPictureMode(pipParams(autoEnter = false)) }.getOrDefault(false)
 
     private fun pipSupported(): Boolean =
         packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
@@ -851,10 +874,14 @@ class DshWebUiActivity : AppCompatActivity() {
     /**
      * 用户离开时的兜底：**所有版本**都在这里再进一次小窗。
      *
-     * 31+ 虽然写了 `setAutoEnterEnabled`，但那是系统说了算（个别 ROM 不认），而用户报的
-     * 「离开应用后小窗不显示」在最新系统上也复现 —— 所以两条路都要有，不能只靠它。
+     * 31+ 虽然写了 `setAutoEnterEnabled`，但那是系统说了算，而且官方文档只把自动进入挂在
+     * 「手势返回桌面（swipe up to home）」这一种离开上；用户报的「切到别的 App 不进小窗」
+     * 正是它管不到的那一半 —— 那一半的官方入口就是这里（文档：*Google Maps switches to PiP
+     * mode if the user presses the home or recents button ... catch this case by overriding
+     * onUserLeaveHint()*）。注意这里必须走 [enterPipOnLeave]：平台在 PAUSING 期间会拒绝带
+     * auto-enter 的客户端请求，带 auto-enter 进等于什么都没做。
      *
-     * **静默**：这里弹引导会在用户正要走的时候糊一脸；进不去就算了，什么都不做。
+     * **静默**：这里弹引导会在用户正要走的时候糊一脸；进不去就算了，什么都不做，失败写日志。
      * [suppressAutoPip]（我们自己调外部页面时立的旗）在这里**一次性消费**，用完立刻清掉 ——
      * 那个旗卡在 true 上正好造成「怎么都不自动进」。
      */
@@ -863,7 +890,7 @@ class DshWebUiActivity : AppCompatActivity() {
         val allow = !suppressAutoPip
         suppressAutoPip = false
         if (!allow || isInPictureInPictureMode || !DshEnv.webuiPipAuto(this)) return
-        if (!enterPip()) Log.w(TAG, "onUserLeaveHint: enterPictureInPictureMode 返回 false")
+        if (!enterPipOnLeave()) Log.w(TAG, "onUserLeaveHint: enterPictureInPictureMode 返回 false")
     }
 
     /** 选择结果 → WebView 要的 Uri 数组。取消或无数据一律 null。 */

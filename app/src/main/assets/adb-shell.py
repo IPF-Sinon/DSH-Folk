@@ -121,11 +121,11 @@ class ConnectFail(Exception):
     """所有候选端口都连不上（携带尝试记录，便于用户排查）"""
 
 
-def run_on_port(device_cls, signer_cls, cmd, port):
-    """在指定端口上连接并执行命令，返回输出。任何失败抛异常。"""
+def run_on_port(device_cls, signer_cls, cmd, port, host='127.0.0.1'):
+    """在指定 host:port 上连接并执行命令，返回输出。任何失败抛异常。"""
     signer = signer_cls(open(KEYPUB, 'rb').read().strip(), open(KEY, 'rb').read())
     priv_pem = open(KEY, 'rb').read()  # PKCS#8 PEM，作为 TLS 客户端私钥（0.5.0 库：传给 connect()）
-    dev = device_cls('127.0.0.1', port)
+    dev = device_cls(host, port)
     dev.connect(rsa_keys=[signer], auth_timeout_s=20, tls_priv_pem=priv_pem)
     try:
         # 超时兜底：logcat（不带 -d）这类命令会一直挂住，旧实现无超时会永久卡死
@@ -138,6 +138,65 @@ def run_on_port(device_cls, signer_cls, cmd, port):
             dev.close()
         except Exception:
             pass
+
+
+def valid_host(h):
+    """只接受点分 IPv4（拒掉空串与畸形值）。"""
+    if not h or not isinstance(h, str):
+        return False
+    parts = h.split('.')
+    if len(parts) != 4:
+        return False
+    for p in parts:
+        if not p.isdigit() or not (0 <= int(p) <= 255):
+            return False
+    return True
+
+
+def load_connect_host():
+    """上次直连成功过的地址（adb-pair.py / 本脚本写入）。读不到或畸形返回 None。"""
+    try:
+        h = open(KEYDIR + '/connect_host').read().strip()
+        return h if valid_host(h) else None
+    except Exception:
+        return None
+
+
+def save_connect_host(host):
+    try:
+        if not valid_host(host):
+            return
+        with open(KEYDIR + '/connect_host', 'w') as f:
+            f.write(host)
+    except Exception:
+        pass
+
+
+def host_candidates(preferred=None):
+    """每个端口要尝试的直连地址，去重保序、有节制（最多两个）。
+
+    HyperOS 等 ROM 的 adbd 可能只监听 WiFi 接口（不监听回环），所以不能只认
+    127.0.0.1。顺序：持久化的 connect_host（上次通的 WiFi IP）→ 127.0.0.1；
+    若调用方给了 preferred（如 mDNS 解析出的 host）则放最前。
+    """
+    out = []
+    for h in (preferred, load_connect_host(), '127.0.0.1'):
+        if valid_host(h) and h not in out:
+            out.append(h)
+    if '127.0.0.1' not in out:
+        out.append('127.0.0.1')
+    return out[:2]
+
+
+def try_hosts(device_cls, signer_cls, cmd, port, preferred=None):
+    """在一个端口上按候选地址逐个尝试；成功返回 (out, host)，全失败抛最后一次异常。"""
+    last = None
+    for h in host_candidates(preferred):
+        try:
+            return run_on_port(device_cls, signer_cls, cmd, port, h), h
+        except Exception as e:
+            last = e
+    raise last if last is not None else RuntimeError('no host candidate')
 
 
 def load_port_history():
@@ -183,18 +242,21 @@ def connect_with_retry(device_cls, signer_cls, cmd, port):
     for p in [port] if port else []:
         tried.append(p)
         try:
-            out = run_on_port(device_cls, signer_cls, cmd, p)
+            out, h = try_hosts(device_cls, signer_cls, cmd, p)
             remember_port(p)
+            save_connect_host(h)
             return out
         except Exception as e:
             last = e
     # 端口过期/未知：mDNS 重发现（discover_conn_port 内部会回写 connect_port）
-    fresh = discover_conn_port()
+    fresh, fresh_host = discover_conn_port()
     if fresh and fresh not in tried:
         tried.append(fresh)
         try:
-            out = run_on_port(device_cls, signer_cls, cmd, fresh)
+            # mDNS 解析出的 host 最可信（设备实际监听的接口），放最前
+            out, h = try_hosts(device_cls, signer_cls, cmd, fresh, preferred=fresh_host)
             remember_port(fresh)
+            save_connect_host(h)
             return out
         except Exception as e:
             last = e
@@ -204,8 +266,9 @@ def connect_with_retry(device_cls, signer_cls, cmd, port):
             continue
         tried.append(p)
         try:
-            out = run_on_port(device_cls, signer_cls, cmd, p)
+            out, h = try_hosts(device_cls, signer_cls, cmd, p)
             remember_port(p)
+            save_connect_host(h)
             try:
                 with open(KEYDIR + '/connect_port', 'w') as f:
                     f.write(str(p))
@@ -218,8 +281,9 @@ def connect_with_retry(device_cls, signer_cls, cmd, port):
     if 5555 not in tried:
         tried.append(5555)
         try:
-            out = run_on_port(device_cls, signer_cls, cmd, 5555)
+            out, h = try_hosts(device_cls, signer_cls, cmd, 5555)
             remember_port(5555)
+            save_connect_host(h)
             return out
         except Exception as e:
             last = e
@@ -252,15 +316,25 @@ def is_readonly_cmd(cmd):
 
 
 def discover_conn_port(timeout_s=5):
-    """mDNS 自动发现无线调试连接端口（_adb-tls-connect）。找到返回端口，失败返回 0。"""
+    """mDNS 自动发现无线调试连接端口（_adb-tls-connect）。
+    返回 (port, host)：找到返回端口和解析出的 IPv4（取不到 host 时为 None）；失败返回 (0, None)。"""
     try:
         from zeroconf import Zeroconf, ServiceBrowser, ServiceListener
         found = {}
+        hosts = {}
         class L(ServiceListener):
             def add_service(self, zc, type_, name):
                 info = zc.get_service_info(type_, name)
                 if info:
                     found[info.port] = name
+                    try:
+                        addrs = info.parsed_addresses()
+                    except Exception:
+                        addrs = []
+                    for a in addrs:
+                        if valid_host(a):  # 只要 IPv4
+                            hosts[info.port] = a
+                            break
             def update_service(self, zc, type_, name):
                 pass
             def remove_service(self, zc, type_, name):
@@ -277,10 +351,10 @@ def discover_conn_port(timeout_s=5):
                     f.write(str(p))
             except Exception:
                 pass
-            return p
+            return p, hosts.get(p)
     except Exception:
         pass
-    return 0
+    return 0, None
 
 
 if __name__ == '__main__':

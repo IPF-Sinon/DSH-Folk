@@ -55,16 +55,13 @@ def ensure_key():
 
 
 def local_ips():
-    """本机所有 IPv4 接口地址（proot 与 Android 共享网络栈，能拿到 WiFi IP）。"""
+    """本机所有 IPv4 接口地址（proot 与 Android 共享网络栈，能拿到 WiFi IP）。
+
+    先用 socket 兜底（无依赖、容器里一定能跑），再用 `ip` 作为补充。容器通常没装
+    iproute2，`ip` 不存在会让 /bin/sh 往 stderr 打 `ip: not found` —— 这里把 stderr
+    全部吞掉，不让这条噪音进入用户可见输出。
+    """
     ips = []
-    try:
-        import subprocess
-        out = subprocess.check_output(
-            "ip -4 addr show | grep -oP 'inet \\K[0-9.]+' | grep -v '^127\\.'",
-            shell=True, timeout=5).decode().split()
-        ips.extend(out)
-    except Exception:
-        pass
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('8.8.8.8', 80))
@@ -72,9 +69,42 @@ def local_ips():
         s.close()
     except Exception:
         pass
+    try:
+        import subprocess
+        out = subprocess.run(
+            "ip -4 addr show | grep -oP 'inet \\K[0-9.]+' | grep -v '^127\\.'",
+            shell=True, timeout=5,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode().split()
+        ips.extend(out)
+    except Exception:
+        pass
     # 去重保序
     seen = set()
     return [ip for ip in ips if not (ip in seen or seen.add(ip))]
+
+
+def valid_host(h):
+    """只接受点分 IPv4（我们只会存/传 IPv4，拒掉空串与畸形值）。"""
+    if not h or not isinstance(h, str):
+        return False
+    parts = h.split('.')
+    if len(parts) != 4:
+        return False
+    for p in parts:
+        if not p.isdigit() or not (0 <= int(p) <= 255):
+            return False
+    return True
+
+
+def save_connect_host(host):
+    """与 connect_port 并列落盘，供 adb-shell.py 下次优先直连该地址。"""
+    try:
+        if not valid_host(host):
+            return
+        with open(KEYDIR + '/connect_host', 'w') as f:
+            f.write(host)
+    except Exception:
+        pass
 
 
 def probe(port, host='127.0.0.1', timeout=2.5):
@@ -168,26 +198,36 @@ def main():
     # 配对成功后直连自检（等 adbd 更新授权列表）
     time.sleep(1.2)
     conn = a.connect_port
+    # 候选直连地址：127.0.0.1 → 配对用过的那个地址(ADDR_USED) → 本机其它 WiFi IP。
+    # HyperOS 等 ROM 的 adbd 可能只监听 WiFi 接口（不监听回环），所以不能只认 127.0.0.1。
+    conn_hosts = ['127.0.0.1']
+    if valid_host(reachable) and reachable not in conn_hosts:
+        conn_hosts.append(reachable)
+    for ip in local_ips():
+        if ip not in conn_hosts:
+            conn_hosts.append(ip)
     last = None
     for candidate in (conn, 5555):
-        try:
-            out = adb_shell(candidate, ['id', 'getprop ro.product.model'])
-            print('CONNECT_OK port=%d' % candidate)
-            print(out.strip())
-            save_connect_port(candidate)
-            sys.exit(0)
-        except Exception as e:
-            last = e
+        for h in conn_hosts:
+            try:
+                out = adb_shell(h, candidate, ['id', 'getprop ro.product.model'])
+                print('CONNECT_OK port=%d host=%s' % (candidate, h))
+                print(out.strip())
+                save_connect_port(candidate)
+                save_connect_host(h)
+                sys.exit(0)
+            except Exception as e:
+                last = e
     print('CONNECT_WARN: 配对成功但直连失败(%s)，请在 App 填写连接端口后重试' % last)
     sys.exit(0)
 
 
-def adb_shell(port, cmds):
+def adb_shell(host, port, cmds):
     from adb_shell_wifi.adb_device import AdbDeviceTls  # 无线调试 TLS 通道
     from adb_shell_wifi.auth.sign_pythonrsa import PythonRSASigner
     signer = PythonRSASigner(open(KEYPUB, 'rb').read().strip(), open(KEY, 'rb').read())
     priv_pem = open(KEY, 'rb').read()
-    dev = AdbDeviceTls('127.0.0.1', port)
+    dev = AdbDeviceTls(host, port)
     dev.connect(rsa_keys=[signer], auth_timeout_s=20, tls_priv_pem=priv_pem)
     try:
         return dev.shell(' && '.join(cmds))

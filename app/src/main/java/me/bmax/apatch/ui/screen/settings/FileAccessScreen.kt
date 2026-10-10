@@ -31,7 +31,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,7 +51,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
@@ -60,7 +58,6 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshFileAccess
 import me.bmax.apatch.dsh.DshFileAccess.PickerHostDir
 import me.bmax.apatch.dsh.DshRuntime
-import me.bmax.apatch.dsh.DshSafImport
 import me.bmax.apatch.util.ui.showToast
 import java.io.File
 
@@ -98,11 +95,6 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
     // 系统文件选择器失败时的现场（失败原因 + 小字号诊断）。以前只弹一句 Toast：一闪就没、
     // 也装不下 authority / document id / 根信息这几行 —— 用户报障时既截不到图也抄不全。
     var pickerFailure by remember { mutableStateOf<PickerFailure?>(null) }
-
-    // 「复制进工作区」：挂不上的那一类提供器（Termux 这种目录是别的应用私有数据、本应用和
-    // 容器都读不到，但 SAF 有树授权）唯一通用的出路。**状态在 DshSafImport 上、不在页面里**：
-    // 转屏或离开这一页，任务照跑，回来进度与摘要都还在（挂在页面作用域上会被直接取消）。
-    val copyState = DshSafImport.state.collectAsStateWithLifecycle().value
 
     val dirty = allow.toList() != initialAllow || deny.toList() != initialDeny ||
         wsMounts.toList() != initialWsMounts
@@ -163,27 +155,7 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
      */
     fun failPicker(uri: Uri?, message: String) {
         pickerFor = null
-        pickerFailure = PickerFailure(message, DshFileAccess.pickerDiagnostics(context, uri), uri)
-    }
-
-    /**
-     * 「复制进工作区」：把 SAF 那棵树的内容一次性复制到 `/root/workspace/<树的显示名>`（见
-     * [DshSafImport]，它自己负责递归、上限、命名与**不覆盖**），容器里的 agent 就能直接读到。
-     *
-     * 这里**只负责按一下**：任务本体与状态都在 [DshSafImport]（应用级 scope），所以转屏、
-     * 离开设置页再回来，进度与结果摘要都还在。三条纪律的落地位置：
-     * 1. **不卡 UI**：复制全程在 `Dispatchers.IO` 上，进度只往状态里落一份快照；
-     * 2. **取消是真的取消**：取消走 [DshSafImport.cancel] → 复制循环逐块检查取消、流由 `use`
-     *    关闭。取消**不是失败**：用最后一份 `Progress` 把"已经复制了多少"如实报回去；
-     * 3. **结果要说清三件事**：复制到哪儿、这是一次性复制不是实时同步、要更新再点一次
-     *    （见 [CopyResultDialog]）。
-     *
-     * 失败对话框**不关**：复制结束后它还在下面，用户想再来一次（比如手机那边更新了内容）
-     * 直接再点一下按钮就行。
-     */
-    fun startCopyIntoWorkspace(uri: Uri) {
-        // application context 由 DshSafImport 自己取：复制可能跑上一阵，不该为它攥着 Activity
-        DshSafImport.start(context, uri)
+        pickerFailure = PickerFailure(message, DshFileAccess.pickerDiagnostics(context, uri))
     }
 
     /**
@@ -502,200 +474,12 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
     }
 
     pickerFailure?.let { f ->
-        PickerFailureDialog(
-            failure = f,
-            onDismiss = { pickerFailure = null },
-            onCopy = f.uri?.let { uri -> { startCopyIntoWorkspace(uri) } },
-        )
-    }
-
-    // 进度盖在失败对话框之上（失败对话框不关：复制完还能再点一次）。
-    // 状态来自 [DshSafImport]，所以这一页被销毁重建（转屏、切页回来）后照样能接上。
-    (copyState as? DshSafImport.State.Running)?.let { running ->
-        CopyProgressDialog(progress = running.progress, onCancel = { DshSafImport.cancel() })
-    }
-
-    (copyState as? DshSafImport.State.Done)?.let { done ->
-        CopyResultDialog(result = done.result, onDismiss = { DshSafImport.dismiss() })
+        PickerFailureDialog(failure = f, onDismiss = { pickerFailure = null })
     }
 }
 
-/**
- * 「正在复制进工作区」的进度框：已复制的条目计数 + 当前正在处理的那一条（相对路径），
- * 以及**取消**。
- *
- * 计数与路径都来自 IO 侧的进度回调（见 [startCopyIntoWorkspace]），所以大目录里一路在动；
- * 取消真的是取消：取消交给 [DshSafImport.cancel]，复制循环在下一个 64 KiB 块边界停下（见 [DshSafImport]）。
- * 点外面/返回键与「取消」等价 —— 复制还在跑就没有"隐形地在后台继续"这种状态。
- */
-@Composable
-private fun CopyProgressDialog(progress: DshSafImport.Progress, onCancel: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(stringResource(R.string.dsh_copy_ws_progress_title)) },
-        text = {
-            Column(Modifier.fillMaxWidth()) {
-                // 目的地说一次（在容器里看到的就是这个路径）
-                Text(
-                    text = progress.guestPath,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(
-                        R.string.dsh_copy_ws_counts,
-                        progress.copied, progress.skipped, progress.failed,
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    // 不限高、不截断：长路径换行显示（限高又不给滚动 = 静默裁字）
-                    text = stringResource(R.string.dsh_copy_ws_current, progress.current),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.dsh_copy_ws_cancel)) }
-        },
-    )
-}
-
-/**
- * 「复制进工作区」的结果摘要。三件事必须说清（用户 2026-10 定）：
- *
- * 1. **复制到哪儿**：容器里的 `/root/workspace/<名字>`（[DshSafImport.Result.guestPath]）——
- *    容器里的 agent 直接按这个路径读；
- * 2. **这是一次性复制，不是实时同步**：手机那边的后续改动不会跟过来；
- * 3. **要更新就再点一次**：同名的下次会自动换成 `名字 (2)`，不覆盖这一次的。
- *
- * 另外如实报：成功/跳过/失败各几个、**首条**失败原因、撞上上限停在半路、取消（不是失败）。
- */
-@Composable
-private fun CopyResultDialog(result: DshSafImport.Result, onDismiss: () -> Unit) {
-    val stopped = when (result.stop) {
-        DshSafImport.Stop.Entries ->
-            stringResource(R.string.dsh_copy_ws_stopped_entries, DshSafImport.MAX_ENTRIES)
-        DshSafImport.Stop.Bytes ->
-            stringResource(R.string.dsh_copy_ws_stopped_bytes, (DshSafImport.MAX_BYTES shr 20).toInt())
-        DshSafImport.Stop.LowSpace ->
-            stringResource(R.string.dsh_copy_ws_stopped_space, (DshSafImport.MIN_FREE_AFTER shr 20).toInt())
-        DshSafImport.Stop.None -> null
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                stringResource(
-                    if (result.cancelled) R.string.dsh_copy_ws_cancelled_title
-                    else R.string.dsh_copy_ws_done_title
-                )
-            )
-        },
-        text = {
-            Column(Modifier.fillMaxWidth()) {
-                // 整体没跑起来（拿不到树 id / 定位不到工作区 / 建目录失败）
-                if (result.error != null) {
-                    Text(
-                        text = stringResource(R.string.dsh_copy_ws_error, result.error),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                } else {
-                    CopyResultDetails(result = result, stopped = stopped)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.ok)) }
-        },
-    )
-}
-
-/** 结果摘要的正文（[CopyResultDialog] 里"跑起来了"那一支）：计数 + 到哪儿 + 三条说明 + 失败/上限。 */
-@Composable
-private fun CopyResultDetails(result: DshSafImport.Result, stopped: String?) {
-    Text(
-        text = stringResource(
-            R.string.dsh_copy_ws_counts,
-            result.copied, result.skipped, result.failed,
-        ),
-        style = MaterialTheme.typography.bodyMedium,
-    )
-    Spacer(Modifier.height(8.dp))
-    // 取消得太早（目标目录还没定下来，guestPath 为空）时，下面那三条都还谈不上：
-    // 不装作"复制到了某个地方"，让计数那一行自己说话。
-    if (result.guestPath.isNotBlank()) {
-        // ① 复制到哪儿（容器里的路径）
-        Text(
-            text = stringResource(R.string.dsh_copy_ws_dest, result.guestPath),
-            style = MaterialTheme.typography.bodySmall,
-            fontFamily = FontFamily.Monospace,
-        )
-        Spacer(Modifier.height(6.dp))
-        // ② 一次性复制、③ 要更新再点一次、④ 运行时重建会把物理复制的内容清掉（挂载不受影响）
-        Text(
-            text = stringResource(R.string.dsh_copy_ws_once),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = stringResource(R.string.dsh_copy_ws_again),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = stringResource(R.string.dsh_copy_ws_runtime_rebuild),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    // 首条失败原因：不是所有失败都值得展开（几百个失败也没法逐个看），但第一条
-    // 通常就说明了整片失败的原因（权限 / 授权没了 / IO）
-    result.firstError?.let { first ->
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = stringResource(R.string.dsh_copy_ws_first_error, first),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-        )
-    }
-    stopped?.let { line ->
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = line,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-        )
-    }
-    if (result.depthHit) {
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = stringResource(R.string.dsh_copy_ws_stopped_depth, DshSafImport.MAX_DEPTH),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-        )
-    }
-}
-
-/**
- * 系统文件选择器失败时的现场：给用户看的那句原因 + 小字号诊断（可截图 / 可复制）+ 那个树 URI。
- *
- * 留着 [uri] 是因为失败对话框上要挂「复制进工作区」：这类失败里有一半**永远挂不上**，但 SAF
- * 那棵树的内容还读得到（别的应用的私有数据：本应用与容器都读不到真实路径，而提供器愿意把内容
- * 交给拿到树授权的我们）。按钮只在这一条 URI 还在手上时出现。
- */
-private data class PickerFailure(
-    val message: String,
-    val diagnostics: String,
-    val uri: Uri?,
-)
+/** 系统文件选择器失败时的现场：给用户看的那句原因 + 小字号诊断（可截图 / 可复制）。 */
+private data class PickerFailure(val message: String, val diagnostics: String)
 
 /**
  * 「这个目录挂不了」的提示框。
@@ -706,17 +490,9 @@ private data class PickerFailure(
  * 诊断用等宽小字、可选中复制，并在纵向/横向上都能滚（长 document id 与长路径不会被裁掉，
  * 也不会把对话框顶出屏幕）。内容与 `Log.i("DshPicker", …)` 那段逐字相同（见
  * [DshFileAccess.pickerDiagnostics]）——用户截图回来，我们和日志一比对就知道是不是同一份。
- *
- * [onCopy] 非空时多一个动作按钮「复制进工作区」：**挂不上**不等于**读不到** —— 对 Termux 这类
- * 提供器（真实路径是别的应用的私有数据）挂载永远不可能成功，而内容经 SAF 还读得到，那就把它
- * 一次性复制进容器的 `/root/workspace`。
  */
 @Composable
-private fun PickerFailureDialog(
-    failure: PickerFailure,
-    onDismiss: () -> Unit,
-    onCopy: (() -> Unit)? = null,
-) {
+private fun PickerFailureDialog(failure: PickerFailure, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.dsh_fs_picker_diag_title)) },
@@ -745,13 +521,7 @@ private fun PickerFailureDialog(
             }
         },
         confirmButton = {
-            Row {
-                // 挂不上 ≠ 读不到：有 SAF 树授权时，把内容一次性复制进容器的工作区
-                if (onCopy != null) {
-                    TextButton(onClick = onCopy) { Text(stringResource(R.string.dsh_copy_ws_action)) }
-                }
-                TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.ok)) }
-            }
+            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.ok)) }
         },
     )
 }
