@@ -1,6 +1,7 @@
 package me.bmax.apatch.dsh
 
 import android.content.Context
+import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
@@ -171,8 +172,9 @@ object DshFileAccess {
         if (sep <= 0) return null
         val volume = docId.substring(0, sep)
         if (volume.equals("primary", ignoreCase = true)) return null
-        // 卷名要拼进路径：只收字母/数字/-/_（不认就拒，绝不把一个能越界的名字拼进去）
-        if (volume.isEmpty() || !volume.all { it.isLetterOrDigit() || it == '-' || it == '_' }) return null
+        // 卷名要拼进路径：收不收由 [isSafeVolumeName] 一处说了算（不认就拒，绝不把一个能
+        // 越界的名字拼进去）
+        if (!isSafeVolumeName(volume)) return null
         val rel = docId.substring(sep + 1).replace('\\', '/').trim('/')
         val segs = rel.split('/').filter { it.isNotEmpty() && it != "." }
         if (segs.any { it == ".." }) return null
@@ -216,9 +218,15 @@ object DshFileAccess {
      * - [Mountable]：推出了真实宿主路径，而且列得出目录内容（`listFiles()` 非 null）→ 能挂；
      * - [Unreadable]：真实路径**推出来了**但用不了 —— 不存在 / 不是目录 / 列不出内容
      *   （别的应用的私有数据、没拿到「所有文件访问」）→ **不挂**，如实说"本应用用不了"；
+     * - [Unverified]：真实路径**推出来了**、候选目录也存在且读得到，但和 SAF 那棵树对不上
+     *   （子项名不匹配、或只有一边列得出内容）→ **不挂**，如实说"推出可能是 X，但确认不了"
+     *   —— 路径本身要显示给用户（它同时是诊断线索）；
      * - [NoPath]：从 document id 里**压根推不出**候选真实路径（不透明 id、无冒号的 id、
-     *   `<卷>:<路径>` 里卷名推不出候选），或推出来的候选连交叉验证都过不了 → 才说"这个
-     *   提供器不给出真实路径"。
+     *   `<卷>:<路径>` 里卷名推不出候选）→ 才说"这个提供器不给出真实路径"。
+     *
+     * [Unverified] 是 2026-10 加的一条：以前交叉验证不过一律回报 [NoPath]，于是推出了路径
+     * 却告诉用户"提供器不给出真实路径" —— 与我们自己算出来的事实自相矛盾，用户也没法据此
+     * 报障。
      */
     internal sealed class PickerHostDir {
         /** 读得到、能挂的真实宿主路径。 */
@@ -226,6 +234,9 @@ object DshFileAccess {
 
         /** 推出的真实宿主路径本应用用不了（不存在 / 不是目录 / `listFiles()` 为 null）。 */
         data class Unreadable(val path: String) : PickerHostDir()
+
+        /** 推出的路径存在且读得到，但 SAF 那棵树与它对不上（不敢挂）。 */
+        data class Unverified(val path: String) : PickerHostDir()
 
         /** 推不出任何可信的真实宿主路径。 */
         object NoPath : PickerHostDir()
@@ -245,7 +256,8 @@ object DshFileAccess {
      *    `/` 开头的绝对形状、`storage/` / `sdcard/` 开头的相对形状。
      * 3. **形状不足为凭**（例如第三方提供器回一个 `primary:Download`）：由 [candidateHostDir]
      *    推出候选，再拿 SAF 那棵树列出的子项名与候选目录 `listFiles()` 的名字交叉验证
-     *    （见 [crossCheckedHostDir]）。验证不过就拒 —— 绝不挂一个可能错的目录。
+     *    （见 [crossCheckedHostDir]）。验证不过就拒（[PickerHostDir.Unverified]）—— 绝不挂
+     *    一个可能错的目录，但**把推出来的路径如实报出来**。
      *
      * **不再拿"在不在 /storage 之下"当门槛，也不再因为尾段有软链而拒**：第三方提供器（Termux、
      * DSHA、FCL、RikkaHub…）的真实路径常在 `/data/data/<包名>/…`、应用专属外部目录或 SD 卷
@@ -254,8 +266,13 @@ object DshFileAccess {
      * 本应用读不读得到（[hostDirReadable]）。
      *
      * 推得出路径但用不了的（不存在 / 不是目录 / 读不到）一律是 [PickerHostDir.Unreadable]；
-     * 只有压根推不出候选路径、或候选过不了交叉验证才是 [PickerHostDir.NoPath] —— 云盘 / 相册
-     * 这类虚拟文档落在后者，调用方据此给「没有本地路径」的提示。
+     * 推得出路径、也能用、但和 SAF 对不上是 [PickerHostDir.Unverified]；只有**压根推不出**候选
+     * 路径才是 [PickerHostDir.NoPath] —— 云盘 / 相册这类虚拟文档落在后者，调用方据此给
+     * 「没有本地路径」的提示。
+     *
+     * 判定失败时不要靠猜（我们不可能凭形状覆盖所有第三方约定）：提示里要把
+     * [pickerDiagnostics] 那段诊断一起给用户 —— authority / document id / 根信息 / 我们走到
+     * 哪一步，一次截图就能把现场交回来。
      */
     internal fun resolvePickerHostDir(ctx: Context, uri: Uri?): PickerHostDir {
         if (uri == null) return PickerHostDir.NoPath
@@ -335,6 +352,22 @@ object DshFileAccess {
     }
 
     /**
+     * `<卷>:<路径>` 里卷名能不能当**单个路径段**用（三个拼 `/storage/<卷>` 的地方共用这一条，
+     * 见 [hostPathFromTreeUri] / [candidateHostDir] / [sanitizeHostPath]）。
+     *
+     * 只收字母/数字/`-`/`_`/`.`，其余一律不收 —— 关键是 `/`、`\`、`:` 这些能改变路径结构的
+     * 字符进不来。`.` 是给第三方提供器那种 `com.termux.documents:home` 形状的卷名留的
+     * （2026-10 放宽，见 [pickerDiagnostics] 要带回来的事实）；但 `.` 与 `..` 本身是路径段、
+     * 不能当卷名（`/storage/..` 就是 `/`），所以单独排掉。
+     *
+     * 这只是"名字能不能拼进路径"，**不是接受依据**：拼出来的候选还要过
+     * [resolveHostDir]（存在 / 是目录 / 读得到）与 [crossCheckedHostDir]。
+     */
+    private fun isSafeVolumeName(volume: String): Boolean =
+        volume.isNotEmpty() && volume != "." && volume != ".." &&
+            volume.all { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' }
+
+    /**
      * 形状不足为凭时的**候选**目录 —— 只按 `<卷>:<相对路径>` 这一种约定推（`primary:` →
      * [HOST_ROOT]，其余卷 → `/storage/<卷>`）。它**不是**接受依据，必须再经
      * [crossCheckedHostDir] 的子项名比对。
@@ -344,7 +377,7 @@ object DshFileAccess {
         val sep = clean.indexOf(':')
         if (sep <= 0) return null
         val volume = clean.substring(0, sep)
-        if (!volume.all { it.isLetterOrDigit() || it == '-' || it == '_' }) return null
+        if (!isSafeVolumeName(volume)) return null
         val rel = safeSegments(clean.substring(sep + 1)) ?: return null
         val base = if (volume.equals("primary", ignoreCase = true)) HOST_ROOT else "/storage/$volume"
         return if (rel.isEmpty()) File(base) else File(base, rel)
@@ -354,15 +387,23 @@ object DshFileAccess {
      * 交叉验证：把 SAF 那棵树列出的子项名字，跟候选宿主目录 `listFiles()` 的名字比对。
      *
      * 判据（"比对不通过就拒绝"，但**不要求两边相等**）：
-     * - **推不出候选**（`<卷>:<路径>` 形状不合：没冒号、卷名带点、`..` 段）→
+     * - **推不出候选**（`<卷>:<路径>` 形状不合：没冒号、卷名带非法字符、`..` 段）→
      *   [PickerHostDir.NoPath]；
      * - 候选推出来了、但用不了（不存在 / 不是目录 / 读不到）→ [PickerHostDir.Unreadable]：
      *   路径是真的推出来了，事实就是"用不了"，不说"提供器不给出真实路径"；
-     * - **交叉验证不过**（SAF 列不出子项或一个都没有、子项名在候选目录里找不到、提供器报的
-     *   显示名与候选目录名不符）→ [PickerHostDir.NoPath]：没法确认这条 id 指的是哪个真实目录；
-     * - SAF 的**每个**子项名都要能在候选目录里找到同名条目（子集关系）。真实目录本来就和
-     *   选择器里看到的是同一份，相等是常态不是判据；虚拟目录在本地根本没有对应目录、推不出
-     *   候选，走不到这一步 —— 所以这里保持宽松，不收紧成相等。
+     * - **子项名集合对不上**（SAF 的一个子项名在候选目录里找不到、或只有一边列得出内容）→
+     *   [PickerHostDir.Unverified]：路径推出来了、目录也真实存在，只是确认不了它就是这条 id
+     *   指的那个目录 —— 不挂，但把路径显示出来；
+     * - **显示名不一致只算弱证据，不单独否**（用户 2026-10 定）：第三方提供器报的显示名
+     *   经常是应用名或本地化名（和真实目录名不同），拿它当判据就是成片误拒。它只进
+     *   [pickerDiagnostics]，不参与这里的是否接受。
+     *
+     * 判据的放宽点（与 2026-10 之前相比，两处都是"过度拒绝"的修复）：
+     * - **两边都为空 → 通过**：用户新建的空目录是很常见的选择对象，SAF 列 0 项、宿主目录也
+     *   列 0 项，这正是"同一份目录"的常态；
+     * - SAF 的**每个**子项名都要能在候选目录里找到同名条目（子集关系，不要求相等）。
+     *   真实目录本来就和选择器里看到的是同一份，相等是常态不是判据；虚拟目录在本地根本
+     *   没有对应目录、推不出候选，走不到这一步 —— 所以这里保持宽松，不收紧成相等。
      *
      * 残留风险：一个虚拟目录的内容恰好与某个宿主目录同名同子项时会被误认（形状证据那条路
      * 不存在这个问题）。
@@ -374,14 +415,22 @@ object DshFileAccess {
         // 不假装是"推不出路径"。
         if (resolved !is PickerHostDir.Mountable) return resolved
         val host = resolved.path
-        safDisplayName(ctx, uri, docId)?.let { name ->
-            if (!name.equals(File(host).name, ignoreCase = true)) return PickerHostDir.NoPath
-        }
+        // safNames == null 表示"列不出来"（提供器不支持子项查询 / 权限没了），与"空目录"分开。
         val safNames = safChildNames(ctx, uri, docId)
-        if (safNames.isEmpty()) return PickerHostDir.NoPath
         val hostNames = runCatching { File(host).listFiles()?.map { it.name }?.toSet() }.getOrNull()
-            ?: return PickerHostDir.NoPath
-        return if (safNames.all { it in hostNames }) resolved else PickerHostDir.NoPath
+        // 宿主这一侧 [resolveHostDir] 刚确认过读得到，listFiles() 却又为 null：不当证据，
+        // 按"对不上"回报（不挂），也不假装是"推不出路径"。
+        if (hostNames == null) return PickerHostDir.Unverified(host)
+        return when {
+            // 两边都空：空目录是最常见的正常情形，通过
+            safNames != null && safNames.isEmpty() && hostNames.isEmpty() -> resolved
+            // 只有一边列得出内容（含提供器列不出来 == null）：确认不了，不挂
+            safNames == null || safNames.isEmpty() || hostNames.isEmpty() ->
+                PickerHostDir.Unverified(host)
+            // SAF 的每个子项名都要能在候选目录里找到同名条目（子集关系）
+            safNames.all { it in hostNames } -> resolved
+            else -> PickerHostDir.Unverified(host)
+        }
     }
 
     /**
@@ -445,26 +494,27 @@ object DshFileAccess {
     internal fun hostDirReadable(hostPath: String): Boolean =
         runCatching { File(hostPath).listFiles() }.getOrNull() != null
 
-    /** SAF 那棵树自己的显示名（列不出来 / 提供器没报 → null）。 */
+    /** SAF 那棵树自己的显示名（列不出来 / 提供器没报 → null）。**只用于诊断**，不参与是否接受。 */
     private fun safDisplayName(ctx: Context, uri: Uri, docId: String): String? {
         val docUri = runCatching { DocumentsContract.buildDocumentUriUsingTree(uri, docId) }
             .getOrNull() ?: return null
-        return runCatching {
-            ctx.contentResolver.query(
-                docUri,
-                arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
-                null, null, null,
-            )?.use { c -> if (c.moveToFirst()) c.getString(0)?.takeIf { it.isNotBlank() } else null }
-        }.getOrNull()
+        return queryString(ctx, docUri, DocumentsContract.Document.COLUMN_DISPLAY_NAME)
     }
 
-    /** SAF 那棵树的直接子项显示名（列不出来 → 空集，交叉验证会因此拒绝）。 */
-    private fun safChildNames(ctx: Context, uri: Uri, docId: String): Set<String> {
+    /**
+     * SAF 那棵树的直接子项显示名。
+     *
+     * 三种结果必须分开（"空目录"与"列不出来"不是一回事）：
+     * - **集合**（可能是**空集**）：列出来了，空集就是真空目录；
+     * - **null**：子项游标建不出来 / 查询抛异常（提供器不支持这种查询、权限没了）——
+     *   这叫"无法确认"，调用方按 [PickerHostDir.Unverified] 回报，不当作空目录。
+     */
+    private fun safChildNames(ctx: Context, uri: Uri, docId: String): Set<String>? {
         val childUri = runCatching {
             DocumentsContract.buildChildDocumentsUriUsingTree(uri, docId)
-        }.getOrNull() ?: return emptySet()
-        val names = HashSet<String>()
-        runCatching {
+        }.getOrNull() ?: return null
+        return runCatching {
+            val names = HashSet<String>()
             ctx.contentResolver.query(
                 childUri,
                 arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
@@ -473,9 +523,215 @@ object DshFileAccess {
                 while (c.moveToNext()) {
                     c.getString(0)?.takeIf { it.isNotBlank() }?.let { names.add(it) }
                 }
+                names
+            }
+        }.getOrNull()
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  选择器失败的诊断
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 诊断字段里"没有这个值"的记号。
+     *
+     * **一律原文、不本地化**（与 bugreport 的 `basic.txt` 同一条纪律）：用户截图回来、
+     * 或我们从 logcat 里翻出来，字段名与取值都不受应用内语言影响，能逐字比对。
+     */
+    private const val DIAG_NONE = "(none)"
+
+    /** 查询失败 / 提供器不认这一列 / 权限没了。 */
+    private const val DIAG_QUERY_FAILED = "(query failed)"
+
+    /** 最多列几个 root（有的提供器 root 很多，全列会把日志与截图淹掉）。 */
+    private const val DIAG_MAX_ROOTS = 6
+
+    /** 最多列几个子项名（只为看出"对不对得上"，不需要全量）。 */
+    private const val DIAG_MAX_NAMES = 12
+
+    /**
+     * 文档游标里的 `root_id` 列。
+     *
+     * 用字面量而不是 `DocumentsContract.Document.COLUMN_ROOT_ID`：后者在 SDK 里未必存在
+     * （`DocumentsContract.Root.COLUMN_ROOT_ID` 才是确定有的那条，它在**根**游标上），
+     * 而 `root_id` 是 `DocumentsProvider` 文档表的固定列名，查不到会被 catch 成"查询失败"。
+     */
+    private const val COLUMN_DOC_ROOT_ID = "root_id"
+
+    /** 诊断日志的 tag（bugreport 的 logcat.txt 里按它翻）。 */
+    private const val TAG_PICKER = "DshPicker"
+
+    /**
+     * 挂载失败的现场诊断 —— 用户 2026-10 定：**一次截图就要能把"这家提供器到底给的是什么"
+     * 交回来**。返回的那段文字同时写进 `Log.i("DshPicker", …)`（一行一个字段）。
+     *
+     * 为什么必须有这个：第三方提供器（Termux / DSHA / SillyDroid / FCL / RikkaHub…）的
+     * document id 不是我们认得的那几种形状，光看 id 推不出真实路径 —— 靠猜永远猜不全，
+     * 只能把**提供器自己报的东西**原样带回来。逐项收集：
+     *
+     * - `uri` / `provider`（authority）：哪一家，以及 tree uri 的原始形态；
+     * - `treeId`：SAF 那棵树的 document id（[DocumentsContract.getTreeDocumentId]）；
+     * - `treeName`：该树的显示名（`COLUMN_DISPLAY_NAME`）；
+     * - **根信息**：先查 tree 那行文档的 `root_id`，再
+     *   `DocumentsContract.buildRootUri(authority, rootId)` 查这个 root 的
+     *   id / title / summary / documentId；另外把该 authority 的**全部** root 也列一份
+     *   （`buildRootsUri`）—— 有些提供器只在 root 的 summary 或 documentId 里暴露路径线索
+     *   （自家那个 summary 就是 `rootfs/root/.dsh (sessions, profiles)`）；
+     * - **我们自己走到哪一步**：`own` / `raw` / `absolute` / `relative-storage` /
+     *   `volume-candidate` / `no-candidate`，以及卷候选那一步的现场（候选路径、存在 / 是目录 /
+     *   读得到、SAF 子项名、宿主子项名、显示名对不对得上 —— 显示名只是弱证据）。
+     *
+     * **所有 query 都 try/catch**（提供器不认某一列、权限没了都是家常便饭）：拿不到就记
+     * [DIAG_QUERY_FAILED]，绝不让诊断自己抛异常。逐列单独查，一家少一列不影响其余列。
+     *
+     * 只在**失败**时调用（它要跑好几个 query）；返回值直接给界面贴小字号那一段，
+     * 所以"用户截到的图"与"日志里的那段"逐字相同。
+     */
+    internal fun pickerDiagnostics(ctx: Context, uri: Uri?): String {
+        val authority = uri?.authority
+        // treeId 一律取成非空字符串（空串 = 没拿到），后面所有调用都吃 String —— 不依赖
+        // 编译器对可空类型的智能转换。
+        val treeId = uri?.let { runCatching { DocumentsContract.getTreeDocumentId(it) }.getOrNull() }.orEmpty()
+        val hasId = treeId.isNotBlank()
+        val clean = treeId.replace('\\', '/')
+        val treeName = if (uri != null && hasId) safDisplayName(ctx, uri, treeId) else null
+
+        // ── 根信息：先拿 tree 那行文档的 root_id，再查那个 root ──
+        val docUri = if (uri != null && hasId) {
+            runCatching { DocumentsContract.buildDocumentUriUsingTree(uri, treeId) }.getOrNull()
+        } else {
+            null
+        }
+        val docRootId = docUri?.let { queryString(ctx, it, COLUMN_DOC_ROOT_ID) }
+        val rootId = docRootId.orEmpty()
+        val rootText = if (authority == null || rootId.isBlank()) {
+            "id=$DIAG_NONE title=$DIAG_NONE summary=$DIAG_NONE docId=$DIAG_NONE"
+        } else {
+            val rootUri = runCatching { DocumentsContract.buildRootUri(authority, rootId) }.getOrNull()
+            if (rootUri == null) {
+                "id=$rootId title=$DIAG_QUERY_FAILED summary=$DIAG_QUERY_FAILED docId=$DIAG_QUERY_FAILED"
+            } else {
+                "id=${queryString(ctx, rootUri, DocumentsContract.Root.COLUMN_ROOT_ID) ?: DIAG_QUERY_FAILED}" +
+                    " title=${queryString(ctx, rootUri, DocumentsContract.Root.COLUMN_TITLE) ?: DIAG_QUERY_FAILED}" +
+                    " summary=${queryString(ctx, rootUri, DocumentsContract.Root.COLUMN_SUMMARY) ?: DIAG_QUERY_FAILED}" +
+                    " docId=${queryString(ctx, rootUri, DocumentsContract.Root.COLUMN_DOCUMENT_ID) ?: DIAG_QUERY_FAILED}"
             }
         }
-        return names
+        val allRoots = if (authority == null) emptyList() else rootRows(ctx, authority)
+
+        // ── 我们自己走到哪一步（与 resolvePickerHostDir 的分支顺序逐条对应）──
+        val isOwn = authority != null && ownDocsAuthority().equals(authority, ignoreCase = true)
+        val shape = if (!isOwn && clean.isNotEmpty()) shapeHostDir(clean) else null
+        val branch = when {
+            uri == null -> "no-uri"
+            authority == null -> "no-authority"
+            !hasId -> "no-id"
+            isOwn -> "own"
+            shape != null -> when {
+                clean.startsWith("raw:") -> "raw"
+                clean.startsWith("storage/") || clean.startsWith("sdcard/") -> "relative-storage"
+                else -> "absolute"
+            }
+            candidateHostDir(clean) != null -> "volume-candidate"
+            else -> "no-candidate"
+        }
+
+        // ── 卷候选那一步的现场 ──
+        val candidate = candidateHostDir(clean)
+        val canon = candidate?.let {
+            runCatching { File(normalizeHostAlias(it.path)).canonicalFile }.getOrNull()
+        }
+        val candDir = canon != null && canon.isDirectory
+        val candReadable = if (canon != null && canon.isDirectory) hostDirReadable(canon.path) else false
+        val safNames = if (uri != null && hasId) safChildNames(ctx, uri, treeId) else null
+        val hostNames: Set<String>? = if (canon != null && canon.isDirectory) {
+            runCatching { canon.listFiles()?.map { it.name }?.toSet() }.getOrNull()
+        } else {
+            null
+        }
+        val nameMatch: Boolean? = if (treeName != null && canon != null && canon.isDirectory) {
+            treeName.equals(canon.name, ignoreCase = true)
+        } else {
+            null
+        }
+        // id 恰好是 "raw:" 这种"前缀对、路径空"的情形：形状分支吐出 null、接着落到卷候选，
+        // 而 `raw` 会被当成卷名推出 /storage/raw —— 记一笔，免得看报告的人以为是真候选。
+        val note = if (shape == null && clean.startsWith("raw:")) {
+            "shape-prefix=raw: but path is empty → fell through to volume candidate;" +
+                " the volume name is just the id prefix, not a real volume"
+        } else {
+            DIAG_NONE
+        }
+
+        val fields = listOf(
+            "uri" to (uri?.toString() ?: DIAG_NONE),
+            "provider" to (authority ?: DIAG_NONE),
+            "treeId" to (treeId.ifBlank { DIAG_NONE }),
+            "treeName" to (treeName ?: DIAG_NONE),
+            "root" to rootText,
+            "roots" to if (allRoots.isEmpty()) DIAG_NONE else allRoots.joinToString(" ; "),
+            "branch" to branch,
+            "candidate" to (candidate?.path ?: DIAG_NONE),
+            "candidateState" to "exists=${canon?.exists() == true} dir=$candDir readable=$candReadable",
+            "safChildren" to if (safNames == null) DIAG_QUERY_FAILED else "${safNames.size}: ${namesPreview(safNames)}",
+            "hostChildren" to if (hostNames == null) DIAG_QUERY_FAILED else "${hostNames.size}: ${namesPreview(hostNames)}",
+            "nameMatch" to "${nameMatch?.toString() ?: DIAG_NONE} (weak, never the sole reason)",
+            "note" to note,
+        )
+        val text = buildString {
+            for ((k, v) in fields) append(k).append(": ").append(v).append('\n')
+        }.trimEnd()
+        // 一行一个字段地进 logcat：bugreport 的 logcat.txt 会收它（受"时间窗口"限制，
+        // 默认最近 10 分钟），所以下一次报障不一定只能靠用户截图。
+        Log.i(TAG_PICKER, text)
+        return text
+    }
+
+    /**
+     * 拿一列的字符串值（第一行）。提供器不认这一列 / 权限没了 / 没有行 → null。
+     * **一次只查一列**：某一家不认某列时，别的列还能拿到。
+     */
+    private fun queryString(ctx: Context, uri: Uri, column: String): String? = runCatching {
+        ctx.contentResolver.query(uri, arrayOf(column), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0)?.takeIf { it.isNotBlank() } else null
+        }
+    }.getOrNull()
+
+    /**
+     * 这个 authority 报出来的全部 root（最多 [DIAG_MAX_ROOTS] 条），每条 `id|title|summary|docId`。
+     * 根游标拿不到（提供器不支持 / 没权限）→ 空表。
+     */
+    private fun rootRows(ctx: Context, authority: String): List<String> =
+        runCatching {
+            val rootsUri = DocumentsContract.buildRootsUri(authority)
+            val out = ArrayList<String>()
+            ctx.contentResolver.query(rootsUri, null, null, null, null)?.use { c ->
+                while (c.moveToNext() && out.size < DIAG_MAX_ROOTS) out.add(rootRowText(c))
+            }
+            out
+        }.getOrNull() ?: emptyList()
+
+    /** 根游标的一行 → `id|title|summary|docId`（取不到的列记 [DIAG_QUERY_FAILED]，逐列独立）。 */
+    private fun rootRowText(c: Cursor): String {
+        fun col(name: String): String = runCatching {
+            val i = c.getColumnIndex(name)
+            if (i < 0) null else c.getString(i)?.takeIf { it.isNotBlank() }
+        }.getOrNull() ?: DIAG_QUERY_FAILED
+        return listOf(
+            col(DocumentsContract.Root.COLUMN_ROOT_ID),
+            col(DocumentsContract.Root.COLUMN_TITLE),
+            col(DocumentsContract.Root.COLUMN_SUMMARY),
+            col(DocumentsContract.Root.COLUMN_DOCUMENT_ID),
+        ).joinToString("|")
+    }
+
+    /** 子项名预览：排序后最多 [DIAG_MAX_NAMES] 个，多出来的写成 `…(+N)`。 */
+    private fun namesPreview(names: Set<String>): String {
+        if (names.isEmpty()) return "(empty)"
+        val sorted = names.sorted()
+        val head = sorted.take(DIAG_MAX_NAMES)
+        val more = sorted.size - head.size
+        return head.joinToString(", ") + if (more > 0) ", …(+$more)" else ""
     }
 
     /**
@@ -659,7 +915,7 @@ object DshFileAccess {
             if (segs.size < 2) return null
             if (segs.any { it.isEmpty() || it == "." || it == ".." }) return null
             val volume = segs[1]
-            if (volume.isEmpty() || !volume.all { it.isLetterOrDigit() || it == '-' || it == '_' }) return null
+            if (!isSafeVolumeName(volume)) return null
             return "/" + segs.joinToString("/")
         }
         val base = runCatching { ctx.dataDir.canonicalFile.path }.getOrNull() ?: return null

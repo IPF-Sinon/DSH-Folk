@@ -789,6 +789,9 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_fs_picker_volume_missing">That folder cannot be mounted right now: its volume (or the folder itself) is gone — check that the SD card or USB drive is inserted and the folder still exists.</string>
     <string name="dsh_fs_picker_list_needs_sdcard">These lists only take folders on shared storage (/sdcard); for an SD card or USB drive, use the workspace mapping below.</string>
     <string name="dsh_fs_picker_need_subdir">Pick a subfolder for these lists (the whole /sdcard makes no sense here).</string>
+    <string name="dsh_fs_picker_unverified_path">The folder behind that choice looks like %1$s, but it could not be confirmed (the provider\'s name or contents do not match), so it was not mounted. The path is shown in the diagnostics below as a clue.</string>
+    <string name="dsh_fs_picker_diag_title">Folder not mounted — diagnostics</string>
+    <string name="dsh_fs_picker_diag_hint">When reporting this, screenshot or copy the block below: it names the provider, the document id, the root info, and the step that refused it.</string>
 
     <!-- ── Deep clean (long-press "Clean resources and cache") ── -->
     <string name="dsh_clean_title">Deep clean</string>

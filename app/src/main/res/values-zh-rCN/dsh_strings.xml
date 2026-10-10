@@ -769,6 +769,9 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_fs_picker_volume_missing">这个目录现在挂不了：它所在的卷（或这个目录本身）已经不在了 —— 检查 SD 卡/U 盘是否插好、目录是否还存在。</string>
     <string name="dsh_fs_picker_list_needs_sdcard">黑白名单只认共享存储（/sdcard）里的目录；SD 卡/U 盘请用下面的「挂进工作区」映射。</string>
     <string name="dsh_fs_picker_need_subdir">黑白名单要选一个子目录（整棵 /sdcard 在这里没有意义）。</string>
+    <string name="dsh_fs_picker_unverified_path">推出这个目录可能是 %1$s，但无法确认（提供器报的名称或内容对不上），所以没有挂载。这个路径也写在了下面的诊断信息里，作为线索。</string>
+    <string name="dsh_fs_picker_diag_title">没有挂载 —— 诊断信息</string>
+    <string name="dsh_fs_picker_diag_hint">报障时截图或复制下面这一段即可：它写明了提供器、document id、根信息，以及我们在哪一步拒绝的。</string>
 
     <!-- ── 深度清理（长按「清理资源和缓存」进来） ── -->
     <string name="dsh_clean_title">深度清理</string>

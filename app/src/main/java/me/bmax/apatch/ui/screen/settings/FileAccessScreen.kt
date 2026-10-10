@@ -1,11 +1,13 @@
 package me.bmax.apatch.ui.screen.settings
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -89,6 +92,9 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
     var wsPendingSrc by remember { mutableStateOf<String?>(null) }
     // 共享存储是否支持真硬链接（决定要不要提示「write 工具在此会失败」）。可在页内重新检测。
     var storageLinkOk by remember { mutableStateOf(DshFileAccess.storageLinkSupported(context)) }
+    // 系统文件选择器失败时的现场（失败原因 + 小字号诊断）。以前只弹一句 Toast：一闪就没、
+    // 也装不下 authority / document id / 根信息这几行 —— 用户报障时既截不到图也抄不全。
+    var pickerFailure by remember { mutableStateOf<PickerFailure?>(null) }
 
     val dirty = allow.toList() != initialAllow || deny.toList() != initialDeny ||
         wsMounts.toList() != initialWsMounts
@@ -141,6 +147,18 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
     }
 
     /**
+     * 系统文件选择器失败的统一出口：把失败原因与**诊断**一起弹出来（不再只弹一句 Toast）。
+     *
+     * 诊断（[DshFileAccess.pickerDiagnostics]）里带 authority / tree document id / 根信息 /
+     * 我们走到哪一步；它自己也会把同一段写进 `Log.i("DshPicker", …)`，所以截图与日志逐字相同。
+     * 判断标准始终是"DshFileAccess 说挂不了就不挂"，这里只负责把现场交给用户。
+     */
+    fun failPicker(uri: Uri?, message: String) {
+        pickerFor = null
+        pickerFailure = PickerFailure(message, DshFileAccess.pickerDiagnostics(context, uri))
+    }
+
+    /**
      * 系统文件选择器（`ACTION_OPEN_DOCUMENT_TREE`）：不限定提供器 —— 系统文件、MT 管理器、
      * 其它 SAF 提供器都能进来选目录，页内那个只能翻 /sdcard 的浏览器不再是唯一入口。
      *
@@ -165,10 +183,15 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
      *    黑白名单也照常生效。
      * 3. **用不了就不挂**：真实路径**推出来了**但用不了（不存在 / 不是目录 / 读不到：别的应用
      *    的私有数据、没拿到「所有文件访问」）时，给
-     *    [R.string.dsh_fs_picker_unreadable_host_dir] 的提示，不静默挂一个空目录。三种情形
+     *    [R.string.dsh_fs_picker_unreadable_host_dir] 的提示，不静默挂一个空目录。四种情形
      *    因此各说各的：**压根推不出**真实路径 →「这个提供器不给出真实路径」；**推出来但用不了**
-     *    →「本应用用不了」；系统存储提供器（externalstorage）的卷/目录不在了 → 它自己那句
-     *    「卷或目录已经不在了」（更精确，优先）。
+     *    →「本应用用不了」；**推出来、也存在，但与 SAF 那棵树对不上**（[PickerHostDir.Unverified]）
+     *    →「推出可能是 X，但确认不了」并把路径显示出来；系统存储提供器（externalstorage）的
+     *    卷/目录不在了 → 它自己那句「卷或目录已经不在了」（更精确，优先）。
+     *
+     * 四种失败都走 [failPicker]：提示框里除了原因还贴一段小字号诊断（authority / tree document id /
+     * 显示名 / 根信息 / 我们走到哪一步），用户截一张图就能把现场交回来（见
+     * [DshFileAccess.pickerDiagnostics]）。
      */
     val systemPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -193,8 +216,7 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
             if (DshFileAccess.hostDirReadable(DshFileAccess.wsHostDir(rel))) {
                 handlePicked(rel)
             } else {
-                pickerFor = null
-                showToast(context, context.getString(R.string.dsh_fs_picker_unreadable_host_dir))
+                failPicker(uri, context.getString(R.string.dsh_fs_picker_unreadable_host_dir))
             }
             return@rememberLauncherForActivityResult
         }
@@ -214,6 +236,8 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
         val hostPath = when (resolved) {
             is PickerHostDir.Mountable -> resolved.path
             is PickerHostDir.Unreadable -> resolved.path
+            // 只为了把推出来的路径显示给用户；下面第一处就拦掉，绝不按它挂载
+            is PickerHostDir.Unverified -> resolved.path
             PickerHostDir.NoPath -> null
         }
         val sdcardRel = hostPath?.let { DshFileAccess.relativeUnderHostRoot(it) }
@@ -222,13 +246,20 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
             // —— 这几条它自己就有更精确的说法（"卷或目录已经不在了"），优先于下面那句笼统的
             // "本应用用不了"。
             DshFileAccess.isExternalStorageTree(uri) && resolved !is PickerHostDir.Mountable -> {
-                pickerFor = null
-                showToast(context, context.getString(R.string.dsh_fs_picker_volume_missing))
+                failPicker(uri, context.getString(R.string.dsh_fs_picker_volume_missing))
             }
             // 真实路径推出来了但用不了（别的应用的私有数据 / 没权限 / 已经不在了）：不挂
             resolved is PickerHostDir.Unreadable -> {
-                pickerFor = null
-                showToast(context, context.getString(R.string.dsh_fs_picker_unreadable_host_dir))
+                failPicker(uri, context.getString(R.string.dsh_fs_picker_unreadable_host_dir))
+            }
+            // 路径推出来了、候选目录也真实存在，但与 SAF 那棵树对不上：不挂。以前这里报的是
+            // "提供器不给出真实路径" —— 与自己算出来的事实矛盾，也丢掉了唯一的诊断线索。
+            // 这一支必须排在下面任何"挂载"分支之前。
+            resolved is PickerHostDir.Unverified -> {
+                failPicker(
+                    uri,
+                    context.getString(R.string.dsh_fs_picker_unverified_path, resolved.path),
+                )
             }
             // 主卷内的目录：走和 externalstorage primary 完全相同的那条路
             sdcardRel != null -> handlePicked(sdcardRel)
@@ -236,13 +267,11 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
             hostPath != null && pickerFor == "ws" -> handlePicked(hostPath)
             // 黑白名单存的只有"相对 /sdcard"的条目，别的宿主路径不是那棵树；指路，不含糊
             hostPath != null -> {
-                pickerFor = null
-                showToast(context, context.getString(R.string.dsh_fs_picker_list_needs_sdcard))
+                failPicker(uri, context.getString(R.string.dsh_fs_picker_list_needs_sdcard))
             }
             // 真·虚拟提供器（云盘 / 相册 SPA / 不透明 id）：id 里压根推不出真实路径，挂不了
             else -> {
-                pickerFor = null
-                showToast(context, context.getString(R.string.dsh_fs_picker_no_local_path))
+                failPicker(uri, context.getString(R.string.dsh_fs_picker_no_local_path))
             }
         }
     }
@@ -443,6 +472,58 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
             },
         )
     }
+
+    pickerFailure?.let { f ->
+        PickerFailureDialog(failure = f, onDismiss = { pickerFailure = null })
+    }
+}
+
+/** 系统文件选择器失败时的现场：给用户看的那句原因 + 小字号诊断（可截图 / 可复制）。 */
+private data class PickerFailure(val message: String, val diagnostics: String)
+
+/**
+ * 「这个目录挂不了」的提示框。
+ *
+ * 为什么不是 Toast：失败原因要**连诊断一起**给（哪家提供器、什么 document id、根信息、
+ * 我们走到哪一步）—— Toast 一闪就没、也装不下这几行，用户报障时既截不到图也抄不全。
+ *
+ * 诊断用等宽小字、可选中复制，并在纵向/横向上都能滚（长 document id 与长路径不会被裁掉，
+ * 也不会把对话框顶出屏幕）。内容与 `Log.i("DshPicker", …)` 那段逐字相同（见
+ * [DshFileAccess.pickerDiagnostics]）——用户截图回来，我们和日志一比对就知道是不是同一份。
+ */
+@Composable
+private fun PickerFailureDialog(failure: PickerFailure, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dsh_fs_picker_diag_title)) },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Text(failure.message, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = stringResource(R.string.dsh_fs_picker_diag_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                SelectionContainer {
+                    Text(
+                        text = failure.diagnostics,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .heightIn(max = 220.dp)
+                            .verticalScroll(rememberScrollState())
+                            .horizontalScroll(rememberScrollState()),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.ok)) }
+        },
+    )
 }
 
 @Composable
