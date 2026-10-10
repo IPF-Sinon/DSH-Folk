@@ -369,7 +369,7 @@ object DshSafImport {
         )
         Log.i(
             TAG,
-            "import done: $guestPath copied=$copied skipped=$skipped failed=$failed" +
+            "import done: $guestPath copied=$copied skipped=$skipped failed=$failedCount" +
                 " stop=$stop depthHit=$depthHit bytes=$bytes" +
                 (firstError?.let { " firstError=$it" } ?: ""),
         )
