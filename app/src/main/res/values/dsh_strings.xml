@@ -784,7 +784,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_fs_picker_need_perm">All files access is required to browse folders.</string>
     <string name="dsh_fs_picker_up">.. (up one level)</string>
     <string name="dsh_fs_picker_system">System file picker</string>
-    <string name="dsh_fs_picker_no_local_path">This provider has no local path, so it cannot be mounted: cloud drives and photo apps are virtual folders; an SD card or USB drive must be mounted and this app needs all-files access.</string>
+    <string name="dsh_fs_picker_no_local_path">This provider does not expose a real path, so it cannot be mounted: cloud drives and photo apps are virtual folders — nothing in the document id points to a real path on the file system.</string>
+    <string name="dsh_fs_picker_unreadable_host_dir">This folder cannot be used by this app (it lives in another app\'s data, this app lacks all-files access, or it is gone) — mounting it would at best give you an empty folder, so it was not mounted.</string>
     <string name="dsh_fs_picker_volume_missing">That folder cannot be mounted right now: its volume (or the folder itself) is gone — check that the SD card or USB drive is inserted and the folder still exists.</string>
     <string name="dsh_fs_picker_list_needs_sdcard">These lists only take folders on shared storage (/sdcard); for an SD card or USB drive, use the workspace mapping below.</string>
     <string name="dsh_fs_picker_need_subdir">Pick a subfolder for these lists (the whole /sdcard makes no sense here).</string>

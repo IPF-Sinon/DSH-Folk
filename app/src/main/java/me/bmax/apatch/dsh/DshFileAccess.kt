@@ -49,9 +49,12 @@ object DshFileAccess {
      * 只有它给出的 `<卷>:<路径>` document id 能确定**宿主文件系统路径**：主卷的 `primary:` →
      * [HOST_ROOT]，其余卷 → `/storage/<卷>/<路径>`（Android 把第二卷挂在那里，卷名就是冒号前
      * 那一段 —— 见 [hostPathFromTreeUri]）。别的 authority（云盘、相册）即便 document id 长得
-     * 一样，也不因为"形状像"就被接受：自家提供器走 [hostPathFromPickerUri] 的第一条分支，
+     * 一样，也不因为"形状像"就被接受：自家提供器走 [resolvePickerHostDir] 的第一条分支，
      * 第三方提供器只有在 id 形状本身就是宿主路径证据（`raw:` / 绝对路径）或子项名交叉验证
-     * 通过时才接受（见 [hostPathFromPickerUri]）。
+     * 通过时才接受；最后都过同一条判据 —— 解析到底（canonical 跟随软链）、存在、是目录、
+     * **本应用读得到**（见 [resolveHostDir]）。**没有"必须落在某个根下"这条门槛，也不因为
+     * 尾段有软链而拒**：第三方提供器的真实路径本来就在 `/data/data/<包名>/…`、应用专属外部
+     * 目录或 SD 卷里，按根筛、按"规范形态"筛都是成片的误拒。
      */
     private const val EXT_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
 
@@ -207,32 +210,63 @@ object DshFileAccess {
     private fun ownDocsAuthority(): String = "${BuildConfig.APPLICATION_ID}.documents"
 
     /**
-     * 系统选择器给的 tree URI → 真实宿主绝对路径，覆盖 [relativeFromTreeUri] /
-     * [hostPathFromTreeUri] 管不到的那些提供器。三条互斥的路，每条都以"这是宿主文件系统里
-     * 真实存在的目录"为**接受前提**：
+     * 系统文件选择器那条路的判定结果。三种情形必须分开（用户 2026-10 定：唯一标准是
+     * **这个真实路径本应用能不能当普通文件读**）：
+     *
+     * - [Mountable]：推出了真实宿主路径，而且列得出目录内容（`listFiles()` 非 null）→ 能挂；
+     * - [Unreadable]：真实路径**推出来了**但用不了 —— 不存在 / 不是目录 / 列不出内容
+     *   （别的应用的私有数据、没拿到「所有文件访问」）→ **不挂**，如实说"本应用用不了"；
+     * - [NoPath]：从 document id 里**压根推不出**候选真实路径（不透明 id、无冒号的 id、
+     *   `<卷>:<路径>` 里卷名推不出候选），或推出来的候选连交叉验证都过不了 → 才说"这个
+     *   提供器不给出真实路径"。
+     */
+    internal sealed class PickerHostDir {
+        /** 读得到、能挂的真实宿主路径。 */
+        data class Mountable(val path: String) : PickerHostDir()
+
+        /** 推出的真实宿主路径本应用用不了（不存在 / 不是目录 / `listFiles()` 为 null）。 */
+        data class Unreadable(val path: String) : PickerHostDir()
+
+        /** 推不出任何可信的真实宿主路径。 */
+        object NoPath : PickerHostDir()
+    }
+
+    /**
+     * 系统选择器给的 tree URI → 判定结果（见 [PickerHostDir]），覆盖 [relativeFromTreeUri] /
+     * [hostPathFromTreeUri] 管不到的那些提供器。三条互斥的路，最后都过同一条判据
+     * （[resolveHostDir]）：**路径是不是真的解析得到、存在、是目录、本应用读得到**。
      *
      * 1. **自家文档提供器**（[ownDocsAuthority]）。`DshDocumentsProvider.getDocIdForFile` 把
      *    id 编成 `ROOT_DOC_ID + <相对 dataDir 的路径>`（根是 `"/"`），所以
      *    `/files/rootfs/root/.dsh` → `context.dataDir/files/rootfs/root/.dsh`。
-     *    映射后仍须落在 canonical `dataDir` 内 —— 与提供器自己的 `resolveLexical` 同一条边界。
+     *    映射后仍须落在 canonical `dataDir` 内 —— 与提供器自己的 `resolveLexical` 同一条边界，
+     *    这条分支**不额外收窄**（整个 dataDir 都可挂）。
      * 2. **document id 形状本身就是宿主路径证据**（见 [shapeHostDir]）：`raw:` 前缀、
      *    `/` 开头的绝对形状、`storage/` / `sdcard/` 开头的相对形状。
      * 3. **形状不足为凭**（例如第三方提供器回一个 `primary:Download`）：由 [candidateHostDir]
      *    推出候选，再拿 SAF 那棵树列出的子项名与候选目录 `listFiles()` 的名字交叉验证
      *    （见 [crossCheckedHostDir]）。验证不过就拒 —— 绝不挂一个可能错的目录。
      *
-     * 云盘 / 相册这类虚拟文档三条都过不了，调用方据此给「没有本地路径」的提示。
+     * **不再拿"在不在 /storage 之下"当门槛，也不再因为尾段有软链而拒**：第三方提供器（Termux、
+     * DSHA、FCL、RikkaHub…）的真实路径常在 `/data/data/<包名>/…`、应用专属外部目录或 SD 卷
+     * 里，按根白名单筛、或按"必须是规范形态"筛都是成片的误拒。现在把候选**解析到底**
+     * （canonical 跟随软链，挂载时系统也是这么走的），只校验解析结果：路径是不是真的、以及
+     * 本应用读不读得到（[hostDirReadable]）。
+     *
+     * 推得出路径但用不了的（不存在 / 不是目录 / 读不到）一律是 [PickerHostDir.Unreadable]；
+     * 只有压根推不出候选路径、或候选过不了交叉验证才是 [PickerHostDir.NoPath] —— 云盘 / 相册
+     * 这类虚拟文档落在后者，调用方据此给「没有本地路径」的提示。
      */
-    fun hostPathFromPickerUri(ctx: Context, uri: Uri?): String? {
-        if (uri == null) return null
-        val authority = uri.authority ?: return null
+    internal fun resolvePickerHostDir(ctx: Context, uri: Uri?): PickerHostDir {
+        if (uri == null) return PickerHostDir.NoPath
+        val authority = uri.authority ?: return PickerHostDir.NoPath
         val docId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
-            ?.takeIf { it.isNotBlank() } ?: return null
+            ?.takeIf { it.isNotBlank() } ?: return PickerHostDir.NoPath
         if (ownDocsAuthority().equals(authority, ignoreCase = true)) {
-            return ownHostDir(ctx, docId)?.path
+            return ownHostDir(ctx, docId) ?: PickerHostDir.NoPath
         }
-        shapeHostDir(docId)?.let { return it.path }
-        return crossCheckedHostDir(ctx, uri, docId)?.path
+        shapeHostDir(docId)?.let { return it }
+        return crossCheckedHostDir(ctx, uri, docId)
     }
 
     /**
@@ -251,27 +285,42 @@ object DshFileAccess {
      * 自家提供器的文档 id → dataDir 下的真实目录。
      *
      * id 是绝对形状（`/` 或 `/files/rootfs/…`），去掉前导 `/` 直接拼到 canonical `dataDir`
-     * 下；canonicalize 之后仍须落在 `dataDir` 内（软链也逃不出去），且必须存在、是目录。
-     * 提供器自己的 `resolveLexical` 用的就是这条边界 —— 这里不额外放宽也不额外收紧。
+     * 下；canonicalize 之后仍须落在 `dataDir` 内（软链也逃不出去），且必须存在、是目录、
+     * 本应用读得到。提供器自己的 `resolveLexical` 用的就是这条边界 —— 这条分支不额外放宽也
+     * 不额外收紧（**整个 dataDir 都能挂**）。
+     *
+     * 返回 null 只表示"这条 id 压根不该出现在这个提供器下"（越界 / 段非法），调用方按
+     * [PickerHostDir.NoPath] 处理 —— **不是**"读不到"那种情形（那个由 [resolveHostDir] 回
+     * [PickerHostDir.Unreadable]）。
      */
-    private fun ownHostDir(ctx: Context, docId: String): File? {
+    private fun ownHostDir(ctx: Context, docId: String): PickerHostDir? {
         val base = runCatching { ctx.dataDir.canonicalFile }.getOrNull() ?: return null
         val rel = safeSegments(docId) ?: return null
         val target = if (rel.isEmpty()) base else File(base, rel)
-        return allowedHostDir(target, listOf(base))
+        val canon = runCatching { target.canonicalFile }.getOrNull()
+        if (canon != null && canon.path != base.path &&
+            !canon.path.startsWith(base.path + File.separator)
+        ) {
+            return null
+        }
+        return resolveHostDir(target)
     }
 
     /**
-     * document id 的形状**本身就是**"这条 id 指向真实宿主路径"的证据时，给出宿主目录。
+     * document id 的形状**本身就是**"这条 id 指向真实宿主路径"的证据时，给出判定结果。
      * 只认这几种线上真实存在的约定，别的一律 null（交给 [crossCheckedHostDir] 去验证，
      * 不在这里猜）：
      *
      * - `raw:/storage/emulated/0/Download`（`com.android.providers.downloads.documents`
      *   的 Downloads root 用的就是这种 id）；
-     * - `/storage/…`、`/sdcard/…`（id 直接就是绝对路径）；
+     * - `/storage/…`、`/sdcard/…`、`/data/data/…`（id 直接就是绝对路径）；
      * - `storage/…`、`sdcard/…`（少一个前导 `/` 的同一种形状）。
+     *
+     * 形状对上了**也还不算接受**：还要过 [resolveHostDir]（别名归一 → canonical 跟随软链 →
+     * 存在、是目录、读得到）。用不了（不存在 / 不是目录 / 读不到）时返回
+     * [PickerHostDir.Unreadable]，调用方据此给"这个目录本应用用不了"那句提示 —— 不假装挂上。
      */
-    private fun shapeHostDir(docId: String): File? {
+    private fun shapeHostDir(docId: String): PickerHostDir? {
         val clean = docId.replace('\\', '/')
         val path = when {
             clean.startsWith("raw:") -> clean.removePrefix("raw:")
@@ -282,7 +331,7 @@ object DshFileAccess {
         // safeSegments 返回空串表示"根"——绝对路径的根（`/`）不是可挂的目录，拒。
         val rel = safeSegments(path) ?: return null
         if (rel.isEmpty()) return null
-        return allowedHostDir(File("/$rel"), hostRoots())
+        return resolveHostDir(File("/$rel"))
     }
 
     /**
@@ -304,59 +353,97 @@ object DshFileAccess {
     /**
      * 交叉验证：把 SAF 那棵树列出的子项名字，跟候选宿主目录 `listFiles()` 的名字比对。
      *
-     * 判据（保守 —— 「比对不通过就拒绝」）：
-     * - SAF 列不出子项、或一个都没有 → 不接受（空目录没有可核对的证据）；
-     * - SAF 的**每个**子项名都要能在候选目录里找到同名条目（子集关系）；
-     * - 提供器若报了这棵树自己的显示名，还要与候选目录名相同（忽略大小写）—— 只多一道
-     *   更严的门，不放松任何一条。
+     * 判据（"比对不通过就拒绝"，但**不要求两边相等**）：
+     * - **推不出候选**（`<卷>:<路径>` 形状不合：没冒号、卷名带点、`..` 段）→
+     *   [PickerHostDir.NoPath]；
+     * - 候选推出来了、但用不了（不存在 / 不是目录 / 读不到）→ [PickerHostDir.Unreadable]：
+     *   路径是真的推出来了，事实就是"用不了"，不说"提供器不给出真实路径"；
+     * - **交叉验证不过**（SAF 列不出子项或一个都没有、子项名在候选目录里找不到、提供器报的
+     *   显示名与候选目录名不符）→ [PickerHostDir.NoPath]：没法确认这条 id 指的是哪个真实目录；
+     * - SAF 的**每个**子项名都要能在候选目录里找到同名条目（子集关系）。真实目录本来就和
+     *   选择器里看到的是同一份，相等是常态不是判据；虚拟目录在本地根本没有对应目录、推不出
+     *   候选，走不到这一步 —— 所以这里保持宽松，不收紧成相等。
      *
      * 残留风险：一个虚拟目录的内容恰好与某个宿主目录同名同子项时会被误认（形状证据那条路
-     * 不存在这个问题）。所以候选必须先在 [hostRoots] 白名单里真实存在，才会走到这里。
+     * 不存在这个问题）。
      */
-    private fun crossCheckedHostDir(ctx: Context, uri: Uri, docId: String): File? {
-        val candidate = candidateHostDir(docId) ?: return null
-        val host = allowedHostDir(candidate, hostRoots()) ?: return null
+    private fun crossCheckedHostDir(ctx: Context, uri: Uri, docId: String): PickerHostDir {
+        val candidate = candidateHostDir(docId) ?: return PickerHostDir.NoPath
+        val resolved = resolveHostDir(candidate)
+        // 候选存在但用不了（不存在 / 不是目录 / 读不到）：路径是真的推出来了，如实回报，
+        // 不假装是"推不出路径"。
+        if (resolved !is PickerHostDir.Mountable) return resolved
+        val host = resolved.path
         safDisplayName(ctx, uri, docId)?.let { name ->
-            if (!name.equals(host.name, ignoreCase = true)) return null
+            if (!name.equals(File(host).name, ignoreCase = true)) return PickerHostDir.NoPath
         }
         val safNames = safChildNames(ctx, uri, docId)
-        if (safNames.isEmpty()) return null
-        val hostNames = runCatching { host.listFiles()?.map { it.name }?.toSet() }.getOrNull()
-            ?: return null
-        return if (safNames.all { it in hostNames }) host else null
+        if (safNames.isEmpty()) return PickerHostDir.NoPath
+        val hostNames = runCatching { File(host).listFiles()?.map { it.name }?.toSet() }.getOrNull()
+            ?: return PickerHostDir.NoPath
+        return if (safNames.all { it in hostNames }) resolved else PickerHostDir.NoPath
     }
 
     /**
-     * 可以挂给容器的**共享存储**宿主根（真实路径白名单）。绝对形状的 id 与交叉验证的候选都
-     * 必须落在其中之一：
+     * 已知的**路径别名前缀**（左 → 右）：解析前先把这些 Android 自己定的写法换成真实前缀。
      *
-     * - [HOST_ROOT]（`/storage/emulated/0`，主卷）；
-     * - `/storage`（SD 卡 / U 盘卷挂在这里；`/sdcard` 是软链，[allowedHostDir] 先
-     *   canonicalize 再比，于是归到 [HOST_ROOT] 那一支）。
+     * 这一步**不是校验门槛，不拒绝任何东西** —— 只是把 `/sdcard` 与 `/storage/emulated/0`、
+     * `/data/data` 与 `/data/user/0` 收敛到同一个真实形态（后面的 canonical 与"能不能挂"都只看
+     * 解析结果）。`/mnt/sdcard`、`/storage/self/primary` 是历史上见过的主卷别名；多用户下
+     * `/data/data` 固定指 user 0，应用自己的数据目录由 `Context.dataDir` 给出（形如
+     * `/data/user/<用户>/…`）。
      *
-     * 自家提供器的 sandbox 根（canonical `dataDir`）**不在这里** —— 它只在 [ownHostDir] 里
-     * 单独传：一个第三方 id 不该把本应用的私有目录（shared_prefs、databases 等）挂进容器。
+     * 注意**没有** `HOST_ROOT` / `/storage` 这种"映射到自己"的条目：那是以前用来做尾段逐字
+     * 比较的锚点，现在不需要了（尾段软链不再拒，直接 canonical 跟随到底）。
      */
-    private fun hostRoots(): List<File> = listOf(File(HOST_ROOT), File("/storage"))
+    private val HOST_PATH_ALIASES: List<Pair<String, String>> = listOf(
+        "/sdcard" to HOST_ROOT,
+        "/mnt/sdcard" to HOST_ROOT,
+        "/storage/self/primary" to HOST_ROOT,
+        "/data/data" to "/data/user/0",
+    )
+
+    /** 把 [path] 命中的**最长**别名前缀换成真实前缀；没命中就原样返回。 */
+    private fun normalizeHostAlias(path: String): String {
+        val hit = HOST_PATH_ALIASES
+            .filter { path == it.first || path.startsWith("${it.first}/") }
+            .maxByOrNull { it.first.length } ?: return path
+        return hit.second + path.removePrefix(hit.first)
+    }
 
     /**
-     * 候选目录 → 通过校验的真实目录：
-     * - canonicalize（`/sdcard`、`/storage/self/primary` 这类软链归一到真实路径，也堵住
-     *   软链逃逸）；
-     * - 必须落在 [roots] 之一内（相等或在其下，按目录段边界）；
-     * - 必须存在且是目录。
+     * 候选目录 → 判定结果。**只要路径推得出来，结果一定是 [PickerHostDir.Mountable] 或
+     * [PickerHostDir.Unreadable]**（用户 2026-10 定）：
      *
-     * 任一不满足返回 null —— 调用方据此拒绝，而不是 bind 一个可能错的目录。
+     * - **解析到底**：已知别名前缀先归一（[normalizeHostAlias]），再 canonicalize —— 软链
+     *   一路跟随。挂载时系统自己也是跟着软链走的，所以这里**不因为"尾段是软链"、也不因为
+     *   `/storage/<卷>` 本身是软链而拒**，只校验解析结果本身；
+     * - 解析结果存在、是目录、[hostDirReadable]（`listFiles()` 非 null，空目录算读得到）
+     *   → Mountable；
+     * - 其余（canonical 失败 / 不存在 / 不是目录 / 读不到）→ Unreadable："推得出路径但用不了"
+     *   就是事实，不能拿"提供器不给出真实路径"去说（那是 [PickerHostDir.NoPath] 的语义）。
      */
-    private fun allowedHostDir(candidate: File, roots: List<File>): File? {
-        val canon = runCatching { candidate.canonicalFile }.getOrNull() ?: return null
-        val inside = roots.any { root ->
-            val r = runCatching { root.canonicalFile }.getOrNull() ?: return@any false
-            canon.path == r.path || canon.path.startsWith(r.path + File.separator)
+    private fun resolveHostDir(candidate: File): PickerHostDir {
+        val canon = runCatching { File(normalizeHostAlias(candidate.path)).canonicalFile }.getOrNull()
+            ?: return PickerHostDir.Unreadable(candidate.path)
+        if (!canon.isDirectory) return PickerHostDir.Unreadable(canon.path)
+        return if (hostDirReadable(canon.path)) {
+            PickerHostDir.Mountable(canon.path)
+        } else {
+            PickerHostDir.Unreadable(canon.path)
         }
-        if (!inside) return null
-        return if (canon.isDirectory) canon else null
     }
+
+    /**
+     * [hostPath] 本应用能不能当普通目录读 —— **接受门槛的最后一条**（用户 2026-10 定：唯一
+     * 标准就是这个）。空目录返回空数组也算读得到（列得出目录就够了）：
+     *
+     * - `listFiles()` 非 null → 读得到，可以挂；
+     * - 为 null → 路径是真的，但这个进程无权访问（别的应用的私有数据、或没拿到「所有文件
+     *   访问」）：挂进容器只会是个空目录，调用方据此给"用不了"的提示，**不静默挂上去**。
+     */
+    internal fun hostDirReadable(hostPath: String): Boolean =
+        runCatching { File(hostPath).listFiles() }.getOrNull() != null
 
     /** SAF 那棵树自己的显示名（列不出来 / 提供器没报 → null）。 */
     private fun safDisplayName(ctx: Context, uri: Uri, docId: String): String? {

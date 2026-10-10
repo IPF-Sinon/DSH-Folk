@@ -53,6 +53,7 @@ import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshFileAccess
+import me.bmax.apatch.dsh.DshFileAccess.PickerHostDir
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.util.ui.showToast
 import java.io.File
@@ -151,13 +152,23 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
      * 2. **换算成能挂的宿主路径**再交给 [handlePicked]。三条已知约定按顺序试：
      *    主卷（externalstorage 的 `primary:`）换成"相对 /sdcard"；真第二卷（SD 卡 / U 盘）
      *    换成真实宿主绝对路径 `/storage/<卷>/…`（见 [DshFileAccess.hostPathFromTreeUri]）；
-     *    其余提供器交给 [DshFileAccess.hostPathFromPickerUri] —— 自家文档提供器和 `raw:` /
-     *    绝对路径形状能直接定出宿主路径，形状不足为凭的第三方提供器要过子项名交叉验证。
+     *    其余提供器交给 [DshFileAccess.resolvePickerHostDir] —— 自家文档提供器、`raw:` /
+     *    绝对路径形状、形状不足为凭时的子项名交叉验证，最后都过同一条判据：**解析到底**
+     *    （canonical 跟随软链，见 [DshFileAccess.resolveHostDir]）、存在、是目录、
+     *    **本应用读得到**（[DshFileAccess.hostDirReadable]，`listFiles()` 非 null）。
+     *    这里**不再要求路径落在 /storage 之下、也不因为尾段有软链而拒** —— 第三方提供器
+     *    （Termux、DSHA、FCL…）的真实路径本来就在 `/data/data/<包名>/…`、应用专属外部目录
+     *    或 SD 卷里（`/storage/<卷>` 自己都可能是个软链），按根筛、按"规范形态"筛都是成片的
+     *    误拒。
      *    换出来的绝对路径若落在主卷里，还会折回"相对 /sdcard"（见
      *    [DshFileAccess.relativeUnderHostRoot]）——与页内浏览器选同一个目录是同一种形态，
      *    黑白名单也照常生效。
-     *    三条都对不上才是真正没有宿主路径的虚拟提供器（云盘 / 相册 SPA）：容器挂不了，如实
-     *    说一句，不悄悄落一条错的。
+     * 3. **用不了就不挂**：真实路径**推出来了**但用不了（不存在 / 不是目录 / 读不到：别的应用
+     *    的私有数据、没拿到「所有文件访问」）时，给
+     *    [R.string.dsh_fs_picker_unreadable_host_dir] 的提示，不静默挂一个空目录。三种情形
+     *    因此各说各的：**压根推不出**真实路径 →「这个提供器不给出真实路径」；**推出来但用不了**
+     *    →「本应用用不了」；系统存储提供器（externalstorage）的卷/目录不在了 → 它自己那句
+     *    「卷或目录已经不在了」（更精确，优先）。
      */
     val systemPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -175,34 +186,60 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
         if (take != 0) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, take) }
         }
+        // 主卷（externalstorage 的 `primary:`）：换算成"相对 /sdcard"，与页内浏览器选同一个
+        // 目录是同一种形态，黑白名单照常生效。存在但读不到（没权限时的 FUSE 拒绝）同样不挂。
         val rel = DshFileAccess.relativeFromTreeUri(uri)
         if (rel != null) {
-            handlePicked(rel)
+            if (DshFileAccess.hostDirReadable(DshFileAccess.wsHostDir(rel))) {
+                handlePicked(rel)
+            } else {
+                pickerFor = null
+                showToast(context, context.getString(R.string.dsh_fs_picker_unreadable_host_dir))
+            }
             return@rememberLauncherForActivityResult
         }
-        // 主卷之外再看别的来源：第二卷（SD 卡 / U 盘）与自家文档提供器 / raw: 等形状都能给出
-        // 真实宿主绝对路径；只有三条都换不出来才落到"虚拟提供器"那句提示。
-        val vol = DshFileAccess.hostPathFromTreeUri(uri)
-            ?: DshFileAccess.hostPathFromPickerUri(context, uri)
+        // 主卷之外再看别的来源：第二卷（SD 卡 / U 盘）由 hostPathFromTreeUri 给出真实宿主绝对
+        // 路径；其余提供器（自家 / 第三方）交给 resolvePickerHostDir 判定。两处的结果都按
+        // "用得了吗"这一条收口 —— 用不了就是 Unreadable，不再往下走。
+        val resolved = when (val volPath = DshFileAccess.hostPathFromTreeUri(uri)) {
+            null -> DshFileAccess.resolvePickerHostDir(context, uri)
+            else -> if (DshFileAccess.hostDirReadable(volPath)) {
+                PickerHostDir.Mountable(volPath)
+            } else {
+                PickerHostDir.Unreadable(volPath)
+            }
+        }
         // 主卷内的绝对路径折回"相对 /sdcard"：与页内浏览器选同一个目录时是同一种形态，
         // 黑白名单也因此照常生效（绝对形态在挂载层不套名单，见 DshFileAccess.workspaceBinds）。
-        val sdcardRel = vol?.let { DshFileAccess.relativeUnderHostRoot(it) }
+        val hostPath = when (resolved) {
+            is PickerHostDir.Mountable -> resolved.path
+            is PickerHostDir.Unreadable -> resolved.path
+            PickerHostDir.NoPath -> null
+        }
+        val sdcardRel = hostPath?.let { DshFileAccess.relativeUnderHostRoot(it) }
         when {
-            // 主卷内的目录：走和 externalstorage primary 完全相同的那条路
-            sdcardRel != null -> handlePicked(sdcardRel)
-            // 挂载映射按"具体目录"走，能直接吃下这个绝对路径
-            vol != null && pickerFor == "ws" -> handlePicked(vol)
-            // 黑白名单存的只有"相对 /sdcard"的条目，别的宿主路径不是那棵树；指路，不含糊
-            vol != null -> {
-                pickerFor = null
-                showToast(context, context.getString(R.string.dsh_fs_picker_list_needs_sdcard))
-            }
-            // 系统存储提供器给的路径现在不成立（卡没插 / 目录已不在 / id 里带 ..）
-            DshFileAccess.isExternalStorageTree(uri) -> {
+            // 系统存储提供器（externalstorage）的树现在不成立：卡没插 / 目录已不在 / id 里带 ..
+            // —— 这几条它自己就有更精确的说法（"卷或目录已经不在了"），优先于下面那句笼统的
+            // "本应用用不了"。
+            DshFileAccess.isExternalStorageTree(uri) && resolved !is PickerHostDir.Mountable -> {
                 pickerFor = null
                 showToast(context, context.getString(R.string.dsh_fs_picker_volume_missing))
             }
-            // 虚拟提供器（云盘 / 相册 SPA）：没有宿主文件系统路径，容器挂不了
+            // 真实路径推出来了但用不了（别的应用的私有数据 / 没权限 / 已经不在了）：不挂
+            resolved is PickerHostDir.Unreadable -> {
+                pickerFor = null
+                showToast(context, context.getString(R.string.dsh_fs_picker_unreadable_host_dir))
+            }
+            // 主卷内的目录：走和 externalstorage primary 完全相同的那条路
+            sdcardRel != null -> handlePicked(sdcardRel)
+            // 挂载映射按"具体目录"走，能直接吃下这个绝对路径
+            hostPath != null && pickerFor == "ws" -> handlePicked(hostPath)
+            // 黑白名单存的只有"相对 /sdcard"的条目，别的宿主路径不是那棵树；指路，不含糊
+            hostPath != null -> {
+                pickerFor = null
+                showToast(context, context.getString(R.string.dsh_fs_picker_list_needs_sdcard))
+            }
+            // 真·虚拟提供器（云盘 / 相册 SPA / 不透明 id）：id 里压根推不出真实路径，挂不了
             else -> {
                 pickerFor = null
                 showToast(context, context.getString(R.string.dsh_fs_picker_no_local_path))
