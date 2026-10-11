@@ -25,6 +25,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -91,6 +92,9 @@ fun DshDeepCleanScreen(navigator: DestinationsNavigator) {
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirming by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf<List<String>>(emptyList()) }
+    // 删除进度：条目可能是十万级文件的大目录，一条删好几秒，没进度的话底栏按钮按下去像死了。
+    // deleting==null 表示没在删；非 null 时是 (已完成, 总数, 当前路径)。
+    var deleting by remember { mutableStateOf<Triple<Int, Int, String>?>(null) }
 
     // 扫描必须在 IO 上：rootfs 是十万级文件（见 DshDeepClean 的 KDoc）
     LaunchedEffect(scanKey) {
@@ -127,7 +131,14 @@ fun DshDeepCleanScreen(navigator: DestinationsNavigator) {
         val paths = chosen.map { it.path }
         if (paths.isEmpty()) return
         scope.launch {
-            val result = withContext(Dispatchers.IO) { DshDeepClean.delete(context, paths) }
+            deleting = Triple(0, paths.size, "")
+            val result = withContext(Dispatchers.IO) {
+                DshDeepClean.delete(context, paths) { done, total, current ->
+                    // 回调在 IO 线程上：进度状态是 Compose State，切回主线程再写
+                    scope.launch(Dispatchers.Main) { deleting = Triple(done, total, current) }
+                }
+            }
+            deleting = null
             failed = result.failed
             showToast(context, context.getString(R.string.dsh_clean_done, result.deleted))
             // 删完重扫：留下的与没删掉的要按真实情况重新列
@@ -283,6 +294,40 @@ fun DshDeepCleanScreen(navigator: DestinationsNavigator) {
             dismissButton = {
                 TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.cancel)) }
             },
+        )
+    }
+
+    // 删除进行时的进度对话框：不可取消（删一半中断会留下半删的目录，比删完更糟），
+    // 删完由 clean() 把 deleting 置空自动消失。
+    deleting?.let { (done, total, current) ->
+        AlertDialog(
+            onDismissRequest = { /* 删除中不允许关 */ },
+            title = { Text(stringResource(R.string.dsh_clean_deleting_title)) },
+            text = {
+                Column(Modifier.fillMaxWidth()) {
+                    LinearProgressIndicator(
+                        progress = { if (total > 0) done.toFloat() / total else 0f },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_clean_deleting_count, done, total),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (current.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = current,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
         )
     }
 

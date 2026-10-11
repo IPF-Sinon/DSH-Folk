@@ -810,6 +810,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_clean_confirm_title">Clean the selected items?</string>
     <string name="dsh_clean_confirm_text">%1$s will be deleted for good; there is no recycle bin. Please confirm once more that nothing in there matters.</string>
     <string name="dsh_clean_done">Cleaned %1$d item(s)</string>
+    <string name="dsh_clean_deleting_title">Cleaning up…</string>
+    <string name="dsh_clean_deleting_count">%1$d / %2$d</string>
     <string name="dsh_clean_failed_title">%1$d item(s) could not be deleted</string>
     <string name="dsh_clean_failed_hint">Usual causes: the file is in use by dsh or a plugin, or the app lacks All files access.</string>
     <string name="dsh_clean_empty">Nothing to clean up was found.</string>

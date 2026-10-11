@@ -178,11 +178,17 @@ internal object DshDeepClean {
      * 白名单根：rootfs / filesDir / cacheDir / 共享存储。清单本来只可能来自 [scan]，这里再
      * 用 canonicalPath 确认一遍 —— 扫描结果到删除之间隔着一次点击，越界检查不能省。
      */
-    fun delete(ctx: Context, paths: List<String>): DeleteResult {
+    fun delete(
+        ctx: Context,
+        paths: List<String>,
+        onProgress: ((done: Int, total: Int, current: String) -> Unit)? = null,
+    ): DeleteResult {
         val roots = allowedRoots(ctx)
         var deleted = 0
         val failed = ArrayList<String>()
-        for (p in paths) {
+        for ((index, p) in paths.withIndex()) {
+            // 每条删除前先报一次（当前这条还没删）：大目录删起来慢，用户要看得见"卡在哪一条"。
+            onProgress?.invoke(index, paths.size, p)
             val f = File(p)
             val canonical = runCatching { f.canonicalPath }.getOrNull()
             if (canonical == null || !insideRoots(canonical, roots)) {
@@ -206,6 +212,8 @@ internal object DshDeepClean {
             }
             if (ok) deleted++ else failed.add(p)
         }
+        // 收尾再报一次满格（最后一条删完后 done==total）
+        onProgress?.invoke(paths.size, paths.size, "")
         return DeleteResult(deleted, failed)
     }
 

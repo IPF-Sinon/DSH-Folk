@@ -790,6 +790,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_clean_confirm_title">清理选中的项目？</string>
     <string name="dsh_clean_confirm_text">将永久删除 %1$s，没有回收站。请再确认一次里面没有你要保留的东西。</string>
     <string name="dsh_clean_done">已清理 %1$d 项</string>
+    <string name="dsh_clean_deleting_title">正在清理…</string>
+    <string name="dsh_clean_deleting_count">%1$d / %2$d</string>
     <string name="dsh_clean_failed_title">有 %1$d 项没能删掉</string>
     <string name="dsh_clean_failed_hint">常见原因：文件正被 dsh 或插件占用，或应用没有「所有文件访问」权限。</string>
     <string name="dsh_clean_empty">没有找到可清理的项目。</string>

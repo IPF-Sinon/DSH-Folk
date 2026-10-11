@@ -78,11 +78,6 @@
     <string name="settings_clean_storage_summary">Delete downloaded themes, imported media, sound effects, and cache. Long-press for deep clean</string>
     <string name="settings_clean_storage_confirm">The following content will be deleted:\n\n• Downloaded themes\n• Imported music\n• Imported sound effects\n• All temporary cache files\n\nApp settings, DSH runtime, sessions, plugins, model configuration, and wireless ADB keys will be kept. The resource directories will then be rebuilt. Continue?</string>
     <string name="settings_clean_storage_done">Cleanup complete</string>
-    <string name="settings_clean_storage_progress">%1$s (%2$d/%3$d)</string>
-    <string name="settings_clean_step_themes">Removing downloaded themes</string>
-    <string name="settings_clean_step_music">Removing imported music</string>
-    <string name="settings_clean_step_effects">Removing imported sound effects</string>
-    <string name="settings_clean_step_cache">Clearing cache files</string>
 
 
 

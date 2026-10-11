@@ -480,17 +480,8 @@ fun CleanStorageDialog(showDialog: MutableState<Boolean>) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // 清理过程原来是「点确定→关弹窗→默默删→最后 toast」：删得慢时像死按钮，用户不知道在动。
-    // 现在就地显示进度：running 时把按钮换成进度条 + 当前步骤，删完再 toast 并关窗。
-    // 进度条是 determinate（四步，一步一格）——清理步骤是可数的，比转圈更能说明「做到哪了」。
-    var cleaning by remember { mutableStateOf(false) }
-    var step by remember { mutableStateOf("") }
-    var doneCount by remember { mutableIntStateOf(0) }
-    val totalSteps = 4
-
     BasicAlertDialog(
-        // 清理期间不许点外面关掉：任务还在删盘，弹窗一消失用户就以为没反应了
-        onDismissRequest = { if (!cleaning) showDialog.value = false }, properties = DialogProperties(
+        onDismissRequest = { showDialog.value = false }, properties = DialogProperties(
             decorFitsSystemWindows = true,
             usePlatformDefaultWidth = false,
         )
@@ -509,67 +500,37 @@ fun CleanStorageDialog(showDialog: MutableState<Boolean>) {
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
-                if (cleaning) {
-                    // 进度：当前步骤名 + 第几步/共几步，下面一条 determinate 进度条
-                    Text(
-                        text = stringResource(id = R.string.settings_clean_storage_progress, step, doneCount, totalSteps),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    LinearProgressIndicator(
-                        progress = { doneCount.toFloat() / totalSteps },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else {
-                    Text(
-                        text = stringResource(id = R.string.settings_clean_storage_confirm),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
+                Text(
+                    text = stringResource(id = R.string.settings_clean_storage_confirm),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { showDialog.value = false }) {
-                            Text(stringResource(id = android.R.string.cancel))
-                        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = { showDialog.value = false }) {
+                        Text(stringResource(id = android.R.string.cancel))
+                    }
 
-                        Button(onClick = {
-                            cleaning = true
-                            doneCount = 0
-                            scope.launch {
-                                // 删除容易因残留/占位文件导致下载或应用失败的目录，随后重建空目录。
-                                // 一步一报：每删完一类就推进一格，大目录删起来慢时用户看得见在动。
-                                val steps = listOf(
-                                    context.getString(R.string.settings_clean_step_themes) to { ->
-                                        rebuildDir(File(context.filesDir, "themes"))
-                                    },
-                                    context.getString(R.string.settings_clean_step_music) to { ->
-                                        rebuildDir(File(context.filesDir, "music"))
-                                    },
-                                    context.getString(R.string.settings_clean_step_effects) to { ->
-                                        rebuildDir(File(context.filesDir, "sound_effects"))
-                                    },
-                                    context.getString(R.string.settings_clean_step_cache) to { ->
-                                        context.cacheDir?.listFiles()?.forEach { it.deleteRecursively() }
-                                    },
-                                )
-                                var ok = true
-                                for ((label, action) in steps) {
-                                    step = label
-                                    val stepOk = withContext(Dispatchers.IO) {
-                                        runCatching { action() }.isSuccess
+                    Button(onClick = {
+                        showDialog.value = false
+                        scope.launch {
+                            val success = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    // 删除容易因残留/占位文件导致下载或应用失败的目录，随后重建空目录
+                                    listOf("themes", "music", "sound_effects").forEach { name ->
+                                        val dir = File(context.filesDir, name)
+                                        if (dir.exists()) dir.deleteRecursively()
+                                        dir.mkdirs()
                                     }
-                                    if (!stepOk) ok = false
-                                    doneCount += 1
-                                }
-                                cleaning = false
-                                showDialog.value = false
-                                showToast(context, if (ok) R.string.settings_clean_storage_done else R.string.failure)
+                                    context.cacheDir?.listFiles()?.forEach { it.deleteRecursively() }
+                                }.isSuccess
                             }
-                        }) {
-                            Text(stringResource(id = android.R.string.ok))
+                            showToast(context, if (success) R.string.settings_clean_storage_done else R.string.failure)
                         }
+                    }) {
+                        Text(stringResource(id = android.R.string.ok))
                     }
                 }
             }
@@ -577,12 +538,6 @@ fun CleanStorageDialog(showDialog: MutableState<Boolean>) {
             APDialogBlurBehindUtils.setupWindowBlurListener(dialogWindowProvider.window)
         }
     }
-}
-
-/** 删掉一个目录再重建空目录（清理时反复用到的那一步）。 */
-private fun rebuildDir(dir: File) {
-    if (dir.exists()) dir.deleteRecursively()
-    dir.mkdirs()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
