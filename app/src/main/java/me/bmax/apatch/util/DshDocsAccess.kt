@@ -54,13 +54,19 @@ import me.bmax.apatch.BuildConfig
  *
  * ## 候选名单按「能力」算，不按厂商包名硬编码
  *
- * 三类并集：`ACTION_OPEN_DOCUMENT_TREE` 的处理器（能选文件夹 —— 系统文件管理器在这一类）、
- * `ACTION_VIEW` + 目录 MIME 的处理器（能打开文件夹）、以及 [MT_PACKAGES]（MT 管理器的
- * 「添加本地存储」是自己去调系统选择器，不声明上面那两个 intent-filter，按能力查不到它）。
+ * 四类并集：`ACTION_OPEN_DOCUMENT_TREE` 的处理器（能选文件夹 —— 系统文件管理器在这一类）、
+ * `ACTION_VIEW` + 目录 MIME 的处理器（能打开文件夹）、[MT_PACKAGES]（MT 管理器的
+ * 「添加本地存储」是自己去调系统选择器，不声明上面那两个 intent-filter，按能力查不到它），
+ * 以及**所有能从桌面启动的已安装应用**（`ACTION_MAIN` + `CATEGORY_LAUNCHER`，默认不勾）。
  * 默认勾选「能选文件夹且是系统应用」的那一个（就是系统文件管理器）与 MT 管理器。
  *
- * 这三类之外的应用不给授（[grant] 会再查一遍名单）：一次误勾等于把整个私有目录交出去，
- * 名单是这条通道唯一的安全边界。
+ * 为什么要并进启动器应用：想授权的第三方应用（某个网盘 / 某个专用管理器）往往**不声明**选
+ * 文件夹的 intent-filter，只按前三类能力去查，弹窗里就只剩固定那几个 —— 用户要授的那个根本
+ * 出不来。并进启动器应用后用户能搜到并勾选任意信任的应用。
+ *
+ * 安全边界不变：启动器应用**默认不勾**，必须用户手动勾选并点「授权」；[grant] 还会再查一遍
+ * 名单，名单之外一律不授。一次误勾等于把整个私有目录交出去，所以默认全不勾、全靠用户显式选。
+
  *
  * ## 授的是哪个 URI
  *
@@ -125,6 +131,13 @@ object DshDocsAccess {
                 found.putIfAbsent(pkg, labelOf(pm, pkg))
             }
         }
+
+        // 其余所有「能从桌面启动的」已安装应用也列进来（默认不勾）。按能力只找得到系统文件
+        // 管理器和 MT 这几家，可用户想授的第三方应用（某个网盘、某个专用管理器）往往不声明
+        // 选文件夹的 intent-filter，于是弹窗里只剩那固定几个 —— 用户报的「只能选固定的」就是这个。
+        // 这里把启动器应用并进来当候选，让用户自己能搜到并勾选任意信任应用；安全边界仍在：
+        // 默认不勾、必须手动勾选并点「授权」，且 [grant] 只放行出现在候选名单里的包。
+        collect(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)) { false }
 
         return found.map { (pkg, label) -> Candidate(pkg, label, pkg in defaults) }
             .sortedWith(compareBy({ !it.defaultOn }, { it.label }))

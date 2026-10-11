@@ -30,6 +30,34 @@ protectionLevel is `signature|appop`, so the app cannot request it directly). Wi
 For context, `/storage/emulated/0` is already bind-mounted into the container, so ordinary `read`/`write`/`glob` often suffice;
 the bridge's value is that it provides a **narrow and auditable** path, not access itself.
 
+`dsh-saf` — for the kind of provider that **cannot be mounted** (typically Termux: its files live in another app's private
+storage, so the container's proot cannot reach the real path), the host app operates it over SAF (ContentResolver /
+DocumentsContract) on your behalf. **No real path, no copying of the whole tree, no root, no mount** — it only works on a tree
+you picked with the system picker under **Settings → File access scope** and that was then registered as a "SAF source" (that
+registration happens on the branch where a folder cannot be mounted — see the picker routing below). It shares the same token,
+port and loopback guard as `dsh-fs` / `dsh-native`; the endpoint prefix is `/saf/`:
+
+```
+dsh-saf sources                                    # list registered SAF sources (name / authority)
+dsh-saf list <src> [path] [--limit N]              # list a directory in that tree
+dsh-saf stat <src> <path>
+dsh-saf read <src> <path> [--offset N] [--length N]   # writes binary to stdout
+dsh-saf write <local-file> <src> <path> [--append]    # upload a local container file into the tree
+dsh-saf mkdir <src> <path>
+dsh-saf rm <src> <path>
+dsh-saf mv <src> <from> <to>
+dsh-saf cp <src> <from> <to>
+```
+
+Paths are relative to that tree's root; the host resolves them **segment by segment** by display name into a documentId (SAF has
+no real path), and rejects `..` / empty segments / absolute paths. Reads (`sources` / `list` / `stat` / `read`) take the **read**
+level; everything else (`write` / `mkdir` / `rm` / `mv` / `cp`) takes **read+write**. This is a separate native capability (`saf`,
+off by default): enable it under **Settings → Security → Native Capabilities**, and writes require the read+write level or you get
+`403 write_disabled`; with no registered source you get `no_saf_source`. Over SAF a cross-folder `mv` cannot also rename, `cp`
+keeps the original name, and some providers do not implement copy at all (`copy_unsupported`) — those are provider limits, not
+transient errors. It is the same SAF path MT Manager uses to read Termux, except every call goes through the host app and is
+gated and audited.
+
 The same loopback bridge also exposes **cloud-backup packing endpoints** (`/cloud/appdata/status`,
 `/cloud/appdata/export`, `/cloud/appdata/restore`) that the `dsh-folk-cloud` plugin calls in reverse
 when a backup/restore includes **app data**: app settings and appearance live in the app's private
@@ -37,13 +65,13 @@ directory where the container cannot reach them, so the app produces/consumes th
 the backup screen's export/import path). They share the same token and loopback guard as
 `dsh-fs`/`dsh-native`; older app versions lacking them make the plugin fall back to DSH-only tiers.
 
-`dsh-native` — invokes native capabilities through the App, 24 in total, **all disabled by default**: enable the master toggle under **Settings → Security → Native Capabilities**,
+`dsh-native` — invokes native capabilities through the App, 25 in total, **all disabled by default**: enable the master toggle under **Settings → Security → Native Capabilities**,
 then select individual capabilities. The UI groups them into four categories according to “what this capability affects”; the lower the group, the more caution it warrants:
 
 ```
 Interact with device   notify / full_screen_notify / toast / vibrate / clipboard / intent (share and open links) / tts (speech synthesis)
 Read device state      device / network / phone / sensors
-Personal data          media / camera / mic / location / calendar / contacts / sms / a11y (accessibility)
+Personal data          media / camera / mic / location / calendar / contacts / sms / saf (SAF bridge) / a11y (accessibility)
 Change system state    volume / settings / install / usage / shell (privileged commands)
 ```
 

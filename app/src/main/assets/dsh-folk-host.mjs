@@ -115,6 +115,17 @@ const CAP_USAGE = {
   usage: [
     'dsh-native usage list [--days N] [--limit N]           # recent app foreground usage',
   ],
+  saf: [
+    'dsh-saf sources                                        # list registered SAF sources (name, authority)',
+    'dsh-saf list <src> [path] [--limit N]                  # list a directory in that tree',
+    'dsh-saf stat <src> <path>',
+    'dsh-saf read <src> <path> [--offset N] [--length N]    # binary goes to stdout',
+    'dsh-saf write <localFile> <src> <path> [--append]      # upload a local file into the tree',
+    'dsh-saf mkdir <src> <path>',
+    'dsh-saf rm <src> <path>',
+    'dsh-saf mv <src> <from> <to>',
+    'dsh-saf cp <src> <from> <to>',
+  ],
   a11y: [
     'dsh-native a11y tree [--depth N] [--max N]      # read the current screen as a node tree',
     'dsh-native a11y click <text-or-id> [--class C] [--index N]   # tap that node',
@@ -238,6 +249,20 @@ const CAP_CAVEAT = {
   usage:
     'Read only. Use --days and --limit to request the smallest useful window; foregroundMs is an ' +
     'Android aggregate, not a live process timer.',
+  saf:
+    'This is for a tree that CANNOT be mounted (a provider like Termux whose files sit in another ' +
+    'app\'s private storage) but that the user authorised in the app over SAF — the host operates ' +
+    'it through ContentResolver, not a real path, so ordinary file tools and /sdcard do NOT see it; ' +
+    'you must go through dsh-saf. Start with `dsh-saf sources` to get the source names; a path is ' +
+    'relative to that source\'s tree root and the host resolves it segment by segment by display ' +
+    'name (no real filesystem path exists). With no registered source every call answers ' +
+    'no_saf_source (unknown_source for a wrong name) — tell the user ONCE to pick the folder under ' +
+    'Settings > File access scope, which registers it. Reads (sources/list/stat/read) need the read ' +
+    'level; writes (write/mkdir/rm/mv/cp) need read+write and answer write_disabled until you turn ' +
+    'that on. read streams bytes to stdout; write uploads a LOCAL container file into the tree. ' +
+    'Over SAF a cross-folder mv cannot also rename (move_rename_unsupported) and cp keeps the ' +
+    'original name (copy_rename_unsupported) and may answer copy_unsupported on providers that do ' +
+    'not implement it — those are provider limits, not transient errors, so do not retry blindly.',
   a11y:
     'This acts on whatever the user is looking at, not on this app. Read the tree first, then ' +
     'click by text or id rather than by coordinates: bounds are device specific. It needs the ' +

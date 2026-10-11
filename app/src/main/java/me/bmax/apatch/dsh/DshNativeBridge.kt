@@ -141,6 +141,17 @@ object DshNativeBridge {
         INSTALL("install"),
         /** 应用使用统计（Usage Access）。 */
         USAGE("usage"),
+        /**
+         * SAF 桥：对**挂不上**的那一类第三方提供器（典型 Termux），经宿主 App 用
+         * ContentResolver / DocumentsContract 代办简单文件操作（list/stat/read/write/mkdir/rm/mv/cp）。
+         *
+         * 挂得上的（共享存储、App 读得到真实路径的）仍走 bind 挂载；这一项只补「挂不上但有
+         * 持久化 SAF 授权」的那棵树（见 [DshSafSources]）。读档只放行 sources/list/stat/read，
+         * 写（write/mkdir/rm/mv/cp）要读写档。不需要任何 Android 运行时权限 —— 授权是逐棵树的
+         * SAF 持久化授权，不是系统权限。端点挂在 [DshFsBridge] 的 `/saf/…`（同一 socket、同一
+         * token、同一回环守卫），写操作在服务端按本能力的读写档 gate（见 [safAccess]）。
+         */
+        SAF("saf"),
         /** 短信读取权限。 */
         SMS("sms"),
         /**
@@ -381,7 +392,7 @@ object DshNativeBridge {
     fun supportsWrite(cap: Cap): Boolean = when (cap) {
         Cap.NOTIFY, Cap.FULL_SCREEN_NOTIFY, Cap.TOAST, Cap.VIBRATE, Cap.TORCH, Cap.CLIPBOARD, Cap.INTENT,
         Cap.MIC, Cap.CAMERA, Cap.TTS, Cap.CALENDAR, Cap.VOLUME, Cap.SETTINGS,
-        Cap.SMS, Cap.SHELL, Cap.A11Y, Cap.DISPLAY -> true
+        Cap.SMS, Cap.SHELL, Cap.SAF, Cap.A11Y, Cap.DISPLAY -> true
         else -> false
     }
 
@@ -612,6 +623,10 @@ object DshNativeBridge {
         // 无障碍服务没开时这一项做不了任何事：agent 该提示用户去打开那个开关
         Cap.A11Y ->
             if (DshA11y.connected()) true to "" else false to "no_a11y_service"
+        // 没有任何已登记的 SAF 来源时这一项做不了事：agent 该提示用户在「文件访问范围」里
+        // 用系统选择器选一棵挂不上的树（会被登记成来源）。这不是瞬时错误，别反复重试。
+        Cap.SAF ->
+            if (DshSafSources.sources(ctx).isNotEmpty()) true to "" else false to "no_saf_source"
         else -> true to ""
     }
 
@@ -1087,6 +1102,7 @@ object DshNativeBridge {
             Cap.SETTINGS -> R.string.dsh_native_cap_settings
             Cap.INSTALL -> R.string.dsh_native_cap_install
             Cap.USAGE -> R.string.dsh_native_cap_usage
+            Cap.SAF -> R.string.dsh_native_cap_saf
             Cap.SMS -> R.string.dsh_native_cap_sms
             Cap.SHELL -> R.string.dsh_native_cap_shell
             Cap.A11Y -> R.string.dsh_native_cap_a11y
@@ -1176,7 +1192,68 @@ object DshNativeBridge {
         "/native/display/key",
         "/native/display/launch",
         "/native/display/stop" -> Cap.DISPLAY
+        // SAF 桥的端点挂在 [DshFsBridge] 的 `/saf/…` socket 上、不经本 handle 分发，但它们
+        // 的权限判定落在 Cap.SAF —— 列在这里让「路径 → 能力」只有一处权威，也让
+        // check-native-caps 的「每个 Cap 都有端点」成立。真正的 gate 见 [safGate]。
+        "/saf/sources", "/saf/list", "/saf/stat", "/saf/read",
+        "/saf/write", "/saf/mkdir", "/saf/delete", "/saf/move", "/saf/copy" -> Cap.SAF
         else -> null
+    }
+
+    /**
+     * SAF 桥（`/saf/…`，挂在 [DshFsBridge] 的 socket 上）的准入判定。
+     *
+     * 端点虽然在 DshFsBridge 的 socket 上，但「允不允许」这件事的权威仍在这里：读 App 侧
+     * prefs 的 [Cap.SAF] 档位，**不信任容器**传来的任何东西。返回 null = 放行；非空 = 直接
+     * 回这个错误（状态码 + JSON）。
+     *
+     * - 总开关关 → 403 disabled；
+     * - [Cap.SAF] 档位 OFF → 403 cap_disabled；
+     * - 写端点（write/mkdir/delete/move/copy）要读写档，不足 → 403 write_disabled；
+     * - 读端点（sources/list/stat/read）要读档，不足 → 403 read_disabled。
+     *
+     * 读 `effectiveAccess`（含「仅本次」提升）与原生能力同构 —— 虽然 SAF 没有自己的提权弹窗，
+     * 用的是持久档位，但走同一个入口保证口径一致。
+     */
+    fun safGate(ctx: Context, method: String, path: String): Pair<Int, String>? {
+        if (!enabled(ctx)) return 403 to err(str(ctx, R.string.dsh_native_err_disabled), "disabled")
+        val cap = Cap.SAF
+        if (!capEnabled(ctx, cap)) {
+            return 403 to err(str(ctx, R.string.dsh_native_err_cap_disabled, capName(ctx, cap)), "cap_disabled")
+        }
+        return if (safWriteRequest(path)) {
+            if (canWrite(ctx, cap)) null
+            else 403 to err(str(ctx, R.string.dsh_native_err_write_disabled, capName(ctx, cap)), "write_disabled")
+        } else {
+            if (canRead(ctx, cap)) null
+            else 403 to err(str(ctx, R.string.dsh_native_err_read_disabled, capName(ctx, cap)), "read_disabled")
+        }
+    }
+
+    /**
+     * SAF 端点是不是「写」。读：sources / list / stat / read；其余（write / mkdir / delete /
+     * move / copy）都是写。与 [isWriteRequest] 对 `/native/…` 的分法同构 —— 读的归读档、
+     * 动的归读写档。
+     */
+    private fun safWriteRequest(path: String): Boolean = when (path) {
+        "/saf/sources", "/saf/list", "/saf/stat", "/saf/read" -> false
+        else -> true
+    }
+
+    /**
+     * 给 SAF 桥记一条审计（与 `/native/…` 共用 `native-capability.jsonl`）。
+     *
+     * DshFsBridge 执行完 `/saf/…` 之后回调这里，让 SAF 操作与原生能力调用进同一份记录 ——
+     * 否则「经 SAF 代办动了别的应用私有目录」这件事在记录里凭空消失。
+     */
+    fun safAudit(
+        ctx: Context,
+        method: String,
+        path: String,
+        params: Map<String, String>,
+        response: Pair<Int, String>,
+    ) {
+        audit(ctx, method, path, params, Cap.SAF, params["reason"].orEmpty(), response)
     }
 
     private fun capabilitiesJson(ctx: Context): Pair<Int, String> {

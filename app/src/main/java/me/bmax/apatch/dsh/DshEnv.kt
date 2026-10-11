@@ -343,6 +343,17 @@ object DshEnv {
      */
     const val KEY_NATIVE_CAPS = "native_bridge_caps"
 
+    /**
+     * 已登记的 SAF 来源（JSON 数组，元素 `{ "name": <来源名>, "uri": <tree URI 串> }`）。
+     *
+     * 挂不上的那一类第三方提供器（典型 Termux：内容在别的应用私有目录里，容器 proot 挂不了
+     * 真实路径）会被登记成一个有名字的「SAF 来源」，容器内 `dsh-saf` 据此经宿主 App 用
+     * ContentResolver / DocumentsContract 代办简单文件操作。SAF 授权本身由
+     * `takePersistableUriPermission` 持久化，进程重启后仍可用；这里只存"名字→tree URI"映射。
+     * 见 [DshSafSources]。
+     */
+    const val KEY_SAF_SOURCES = "saf_sources"
+
     /** WebUI 打开方式：in | browser | ask。 */
     const val KEY_WEBUI_MODE = "webui_open_mode"
 

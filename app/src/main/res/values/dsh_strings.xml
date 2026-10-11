@@ -176,12 +176,14 @@
     <string name="dsh_adb_pair_code">Pairing code</string>
     <string name="dsh_adb_pair_port">Pairing port</string>
     <string name="dsh_adb_connect_port">Connect port</string>
+    <string name="dsh_adb_connect_port_hint">Leave blank to auto-detect</string>
     <string name="dsh_adb_host">Host (optional)</string>
     <string name="dsh_adb_install_deps">Install dependencies</string>
     <string name="dsh_adb_pair">Pair</string>
     <string name="dsh_adb_paired">Paired</string>
     <string name="dsh_adb_needs_runtime">Install the runtime from Home first.</string>
     <string name="dsh_adb_open_devsettings">Open developer options</string>
+    <string name="dsh_adb_mdns_not_found">Couldn\'t find the connect port automatically. Make sure wireless debugging is on in the system settings, or type the connect port in manually.</string>
     <string name="dsh_output">Output</string>
 
     <!-- 备份：对齐 dsh-config-manager 导出格式 -->
@@ -789,9 +791,9 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_fs_picker_volume_missing">That folder cannot be mounted right now: its volume (or the folder itself) is gone — check that the SD card or USB drive is inserted and the folder still exists.</string>
     <string name="dsh_fs_picker_list_needs_sdcard">These lists only take folders on shared storage (/sdcard); for an SD card or USB drive, use the workspace mapping below.</string>
     <string name="dsh_fs_picker_need_subdir">Pick a subfolder for these lists (the whole /sdcard makes no sense here).</string>
-    <string name="dsh_fs_picker_unverified_path">The folder behind that choice looks like %1$s, but it could not be confirmed (the provider\'s name or contents do not match), so it was not mounted. The path is shown in the diagnostics below as a clue.</string>
     <string name="dsh_fs_picker_diag_title">Folder not mounted — diagnostics</string>
     <string name="dsh_fs_picker_diag_hint">When reporting this, screenshot or copy the block below: it names the provider, the document id, the root info, and the step that refused it.</string>
+    <string name="dsh_fs_picker_saf_registered">That provider cannot be mounted, but it was registered as a SAF source named \"%1$s\" — the agent can reach it with `dsh-saf %1$s` (turn on the SAF-bridge capability under Settings › Security › Native capabilities for writes). Diagnostics are below.</string>
 
     <!-- ── Deep clean (long-press "Clean resources and cache") ── -->
     <string name="dsh_clean_title">Deep clean</string>
@@ -988,6 +990,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_native_err_write_disabled">Write access for %1$s is disabled</string>
     <string name="dsh_native_cap_usage">App usage stats</string>
     <string name="dsh_native_cap_usage_desc">Read app usage statistics. Android requires Usage Access on a system settings page.</string>
+    <string name="dsh_native_cap_saf">SAF bridge (unmountable providers)</string>
+    <string name="dsh_native_cap_saf_desc">Let the agent read and write a tree it cannot mount (a provider like Termux whose files live in another app\'s private storage), going through the host app over SAF — no root, no mount, no copy. Register the tree in Settings › File access scope first. Read lists and reads; read+write can also create, write, delete, move and copy. It can only touch the trees you registered.</string>
     <string name="dsh_native_cap_sms">SMS</string>
     <string name="dsh_native_cap_sms_desc">View and send SMS only at the selected access level. It cannot delete or modify stored messages.</string>
     <string name="dsh_native_cap_full_screen_notify">Full-screen alerts</string>
@@ -1198,6 +1202,13 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_fs_err_exists_named">%1$s already exists</string>
     <string name="dsh_fs_err_overwrite_named">Could not overwrite %1$s</string>
     <string name="dsh_fs_err_copy_failed">Copy failed: %1$s (%2$d files copied)</string>
+    <!-- ── SAF bridge (dsh-saf): operate a provider that cannot be mounted, via the host app ── -->
+    <string name="dsh_saf_err_unknown_source">No SAF source by that name — list them with `dsh-saf sources`, or register the tree in Settings › File access scope</string>
+    <string name="dsh_saf_err_create_failed">The provider refused to create the document</string>
+    <string name="dsh_saf_err_move_failed">The provider refused the move/rename</string>
+    <string name="dsh_saf_err_move_rename">A cross-folder move cannot also rename over SAF — move first, then rename</string>
+    <string name="dsh_saf_err_copy_rename">Copy over SAF keeps the original name — the last path segment of from and to must match</string>
+    <string name="dsh_saf_err_copy_unsupported">This provider does not support copy over SAF</string>
     <!-- ── 启动日志（DshRuntime） ─────────────────────────────
          这些行进首页的启动日志卡与 bugreport 的 dsh.log。它们是给人读的，
          必须跟随应用语言；不进日志的技术标记（EXIT_MARKER 之类）不在此列。 -->

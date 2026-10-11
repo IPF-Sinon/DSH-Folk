@@ -159,12 +159,14 @@
     <string name="dsh_adb_pair_code">配对码</string>
     <string name="dsh_adb_pair_port">配对端口</string>
     <string name="dsh_adb_connect_port">连接端口</string>
+    <string name="dsh_adb_connect_port_hint">可留空，自动发现</string>
     <string name="dsh_adb_host">本机 IP（可选）</string>
     <string name="dsh_adb_install_deps">安装依赖</string>
     <string name="dsh_adb_pair">配对</string>
     <string name="dsh_adb_paired">已配对</string>
     <string name="dsh_adb_needs_runtime">请先在主页安装运行时。</string>
     <string name="dsh_adb_open_devsettings">打开开发者选项</string>
+    <string name="dsh_adb_mdns_not_found">没有自动发现到连接端口。请在系统「无线调试」界面确认已开启，或手动填写连接端口。</string>
     <string name="dsh_output">输出</string>
 
     <string name="dsh_bk_group_stage">正在把 %1$d 个会话归入工作区（先停服务再改，避免被覆盖，稍候）…</string>
@@ -769,9 +771,9 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_fs_picker_volume_missing">这个目录现在挂不了：它所在的卷（或这个目录本身）已经不在了 —— 检查 SD 卡/U 盘是否插好、目录是否还存在。</string>
     <string name="dsh_fs_picker_list_needs_sdcard">黑白名单只认共享存储（/sdcard）里的目录；SD 卡/U 盘请用下面的「挂进工作区」映射。</string>
     <string name="dsh_fs_picker_need_subdir">黑白名单要选一个子目录（整棵 /sdcard 在这里没有意义）。</string>
-    <string name="dsh_fs_picker_unverified_path">推出这个目录可能是 %1$s，但无法确认（提供器报的名称或内容对不上），所以没有挂载。这个路径也写在了下面的诊断信息里，作为线索。</string>
     <string name="dsh_fs_picker_diag_title">没有挂载 —— 诊断信息</string>
     <string name="dsh_fs_picker_diag_hint">报障时截图或复制下面这一段即可：它写明了提供器、document id、根信息，以及我们在哪一步拒绝的。</string>
+    <string name="dsh_fs_picker_saf_registered">这个提供器挂不上，但已登记为 SAF 来源「%1$s」——agent 可用 `dsh-saf %1$s` 访问（写操作要在「设置 › 安全 › 原生能力」里打开 SAF 桥能力）。诊断信息在下方。</string>
 
     <!-- ── 深度清理（长按「清理资源和缓存」进来） ── -->
     <string name="dsh_clean_title">深度清理</string>
@@ -966,6 +968,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_native_err_write_disabled">%1$s 的写权限未启用</string>
     <string name="dsh_native_cap_usage">应用使用统计</string>
     <string name="dsh_native_cap_usage_desc">读取应用使用统计。Android 要求在系统设置页授予「使用情况访问权限」。</string>
+    <string name="dsh_native_cap_saf">SAF 桥（挂不上的提供器）</string>
+    <string name="dsh_native_cap_saf_desc">让 agent 读写一棵挂不上的树（像 Termux 这类、文件在别的应用私有目录里的提供器），全程经宿主 App 走 SAF 代办——无需 root、无需挂载、不复制整树。先到「设置 › 文件访问范围」把那棵树登记成来源。读档只列目录和读取；读写档才能创建、写入、删除、移动、复制。只能动你登记过的那几棵树。</string>
     <string name="dsh_native_cap_sms">短信</string>
     <string name="dsh_native_cap_sms_desc">按所选档位查看或发送短信；不能删除或修改已存短信。</string>
     <string name="dsh_native_cap_full_screen_notify">全屏提醒</string>
@@ -1176,6 +1180,13 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_fs_err_exists_named">%1$s 已存在</string>
     <string name="dsh_fs_err_overwrite_named">覆盖 %1$s 失败</string>
     <string name="dsh_fs_err_copy_failed">复制失败：%1$s（已复制 %2$d 个文件）</string>
+    <!-- ── SAF 桥（dsh-saf）：对挂不上的提供器经宿主 App 代办 ── -->
+    <string name="dsh_saf_err_unknown_source">没有这个名字的 SAF 来源——用 `dsh-saf sources` 看有哪些，或到「设置 › 文件访问范围」里把那棵树登记成来源</string>
+    <string name="dsh_saf_err_create_failed">提供器拒绝创建该文档</string>
+    <string name="dsh_saf_err_move_failed">提供器拒绝了这次移动/改名</string>
+    <string name="dsh_saf_err_move_rename">跨目录移动不能同时改名（SAF 限制）——先移动，再改名</string>
+    <string name="dsh_saf_err_copy_rename">SAF 复制会保留原名——from 与 to 的最后一段必须一致</string>
+    <string name="dsh_saf_err_copy_unsupported">这个提供器不支持经 SAF 复制</string>
     <!-- ── 启动日志（DshRuntime） ───────────────────────────── -->
     <string name="dsh_log_runtime_mode">运行时: %1$s</string>
     <string name="dsh_log_arch">架构: %1$s（设备 ABI: %2$s）</string>

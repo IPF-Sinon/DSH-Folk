@@ -1386,6 +1386,7 @@ internal fun nativeCapTitleRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_cap_settings
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_cap_install
     DshNativeBridge.Cap.USAGE -> R.string.dsh_native_cap_usage
+    DshNativeBridge.Cap.SAF -> R.string.dsh_native_cap_saf
     DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms
     DshNativeBridge.Cap.SHELL -> R.string.dsh_native_cap_shell
     DshNativeBridge.Cap.A11Y -> R.string.dsh_native_cap_a11y
@@ -1428,6 +1429,7 @@ internal fun nativeCapSummaryRes(cap: DshNativeBridge.Cap): Int = when (cap) {
     DshNativeBridge.Cap.SETTINGS -> R.string.dsh_native_cap_settings_desc
     DshNativeBridge.Cap.INSTALL -> R.string.dsh_native_cap_install_desc
     DshNativeBridge.Cap.USAGE -> R.string.dsh_native_cap_usage_desc
+    DshNativeBridge.Cap.SAF -> R.string.dsh_native_cap_saf_desc
     DshNativeBridge.Cap.SMS -> R.string.dsh_native_cap_sms_desc
     DshNativeBridge.Cap.SHELL -> R.string.dsh_native_cap_shell_desc
     DshNativeBridge.Cap.A11Y -> R.string.dsh_native_cap_a11y_desc
@@ -1537,6 +1539,9 @@ internal enum class CapGroup(val titleRes: Int, val caps: List<DshNativeBridge.C
             DshNativeBridge.Cap.CONTACTS,
             DshNativeBridge.Cap.SMS,
             DshNativeBridge.Cap.USAGE,
+            // SAF 桥读写的是别的应用私有目录里的文件（典型 Termux）——那同样是「用户本人的
+            // 内容」，而且写档能改别处应用的私有数据，和日历/短信同级该慎重。
+            DshNativeBridge.Cap.SAF,
         ),
     ),
 

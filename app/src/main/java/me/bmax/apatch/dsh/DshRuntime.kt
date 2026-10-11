@@ -606,6 +606,122 @@ object DshRuntime {
     """.trimIndent()
 
     /**
+     * 容器内 `dsh-saf` CLI（node 脚本，读 /root/.dsh/fs-bridge.json 后回环调用 SAF 桥的 `/saf/…`）。
+     *
+     * 与 `dsh-fs` 共用同一个回环端口与 token（同一份 fs-bridge.json），只是 path 前缀是 `/saf/`。
+     * 它针对的是**挂不上**的那一类提供器（典型 Termux）：宿主 App 用 ContentResolver /
+     * DocumentsContract 代办，不走真实路径、不复制整树。写操作（write/mkdir/rm/mv/cp）在宿主侧
+     * 受 SAF 能力的读写档 gate。
+     *
+     * 同样是 Kotlin raw string：里面**不能出现 `${'$'}`**，字符串字面量里也**不能有 CJK**。
+     */
+    private val SAF_BRIDGE_CLI_SCRIPT = """
+        #!/usr/bin/env node
+        const fs = require('fs');
+        const http = require('http');
+        const CFG = '/root/.dsh/fs-bridge.json';
+        if (!fs.existsSync(CFG)) { console.error('dsh-saf: bridge config missing: ' + CFG); process.exit(1); }
+        const cfg = JSON.parse(fs.readFileSync(CFG, 'utf8'));
+        const enc = encodeURIComponent;
+        function req(method, path, body) {
+          return new Promise(function (resolve, reject) {
+            const headers = { 'X-Dsh-Fs-Token': cfg.token };
+            if (body) headers['Content-Length'] = Buffer.byteLength(body);
+            const r = http.request({
+              host: '127.0.0.1', port: cfg.port, method: method, path: path,
+              headers: headers
+            }, function (res) {
+              const chunks = [];
+              res.on('data', function (c) { chunks.push(c); });
+              res.on('end', function () { resolve({ status: res.statusCode, body: Buffer.concat(chunks) }); });
+            });
+            r.on('error', reject);
+            if (body) r.write(body);
+            r.end();
+          });
+        }
+        const argv = process.argv.slice(2);
+        const cmd = argv[0];
+        const opt = {};
+        const a = [];
+        for (let i = 1; i < argv.length; i++) {
+          const t = argv[i];
+          if (t.slice(0, 2) === '--') {
+            const eq = t.indexOf('=');
+            if (eq > 2) { opt[t.slice(2, eq)] = t.slice(eq + 1); }
+            else if (i + 1 < argv.length && argv[i + 1].slice(0, 2) !== '--') { opt[t.slice(2)] = argv[++i]; }
+            else { opt[t.slice(2)] = '1'; }
+          } else { a.push(t); }
+        }
+        function rel(p) { return p === undefined ? '' : p; }
+        function q(pairs) {
+          const out = [];
+          for (const k in pairs) { if (pairs[k] !== undefined) out.push(k + '=' + enc(String(pairs[k]))); }
+          return out.length ? '?' + out.join('&') : '';
+        }
+        function say(r) {
+          process.stdout.write(r.body.toString() + '\n');
+          if (r.status !== 200) process.exitCode = 1;
+        }
+        const USAGE = [
+          'usage: dsh-saf <command> [args] [options]',
+          '  sources                                    # list registered SAF sources',
+          '  list <src> [path] [--limit N]',
+          '  stat <src> <path>',
+          '  read <src> <path> [--offset N] [--length N]   # binary goes to stdout',
+          '  write <localFile> <src> <path> [--append]',
+          '  mkdir <src> <path>',
+          '  rm <src> <path>',
+          '  mv <src> <from> <to>',
+          '  cp <src> <from> <to>',
+          'A SAF source is a tree you authorised in the app that cannot be mounted (e.g. Termux).',
+          'Paths are relative to that tree root; the host resolves them segment by segment.'
+        ].join('\n');
+        (async function () {
+          try {
+            if (cmd === 'sources') {
+              say(await req('GET', '/saf/sources'));
+            } else if (cmd === 'list') {
+              if (!a[0]) { console.error(USAGE); process.exit(1); }
+              say(await req('GET', '/saf/list' + q({ src: a[0], path: rel(a[1]), limit: opt.limit })));
+            } else if (cmd === 'stat') {
+              if (!a[0] || a[1] === undefined) { console.error(USAGE); process.exit(1); }
+              say(await req('GET', '/saf/stat' + q({ src: a[0], path: a[1] })));
+            } else if (cmd === 'read') {
+              if (!a[0] || a[1] === undefined) { console.error(USAGE); process.exit(1); }
+              const r = await req('GET', '/saf/read' + q({
+                src: a[0], path: a[1], offset: opt.offset, length: opt.length
+              }));
+              if (r.status === 200) process.stdout.write(r.body);
+              else { process.stderr.write(r.body.toString() + '\n'); process.exitCode = 1; }
+            } else if (cmd === 'write') {
+              if (!a[0] || !a[1] || a[2] === undefined) { console.error(USAGE); process.exit(1); }
+              const data = fs.readFileSync(a[0]);
+              say(await req('PUT', '/saf/write' + q({ src: a[1], path: a[2], append: opt.append }), data));
+            } else if (cmd === 'mkdir') {
+              if (!a[0] || a[1] === undefined) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/saf/mkdir' + q({ src: a[0], path: a[1] })));
+            } else if (cmd === 'rm') {
+              if (!a[0] || a[1] === undefined) { console.error(USAGE); process.exit(1); }
+              say(await req('DELETE', '/saf/delete' + q({ src: a[0], path: a[1] })));
+            } else if (cmd === 'mv') {
+              if (!a[0] || a[1] === undefined || a[2] === undefined) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/saf/move' + q({ src: a[0], from: a[1], to: a[2] })));
+            } else if (cmd === 'cp') {
+              if (!a[0] || a[1] === undefined || a[2] === undefined) { console.error(USAGE); process.exit(1); }
+              say(await req('POST', '/saf/copy' + q({ src: a[0], from: a[1], to: a[2] })));
+            } else {
+              console.error(USAGE);
+              process.exitCode = 1;
+            }
+          } catch (e) {
+            console.error('dsh-saf: ' + (e && e.message ? e.message : e));
+            process.exitCode = 1;
+          }
+        })();
+    """.trimIndent()
+
+    /**
      * 容器内 `dsh-native` CLI：调宿主的原生能力（通知/振动/toast/剪贴板/分享/设备信息）。
      *
      * 与 `dsh-fs` 共用同一个回环端口与 token（同一份 fs-bridge.json）。失败时把宿主返回的
@@ -2260,6 +2376,7 @@ object DshRuntime {
      * "command not found"，翻遍设置页也找不到原因。按内容比对再写，成本只是读两个小文件。
      *
      * 两个脚本都读同一份 fs-bridge.json，所以不需要各自的配置或 ROOTFS_REV 变更。
+     * （`dsh-saf` 是第三个，同样读那一份、同一 token、同一 port，只是打到 `/saf/…`。）
      */
     private fun ensureFsBridgeCli() {
         if (!DshEnv.isRuntimeInstalled(appContext)) return
@@ -2267,6 +2384,7 @@ object DshRuntime {
         for ((name, script) in listOf(
             "dsh-fs" to FS_BRIDGE_CLI_SCRIPT,
             "dsh-native" to NATIVE_CLI_SCRIPT,
+            "dsh-saf" to SAF_BRIDGE_CLI_SCRIPT,
         )) {
             runCatching {
                 val f = File(bin, name)

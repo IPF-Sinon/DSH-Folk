@@ -30,13 +30,37 @@ protectionLevel 是 `signature|appop`，应用申请不到）。没授予时上�
 顺带说明：`/storage/emulated/0` 本来就 bind mount 进了容器，普通 `read`/`write`/`glob` 常常够用，
 这个桥的价值是**窄而可审计**的那条路径，不是访问本身。
 
+`dsh-saf` —— 对**挂不上**的那一类提供器（典型 Termux：文件在别的应用私有目录里，容器 proot 挂不了真实路径），
+经宿主 App 用 SAF（ContentResolver / DocumentsContract）代办简单文件操作。**不走真实路径、不复制整树、无需 root、无需挂载**，
+只对**已在「设置 → 文件访问范围」里用系统选择器选过、并被登记成「SAF 来源」的那棵树**生效（登记发生在挂不上的那一支——
+见下文选择器分流）。它和 `dsh-fs` / `dsh-native` 共用同一 token、同一端口、同一回环守卫，端点前缀是 `/saf/`：
+
+```
+dsh-saf sources                                    # 列出已登记的 SAF 来源（name / authority）
+dsh-saf list <src> [路径] [--limit N]              # 列那棵树里的目录
+dsh-saf stat <src> <路径>
+dsh-saf read <src> <路径> [--offset N] [--length N]   # 二进制写到 stdout
+dsh-saf write <本地文件> <src> <路径> [--append]   # 把容器里的本地文件上传进那棵树
+dsh-saf mkdir <src> <路径>
+dsh-saf rm <src> <路径>
+dsh-saf mv <src> <from> <to>
+dsh-saf cp <src> <from> <to>
+```
+
+路径相对那棵树的根，宿主**逐段**按显示名下行解析成 documentId（SAF 没有真实路径），`..` / 空段 / 绝对路径一律拒。
+读（`sources` / `list` / `stat` / `read`）归**读档**，其余（`write` / `mkdir` / `rm` / `mv` / `cp`）归**读写档**：
+这是一项独立的原生能力（`saf`，默认关），要在 **设置 → 安全 → 原生能力** 里打开，写操作必须开到读写档，否则回
+`403 write_disabled`；没有任何已登记来源时回 `no_saf_source`。SAF 的 `mv` 跨目录不能同时改名、`cp` 保留原名且某些提供器
+根本不支持（回 `copy_unsupported`）——这些是提供器自身的限制，不是瞬时错误。它和 MT 管理器读 Termux 走的是同一条
+SAF 路，不同的是全部经宿主 App 代办、受上面那把锁与审计约束。
+
 同一个回环桥上还有一组**云备份补包端点**（`/cloud/appdata/status`、`/cloud/appdata/export`、
 `/cloud/appdata/restore`），供 `dsh-folk-cloud` 插件在做**含软件数据**的备份/恢复时反向请 App 帮忙：
 软件数据（Android `SharedPreferences` 与外观资源）住在 App 私有目录、容器内的插件够不到，只能由 App
 出/收整包（复用备份页那条导出/导入通路）。它们与 `dsh-fs`/`dsh-native` 共用同一 token 与回环守卫 ——
 能调到这里就等于容器内可信代码；旧版 App 没有这组端点时，插件会自动回退到不含软件数据的档位。
 
-`dsh-native` —— 借 App 之手调原生能力，共 24 项，**默认整体关闭**：要在 **设置 → 安全 → 原生能力**
+`dsh-native` —— 借 App 之手调原生能力，共 25 项，**默认整体关闭**：要在 **设置 → 安全 → 原生能力**
 里打开总开关，再逐项勾选。界面按「这项能力动的是什么」分四组，越往下越该慎重。
 **总开关关着的时候，这一页只显示总开关与一行说明**（并告诉你还有多少项档位留在那里）：分项、
 共享存储与 CLI 提示整块收起 —— 关着还摊一屏开关墙，既读不出「现在什么都不通」，也读不出
@@ -45,7 +69,7 @@ protectionLevel 是 `signature|appop`，应用申请不到）。没授予时上�
 ```
 与设备交互   notify / full_screen_notify / toast / vibrate / clipboard / intent（分享与打开链接）/ tts（语音合成）
 读设备状态   device / network / phone / sensors
-个人数据     media / camera / mic / location / calendar / contacts / sms / a11y（无障碍）
+个人数据     media / camera / mic / location / calendar / contacts / sms / saf（SAF 桥）/ a11y（无障碍）
 更改系统状态 volume / settings / install / usage / shell（特权命令）
 ```
 

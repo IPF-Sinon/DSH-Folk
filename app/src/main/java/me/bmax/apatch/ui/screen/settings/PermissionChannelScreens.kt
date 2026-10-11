@@ -2,6 +2,7 @@ package me.bmax.apatch.ui.screen.settings
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
@@ -67,6 +68,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.AdbBridge
+import me.bmax.apatch.dsh.AdbMdns
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.PermissionManager
@@ -695,6 +697,7 @@ fun WirelessAdbScreen(navigator: DestinationsNavigator) {
                             value = adbConnectPort,
                             onValueChange = { adbConnectPort = it.filter { c -> c.isDigit() }.take(5) },
                             label = { Text(stringResource(R.string.dsh_adb_connect_port)) },
+                            placeholder = { Text(stringResource(R.string.dsh_adb_connect_port_hint)) },
                             singleLine = true,
                             enabled = runtimeInstalled && !adbBusy,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -725,7 +728,24 @@ fun WirelessAdbScreen(navigator: DestinationsNavigator) {
                                         // 配对脚本必须先在容器里就位，且依赖装好，否则直接报 ImportError
                                         if (!AdbBridge.injected()) AdbBridge.inject(context.applicationContext)
                                         if (!AdbBridge.depsOk()) AdbBridge.installDeps(context.applicationContext)
-                                        AdbBridge.pair(adbPairCode, adbPairPort, adbConnectPort, adbHost)
+                                        // 连接端口留空时：由 App 侧 NsdManager 发现 `_adb-tls-connect._tcp`
+                                        // 广播的真实动态端口（容器里的 zeroconf 收不到组播）。手填优先。
+                                        // 低于 Android 11 没有无线调试，直接退回脚本自愈（connectPort 保持空）。
+                                        var connectPort = adbConnectPort
+                                        var mdnsHint = ""
+                                        if (connectPort.isBlank() &&
+                                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                                        ) {
+                                            val found = AdbMdns(context.applicationContext)
+                                                .discoverConnectPort()
+                                            if (found != null) {
+                                                connectPort = found.toString()
+                                            } else {
+                                                mdnsHint = "\n" +
+                                                    context.getString(R.string.dsh_adb_mdns_not_found)
+                                            }
+                                        }
+                                        AdbBridge.pair(adbPairCode, adbPairPort, connectPort, adbHost) + mdnsHint
                                     }.getOrElse { it.message ?: context.getString(R.string.dsh_adb_pair_failed) }
                                     PermissionManager.refresh(context.applicationContext)
                                     withContext(Dispatchers.Main) {

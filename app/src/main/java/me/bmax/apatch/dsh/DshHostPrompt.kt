@@ -82,8 +82,11 @@ object DshHostPrompt {
      *
      * 19 这一次是「工作区存储映射」：绝对路径（SD 卡 / U 盘）按自身渲染，不再被整条略去；
      * 同时撤销 host-facts 里「绝对路径不写」的 workaround。18 那次是本文件的上一版内容。
+     *
+     * 20 这一次是「SAF 桥（dsh-saf）」：新增一段讲挂不上的提供器（Termux…）怎么经 SAF 代办、
+     * 新增 CAP_USAGE 的 saf 段与 CAP_CAVEAT 的 saf 注意事项。
      */
-    private const val PLUGIN_REV = 19
+    private const val PLUGIN_REV = 20
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =

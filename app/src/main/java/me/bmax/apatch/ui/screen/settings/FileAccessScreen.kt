@@ -58,6 +58,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshFileAccess
 import me.bmax.apatch.dsh.DshFileAccess.PickerHostDir
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.dsh.DshSafSources
 import me.bmax.apatch.util.ui.showToast
 import java.io.File
 
@@ -159,6 +160,29 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
     }
 
     /**
+     * 挂不上、但有持久化 SAF 授权的那一类提供器（典型 Termux）：登记成一个有名字的「SAF 来源」，
+     * 容器里的 `dsh-saf` 据此经宿主 App 代办文件操作（见 [DshSafSources]）。诊断照样可展开 ——
+     * 但措辞从"挂不上、没辙"改为"挂不上但已可用 dsh-saf <来源名> 访问"。
+     *
+     * 只对**真的挂不上**的那几支调用（Unreadable / NoPath）；能挂的继续走挂载那条路。
+     */
+    fun registerSaf(uri: Uri?) {
+        pickerFor = null
+        if (uri == null) {
+            pickerFailure = PickerFailure(
+                context.getString(R.string.dsh_fs_picker_no_local_path),
+                DshFileAccess.pickerDiagnostics(context, null),
+            )
+            return
+        }
+        val name = DshSafSources.register(context, uri)
+        pickerFailure = PickerFailure(
+            context.getString(R.string.dsh_fs_picker_saf_registered, name),
+            DshFileAccess.pickerDiagnostics(context, uri),
+        )
+    }
+
+    /**
      * 系统文件选择器（`ACTION_OPEN_DOCUMENT_TREE`）：不限定提供器 —— 系统文件、MT 管理器、
      * 其它 SAF 提供器都能进来选目录，页内那个只能翻 /sdcard 的浏览器不再是唯一入口。
      *
@@ -248,18 +272,16 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
             DshFileAccess.isExternalStorageTree(uri) && resolved !is PickerHostDir.Mountable -> {
                 failPicker(uri, context.getString(R.string.dsh_fs_picker_volume_missing))
             }
-            // 真实路径推出来了但用不了（别的应用的私有数据 / 没权限 / 已经不在了）：不挂
+            // 真实路径推出来了但用不了（别的应用的私有数据 / 没权限 / 已经不在了）：挂不上。
+            // 但我们对那棵树有持久化 SAF 授权（上面刚 take 过）——登记成 SAF 来源，容器里的
+            // dsh-saf 据此经宿主 App 代办（典型 Termux 就落在这一支）。
             resolved is PickerHostDir.Unreadable -> {
-                failPicker(uri, context.getString(R.string.dsh_fs_picker_unreadable_host_dir))
+                registerSaf(uri)
             }
-            // 路径推出来了、候选目录也真实存在，但与 SAF 那棵树对不上：不挂。以前这里报的是
-            // "提供器不给出真实路径" —— 与自己算出来的事实矛盾，也丢掉了唯一的诊断线索。
-            // 这一支必须排在下面任何"挂载"分支之前。
+            // 路径推出来了、候选目录也真实存在，但与 SAF 那棵树对不上：挂载不敢挂（怕张冠李戴），
+            // 但 SAF 代办不依赖真实路径 —— 同样登记成来源可用。
             resolved is PickerHostDir.Unverified -> {
-                failPicker(
-                    uri,
-                    context.getString(R.string.dsh_fs_picker_unverified_path, resolved.path),
-                )
+                registerSaf(uri)
             }
             // 主卷内的目录：走和 externalstorage primary 完全相同的那条路
             sdcardRel != null -> handlePicked(sdcardRel)
@@ -269,9 +291,10 @@ fun FileAccessScreen(navigator: DestinationsNavigator) {
             hostPath != null -> {
                 failPicker(uri, context.getString(R.string.dsh_fs_picker_list_needs_sdcard))
             }
-            // 真·虚拟提供器（云盘 / 相册 SPA / 不透明 id）：id 里压根推不出真实路径，挂不了
+            // 真·虚拟提供器（云盘 / 相册 SPA / 不透明 id）：id 里压根推不出真实路径，挂不了 ——
+            // 但它们本身是 SAF 可遍历的（MT 管理器正是这么读的），登记成来源让 dsh-saf 代办。
             else -> {
-                failPicker(uri, context.getString(R.string.dsh_fs_picker_no_local_path))
+                registerSaf(uri)
             }
         }
     }
