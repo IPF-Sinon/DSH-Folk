@@ -606,6 +606,7 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
  * 而是用户在系统选择器里一棵一棵授权、再在这里勾选启用的来源集合。档位决定「能不能写」，
  * 来源集合决定「能看到哪几棵树」——两件事都在这张卡的职责里，放一个弹层里用户才串得起来。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SafBridgeSheet(
     enabled: Boolean,
