@@ -993,7 +993,13 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_native_cap_usage">App usage stats</string>
     <string name="dsh_native_cap_usage_desc">Read app usage statistics. Android requires Usage Access on a system settings page.</string>
     <string name="dsh_native_cap_saf">SAF bridge (unmountable providers)</string>
-    <string name="dsh_native_cap_saf_desc">Let the agent read and write a tree it cannot mount (a provider like Termux whose files live in another app\'s private storage), going through the host app over SAF — no root, no mount, no copy. Register the tree in Settings › File access scope first. Read lists and reads; read+write can also create, write, delete, move and copy. It can only touch the trees you registered.</string>
+    <string name="dsh_native_cap_saf_desc">Let the agent read and write a tree it cannot mount (a provider like Termux whose files live in another app\'s private storage), going through the host app over SAF — no root, no mount, no copy. Register a tree here (or in Settings › File access scope) first. Read lists and reads; read+write can also create, write, delete, move and copy. It can only touch the trees you registered.</string>
+    <string name="dsh_saf_sheet_intro">Register trees you cannot mount (such as Termux) and choose which the agent may reach over SAF. Grant a tree below, then switch on the ones to enable.</string>
+    <string name="dsh_saf_sheet_access_header">Access level</string>
+    <string name="dsh_saf_sheet_sources_header">Authorized sources</string>
+    <string name="dsh_saf_sheet_grant">Grant access</string>
+    <string name="dsh_saf_sheet_empty">No sources yet. Tap “Grant access” and pick a folder; it becomes a named source for dsh-saf.</string>
+    <string name="dsh_saf_sheet_remove">Remove</string>
     <string name="dsh_native_cap_sms">SMS</string>
     <string name="dsh_native_cap_sms_desc">View and send SMS only at the selected access level. It cannot delete or modify stored messages.</string>
     <string name="dsh_native_cap_full_screen_notify">Full-screen alerts</string>

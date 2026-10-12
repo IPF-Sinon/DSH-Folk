@@ -33,9 +33,12 @@ the bridge's value is that it provides a **narrow and auditable** path, not acce
 `dsh-saf` — for the kind of provider that **cannot be mounted** (typically Termux: its files live in another app's private
 storage, so the container's proot cannot reach the real path), the host app operates it over SAF (ContentResolver /
 DocumentsContract) on your behalf. **No real path, no copying of the whole tree, no root, no mount** — it only works on a tree
-you picked with the system picker under **Settings → File access scope** and that was then registered as a "SAF source" (that
-registration happens on the branch where a folder cannot be mounted — see the picker routing below). It shares the same token,
-port and loopback guard as `dsh-fs` / `dsh-native`; the endpoint prefix is `/saf/`:
+that has been registered as a "SAF source" and switched on. Registration has two entry points: the branch under
+**Settings → File access scope** where a folder cannot be mounted registers it automatically (see the picker routing below), and the
+`saf` capability card under **Settings → Security → Native Capabilities** has a "Grant access" button that launches the system
+picker directly. Sources from either entry are listed together in that saf card's sheet, where you toggle each on/off and can
+remove them — a disabled source is invisible to `dsh-saf`. It shares the same token, port and loopback guard as
+`dsh-fs` / `dsh-native`; the endpoint prefix is `/saf/`:
 
 ```
 dsh-saf sources                                    # list registered SAF sources (name / authority)
@@ -53,7 +56,7 @@ Paths are relative to that tree's root; the host resolves them **segment by segm
 no real path), and rejects `..` / empty segments / absolute paths. Reads (`sources` / `list` / `stat` / `read`) take the **read**
 level; everything else (`write` / `mkdir` / `rm` / `mv` / `cp`) takes **read+write**. This is a separate native capability (`saf`,
 off by default): enable it under **Settings → Security → Native Capabilities**, and writes require the read+write level or you get
-`403 write_disabled`; with no registered source you get `no_saf_source`. Over SAF a cross-folder `mv` cannot also rename, `cp`
+`403 write_disabled`; with no enabled source you get `no_saf_source`. Over SAF a cross-folder `mv` cannot also rename, `cp`
 keeps the original name, and some providers do not implement copy at all (`copy_unsupported`) — those are provider limits, not
 transient errors. It is the same SAF path MT Manager uses to read Termux, except every call goes through the host app and is
 gated and audited.

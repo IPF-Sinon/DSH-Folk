@@ -43,8 +43,8 @@ object DshSafSources {
     /** 来源名的最大长度：够描述一棵树，又不至于长到 agent 难输入。 */
     private const val MAX_NAME_LEN = 40
 
-    /** 一棵已登记的 SAF 树。 */
-    data class Source(val name: String, val uri: Uri) {
+    /** 一棵已登记的 SAF 树。[enabled] 为 false 时仍记在册、但 `dsh-saf` 看不到它。 */
+    data class Source(val name: String, val uri: Uri, val enabled: Boolean = true) {
         /** 这棵树的 tree document id（SAF 逐段解析的下行起点）。 */
         val treeDocId: String?
             get() = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
@@ -57,12 +57,19 @@ object DshSafSources {
         ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
 
     /**
-     * 当前仍然有效的来源列表。
+     * 当前**已启用且仍然有效**的来源列表 —— `dsh-saf` 与可用性判定都走这个。
      *
      * 「有效」= 既在 prefs 的映射里、系统也仍然持有对那棵树的持久化授权。授权被收回的条目
      * 会被顺手从 prefs 里清掉（懒清理）——不另开后台任务，读列表这件事本来就不频繁。
+     * 未启用（用户在设置里取消了勾选）的来源不列出：登记≠放行，启用才放行。
      */
-    fun sources(ctx: Context): List<Source> {
+    fun sources(ctx: Context): List<Source> = allSources(ctx).filter { it.enabled }
+
+    /**
+     * 全部仍有效的来源（含未启用）—— 设置页的勾选列表用这个，才能把「已授权但没启用」的也
+     * 显示出来让用户勾。有效性（持久化授权还在）与 [sources] 同一套懒清理。
+     */
+    fun allSources(ctx: Context): List<Source> {
         val stored = readStored(ctx)
         if (stored.isEmpty()) return emptyList()
         val persisted = persistedTreeUris(ctx)
@@ -71,15 +78,15 @@ object DshSafSources {
         return kept
     }
 
-    /** 按名字取一个仍有效的来源；没有或已失效返回 null。 */
+    /** 按名字取一个**已启用且**仍有效的来源；没有、已失效或未启用返回 null。 */
     fun find(ctx: Context, name: String): Source? =
         sources(ctx).firstOrNull { it.name == name }
 
     /**
-     * 登记一棵树为 SAF 来源，返回最终采用的来源名。
+     * 登记一棵树为 SAF 来源，返回最终采用的来源名。**新来源默认启用**（用户授权就是为了用它）。
      *
      * 名字由树的显示名规范化而来（Termux → `termux`）；与已有来源重名时加数字后缀。
-     * 同一棵 URI 已经登记过就原样返回它既有的名字（不重复登记、不改名）。
+     * 同一棵 URI 已经登记过就原样返回它既有的名字（不重复登记、不改名、不动它的启用状态）。
      */
     fun register(ctx: Context, uri: Uri): String {
         val stored = readStored(ctx).toMutableList()
@@ -87,9 +94,16 @@ object DshSafSources {
         val base = baseName(ctx, uri)
         val used = stored.map { it.name }.toSet()
         val name = uniqueName(base, used)
-        stored.add(Source(name, uri))
+        stored.add(Source(name, uri, enabled = true))
         writeStored(ctx, stored)
         return name
+    }
+
+    /** 启用/停用一个来源（停用后 `dsh-saf` 立刻看不到它，但授权与登记都保留）。 */
+    fun setEnabled(ctx: Context, name: String, enabled: Boolean) {
+        val stored = readStored(ctx)
+        if (stored.none { it.name == name }) return
+        writeStored(ctx, stored.map { if (it.name == name) it.copy(enabled = enabled) else it })
     }
 
     /**
@@ -121,7 +135,8 @@ object DshSafSources {
                 val o = a.optJSONObject(i) ?: return@mapNotNull null
                 val name = o.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 val uriStr = o.optString("uri").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                Source(name, Uri.parse(uriStr))
+                // 老记录没有 enabled 字段：缺省按启用（它们是在「默认启用」之前登记的，当时就是可用的）
+                Source(name, Uri.parse(uriStr), o.optBoolean("enabled", true))
             }
         }.getOrDefault(emptyList())
     }
@@ -129,7 +144,12 @@ object DshSafSources {
     private fun writeStored(ctx: Context, list: List<Source>) {
         val a = JSONArray()
         for (s in list) {
-            a.put(JSONObject().put("name", s.name).put("uri", s.uri.toString()))
+            a.put(
+                JSONObject()
+                    .put("name", s.name)
+                    .put("uri", s.uri.toString())
+                    .put("enabled", s.enabled),
+            )
         }
         prefs(ctx).edit().putString(DshEnv.KEY_SAF_SOURCES, a.toString()).apply()
     }

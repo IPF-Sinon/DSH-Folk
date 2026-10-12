@@ -49,7 +49,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -65,6 +67,7 @@ import me.bmax.apatch.dsh.A11yOwn
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
+import me.bmax.apatch.dsh.DshSafSources
 import me.bmax.apatch.dsh.PrivPolicy
 import me.bmax.apatch.dsh.DisplayMirror
 import me.bmax.apatch.util.PermissionUtils
@@ -193,6 +196,9 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
     }
     // 正在选档位的那项能力；null = 弹层关闭
     var accessSheetCap by remember { mutableStateOf<DshNativeBridge.Cap?>(null) }
+    // SAF 桥那张卡单独走一个弹层：除了档位，还要能「申请授权」拉起系统选择器、勾选启用哪些来源。
+    var safSheetOpen by remember { mutableStateOf(false) }
+    var safSources by remember { mutableStateOf(DshSafSources.allSources(context)) }
     // 「完全控制通知」不是普通档位：确认之前先不落盘
     var pendingFullControl by remember { mutableStateOf<DshNativeBridge.Cap?>(null) }
     // 运行时权限框关掉之后还要接着跳的特殊权限页
@@ -258,6 +264,27 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
         DshHostPrompt.writeFacts(context.applicationContext)
         specialAfterRuntime?.let { openSpecialSettings(it) }
         specialAfterRuntime = null
+    }
+
+    // SAF 桥的「申请授权」：拉起系统文件选择器选一棵树，拿到就 take 持久化授权并登记成来源。
+    // 与「文件访问范围」页里挂不上那一支登记来源是同一套（见 DshSafSources），只是入口在这张卡上，
+    // 让用户在能力页里就能一键加新来源、不必先去文件页踩一次「挂不上」。
+    val safPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        val uri = data?.data
+        if (result.resultCode == Activity.RESULT_OK && data != null && uri != null) {
+            val take = data.flags and (
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            if (take != 0) {
+                runCatching { context.contentResolver.takePersistableUriPermission(uri, take) }
+            }
+            DshSafSources.register(context, uri)
+            safSources = DshSafSources.allSources(context)
+            DshHostPrompt.writeFacts(context.applicationContext)
+        }
     }
 
     // 为某项能力补权限。能 requestPermissions 的直接申请；特殊权限只能跳系统页；
@@ -414,7 +441,16 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
                     on = on,
                     permissionMissing = cap !in capsWithPermission,
                     coarseLocationOnly = coarseLocationOnly,
-                    onClick = { accessSheetCap = cap },
+                    onClick = {
+                        // SAF 桥那张卡点开的是它自己的弹窗（档位 + 申请授权 + 来源勾选三合一），
+                        // 其余能力还是走通用的档位弹层。
+                        if (cap == DshNativeBridge.Cap.SAF) {
+                            safSources = DshSafSources.allSources(context)
+                            safSheetOpen = true
+                        } else {
+                            accessSheetCap = cap
+                        }
+                    },
                     onRequestPermission = { requestCapPermission(cap) },
                     onOpenDisplayPreview = { navigator.navigate(DisplayPreviewScreenDestination(null)) },
                     onOpenDisplayManage = { navigator.navigate(DisplayManageScreenDestination) },
@@ -527,8 +563,179 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
             }
         }
     }
+
+    if (safSheetOpen) {
+        SafBridgeSheet(
+            enabled = nativeBridgeEnabled,
+            access = nativeAccess[DshNativeBridge.Cap.SAF] ?: DshNativeBridge.Access.OFF,
+            sources = safSources,
+            onPickAccess = { mode ->
+                applyAccess(DshNativeBridge.Cap.SAF, mode)
+            },
+            onRequestGrant = {
+                // 和「文件访问范围」页同一种发起：persistable + prefix，否则重启后授权就失效
+                safPicker.launch(
+                    Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PREFIX_URI_PERMISSION,
+                    ),
+                )
+            },
+            onToggleSource = { name, on ->
+                DshSafSources.setEnabled(context, name, on)
+                safSources = DshSafSources.allSources(context)
+                DshHostPrompt.writeFacts(context.applicationContext)
+            },
+            onRemoveSource = { name ->
+                DshSafSources.remove(context, name)
+                safSources = DshSafSources.allSources(context)
+                DshHostPrompt.writeFacts(context.applicationContext)
+            },
+            onDismiss = { safSheetOpen = false },
+        )
+    }
 }
 
+/**
+ * SAF 桥这张卡点开后的弹层：档位（关/只读/读写）+「申请授权」拉起系统选择器 + 已授权来源的
+ * 勾选启用列表，三合一。
+ *
+ * 为什么单独做一个而不复用通用的档位弹层：SAF 桥的「能访问哪些目录」不是一个 Android 权限，
+ * 而是用户在系统选择器里一棵一棵授权、再在这里勾选启用的来源集合。档位决定「能不能写」，
+ * 来源集合决定「能看到哪几棵树」——两件事都在这张卡的职责里，放一个弹层里用户才串得起来。
+ */
+@Composable
+private fun SafBridgeSheet(
+    enabled: Boolean,
+    access: DshNativeBridge.Access,
+    sources: List<DshSafSources.Source>,
+    onPickAccess: (DshNativeBridge.Access) -> Unit,
+    onRequestGrant: () -> Unit,
+    onToggleSource: (String, Boolean) -> Unit,
+    onRemoveSource: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 24.dp, bottom = 32.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Text(
+                text = stringResource(nativeCapTitleRes(DshNativeBridge.Cap.SAF)),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.dsh_saf_sheet_intro),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            // ── 档位（关 / 只读 / 读写）──
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.dsh_saf_sheet_access_header),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            for (mode in DshNativeBridge.accessOptions(DshNativeBridge.Cap.SAF)) {
+                val selected = access == mode
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = selected,
+                            enabled = enabled,
+                            onClick = { onPickAccess(mode) },
+                        )
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = selected, onClick = null, enabled = enabled)
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(
+                                nativeCapsAccessLabelRes(DshNativeBridge.Cap.SAF, mode),
+                            ),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (enabled) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                        )
+                        Text(
+                            text = stringResource(nativeCapsAccessDescRes(mode)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            // ── 来源：申请授权 + 勾选启用 ──
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.dsh_saf_sheet_sources_header),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onRequestGrant) {
+                    Text(stringResource(R.string.dsh_saf_sheet_grant))
+                }
+            }
+            if (sources.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.dsh_saf_sheet_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                for (source in sources) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = source.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                            source.authority?.let { auth ->
+                                Text(
+                                    text = auth,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        TextButton(onClick = { onRemoveSource(source.name) }) {
+                            Text(stringResource(R.string.dsh_saf_sheet_remove))
+                        }
+                        Switch(
+                            checked = source.enabled,
+                            onCheckedChange = { on -> onToggleSource(source.name, on) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 /**
  * 一项能力一张卡片：标题 + 说明在左，当前范围胶囊在右；缺权限的提示贴在卡片内部。
  *
