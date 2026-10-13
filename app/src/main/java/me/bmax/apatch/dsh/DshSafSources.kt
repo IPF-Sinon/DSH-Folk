@@ -33,9 +33,11 @@ import java.util.Locale
  * ## 持久化
  *
  * 名字→tree URI 的映射存在同一份 prefs（[DshEnv.KEY_SAF_SOURCES]）。SAF 授权本身由
- * `takePersistableUriPermission` 持久化，所以进程重启后仍可用；[sources] 读出来时会与
- * 当前 [android.content.ContentResolver.getPersistedUriPermissions] 交叉核对，授权已被系统/
- * 用户收回的来源不再列出（也从映射里清掉），避免 agent 调一个早就失效的来源。
+ * `takePersistableUriPermission` 持久化，所以进程重启后仍可用。
+ *
+ * 册子**只随用户显式动作增删**（授权登记 / 移除），不做「持久化授权还在吗」的反查剔除 ——
+ * 见 [allSources] 的说明：反查会误伤刚登记、系统那份列表还没来得及反映的来源。真授权丢了的话，
+ * `dsh-saf` 调用时会拿到明确的权限错误，比来源凭空消失清楚。
  */
 object DshSafSources {
     private const val TAG = "DshSafSources"
@@ -57,28 +59,24 @@ object DshSafSources {
         ctx.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
 
     /**
-     * 当前**已启用且仍然有效**的来源列表 —— `dsh-saf` 与可用性判定都走这个。
-     *
-     * 「有效」= 既在 prefs 的映射里、系统也仍然持有对那棵树的持久化授权。授权被收回的条目
-     * 会被顺手从 prefs 里清掉（懒清理）——不另开后台任务，读列表这件事本来就不频繁。
+     * 当前**已启用**的来源列表 —— `dsh-saf` 与可用性判定都走这个。
      * 未启用（用户在设置里取消了勾选）的来源不列出：登记≠放行，启用才放行。
      */
     fun sources(ctx: Context): List<Source> = allSources(ctx).filter { it.enabled }
 
     /**
-     * 全部仍有效的来源（含未启用）—— 设置页的勾选列表用这个，才能把「已授权但没启用」的也
-     * 显示出来让用户勾。有效性（持久化授权还在）与 [sources] 同一套懒清理。
+     * 全部来源（含未启用）—— 设置页的勾选列表用这个，才能把「已登记但没启用」的也显示出来让用户勾。
+     *
+     * **不做「持久化授权还在吗」的反查剔除**：以前这里写成「拿 persistedUriPermissions 反查，
+     * 查不到就从册子里删掉」，真机上「申请授权」选完目录后列表依旧是空的 —— 刚
+     * `takePersistableUriPermission` 完，系统那份列表未必立刻反映出来（不同 ROM / 提供器也不一定
+     * 都返回持久化位），于是刚登记的来源被当成失效、当场从 prefs 抹掉，用户看到的就是「授权后
+     * 无变化」。登记是用户的显式动作，不该被一次读不准的反查悄悄撤销。真授权丢了的话，`dsh-saf`
+     * 调用时会拿到明确的权限错误，比让来源凭空消失清楚得多。要撤，用户在列表里点「移除」。
      */
-    fun allSources(ctx: Context): List<Source> {
-        val stored = readStored(ctx)
-        if (stored.isEmpty()) return emptyList()
-        val persisted = persistedTreeUris(ctx)
-        val kept = stored.filter { persisted.contains(it.uri.toString()) }
-        if (kept.size != stored.size) writeStored(ctx, kept)
-        return kept
-    }
+    fun allSources(ctx: Context): List<Source> = readStored(ctx)
 
-    /** 按名字取一个**已启用且**仍有效的来源；没有、已失效或未启用返回 null。 */
+    /** 按名字取一个**已启用**的来源；没有或未启用返回 null。 */
     fun find(ctx: Context, name: String): Source? =
         sources(ctx).firstOrNull { it.name == name }
 
@@ -153,13 +151,6 @@ object DshSafSources {
         }
         prefs(ctx).edit().putString(DshEnv.KEY_SAF_SOURCES, a.toString()).apply()
     }
-
-    /** 当前持有持久化授权的 tree URI 字符串集合。 */
-    private fun persistedTreeUris(ctx: Context): Set<String> = runCatching {
-        ctx.contentResolver.persistedUriPermissions
-            .map { it.uri.toString() }
-            .toSet()
-    }.getOrDefault(emptySet())
 
     /** 树的显示名 → 规范化来源名的基底；取不到显示名就用 authority 的末段。 */
     private fun baseName(ctx: Context, uri: Uri): String {
