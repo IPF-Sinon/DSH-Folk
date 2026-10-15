@@ -26,6 +26,20 @@ const KNOWN = {
   AlertDialog: 'androidx.compose.material3.AlertDialog',
   // foundation / animation
   AnimatedVisibility: 'androidx.compose.animation.AnimatedVisibility',
+  // 动画这一组是「用了却忘了 import」的高发区：spring() / Spring.* / animateXxxAsState 都是
+  // 顶层函数或对象，编译期不报、只在 CI 才炸（2026-10-15 的一轮 beta 构建就是这么废的：
+  // 一个文件用了 spring() 却只 import 了 Spring 对象）。
+  spring: 'androidx.compose.animation.core.spring',
+  Spring: 'androidx.compose.animation.core.Spring',
+  tween: 'androidx.compose.animation.core.tween',
+  animateFloatAsState: 'androidx.compose.animation.core.animateFloatAsState',
+  animateDpAsState: 'androidx.compose.animation.core.animateDpAsState',
+  // animateColorAsState 有两个合法来源：core 里的那个，以及 animation 包里更老的那个
+  // （HomeDsh / HomeV4 用的就是后者），所以这里给候选而不是单个全限定名。
+  animateColorAsState: [
+    'androidx.compose.animation.core.animateColorAsState',
+    'androidx.compose.animation.animateColorAsState',
+  ],
   RoundedCornerShape: 'androidx.compose.foundation.shape.RoundedCornerShape',
   LazyColumn: 'androidx.compose.foundation.lazy.LazyColumn',
   // ui
