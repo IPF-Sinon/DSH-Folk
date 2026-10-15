@@ -764,10 +764,18 @@ ok(!/dsh_userscripts_paste/.test(screen) && !/dsh_userscripts_pick/.test(screen)
   // ROM 不认时完全没有兜底。现在：所有版本都从 onUserLeaveHint 兜底，且旗子是一次性消费的。
   {
     const at = activity.indexOf("override fun onUserLeaveHint()");
-    const hint = at > 0 ? activity.slice(at, at + 700) : "";
+    const hint = at > 0 ? activity.slice(at, at + 2600) : "";
     ok(hint.length > 0 && /!suppressAutoPip/.test(hint) && /suppressAutoPip = false/.test(hint) &&
       !/Build\.VERSION\.SDK_INT < Build\.VERSION_CODES\.S/.test(hint),
       "onUserLeaveHint 在所有版本兜底，且 suppressAutoPip 是一次性消费（不会卡住导致永远不自动进）");
+    // 用户：「画中画切换应用时还是不能自动显示」（两个开关都开：滑回桌面能进，切到别的 App 不进）。
+    // 根因：31+ 的 auto-enter 是**粘性**的，平台据此认为「系统自己会进」，于是在 Activity
+    // pausing 期间把我们的显式请求直接拒掉（AOSP 原话见代码注释）；而系统那次自动进入只覆盖
+    // 「滑回桌面」。参照 PiliPlus（它压根不写 setAutoEnterEnabled，只自己发起）。
+    // 所以这里必须钉住**顺序**：先关掉粘性参数，再发起请求；onResume 再按开关写回。
+    ok(/setPictureInPictureParams\(pipParams\(autoEnter = false\)\)[\s\S]{0,400}?enterPipOnLeave\(\)/.test(hint) &&
+      /pipParams\(autoEnter = DshEnv\.webuiPipAuto\(this\)\)/.test(activity),
+      "切到别的 App 之前先关掉粘性 auto-enter，再自己发起进小窗（onResume 按开关写回）");
   }
   ok(/setPictureInPictureParams[\s\S]{0,240}Log\.w\(/.test(activity),
     "onResume 那次 setPictureInPictureParams 的异常要写日志，不再静默吞掉");

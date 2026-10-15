@@ -924,6 +924,25 @@ class DshWebUiActivity : AppCompatActivity() {
         val allow = !suppressAutoPip
         suppressAutoPip = false
         if (!allow || isInPictureInPictureMode || !DshEnv.webuiPipAuto(this)) return
+        // 31+ 上「自动进入」是个**粘性参数**：系统据此认定「离开时由系统自己进小窗」，于是在
+        // Activity 正在 pausing 时，我们的显式请求会被**直接拒掉** —— AOSP
+        // `ActivityTaskManagerService#enterPictureInPictureMode` 原话：
+        //   "If the app is using auto-enter, and it explicitly requests entering PiP while
+        //    pausing, return false immediately since auto-enter should take in place instead."
+        // 而系统那次自动进入只覆盖「滑回桌面 / 划走」，切到别的 App 它管不到 —— 于是用户报的
+        // 「滑回桌面能进、切到别的 App 不进」：两条路一条被拒、一条不管。
+        //
+        // 参照 PiliPlus（android/app/src/main/kotlin/com/example/piliplus/MainActivity.kt）：它
+        // 压根不写 setAutoEnterEnabled，只在 onUserLeaveHint 里自己发起进小窗。这里保留自动
+        // 进入（滑回桌面那条路更稳），但**在显式请求之前先把粘性参数关掉**：两次离开从此都走
+        // 「客户端发起」，不再互相顶掉。onResume 会把粘性参数按开关写回去。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && pipSupported()) {
+            try {
+                setPictureInPictureParams(pipParams(autoEnter = false))
+            } catch (e: Exception) {
+                Log.w(TAG, "onUserLeaveHint: 关闭 auto-enter 失败", e)
+            }
+        }
         if (!enterPipOnLeave()) Log.w(TAG, "onUserLeaveHint: enterPictureInPictureMode 返回 false")
     }
 
