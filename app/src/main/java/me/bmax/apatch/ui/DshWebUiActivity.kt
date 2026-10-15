@@ -35,11 +35,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -61,7 +60,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
 import androidx.compose.material.icons.outlined.Refresh
@@ -88,6 +86,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -95,6 +94,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewCompat
@@ -730,8 +730,9 @@ class DshWebUiActivity : AppCompatActivity() {
                     // 切回全屏（见 [enterPip]）。以前这里按 inPip 把它藏起来，用户在小窗里
                     // 就再也点不到这个按钮，只剩系统那几个手势可用（用户报的正是这个）。
                     WebUiFloatingBall(
+                        // 「退出」不再单给一个 ✕：下面这个返回键在页面退无可退时本来就会
+                        // 退出 Activity（见 addCallback 那段），✕ 是同一个逻辑的第二个入口。
                         onBack = { onBackPressedDispatcher.onBackPressed() },
-                        onClose = { finish() },
                         onReload = { webView?.reload() },
                         // 交给外部浏览器时**现取**当前地址，而不是用本页进来时那个 [url]：
                         // dsh 每次重启都会生成新 token（旧地址的 token 随之失效），而本页
@@ -1211,7 +1212,6 @@ class DshWebUiActivity : AppCompatActivity() {
 @Composable
 private fun WebUiFloatingBall(
     onBack: () -> Unit,
-    onClose: () -> Unit,
     onReload: () -> Unit,
     onOpenExternal: () -> Unit,
     onEnterPip: () -> Unit,
@@ -1255,11 +1255,26 @@ private fun WebUiFloatingBall(
             )
             val y = yMin + (yMax - yMin) * yRatio
 
+            // 展开动画：progress 0 = 按钮全收在球心，1 = 各自铺到圆弧上的落点。
+            // 拖动中目标回到 0（先收起来再拖），松手再展开；球自身的位置由上面那个
+            // animateDpAsState 负责，两者互不干扰。
+            //
+            // 用「不过冲」的弹簧：落点已经被 slot() 贴到安全区边缘，一旦过冲就会顶出屏幕，
+            // 所以这里宁可稳一点，也不要那点多出来的回弹。
+            val menuProgress by animateFloatAsState(
+                targetValue = if (expanded && !dragging) 1f else 0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+                label = "ballMenu",
+            )
+
             // 展开后按钮不再竖排成一列，而是绕着球心铺成一段圆弧：贴右边缘就朝左边扇开，贴
             // 左边缘就朝右边扇开，一律朝屏幕里侧，不会顶到屏幕外。
             val cx = x + BALL_SIZE / 2
             val cy = y + BALL_SIZE / 2
-            val menuCount = if (showPip) 5 else 4
+            val menuCount = if (showPip) 4 else 3
             // 顶端那颗永远排在第一个：右侧时从左上方往左下方扫，左侧时从右上方往右下方扫。
             val startDeg = if (onRight) 180f + MENU_SPREAD_DEG / 2f else -MENU_SPREAD_DEG / 2f
             val endDeg = if (onRight) 180f - MENU_SPREAD_DEG / 2f else MENU_SPREAD_DEG / 2f
@@ -1276,24 +1291,30 @@ private fun WebUiFloatingBall(
                 return bx.coerceIn(minX, maxX) to by.coerceIn(minY, maxY)
             }
 
+            // 起点：按钮正好盖在球心上；终点：slot() 算出来的圆弧落点。
+            val fromX = cx - MENU_BUTTON_SIZE / 2
+            val fromY = cy - MENU_BUTTON_SIZE / 2
             val backSlot = slot(0)
             val reloadSlot = slot(1)
             val pipSlot = slot(2)
             val externalSlot = if (showPip) slot(3) else slot(2)
-            val closeSlot = if (showPip) slot(4) else slot(3)
 
             BallMenuButton(
-                visible = expanded && !dragging,
-                x = backSlot.first,
-                y = backSlot.second,
+                progress = menuProgress,
+                fromX = fromX,
+                fromY = fromY,
+                toX = backSlot.first,
+                toY = backSlot.second,
                 onClick = { expanded = false; onBack() },
             ) {
                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
             }
             BallMenuButton(
-                visible = expanded && !dragging,
-                x = reloadSlot.first,
-                y = reloadSlot.second,
+                progress = menuProgress,
+                fromX = fromX,
+                fromY = fromY,
+                toX = reloadSlot.first,
+                toY = reloadSlot.second,
                 onClick = { expanded = false; onReload() },
             ) {
                 Icon(
@@ -1305,9 +1326,11 @@ private fun WebUiFloatingBall(
             // 只会让人以为功能坏了）。其余按钮照旧。
             if (showPip) {
                 BallMenuButton(
-                    visible = expanded && !dragging,
-                    x = pipSlot.first,
-                    y = pipSlot.second,
+                    progress = menuProgress,
+                    fromX = fromX,
+                    fromY = fromY,
+                    toX = pipSlot.first,
+                    toY = pipSlot.second,
                     onClick = { expanded = false; onEnterPip() },
                 ) {
                     Icon(
@@ -1317,25 +1340,16 @@ private fun WebUiFloatingBall(
                 }
             }
             BallMenuButton(
-                visible = expanded && !dragging,
-                x = externalSlot.first,
-                y = externalSlot.second,
+                progress = menuProgress,
+                fromX = fromX,
+                fromY = fromY,
+                toX = externalSlot.first,
+                toY = externalSlot.second,
                 onClick = { expanded = false; onOpenExternal() },
             ) {
                 Icon(
                     Icons.Outlined.OpenInBrowser,
                     contentDescription = stringResource(R.string.dsh_webui_open_external),
-                )
-            }
-            BallMenuButton(
-                visible = expanded && !dragging,
-                x = closeSlot.first,
-                y = closeSlot.second,
-                onClick = onClose,
-            ) {
-                Icon(
-                    Icons.Outlined.Close,
-                    contentDescription = stringResource(R.string.dsh_webui_close),
                 )
             }
 
@@ -1400,31 +1414,42 @@ private fun WebUiFloatingBall(
 }
 
 /**
- * 环绕在悬浮球外圈的一个圆按钮。位置由调用方按圆弧算好后传进来（而不是自己排布），
- * 这样按钮的落点只跟球心有关，换边、拖动都不会算错。
+ * 环绕在悬浮球外圈的一个圆按钮。
+ *
+ * 位置的起、止点都由调用方按圆弧算好后传进来（而不是自己排布），这样按钮的落点只跟球心
+ * 有关，换边、拖动都不会算错。[progress] 是展开动画的进度：0 = 收在球心且看不见，1 = 到位。
+ * 位移、透明度、缩放都由它插值出来，所以展开/收起是「从球里长出去」而不是原地淡入。
  */
 @Composable
 private fun BallMenuButton(
-    visible: Boolean,
-    x: Dp,
-    y: Dp,
+    progress: Float,
+    fromX: Dp,
+    fromY: Dp,
+    toX: Dp,
+    toY: Dp,
     onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(),
-        exit = fadeOut(),
-        modifier = Modifier.offset(x = x, y = y),
+    // 进度为 0 时干脆不画：否则这一圈透明按钮全叠在球心上，会把球的点击抢走。
+    if (progress <= 0.01f) return
+    val scale = 0.4f + 0.6f * progress
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .offset(
+                x = lerp(fromX, toX, progress),
+                y = lerp(fromY, toY, progress),
+            )
+            .size(MENU_BUTTON_SIZE)
+            .graphicsLayer {
+                alpha = progress
+                scaleX = scale
+                scaleY = scale
+            },
     ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(MENU_BUTTON_SIZE),
-        ) {
-            IconButton(onClick = onClick) { content() }
-        }
+        IconButton(onClick = onClick) { content() }
     }
 }
 
