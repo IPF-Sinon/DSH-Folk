@@ -19,21 +19,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Segment
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -81,6 +84,8 @@ import me.bmax.apatch.ui.component.DshPluginProgressDialog
 import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.ui.component.ScrollableEmptyState
 import me.bmax.apatch.ui.component.SearchAppBar
+import me.bmax.apatch.ui.component.WallpaperAwareDropdownMenu
+import me.bmax.apatch.ui.component.WallpaperAwareDropdownMenuItem
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.LocalSnackbarHost
@@ -102,6 +107,19 @@ import me.bmax.apatch.util.ui.LocalSnackbarHost
 private const val GROUP_PLUGINS = "plugins"
 private const val GROUP_SCRIPTS = "scripts"
 
+/** 第三页：扩展。目前只有入口与一句「暂不可用」，占位是为了让切换器先把三页的位置定下来。 */
+private const val GROUP_EXTENSIONS = "extensions"
+
+/** 切换器里的一页：[id] 是分组常量，[titleRes] 是菜单与标题栏上的名字。 */
+private class PluginPage(val id: String, val titleRes: Int)
+
+/** 三页平级，顺序即菜单顺序 —— 切换器与标题栏都照这一份走，不会再各写一遍 when。 */
+private val PLUGIN_PAGES = listOf(
+    PluginPage(GROUP_PLUGINS, R.string.dsh_plugins),
+    PluginPage(GROUP_SCRIPTS, R.string.dsh_userscripts_title),
+    PluginPage(GROUP_EXTENSIONS, R.string.dsh_plugins_extensions),
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Destination<RootGraph>
 @Composable
@@ -121,6 +139,13 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
     // 脚本那组的安装请求：这一页的顶栏链接图标与右下角 FAB 只发请求，选择器与弹窗仍在
     // 共用的 UserscriptsContent 里（两处宿主不会各写一套安装逻辑）。
     val scriptInstall = rememberUserscriptInstallRequest()
+
+    // 右上角那颗「切换页面」的菜单是否展开
+    var groupMenu by remember { mutableStateOf(false) }
+    // 「从链接安装」弹窗：入口从插件商店搬到了插件页的 ＋ 里（商店那边只留列表与详情）。
+    var showLinkInstall by remember { mutableStateOf(false) }
+    var linkInput by remember { mutableStateOf("") }
+    var linkError by remember { mutableStateOf(false) }
 
     LaunchedEffect(runtimeInstalled) {
         if (runtimeInstalled && viewModel.plugins.isEmpty()) viewModel.refresh()
@@ -149,8 +174,11 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                 title = {
                     Text(
                         stringResource(
-                            if (group == GROUP_SCRIPTS) R.string.dsh_userscripts_title
-                            else R.string.dsh_plugins
+                            when (group) {
+                                GROUP_SCRIPTS -> R.string.dsh_userscripts_title
+                                GROUP_EXTENSIONS -> R.string.dsh_plugins_extensions
+                                else -> R.string.dsh_plugins
+                            }
                         )
                     )
                 },
@@ -165,48 +193,90 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                 },
                 dropdownContent = {
                     // 刷新只对插件那组有意义；脚本那组的「重读列表」在安装/删除后自己会做。
-                    if (group != GROUP_SCRIPTS) {
+                    if (group == GROUP_PLUGINS) {
                         IconButton(onClick = { viewModel.refresh() }) {
                             Icon(Icons.Outlined.Refresh, contentDescription = "Refresh")
                         }
                     }
-                    // 隐藏内置脚本：只作用于脚本组那份列表（hideBuiltins 传给 UserscriptsContent）。
-                    // 插件组下按了没有可见变化 —— 这是老行为，不是这次改动引入的，先照实说明。
-                    IconButton(onClick = {
-                        val next = !hideBuiltins
-                        hideBuiltins = next
-                        DshEnv.setUserscriptsHideBuiltins(context, next)
-                    }) {
+                    // 隐藏内置脚本：只作用于脚本组那份列表（hideBuiltins 传给 UserscriptsContent），
+                    // 所以也只在脚本组显示 —— 在别的组里按了没有可见变化，那是按钮失灵的样子。
+                    // 图标说「按下去会发生什么」：正在显示内置 → 给「隐藏」的眼睛；已经隐藏 → 给睁开的眼睛。
+                    if (group == GROUP_SCRIPTS) {
+                        IconButton(onClick = {
+                            val next = !hideBuiltins
+                            hideBuiltins = next
+                            DshEnv.setUserscriptsHideBuiltins(context, next)
+                        }) {
+                            Icon(
+                                if (hideBuiltins) Icons.Outlined.Visibility
+                                else Icons.Outlined.VisibilityOff,
+                                contentDescription = stringResource(
+                                    if (hideBuiltins) R.string.dsh_userscripts_show_builtin
+                                    else R.string.dsh_userscripts_hide_builtin
+                                ),
+                            )
+                        }
+                    }
+                    // 页面切换器：原先底下那排 FilterChip 撤了，收进这颗按钮（用户：「右上角增加一个
+                    // 按钮（原来的商店入口处）供切换」）。三页平级，所以菜单里列出三页并标出当前页。
+                    IconButton(onClick = { groupMenu = true }) {
                         Icon(
-                            Icons.Outlined.VisibilityOff,
-                            contentDescription = stringResource(
-                                if (hideBuiltins) R.string.dsh_userscripts_show_builtin
-                                else R.string.dsh_userscripts_hide_builtin
-                            ),
+                            Icons.Filled.Segment,
+                            contentDescription = stringResource(R.string.dsh_plugins_switch),
                         )
                     }
-                    // 顶栏不再有商店入口：两组的商店与安装都收进了右下角那个 ＋（见 [AddMenuFab]）。
+                    WallpaperAwareDropdownMenu(
+                        expanded = groupMenu,
+                        onDismissRequest = { groupMenu = false },
+                    ) {
+                        for (page in PLUGIN_PAGES) {
+                            WallpaperAwareDropdownMenuItem(
+                                text = { Text(stringResource(page.titleRes)) },
+                                onClick = {
+                                    group = page.id
+                                    groupMenu = false
+                                },
+                                leadingIcon = {
+                                    // 当前页打勾（而不是换颜色）：菜单收起后三行长得一样，
+                                    // 勾一眼能看出「现在在哪一页」
+                                    if (page.id == group) {
+                                        Icon(Icons.Filled.Check, contentDescription = null)
+                                    } else {
+                                        Spacer(Modifier.size(24.dp))
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    // 顶栏不再有商店入口：三页的商店与安装都收进了右下角那个 ＋（见 [AddMenuFab]）。
                     // 用户要撤掉的正是「右上角那个商店入口」—— 顶栏再留一份就是同一件事的第二个说法。
                 },
             )
         },
         floatingActionButton = {
-            // 两组都是同一个「＋ 环绕菜单」：
-            //   - 插件组 → 本地 .tgz + 插件商店；
-            //   - 脚本组 → 链接 + 文件 + 商店（[UserscriptAddFab] 把三个动作交给同一份 [AddMenuFab]）。
-            if (group == GROUP_SCRIPTS) {
-                // 正文（UserscriptsContent）只在运行时已装时组合；没装时这一组的界面是「需要先装
-                // 运行时」，脚本装了也无处可跑。所以这一格干脆不画，而不是画一个点了没反应的 ＋
-                // （旧写法就是这样：按钮在，点了什么也不会发生）。
-                if (runtimeInstalled) {
-                    UserscriptAddFab(
-                        installRequest = scriptInstall,
-                        onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) },
-                    )
+            // 三页共用一个「＋ 环绕菜单」（[AddMenuFab]）：
+            //   - 插件页 → 链接 + 文件 + 商店（链接安装这一颗是从插件商店搬过来的）；
+            //   - 脚本页 → 链接 + 文件 + 商店（[UserscriptAddFab] 把三个动作交给同一份实现）；
+            //   - 扩展页 → 还没有可装的东西，不画。
+            when (group) {
+                GROUP_SCRIPTS -> {
+                    // 正文（UserscriptsContent）只在运行时已装时组合；没装时这一组的界面是「需要先装
+                    // 运行时」，脚本装了也无处可跑。所以这一格干脆不画，而不是画一个点了没反应的 ＋
+                    // （旧写法就是这样：按钮在，点了什么也不会发生）。
+                    if (runtimeInstalled) {
+                        UserscriptAddFab(
+                            installRequest = scriptInstall,
+                            onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) },
+                        )
+                    }
                 }
-            } else {
-                AddMenuFab(
+                GROUP_PLUGINS -> AddMenuFab(
                     listOf(
+                        AddMenuEntry(
+                            icon = Icons.Outlined.Link,
+                            labelRes = R.string.dsh_plugin_install_link,
+                            onClick = { showLinkInstall = true },
+                        ),
                         AddMenuEntry(
                             icon = Icons.Outlined.FolderOpen,
                             labelRes = R.string.dsh_local_install,
@@ -226,6 +296,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                         ),
                     )
                 )
+                else -> Unit
             }
         },
     ) { innerPadding ->
@@ -236,7 +307,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
             )
         } else {
             Column(Modifier.fillMaxSize().padding(innerPadding)) {
-                ModuleGroupRow(group = group, onSelect = { group = it })
+                // 切换器在顶栏（原来那排 FilterChip 撤了），所以这里直接按当前页铺内容。
                 when (group) {
                     // 用户脚本：与「设置 → 用户脚本」那一页**同一份正文**（UserscriptsContent）。
                     // 入口搬过来之后两处各留一份实现，很快就会各长各的 —— 那正是"对齐 UI"要防的事。
@@ -248,6 +319,21 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                         // 没记来源的那条：更新去市场按名字找一遍
                         onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },
                     )
+                    // 扩展页：入口先占位（用户要的三页切换里它标着「暂不可用」）。
+                    // 不画一个空列表：空列表看起来像「装完就没了」，而不是「这页还没做」。
+                    GROUP_EXTENSIONS -> ScrollableEmptyState(Modifier.weight(1f)) {
+                        Column(
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.dsh_plugins_extensions_unavailable),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 32.dp),
+                            )
+                        }
+                    }
                     else -> DshPluginList(
                         // 外层 Column 已经吃掉 scaffold 的 inset，这里不能再吃一遍
                         innerPadding = PaddingValues(0.dp),
@@ -259,40 +345,56 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
         }
     }
 
-    // 安装/卸载进度：pnpm 可能跑几分钟，不能只在结束后弹一条 snackbar
-    PluginProgressHost(viewModel)
-}
-
-/**
- * 两组内容的切换：DSH 插件 / 用户脚本。
- *
- * 用 FilterChip 而不是 TabRow / SegmentedButton：商店的分类行就是这一套（同样的选中色与
- * 间距），两页挨在一起时视觉上才像同一个应用（本项目此前没有用过 TabRow，不新引入一种）。
- */
-@Composable
-private fun ModuleGroupRow(group: String, onSelect: (String) -> Unit) {
-    val chipColors = FilterChipDefaults.filterChipColors(
-        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 1f)
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        FilterChip(
-            selected = group != GROUP_SCRIPTS,
-            onClick = { onSelect(GROUP_PLUGINS) },
-            label = { Text(stringResource(R.string.dsh_plugins)) },
-            colors = chipColors,
-        )
-        FilterChip(
-            selected = group == GROUP_SCRIPTS,
-            onClick = { onSelect(GROUP_SCRIPTS) },
-            label = { Text(stringResource(R.string.dsh_userscripts_title)) },
-            colors = chipColors,
+    // 「从链接安装」（插件页的 ＋ 里那一颗）：与脚本那套一样，粘 owner/name 或仓库地址即可。
+    // 这段弹窗原来在插件商店页，用户要求把入口从商店移到 ＋ 下面，于是整段搬过来。
+    if (showLinkInstall) {
+        AlertDialog(
+            onDismissRequest = { showLinkInstall = false },
+            title = { Text(stringResource(R.string.dsh_plugin_install_link)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.dsh_plugin_install_link_desc))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = linkInput,
+                        onValueChange = { linkInput = it; linkError = false },
+                        singleLine = true,
+                        isError = linkError,
+                        placeholder = { Text("owner/name") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (linkError) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            stringResource(R.string.dsh_plugin_install_link_invalid),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    // 归一化受「GitHub 插件镜像」开关约束：install() 内部会走 installGitSpec
+                    val spec = DshPluginRepo.normalizeInstallSpec(linkInput)
+                    if (spec == null) {
+                        linkError = true
+                    } else {
+                        showLinkInstall = false
+                        linkInput = ""
+                        viewModel.install(spec)
+                    }
+                }) { Text(stringResource(R.string.dsh_plugin_install_action)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLinkInstall = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
         )
     }
+
+    // 安装/卸载进度：pnpm 可能跑几分钟，不能只在结束后弹一条 snackbar
+    PluginProgressHost(viewModel)
 }
 
 /**

@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -135,11 +137,14 @@ fun HomeScreenDsh(
         )
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            // 等高：两张卡的副标题在窄屏/大字号下换行行数不一样（一台设备 1 行、另一台 2 行），
+            // 不定高就会出现「一张高一张低」—— 用户报的「部分竖屏设备上这两张卡不对齐」就是这个。
+            // IntrinsicSize.Min 让 Row 取两张卡内容高度的较大者，再让两张卡都撑满它。
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             DshSmallCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).fillMaxHeight(),
                 icon = Icons.Outlined.Layers,
                 title = stringResource(R.string.dsh_run_mode),
                 value = if (DshRuntime.effectiveRuntimeId() == "proroot") "proroot" else "proot",
@@ -150,7 +155,7 @@ fun HomeScreenDsh(
                 onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },
             )
             DshSmallCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).fillMaxHeight(),
                 icon = Icons.Outlined.Security,
                 title = stringResource(R.string.dsh_permission),
                 value = perm.label(context),

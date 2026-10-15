@@ -5,6 +5,8 @@
     <string name="dsh_log_collect_failed">采集日志失败，请重试（详情见应用日志）</string>
     <string name="dsh_terminal">终端</string>
     <string name="dsh_plugins">插件</string>
+    <string name="dsh_plugins_extensions">扩展</string>
+    <string name="dsh_plugins_switch">切换页面</string>
 
     <string name="settings_home_layout_dsh">Harness 面板</string>
 
@@ -105,6 +107,7 @@
     <string name="dsh_phase_error">出错</string>
 
     <string name="dsh_plugin_store">插件商店</string>
+    <string name="dsh_plugins_extensions_unavailable">扩展页暂不可用，先在插件 / 用户脚本两页里用。</string>
     <string name="dsh_plugin_downloads">下载量</string>
     <string name="dsh_plugin_stars">星标</string>
     <string name="dsh_local_install">本地安装</string>

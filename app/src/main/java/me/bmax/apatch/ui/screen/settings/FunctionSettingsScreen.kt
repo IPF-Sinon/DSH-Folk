@@ -6,7 +6,6 @@ import android.os.Build
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.format.Formatter
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +53,7 @@ import com.ramcosta.composedestinations.generated.NavGraphs
 import com.ramcosta.composedestinations.generated.destinations.GeneralSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionHubScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.FileAccessScreenDestination
+import com.ramcosta.composedestinations.generated.destinations.FunctionSettingsScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.DshDeepCleanScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.HomeScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.PermissionLogScreenDestination
@@ -91,8 +91,19 @@ import rikka.shizuku.Shizuku
  */
 @Destination<RootGraph>
 @Composable
-fun FunctionSettingsScreen(navigator: DestinationsNavigator, highlightKey: String? = null) {
-    DshSettingsScreen(navigator, highlightKey, permissionOnly = false)
+fun FunctionSettingsScreen(
+    navigator: DestinationsNavigator,
+    highlightKey: String? = null,
+    /**
+     * 次级页要画哪一类（[FunctionGroup.key]）；null = 入口层（5 个分类 + 搜索）。
+     *
+     * 分类页做成**真目的地**（而不是页内 state 切换）：用户要的「切换页面动画」就是导航栈给的，
+     * 顺带返回箭头与系统返回都由栈管 —— 与「安全 → 权限管理 → 分类页」同一套走法。
+     * 枚举本身不是导航参数类型，所以传它的 key。
+     */
+    group: String? = null,
+) {
+    DshSettingsScreen(navigator, highlightKey, permissionOnly = false, groupKey = group)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,6 +112,7 @@ internal fun DshSettingsScreen(
     navigator: DestinationsNavigator,
     highlightKey: String?,
     permissionOnly: Boolean,
+    groupKey: String? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -327,22 +339,26 @@ internal fun DshSettingsScreen(
     var pendingRuntimeOp by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // ── 功能页的两层：入口层（分类 + 搜索）与次级页（某一类的卡片）────────────────────────
-    // 安全页（permissionOnly）不走这一套：它本来就只有两张卡，一屏就是全部。
-    // openGroupKey 存的是 FunctionGroup.key —— 枚举不是 Saveable，字符串是。
+    // 两层是**两个目的地**（见 [FunctionSettingsScreen] 的 group 参数），这里只回答「当前这页
+    // 是哪一类」。安全页（permissionOnly）不走这一套：它本来就只有两张卡，一屏就是全部。
     var hubQuery by rememberSaveable { mutableStateOf("") }
-    var openGroupKey by rememberSaveable { mutableStateOf<String?>(null) }
-    val openGroup = FunctionGroup.entries.firstOrNull { it.key == openGroupKey }
-    // 高亮哪一张卡：全局搜索点进来时是导航参数，入口层搜索命中某张卡时是那一条命中。
-    var highlight by remember(highlightKey) { mutableStateOf(highlightKey) }
-    // 全局搜索（设置主页那份索引）直接点「端口」这种具体卡片时，先把它所在的分类展开 ——
-    // 否则会落在一个入口层上、什么也没高亮，用户会以为搜索没生效。
-    LaunchedEffect(highlightKey) {
-        if (!permissionOnly) functionGroupOfItem(highlightKey)?.let { openGroupKey = it.key }
-    }
-    // 次级页的系统返回先回入口层，而不是直接退出这一页（与返回箭头同一套行为）。
-    BackHandler(enabled = openGroup != null) {
-        openGroupKey = null
-        hubQuery = ""
+    val openGroup = groupKey?.let { key -> FunctionGroup.entries.firstOrNull { it.key == key } }
+    // 全局搜索（设置主页那份索引）直接点「端口」这种具体卡片时：本页是入口层，先翻到它所在的
+    // 分类去 —— 那一页带着 highlightKey，就能把那张卡高亮出来。否则会落在一个入口层上、什么都
+    // 没高亮，用户会以为搜索没生效。
+    //
+    // autoOpened 必须是 saveable 的：从分类页返回时本页会重新进入组合，LaunchedEffect 会再跑一遍，
+    // 不记这一笔就会「返回 → 又被弹回分类页」，永远回不到入口层。
+    var autoOpened by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(highlightKey, groupKey) {
+        if (!permissionOnly && groupKey == null && !autoOpened) {
+            functionGroupOfItem(highlightKey)?.let { g ->
+                autoOpened = true
+                navigator.navigate(
+                    FunctionSettingsScreenDestination(highlightKey = highlightKey, group = g.key)
+                )
+            }
+        }
     }
 
     Scaffold(
@@ -388,17 +404,9 @@ internal fun DshSettingsScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(
-                            onClick = {
-                                if (openGroup != null) {
-                                    // 次级页：回入口层（清掉搜索词，回到 5 个分类）
-                                    openGroupKey = null
-                                    hubQuery = ""
-                                } else {
-                                    navigator.popBackStack()
-                                }
-                            }
-                        ) {
+                        // 次级页与安全页都退栈：次级页是压在入口层上的一个目的地，
+                        // 所以这一颗与系统返回键天然是同一件事（不必再自己管一层）。
+                        IconButton(onClick = { navigator.popBackStack() }) {
                             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
                         }
                     },
@@ -408,13 +416,14 @@ internal fun DshSettingsScreen(
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackBarHost) },
     ) { paddingValues ->
-        // 入口层：5 个分类 + 搜索。命中某张卡时把它所在的分类展开并高亮那一张。
+        // 入口层：5 个分类 + 搜索。点分类 = 推一个新目的地（动画与其它翻页一致）。
         if (!permissionOnly && openGroup == null) {
             FunctionHubContent(
                 query = hubQuery,
                 onOpen = { group, itemKey ->
-                    openGroupKey = group.key
-                    highlight = itemKey
+                    navigator.navigate(
+                        FunctionSettingsScreenDestination(highlightKey = itemKey, group = group.key)
+                    )
                 },
                 modifier = Modifier.padding(paddingValues),
             )
@@ -686,10 +695,10 @@ internal fun DshSettingsScreen(
                         dshPrefs.edit().putBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, on).apply()
                     },
                     permissionOnly = permissionOnly,
-                    // 次级页：只画这一类。安全页（permissionOnly）不用它。
+                    // 次级页：只画这一类（导航参数决定）。安全页（permissionOnly）不用它。
                     group = openGroup,
-                    // 高亮的是入口层搜索命中的那一张（或全局搜索带进来的那张）
-                    highlightKey = highlight,
+                    // 入口层搜索命中的那一张（或全局搜索带进来的那张）在这里高亮
+                    highlightKey = highlightKey,
                 )
             }
             if (permissionOnly) {

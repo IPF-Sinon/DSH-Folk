@@ -6,6 +6,8 @@
     <string name="dsh_log_collect_failed">Collecting logs failed — please retry (see the app log for details)</string>
     <string name="dsh_terminal">Terminal</string>
     <string name="dsh_plugins">Plugins</string>
+    <string name="dsh_plugins_extensions">Extensions</string>
+    <string name="dsh_plugins_switch">Switch page</string>
 
     <!-- 首页布局选项 -->
     <string name="settings_home_layout_dsh">Harness dashboard</string>
@@ -113,6 +115,7 @@
 
     <!-- 插件页 -->
     <string name="dsh_plugin_store">Plugin store</string>
+    <string name="dsh_plugins_extensions_unavailable">Extensions are not available yet — use the Plugins and Userscripts pages for now.</string>
     <string name="dsh_plugin_downloads">Downloads</string>
     <string name="dsh_plugin_stars">Stars</string>
     <string name="dsh_local_install">Install locally</string>

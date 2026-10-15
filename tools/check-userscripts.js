@@ -510,14 +510,38 @@ ok(!/UserscriptsScreenDestination/.test(fnScreen),
   "功能页右上角那个入口已撤（入口搬去插件首页，不留第二处）");
 ok(/internal fun UserscriptsContent\(/.test(screen) && /UserscriptsContent\(/.test(pluginHome),
   "插件首页与独立页共用同一份正文（UserscriptsContent），不是各写一份");
-// 只看 ModuleGroupRow 那一段：这两句 label 在文件别处也出现（标题栏也按组换），
-// 全文匹配抓不住"把 chip 的标签换成别的资源"这种改动。
-const groupRow = (pluginHome.match(/private fun ModuleGroupRow\([\s\S]*?\n\}/) || [])[0] || "";
+// 用户：「删除现有插件页与脚本页切换ui，右上角增加一个按钮（原来的商店入口处）供切换
+// （插件页，脚本页，扩展页[暂不可用]）」。于是底部那排 FilterChip 撤了，切换器搬进顶栏菜单：
+// 三页平级、由同一份 PLUGIN_PAGES 驱动（标题栏与菜单不会再各写一遍 when）。
 ok(/private const val GROUP_PLUGINS = "plugins"/.test(pluginHome) &&
   /private const val GROUP_SCRIPTS = "scripts"/.test(pluginHome) &&
-  /FilterChip\(/.test(groupRow) &&
-  /R\.string\.dsh_plugins/.test(groupRow) && /R\.string\.dsh_userscripts_title/.test(groupRow),
-  "插件首页有「DSH 插件 / 用户脚本」两组的切换（FilterChip，与商店分类行同一套视觉）");
+  /private const val GROUP_EXTENSIONS = "extensions"/.test(pluginHome) &&
+  /private val PLUGIN_PAGES = listOf\([\s\S]{0,400}?PluginPage\(GROUP_EXTENSIONS, R\.string\.dsh_plugins_extensions\)/.test(pluginHome) &&
+  /WallpaperAwareDropdownMenu\(/.test(pluginHome) &&
+  /WallpaperAwareDropdownMenuItem\(/.test(pluginHome) &&
+  /Icon\(\s*\n?\s*Icons\.Filled\.Segment,\s*\n?\s*contentDescription = stringResource\(R\.string\.dsh_plugins_switch\)/.test(pluginHome) &&
+  // 断言「代码里不再有 FilterChip(」而不是「没 import FilterChip」：反向验证时发现，
+  // 只查 import 的话，把 chip 行加回来但没加 import（编译期才会报）这条会漏掉。
+  !/FilterChip\(/.test(pluginHome) &&
+  !/ModuleGroupRow/.test(pluginHome),
+  "三页切换在右上角那颗菜单按钮里（原来的 FilterChip 行已撤）：插件 / 用户脚本 / 扩展");
+ok(/GROUP_EXTENSIONS -> ScrollableEmptyState\(/.test(pluginHome) &&
+  /dsh_plugins_extensions_unavailable/.test(pluginHome),
+  "扩展页有入口也有一句「暂不可用」（不是画一个空列表）");
+// 用户：「插件页顶栏那颗『隐藏内置』在插件组下按了没反应，修一下，另外隐藏内置时应该换个图标」。
+// 该按钮只作用于脚本组那份列表，所以只该在脚本组出现；图标说「按下去会发生什么」。
+ok(/if \(group == GROUP_SCRIPTS\) \{\s*\n\s*IconButton\(onClick = \{\s*\n\s*val next = !hideBuiltins/.test(pluginHome) &&
+  /if \(hideBuiltins\) Icons\.Outlined\.Visibility\s*\n\s*else Icons\.Outlined\.VisibilityOff/.test(pluginHome),
+  "「隐藏内置」只在脚本页显示，且隐藏之后换成「显示」那只眼睛");
+// 用户：「插件页（插件组）：缺少链接安装按钮，把插件商店的从GitHub链接安装移除」。
+const store = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/DshPluginStoreScreen.kt", "utf8");
+ok(/labelRes = R\.string\.dsh_plugin_install_link/.test(pluginHome) &&
+  /showLinkInstall = true/.test(pluginHome) &&
+  /DshPluginRepo\.normalizeInstallSpec\(linkInput\)/.test(pluginHome),
+  "插件页的 ＋ 里有「从链接安装」（弹窗整段从插件商店搬了过来）");
+ok(!/showLinkInstall/.test(store) && !/normalizeInstallSpec/.test(store) &&
+  !/dsh_plugin_install_link/.test(store) && !/linkInput/.test(store),
+  "插件商店不再有「从 GitHub 链接安装」的入口与弹窗（商店只留看列表/看详情/装）");
 // 产品要求变了两次：
 //   第一次（用户：「插件脚本页移除右上角商店入口……点击后环绕它显示三个按钮（链接，文件，商店），
 //   同时自身变为取消 X 按钮」）：脚本页那三件「从哪装」的事收进右下角那个 ＋。

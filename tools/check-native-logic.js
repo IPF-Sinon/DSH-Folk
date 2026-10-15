@@ -1492,15 +1492,21 @@ console.log("── 限制模式页与弹窗 ──");
     /HubRow\(\s*\n\s*icon = group\.icon,\s*\n\s*title = stringResource\(group\.titleRes\),\s*\n\s*summary = stringResource\(group\.summaryRes\),/.test(settings) &&
     /HubHitRow\(hit\.title, hit\.subtitle\)/.test(settings),
     "入口层列分类行（HubRow，图标/标题/说明都取自枚举），搜索按卡片名命中（HubHitRow）");
-  // 全局搜索（设置主页那份索引）点「端口」这种具体卡片时，先把它的分类展开再高亮
-  ok(/functionGroupOfItem\(highlightKey\)/.test(screen) && /openGroupKey = it\.key/.test(screen),
-    "全局搜索点进具体卡片时自动展开它所在的分类");
-  // 两层在页面上真的接上了：入口层用搜索栏、次级页用普通标题栏、返回先回入口层
-  ok(/SearchAppBar\(/.test(screen) && /FunctionHubContent\(/.test(screen) &&
-    /group = openGroup,/.test(screen) && /highlightKey = highlight,/.test(screen) &&
-    /BackHandler\(enabled = openGroup != null\)/.test(screen) &&
+  // 全局搜索（设置主页那份索引）点「端口」这种具体卡片时：入口层先翻到它所在的分类去
+  // （那一页带着 highlightKey 才能高亮），而且**只自动翻一次** —— 不记那一笔的话，从分类页
+  // 返回时本页重新进入组合、effect 再跑一遍，用户会被立刻弹回去，永远回不到入口层。
+  ok(/functionGroupOfItem\(highlightKey\)/.test(screen) &&
+    /FunctionSettingsScreenDestination\(highlightKey = highlightKey, group = g\.key\)/.test(screen) &&
+    /var autoOpened by rememberSaveable/.test(screen) && /!autoOpened/.test(screen),
+    "全局搜索点进具体卡片时翻到它所在的分类，且只自动翻一次");
+  // 分类页是**真目的地**：用户要的「切换页面动画」由导航栈给（与安全页「权限管理 → 分类页」
+  // 同一套走法）。所以入口层点分类是 navigator.navigate(...)，次级页的返回箭头就是退栈。
+  ok(/group: String\? = null,/.test(screen) && /groupKey: String\? = null,/.test(screen) &&
+    /SearchAppBar\(/.test(screen) && /FunctionHubContent\(/.test(screen) &&
+    /group = openGroup,/.test(screen) && /highlightKey = highlightKey,/.test(screen) &&
+    /FunctionSettingsScreenDestination\(highlightKey = itemKey, group = group\.key\)/.test(screen) &&
     /return@Scaffold/.test(screen),
-    "入口层/次级页两份顶栏 + 返回键回入口层都接上了");
+    "分类页是一个真目的地（点分类推栈、因此有翻页动画），次级页只画那一类");
   // 行组件只有一份：权限入口页与功能入口页共用 ui/component/HubList.kt 里那套
   ok(!/private fun (HubRow|HubCard|HitRow)\b/.test(hubScreen) &&
     /import me\.bmax\.apatch\.ui\.component\.HubRow/.test(hubScreen) &&
@@ -1521,6 +1527,22 @@ console.log("── 限制模式页与弹窗 ──");
   // 可见性交给层级（安全页一组 / 次级页一类），不再每张卡自己 visible
   ok(!/visible = !?permissionOnly/.test(settings),
     "功能页与安全页的可见性由层级决定，不是每张卡自己 visible");
+}
+// ── 主页「运行方式 / 权限」两张卡必须等高 ──
+//
+// 用户：「部分竖屏arm64设备上主页运行方式和权限卡片不对齐」。原因不是权重，是**没定高**：
+// 两张卡并排、各按自己内容撑高，副标题在窄屏或大字号下换行行数不一样，内容高的那张就把
+// 底边撑下去。修法是 Row 取 IntrinsicSize.Min、两张卡都 fillMaxHeight()。
+//
+// 这类「只在某些设备/字号下看得见」的布局回归，肉眼审代码很难发现，所以钉住。
+{
+  const home = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/HomeDsh.kt", "utf8");
+  // 从第一张卡的调用往前 900 字符（够覆盖 Row 与上面那几行注释）、往后 1600 字符（够到第二张卡）
+  const at = home.indexOf("DshSmallCard(");
+  const rowBlock = at > 0 ? home.slice(Math.max(0, at - 900), at + 1600) : "";
+  ok(/\.height\(IntrinsicSize\.Min\)/.test(rowBlock) &&
+    (rowBlock.match(/Modifier\.weight\(1f\)\.fillMaxHeight\(\)/g) || []).length === 2,
+    "Harness 面板那两张并排卡取 IntrinsicSize.Min 等高（否则窄屏/大字号下会一高一低）");
 }
 
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
