@@ -518,13 +518,35 @@ ok(/private const val GROUP_PLUGINS = "plugins"/.test(pluginHome) &&
   /FilterChip\(/.test(groupRow) &&
   /R\.string\.dsh_plugins/.test(groupRow) && /R\.string\.dsh_userscripts_title/.test(groupRow),
   "插件首页有「DSH 插件 / 用户脚本」两组的切换（FilterChip，与商店分类行同一套视觉）");
-ok(/if \(group == GROUP_SCRIPTS\) ScriptMarketScreenDestination\(initialQuery = ""\)[\s\S]{0,40}else DshPluginStoreScreenDestination/.test(pluginHome),
-  "商店按钮按当前显示的那一组分流：插件 → 插件商店；脚本 → 脚本市场（两边都是开一页）");
+// 产品要求变了（用户：「插件脚本页移除右上角商店入口……点击后环绕它显示三个按钮（链接，文件，
+// 商店），同时自身变为取消 X 按钮」）：三件「从哪装」的事收进右下角那个 ＋，两处宿主共用同一份
+// 实现。所以插件首页顶栏只剩插件组的商店直达，脚本组既没有链接图标也没有商店图标。
+ok(/if \(group != GROUP_SCRIPTS\) \{[\s\S]{0,220}?DshPluginStoreScreenDestination/.test(pluginHome) &&
+  !/if \(group == GROUP_SCRIPTS\) ScriptMarketScreenDestination/.test(pluginHome) &&
+  !/scriptInstall\.requestLink\(\)/.test(pluginHome),
+  "脚本组的顶栏链接/商店图标已撤：顶栏商店按钮只服务插件组（插件 → 插件商店）");
+const addFabAt = screen.indexOf("internal fun UserscriptAddFab(");
+const addFabEnd = addFabAt > 0 ? screen.indexOf("\n@Composable", addFabAt + 10) : -1;
+const addFab = addFabAt > 0 && addFabEnd > addFabAt ? screen.slice(addFabAt, addFabEnd) : "";
+ok(addFab.length > 0 &&
+  /Icons\.Filled\.Add/.test(addFab) && /Icons\.Filled\.Close/.test(addFab) &&
+  /R\.string\.cancel/.test(addFab) && /R\.string\.dsh_userscripts_add/.test(addFab) &&
+  /requestLink\(\)/.test(addFab) && /requestLocal\(\)/.test(addFab) &&
+  /onOpenMarket/.test(addFab) && /ADD_MINI_SIZE/.test(addFab),
+  "安装入口是一个 ＋：展开后绕它铺开链接/文件/商店三颗，＋ 自己变成 ✕（带取消的无障碍名）");
+ok(/UserscriptAddFab\(/.test(pluginHome) &&
+  /onOpenMarket = \{ navigator\.navigate\(ScriptMarketScreenDestination\(initialQuery = ""\)\) \}/.test(pluginHome),
+  "插件首页脚本组复用同一个 ＋（否则两处宿主各长一套）");
 const marketScreen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/ScriptMarketScreen.kt", "utf8");
 ok(/@Destination<RootGraph>/.test(marketScreen) && /ScriptMarket\./.test(marketScreen) &&
   !/revealMarket/.test(screen) && !/scrollState\.animateScrollTo\(/.test(screen) &&
   !/marketQuery/.test(screen),
   "市场是独立一页（脚本页里既没有页内市场，也没有「把它滚进视野」那套机制）");
+// 用户：「商店内移除链接、文件安装方式和按钮」。市场只留网页一键安装 —— 链接弹窗与本地选择器
+// 都搬去了用户脚本页那个 ＋（市场页自己不再有这两个入口）。
+ok(!/UserscriptLinkInstallDialog/.test(marketScreen) && !/Icons\.Outlined\.FolderOpen/.test(marketScreen) &&
+  !/rememberLauncherForActivityResult/.test(marketScreen) && !/showLinkInstall/.test(marketScreen),
+  "市场页只剩网页一键安装：链接安装与本地文件安装的入口、弹窗与选择器都已撤");
 ok(/filter = scriptFilter/.test(pluginHome) && /val shown = if \(filter\.isBlank\(\)\)/.test(screen),
   "一个搜索栏管两组：脚本那组用它过滤「我装的」");
 // 悬浮球里那个入口按用户要求撤掉了 —— 连同它专用的 AppNavigation 一跳。留着反向断言：

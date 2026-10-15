@@ -1435,5 +1435,49 @@ console.log("── 限制模式页与弹窗 ──");
       "提示词里没有旧概念残留（否则 agent 会按已不存在的规则行事）");
   }
 }
+// ── 功能页的分类整理 ──
+//
+// 用户报「功能页 UI 有点杂乱，分类整理一下」：13 张卡原本首尾拼成一整条 SplicedColumnGroup，
+// 没有任何一级分类。现在按 5 组分开（每组一个带标题的 SplicedColumnGroup），安全页
+// （permissionOnly）仍是一组、且不带标题（那一页只有两张卡，不需要再分类）。
+//
+// 这类「结构性重排」最容易出的事故是重排时掉了一张卡：Kotlin 不报错、其它门禁也全绿，
+// 要等用户发现某个开关不见了。所以这里同时钉组名与顺序，以及 16 张卡一个不少、不重复。
+{
+  const settings = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt", "utf8");
+  const want = [
+    "dsh_function_group_startup",
+    "dsh_function_group_network",
+    "dsh_function_group_webui",
+    "dsh_function_group_runtime",
+    "dsh_function_group_storage",
+  ];
+  const groups = [...settings.matchAll(/SplicedColumnGroup\(title = stringResource\(R\.string\.(dsh_function_group_[a-z]+)\)/g)]
+    .map((m) => m[1]);
+  ok(JSON.stringify(groups) === JSON.stringify(want),
+    "功能页按 5 组分类、顺序固定（实际 " + (groups.join(",") || "无") + "）");
+  const keys = [...settings.matchAll(/item\(key = "(function_[a-z_]+)"/g)].map((m) => m[1]);
+  const wantKeys = [
+    "function_auto_open_webui", "function_auto_start_service", "function_autostart",
+    "function_clean_storage", "function_docs_access", "function_gh_mirror", "function_lan",
+    "function_permission", "function_port", "function_repair_plugins", "function_run_mode",
+    "function_storage_mount", "function_verify_install", "function_webui_mode",
+    "function_webui_pip", "function_runtime",
+  ].sort();
+  const gotKeys = keys.slice().sort();
+  const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
+  const missing = wantKeys.filter((k) => !gotKeys.includes(k));
+  const extra = gotKeys.filter((k) => !wantKeys.includes(k));
+  ok(keys.length === 16 && dup.length === 0 && missing.length === 0 && extra.length === 0,
+    `重排后 16 张卡一个不少、不重复、不改名（实际 ${keys.length}` +
+    `${dup.length ? "，重复 " + dup.join(",") : ""}${missing.length ? "，缺 " + missing.join(",") : ""}` +
+    `${extra.length ? "，多 " + extra.join(",") : ""}）`);
+  // 可见性交给分组分支：if (permissionOnly) / else 各画一组。两处同时判（分支 + 每张卡的
+  // visible）最容易漂移 —— 以后加一张卡，忘了改 visible 就会在两页上各错一次。
+  ok(!/visible = !?permissionOnly/.test(settings) &&
+    /if \(permissionOnly\) \{[\s\S]{0,600}?SplicedColumnGroup\(flat = flat, highlightKey = highlightKey\) \{/.test(settings) &&
+    /\} else \{\s*\n\s*SplicedColumnGroup\(title = stringResource\(R\.string\.dsh_function_group_startup\)/.test(settings),
+    "功能页与安全页互斥渲染（if/else 各一组），不是每张卡自己 visible");
+}
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

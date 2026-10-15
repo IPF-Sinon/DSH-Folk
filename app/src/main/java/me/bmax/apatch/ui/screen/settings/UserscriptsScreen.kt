@@ -3,8 +3,11 @@ package me.bmax.apatch.ui.screen.settings
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +24,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Link
@@ -49,11 +55,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.ScriptMarketScreenDestination
@@ -67,6 +76,8 @@ import me.bmax.apatch.ui.component.UserscriptLinkInstallDialog
 import me.bmax.apatch.ui.screen.ScriptDetailSheet
 import me.bmax.apatch.util.DshWebCompat
 import me.bmax.apatch.util.ui.HomeBottomSpacer
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -93,10 +104,9 @@ import me.bmax.apatch.util.ui.showToast
  * 持有选择器与弹窗，宿主（这里的 Scaffold 与插件首页的 Scaffold）只通过
  * [UserscriptInstallRequest] 发「本地安装 / 从链接安装」两个请求。
  *
- * 用户明确要求**不要**正文顶部那张「安装脚本」卡片，改成**右下角 FAB**（照插件页那个
- * `Icons.Outlined.FolderOpen` 圆形按钮）。所以入口是「两处宿主各一个 FAB + 顶栏一个链接图标」，
- * 不再有卡片。上一轮把入口做成正文第一个列表项时，独立页与插件首页确实都看得到；但用户要的是
- * FAB 形态 —— 这一轮按 FAB 重做，两处都由宿主提供，正文里不再有安装项。
+ * 入口是右下角一个 ＋（[UserscriptAddFab]）：点开后绕着它朝屏幕里侧铺开「链接 / 文件 / 商店」
+ * 三颗，＋ 自己同时变成 ✕。三件事本来散在顶栏两个图标 + 右下角 FAB 三处，页面上就没有
+ * 「从哪装」这一个答案了 —— 收到一个按钮下面之后，顶栏只剩「隐藏内置」那个显示开关。
  *
  * 脚本市场（GreasyFork 搜索 + 一键安装）搬去了独立页
  * [me.bmax.apatch.ui.screen.ScriptMarketScreen]：它是「去别处找东西」，与这一页「本机现在注入/
@@ -120,10 +130,9 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
                 },
-                // 市场入口与插件首页那个「商店」按钮同一形态（同样的图标与无障碍名）：
-                // 同一件事在两处出现时，长得一样才不用重新认一遍。
+                // 顶栏只剩「隐藏内置」这一个显示开关：三个"从哪装"的入口都收进右下角的 ＋
+                // （见 [UserscriptAddFab]）。顶栏再留一份，就是同一件事的第二个说法。
                 actions = {
-                    // 与插件首页那个「商店」同一行（都在右上角 actions 里）。状态持久化，默认显示。
                     IconButton(onClick = {
                         val next = !hideBuiltins
                         hideBuiltins = next
@@ -137,37 +146,16 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
                             ),
                         )
                     }
-                    // 「从链接安装」：与市场同一个位置（顶栏右侧的链接图标）。安装卡撤掉之后，
-                    // 链接安装就剩这一个入口 —— 独立页与插件首页都必须有。
-                    IconButton(onClick = { installRequest.requestLink() }) {
-                        Icon(
-                            Icons.Outlined.Link,
-                            contentDescription = stringResource(R.string.dsh_userscripts_market_link_install),
-                        )
-                    }
-                    IconButton(onClick = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) }) {
-                        Icon(
-                            Icons.Outlined.Storefront,
-                            contentDescription = stringResource(R.string.dsh_userscripts_market_section),
-                        )
-                    }
                 },
             )
         },
         floatingActionButton = {
-            // 本地安装：与插件页那个 FAB 同形（图标 / 圆形 / 配色），选一个 `.user.js`。
-            // 这里只发请求，真正的选择器与安装仍只有 [UserscriptsContent] 里那一份。
-            FloatingActionButton(
-                onClick = { installRequest.requestLocal() },
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Icon(
-                    Icons.Outlined.FolderOpen,
-                    contentDescription = stringResource(R.string.dsh_userscripts_install_file),
-                )
-            }
+            // 三个安装入口共用的那一个 ＋（点开变 ✕，三颗绕它铺开）。两处宿主共用这一份，
+            // 这里只传「商店往哪开」，真正的安装动作仍由 [UserscriptsContent] 执行。
+            UserscriptAddFab(
+                installRequest = installRequest,
+                onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) },
+            )
         },
     ) { padding ->
         UserscriptsContent(
@@ -180,9 +168,154 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
     }
 }
 
+/** 主按钮（右下角那颗 ＋/✕）的直径。 */
+private val ADD_FAB_SIZE = 56.dp
+
+/** 环绕的小按钮直径，以及它们圆心到主按钮圆心的距离。 */
+private val ADD_MINI_SIZE = 40.dp
+private val ADD_RADIUS = 72.dp
+
 /**
- * 安装入口的「请求」：宿主的右下角 FAB 与顶栏链接图标只置一个待办标志，真正的选择器（本地
- * `.user.js`）与弹窗（从链接安装）仍只有 [UserscriptsContent] 里那一份实现。
+ * 「安装脚本」入口：右下角一个 ＋，点开后绕着它朝屏幕里侧铺开三颗 —— 链接 / 文件 / 商店，
+ * 同时 ＋ 自己变成 ✕（再点收回）。
+ *
+ * 两处宿主（设置 → 用户脚本、插件首页的脚本组）共用这一份，所以落点、动效与三个动作只有
+ * 一处定义；真正的选择器与两个弹窗仍在 [UserscriptsContent] 里 —— 这里只发请求。
+ */
+@Composable
+internal fun UserscriptAddFab(
+    installRequest: UserscriptInstallRequest,
+    onOpenMarket: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    // 展开动画与悬浮球那套同形：progress 0 = 三颗叠在主按钮圆心，1 = 各自到位。位移、
+    // 透明度、缩放都由它插值出来，所以是「从 ＋ 里长出去」，不是原地淡入。
+    // 不过冲：这一格的边正好压在落点上，弹簧一回弹就会被 Scaffold 的边裁掉。
+    val progress by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "scriptAddMenu",
+    )
+
+    // 主按钮落在这一格的右下角（FAB 槽本身就是右下角对齐），三颗副按钮以它的圆心为圆心铺开。
+    // 边长 = 半径 + 两颗的半径之和：正好等于最远那颗的外沿 —— 一格装得下，也不多占地方。
+    val box = ADD_RADIUS + ADD_MINI_SIZE / 2 + ADD_FAB_SIZE / 2
+    val cx = box - ADD_FAB_SIZE / 2
+    val cy = box - ADD_FAB_SIZE / 2
+    val fromX = cx - ADD_MINI_SIZE / 2
+    val fromY = cy - ADD_MINI_SIZE / 2
+
+    fun slot(deg: Double): Pair<Dp, Dp> {
+        val rad = Math.toRadians(deg)
+        return cx + ADD_RADIUS * cos(rad).toFloat() - ADD_MINI_SIZE / 2 to
+            cy + ADD_RADIUS * sin(rad).toFloat() - ADD_MINI_SIZE / 2
+    }
+
+    // 屏幕右下角这个位置只有左上那 90° 有地方：正左 → 左上 → 正上。
+    val linkSlot = slot(180.0)
+    val fileSlot = slot(225.0)
+    val marketSlot = slot(270.0)
+
+    Box(Modifier.size(box)) {
+        AddMenuButton(
+            progress = progress,
+            fromX = fromX,
+            fromY = fromY,
+            toX = linkSlot.first,
+            toY = linkSlot.second,
+            onClick = { expanded = false; installRequest.requestLink() },
+        ) {
+            Icon(
+                Icons.Outlined.Link,
+                contentDescription = stringResource(R.string.dsh_userscripts_market_link_install),
+            )
+        }
+        AddMenuButton(
+            progress = progress,
+            fromX = fromX,
+            fromY = fromY,
+            toX = fileSlot.first,
+            toY = fileSlot.second,
+            onClick = { expanded = false; installRequest.requestLocal() },
+        ) {
+            Icon(
+                Icons.Outlined.FolderOpen,
+                contentDescription = stringResource(R.string.dsh_userscripts_install_file),
+            )
+        }
+        AddMenuButton(
+            progress = progress,
+            fromX = fromX,
+            fromY = fromY,
+            toX = marketSlot.first,
+            toY = marketSlot.second,
+            onClick = { expanded = false; onOpenMarket() },
+        ) {
+            Icon(
+                Icons.Outlined.Storefront,
+                contentDescription = stringResource(R.string.dsh_userscripts_market_section),
+            )
+        }
+        FloatingActionButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.align(Alignment.BottomEnd).size(ADD_FAB_SIZE),
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ) {
+            Icon(
+                if (expanded) Icons.Filled.Close else Icons.Filled.Add,
+                // 展开时这颗的语义是「取消」：图标与读屏名一起换，否则读屏还会念「安装脚本」，
+                // 而这一下按下去其实是收回菜单。
+                contentDescription = stringResource(
+                    if (expanded) R.string.cancel else R.string.dsh_userscripts_add
+                ),
+            )
+        }
+    }
+}
+
+/**
+ * 环绕安装入口的一颗小按钮：起止点由 [UserscriptAddFab] 算好传进来，[progress] 与主按钮共用，
+ * 所以三颗是一起长出去、一起收回来的。
+ */
+@Composable
+private fun AddMenuButton(
+    progress: Float,
+    fromX: Dp,
+    fromY: Dp,
+    toX: Dp,
+    toY: Dp,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    // 进度为 0 时干脆不画：否则三颗透明按钮叠在主按钮上，会把「点 ＋」这一下抢走。
+    if (progress <= 0.01f) return
+    val scale = 0.4f + 0.6f * progress
+    FloatingActionButton(
+        onClick = onClick,
+        modifier = Modifier
+            .offset(x = lerp(fromX, toX, progress), y = lerp(fromY, toY, progress))
+            .size(ADD_MINI_SIZE)
+            .graphicsLayer {
+                alpha = progress
+                scaleX = scale
+                scaleY = scale
+            },
+        shape = CircleShape,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        content()
+    }
+}
+
+/**
+ * 安装入口的「请求」：[UserscriptAddFab] 里的链接 / 文件两颗只置一个待办标志，真正的选择器
+ * （本地 `.user.js`）与弹窗（从链接安装）仍只有 [UserscriptsContent] 里那一份实现。
  *
  * 为什么不让两处宿主各自持有一个 `rememberLauncherForActivityResult`：那样安装逻辑会变成
  * 三份（两个宿主 + 正文），这正是"对齐 UI"要防的事。为什么用「置位 + 消费」而不是自增计数：

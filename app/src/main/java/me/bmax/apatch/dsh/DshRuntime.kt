@@ -3600,6 +3600,14 @@ object DshRuntime {
         }
 
         logInfo(R.string.dsh_log_runtime_mode, runtime().displayName())
+        // 设备信息（裁剪版）：只留厂商 + 型号 + 系统版本。完整字段在报障包的 basic.txt 里，
+        // 但那份得解压、翻文件才看得到；而这份日志是随手复制/导出转发的（设置 → 常规 →
+        // 发送日志，或首页那张启动日志卡），开头就得能答出「这是哪台设备」。
+        logInfo(
+            R.string.dsh_log_device,
+            "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · " +
+                "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})",
+        )
         // 架构写进日志：x86_64 + arm 转译设备上「装了哪个包 / 用了哪份 rootfs」是首要排障线索
         logInfo(
             R.string.dsh_log_arch,

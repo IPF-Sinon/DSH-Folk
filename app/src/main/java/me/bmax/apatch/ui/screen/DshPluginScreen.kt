@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SystemUpdate
@@ -73,6 +72,7 @@ import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
+import me.bmax.apatch.ui.screen.settings.UserscriptAddFab
 import me.bmax.apatch.ui.screen.settings.UserscriptsContent
 import me.bmax.apatch.ui.screen.settings.rememberUserscriptInstallRequest
 import me.bmax.apatch.dsh.DshRuntime
@@ -186,66 +186,54 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                             ),
                         )
                     }
-                    // 脚本那一组的「从链接安装」：与市场同一个位置（顶栏右侧链接图标）。
-                    // 插件组没有这一项（插件从商店/本地 .tgz 装，没有"粘贴链接"这条路）。
-                    if (group == GROUP_SCRIPTS) {
-                        IconButton(onClick = { scriptInstall.requestLink() }) {
+                    // 商店按钮只服务插件组：插件从商店 / 本地 .tgz 装，顶栏这一个就是它的直达入口。
+                    // 脚本组的商店收进了右下角那个 ＋（见 [UserscriptAddFab]）—— 顶栏再放一份就是
+                    // 同一件事的第二个说法，用户要撤掉的正是「脚本页右上角那个商店入口」。
+                    // 「从链接安装」同理，也从顶栏收进了那个 ＋。
+                    if (group != GROUP_SCRIPTS) {
+                        IconButton(onClick = { navigator.navigate(DshPluginStoreScreenDestination) }) {
                             Icon(
-                                Icons.Outlined.Link,
-                                contentDescription = stringResource(R.string.dsh_userscripts_market_link_install),
+                                Icons.Outlined.Storefront,
+                                contentDescription = stringResource(R.string.dsh_plugin_store),
                             )
                         }
-                    }
-                    IconButton(onClick = {
-                        navigator.navigate(
-                            if (group == GROUP_SCRIPTS) ScriptMarketScreenDestination(initialQuery = "")
-                            else DshPluginStoreScreenDestination
-                        )
-                    }) {
-                        Icon(
-                            Icons.Outlined.Storefront,
-                            contentDescription = stringResource(
-                                if (group == GROUP_SCRIPTS) R.string.dsh_userscripts_market_section
-                                else R.string.dsh_plugin_store
-                            ),
-                        )
                     }
                 },
             )
         },
         floatingActionButton = {
-            // 本地安装：留在右下角，与 FolkPatch 模块页一致。**两组都有**：
+            // 本地安装：留在右下角，与 FolkPatch 模块页一致。
             //   - 插件组 → 选一个 .tgz（插件包）；
-            //   - 脚本组 → 选一个 .user.js。后者的安装逻辑在共用的 UserscriptsContent 里，
-            //     这里只发一个请求（以前这里是 `if (group != GROUP_SCRIPTS)`，脚本组既没有
-            //     FAB 也没有顶栏链接图标，用户报的「脚本页看不到安装入口」就是这个）。
-            FloatingActionButton(
-                onClick = {
-                    if (group == GROUP_SCRIPTS) {
-                        // 正文（UserscriptsContent）只在运行时已装时组合；没装时这一组的界面是
-                        // 「需要先装运行时」，这时不发请求 —— 否则请求会一直挂着，等以后回到
-                        // 这一组时突然弹出选择器。
-                        if (runtimeInstalled) scriptInstall.requestLocal()
-                    } else {
+            //   - 脚本组 → 右下角那个 ＋：链接 / 文件 / 商店三颗绕它铺开（见 [UserscriptAddFab]）。
+            if (group == GROUP_SCRIPTS) {
+                // 正文（UserscriptsContent）只在运行时已装时组合；没装时这一组的界面是「需要先装
+                // 运行时」，脚本装了也无处可跑。所以这一格干脆不画，而不是画一个点了没反应的 ＋
+                // （旧写法就是这样：按钮在，点了什么也不会发生）。
+                if (runtimeInstalled) {
+                    UserscriptAddFab(
+                        installRequest = scriptInstall,
+                        onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) },
+                    )
+                }
+            } else {
+                FloatingActionButton(
+                    onClick = {
                         pickTarball.launch(
                             Intent(Intent.ACTION_GET_CONTENT).apply {
                                 type = "*/*"
                                 addCategory(Intent.CATEGORY_OPENABLE)
                             }
                         )
-                    }
-                },
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Icon(
-                    Icons.Outlined.FolderOpen,
-                    contentDescription = stringResource(
-                        if (group == GROUP_SCRIPTS) R.string.dsh_userscripts_install_file
-                        else R.string.dsh_local_install
-                    ),
-                )
+                    },
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(
+                        Icons.Outlined.FolderOpen,
+                        contentDescription = stringResource(R.string.dsh_local_install),
+                    )
+                }
             }
         },
     ) { innerPadding ->

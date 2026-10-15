@@ -369,6 +369,26 @@ console.log("── 日志时间窗口裁切（DshLogWindow） ──");
     "untimed 计数写进 notes（报告里看得见，不是只算不报）");
 }
 
+// ── 启动日志横幅里的设备信息（裁剪版）──
+//
+// 用户要的是「日志注入设备信息（裁剪后）」。这份日志就是「设置 → 常规 → 发送日志」与首页那张
+// 启动日志卡复制/导出的正文 —— 收到日志的人第一眼就该知道这是哪台设备。完整字段在归档的
+// basic.txt 里，但那份要解压、翻文件；横幅只要厂商 + 型号 + Android 版本这三样。
+console.log("── 启动日志里的设备信息 ──");
+{
+  const runtime = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8");
+  const zh = fs.readFileSync("app/src/main/res/values-zh-rCN/dsh_strings.xml", "utf8");
+  ok(/name="dsh_log_device"/.test(zh), "dsh_log_device 有中文文案");
+  ok(/logInfo\(\s*R\.string\.dsh_log_device,/.test(runtime) &&
+    /Build\.MANUFACTURER/.test(runtime) && /Build\.MODEL/.test(runtime) &&
+    /VERSION\.RELEASE/.test(runtime) && /VERSION\.SDK_INT/.test(runtime),
+    "启动横幅写一行设备信息（厂商 + 型号 + Android 版本）");
+  // 裁剪：这一行里不许出现整段 Build 字段（那是 basic.txt 的活）
+  const call = (runtime.match(/logInfo\(\s*R\.string\.dsh_log_device,[\s\S]{0,400}?\n\s*\)/) || [""])[0];
+  ok(call.length > 0 && !/FINGERPRINT|Build\.DEVICE|Build\.PRODUCT|Build\.BRAND/.test(call),
+    "这一行是裁剪版：不带 FINGERPRINT / DEVICE / PRODUCT / BRAND（完整字段留在 basic.txt）");
+}
+
 console.log("");
 if (failed === 0) {
   console.log("全部通过（" + written.size + " 个文件 + " + total + " 项断言）");

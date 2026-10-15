@@ -12,6 +12,13 @@
 
     <!-- 首页 -->
     <string name="dsh_app_title" translatable="false">DeepSeek Harness</string>
+    <!-- Function page category headers: the 13 cards used to be spliced into one column with no grouping -->
+    <string name="dsh_function_group_startup">Startup &amp; running</string>
+    <string name="dsh_function_group_network">Network &amp; access</string>
+    <string name="dsh_function_group_webui">Web UI</string>
+    <string name="dsh_function_group_runtime">Runtime &amp; maintenance</string>
+    <string name="dsh_function_group_storage">Storage &amp; data</string>
+
     <string name="dsh_run_mode">Run mode</string>
     <string name="dsh_permission">Permission</string>
     <string name="dsh_boot_log">Startup log</string>
@@ -1221,6 +1228,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
          这些行进首页的启动日志卡与 bugreport 的 dsh.log。它们是给人读的，
          必须跟随应用语言；不进日志的技术标记（EXIT_MARKER 之类）不在此列。 -->
     <string name="dsh_log_runtime_mode">Container runtime: %1$s</string>
+    <string name="dsh_log_device">Device: %1$s</string>
     <string name="dsh_log_arch">Architecture: %1$s (device ABIs: %2$s)</string>
     <string name="dsh_log_hardlink">Hard links: %1$s</string>
     <string name="dsh_log_hardlink_yes">supported</string>
@@ -1596,8 +1604,9 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_title">Userscripts</string>
     <string name="dsh_userscripts_scope">Applies to this app own page (the built-in dsh web UI) only. The metadata block, @match / @include / @exclude and @run-at (document-start / -end / -idle) are read the Greasemonkey way.</string>
     <string name="dsh_userscripts_install_file">Install from a file</string>
+    <string name="dsh_userscripts_add">Install a script</string>
     <string name="dsh_userscripts_code_loading">Loading the source…</string>
-    <string name="dsh_userscripts_empty">Nothing installed yet. Use the install card above to pick a local .user.js, or install from a link — either way it runs before the page own scripts.</string>
+    <string name="dsh_userscripts_empty">Nothing installed yet. Tap ＋ at the bottom right: File picks a local .user.js, Link takes a pasted address, Store browses greasyfork.org — either way it runs before the page\'s own scripts.</string>
     <string name="dsh_userscripts_empty_filtered">No installed script matches that.</string>
     <string name="dsh_userscripts_hide_builtin">Hide built-ins</string>
     <string name="dsh_userscripts_show_builtin">Show built-ins</string>
@@ -1632,7 +1641,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_entry">Userscripts</string>
     <string name="dsh_userscripts_entry_summary">Run your own JS against this app own web UI — a .user.js, no build, no release.</string>
     <string name="dsh_userscripts_market_section">Script marketplace (GreasyFork)</string>
-    <string name="dsh_userscripts_market_hint">Search greasyfork.org: tap Install on a result to add it to the Userscripts list; the button at the bottom right installs a local .user.js, and the link icon in the top bar takes a pasted address.</string>
+    <string name="dsh_userscripts_market_hint">Search greasyfork.org: tap Install on a result to add it to the Userscripts list. Local files and pasted links moved to the ＋ at the bottom right of the Userscripts page.</string>
     <string name="dsh_userscripts_market_query_hint">Search scripts (translate, markdown, …)</string>
     <string name="dsh_userscripts_market_popular">Popular scripts</string>
     <string name="dsh_userscripts_market_link_install">Install from a link</string>

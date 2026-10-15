@@ -1,9 +1,5 @@
 package me.bmax.apatch.ui.screen
 
-import android.app.Activity.RESULT_OK
-import android.content.Intent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,20 +14,16 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +56,6 @@ import me.bmax.apatch.dsh.ScriptMarket
 import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.ui.component.SearchAppBar
-import me.bmax.apatch.ui.component.UserscriptLinkInstallDialog
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.showToast
 
@@ -111,10 +102,6 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
     // 失败后「重试」按上一次那条路重来：true = 热门，false = 搜索。不能复用 popular ——
     // 热门失败时 popular 会被重置成 false，重试就会悄悄变成一次空查询的搜索。
     var retryPopular by remember { mutableStateOf(true) }
-
-    // 「从链接安装」弹窗（粘贴 greasyfork 脚本页 / .user.js 地址）：输入与标红状态住在
-    // 共用的 UserscriptLinkInstallDialog 里，这里只留「开没开」。
-    var showLinkInstall by remember { mutableStateOf(false) }
 
     // 一次只发一个请求：手机上的网络本来就慢，并发只会让两边都超时。
     fun runSearch(next: Int, reset: Boolean) {
@@ -227,53 +214,6 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
     }
 
     /**
-     * 从链接安装（弹窗那条路）：把用户粘贴的东西先归一成可取的正文地址
-     * （[ScriptMarket.normalizeInstallUrl]，认不出就不装、弹窗里标红），再走「拉正文 + 落盘 +
-     * 记来源」这一条**与用户脚本页共用**的 [Userscripts.installFromUrl]。
-     */
-    fun installFromUrl(normalized: String) {
-        if (installing != 0L) return
-        // -1 是「链接安装」的哨兵值：结果卡的 id 都是正数，所以不会有卡片显示成正在装
-        installing = -1L
-        fail = null
-        scope.launch {
-            val outcome = withContext(Dispatchers.IO) {
-                runCatching { Userscripts.installFromUrl(context, normalized) }
-            }
-            outcome.onSuccess { id ->
-                if (id == null) {
-                    fail = ScriptMarket.Fail.CONTENT
-                } else {
-                    reload()
-                    showToast(context, context.getString(R.string.dsh_userscripts_installed))
-                }
-            }.onFailure { e ->
-                val me = e as? ScriptMarket.MarketException
-                fail = me?.fail ?: ScriptMarket.Fail.NETWORK
-                code = me?.code ?: 0
-            }
-            installing = 0L
-        }
-    }
-
-    /** 本地安装：选一个 `.user.js`（与「用户脚本」页那条路同一套 read / install）。 */
-    val pickLocal = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode != RESULT_OK) return@rememberLauncherForActivityResult
-        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
-        scope.launch {
-            val text = withContext(Dispatchers.IO) { Userscripts.read(context, uri) }
-            if (text.isNullOrBlank() || Userscripts.install(context, text) == null) {
-                showToast(context, context.getString(R.string.dsh_userscripts_read_failed))
-            } else {
-                reload()
-                showToast(context, context.getString(R.string.dsh_userscripts_installed))
-            }
-        }
-    }
-
-    /**
      * 镜像源的浏览入口：**应用内**打开（见 [DshWebViewScreen]），不再交给系统浏览器。
      *
      * 这条路的全部意义就是"接着刚才那次失败往下看" —— 甩去浏览器再回来，这一页的状态全没了。
@@ -306,15 +246,6 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
         }
     }
 
-    // 「从链接安装」：与用户脚本页**共用同一个弹窗**（[UserscriptLinkInstallDialog]）——
-    // 归一、标红、安装三件事只写一遍，两处入口的手感与边界因此不会漂移。
-    if (showLinkInstall) {
-        UserscriptLinkInstallDialog(
-            onDismiss = { showLinkInstall = false },
-            onInstall = { url -> installFromUrl(url) },
-        )
-    }
-
     Scaffold(
         topBar = {
             SearchAppBar(
@@ -326,37 +257,7 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
                 onBackClick = { navigator.popBackStack() },
                 // 键盘上的「搜索」与右上角那个放大镜走同一个入口（都是重新搜第一页）
                 onConfirm = { runSearch(1, reset = true) },
-                dropdownContent = {
-                    // 「从链接安装」与插件商店同一个位置（顶栏右侧的链接图标）
-                    IconButton(onClick = { showLinkInstall = true }) {
-                        Icon(
-                            Icons.Outlined.Link,
-                            contentDescription = stringResource(R.string.dsh_userscripts_market_link_install),
-                        )
-                    }
-                },
             )
-        },
-        floatingActionButton = {
-            // 本地安装：与插件页那个 FAB 同形（同样的图标、文案与配色），选一个 .user.js
-            FloatingActionButton(
-                onClick = {
-                    pickLocal.launch(
-                        Intent(Intent.ACTION_GET_CONTENT).apply {
-                            type = "*/*"
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                        }
-                    )
-                },
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Icon(
-                    Icons.Outlined.FolderOpen,
-                    contentDescription = stringResource(R.string.dsh_local_install),
-                )
-            }
         },
     ) { innerPadding ->
         LazyVerticalStaggeredGrid(

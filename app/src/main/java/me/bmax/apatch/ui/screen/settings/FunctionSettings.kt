@@ -251,893 +251,901 @@ fun FunctionSettingsContent(
     // 已直接授权的包名（本对象自己记的）：授权/撤销后就地刷新
     val docsGranted = remember { mutableStateOf(DshDocsAccess.grantedPackages(context)) }
 
-    SplicedColumnGroup(flat = flat, highlightKey = highlightKey) {
-        // ───────── 运行方式 ─────────
-        item(key = "function_run_mode", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.Layers, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_run_mode),
-                        summary = stringResource(R.string.dsh_run_mode_summary),
-                    )
-                    Spacer(Modifier.height(12.dp))
+    if (permissionOnly) {
+        SplicedColumnGroup(flat = flat, highlightKey = highlightKey) {
+            // ───────── 权限管理 ─────────
+            // 通道、配对与每一项原生能力都收进了这一页（分类 + 搜索）。原先它们挤在安全页上一条
+            // 越接越长的列表里，想找某一项只能一路滚到底 —— 见 PermissionHubScreen 的 KDoc。
+            item(key = "function_permission") {
+                ExpressiveCard(flat = flat, onClick = onOpenPermissionHub) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        SectionHeader(
+                            icon = { Icon(Icons.Filled.Security, null, Modifier.size(20.dp)) },
+                            title = stringResource(R.string.dsh_perm_hub_title),
+                            summary = stringResource(R.string.dsh_perm_hub_summary),
+                        )
+                    }
+                }
+            }
 
-                    RuntimeOption(
-                        selected = runtimeId != "proroot",
-                        enabled = true,
-                        title = stringResource(R.string.dsh_mode_proot),
-                        summary = stringResource(R.string.dsh_mode_proot_desc),
-                        onSelect = { onRuntimeIdChange("proot") },
-                    )
-                    RuntimeOption(
-                        selected = runtimeId == "proroot",
-                        enabled = prorootAvailable,
-                        title = stringResource(R.string.dsh_mode_proroot),
-                        summary = if (prorootAvailable) stringResource(R.string.dsh_mode_proroot_desc)
-                        else prorootUnavailableReason,
-                        onSelect = { onRuntimeIdChange("proroot") },
-                    )
-
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.dsh_run_mode_restart_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            // ───────── 共享存储（挂载 /sdcard） ─────────
+            // 它从来不是"原生能力"的一部分：原生能力是"拿到身份后能动什么"，而它管的是容器里
+            // 有没有 /sdcard。原来只是凑巧画在那张卡片里，还被桥的总开关一起藏了起来 ——
+            // 桥关着它照样有用（挂载层与 dsh-fs 桥都不经过原生能力桥），所以现在独立成卡。
+            item(key = "function_storage_mount") {
+                ExpressiveCard(flat = flat) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        // ── 共享存储（挂载 /sdcard） ──
+                        // 一个开关同时管两件事：容器 bind 挂载 + dsh-fs 桥（两者都受黑白名单约束）。
+                        // 关＝容器彻底看不到 /sdcard。长按整行进黑白名单设置。改动需重启 dsh 才在
+                        // 挂载层生效（dsh-fs 侧立即生效）。
+                        // 长按进黑白名单要覆盖**整张卡片**：combinedClickable 原来只挂在标题 Row 上，
+                        // 而 `if (mountEnabled)` 里那几行（已授权提示 / 重启提示）在 Row 之外，
+                        // 于是卡片看着一大块、实际只有标题那一小块能长按。把 clickable 提到外层
+                        // Column，卡片范围内（按钮自身除外）都能长按。
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = { onSetMount(!mountEnabled) },
+                                    onLongClick = onOpenFileAccess,
+                                ),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.dsh_storage_cap_title),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.dsh_storage_mount_hint),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                ExpressiveSwitch(
+                                    checked = mountEnabled,
+                                    onCheckedChange = onSetMount,
+                                )
+                            }
+                            if (mountEnabled) {
+                                if (allFilesGranted) {
+                                    Text(
+                                        text = stringResource(R.string.dsh_storage_granted),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                } else {
+                                    TextButton(onClick = onOpenAllFilesSettings) {
+                                        Text(stringResource(R.string.dsh_storage_need_perm))
+                                    }
+                                }
+                                Text(
+                                    text = stringResource(R.string.dsh_storage_restart_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
-
-        // ───────── 开机自启 ─────────
-        //
-        // 三条路径按「代价从小到大」排：广播（零成本、但可能不生效）→ 无障碍（要开一个
-        // 吓人的开关）→ 脚本（要 root）。不按可靠性排：把「需要 root」放在第一条会让
-        // 没 root 的人以为这功能与自己无关。
-        item(key = "function_autostart", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_autostart),
-                        summary = stringResource(R.string.dsh_autostart_summary),
-                    )
-                    var autostartExpanded by remember { mutableStateOf(false) }
-                    TextButton(onClick = { autostartExpanded = !autostartExpanded }) {
-                        Icon(
-                            if (autostartExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                            contentDescription = null,
+    } else {
+        SplicedColumnGroup(title = stringResource(R.string.dsh_function_group_startup), flat = flat, highlightKey = highlightKey) {
+            // ───────── 运行方式 ─────────
+            item(key = "function_run_mode") {
+                ExpressiveCard(flat = flat) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        SectionHeader(
+                            icon = { Icon(Icons.Filled.Layers, null, Modifier.size(20.dp)) },
+                            title = stringResource(R.string.dsh_run_mode),
+                            summary = stringResource(R.string.dsh_run_mode_summary),
                         )
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(if (autostartExpanded) R.string.dsh_section_collapse else R.string.dsh_section_expand))
+                        Spacer(Modifier.height(12.dp))
+
+                        RuntimeOption(
+                            selected = runtimeId != "proroot",
+                            enabled = true,
+                            title = stringResource(R.string.dsh_mode_proot),
+                            summary = stringResource(R.string.dsh_mode_proot_desc),
+                            onSelect = { onRuntimeIdChange("proot") },
+                        )
+                        RuntimeOption(
+                            selected = runtimeId == "proroot",
+                            enabled = prorootAvailable,
+                            title = stringResource(R.string.dsh_mode_proroot),
+                            summary = if (prorootAvailable) stringResource(R.string.dsh_mode_proroot_desc)
+                            else prorootUnavailableReason,
+                            onSelect = { onRuntimeIdChange("proroot") },
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_run_mode_restart_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    AnimatedVisibility(visible = autostartExpanded) {
-                        Column {
-                    Spacer(Modifier.height(12.dp))
+                }
+            }
 
-                    RuntimeOption(
-                        selected = autostartMode == DshAutostart.Mode.OFF,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_autostart_mode_off),
-                        summary = stringResource(R.string.dsh_autostart_mode_off_desc),
-                        onSelect = { onAutostartModeChange(DshAutostart.Mode.OFF) },
-                    )
-                    RuntimeOption(
-                        selected = autostartMode == DshAutostart.Mode.RECEIVER,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_autostart_mode_receiver),
-                        summary = stringResource(R.string.dsh_autostart_mode_receiver_desc),
-                        onSelect = { onAutostartModeChange(DshAutostart.Mode.RECEIVER) },
-                    )
-                    RuntimeOption(
-                        selected = autostartMode == DshAutostart.Mode.ACCESSIBILITY,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_autostart_mode_a11y),
-                        summary = stringResource(R.string.dsh_autostart_mode_a11y_desc),
-                        onSelect = { onAutostartModeChange(DshAutostart.Mode.ACCESSIBILITY) },
-                    )
-                    RuntimeOption(
-                        selected = autostartMode == DshAutostart.Mode.SCRIPT,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_autostart_mode_script),
-                        summary = stringResource(R.string.dsh_autostart_mode_script_desc),
-                        onSelect = { onAutostartModeChange(DshAutostart.Mode.SCRIPT) },
-                    )
-
-                    // 选中的那条路径各自的后续动作。只显示当前选中的那一组：三组同时铺开
-                    // 会让人以为要全部做完。
-                    when (autostartMode) {
-                        DshAutostart.Mode.SCRIPT -> {
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = when {
-                                    autostartScriptOutdated ->
-                                        stringResource(R.string.dsh_autostart_script_state_outdated)
-                                    autostartScriptInstalled -> stringResource(
-                                        R.string.dsh_autostart_script_state_installed,
-                                        DshAutostart.scriptPath(),
-                                    )
-                                    else -> stringResource(R.string.dsh_autostart_script_state_missing)
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (autostartScriptInstalled && !autostartScriptOutdated) {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                } else {
-                                    MaterialTheme.colorScheme.tertiary
-                                },
+            // ───────── 开机自启 ─────────
+            //
+            // 三条路径按「代价从小到大」排：广播（零成本、但可能不生效）→ 无障碍（要开一个
+            // 吓人的开关）→ 脚本（要 root）。不按可靠性排：把「需要 root」放在第一条会让
+            // 没 root 的人以为这功能与自己无关。
+            item(key = "function_autostart") {
+                ExpressiveCard(flat = flat) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        SectionHeader(
+                            icon = { Icon(Icons.Filled.PowerSettingsNew, null, Modifier.size(20.dp)) },
+                            title = stringResource(R.string.dsh_autostart),
+                            summary = stringResource(R.string.dsh_autostart_summary),
+                        )
+                        var autostartExpanded by remember { mutableStateOf(false) }
+                        TextButton(onClick = { autostartExpanded = !autostartExpanded }) {
+                            Icon(
+                                if (autostartExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null,
                             )
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = onInstallAutostartScript,
-                                    enabled = !autostartScriptBusy,
-                                ) {
-                                    Text(
-                                        stringResource(
-                                            if (autostartScriptInstalled) {
-                                                R.string.dsh_autostart_script_reinstall
-                                            } else {
-                                                R.string.dsh_autostart_script_install
-                                            }
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(if (autostartExpanded) R.string.dsh_section_collapse else R.string.dsh_section_expand))
+                        }
+                        AnimatedVisibility(visible = autostartExpanded) {
+                            Column {
+                        Spacer(Modifier.height(12.dp))
+
+                        RuntimeOption(
+                            selected = autostartMode == DshAutostart.Mode.OFF,
+                            enabled = true,
+                            title = stringResource(R.string.dsh_autostart_mode_off),
+                            summary = stringResource(R.string.dsh_autostart_mode_off_desc),
+                            onSelect = { onAutostartModeChange(DshAutostart.Mode.OFF) },
+                        )
+                        RuntimeOption(
+                            selected = autostartMode == DshAutostart.Mode.RECEIVER,
+                            enabled = true,
+                            title = stringResource(R.string.dsh_autostart_mode_receiver),
+                            summary = stringResource(R.string.dsh_autostart_mode_receiver_desc),
+                            onSelect = { onAutostartModeChange(DshAutostart.Mode.RECEIVER) },
+                        )
+                        RuntimeOption(
+                            selected = autostartMode == DshAutostart.Mode.ACCESSIBILITY,
+                            enabled = true,
+                            title = stringResource(R.string.dsh_autostart_mode_a11y),
+                            summary = stringResource(R.string.dsh_autostart_mode_a11y_desc),
+                            onSelect = { onAutostartModeChange(DshAutostart.Mode.ACCESSIBILITY) },
+                        )
+                        RuntimeOption(
+                            selected = autostartMode == DshAutostart.Mode.SCRIPT,
+                            enabled = true,
+                            title = stringResource(R.string.dsh_autostart_mode_script),
+                            summary = stringResource(R.string.dsh_autostart_mode_script_desc),
+                            onSelect = { onAutostartModeChange(DshAutostart.Mode.SCRIPT) },
+                        )
+
+                        // 选中的那条路径各自的后续动作。只显示当前选中的那一组：三组同时铺开
+                        // 会让人以为要全部做完。
+                        when (autostartMode) {
+                            DshAutostart.Mode.SCRIPT -> {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = when {
+                                        autostartScriptOutdated ->
+                                            stringResource(R.string.dsh_autostart_script_state_outdated)
+                                        autostartScriptInstalled -> stringResource(
+                                            R.string.dsh_autostart_script_state_installed,
+                                            DshAutostart.scriptPath(),
                                         )
-                                    )
-                                }
-                                if (autostartScriptInstalled) {
-                                    OutlinedButton(
-                                        onClick = onRemoveAutostartScript,
+                                        else -> stringResource(R.string.dsh_autostart_script_state_missing)
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (autostartScriptInstalled && !autostartScriptOutdated) {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.tertiary
+                                    },
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = onInstallAutostartScript,
                                         enabled = !autostartScriptBusy,
                                     ) {
-                                        Text(stringResource(R.string.dsh_autostart_script_remove))
+                                        Text(
+                                            stringResource(
+                                                if (autostartScriptInstalled) {
+                                                    R.string.dsh_autostart_script_reinstall
+                                                } else {
+                                                    R.string.dsh_autostart_script_install
+                                                }
+                                            )
+                                        )
+                                    }
+                                    if (autostartScriptInstalled) {
+                                        OutlinedButton(
+                                            onClick = onRemoveAutostartScript,
+                                            enabled = !autostartScriptBusy,
+                                        ) {
+                                            Text(stringResource(R.string.dsh_autostart_script_remove))
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        DshAutostart.Mode.ACCESSIBILITY -> {
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = if (autostartA11yEnabled) {
-                                    stringResource(R.string.dsh_autostart_a11y_state_on)
-                                } else {
-                                    stringResource(
-                                        R.string.dsh_autostart_a11y_state_off,
-                                        stringResource(R.string.app_name),
+                            DshAutostart.Mode.ACCESSIBILITY -> {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = if (autostartA11yEnabled) {
+                                        stringResource(R.string.dsh_autostart_a11y_state_on)
+                                    } else {
+                                        stringResource(
+                                            R.string.dsh_autostart_a11y_state_off,
+                                            stringResource(R.string.app_name),
+                                        )
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (autostartA11yEnabled) {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.tertiary
+                                    },
+                                )
+                                if (!autostartA11yEnabled) {
+                                    // 旁加载安装的应用会被 Android 13+ 挡在「受限设置」后面，
+                                    // 那时无障碍开关是灰的、点了没反应 —— 不说清楚的话用户只会
+                                    // 以为我们写坏了。
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = stringResource(R.string.dsh_autostart_a11y_restricted),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (autostartA11yEnabled) {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                } else {
-                                    MaterialTheme.colorScheme.tertiary
-                                },
-                            )
-                            if (!autostartA11yEnabled) {
-                                // 旁加载安装的应用会被 Android 13+ 挡在「受限设置」后面，
-                                // 那时无障碍开关是灰的、点了没反应 —— 不说清楚的话用户只会
-                                // 以为我们写坏了。
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = stringResource(R.string.dsh_autostart_a11y_restricted),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            Button(onClick = onOpenA11ySettings) {
-                                Text(stringResource(R.string.dsh_autostart_a11y_open))
-                            }
-                        }
-
-                        DshAutostart.Mode.OFF, DshAutostart.Mode.RECEIVER -> Unit
-                    }
-
-                    if (autostartMode != DshAutostart.Mode.OFF) {
-                        if (!runtimeInstalled) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = stringResource(R.string.dsh_autostart_not_installed),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.tertiary,
-                            )
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        HorizontalDivider()
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.dsh_autostart_container),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    text = stringResource(R.string.dsh_autostart_container_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            ExpressiveSwitch(
-                                checked = autostartContainer,
-                                onCheckedChange = onAutostartContainerChange,
-                            )
-                        }
-                    }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ───────── 应用启动行为 ─────────
-        //
-        // 与上面「开机自启」分开：那一条讲的是设备重启后要不要自己起来，这两条讲的是
-        // **用户打开 App** 时的行为。开关也各自独立 —— 只让服务在后台待命、或者每次
-        // 打开都直接进页面，都是合理用法。
-        item(key = "function_auto_start_service", visible = !permissionOnly) {
-            ToggleSettingCard(
-                flat = flat,
-                icon = Icons.Filled.PowerSettingsNew,
-                title = stringResource(R.string.dsh_auto_start_service),
-                description = stringResource(R.string.dsh_auto_start_service_summary),
-                checked = autoStartOnLaunch,
-                onCheckedChange = onAutoStartOnLaunchChange,
-            )
-        }
-
-        item(key = "function_auto_open_webui", visible = !permissionOnly) {
-            ToggleSettingCard(
-                flat = flat,
-                icon = Icons.Filled.OpenInNew,
-                title = stringResource(R.string.dsh_auto_open_webui),
-                description = stringResource(R.string.dsh_auto_open_webui_summary),
-                checked = autoOpenWebUi,
-                onCheckedChange = onAutoOpenWebUiChange,
-            )
-        }
-
-        // ───────── 端口 ─────────
-        item(key = "function_port", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.Tune, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_port_title),
-                        summary = stringResource(R.string.dsh_port_summary),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.dsh_port_current, port),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    var editing by remember { mutableStateOf(false) }
-                    OutlinedButton(onClick = { editing = true }) {
-                        Text(stringResource(R.string.dsh_port_edit))
-                    }
-                    if (editing) {
-                        var input by remember { mutableStateOf(port.toString()) }
-                        var inputError by remember { mutableStateOf(false) }
-                        AlertDialog(
-                            onDismissRequest = { editing = false },
-                            title = { Text(stringResource(R.string.dsh_port_title)) },
-                            text = {
-                                OutlinedTextField(
-                                    value = input,
-                                    onValueChange = {
-                                        input = it.filter(Char::isDigit)
-                                        inputError = false
-                                    },
-                                    label = { Text(stringResource(R.string.dsh_port_input_hint)) },
-                                    isError = inputError,
-                                    supportingText = if (inputError) {
-                                        { Text(stringResource(R.string.dsh_port_invalid)) }
-                                    } else {
-                                        null
-                                    },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    singleLine = true,
-                                )
-                            },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    val p = input.toIntOrNull()
-                                    if (p == null || p !in 1..65535) {
-                                        inputError = true
-                                    } else {
-                                        onPortChange(p)
-                                        editing = false
-                                    }
-                                }) { Text(stringResource(R.string.dsh_port_confirm)) }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { editing = false }) {
-                                    Text(stringResource(android.R.string.cancel))
                                 }
-                            },
-                        )
+                                Spacer(Modifier.height(8.dp))
+                                Button(onClick = onOpenA11ySettings) {
+                                    Text(stringResource(R.string.dsh_autostart_a11y_open))
+                                }
+                            }
+
+                            DshAutostart.Mode.OFF, DshAutostart.Mode.RECEIVER -> Unit
+                        }
+
+                        if (autostartMode != DshAutostart.Mode.OFF) {
+                            if (!runtimeInstalled) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.dsh_autostart_not_installed),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider()
+                            Spacer(Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.dsh_autostart_container),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.dsh_autostart_container_desc),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                ExpressiveSwitch(
+                                    checked = autostartContainer,
+                                    onCheckedChange = onAutostartContainerChange,
+                                )
+                            }
+                        }
+                            }
+                        }
                     }
                 }
             }
-        }
 
-        // ───────── 局域网访问 ─────────
-        item(key = "function_lan", visible = !permissionOnly) {
-            ToggleSettingCard(
-                flat = flat,
-                icon = Icons.Filled.Public,
-                title = stringResource(R.string.dsh_lan_title),
-                description = stringResource(R.string.dsh_lan_summary),
-                checked = lanEnabled,
-                onCheckedChange = onLanChange,
-            )
-        }
+            // ───────── 应用启动行为 ─────────
+            //
+            // 与上面「开机自启」分开：那一条讲的是设备重启后要不要自己起来，这两条讲的是
+            // **用户打开 App** 时的行为。开关也各自独立 —— 只让服务在后台待命、或者每次
+            // 打开都直接进页面，都是合理用法。
+            item(key = "function_auto_start_service") {
+                ToggleSettingCard(
+                    flat = flat,
+                    icon = Icons.Filled.PowerSettingsNew,
+                    title = stringResource(R.string.dsh_auto_start_service),
+                    description = stringResource(R.string.dsh_auto_start_service_summary),
+                    checked = autoStartOnLaunch,
+                    onCheckedChange = onAutoStartOnLaunchChange,
+                )
+            }
 
-        // ───────── 竞速通道（镜像/测速）─────────
-        // 长按卡片出通道勾选弹窗：勾了的通道走测速竞速，没勾的一律直连；总开关关掉则全部不生效。
-        item(key = "function_gh_mirror", visible = !permissionOnly) {
-            var showRaceDialog by remember { mutableStateOf(false) }
-            ToggleSettingCard(
-                flat = flat,
-                icon = Icons.Filled.CloudDownload,
-                title = stringResource(R.string.dsh_race_title),
-                description = stringResource(R.string.dsh_race_summary),
-                checked = raceMasterEnabled,
-                onLongClick = { showRaceDialog = true },
-                onCheckedChange = onRaceMasterChange,
-            )
-            if (showRaceDialog) {
-                RaceChannelDialog(
-                    masterEnabled = raceMasterEnabled,
-                    racePlugins = racePlugins,
-                    raceAppUpdate = raceAppUpdate,
-                    raceRuntime = raceRuntime,
-                    onChannelChange = onRaceChannelChange,
-                    mirrors = raceMirrors,
-                    onMirrorToggle = onRaceMirrorToggle,
-                    customSourceEnabled = customSourceEnabled,
-                    onCustomSourceToggle = onCustomSourceToggle,
-                    customMetaUrl = customMetaUrl,
-                    onCustomMetaUrlChange = onCustomMetaUrlChange,
-                    speedTesting = speedTesting,
-                    speedResults = speedResults,
-                    effectiveSource = effectiveSource,
-                    onSpeedTest = onSpeedTest,
-                    onDismiss = { showRaceDialog = false },
+            item(key = "function_auto_open_webui") {
+                ToggleSettingCard(
+                    flat = flat,
+                    icon = Icons.Filled.OpenInNew,
+                    title = stringResource(R.string.dsh_auto_open_webui),
+                    description = stringResource(R.string.dsh_auto_open_webui_summary),
+                    checked = autoOpenWebUi,
+                    onCheckedChange = onAutoOpenWebUiChange,
                 )
             }
         }
-
-        // ───────── Web 界面打开方式 ─────────
-        item(key = "function_webui_mode", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.Layers, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_webui_mode),
-                        summary = stringResource(R.string.dsh_webui_mode_summary),
-                    )
-                    Spacer(Modifier.height(12.dp))
-
-                    RuntimeOption(
-                        selected = webuiMode == DshWebUi.MODE_IN_APP,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_webui_mode_in_app),
-                        summary = stringResource(R.string.dsh_webui_mode_in_app_desc),
-                        onSelect = { onWebuiModeChange(DshWebUi.MODE_IN_APP) },
-                    )
-                    RuntimeOption(
-                        selected = webuiMode == DshWebUi.MODE_BROWSER,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_webui_mode_browser),
-                        summary = stringResource(R.string.dsh_webui_mode_browser_desc),
-                        onSelect = { onWebuiModeChange(DshWebUi.MODE_BROWSER) },
-                    )
-                    RuntimeOption(
-                        selected = webuiMode == DshWebUi.MODE_ASK,
-                        enabled = true,
-                        title = stringResource(R.string.dsh_webui_mode_ask),
-                        summary = stringResource(R.string.dsh_webui_mode_ask_desc),
-                        onSelect = { onWebuiModeChange(DshWebUi.MODE_ASK) },
-                    )
-                }
-            }
-        }
-
-        // ───────── 画中画（主/副两个开关，独立一张卡）─────────
-        // 主开关管「这个应用能不能进小窗」：悬浮菜单里的按钮、以及离开时自动进入都看它。
-        // 副开关只管「离开应用时自动缩」——两者是包含关系，所以摆在同一个卡里，
-        // 主开关关掉时副开关置灰（留着可点的副开关会让人以为「关了它还能自动缩」）。
-        item(key = "function_webui_pip", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Outlined.PictureInPictureAlt, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_webui_pip),
-                        summary = stringResource(R.string.dsh_webui_pip_summary),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    PipSwitchRow(
-                        title = stringResource(R.string.dsh_webui_pip_main),
-                        summary = stringResource(R.string.dsh_webui_pip_main_summary),
-                        checked = webuiPipMain,
-                        enabled = true,
-                        onCheckedChange = onWebuiPipMainChange,
-                    )
-                    PipSwitchRow(
-                        title = stringResource(R.string.dsh_webui_pip_auto),
-                        summary = stringResource(R.string.dsh_webui_pip_auto_summary),
-                        checked = webuiPipAuto,
-                        enabled = webuiPipMain,
-                        onCheckedChange = onWebuiPipAutoChange,
-                    )
-                }
-            }
-        }
-
-        // ───────── 运行时重装 ─────────
-        // DshRuntime.reinstallRuntime() 早就存在，但之前 UI 里没有任何入口，
-        // 而好几处报错文案（缺 pnpm / 缺 dsh）都写着「请在设置中重装运行时」。
-        item(key = "function_runtime", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                // 「点一下 = 立即检查」这个标志要挂在**外层整卡**的点击上（见下面的 Column），
-                // 而它同时要被卡片里的那次检查读到，所以声明在 Column 之前。
-                var confirmAfterCheck by remember { mutableStateOf(false) }
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        // 用户报「运行时那张外层卡片点了没反应」：里层的开关卡片（下面的
-                        // ToggleSettingCard）自己接走了它那一块的点击，而外层这圈（标题行、
-                        // 版本行、留白）根本没有点击接点。整张卡点一下 = 检查更新：
-                        // 与里层同一个动作，查完真有可装的更新才弹确认框。
-                        .combinedClickable(onClick = {
-                            confirmAfterCheck = true
-                            onCheckRuntimeUpdateRequested()
-                        })
-                        .padding(16.dp),
-                ) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.Refresh, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_runtime_section),
-                        summary = stringResource(R.string.dsh_runtime_summary),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = if (runtimeInstalled && runtimeVersion.isNotEmpty()) {
-                            stringResource(R.string.dsh_runtime_installed_version, runtimeVersion)
-                        } else if (runtimeInstalled) {
-                            stringResource(R.string.dsh_runtime_section)
-                        } else {
-                            stringResource(R.string.dsh_runtime_not_installed)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
-                    // 有新运行时可用时明确说出来。之前完全没有这个检测：
-                    // r1 的 git 依赖不全，修好了也没人告诉用户该更新。
-                    var latest by remember { mutableStateOf<RuntimeCheckResult?>(null) }
-                    var checking by remember { mutableStateOf(false) }
-                    // confirmAfterCheck 声明在外层（整卡点击要用），这里只声明其余状态。
-                    var updateConfirming by remember { mutableStateOf(false) }
-                    var versionListOpen by remember { mutableStateOf(false) }
-                    LaunchedEffect(runtimeInstalled, runtimeVersion, runtimeBeta, runtimeSlim, runtimeCheckRevision) {
-                        if (!runtimeInstalled) {
-                            latest = null
-                            return@LaunchedEffect
+        SplicedColumnGroup(title = stringResource(R.string.dsh_function_group_network), flat = flat, highlightKey = highlightKey) {
+            // ───────── 端口 ─────────
+            item(key = "function_port") {
+                ExpressiveCard(flat = flat) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        SectionHeader(
+                            icon = { Icon(Icons.Filled.Tune, null, Modifier.size(20.dp)) },
+                            title = stringResource(R.string.dsh_port_title),
+                            summary = stringResource(R.string.dsh_port_summary),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_port_current, port),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        var editing by remember { mutableStateOf(false) }
+                        OutlinedButton(onClick = { editing = true }) {
+                            Text(stringResource(R.string.dsh_port_edit))
                         }
-                        if (runtimeCheckRevision == 0) return@LaunchedEffect
-                        checking = true
-                        latest = runCatching { onCheckRuntimeUpdate() }.getOrNull()
-                        checking = false
-                        val result = latest
-                        // 只有「确实装得上」才弹确认框：要求更高 App 版本的更新弹了也装不了
-                        if (confirmAfterCheck && result?.version != null && result.minAppVersion.isEmpty()) {
-                            updateConfirming = true
-                        }
-                        confirmAfterCheck = false
-                    }
-
-                    // 重装确认/全新重装确认：声明在卡片层而不是下面的分支里 ——
-                    // 两个 AlertDialog 在分支外渲染，变量必须在同一层可见。
-                    var reinstallChoice by remember { mutableStateOf(false) }
-                    var cleanConfirming by remember { mutableStateOf(false) }
-
-                    // 已装运行时要求更高的 App 版本：整张卡先变成「请先更新应用」。
-                    // 继续给「更新/重装」按钮没有意义 —— 那两条路会立刻被闸门拦下。
-                    if (appUpdateRequired) {
-                        requiredAppVersion?.let { req ->
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = stringResource(R.string.dsh_runtime_min_app_required, req),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            OutlinedButton(onClick = onGoUpdateApp) {
-                                Text(stringResource(R.string.dsh_runtime_min_app_go_update))
-                            }
-                        }
-                    } else {
-                        latest?.let { result ->
-                            val line = when {
-                                result.version != null && result.minAppVersion.isNotEmpty() ->
-                                    stringResource(R.string.dsh_runtime_update_requires_app, result.minAppVersion)
-                                result.version != null ->
-                                    stringResource(R.string.dsh_runtime_update_available, result.version)
-                                result.failure -> stringResource(R.string.dsh_runtime_check_failed)
-                                else -> stringResource(R.string.dsh_runtime_up_to_date)
-                            }
-                            val color = when {
-                                result.version != null && result.minAppVersion.isNotEmpty() ->
-                                    MaterialTheme.colorScheme.error
-                                result.version != null -> MaterialTheme.colorScheme.primary
-                                result.failure -> MaterialTheme.colorScheme.error
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Text(text = line, style = MaterialTheme.typography.bodySmall, color = color)
-                        }
-
-                        // 手动检查搬到了下面的开关卡片上（点一下卡片 = 检查），这里不再有
-                        // 按钮行：更新 / 重装 / 导入 三件事分别落在 点卡片 / 版本菜单的当前行 /
-                        // 菜单左下角的导入。
-                        if (checking) {
-                            Spacer(Modifier.height(6.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = stringResource(R.string.dsh_runtime_checking),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    // 运行时卡片现在就是一张**开关卡片**：整行点一下 = 立即检查更新
-                    // （结果 / 确认框照旧走 confirmAfterCheck 那条路），长按 = 版本菜单。
-                    // 精简/完整、测试/正式两个滑块搬进了菜单 —— 它们是「要装哪一版」的
-                    // 参数，和版本列表同屏才有意义；留在卡片上就成了第二处状态。
-                    ToggleSettingCard(
-                        flat = true,
-                        icon = Icons.Filled.CloudDownload,
-                        title = stringResource(R.string.dsh_runtime_auto_check),
-                        description = stringResource(R.string.dsh_runtime_auto_check_summary),
-                        checked = runtimeAutoCheck,
-                        onCheckedChange = onRuntimeAutoCheckChange,
-                        onClick = {
-                            val result = latest
-                            when {
-                                // 已经查到有更新：直接弹确认框，别让用户再等一次网络
-                                result?.version != null && result.minAppVersion.isEmpty() ->
-                                    updateConfirming = true
-                                // 新运行时要求更高 App 版本：点下去也是被闸门拦下，直接指路
-                                result?.version != null -> onGoUpdateApp()
-                                else -> {
-                                    // 长按菜单之外的这条检查路径：查完真有可装的更新就弹确认框
-                                    confirmAfterCheck = true
-                                    onCheckRuntimeUpdateRequested()
-                                }
-                            }
-                        },
-                        // 长按**不要求已装**：没装过的人也要能从版本菜单里挑一版装上，
-                        // 而菜单里选任意一行本来就是走 switchRuntimeVersion 的安装路径。
-                        onLongClick = { versionListOpen = true },
-                    )
-                    if (updateConfirming) {
-                        AlertDialog(
-                            onDismissRequest = { updateConfirming = false },
-                            title = { Text(stringResource(R.string.dsh_runtime_update_confirm_title)) },
-                            text = {
-                                Text(
-                                    stringResource(
-                                        R.string.dsh_runtime_switch_confirm_text,
-                                        latest?.version.orEmpty(),
+                        if (editing) {
+                            var input by remember { mutableStateOf(port.toString()) }
+                            var inputError by remember { mutableStateOf(false) }
+                            AlertDialog(
+                                onDismissRequest = { editing = false },
+                                title = { Text(stringResource(R.string.dsh_port_title)) },
+                                text = {
+                                    OutlinedTextField(
+                                        value = input,
+                                        onValueChange = {
+                                            input = it.filter(Char::isDigit)
+                                            inputError = false
+                                        },
+                                        label = { Text(stringResource(R.string.dsh_port_input_hint)) },
+                                        isError = inputError,
+                                        supportingText = if (inputError) {
+                                            { Text(stringResource(R.string.dsh_port_invalid)) }
+                                        } else {
+                                            null
+                                        },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
                                     )
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        val p = input.toIntOrNull()
+                                        if (p == null || p !in 1..65535) {
+                                            inputError = true
+                                        } else {
+                                            onPortChange(p)
+                                            editing = false
+                                        }
+                                    }) { Text(stringResource(R.string.dsh_port_confirm)) }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { editing = false }) {
+                                        Text(stringResource(android.R.string.cancel))
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ───────── 局域网访问 ─────────
+            item(key = "function_lan") {
+                ToggleSettingCard(
+                    flat = flat,
+                    icon = Icons.Filled.Public,
+                    title = stringResource(R.string.dsh_lan_title),
+                    description = stringResource(R.string.dsh_lan_summary),
+                    checked = lanEnabled,
+                    onCheckedChange = onLanChange,
+                )
+            }
+
+            // ───────── 竞速通道（镜像/测速）─────────
+            // 长按卡片出通道勾选弹窗：勾了的通道走测速竞速，没勾的一律直连；总开关关掉则全部不生效。
+            item(key = "function_gh_mirror") {
+                var showRaceDialog by remember { mutableStateOf(false) }
+                ToggleSettingCard(
+                    flat = flat,
+                    icon = Icons.Filled.CloudDownload,
+                    title = stringResource(R.string.dsh_race_title),
+                    description = stringResource(R.string.dsh_race_summary),
+                    checked = raceMasterEnabled,
+                    onLongClick = { showRaceDialog = true },
+                    onCheckedChange = onRaceMasterChange,
+                )
+                if (showRaceDialog) {
+                    RaceChannelDialog(
+                        masterEnabled = raceMasterEnabled,
+                        racePlugins = racePlugins,
+                        raceAppUpdate = raceAppUpdate,
+                        raceRuntime = raceRuntime,
+                        onChannelChange = onRaceChannelChange,
+                        mirrors = raceMirrors,
+                        onMirrorToggle = onRaceMirrorToggle,
+                        customSourceEnabled = customSourceEnabled,
+                        onCustomSourceToggle = onCustomSourceToggle,
+                        customMetaUrl = customMetaUrl,
+                        onCustomMetaUrlChange = onCustomMetaUrlChange,
+                        speedTesting = speedTesting,
+                        speedResults = speedResults,
+                        effectiveSource = effectiveSource,
+                        onSpeedTest = onSpeedTest,
+                        onDismiss = { showRaceDialog = false },
+                    )
+                }
+            }
+        }
+        SplicedColumnGroup(title = stringResource(R.string.dsh_function_group_webui), flat = flat, highlightKey = highlightKey) {
+            // ───────── Web 界面打开方式 ─────────
+            item(key = "function_webui_mode") {
+                ExpressiveCard(flat = flat) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        SectionHeader(
+                            icon = { Icon(Icons.Filled.Layers, null, Modifier.size(20.dp)) },
+                            title = stringResource(R.string.dsh_webui_mode),
+                            summary = stringResource(R.string.dsh_webui_mode_summary),
+                        )
+                        Spacer(Modifier.height(12.dp))
+
+                        RuntimeOption(
+                            selected = webuiMode == DshWebUi.MODE_IN_APP,
+                            enabled = true,
+                            title = stringResource(R.string.dsh_webui_mode_in_app),
+                            summary = stringResource(R.string.dsh_webui_mode_in_app_desc),
+                            onSelect = { onWebuiModeChange(DshWebUi.MODE_IN_APP) },
+                        )
+                        RuntimeOption(
+                            selected = webuiMode == DshWebUi.MODE_BROWSER,
+                            enabled = true,
+                            title = stringResource(R.string.dsh_webui_mode_browser),
+                            summary = stringResource(R.string.dsh_webui_mode_browser_desc),
+                            onSelect = { onWebuiModeChange(DshWebUi.MODE_BROWSER) },
+                        )
+                        RuntimeOption(
+                            selected = webuiMode == DshWebUi.MODE_ASK,
+                            enabled = true,
+                            title = stringResource(R.string.dsh_webui_mode_ask),
+                            summary = stringResource(R.string.dsh_webui_mode_ask_desc),
+                            onSelect = { onWebuiModeChange(DshWebUi.MODE_ASK) },
+                        )
+                    }
+                }
+            }
+
+            // ───────── 画中画（主/副两个开关，独立一张卡）─────────
+            // 主开关管「这个应用能不能进小窗」：悬浮菜单里的按钮、以及离开时自动进入都看它。
+            // 副开关只管「离开应用时自动缩」——两者是包含关系，所以摆在同一个卡里，
+            // 主开关关掉时副开关置灰（留着可点的副开关会让人以为「关了它还能自动缩」）。
+            item(key = "function_webui_pip") {
+                ExpressiveCard(flat = flat) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        SectionHeader(
+                            icon = { Icon(Icons.Outlined.PictureInPictureAlt, null, Modifier.size(20.dp)) },
+                            title = stringResource(R.string.dsh_webui_pip),
+                            summary = stringResource(R.string.dsh_webui_pip_summary),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        PipSwitchRow(
+                            title = stringResource(R.string.dsh_webui_pip_main),
+                            summary = stringResource(R.string.dsh_webui_pip_main_summary),
+                            checked = webuiPipMain,
+                            enabled = true,
+                            onCheckedChange = onWebuiPipMainChange,
+                        )
+                        PipSwitchRow(
+                            title = stringResource(R.string.dsh_webui_pip_auto),
+                            summary = stringResource(R.string.dsh_webui_pip_auto_summary),
+                            checked = webuiPipAuto,
+                            enabled = webuiPipMain,
+                            onCheckedChange = onWebuiPipAutoChange,
+                        )
+                    }
+                }
+            }
+        }
+        SplicedColumnGroup(title = stringResource(R.string.dsh_function_group_runtime), flat = flat, highlightKey = highlightKey) {
+            // ───────── 运行时重装 ─────────
+            // DshRuntime.reinstallRuntime() 早就存在，但之前 UI 里没有任何入口，
+            // 而好几处报错文案（缺 pnpm / 缺 dsh）都写着「请在设置中重装运行时」。
+            item(key = "function_runtime") {
+                ExpressiveCard(flat = flat) {
+                    // 「点一下 = 立即检查」这个标志要挂在**外层整卡**的点击上（见下面的 Column），
+                    // 而它同时要被卡片里的那次检查读到，所以声明在 Column 之前。
+                    var confirmAfterCheck by remember { mutableStateOf(false) }
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            // 用户报「运行时那张外层卡片点了没反应」：里层的开关卡片（下面的
+                            // ToggleSettingCard）自己接走了它那一块的点击，而外层这圈（标题行、
+                            // 版本行、留白）根本没有点击接点。整张卡点一下 = 检查更新：
+                            // 与里层同一个动作，查完真有可装的更新才弹确认框。
+                            .combinedClickable(onClick = {
+                                confirmAfterCheck = true
+                                onCheckRuntimeUpdateRequested()
+                            })
+                            .padding(16.dp),
+                    ) {
+                        SectionHeader(
+                            icon = { Icon(Icons.Filled.Refresh, null, Modifier.size(20.dp)) },
+                            title = stringResource(R.string.dsh_runtime_section),
+                            summary = stringResource(R.string.dsh_runtime_summary),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = if (runtimeInstalled && runtimeVersion.isNotEmpty()) {
+                                stringResource(R.string.dsh_runtime_installed_version, runtimeVersion)
+                            } else if (runtimeInstalled) {
+                                stringResource(R.string.dsh_runtime_section)
+                            } else {
+                                stringResource(R.string.dsh_runtime_not_installed)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        // 有新运行时可用时明确说出来。之前完全没有这个检测：
+                        // r1 的 git 依赖不全，修好了也没人告诉用户该更新。
+                        var latest by remember { mutableStateOf<RuntimeCheckResult?>(null) }
+                        var checking by remember { mutableStateOf(false) }
+                        // confirmAfterCheck 声明在外层（整卡点击要用），这里只声明其余状态。
+                        var updateConfirming by remember { mutableStateOf(false) }
+                        var versionListOpen by remember { mutableStateOf(false) }
+                        LaunchedEffect(runtimeInstalled, runtimeVersion, runtimeBeta, runtimeSlim, runtimeCheckRevision) {
+                            if (!runtimeInstalled) {
+                                latest = null
+                                return@LaunchedEffect
+                            }
+                            if (runtimeCheckRevision == 0) return@LaunchedEffect
+                            checking = true
+                            latest = runCatching { onCheckRuntimeUpdate() }.getOrNull()
+                            checking = false
+                            val result = latest
+                            // 只有「确实装得上」才弹确认框：要求更高 App 版本的更新弹了也装不了
+                            if (confirmAfterCheck && result?.version != null && result.minAppVersion.isEmpty()) {
+                                updateConfirming = true
+                            }
+                            confirmAfterCheck = false
+                        }
+
+                        // 重装确认/全新重装确认：声明在卡片层而不是下面的分支里 ——
+                        // 两个 AlertDialog 在分支外渲染，变量必须在同一层可见。
+                        var reinstallChoice by remember { mutableStateOf(false) }
+                        var cleanConfirming by remember { mutableStateOf(false) }
+
+                        // 已装运行时要求更高的 App 版本：整张卡先变成「请先更新应用」。
+                        // 继续给「更新/重装」按钮没有意义 —— 那两条路会立刻被闸门拦下。
+                        if (appUpdateRequired) {
+                            requiredAppVersion?.let { req ->
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = stringResource(R.string.dsh_runtime_min_app_required, req),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error,
                                 )
-                            },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    updateConfirming = false
-                                    onReinstallRuntime(true)
-                                }) { Text(stringResource(R.string.dsh_runtime_update_go)) }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { updateConfirming = false }) {
-                                    Text(stringResource(android.R.string.cancel))
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedButton(onClick = onGoUpdateApp) {
+                                    Text(stringResource(R.string.dsh_runtime_min_app_go_update))
+                                }
+                            }
+                        } else {
+                            latest?.let { result ->
+                                val line = when {
+                                    result.version != null && result.minAppVersion.isNotEmpty() ->
+                                        stringResource(R.string.dsh_runtime_update_requires_app, result.minAppVersion)
+                                    result.version != null ->
+                                        stringResource(R.string.dsh_runtime_update_available, result.version)
+                                    result.failure -> stringResource(R.string.dsh_runtime_check_failed)
+                                    else -> stringResource(R.string.dsh_runtime_up_to_date)
+                                }
+                                val color = when {
+                                    result.version != null && result.minAppVersion.isNotEmpty() ->
+                                        MaterialTheme.colorScheme.error
+                                    result.version != null -> MaterialTheme.colorScheme.primary
+                                    result.failure -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(text = line, style = MaterialTheme.typography.bodySmall, color = color)
+                            }
+
+                            // 手动检查搬到了下面的开关卡片上（点一下卡片 = 检查），这里不再有
+                            // 按钮行：更新 / 重装 / 导入 三件事分别落在 点卡片 / 版本菜单的当前行 /
+                            // 菜单左下角的导入。
+                            if (checking) {
+                                Spacer(Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = stringResource(R.string.dsh_runtime_checking),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        // 运行时卡片现在就是一张**开关卡片**：整行点一下 = 立即检查更新
+                        // （结果 / 确认框照旧走 confirmAfterCheck 那条路），长按 = 版本菜单。
+                        // 精简/完整、测试/正式两个滑块搬进了菜单 —— 它们是「要装哪一版」的
+                        // 参数，和版本列表同屏才有意义；留在卡片上就成了第二处状态。
+                        ToggleSettingCard(
+                            flat = true,
+                            icon = Icons.Filled.CloudDownload,
+                            title = stringResource(R.string.dsh_runtime_auto_check),
+                            description = stringResource(R.string.dsh_runtime_auto_check_summary),
+                            checked = runtimeAutoCheck,
+                            onCheckedChange = onRuntimeAutoCheckChange,
+                            onClick = {
+                                val result = latest
+                                when {
+                                    // 已经查到有更新：直接弹确认框，别让用户再等一次网络
+                                    result?.version != null && result.minAppVersion.isEmpty() ->
+                                        updateConfirming = true
+                                    // 新运行时要求更高 App 版本：点下去也是被闸门拦下，直接指路
+                                    result?.version != null -> onGoUpdateApp()
+                                    else -> {
+                                        // 长按菜单之外的这条检查路径：查完真有可装的更新就弹确认框
+                                        confirmAfterCheck = true
+                                        onCheckRuntimeUpdateRequested()
+                                    }
                                 }
                             },
+                            // 长按**不要求已装**：没装过的人也要能从版本菜单里挑一版装上，
+                            // 而菜单里选任意一行本来就是走 switchRuntimeVersion 的安装路径。
+                            onLongClick = { versionListOpen = true },
                         )
-                    }
-                    if (versionListOpen) {
-                        RuntimeVersionDialog(
-                            currentVersion = runtimeVersion,
-                            slim = runtimeSlim,
-                            beta = runtimeBeta,
-                            onSlimChange = onRuntimeSlimChange,
-                            onBetaChange = onRuntimeBetaChange,
-                            onDismiss = { versionListOpen = false },
-                            onLoad = onListRuntimeVersions,
-                            onInstall = { entry ->
-                                versionListOpen = false
-                                onSwitchRuntimeVersion(entry)
-                            },
-                            // 当前那一行 = 重装：沿用卡片原来那个「保留数据 / 全新重装」二选一
-                            onReinstallCurrent = {
-                                versionListOpen = false
-                                reinstallChoice = true
-                            },
-                            onGoUpdateApp = {
-                                versionListOpen = false
-                                onGoUpdateApp()
-                            },
-                            onImport = {
-                                versionListOpen = false
-                                onImportRuntime()
-                            },
-                        )
-                    }
-                    if (reinstallChoice) {
-                        AlertDialog(
-                            onDismissRequest = { reinstallChoice = false },
-                            title = { Text(stringResource(R.string.dsh_runtime_reinstall_confirm_title)) },
-                            text = { Text(stringResource(R.string.dsh_runtime_preserve_question)) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    reinstallChoice = false
-                                    onReinstallRuntime(true)
-                                }) { Text(stringResource(R.string.dsh_runtime_preserve)) }
-                            },
-                            dismissButton = {
-                                Row {
+                        if (updateConfirming) {
+                            AlertDialog(
+                                onDismissRequest = { updateConfirming = false },
+                                title = { Text(stringResource(R.string.dsh_runtime_update_confirm_title)) },
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            R.string.dsh_runtime_switch_confirm_text,
+                                            latest?.version.orEmpty(),
+                                        )
+                                    )
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        updateConfirming = false
+                                        onReinstallRuntime(true)
+                                    }) { Text(stringResource(R.string.dsh_runtime_update_go)) }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { updateConfirming = false }) {
+                                        Text(stringResource(android.R.string.cancel))
+                                    }
+                                },
+                            )
+                        }
+                        if (versionListOpen) {
+                            RuntimeVersionDialog(
+                                currentVersion = runtimeVersion,
+                                slim = runtimeSlim,
+                                beta = runtimeBeta,
+                                onSlimChange = onRuntimeSlimChange,
+                                onBetaChange = onRuntimeBetaChange,
+                                onDismiss = { versionListOpen = false },
+                                onLoad = onListRuntimeVersions,
+                                onInstall = { entry ->
+                                    versionListOpen = false
+                                    onSwitchRuntimeVersion(entry)
+                                },
+                                // 当前那一行 = 重装：沿用卡片原来那个「保留数据 / 全新重装」二选一
+                                onReinstallCurrent = {
+                                    versionListOpen = false
+                                    reinstallChoice = true
+                                },
+                                onGoUpdateApp = {
+                                    versionListOpen = false
+                                    onGoUpdateApp()
+                                },
+                                onImport = {
+                                    versionListOpen = false
+                                    onImportRuntime()
+                                },
+                            )
+                        }
+                        if (reinstallChoice) {
+                            AlertDialog(
+                                onDismissRequest = { reinstallChoice = false },
+                                title = { Text(stringResource(R.string.dsh_runtime_reinstall_confirm_title)) },
+                                text = { Text(stringResource(R.string.dsh_runtime_preserve_question)) },
+                                confirmButton = {
                                     TextButton(onClick = {
                                         reinstallChoice = false
-                                        cleanConfirming = true
-                                    }) { Text(stringResource(R.string.dsh_runtime_clean)) }
-                                    TextButton(onClick = { reinstallChoice = false }) { Text(stringResource(android.R.string.cancel)) }
-                                }
-                            },
-                        )
-                    }
-                    if (cleanConfirming) {
-                        AlertDialog(
-                            onDismissRequest = { cleanConfirming = false },
-                            title = { Text(stringResource(R.string.dsh_runtime_clean_confirm_title)) },
-                            text = { Text(stringResource(R.string.dsh_runtime_clean_confirm_text)) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    cleanConfirming = false
-                                    onReinstallRuntime(false)
-                                }) { Text(stringResource(R.string.dsh_runtime_clean_confirm_go)) }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { cleanConfirming = false }) {
-                                    Text(stringResource(android.R.string.cancel))
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-        }
-
-        // ───────── 插件依赖修复 ─────────
-        item(key = "function_repair_plugins", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.Build, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_plugin_repair),
-                        summary = stringResource(R.string.dsh_plugin_repair_summary),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = onRepairPlugins,
-                        enabled = runtimeInstalled && !repairBusy,
-                    ) {
-                        Text(stringResource(R.string.dsh_plugin_repair_go))
-                    }
-                }
-            }
-        }
-
-        // ───────── 安装后验证 ─────────
-        item(key = "function_verify_install", visible = !permissionOnly) {
-            ToggleSettingCard(
-                flat = flat,
-                icon = Icons.Filled.VerifiedUser,
-                title = stringResource(R.string.dsh_verify_after_install),
-                description = stringResource(R.string.dsh_verify_after_install_summary),
-                checked = verifyAfterInstall,
-                onCheckedChange = onVerifyAfterInstallChange,
-            )
-        }
-
-        // ───────── 数据目录 ─────────
-        //
-        // **一个入口两条路**。原来是两个卡片（「在文件管理器中打开」/「直接授权给 MT 管理器」），
-        // 但对用户这是同一件事：让第三方应用能访问本应用的数据目录。第二个卡片还只在装了
-        // MT 管理器时出现，看起来像另一个功能，其实只是 MT 那套持久化授权的替代路径 ——
-        // 它在侧栏选中本应用后会报"没有可持久化的授权"（见 [DshDocsAccess]）。
-        // 所以合成一张卡：说明说一次，两条路各一个按钮，装没装 MT 只影响第二个按钮在不在。
-        item(key = "function_docs_access", visible = !permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                        Spacer(Modifier.width(16.dp))
-                        Column {
-                            Text(stringResource(R.string.dsh_docs_access_title), style = MaterialTheme.typography.bodyLarge)
-                            Spacer(Modifier.height(4.dp))
-                            Text(stringResource(R.string.dsh_docs_access_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        // 路一：系统选择器（任何文件管理器都走这条）
-                        TextButton(onClick = {
-                            val authority = "${BuildConfig.APPLICATION_ID}.documents"
-                            val dshHome = DshEnv.dshHome(context)
-                            val base = context.dataDir.canonicalFile.path
-                            val initialDocId = runCatching {
-                                val p = dshHome.absolutePath
-                                if (dshHome.isDirectory && p.startsWith("$base/")) "/" + p.removePrefix("$base/") else "/"
-                            }.getOrDefault("/")
-                            val target = DocumentsContract.buildDocumentUri(authority, initialDocId)
-                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                                .putExtra(DocumentsContract.EXTRA_INITIAL_URI, target)
-                                .addFlags(
-                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
-                                )
-                            if (!runCatching { context.startActivity(intent) }.isSuccess) {
-                                showToast(context, R.string.dsh_docs_open_failed)
-                            }
-                        }) { Text(stringResource(R.string.dsh_docs_open_action)) }
-                        // 路二：缺陷 ROM 兼容通道（由本应用自己发放同一份授权）。
-                        // 候选按「能力」算，见 DshDocsAccess.candidates —— 默认勾选系统文件
-                        // 管理器与 MT 管理器，其余能打开文件夹的应用列出来由用户勾。
-                        // 已经授过（哪怕被授权方后来卸了）也要留着这个入口：撤销只在弹窗里。
-                        if (docsCandidates.isNotEmpty() || docsGranted.value.isNotEmpty()) {
-                            TextButton(onClick = { showGrantDocsDialog.value = true }) {
-                                Text(stringResource(R.string.dsh_docs_grant_action))
-                            }
-                        }
-                    }
-                    // 已授权时把「授给了谁」写在卡片上：弹窗只在候选非空或已授权时才打得开，
-                    // 而那行提示是用户判断"要不要撤销"的唯一线索。被授权方卸载后名字查不到，
-                    // 退化成包名也要显示出来。
-                    if (docsGranted.value.isNotEmpty()) {
-                        val labels = docsGranted.value.joinToString("、") { pkg ->
-                            docsCandidates.firstOrNull { it.packageName == pkg }?.label ?: pkg
-                        }
-                        Text(
-                            text = stringResource(R.string.dsh_docs_granted_label, labels),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                }
-            }
-        }
-        item(key = "function_clean_storage", visible = !permissionOnly) {
-            // 点 = 原有的浅清理（主题 / 媒体 / 音效 / 应用缓存）；长按 = 深度清理页
-            // （运行时临时文件、apt/npm 缓存、日志，以及共享存储的大文件/大文件夹）。
-            // 长按挂在内层 Row 上：ExpressiveCard 的 onClick 不接受 onLongClick，而这张卡里
-            // 没有别的可点元素、Row 又铺满整卡，所以触摸范围就是整张卡（与共享存储那张卡
-            // 同一个写法）。
-            ExpressiveCard(flat = flat) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .combinedClickable(
-                            onClick = { showCleanStorageDialog.value = true },
-                            onLongClick = onOpenDeepClean,
-                        )
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.CleaningServices, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(stringResource(R.string.settings_clean_storage), style = MaterialTheme.typography.bodyLarge)
-                        Spacer(Modifier.height(4.dp))
-                        Text(stringResource(R.string.settings_clean_storage_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-
-        // ───────── 权限管理 ─────────
-        // 通道、配对与每一项原生能力都收进了这一页（分类 + 搜索）。原先它们挤在安全页上一条
-        // 越接越长的列表里，想找某一项只能一路滚到底 —— 见 PermissionHubScreen 的 KDoc。
-        item(key = "function_permission", visible = permissionOnly) {
-            ExpressiveCard(flat = flat, onClick = onOpenPermissionHub) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    SectionHeader(
-                        icon = { Icon(Icons.Filled.Security, null, Modifier.size(20.dp)) },
-                        title = stringResource(R.string.dsh_perm_hub_title),
-                        summary = stringResource(R.string.dsh_perm_hub_summary),
-                    )
-                }
-            }
-        }
-
-        // ───────── 共享存储（挂载 /sdcard） ─────────
-        // 它从来不是"原生能力"的一部分：原生能力是"拿到身份后能动什么"，而它管的是容器里
-        // 有没有 /sdcard。原来只是凑巧画在那张卡片里，还被桥的总开关一起藏了起来 ——
-        // 桥关着它照样有用（挂载层与 dsh-fs 桥都不经过原生能力桥），所以现在独立成卡。
-        item(key = "function_storage_mount", visible = permissionOnly) {
-            ExpressiveCard(flat = flat) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    // ── 共享存储（挂载 /sdcard） ──
-                    // 一个开关同时管两件事：容器 bind 挂载 + dsh-fs 桥（两者都受黑白名单约束）。
-                    // 关＝容器彻底看不到 /sdcard。长按整行进黑白名单设置。改动需重启 dsh 才在
-                    // 挂载层生效（dsh-fs 侧立即生效）。
-                    // 长按进黑白名单要覆盖**整张卡片**：combinedClickable 原来只挂在标题 Row 上，
-                    // 而 `if (mountEnabled)` 里那几行（已授权提示 / 重启提示）在 Row 之外，
-                    // 于是卡片看着一大块、实际只有标题那一小块能长按。把 clickable 提到外层
-                    // Column，卡片范围内（按钮自身除外）都能长按。
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(
-                                onClick = { onSetMount(!mountEnabled) },
-                                onLongClick = onOpenFileAccess,
-                            ),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.dsh_storage_cap_title),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    text = stringResource(R.string.dsh_storage_mount_hint),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            ExpressiveSwitch(
-                                checked = mountEnabled,
-                                onCheckedChange = onSetMount,
+                                        onReinstallRuntime(true)
+                                    }) { Text(stringResource(R.string.dsh_runtime_preserve)) }
+                                },
+                                dismissButton = {
+                                    Row {
+                                        TextButton(onClick = {
+                                            reinstallChoice = false
+                                            cleanConfirming = true
+                                        }) { Text(stringResource(R.string.dsh_runtime_clean)) }
+                                        TextButton(onClick = { reinstallChoice = false }) { Text(stringResource(android.R.string.cancel)) }
+                                    }
+                                },
                             )
                         }
-                        if (mountEnabled) {
-                            if (allFilesGranted) {
-                                Text(
-                                    text = stringResource(R.string.dsh_storage_granted),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            } else {
-                                TextButton(onClick = onOpenAllFilesSettings) {
-                                    Text(stringResource(R.string.dsh_storage_need_perm))
+                        if (cleanConfirming) {
+                            AlertDialog(
+                                onDismissRequest = { cleanConfirming = false },
+                                title = { Text(stringResource(R.string.dsh_runtime_clean_confirm_title)) },
+                                text = { Text(stringResource(R.string.dsh_runtime_clean_confirm_text)) },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        cleanConfirming = false
+                                        onReinstallRuntime(false)
+                                    }) { Text(stringResource(R.string.dsh_runtime_clean_confirm_go)) }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { cleanConfirming = false }) {
+                                        Text(stringResource(android.R.string.cancel))
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ───────── 插件依赖修复 ─────────
+            item(key = "function_repair_plugins") {
+                ExpressiveCard(flat = flat) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        SectionHeader(
+                            icon = { Icon(Icons.Filled.Build, null, Modifier.size(20.dp)) },
+                            title = stringResource(R.string.dsh_plugin_repair),
+                            summary = stringResource(R.string.dsh_plugin_repair_summary),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = onRepairPlugins,
+                            enabled = runtimeInstalled && !repairBusy,
+                        ) {
+                            Text(stringResource(R.string.dsh_plugin_repair_go))
+                        }
+                    }
+                }
+            }
+
+            // ───────── 安装后验证 ─────────
+            item(key = "function_verify_install") {
+                ToggleSettingCard(
+                    flat = flat,
+                    icon = Icons.Filled.VerifiedUser,
+                    title = stringResource(R.string.dsh_verify_after_install),
+                    description = stringResource(R.string.dsh_verify_after_install_summary),
+                    checked = verifyAfterInstall,
+                    onCheckedChange = onVerifyAfterInstallChange,
+                )
+            }
+        }
+        SplicedColumnGroup(title = stringResource(R.string.dsh_function_group_storage), flat = flat, highlightKey = highlightKey) {
+            // ───────── 数据目录 ─────────
+            //
+            // **一个入口两条路**。原来是两个卡片（「在文件管理器中打开」/「直接授权给 MT 管理器」），
+            // 但对用户这是同一件事：让第三方应用能访问本应用的数据目录。第二个卡片还只在装了
+            // MT 管理器时出现，看起来像另一个功能，其实只是 MT 那套持久化授权的替代路径 ——
+            // 它在侧栏选中本应用后会报"没有可持久化的授权"（见 [DshDocsAccess]）。
+            // 所以合成一张卡：说明说一次，两条路各一个按钮，装没装 MT 只影响第二个按钮在不在。
+            item(key = "function_docs_access") {
+                ExpressiveCard(flat = flat) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.width(16.dp))
+                            Column {
+                                Text(stringResource(R.string.dsh_docs_access_title), style = MaterialTheme.typography.bodyLarge)
+                                Spacer(Modifier.height(4.dp))
+                                Text(stringResource(R.string.dsh_docs_access_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            // 路一：系统选择器（任何文件管理器都走这条）
+                            TextButton(onClick = {
+                                val authority = "${BuildConfig.APPLICATION_ID}.documents"
+                                val dshHome = DshEnv.dshHome(context)
+                                val base = context.dataDir.canonicalFile.path
+                                val initialDocId = runCatching {
+                                    val p = dshHome.absolutePath
+                                    if (dshHome.isDirectory && p.startsWith("$base/")) "/" + p.removePrefix("$base/") else "/"
+                                }.getOrDefault("/")
+                                val target = DocumentsContract.buildDocumentUri(authority, initialDocId)
+                                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                                    .putExtra(DocumentsContract.EXTRA_INITIAL_URI, target)
+                                    .addFlags(
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+                                    )
+                                if (!runCatching { context.startActivity(intent) }.isSuccess) {
+                                    showToast(context, R.string.dsh_docs_open_failed)
                                 }
+                            }) { Text(stringResource(R.string.dsh_docs_open_action)) }
+                            // 路二：缺陷 ROM 兼容通道（由本应用自己发放同一份授权）。
+                            // 候选按「能力」算，见 DshDocsAccess.candidates —— 默认勾选系统文件
+                            // 管理器与 MT 管理器，其余能打开文件夹的应用列出来由用户勾。
+                            // 已经授过（哪怕被授权方后来卸了）也要留着这个入口：撤销只在弹窗里。
+                            if (docsCandidates.isNotEmpty() || docsGranted.value.isNotEmpty()) {
+                                TextButton(onClick = { showGrantDocsDialog.value = true }) {
+                                    Text(stringResource(R.string.dsh_docs_grant_action))
+                                }
+                            }
+                        }
+                        // 已授权时把「授给了谁」写在卡片上：弹窗只在候选非空或已授权时才打得开，
+                        // 而那行提示是用户判断"要不要撤销"的唯一线索。被授权方卸载后名字查不到，
+                        // 退化成包名也要显示出来。
+                        if (docsGranted.value.isNotEmpty()) {
+                            val labels = docsGranted.value.joinToString("、") { pkg ->
+                                docsCandidates.firstOrNull { it.packageName == pkg }?.label ?: pkg
                             }
                             Text(
-                                text = stringResource(R.string.dsh_storage_restart_hint),
+                                text = stringResource(R.string.dsh_docs_granted_label, labels),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp),
                             )
                         }
                     }
                 }
             }
-        }
 
+            item(key = "function_clean_storage") {
+                // 点 = 原有的浅清理（主题 / 媒体 / 音效 / 应用缓存）；长按 = 深度清理页
+                // （运行时临时文件、apt/npm 缓存、日志，以及共享存储的大文件/大文件夹）。
+                // 长按挂在内层 Row 上：ExpressiveCard 的 onClick 不接受 onLongClick，而这张卡里
+                // 没有别的可点元素、Row 又铺满整卡，所以触摸范围就是整张卡（与共享存储那张卡
+                // 同一个写法）。
+                ExpressiveCard(flat = flat) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = { showCleanStorageDialog.value = true },
+                                onLongClick = onOpenDeepClean,
+                            )
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.CleaningServices, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text(stringResource(R.string.settings_clean_storage), style = MaterialTheme.typography.bodyLarge)
+                            Spacer(Modifier.height(4.dp))
+                            Text(stringResource(R.string.settings_clean_storage_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (showCleanStorageDialog.value) CleanStorageDialog(showCleanStorageDialog)
