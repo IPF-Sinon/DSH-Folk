@@ -1435,35 +1435,81 @@ console.log("── 限制模式页与弹窗 ──");
       "提示词里没有旧概念残留（否则 agent 会按已不存在的规则行事）");
   }
 }
-// ── 功能页的分类整理 ──
+// ── 功能页：分类入口 + 次级页（形状同「安全 → 权限管理」）──
 //
-// 用户报「功能页 UI 有点杂乱，分类整理一下」：13 张卡原本首尾拼成一整条 SplicedColumnGroup，
-// 没有任何一级分类。现在按 5 组分开（每组一个带标题的 SplicedColumnGroup），安全页
-// （permissionOnly）仍是一组、且不带标题（那一页只有两张卡，不需要再分类）。
+// 第一轮用户报「功能页 UI 有点杂乱，分类整理一下」，第二轮给出做法：「1.可以像安全也一样收进
+// 次级菜单」。所以功能页现在有两层 —— 入口层只有 5 个分类（带搜索），点进去才是那一类的卡片。
 //
-// 这类「结构性重排」最容易出的事故是重排时掉了一张卡：Kotlin 不报错、其它门禁也全绿，
-// 要等用户发现某个开关不见了。所以这里同时钉组名与顺序，以及 16 张卡一个不少、不重复。
+// 这类结构性重排最容易出的事故是重排时掉一张卡：Kotlin 不报错、其它门禁也全绿，要等用户发现
+// 某个开关不见了。所以这里把「分类枚举」「分类→卡片映射」「搜索用的卡片标题表」三份数据钉死
+// 在同一批 key 上：任意一处漏一张卡或写错一个 key，都会在这里失败。
 {
   const settings = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt", "utf8");
+  const screen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt", "utf8");
+  const hubScreen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionHubScreen.kt", "utf8");
+
   const want = [
-    "dsh_function_group_startup",
-    "dsh_function_group_network",
-    "dsh_function_group_webui",
-    "dsh_function_group_runtime",
-    "dsh_function_group_storage",
+    ["STARTUP", "startup", "dsh_function_group_startup"],
+    ["NETWORK", "network", "dsh_function_group_network"],
+    ["WEBUI", "webui", "dsh_function_group_webui"],
+    ["RUNTIME", "runtime", "dsh_function_group_runtime"],
+    ["STORAGE", "storage", "dsh_function_group_storage"],
   ];
-  const groups = [...settings.matchAll(/SplicedColumnGroup\(title = stringResource\(R\.string\.(dsh_function_group_[a-z]+)\)/g)]
-    .map((m) => m[1]);
+  // 枚举项是「名字 / key / 标题 / 说明 / 图标」五行一组：说明必须是 <标题>_summary，图标必须给 ——
+  // 少写一个副标题，入口层上就是一行只有标题的空行。
+  const groups = [...settings.matchAll(
+    /^ {4}([A-Z]+)\(\n {8}"([a-z]+)",\n {8}R\.string\.(dsh_function_group_[a-z]+),\n {8}R\.string\.(\3_summary),\n {8}Icons\./gm,
+  )].map((m) => [m[1], m[2], m[3]]);
   ok(JSON.stringify(groups) === JSON.stringify(want),
-    "功能页按 5 组分类、顺序固定（实际 " + (groups.join(",") || "无") + "）");
-  const keys = [...settings.matchAll(/item\(key = "(function_[a-z_]+)"/g)].map((m) => m[1]);
-  const wantKeys = [
+    "功能页 5 个分类的名字/顺序/标题/说明齐全（实际 " + (groups.map((g) => g[0]).join(",") || "无") + "）");
+
+  const blockKeys = (src, re) => {
+    const i = src.search(re);
+    if (i < 0) return null;
+    return [...src.slice(i, src.indexOf("\n)", i)).matchAll(/"(function_[a-z_]+)"/g)].map((m) => m[1]).sort();
+  };
+  const functional = [
     "function_auto_open_webui", "function_auto_start_service", "function_autostart",
     "function_clean_storage", "function_docs_access", "function_gh_mirror", "function_lan",
-    "function_permission", "function_port", "function_repair_plugins", "function_run_mode",
-    "function_storage_mount", "function_verify_install", "function_webui_mode",
-    "function_webui_pip", "function_runtime",
+    "function_port", "function_repair_plugins", "function_run_mode", "function_runtime",
+    "function_verify_install", "function_webui_mode", "function_webui_pip",
   ].sort();
+  const inMap = blockKeys(settings, /internal val FUNCTION_GROUP_ITEMS/);
+  ok(inMap !== null && JSON.stringify(inMap) === JSON.stringify(functional),
+    "分类→卡片映射正好覆盖 14 张功能卡（实际 " + (inMap ? inMap.length : 0) + " 张）");
+  const inTitle = blockKeys(settings, /private val FUNCTION_ITEM_TITLE/);
+  ok(inTitle !== null && JSON.stringify(inTitle) === JSON.stringify(functional),
+    "入口层搜索的卡片标题表与分类映射是同一批 key（实际 " + (inTitle ? inTitle.length : 0) + " 张）");
+
+  // 次级页只画选中的那一类：标题取自枚举（5 处各写一遍字符串就是 5 处会漂移），其余分类连组合都不发生。
+  ok(/SplicedColumnGroup\(\s*\n\s*title = stringResource\(group\.titleRes\),/.test(settings) &&
+    /when \(group\) \{/.test(settings) &&
+    want.every((g) => settings.includes("FunctionGroup." + g[0] + " -> {")),
+    "次级页用 when(group) 只画选中那一类，且组标题取自枚举");
+  // 入口层：分类行 + 按卡片名的搜索命中。分类行的图标/标题/说明都必须取自枚举 ——
+  // 某一行写死成「启动与运行」这种事故，只钉「用了 HubRow」是抓不住的（反向验证时抓到过）。
+  ok(/functionHubHits\(/.test(settings) &&
+    /HubRow\(\s*\n\s*icon = group\.icon,\s*\n\s*title = stringResource\(group\.titleRes\),\s*\n\s*summary = stringResource\(group\.summaryRes\),/.test(settings) &&
+    /HubHitRow\(hit\.title, hit\.subtitle\)/.test(settings),
+    "入口层列分类行（HubRow，图标/标题/说明都取自枚举），搜索按卡片名命中（HubHitRow）");
+  // 全局搜索（设置主页那份索引）点「端口」这种具体卡片时，先把它的分类展开再高亮
+  ok(/functionGroupOfItem\(highlightKey\)/.test(screen) && /openGroupKey = it\.key/.test(screen),
+    "全局搜索点进具体卡片时自动展开它所在的分类");
+  // 两层在页面上真的接上了：入口层用搜索栏、次级页用普通标题栏、返回先回入口层
+  ok(/SearchAppBar\(/.test(screen) && /FunctionHubContent\(/.test(screen) &&
+    /group = openGroup,/.test(screen) && /highlightKey = highlight,/.test(screen) &&
+    /BackHandler\(enabled = openGroup != null\)/.test(screen) &&
+    /return@Scaffold/.test(screen),
+    "入口层/次级页两份顶栏 + 返回键回入口层都接上了");
+  // 行组件只有一份：权限入口页与功能入口页共用 ui/component/HubList.kt 里那套
+  ok(!/private fun (HubRow|HubCard|HitRow)\b/.test(hubScreen) &&
+    /import me\.bmax\.apatch\.ui\.component\.HubRow/.test(hubScreen) &&
+    /import me\.bmax\.apatch\.ui\.component\.HubHitRow/.test(hubScreen),
+    "两个入口页共用同一套行组件（没有第二份 private HubRow）");
+
+  // 重排后 16 张卡（14 张功能卡 + 安全页那 2 张）一个不少、不重复、不改名
+  const keys = [...settings.matchAll(/item\(key = "(function_[a-z_]+)"/g)].map((m) => m[1]);
+  const wantKeys = functional.concat(["function_permission", "function_storage_mount"]).sort();
   const gotKeys = keys.slice().sort();
   const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
   const missing = wantKeys.filter((k) => !gotKeys.includes(k));
@@ -1472,12 +1518,10 @@ console.log("── 限制模式页与弹窗 ──");
     `重排后 16 张卡一个不少、不重复、不改名（实际 ${keys.length}` +
     `${dup.length ? "，重复 " + dup.join(",") : ""}${missing.length ? "，缺 " + missing.join(",") : ""}` +
     `${extra.length ? "，多 " + extra.join(",") : ""}）`);
-  // 可见性交给分组分支：if (permissionOnly) / else 各画一组。两处同时判（分支 + 每张卡的
-  // visible）最容易漂移 —— 以后加一张卡，忘了改 visible 就会在两页上各错一次。
-  ok(!/visible = !?permissionOnly/.test(settings) &&
-    /if \(permissionOnly\) \{[\s\S]{0,600}?SplicedColumnGroup\(flat = flat, highlightKey = highlightKey\) \{/.test(settings) &&
-    /\} else \{\s*\n\s*SplicedColumnGroup\(title = stringResource\(R\.string\.dsh_function_group_startup\)/.test(settings),
-    "功能页与安全页互斥渲染（if/else 各一组），不是每张卡自己 visible");
+  // 可见性交给层级（安全页一组 / 次级页一类），不再每张卡自己 visible
+  ok(!/visible = !?permissionOnly/.test(settings),
+    "功能页与安全页的可见性由层级决定，不是每张卡自己 visible");
 }
+
 console.log(bad === 0 ? `\n全部通过（${n} 项断言）` : `\n${bad}/${n} 项失败`);
 process.exit(bad === 0 ? 0 : 1);

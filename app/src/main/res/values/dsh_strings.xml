@@ -12,12 +12,19 @@
 
     <!-- 首页 -->
     <string name="dsh_app_title" translatable="false">DeepSeek Harness</string>
-    <!-- Function page category headers: the 13 cards used to be spliced into one column with no grouping -->
+    <!-- Function page: an entry layer (categories + search) and a secondary page per category, same shape as Security → Permission hub -->
     <string name="dsh_function_group_startup">Startup &amp; running</string>
+    <string name="dsh_function_group_startup_summary">Run mode, start on boot, and what the app does when you open it</string>
     <string name="dsh_function_group_network">Network &amp; access</string>
+    <string name="dsh_function_group_network_summary">Port, LAN access, and the mirror / speed-test channels</string>
     <string name="dsh_function_group_webui">Web UI</string>
+    <string name="dsh_function_group_webui_summary">How the Web UI opens, plus the two picture-in-picture switches</string>
     <string name="dsh_function_group_runtime">Runtime &amp; maintenance</string>
+    <string name="dsh_function_group_runtime_summary">Runtime version and reinstall, plugin dependency repair, post-install verification</string>
     <string name="dsh_function_group_storage">Storage &amp; data</string>
+    <string name="dsh_function_group_storage_summary">Data-directory grants and storage cleanup</string>
+    <string name="dsh_function_hub_summary">Startup, network, Web UI, runtime and storage all live here — pick a category to see its cards</string>
+    <string name="dsh_function_hub_empty">Nothing matches</string>
 
     <string name="dsh_run_mode">Run mode</string>
     <string name="dsh_permission">Permission</string>
@@ -1604,7 +1611,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_title">Userscripts</string>
     <string name="dsh_userscripts_scope">Applies to this app own page (the built-in dsh web UI) only. The metadata block, @match / @include / @exclude and @run-at (document-start / -end / -idle) are read the Greasemonkey way.</string>
     <string name="dsh_userscripts_install_file">Install from a file</string>
-    <string name="dsh_userscripts_add">Install a script</string>
+    <string name="dsh_add_menu">Add</string>
     <string name="dsh_userscripts_code_loading">Loading the source…</string>
     <string name="dsh_userscripts_empty">Nothing installed yet. Tap ＋ at the bottom right: File picks a local .user.js, Link takes a pasted address, Store browses greasyfork.org — either way it runs before the page\'s own scripts.</string>
     <string name="dsh_userscripts_empty_filtered">No installed script matches that.</string>

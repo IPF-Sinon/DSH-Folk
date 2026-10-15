@@ -518,25 +518,44 @@ ok(/private const val GROUP_PLUGINS = "plugins"/.test(pluginHome) &&
   /FilterChip\(/.test(groupRow) &&
   /R\.string\.dsh_plugins/.test(groupRow) && /R\.string\.dsh_userscripts_title/.test(groupRow),
   "插件首页有「DSH 插件 / 用户脚本」两组的切换（FilterChip，与商店分类行同一套视觉）");
-// 产品要求变了（用户：「插件脚本页移除右上角商店入口……点击后环绕它显示三个按钮（链接，文件，
-// 商店），同时自身变为取消 X 按钮」）：三件「从哪装」的事收进右下角那个 ＋，两处宿主共用同一份
-// 实现。所以插件首页顶栏只剩插件组的商店直达，脚本组既没有链接图标也没有商店图标。
-ok(/if \(group != GROUP_SCRIPTS\) \{[\s\S]{0,220}?DshPluginStoreScreenDestination/.test(pluginHome) &&
-  !/if \(group == GROUP_SCRIPTS\) ScriptMarketScreenDestination/.test(pluginHome) &&
-  !/scriptInstall\.requestLink\(\)/.test(pluginHome),
-  "脚本组的顶栏链接/商店图标已撤：顶栏商店按钮只服务插件组（插件 → 插件商店）");
-const addFabAt = screen.indexOf("internal fun UserscriptAddFab(");
-const addFabEnd = addFabAt > 0 ? screen.indexOf("\n@Composable", addFabAt + 10) : -1;
-const addFab = addFabAt > 0 && addFabEnd > addFabAt ? screen.slice(addFabAt, addFabEnd) : "";
-ok(addFab.length > 0 &&
-  /Icons\.Filled\.Add/.test(addFab) && /Icons\.Filled\.Close/.test(addFab) &&
-  /R\.string\.cancel/.test(addFab) && /R\.string\.dsh_userscripts_add/.test(addFab) &&
-  /requestLink\(\)/.test(addFab) && /requestLocal\(\)/.test(addFab) &&
-  /onOpenMarket/.test(addFab) && /ADD_MINI_SIZE/.test(addFab),
-  "安装入口是一个 ＋：展开后绕它铺开链接/文件/商店三颗，＋ 自己变成 ✕（带取消的无障碍名）");
-ok(/UserscriptAddFab\(/.test(pluginHome) &&
+// 产品要求变了两次：
+//   第一次（用户：「插件脚本页移除右上角商店入口……点击后环绕它显示三个按钮（链接，文件，商店），
+//   同时自身变为取消 X 按钮」）：脚本页那三件「从哪装」的事收进右下角那个 ＋。
+//   第二次（用户：「3.也要搞插件页的」）：插件页（插件组）照做 —— 顶栏那个商店图标也撤掉，
+//   商店与本地 .tgz 一起收进 ＋。
+// 于是「＋ 环绕菜单」现在有三处宿主（用户脚本页、插件首页脚本组、插件首页插件组），实现只有一份
+// （ui/component/AddMenuFab.kt）。三份各写一遍的话，落点、动效与读屏名很快就会各长各的。
+const addMenu = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/component/AddMenuFab.kt", "utf8");
+ok(/internal fun AddMenuFab\(entries: List<AddMenuEntry>\)/.test(addMenu) &&
+  /internal class AddMenuEntry\(/.test(addMenu) &&
+  /Icons\.Filled\.Add/.test(addMenu) && /Icons\.Filled\.Close/.test(addMenu) &&
+  /R\.string\.cancel/.test(addMenu) && /R\.string\.dsh_add_menu/.test(addMenu) &&
+  /ADD_MINI_SIZE/.test(addMenu) && /ADD_RADIUS/.test(addMenu),
+  "＋ 环绕菜单只有一份实现：展开绕主按钮铺开、自身变 ✕（读屏名一起换成「取消」）");
+// 顶栏不再有商店入口（两组都没有）：商店与安装都在右下角那个 ＋ 里 —— 顶栏再留一份就是同一件事
+// 的第二个说法，而用户要撤掉的正是「右上角那个商店入口」。
+const pluginTopBar = (() => {
+  const a = pluginHome.indexOf("dropdownContent");
+  const b = pluginHome.indexOf("floatingActionButton", a);
+  return a >= 0 && b > a ? pluginHome.slice(a, b) : "";
+})();
+ok(pluginTopBar.length > 0 && !/Storefront/.test(pluginTopBar) && !/DshPluginStoreScreenDestination/.test(pluginTopBar),
+  "插件首页顶栏已无商店入口（两组的商店都收进右下角 ＋）");
+ok(/AddMenuFab\(/.test(pluginHome) &&
+  /Icons\.Outlined\.FolderOpen,\s*\n\s*labelRes = R\.string\.dsh_local_install/.test(pluginHome) &&
+  /Icons\.Outlined\.Storefront,\s*\n\s*labelRes = R\.string\.dsh_plugin_store/.test(pluginHome) &&
+  /DshPluginStoreScreenDestination/.test(pluginHome),
+  "插件组的 ＋ 里有本地 .tgz 与插件商店两个入口");
+// 用户脚本页与插件首页脚本组仍共用同一个包装（三个动作：链接 / 文件 / 商店）
+const wrapAt = screen.indexOf("internal fun UserscriptAddFab(");
+const wrapEnd = wrapAt > 0 ? screen.indexOf("\n}", wrapAt) : -1;
+const addWrap = wrapAt > 0 && wrapEnd > wrapAt ? screen.slice(wrapAt, wrapEnd) : "";
+ok(addWrap.length > 0 && /AddMenuFab\(/.test(addWrap) &&
+  /requestLink\(\)/.test(addWrap) && /requestLocal\(\)/.test(addWrap) && /onOpenMarket/.test(addWrap),
+  "用户脚本页的 ＋ 仍是链接/文件/商店三颗（交给共用的 AddMenuFab）");
+ok(/UserscriptAddFab\(/.test(pluginHome) && /AddMenuFab\(/.test(pluginHome) &&
   /onOpenMarket = \{ navigator\.navigate\(ScriptMarketScreenDestination\(initialQuery = ""\)\) \}/.test(pluginHome),
-  "插件首页脚本组复用同一个 ＋（否则两处宿主各长一套）");
+  "插件首页两组都用同一个 ＋（脚本组三颗、插件组两颗）");
 const marketScreen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/ScriptMarketScreen.kt", "utf8");
 ok(/@Destination<RootGraph>/.test(marketScreen) && /ScriptMarket\./.test(marketScreen) &&
   !/revealMarket/.test(screen) && !/scrollState\.animateScrollTo\(/.test(screen) &&

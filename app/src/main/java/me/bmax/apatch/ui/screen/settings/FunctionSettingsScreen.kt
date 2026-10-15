@@ -6,6 +6,7 @@ import android.os.Build
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.format.Formatter
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -74,6 +75,7 @@ import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.ui.DshWebUi
+import me.bmax.apatch.ui.component.SearchAppBar
 import me.bmax.apatch.ui.screen.PluginProgressHost
 import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
 import me.bmax.apatch.util.PermissionUtils
@@ -324,36 +326,100 @@ internal fun DshSettingsScreen(
     // 运行时替换（重装/切版本/导入）前的「建议先备份」拦截：不为 null 时先弹提示，用户选「继续」才跑
     var pendingRuntimeOp by remember { mutableStateOf<(() -> Unit)?>(null) }
 
+    // ── 功能页的两层：入口层（分类 + 搜索）与次级页（某一类的卡片）────────────────────────
+    // 安全页（permissionOnly）不走这一套：它本来就只有两张卡，一屏就是全部。
+    // openGroupKey 存的是 FunctionGroup.key —— 枚举不是 Saveable，字符串是。
+    var hubQuery by rememberSaveable { mutableStateOf("") }
+    var openGroupKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val openGroup = FunctionGroup.entries.firstOrNull { it.key == openGroupKey }
+    // 高亮哪一张卡：全局搜索点进来时是导航参数，入口层搜索命中某张卡时是那一条命中。
+    var highlight by remember(highlightKey) { mutableStateOf(highlightKey) }
+    // 全局搜索（设置主页那份索引）直接点「端口」这种具体卡片时，先把它所在的分类展开 ——
+    // 否则会落在一个入口层上、什么也没高亮，用户会以为搜索没生效。
+    LaunchedEffect(highlightKey) {
+        if (!permissionOnly) functionGroupOfItem(highlightKey)?.let { openGroupKey = it.key }
+    }
+    // 次级页的系统返回先回入口层，而不是直接退出这一页（与返回箭头同一套行为）。
+    BackHandler(enabled = openGroup != null) {
+        openGroupKey = null
+        hubQuery = ""
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        stringResource(
-                            if (permissionOnly) R.string.settings_category_security
-                            else R.string.settings_category_function
-                        ),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
-                actions = {
-                    if (permissionOnly) {
-                        IconButton(onClick = { navigator.navigate(PermissionLogScreenDestination) }) {
-                            Icon(Icons.Outlined.ReceiptLong, contentDescription = stringResource(R.string.dsh_permission_log_title))
+            // 入口层用搜索栏，次级页/安全页用普通标题栏（次级页的返回箭头回入口层）。
+            if (!permissionOnly && openGroup == null) {
+                SearchAppBar(
+                    title = {
+                        Text(
+                            stringResource(R.string.settings_category_function),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    searchText = hubQuery,
+                    onSearchTextChange = { hubQuery = it },
+                    onClearClick = { hubQuery = "" },
+                    onBackClick = { navigator.popBackStack() },
+                    // 与权限管理页同一个取舍：不自动进搜索态 —— 一进来就拉键盘会盖住分类列表，
+                    // 而进这一页的人十次里有九次是来点分类的。
+                    startInSearchMode = false,
+                )
+            } else {
+                TopAppBar(
+                    title = {
+                        Text(
+                            stringResource(
+                                when {
+                                    openGroup != null -> openGroup.titleRes
+                                    permissionOnly -> R.string.settings_category_security
+                                    else -> R.string.settings_category_function
+                                }
+                            ),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    actions = {
+                        if (permissionOnly) {
+                            IconButton(onClick = { navigator.navigate(PermissionLogScreenDestination) }) {
+                                Icon(Icons.Outlined.ReceiptLong, contentDescription = stringResource(R.string.dsh_permission_log_title))
+                            }
                         }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navigator.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
-                    }
-                },
-            )
+                    },
+                    navigationIcon = {
+                        IconButton(
+                            onClick = {
+                                if (openGroup != null) {
+                                    // 次级页：回入口层（清掉搜索词，回到 5 个分类）
+                                    openGroupKey = null
+                                    hubQuery = ""
+                                } else {
+                                    navigator.popBackStack()
+                                }
+                            }
+                        ) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
+                        }
+                    },
+                )
+            }
         },
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackBarHost) },
     ) { paddingValues ->
+        // 入口层：5 个分类 + 搜索。命中某张卡时把它所在的分类展开并高亮那一张。
+        if (!permissionOnly && openGroup == null) {
+            FunctionHubContent(
+                query = hubQuery,
+                onOpen = { group, itemKey ->
+                    openGroupKey = group.key
+                    highlight = itemKey
+                },
+                modifier = Modifier.padding(paddingValues),
+            )
+            return@Scaffold
+        }
         LazyColumn(
             modifier = Modifier.padding(paddingValues),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -620,7 +686,10 @@ internal fun DshSettingsScreen(
                         dshPrefs.edit().putBoolean(DshEnv.KEY_VERIFY_AFTER_INSTALL, on).apply()
                     },
                     permissionOnly = permissionOnly,
-                    highlightKey = highlightKey,
+                    // 次级页：只画这一类。安全页（permissionOnly）不用它。
+                    group = openGroup,
+                    // 高亮的是入口层搜索命中的那一张（或全局搜索带进来的那张）
+                    highlightKey = highlight,
                 )
             }
             if (permissionOnly) {

@@ -79,5 +79,42 @@ for (const f of FILES) {
     }
   }
 }
+// 图标：Icons.<风格>.<名字> 全是扩展属性，必须逐个 import。material-icons 里的图标上千个，
+// 枚举进 KNOWN 表不现实 —— 但它们的规则极整齐，可以通用地查：用到什么风格，就要求那个包的
+// import（Icons.Default 是 Icons.Filled 的老别名，同一个包）。
+//
+// 这一条是补课：2026-10-15 那次功能页的分类枚举里用了 Icons.Filled.Folder 却没 import，
+// 本地 33 条门禁全绿、CI 才报 Unresolved reference（同一个提交里还漏了 spring()）。
+const ICON_STYLE = {
+  Default: 'filled', Filled: 'filled', Outlined: 'outlined',
+  Rounded: 'rounded', Sharp: 'sharp', TwoTone: 'twotone',
+};
+for (const f of FILES) {
+  const src = fs.readFileSync(f, 'utf8');
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').map((l) => l.replace(/(^|\s)\/\/.*$/, '')).join('\n');
+  // 本仓没有自己声明过 Icons 扩展；真出现了就整文件跳过，免得误报
+  if (/\bval\s+Icons\b/.test(code)) continue;
+  const need = new Set();
+  for (const m of code.matchAll(/Icons\.AutoMirrored\.(Default|Filled|Outlined|Rounded|Sharp|TwoTone)\.([A-Za-z0-9_]+)/g)) {
+    need.add('automirrored.' + ICON_STYLE[m[1]] + '.' + m[2]);
+  }
+  for (const m of code.matchAll(/Icons\.(Default|Filled|Outlined|Rounded|Sharp|TwoTone)\.([A-Za-z0-9_]+)/g)) {
+    need.add(ICON_STYLE[m[1]] + '.' + m[2]);
+  }
+  for (const key of need) {
+    const parts = key.split('.');
+    const name = parts.pop();
+    const fqcn = 'androidx.compose.material.icons.' + key;
+    const pkg = 'androidx.compose.material.icons.' + parts.join('.');
+    const exact = new RegExp('^import\\s+' + fqcn.replace(/\./g, '\\.') + '\\s*$', 'm').test(code);
+    const wild = new RegExp('^import\\s+' + pkg.replace(/\./g, '\\.') + '\\.\\*\\s*$', 'm').test(code);
+    if (!exact && !wild) {
+      console.log('缺 import: ' + f.split('/').pop() + ' 用了 Icons.…' + name + '，需 import ' + fqcn);
+      bad++;
+    }
+  }
+}
 console.log(bad === 0 ? '导入齐全（' + FILES.length + ' 个文件）' : bad + ' 处缺 import');
 process.exit(bad === 0 ? 0 : 1);

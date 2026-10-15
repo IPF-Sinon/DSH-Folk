@@ -3,12 +3,8 @@ package me.bmax.apatch.ui.screen.settings
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,17 +12,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Link
@@ -37,7 +29,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,14 +47,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.lerp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.generated.destinations.ScriptMarketScreenDestination
@@ -72,13 +60,13 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.dsh.WebScripts
+import me.bmax.apatch.ui.component.AddMenuEntry
+import me.bmax.apatch.ui.component.AddMenuFab
 import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.ui.component.UserscriptLinkInstallDialog
 import me.bmax.apatch.ui.screen.ScriptDetailSheet
 import me.bmax.apatch.util.DshWebCompat
 import me.bmax.apatch.util.ui.HomeBottomSpacer
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -169,150 +157,38 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
     }
 }
 
-/** 主按钮（右下角那颗 ＋/✕）的直径。 */
-private val ADD_FAB_SIZE = 56.dp
-
-/** 环绕的小按钮直径，以及它们圆心到主按钮圆心的距离。 */
-private val ADD_MINI_SIZE = 40.dp
-private val ADD_RADIUS = 72.dp
-
 /**
- * 「安装脚本」入口：右下角一个 ＋，点开后绕着它朝屏幕里侧铺开三颗 —— 链接 / 文件 / 商店，
- * 同时 ＋ 自己变成 ✕（再点收回）。
+ * 用户脚本的三个安装入口（链接 / 文件 / 商店），交给共用的 [AddMenuFab] 铺成 ＋ 环绕菜单。
  *
- * 两处宿主（设置 → 用户脚本、插件首页的脚本组）共用这一份，所以落点、动效与三个动作只有
- * 一处定义；真正的选择器与两个弹窗仍在 [UserscriptsContent] 里 —— 这里只发请求。
+ * 两处宿主（设置 → 用户脚本、插件首页的脚本组）共用这一份；真正的选择器与两个弹窗仍在
+ * [UserscriptsContent] 里 —— 这里只发「本地安装 / 从链接安装」两个请求。
  */
 @Composable
 internal fun UserscriptAddFab(
     installRequest: UserscriptInstallRequest,
     onOpenMarket: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    // 展开动画与悬浮球那套同形：progress 0 = 三颗叠在主按钮圆心，1 = 各自到位。位移、
-    // 透明度、缩放都由它插值出来，所以是「从 ＋ 里长出去」，不是原地淡入。
-    // 不过冲：这一格的边正好压在落点上，弹簧一回弹就会被 Scaffold 的边裁掉。
-    val progress by animateFloatAsState(
-        targetValue = if (expanded) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
-        label = "scriptAddMenu",
+    AddMenuFab(
+        listOf(
+            AddMenuEntry(
+                icon = Icons.Outlined.Link,
+                labelRes = R.string.dsh_userscripts_market_link_install,
+                onClick = { installRequest.requestLink() },
+            ),
+            AddMenuEntry(
+                icon = Icons.Outlined.FolderOpen,
+                labelRes = R.string.dsh_userscripts_install_file,
+                onClick = { installRequest.requestLocal() },
+            ),
+            AddMenuEntry(
+                icon = Icons.Outlined.Storefront,
+                labelRes = R.string.dsh_userscripts_market_section,
+                onClick = onOpenMarket,
+            ),
+        )
     )
-
-    // 主按钮落在这一格的右下角（FAB 槽本身就是右下角对齐），三颗副按钮以它的圆心为圆心铺开。
-    // 边长 = 半径 + 两颗的半径之和：正好等于最远那颗的外沿 —— 一格装得下，也不多占地方。
-    val box = ADD_RADIUS + ADD_MINI_SIZE / 2 + ADD_FAB_SIZE / 2
-    val cx = box - ADD_FAB_SIZE / 2
-    val cy = box - ADD_FAB_SIZE / 2
-    val fromX = cx - ADD_MINI_SIZE / 2
-    val fromY = cy - ADD_MINI_SIZE / 2
-
-    fun slot(deg: Double): Pair<Dp, Dp> {
-        val rad = Math.toRadians(deg)
-        return cx + ADD_RADIUS * cos(rad).toFloat() - ADD_MINI_SIZE / 2 to
-            cy + ADD_RADIUS * sin(rad).toFloat() - ADD_MINI_SIZE / 2
-    }
-
-    // 屏幕右下角这个位置只有左上那 90° 有地方：正左 → 左上 → 正上。
-    val linkSlot = slot(180.0)
-    val fileSlot = slot(225.0)
-    val marketSlot = slot(270.0)
-
-    Box(Modifier.size(box)) {
-        AddMenuButton(
-            progress = progress,
-            fromX = fromX,
-            fromY = fromY,
-            toX = linkSlot.first,
-            toY = linkSlot.second,
-            onClick = { expanded = false; installRequest.requestLink() },
-        ) {
-            Icon(
-                Icons.Outlined.Link,
-                contentDescription = stringResource(R.string.dsh_userscripts_market_link_install),
-            )
-        }
-        AddMenuButton(
-            progress = progress,
-            fromX = fromX,
-            fromY = fromY,
-            toX = fileSlot.first,
-            toY = fileSlot.second,
-            onClick = { expanded = false; installRequest.requestLocal() },
-        ) {
-            Icon(
-                Icons.Outlined.FolderOpen,
-                contentDescription = stringResource(R.string.dsh_userscripts_install_file),
-            )
-        }
-        AddMenuButton(
-            progress = progress,
-            fromX = fromX,
-            fromY = fromY,
-            toX = marketSlot.first,
-            toY = marketSlot.second,
-            onClick = { expanded = false; onOpenMarket() },
-        ) {
-            Icon(
-                Icons.Outlined.Storefront,
-                contentDescription = stringResource(R.string.dsh_userscripts_market_section),
-            )
-        }
-        FloatingActionButton(
-            onClick = { expanded = !expanded },
-            modifier = Modifier.align(Alignment.BottomEnd).size(ADD_FAB_SIZE),
-            shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-        ) {
-            Icon(
-                if (expanded) Icons.Filled.Close else Icons.Filled.Add,
-                // 展开时这颗的语义是「取消」：图标与读屏名一起换，否则读屏还会念「安装脚本」，
-                // 而这一下按下去其实是收回菜单。
-                contentDescription = stringResource(
-                    if (expanded) R.string.cancel else R.string.dsh_userscripts_add
-                ),
-            )
-        }
-    }
 }
 
-/**
- * 环绕安装入口的一颗小按钮：起止点由 [UserscriptAddFab] 算好传进来，[progress] 与主按钮共用，
- * 所以三颗是一起长出去、一起收回来的。
- */
-@Composable
-private fun AddMenuButton(
-    progress: Float,
-    fromX: Dp,
-    fromY: Dp,
-    toX: Dp,
-    toY: Dp,
-    onClick: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    // 进度为 0 时干脆不画：否则三颗透明按钮叠在主按钮上，会把「点 ＋」这一下抢走。
-    if (progress <= 0.01f) return
-    val scale = 0.4f + 0.6f * progress
-    FloatingActionButton(
-        onClick = onClick,
-        modifier = Modifier
-            .offset(x = lerp(fromX, toX, progress), y = lerp(fromY, toY, progress))
-            .size(ADD_MINI_SIZE)
-            .graphicsLayer {
-                alpha = progress
-                scaleX = scale
-                scaleY = scale
-            },
-        shape = CircleShape,
-        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    ) {
-        content()
-    }
-}
 
 /**
  * 安装入口的「请求」：[UserscriptAddFab] 里的链接 / 文件两颗只置一个待办标志，真正的选择器
