@@ -632,10 +632,10 @@ ok(builtinRow.length > 0 && /R\.string\.dsh_plugin_builtin_label/.test(builtinRo
 const userscripts = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/Userscripts.kt", "utf8");
 const detail = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/ScriptDetailScreen.kt", "utf8");
 ok(/val source: String\? = null/.test(userscripts) &&
-  /fun rememberSource\(/.test(userscripts) &&
+  /fun sourceOf\(/.test(userscripts) &&
   /fun update\(ctx: Context, id: String\): UpdateOutcome/.test(userscripts) &&
   /NO_SOURCE/.test(userscripts) && /UP_TO_DATE/.test(userscripts),
-  "来源存进 prefs、更新按 outcome 分流（没来源 → NO_SOURCE，正文没变 → UP_TO_DATE）");
+  "来源存进 prefs（sourceOf 读回）、更新按 outcome 分流（没来源 → NO_SOURCE，正文没变 → UP_TO_DATE）");
 ok(/Icons\.Outlined\.Refresh\b/.test(screen) && /onUpdate/.test(screen) &&
   /onOpen/.test(screen) && /combinedClickable/.test(screen),
   "列表行有「更新」+ 整行进详情（列表仍保留快捷开关）");
@@ -678,12 +678,41 @@ ok(/var pendingDelete by remember \{ mutableStateOf<String\?>\(null\) \}/.test(s
       "逐条开关（脚本页）接引擎；总开关逻辑已从引擎删除");
   }
   }
-// 设计已换：卡片底部「粘贴脚本 / 从文件选」两个按钮撤掉（粘贴那条路整条没了），改成与脚本
-// 市场同一套 —— 本地 `.user.js` 走 install(context, text)，链接走新的 installFromUrl(...)。
-ok(/Userscripts\.install\(context, text\)/.test(screen) &&
-  /Userscripts\.installFromUrl\(/.test(screen) &&
-  !/Userscripts\.install\(context, pasted\)/.test(screen),
-  "本地文件走 Userscripts.install(text)、链接走 installFromUrl；「粘贴脚本」那条路已撤掉");
+// 设计已换：卡片底部「粘贴脚本 / 从文件选」两个按钮撤掉（粘贴那条路整条没了）。
+// 用户：「确认脚本安装逻辑：先检测是否与已安装有同名，再读取版本询问用户确认升级/降级，
+// 并提供 diff 预览，否则直接提示确认安装」。所以三个入口都不再直接 install，改成：
+// prepare（查同名 + 比版本 + 算逐行差异）→ 确认框 → commit（装新的 + 删同名旧的 + 搬开关）。
+ok(/Userscripts\.prepare\(context, it\)/.test(screen) &&
+  /Userscripts\.prepareFromUrl\(context, url\)/.test(screen) &&
+  /UserscriptInstallConfirmHost\(/.test(screen) &&
+  !/Userscripts\.install\(/.test(screen),
+  "本地文件与链接都先 prepare（查同名/比版本/算差异）再弹确认框，页面里不再直接 install");
+{
+  const usLib = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/Userscripts.kt", "utf8");
+  const pendingHost = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/component/UserscriptInstall.kt", "utf8");
+  const marketCode = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/ScriptMarketScreen.kt", "utf8");
+  ok(/fun findByTitle\(/.test(usLib) && /fun prepare\(/.test(usLib) && /fun prepareFromUrl\(/.test(usLib) &&
+    /fun commit\(/.test(usLib) && /fun diffLines\(/.test(usLib),
+    "引擎侧有 findByTitle / prepare / prepareFromUrl / commit / diffLines 五件事");
+  // 比版本这一条要钉「谁大谁小」两个方向：只钉枚举里有 DOWNGRADE 的话，
+  // 把比较写反（一律当升级）这种改动抓不住。
+  ok(/cmp > 0 -> Change\.UPGRADE/.test(usLib) && /cmp < 0 -> Change\.DOWNGRADE/.test(usLib),
+    "比版本：新的大 = UPGRADE、旧的大 = DOWNGRADE（比较器与插件那套共用）");
+  ok(/pending\.existing\?\.let \{ if \(it\.id != newId\) remove\(ctx, it\.id\) \}/.test(usLib) &&
+    /val wasOn = pending\.existing\?\.let \{ it\.id in enabledIds\(ctx\) \} \?: true/.test(usLib),
+    "commit 会删掉同名旧文件并把开关状态搬过去（否则同一个脚本换版本会留两份、注入两遍）");
+  ok(/Userscripts\.Change\.DOWNGRADE -> R\.string\.dsh_userscripts_confirm_downgrade/.test(pendingHost) &&
+    /pending\.change == Userscripts\.Change\.DOWNGRADE\) \{/.test(pendingHost) &&
+    /dsh_userscripts_confirm_downgrade_warn/.test(pendingHost) &&
+    /dsh_userscripts_confirm_diff/.test(pendingHost) &&
+    /dsh_userscripts_confirm_replace/.test(pendingHost) &&
+    /if \(line\.kind == Userscripts\.DiffLine\.Kind\.SAME\) continue/.test(pendingHost),
+    "确认框分安装/升级/降级/重装四种说法，降级另给警告，并逐行列出差异（相同的行跳过）");
+  ok(/Userscripts\.prepare\(context, text, source = hit\.codeUrl\)/.test(marketCode) &&
+    /UserscriptInstallConfirmHost\(/.test(marketCode) &&
+    !/Userscripts\.install\(context,/.test(marketCode),
+    "市场点安装也走同一套确认（先拉正文算差异，确认后才落盘）");
+}
 ok(/Intent\.ACTION_GET_CONTENT/.test(screen) &&
   /Userscripts\.read\(context, uri\)/.test(screen),
   "选文件：ACTION_GET_CONTENT + read(content://)");

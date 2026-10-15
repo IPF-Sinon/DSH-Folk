@@ -63,6 +63,8 @@ import me.bmax.apatch.dsh.WebScripts
 import me.bmax.apatch.ui.component.AddMenuEntry
 import me.bmax.apatch.ui.component.AddMenuFab
 import me.bmax.apatch.ui.component.ModuleLabel
+import me.bmax.apatch.ui.component.UserscriptInstallConfirmHost
+import me.bmax.apatch.ui.component.rememberUserscriptPendingInstall
 import me.bmax.apatch.ui.component.UserscriptLinkInstallDialog
 import me.bmax.apatch.ui.screen.ScriptDetailSheet
 import me.bmax.apatch.util.DshWebCompat
@@ -276,12 +278,14 @@ internal fun UserscriptsContent(
     var detailId by remember { mutableStateOf<String?>(null) }
     // 「从链接安装」弹窗的开关；弹窗本体与市场页共用（[UserscriptLinkInstallDialog]）。
     var showLinkInstall by remember { mutableStateOf(false) }
+    // 待确认的安装：同名检查 / 版本对比 / diff 预览都在这里过一遍，用户点头才落盘。
+    val pendingInstall = rememberUserscriptPendingInstall()
 
     fun reload() {
         scripts = Userscripts.list(context)
     }
 
-    /** 本地安装：选一个 `.user.js`（与市场那个 FAB 走同一套 read / install）。 */
+    /** 本地安装：选一个 `.user.js`，读出来交给确认框（与市场 / 链接两条路同一套确认）。 */
     val pickLocal = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -289,11 +293,12 @@ internal fun UserscriptsContent(
         val uri = result.data?.data ?: return@rememberLauncherForActivityResult
         scope.launch {
             val text = withContext(Dispatchers.IO) { Userscripts.read(context, uri) }
-            if (text.isNullOrBlank() || Userscripts.install(context, text) == null) {
+            // 读不出 → 报「不是文本文件」；读出来了**不直接装**：先算清同名与版本，弹确认框
+            val prepared = withContext(Dispatchers.IO) { text?.let { Userscripts.prepare(context, it) } }
+            if (prepared == null) {
                 showToast(context, context.getString(R.string.dsh_userscripts_read_failed))
             } else {
-                reload()
-                showToast(context, context.getString(R.string.dsh_userscripts_installed))
+                pendingInstall.offer(prepared)
             }
         }
     }
@@ -496,23 +501,34 @@ internal fun UserscriptsContent(
     }
 
     // 「从链接安装」：与脚本市场**共用同一个弹窗**（[UserscriptLinkInstallDialog]），
-    // 归一、标红、安装三件事只写一遍，两处入口的手感与边界因此不会漂移。
+    // 归一、标红、准备安装三件事只写一遍，两处入口的手感与边界因此不会漂移。
     if (showLinkInstall) {
         UserscriptLinkInstallDialog(
             onDismiss = { showLinkInstall = false },
             onInstall = { url ->
                 scope.launch {
-                    val id = withContext(Dispatchers.IO) { Userscripts.installFromUrl(context, url) }
-                    if (id == null) {
+                    // 先拉正文并算清同名/版本（用户要的「先检测、再问」），**不直接落盘**
+                    val prepared = withContext(Dispatchers.IO) { Userscripts.prepareFromUrl(context, url) }
+                    if (prepared == null) {
                         showToast(context, context.getString(R.string.dsh_userscripts_read_failed))
                     } else {
-                        reload()
-                        showToast(context, context.getString(R.string.dsh_userscripts_installed))
+                        pendingInstall.offer(prepared)
                     }
                 }
             },
         )
     }
+
+    // 安装前的确认框：从链接 / 从文件两个入口共用这一份（市场页也有自己的一份，同一个组件）。
+    // 确认之后才落盘，落盘时会顺手删掉同名的旧版本（见 [Userscripts.commit]）。
+    UserscriptInstallConfirmHost(
+        state = pendingInstall,
+        onInstalled = {
+            reload()
+            showToast(context, context.getString(R.string.dsh_userscripts_installed))
+        },
+        onFailed = { showToast(context, context.getString(R.string.dsh_userscripts_install_failed)) },
+    )
 
     val deleting = pendingDelete
     if (deleting != null) {

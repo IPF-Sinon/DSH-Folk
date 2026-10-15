@@ -104,8 +104,14 @@ console.log("\n── 接线：状态在原生侧，装完回到同一套列表 
   ok(/import me\.bmax\.apatch\.dsh\.ScriptMarket/.test(SCREEN) &&
     /ScriptMarket\.search\(context, marketQuery\.trim\(\), next\)/.test(SCREEN),
     "界面调 search（原生 HTTP —— WebView 坏掉时这一页还能用）");
-  ok(/Userscripts\.install\(context, ScriptMarket\.fetch\(context, hit\.codeUrl\)\)/.test(SCREEN),
-    "装的就是 fetch 回来的正文，走既有 install（同名覆盖/落盘都由它管）");
+  // 用户：「确认脚本安装逻辑：先检测是否与已安装有同名，再读取版本询问用户确认升级/降级，
+  // 并提供 diff 预览，否则直接提示确认安装」。市场这条同理：fetch 回来的正文先过 prepare
+  // （查同名 / 比版本 / 算逐行差异），用户点头之后才由 commit 落盘。
+  ok(/val text = ScriptMarket\.fetch\(context, hit\.codeUrl\)/.test(SCREEN) &&
+    /Userscripts\.prepare\(context, text, source = hit\.codeUrl\)/.test(SCREEN) &&
+    /UserscriptInstallConfirmHost\(/.test(SCREEN) &&
+    !/Userscripts\.install\(context, ScriptMarket/.test(SCREEN),
+    "市场装的是 fetch 回来的正文，但先走 prepare（同名/版本/diff），确认后才落盘");
   ok(/withContext\(Dispatchers\.IO\)/.test(SCREEN),
     "网络与落盘都在 IO 线程（首屏不该被一次搜索卡住）");
   ok(/reload\(\)/.test(SCREEN) && /scripts\.any \{ it\.title == hit\.name \}/.test(SCREEN),

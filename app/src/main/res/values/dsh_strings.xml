@@ -1636,6 +1636,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_builtin_blob_summary">WebView never fires the download callback for blob:/data:, so this one reads those links as base64 and hands them to the native side. Always on.</string>
     <string name="dsh_userscripts_installed">Installed</string>
     <string name="dsh_userscripts_read_failed">Could not read that as text (not a text file?)</string>
+    <string name="dsh_userscripts_install_failed">Install failed: the script directory is not writable</string>
     <string name="dsh_userscripts_update">Update</string>
     <string name="dsh_userscripts_update_done">Updated to the latest version</string>
     <string name="dsh_userscripts_update_same">Already up to date</string>
@@ -1666,6 +1667,18 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_market_by">by %1$s</string>
     <string name="dsh_userscripts_market_installs">%1$s installs</string>
     <string name="dsh_userscripts_market_install">Install</string>
+    <string name="dsh_userscripts_confirm_install">Install script</string>
+    <string name="dsh_userscripts_confirm_upgrade">Upgrade script</string>
+    <string name="dsh_userscripts_confirm_downgrade">Downgrade script</string>
+    <string name="dsh_userscripts_confirm_reinstall">Reinstall script</string>
+    <string name="dsh_userscripts_confirm_version">Version %1$s</string>
+    <string name="dsh_userscripts_confirm_no_version">no version</string>
+    <string name="dsh_userscripts_confirm_replace">Installed %1$s, this one is %2$s</string>
+    <string name="dsh_userscripts_confirm_downgrade_warn">This one is older than what you have — downgrade anyway?</string>
+    <string name="dsh_userscripts_confirm_diff">Diff against the installed version</string>
+    <string name="dsh_userscripts_confirm_nodiff">The source is unchanged (only the version or metadata differs)</string>
+    <string name="dsh_userscripts_confirm_go_downgrade">Downgrade</string>
+    <string name="dsh_userscripts_confirm_go_reinstall">Reinstall</string>
     <string name="dsh_userscripts_market_installed">Installed</string>
     <string name="dsh_userscripts_market_page">Open the script page in the app</string>
     <string name="dsh_userscripts_market_fail_network">Could not reach greasyfork.org (check the network)</string>

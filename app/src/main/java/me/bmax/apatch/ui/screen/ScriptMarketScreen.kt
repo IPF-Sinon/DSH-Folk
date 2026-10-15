@@ -56,6 +56,8 @@ import me.bmax.apatch.dsh.ScriptMarket
 import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.ui.component.ModuleLabel
 import me.bmax.apatch.ui.component.SearchAppBar
+import me.bmax.apatch.ui.component.UserscriptInstallConfirmHost
+import me.bmax.apatch.ui.component.rememberUserscriptPendingInstall
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 import me.bmax.apatch.util.ui.showToast
 
@@ -96,6 +98,8 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
     var fail by remember { mutableStateOf<ScriptMarket.Fail?>(null) }
     var code by remember { mutableStateOf(0) }
     var installing by remember { mutableStateOf(0L) }
+    // 待确认的安装（查同名 / 比版本 / diff 预览）：与用户脚本页共用同一个确认组件
+    val pendingInstall = rememberUserscriptPendingInstall()
     // 当前列的是不是「热门」：热门与搜索结果共用 hits / page / full，靠这个标志区分
     // 标题显示什么、以及「更多」该去取搜索的下一页还是热门的下一页。
     var popular by remember { mutableStateOf(false) }
@@ -190,19 +194,18 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
         scope.launch {
             val outcome = withContext(Dispatchers.IO) {
                 runCatching {
-                    val id = Userscripts.install(context, ScriptMarket.fetch(context, hit.codeUrl))
-                    // 记下来源：脚本页那条「更新」才知道去哪拉新的（不往用户正文里塞字段）
-                    if (id != null) Userscripts.rememberSource(context, id, hit.codeUrl)
-                    id
+                    // 拉正文 → 算清同名/版本/差异，交给确认框；**确认之后才落盘**
+                    // （prepare 的 source 就是装完要记下来的来源：那条「更新」靠它去拉新版本）
+                    val text = ScriptMarket.fetch(context, hit.codeUrl)
+                    Userscripts.prepare(context, text, source = hit.codeUrl)
                 }
             }
-            outcome.onSuccess { id ->
-                if (id == null) {
-                    // 落盘失败（同名覆盖、目录不可写）：按内容问题报，细节在 Userscripts 里
+            outcome.onSuccess { prepared ->
+                if (prepared == null) {
+                    // 认不出 UserScript / 正文为空：按内容问题报，细节在 Userscripts 里
                     fail = ScriptMarket.Fail.CONTENT
                 } else {
-                    reload()
-                    showToast(context, context.getString(R.string.dsh_userscripts_installed))
+                    pendingInstall.offer(prepared)
                 }
             }.onFailure { e ->
                 val me = e as? ScriptMarket.MarketException
@@ -334,6 +337,17 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
             item(span = StaggeredGridItemSpan.FullLine, key = "market-bottom") { HomeBottomSpacer() }
         }
     }
+
+    // 安装前的确认框：与用户脚本页那两份是同一个组件（同名检查 / 版本对比 / diff 预览）。
+    // 市场这里走的是「已点安装」之后：先把正文拉下来算清关系，用户点头才落盘。
+    UserscriptInstallConfirmHost(
+        state = pendingInstall,
+        onInstalled = {
+            reload()
+            showToast(context, context.getString(R.string.dsh_userscripts_installed))
+        },
+        onFailed = { fail = ScriptMarket.Fail.CONTENT },
+    )
 }
 
 /**

@@ -156,30 +156,6 @@ internal object Userscripts {
         setSource(ctx, id, null)
     }
 
-    /**
-     * 装完之后补记一条来源。
-     *
-     * 市场页是「先装、后记」：这样那条 install 调用保持原样（门禁按它认"走的是同一个安装
-     * 入口"），而来源照样落在 prefs 上。正文是用户的东西，不往里面塞 `@source` 字段。
-     */
-    fun rememberSource(ctx: Context, id: String, url: String) = setSource(ctx, id, url)
-
-    /**
-     * 从一个正文地址装：拉正文 → 落盘 → 记来源，一步到位。返回 id（失败 null）。
-     *
-     * 「从链接安装」有**两个入口**（脚本市场顶栏 / 用户脚本页顶栏），而这一步在两边必须
-     * 完全一样：只按 URL 装、装完必须记来源（否则列表上那个「更新」不知道去哪拉新的）。
-     * 所以放在这里一处实现，界面那边只管线程与提示。
-     *
-     * 阻塞（HTTP + 落盘）：调用方必须在 IO 线程上调，与市场页同一条规矩。
-     */
-    fun installFromUrl(ctx: Context, url: String): String? {
-        val text = runCatching { ScriptMarket.fetch(ctx, url) }.getOrNull() ?: return null
-        val id = install(ctx, text) ?: return null
-        rememberSource(ctx, id, url)
-        return id
-    }
-
     /** 某个脚本的正文（详情页要预览它）；读不到返回 null。 */
     fun code(ctx: Context, id: String): String? =
         runCatching { File(dir(ctx), "$id.user.js").readText() }.getOrNull()
@@ -214,6 +190,115 @@ internal object Userscripts {
     fun read(ctx: Context, uri: Uri): String? = runCatching {
         ctx.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
     }.getOrNull()
+
+    // ── 安装前的「先看清要装什么」────────────────────────────────────────────────────────
+    //
+    // 用户要的流程：先查有没有同名的已装脚本 → 有就比版本、问一句升级还是降级，并把两版正文的
+    // 差异摆出来；没有就直接确认安装。
+    //
+    // 为什么非做不可：文件名是「标题 + **正文哈希**」（见 [idOf]），所以同一个脚本换个版本就是
+    // 另一个 id —— 直接装会在列表里留下两条（一条旧的、一条新的），页面里注入两遍。
+    // [commit] 就是冲着这个来的：装新的、删同名的旧的、开关状态搬过去（与 [update] 同一套）。
+
+    /** 这次安装与已装那份的关系。界面照它翻文案，不自己比版本。 */
+    enum class Change { INSTALL, UPGRADE, DOWNGRADE, SAME }
+
+    /** 差异的一行：相同 / 只在新版 / 只在旧版。 */
+    data class DiffLine(val kind: Kind, val text: String) {
+        enum class Kind { SAME, ADD, DEL }
+    }
+
+    /** 一次**待确认**的安装：要装的正文、它跟已装那份的关系、以及两版正文的逐行差异。 */
+    class Pending(
+        val text: String,
+        val source: String?,
+        val title: String,
+        val version: String,
+        /** 同名的已装脚本；null = 新装。 */
+        val existing: Script?,
+        val change: Change,
+        /** 逐行差异；[change] 为 [Change.INSTALL] 时为空（没有可比的旧版）。 */
+        val diff: List<DiffLine>,
+    )
+
+    /** 同名的已装脚本（不区分大小写）。 */
+    fun findByTitle(ctx: Context, title: String): Script? =
+        list(ctx).firstOrNull { it.title.equals(title, ignoreCase = true) }
+
+    /**
+     * 算清「这次要装的是什么、跟已装的差在哪」，交给界面弹确认框；正文为空返回 null。
+     *
+     * [source] 只在有来源时给（从链接 / 市场装）：它决定装完之后「更新」能不能找到新版本。
+     */
+    fun prepare(ctx: Context, text: String, fallbackTitle: String? = null, source: String? = null): Pending? {
+        if (text.isBlank()) return null
+        val meta = parse(text)
+        val title = meta.title.ifBlank { fallbackTitle?.trim().orEmpty().ifBlank { "userscript" } }
+        val existing = findByTitle(ctx, title)
+        val change = if (existing == null) {
+            Change.INSTALL
+        } else {
+            // 缺段按 0 补（1.0 与 1.0.0 同版），非数字段按字典序 —— 与插件那套同一个比较器
+            val cmp = compareVersions(meta.version, existing.version)
+            when {
+                cmp > 0 -> Change.UPGRADE
+                cmp < 0 -> Change.DOWNGRADE
+                else -> Change.SAME
+            }
+        }
+        val diff = existing?.let { diffLines(code(ctx, it.id).orEmpty(), text) }.orEmpty()
+        return Pending(text, source, title, meta.version, existing, change, diff)
+    }
+
+    /** 从正文地址准备一次安装（拉正文 + 算关系）；拉不到返回 null。阻塞，调用方在 IO 线程上跑。 */
+    fun prepareFromUrl(ctx: Context, url: String): Pending? {
+        val text = runCatching { ScriptMarket.fetch(ctx, url) }.getOrNull() ?: return null
+        return prepare(ctx, text, source = url)
+    }
+
+    /**
+     * 用户点头之后落盘：装新的 + 把同名旧的那条删掉（开关状态搬过去）。返回新 id（失败 null）。
+     */
+    fun commit(ctx: Context, pending: Pending): String? {
+        val wasOn = pending.existing?.let { it.id in enabledIds(ctx) } ?: true
+        val newId = install(ctx, pending.text, pending.title, pending.source) ?: return null
+        pending.existing?.let { if (it.id != newId) remove(ctx, it.id) }
+        setEnabled(ctx, newId, wasOn)
+        return newId
+    }
+
+    /**
+     * 两版正文的逐行差异（LCS）。升级是脚本唯一的信任来源 —— 用户要的「diff 预览」就是它。
+     *
+     * 脚本通常几百行，O(n·m) 的动态规划够用；上万行（乘出来过 400k 个格子）就不算了，
+     * 直接把两边当成「全删 + 全增」，免得在手机上花几十毫秒算一个没人看得完的表。
+     */
+    fun diffLines(old: String, new: String): List<DiffLine> {
+        val a = old.lines()
+        val b = new.lines()
+        if (a.size.toLong() * b.size.toLong() > 400_000L) {
+            return a.map { DiffLine(DiffLine.Kind.DEL, it) } + b.map { DiffLine(DiffLine.Kind.ADD, it) }
+        }
+        val dp = Array(a.size + 1) { IntArray(b.size + 1) }
+        for (i in a.indices.reversed()) {
+            for (j in b.indices.reversed()) {
+                dp[i][j] = if (a[i] == b[j]) dp[i + 1][j + 1] + 1 else maxOf(dp[i + 1][j], dp[i][j + 1])
+            }
+        }
+        val out = mutableListOf<DiffLine>()
+        var i = 0
+        var j = 0
+        while (i < a.size && j < b.size) {
+            when {
+                a[i] == b[j] -> { out += DiffLine(DiffLine.Kind.SAME, a[i]); i++; j++ }
+                dp[i + 1][j] >= dp[i][j + 1] -> { out += DiffLine(DiffLine.Kind.DEL, a[i]); i++ }
+                else -> { out += DiffLine(DiffLine.Kind.ADD, b[j]); j++ }
+            }
+        }
+        while (i < a.size) { out += DiffLine(DiffLine.Kind.DEL, a[i]); i++ }
+        while (j < b.size) { out += DiffLine(DiffLine.Kind.ADD, b[j]); j++ }
+        return out
+    }
 
     /**
      * 这次页面加载要注入的**每一段** JS（已按 [Meta.runAt] 自行安排时机）。

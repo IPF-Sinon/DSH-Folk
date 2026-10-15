@@ -1610,6 +1610,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_userscripts_builtin_blob_summary">WebView 对 blob:/data: 不触发下载回调，这一段把这类链接读成 base64 交给原生写盘。常开。</string>
     <string name="dsh_userscripts_installed">已安装</string>
     <string name="dsh_userscripts_read_failed">读不出文本内容（不是文本文件？）</string>
+    <string name="dsh_userscripts_install_failed">安装失败：写不进脚本目录</string>
     <string name="dsh_userscripts_update">更新</string>
     <string name="dsh_userscripts_update_done">已更新到最新版本</string>
     <string name="dsh_userscripts_update_same">已经是最新版本</string>
@@ -1640,6 +1641,18 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_userscripts_market_by">作者 %1$s</string>
     <string name="dsh_userscripts_market_installs">%1$s 次安装</string>
     <string name="dsh_userscripts_market_install">安装</string>
+    <string name="dsh_userscripts_confirm_install">安装脚本</string>
+    <string name="dsh_userscripts_confirm_upgrade">升级脚本</string>
+    <string name="dsh_userscripts_confirm_downgrade">降级脚本</string>
+    <string name="dsh_userscripts_confirm_reinstall">重装脚本</string>
+    <string name="dsh_userscripts_confirm_version">版本 %1$s</string>
+    <string name="dsh_userscripts_confirm_no_version">未标版本</string>
+    <string name="dsh_userscripts_confirm_replace">已装 %1$s，这次是 %2$s</string>
+    <string name="dsh_userscripts_confirm_downgrade_warn">这次比已装的旧 —— 确认要降级吗？</string>
+    <string name="dsh_userscripts_confirm_diff">与已装那版的差异</string>
+    <string name="dsh_userscripts_confirm_nodiff">正文没有变化（只是版本或元数据不同）</string>
+    <string name="dsh_userscripts_confirm_go_downgrade">降级</string>
+    <string name="dsh_userscripts_confirm_go_reinstall">重装</string>
     <string name="dsh_userscripts_market_installed">已安装</string>
     <string name="dsh_userscripts_market_page">在应用内打开脚本页</string>
     <string name="dsh_userscripts_market_fail_network">连不上 greasyfork.org（检查网络）</string>
