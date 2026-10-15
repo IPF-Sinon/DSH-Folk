@@ -28,6 +28,7 @@
     <string name="dsh_webui_downloaded">Saved to Download/DSH-Folk/%1$s</string>
     <string name="dsh_webui_download_failed">Download failed</string>
     <string name="dsh_webui_ball">Web UI controls</string>
+    <string name="dsh_webui_back">Back</string>
     <!-- WebUI 打开方式设置 -->
     <string name="dsh_webui_pip">Picture-in-picture</string>
     <string name="dsh_webui_pip_summary">Picture-in-picture settings for the built-in Web UI</string>

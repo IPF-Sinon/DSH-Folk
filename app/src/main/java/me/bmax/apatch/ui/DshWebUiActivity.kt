@@ -1307,7 +1307,10 @@ private fun WebUiFloatingBall(
                 toY = backSlot.second,
                 onClick = { expanded = false; onBack() },
             ) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
+                Icon(
+                    Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = stringResource(R.string.dsh_webui_back),
+                )
             }
             BallMenuButton(
                 progress = menuProgress,

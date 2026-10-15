@@ -24,6 +24,7 @@
     <string name="dsh_webui_downloaded">已保存到 Download/DSH-Folk/%1$s</string>
     <string name="dsh_webui_download_failed">下载失败</string>
     <string name="dsh_webui_ball">Web 界面控制</string>
+    <string name="dsh_webui_back">返回</string>
     <!-- WebUI 打开方式设置 -->
     <string name="dsh_webui_pip">画中画</string>
     <string name="dsh_webui_pip_summary">内置 Web 界面的画中画设置</string>
