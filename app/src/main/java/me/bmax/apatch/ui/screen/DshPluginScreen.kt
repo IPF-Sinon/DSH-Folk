@@ -170,9 +170,8 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                             Icon(Icons.Outlined.Refresh, contentDescription = "Refresh")
                         }
                     }
-                    // 同一个按钮按**当前显示的是哪一组**分流，两边都是**开一页** —— 插件 →
-                    // 插件商店，脚本 → 脚本市场（ScriptMarketScreen）。市场以前是脚本正文里的
-                    // 一段，这个按钮只能把列表滚过去；它搬成独立页之后，两条路的手感一致了。
+                    // 隐藏内置脚本：只作用于脚本组那份列表（hideBuiltins 传给 UserscriptsContent）。
+                    // 插件组下按了没有可见变化 —— 这是老行为，不是这次改动引入的，先照实说明。
                     IconButton(onClick = {
                         val next = !hideBuiltins
                         hideBuiltins = next
