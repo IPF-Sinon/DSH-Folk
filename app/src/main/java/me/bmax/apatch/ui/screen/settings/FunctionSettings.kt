@@ -112,8 +112,12 @@ import me.bmax.apatch.ui.screen.settings.general.CleanStorageDialog
  *
  * 原来 13 张卡平铺在同一页上，想找「端口」得一路滚。现在入口层只列这 5 行（带搜索），点进去
  * 才是那一类的卡片 —— 与「安全 → 权限管理」同一套形状（行组件也是共用的 HubRow）。
+ *
+ * 不是 internal：它出现在 [FunctionSettingsContent] 的参数表里，而那个函数是本文件里一直
+ * public 的（Kotlin 会把「public 函数暴露 internal 类型」当编译错误 —— 本地没编译器，
+ * 只能在 CI 报出来，已经栽过一次）。
  */
-internal enum class FunctionGroup(
+enum class FunctionGroup(
     val key: String,
     val titleRes: Int,
     val summaryRes: Int,

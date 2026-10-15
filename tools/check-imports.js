@@ -116,5 +116,44 @@ for (const f of FILES) {
     }
   }
 }
-console.log(bad === 0 ? '导入齐全（' + FILES.length + ' 个文件）' : bad + ' 处缺 import');
+// 「public 函数暴露 internal 类型」也是编译错误，而且同样只在 CI 才炸（2026-10-15：给功能页
+// 加了 internal enum 的分类参数，FunctionSettingsContent 是 public，CI 报
+// 'public' function exposes its 'internal' parameter type）。文本可判，就补上：
+//   1. 先收集全仓的 internal 类型名；
+//   2. 再看每个文件里**顶层 public 函数**（行首就是 fun，带注解也算）的参数类型有没有用它。
+// 只查顶层：internal 类的成员函数用 internal 类型是合法的，而成员函数在这个仓里都是缩进的。
+const INTERNAL_TYPES = new Set();
+for (const f of FILES) {
+  const src = fs.readFileSync(f, 'utf8');
+  for (const m of src.matchAll(
+    /\binternal\s+(?:enum\s+class|sealed\s+class|data\s+class|value\s+class|annotation\s+class|class|interface|object)\s+([A-Z][A-Za-z0-9_]*)/g,
+  )) {
+    INTERNAL_TYPES.add(m[1]);
+  }
+}
+if (INTERNAL_TYPES.size > 0) {
+  for (const f of FILES) {
+    const src = fs.readFileSync(f, 'utf8');
+    const code = src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n').map((l) => l.replace(/(^|\s)\/\/.*$/, '')).join('\n');
+    for (const m of code.matchAll(/^(?:@[A-Za-z0-9_.]+(?:\([^)]*\))?\s*\n)*fun\s+([A-Za-z0-9_]+)\s*\(/gm)) {
+      const open = code.indexOf('(', m.index);
+      let depth = 0, close = -1;
+      for (let i = open; i < code.length; i++) {
+        if (code[i] === '(') depth++;
+        else if (code[i] === ')') { depth--; if (depth === 0) { close = i; break; } }
+      }
+      if (close < 0) continue;
+      const params = code.slice(open + 1, close);
+      const hit = [...INTERNAL_TYPES].filter((t) => new RegExp('[:<(,\\s]' + t + '\\b').test(params));
+      if (hit.length > 0) {
+        console.log('可见性: ' + f.split('/').pop() + ' 的 public 函数 ' + m[1] +
+          ' 暴露了 internal 类型 ' + hit.join('、') + '（Kotlin 会报 public function exposes its internal parameter type）');
+        bad++;
+      }
+    }
+  }
+}
+console.log(bad === 0 ? '导入/可见性齐全（' + FILES.length + ' 个文件）' : bad + ' 处问题');
 process.exit(bad === 0 ? 0 : 1);
