@@ -38,15 +38,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -57,15 +54,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.DragIndicator
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
 import androidx.compose.material.icons.outlined.Refresh
@@ -89,10 +85,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -101,7 +100,9 @@ import androidx.core.content.ContextCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.File
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.A11yOwn
 import me.bmax.apatch.dsh.DshEnv
@@ -110,6 +111,7 @@ import me.bmax.apatch.dsh.WebScripts
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
 import me.bmax.apatch.ui.theme.APatchTheme
 import me.bmax.apatch.util.DshWebCompat
+import me.bmax.apatch.util.LauncherIconUtils
 import me.bmax.apatch.util.ui.showToast
 
 /**
@@ -168,6 +170,37 @@ private val BALL_SIZE = 44.dp
 
 /** 球体与屏幕边缘的内缩。 */
 private val BALL_INSET = 8.dp
+
+/**
+ * 球面上那个软件图标的绘制尺寸。
+ *
+ * 比 [BALL_SIZE] 大：`ic_launcher_foreground` 那张前景位图四周有一圈透明留白 —— 实测画布
+ * 432px，有内容的只有居中的 262px，约六成。按球直径直接画的话真正的图案会缩成一小块，
+ * 所以放大到 0.606 × 48 ≈ 29dp 让图案撑满一些。
+ *
+ * 上限由圆形裁剪定：图案是个圆角方块（圆角半径 51/432），离画布中心最远的一点在
+ * 0.38 × 尺寸处；取 48dp 时是 18.2dp，仍在 IconButton / Surface 那道圆形裁剪（半径 ≥ 20dp）
+ * 之内，所以切掉的只是透明留白，不会啃掉图案。
+ */
+private val BALL_ICON_SIZE = 48.dp
+
+/** 展开后每个环绕按钮的直径。 */
+private val MENU_BUTTON_SIZE = 42.dp
+
+/** 环绕按钮圆心到球心的距离。 */
+private val MENU_RADIUS = 64.dp
+
+/** 环绕展开的总张角（度）：180 = 贴着屏幕那一侧的一个半圆。 */
+private const val MENU_SPREAD_DEG = 180f
+
+/**
+ * 环绕按钮往外顶出的高度：球心到最上/最下那颗按钮外沿的距离。
+ *
+ * 球的纵向可停区间要按它缩进，否则球贴到屏幕上/下边缘时，展开的按钮要么顶出屏幕，
+ * 要么被夹到同一行叠在一起。水平方向不用管：球本来就贴边，按钮只朝屏幕里侧铺。
+ */
+private val MENU_REACH = MENU_RADIUS * sin(Math.toRadians(MENU_SPREAD_DEG / 2.0)).toFloat() +
+    MENU_BUTTON_SIZE / 2 - BALL_SIZE / 2
 
 /**
  * 首次在旧内核上打开 WebUI 时的说明框。
@@ -1163,10 +1196,14 @@ class DshWebUiActivity : AppCompatActivity() {
 }
 
 /**
- * 贴边的半透明悬浮球，点开展出返回 / 刷新 / 画中画 / 外部打开 / 关闭。
+ * 贴边的半透明悬浮球：球面就是应用自己的软件图标，点开后返回 / 刷新 / 画中画 /
+ * 外部打开 / 关闭这几颗圆钮**绕着球心**铺成半圈（不再竖排成一列）。
  *
  * 位置持久化成「哪一侧 + 纵向比例」而不是绝对像素：换了屏幕方向或分屏尺寸后，
  * 绝对坐标会把球留在屏幕外，比例不会。
+ *
+ * 圆弧朝屏幕里侧扇开（右贴边朝左、左贴边朝右），球的可停区间也跟着上下各缩进
+ * `MENU_REACH`，这样贴到边缘再展开也不会把按钮顶出屏幕。
  *
  * [showPip] 为 false（画中画主开关被关掉）时**不画**画中画那一个按钮 —— 关掉开关的人
  * 不该还看到一个点了没用的入口。
@@ -1205,9 +1242,10 @@ private fun WebUiFloatingBall(
             val maxH = maxHeight
             val top = safe.calculateTopPadding()
             val bottom = safe.calculateBottomPadding()
-            // 球心可落的纵向区间：不压状态栏、不压手势条
-            val yMin = top + BALL_INSET
-            val yMax = (maxH - bottom - BALL_INSET - BALL_SIZE).coerceAtLeast(yMin)
+            // 球心可落的纵向区间：不压状态栏、不压手势条，并且给展开的环绕按钮留出上下半径
+            // （MENU_REACH），这样球贴到边缘时展开的按钮也不会被顶出屏幕。
+            val yMin = top + BALL_INSET + MENU_REACH
+            val yMax = (maxH - bottom - BALL_INSET - BALL_SIZE - MENU_REACH).coerceAtLeast(yMin)
             val restX = if (onRight) maxW - BALL_SIZE - BALL_INSET else BALL_INSET
 
             val x by animateDpAsState(
@@ -1217,107 +1255,175 @@ private fun WebUiFloatingBall(
             )
             val y = yMin + (yMax - yMin) * yRatio
 
-            Column(
-                modifier = Modifier.offset(x = x, y = y),
-                horizontalAlignment = if (onRight) Alignment.End else Alignment.Start,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(
-                        alpha = if (dragging || expanded) 0.92f else 0.55f
-                    ),
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier
-                        .size(BALL_SIZE)
-                        .pointerInput(maxW, maxH, yMin, yMax) {
-                            detectDragGestures(
-                                onDragStart = {
-                                    dragging = true
-                                    dragX = restX
-                                },
-                                onDragEnd = {
-                                    dragging = false
-                                    // 松手按左右中线吸附，并把结果记下来
-                                    val centre = (dragX ?: restX) + BALL_SIZE / 2
-                                    onRight = centre > maxW / 2
-                                    dragX = null
-                                    prefs.edit()
-                                        .putString(
-                                            DshEnv.KEY_WEBUI_BALL_SIDE,
-                                            if (onRight) "right" else "left",
-                                        )
-                                        .putFloat(DshEnv.KEY_WEBUI_BALL_Y, yRatio)
-                                        .apply()
-                                },
-                                onDragCancel = {
-                                    dragging = false
-                                    dragX = null
-                                },
-                            ) { _, delta: Offset ->
-                                with(density) {
-                                    dragX = ((dragX ?: restX) + delta.x.toDp())
-                                        .coerceIn(0.dp, (maxW - BALL_SIZE).coerceAtLeast(0.dp))
-                                    val span = (yMax - yMin).coerceAtLeast(1.dp)
-                                    yRatio = (yRatio + (delta.y.toDp() / span)).coerceIn(0f, 1f)
-                                }
-                            }
-                        },
-                ) {
-                    IconButton(onClick = { expanded = !expanded }) {
-                        Icon(
-                            Icons.Outlined.DragIndicator,
-                            contentDescription = stringResource(R.string.dsh_webui_ball),
-                        )
-                    }
-                }
+            // 展开后按钮不再竖排成一列，而是绕着球心铺成一段圆弧：贴右边缘就朝左边扇开，贴
+            // 左边缘就朝右边扇开，一律朝屏幕里侧，不会顶到屏幕外。
+            val cx = x + BALL_SIZE / 2
+            val cy = y + BALL_SIZE / 2
+            val menuCount = if (showPip) 5 else 4
+            // 顶端那颗永远排在第一个：右侧时从左上方往左下方扫，左侧时从右上方往右下方扫。
+            val startDeg = if (onRight) 180f + MENU_SPREAD_DEG / 2f else -MENU_SPREAD_DEG / 2f
+            val endDeg = if (onRight) 180f - MENU_SPREAD_DEG / 2f else MENU_SPREAD_DEG / 2f
+            val minX = BALL_INSET
+            val maxX = (maxW - BALL_INSET - MENU_BUTTON_SIZE).coerceAtLeast(minX)
+            val minY = top + BALL_INSET
+            val maxY = (maxH - bottom - BALL_INSET - MENU_BUTTON_SIZE).coerceAtLeast(minY)
 
-                AnimatedVisibility(
+            fun slot(index: Int): Pair<Dp, Dp> {
+                val f = if (menuCount <= 1) 0.5f else index.toFloat() / (menuCount - 1)
+                val rad = Math.toRadians((startDeg + (endDeg - startDeg) * f).toDouble())
+                val bx = cx + MENU_RADIUS * cos(rad).toFloat() - MENU_BUTTON_SIZE / 2
+                val by = cy + MENU_RADIUS * sin(rad).toFloat() - MENU_BUTTON_SIZE / 2
+                return bx.coerceIn(minX, maxX) to by.coerceIn(minY, maxY)
+            }
+
+            val backSlot = slot(0)
+            val reloadSlot = slot(1)
+            val pipSlot = slot(2)
+            val externalSlot = if (showPip) slot(3) else slot(2)
+            val closeSlot = if (showPip) slot(4) else slot(3)
+
+            BallMenuButton(
+                visible = expanded && !dragging,
+                x = backSlot.first,
+                y = backSlot.second,
+                onClick = { expanded = false; onBack() },
+            ) {
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
+            }
+            BallMenuButton(
+                visible = expanded && !dragging,
+                x = reloadSlot.first,
+                y = reloadSlot.second,
+                onClick = { expanded = false; onReload() },
+            ) {
+                Icon(
+                    Icons.Outlined.Refresh,
+                    contentDescription = stringResource(R.string.dsh_webui_reload),
+                )
+            }
+            // 主开关关掉时这一条不出现：不是灰掉，是根本不画（点了没用的入口
+            // 只会让人以为功能坏了）。其余按钮照旧。
+            if (showPip) {
+                BallMenuButton(
                     visible = expanded && !dragging,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically(),
+                    x = pipSlot.first,
+                    y = pipSlot.second,
+                    onClick = { expanded = false; onEnterPip() },
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(22.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            IconButton(onClick = { expanded = false; onBack() }) {
-                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
-                            }
-                            IconButton(onClick = { expanded = false; onReload() }) {
-                                Icon(
-                                    Icons.Outlined.Refresh,
-                                    contentDescription = stringResource(R.string.dsh_webui_reload),
-                                )
-                            }
-                            // 主开关关掉时这一条不出现：不是灰掉，是根本不画（点了没用的入口
-                            // 只会让人以为功能坏了）。其余按钮照旧。
-                            if (showPip) {
-                                IconButton(onClick = { expanded = false; onEnterPip() }) {
-                                    Icon(
-                                        Icons.Outlined.PictureInPictureAlt,
-                                        contentDescription = stringResource(R.string.dsh_pip_button),
-                                    )
-                                }
-                            }
-                            IconButton(onClick = { expanded = false; onOpenExternal() }) {
-                                Icon(
-                                    Icons.Outlined.OpenInBrowser,
-                                    contentDescription = stringResource(R.string.dsh_webui_open_external),
-                                )
-                            }
-                            IconButton(onClick = onClose) {
-                                Icon(
-                                    Icons.Outlined.Close,
-                                    contentDescription = stringResource(R.string.dsh_webui_close),
-                                )
-                            }
-                        }
-                    }
+                    Icon(
+                        Icons.Outlined.PictureInPictureAlt,
+                        contentDescription = stringResource(R.string.dsh_pip_button),
+                    )
                 }
             }
+            BallMenuButton(
+                visible = expanded && !dragging,
+                x = externalSlot.first,
+                y = externalSlot.second,
+                onClick = { expanded = false; onOpenExternal() },
+            ) {
+                Icon(
+                    Icons.Outlined.OpenInBrowser,
+                    contentDescription = stringResource(R.string.dsh_webui_open_external),
+                )
+            }
+            BallMenuButton(
+                visible = expanded && !dragging,
+                x = closeSlot.first,
+                y = closeSlot.second,
+                onClick = onClose,
+            ) {
+                Icon(
+                    Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.dsh_webui_close),
+                )
+            }
+
+            Surface(
+                shape = CircleShape,
+                // 球面就是软件图标本身：不再垫一块 secondaryContainer 圆底，否则图标自带的
+                // 浅色圆角底会叠在色块上，既不是「软件图标」也不半透明。
+                color = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .offset(x = x, y = y)
+                    .size(BALL_SIZE)
+                    .pointerInput(maxW, maxH, yMin, yMax) {
+                        detectDragGestures(
+                            onDragStart = {
+                                dragging = true
+                                dragX = restX
+                            },
+                            onDragEnd = {
+                                dragging = false
+                                // 松手按左右中线吸附，并把结果记下来
+                                val centre = (dragX ?: restX) + BALL_SIZE / 2
+                                onRight = centre > maxW / 2
+                                dragX = null
+                                prefs.edit()
+                                    .putString(
+                                        DshEnv.KEY_WEBUI_BALL_SIDE,
+                                        if (onRight) "right" else "left",
+                                    )
+                                    .putFloat(DshEnv.KEY_WEBUI_BALL_Y, yRatio)
+                                    .apply()
+                            },
+                            onDragCancel = {
+                                dragging = false
+                                dragX = null
+                            },
+                        ) { _, delta: Offset ->
+                            with(density) {
+                                dragX = ((dragX ?: restX) + delta.x.toDp())
+                                    .coerceIn(0.dp, (maxW - BALL_SIZE).coerceAtLeast(0.dp))
+                                val span = (yMax - yMin).coerceAtLeast(1.dp)
+                                yRatio = (yRatio + (delta.y.toDp() / span)).coerceIn(0f, 1f)
+                            }
+                        }
+                    },
+            ) {
+                IconButton(onClick = { expanded = !expanded }) {
+                    Image(
+                        painter = painterResource(LauncherIconUtils.currentIconForeground()),
+                        contentDescription = stringResource(R.string.dsh_webui_ball),
+                        // requiredSize 而不是 size：IconButton/Surface 会把最小约束往下传，
+                        // size 会被夹回球径，画出来就偏小。位图四周那圈透明留白会被
+                        // IconButton 的圆形裁剪吃掉，只留下中间本来就有内容的圆角方形。
+                        modifier = Modifier
+                            .requiredSize(BALL_ICON_SIZE)
+                            .alpha(if (dragging || expanded) 0.92f else 0.6f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 环绕在悬浮球外圈的一个圆按钮。位置由调用方按圆弧算好后传进来（而不是自己排布），
+ * 这样按钮的落点只跟球心有关，换边、拖动都不会算错。
+ */
+@Composable
+private fun BallMenuButton(
+    visible: Boolean,
+    x: Dp,
+    y: Dp,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = Modifier.offset(x = x, y = y),
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(MENU_BUTTON_SIZE),
+        ) {
+            IconButton(onClick = onClick) { content() }
         }
     }
 }
