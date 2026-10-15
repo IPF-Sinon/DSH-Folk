@@ -191,6 +191,8 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                 onClearClick = {
                     if (group == GROUP_SCRIPTS) scriptFilter = "" else viewModel.search = ""
                 },
+                // 扩展页目前是占位：这一页没有可搜的东西，就不给一颗点开什么都搜不到的放大镜。
+                searchEnabled = group != GROUP_EXTENSIONS,
                 dropdownContent = {
                     // 刷新只对插件那组有意义；脚本那组的「重读列表」在安装/删除后自己会做。
                     if (group == GROUP_PLUGINS) {

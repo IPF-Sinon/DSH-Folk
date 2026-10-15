@@ -190,5 +190,79 @@ for (const [fn, declFile, callFile] of PAIRS) {
       (missing.length ? " → 漏 " + missing.join(",") : ""));
 }
 
+// ── 导航目的地（@Destination）的命名参数 ──
+//
+// 上面那张 PAIRS 表是手写的，覆盖不到「生成了 XDestination(...) 构造器」的那些调用点。
+// 而这条路更凶：构造器是 compose-destinations 生成的代码，本地没有 Kotlin 编译器，
+// 参数名写错、多传一个、或者声明改了却漏掉某个必填参数，**只有 CI 才会报**
+// （2026-10-15 就因为一个枚举可见性连废两轮）。
+//
+// 规则与上面一致：命名参数必须都在声明里（或位置参数个数不超）；声明里没有默认值的参数
+// 必须传。默认值可以省略 —— 这一点有先例可循：RestoreWizardScreen 的 stagedEncrypted
+// 就有默认值，调用点 RestoreWizardScreenDestination(stagedPath = null) 只传了一个。
+{
+  /** 收集全仓的 @Destination 声明：名字 → { 参数名集合, 必填参数集合 }。 */
+  const decls = new Map();
+  const ktFiles = [];
+  (function walk(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith(".kt")) ktFiles.push(p);
+    }
+  })(path.join(ROOT, "app/src/main/java"));
+
+  for (const f of ktFiles) {
+    const src = fs.readFileSync(f, "utf8");
+    for (const m of src.matchAll(/@Destination<\w+>[\s\S]{0,220}?fun\s+([A-Za-z_][A-Za-z0-9_]*)\(/g)) {
+      const open = src.indexOf("(", m.index + m[0].length - 1);
+      const close = matchParen(src, open);
+      if (close < 0) continue;
+      const params = splitTop(src.slice(open + 1, close)).map((p) => {
+        const clean = p.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").trim();
+        const nm = clean.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:/);
+        return nm ? { name: nm[1], hasDefault: /(^|[^=!<>])=[^=]/.test(clean) } : null;
+      }).filter(Boolean).filter((p) => p.name !== "navigator");
+      decls.set(m[1], params);
+    }
+  }
+  ok(decls.size > 0, `解析到 ${decls.size} 个 @Destination 声明（一条都没解析到 = 下面形同虚设）`);
+
+  let checked = 0;
+  const problems = [];
+  for (const f of ktFiles) {
+    const src = fs.readFileSync(f, "utf8");
+    for (const m of src.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*Destination)\(/g)) {
+      const fn = m[1].slice(0, -"Destination".length);
+      const params = decls.get(fn);
+      if (!params) continue; // 不是本仓声明的目的地（或还没解析到），跳过
+      checked++;
+      const open = src.indexOf("(", m.index + m[0].length - 1);
+      const close = matchParen(src, open);
+      if (close < 0) { problems.push(`${fn}(${fn}Destination 参数表不配平`); continue; }
+      const raw = splitTop(src.slice(open + 1, close));
+      const named = raw.map((a) => {
+        const clean = a.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").trim();
+        const nm = clean.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)/);
+        return nm ? nm[1] : null;
+      });
+      const names = new Set(params.map((p) => p.name));
+      const unknown = named.filter(Boolean).filter((n) => !names.has(n));
+      if (unknown.length) problems.push(`${fn}Destination 传了声明里没有的参数：${unknown.join(",")}`);
+      const positional = named.filter((n) => !n).length;
+      if (positional > params.length) {
+        problems.push(`${fn}Destination 位置参数 ${positional} 个 > 声明 ${params.length} 个`);
+      }
+      const supplied = new Set(named.filter(Boolean));
+      params.slice(positional).forEach((p, i) => {
+        if (!p.hasDefault && !supplied.has(p.name)) problems.push(`${fn}Destination 漏传必填参数：${p.name}`);
+      });
+    }
+  }
+  ok(checked > 0, `检查了 ${checked} 处 XDestination(...) 调用`);
+  ok(problems.length === 0,
+    "目的地的命名参数与声明一致" + (problems.length ? " → " + [...new Set(problems)].join(" / ") : ""));
+}
+
 console.log(fail === 0 ? "\n全部通过" : `\n${fail} 项失败`);
 process.exit(fail === 0 ? 0 : 1);

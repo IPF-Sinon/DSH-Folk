@@ -57,6 +57,13 @@ fun SearchAppBar(
     leadingActions: @Composable (() -> Unit)? = null,
     trailingActions: @Composable (() -> Unit)? = null,
     startInSearchMode: Boolean = false,
+    /**
+     * 这一页有没有可搜的东西。false 时不画那颗放大镜（标题栏照旧）。
+     *
+     * 给的是那种**内容还没做**的页（插件页的「扩展」）：点开一个什么都搜不到的搜索框，
+     * 和一颗按了没反应的按钮是同一种毛病 —— 用户会以为是自己没搜对。
+     */
+    searchEnabled: Boolean = true,
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
@@ -167,10 +174,13 @@ fun SearchAppBar(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     leadingActions?.invoke()
-                    IconButton(
-                        onClick = { onSearch = true },
-                        content = { Icon(Icons.Filled.Search, "Search") }
-                    )
+                    // 没东西可搜的页面不给放大镜（见 [searchEnabled]）
+                    if (searchEnabled) {
+                        IconButton(
+                            onClick = { onSearch = true },
+                            content = { Icon(Icons.Filled.Search, "Search") }
+                        )
+                    }
                 }
             }
 

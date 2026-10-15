@@ -528,6 +528,15 @@ ok(/private const val GROUP_PLUGINS = "plugins"/.test(pluginHome) &&
 ok(/GROUP_EXTENSIONS -> ScrollableEmptyState\(/.test(pluginHome) &&
   /dsh_plugins_extensions_unavailable/.test(pluginHome),
   "扩展页有入口也有一句「暂不可用」（不是画一个空列表）");
+// 占位页不该给「点了没反应」的控件：扩展页没有可搜的东西，放大镜就不该在（与那颗
+// 「按了没反应的隐藏内置」是同一种毛病）。判据落在 SearchAppBar 的新参数上。
+{
+  const searchBar = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/component/SearchBar.kt", "utf8");
+  ok(/searchEnabled: Boolean = true/.test(searchBar) && /if \(searchEnabled\) \{/.test(searchBar),
+    "SearchAppBar 支持「这一页没有可搜的东西」：不画放大镜");
+  ok(/searchEnabled = group != GROUP_EXTENSIONS/.test(pluginHome),
+    "扩展页明确关掉搜索（其余两页照旧）");
+}
 // 用户：「插件页顶栏那颗『隐藏内置』在插件组下按了没反应，修一下，另外隐藏内置时应该换个图标」。
 // 该按钮只作用于脚本组那份列表，所以只该在脚本组出现；图标说「按下去会发生什么」。
 ok(/if \(group == GROUP_SCRIPTS\) \{\s*\n\s*IconButton\(onClick = \{\s*\n\s*val next = !hideBuiltins/.test(pluginHome) &&
