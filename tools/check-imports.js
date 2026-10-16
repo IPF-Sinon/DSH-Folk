@@ -176,5 +176,52 @@ if (INTERNAL_TYPES.size > 0) {
     }
   }
 }
+// 上面那条只查「顶层 public 函数」。漏掉的另一半：**顶层 public 类/对象的成员与属性**也是
+// public API —— 2026-10-16 就栽在这里：UserscriptInstall.kt 里一个 public class 的属性和
+// 成员函数用了 `internal object Userscripts` 的嵌套类型（Userscripts.Pending），本地 33 条
+// 门禁全绿，CI 报两行：
+//   'public' function exposes its 'internal' parameter type containing declaration 'Userscripts'.
+//   'public' property exposes its 'internal' type containing declaration 'Userscripts'.
+//
+// 只看**类体的最外层成员**（嵌套声明里的成员缩进更深、且嵌套 internal 类用 internal 类型
+// 是合法的，所以整段跳过），并且成员自己标了 private/internal/protected 的也算合规。
+{
+  const strip = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').map((l) => l.replace(/(^|\s)\/\/.*$/, '')).join('\n');
+  for (const f of FILES) {
+    const code = strip(fs.readFileSync(f, 'utf8'));
+    for (const m of code.matchAll(
+      /^(?:(?:public|open|abstract|sealed|data|value|annotation|enum)\s+)*(?:class|object|interface)\s+([A-Za-z0-9_]+)[^\n]*\{/gm,
+    )) {
+      if (/^\s*(internal|private)\b/.test(m[0])) continue; // 自身不是 public API
+      const open = code.indexOf('{', m.index);
+      let depth = 0;
+      let close = -1;
+      for (let i = open; i < code.length; i++) {
+        if (code[i] === '{') depth++;
+        else if (code[i] === '}') { depth--; if (depth === 0) { close = i; break; } }
+      }
+      if (close < 0) continue;
+      let inner = 0;
+      for (const raw of code.slice(open + 1, close).split('\n')) {
+        const t = raw.trim();
+        const at = inner; // 这一行开始处的相对深度
+        inner += (raw.match(/\{/g) || []).length - (raw.match(/\}/g) || []).length;
+        if (at !== 0) continue; // 只认类体最外层的成员
+        if (/^(private|internal|protected)\b/.test(t)) continue;
+        if (!/^(fun|val|var|constructor)\b/.test(t)) continue;
+        const hit = [...INTERNAL_TYPES].filter((tt) =>
+          new RegExp('(?<![\\w.])' + tt + '(\\.[A-Za-z0-9_]+)?\\b').test(t));
+        if (hit.length > 0) {
+          console.log('可见性: ' + f.split('/').pop() + ' 的 ' + m[1] + ' 里的成员「' +
+            t.slice(0, 60) + '」用了 internal 类型 ' + hit.join('、') +
+            '（public 成员不能暴露 internal 类型）');
+          bad++;
+        }
+      }
+    }
+  }
+}
 console.log(bad === 0 ? '导入/可见性齐全（' + FILES.length + ' 个文件）' : bad + ' 处问题');
 process.exit(bad === 0 ? 0 : 1);

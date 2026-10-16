@@ -99,7 +99,7 @@ internal fun UserscriptLinkInstallDialog(
  * 用「置位 + 宿主渲染」而不是每个入口各弹一个框：三个入口的确认框必须是同一份（同一条
  * 「先查同名、比版本、给 diff」的逻辑），各写一份必然漂移。
  */
-class UserscriptPendingInstallState {
+internal class UserscriptPendingInstallState {
     var pending by mutableStateOf<Userscripts.Pending?>(null)
         private set
 
@@ -109,7 +109,7 @@ class UserscriptPendingInstallState {
 }
 
 @Composable
-fun rememberUserscriptPendingInstall(): UserscriptPendingInstallState =
+internal fun rememberUserscriptPendingInstall(): UserscriptPendingInstallState =
     remember { UserscriptPendingInstallState() }
 
 /**
@@ -119,7 +119,7 @@ fun rememberUserscriptPendingInstall(): UserscriptPendingInstallState =
  * 哈希（[Userscripts.idOf]），版本一变 id 就变。
  */
 @Composable
-fun UserscriptInstallConfirmHost(
+internal fun UserscriptInstallConfirmHost(
     state: UserscriptPendingInstallState,
     onInstalled: (String) -> Unit,
     onFailed: () -> Unit,
