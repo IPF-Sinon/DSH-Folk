@@ -53,8 +53,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.delay
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.WorkflowApprovals
 import me.bmax.apatch.dsh.WorkflowDefinition
+import me.bmax.apatch.dsh.WorkflowEdge
 import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
 import me.bmax.apatch.dsh.WorkflowPatch
@@ -447,7 +449,7 @@ private fun WorkflowEditorOverlay(
                                         selected = if (selected == node.id) null else node.id
                                     } else if (from != node.id) {
                                         draft = def.copy(
-                                            edges = def.edges + me.bmax.apatch.dsh.WorkflowEdge(from, node.id, linkWhen),
+                                            edges = def.edges + WorkflowEdge(from, node.id, linkWhen),
                                         )
                                         linkFrom = null
                                         linkWhen = ""

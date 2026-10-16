@@ -280,6 +280,34 @@ ok(/if \(patchLines\.isEmpty\(\)\) onCancel\(\) else confirmDiscard = true/.test
 ok(!/workflowDraftDir|saveDraft|loadDraft|clearDraft/.test(SRC.store + read("app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt")),
   "没有没人调用的草稿 API（审批是内存态的，草稿恢复无去处）");
 
+// 项目内部符号的导入：check-imports 只管 androidx/Compose 那一类，这三次 CI 红全栽在
+// 「项目自己的类型/扩展没导入」上（R、toJson、WorkflowActionType）。这里按文件静态对一遍。
+{
+  const dshSymbols = ["WorkflowApprovals", "WorkflowDefinition", "WorkflowEdge", "WorkflowEngine", "WorkflowGrants",
+    "WorkflowNode", "WorkflowNodeType", "WorkflowActionType", "WorkflowOnError", "WorkflowPatch",
+    "WorkflowPermissions", "WorkflowRun", "WorkflowRunState", "WorkflowSchema", "WorkflowStepResult",
+    "WorkflowStepState", "WorkflowStore", "WorkflowValidator", "WorkflowBridge", "definitionFromJson",
+    "toJson", "workflowDiff", "interpolate", "nodeFromJson", "runFromJson", "stepFromJson"];
+  for (const [name, text] of [["WorkflowDialogs.kt", SRC.dialogs], ["WorkflowScreen.kt", SRC.screen],
+    ["FunctionSettings.kt", SRC.settings]]) {
+    // 注释与 KDoc 链接（[WorkflowValidator]）不是使用，先剥掉再匹配
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const missing = dshSymbols.filter((sym) => {
+      const used = new RegExp("\\b" + sym + "\\b").test(code);
+      if (!used) return false;
+      // 自己声明的符号不用导入
+      // 自己声明的符号不用导入（用 includes 而不是正则：这里已经有三层转义，正则太容易写错）
+      const declared = text.includes("fun " + sym) || text.includes("class " + sym) ||
+        text.includes("object " + sym) || text.includes("val " + sym);
+      return !declared && !text.includes("import me.bmax.apatch.dsh." + sym);
+    });
+    ok(missing.length === 0, name + " 用到的 dsh 符号都导入了" + (missing.length ? "，缺 " + missing.join(",") : ""));
+    if (/R\.(string|drawable|plurals)\./.test(text)) {
+      ok(/import me\.bmax\.apatch\.R\b/.test(text), name + " 引用了 R.* 就必须 import me.bmax.apatch.R");
+    }
+  }
+}
+
 console.log("\u2500 #12 新门禁登记进两条 CI 清单");
 ok(/node tools\/check-workflow\.js/.test(SRC.buildYml), "build.yml 里有 check-workflow");
 ok(/node tools\/check-workflow\.js/.test(SRC.betaYml), "beta.yml 里有 check-workflow");
