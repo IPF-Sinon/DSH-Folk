@@ -59,6 +59,7 @@ import me.bmax.apatch.dsh.WorkflowNodeType
 import me.bmax.apatch.dsh.WorkflowPatch
 import me.bmax.apatch.dsh.WorkflowPermissions
 import me.bmax.apatch.dsh.definitionFromJson
+import me.bmax.apatch.dsh.toJson
 import me.bmax.apatch.dsh.workflowDiff
 
 /**
