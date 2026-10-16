@@ -229,8 +229,8 @@ internal object WorkflowBridge {
             return 400 to err(
                 str(ctx, R.string.dsh_workflow_err_invalid, validation.errors.take(8).joinToString("；")),
                 "invalid_definition",
-            ).let { (code, body) ->
-                code to JSONObject(body).put("errors", JSONArray(validation.errors)).toString()
+            ).let { body ->
+                JSONObject(body).put("errors", JSONArray(validation.errors)).toString()
             }
         }
         val dangerous = scanDangerous(ctx, submitted)
@@ -263,8 +263,8 @@ internal object WorkflowBridge {
                         verdict.rejectReason.ifBlank { str(ctx, R.string.dsh_workflow_reject_no_reason) },
                     ),
                     "rejected_by_user",
-                ).let { (code, body) ->
-                    code to JSONObject(body).put("rejectReason", verdict.rejectReason).toString()
+                ).let { body ->
+                    JSONObject(body).put("rejectReason", verdict.rejectReason).toString()
                 }
 
             WorkflowApprovals.Decision.APPROVED -> Unit
@@ -281,8 +281,8 @@ internal object WorkflowBridge {
                 return 400 to err(
                     str(ctx, R.string.dsh_workflow_err_edited_invalid, recheck.errors.take(8).joinToString("；")),
                     "invalid_definition",
-                ).let { (code, body) ->
-                    code to JSONObject(body).put("errors", JSONArray(recheck.errors)).toString()
+                ).let { body ->
+                    JSONObject(body).put("errors", JSONArray(recheck.errors)).toString()
                 }
             }
             diff = workflowDiff(submitted, edited)
