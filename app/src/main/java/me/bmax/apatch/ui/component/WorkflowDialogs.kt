@@ -546,7 +546,7 @@ private fun WorkflowEditorOverlay(
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onCancel) { Text(stringResource(R.string.dsh_workflow_action_cancel)) }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { onSave(draft?.toJson()?.toString()) }) {
+                Button(onClick = { onSave(def.toJson().toString()) }) {
                     Text(stringResource(R.string.dsh_workflow_editor_save))
                 }
             }
