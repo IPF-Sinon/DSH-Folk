@@ -42,6 +42,27 @@ const KNOWN = {
   ],
   RoundedCornerShape: 'androidx.compose.foundation.shape.RoundedCornerShape',
   LazyColumn: 'androidx.compose.foundation.lazy.LazyColumn',
+  // runtime / 组合处（「用了却忘了 import」的第二高发区，原来这张表里一个都没有）：
+  // 它们全是**顶层函数或属性**，忘了 import 就是 Unresolved reference，本地门禁原来
+  // 完全看不见，只能等 CI 报 —— 2026-10-15 的 spring()、以及后面几次都是这一类。
+  remember: 'androidx.compose.runtime.remember',
+  rememberSaveable: 'androidx.compose.runtime.saveable.rememberSaveable',
+  rememberCoroutineScope: 'androidx.compose.runtime.rememberCoroutineScope',
+  rememberUpdatedState: 'androidx.compose.runtime.rememberUpdatedState',
+  LaunchedEffect: 'androidx.compose.runtime.LaunchedEffect',
+  DisposableEffect: 'androidx.compose.runtime.DisposableEffect',
+  derivedStateOf: 'androidx.compose.runtime.derivedStateOf',
+  produceState: 'androidx.compose.runtime.produceState',
+  collectAsState: 'androidx.compose.runtime.collectAsState',
+  collectAsStateWithLifecycle: 'androidx.lifecycle.compose.collectAsStateWithLifecycle',
+  LocalContext: 'androidx.compose.ui.platform.LocalContext',
+  LocalConfiguration: 'androidx.compose.ui.platform.LocalConfiguration',
+  LocalDensity: 'androidx.compose.ui.platform.LocalDensity',
+  LocalLifecycleOwner: 'androidx.lifecycle.compose.LocalLifecycleOwner',
+  stringResource: 'androidx.compose.ui.res.stringResource',
+  rememberScrollState: 'androidx.compose.foundation.rememberScrollState',
+  verticalScroll: 'androidx.compose.foundation.verticalScroll',
+  horizontalScroll: 'androidx.compose.foundation.horizontalScroll',
   // ui
   Alignment: 'androidx.compose.ui.Alignment',
   PasswordVisualTransformation: 'androidx.compose.ui.text.input.PasswordVisualTransformation',
