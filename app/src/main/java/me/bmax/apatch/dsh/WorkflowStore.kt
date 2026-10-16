@@ -36,8 +36,6 @@ internal object WorkflowStore {
 
     private fun runDir(ctx: Context): File = DshEnv.workflowRunDir(ctx).apply { mkdirs() }
 
-    private fun draftDir(ctx: Context): File = DshEnv.workflowDraftDir(ctx).apply { mkdirs() }
-
     private fun defFile(ctx: Context, id: String): File? =
         if (ID_SAFE.matches(id)) File(defDir(ctx), "$id.json") else null
 
@@ -67,20 +65,6 @@ internal object WorkflowStore {
     }
 
     fun delete(ctx: Context, id: String): Boolean = defFile(ctx, id)?.delete() ?: false
-
-    // ────────────────────────── 草稿（编辑中、还没批准）──────────────────────────
-
-    fun saveDraft(ctx: Context, approvalId: Long, def: WorkflowDefinition): Boolean =
-        atomicWrite(File(draftDir(ctx), "draft_$approvalId.json"), def.toJson().toString())
-
-    fun loadDraft(ctx: Context, approvalId: Long): WorkflowDefinition? {
-        val f = File(draftDir(ctx), "draft_$approvalId.json")
-        return if (f.isFile) runCatching { definitionFromJson(f.readText()) }.getOrNull() else null
-    }
-
-    fun clearDraft(ctx: Context, approvalId: Long) {
-        runCatching { File(draftDir(ctx), "draft_$approvalId.json").delete() }
-    }
 
     // ────────────────────────── 运行 ──────────────────────────
 

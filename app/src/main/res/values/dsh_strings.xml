@@ -1784,4 +1784,10 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_workflow_err_edited_invalid">The edited definition failed validation: %1$s</string>
     <string name="dsh_workflow_err_save_failed">Failed to save the definition</string>
     <string name="dsh_workflow_err_start_failed">Failed to start the run: %1$s</string>
+    <string name="dsh_workflow_kind_shell">Run command</string>
+    <string name="dsh_workflow_kind_dsh">Run command (needs DSH)</string>
+    <string name="dsh_workflow_editor_discard_title">Discard changes?</string>
+    <string name="dsh_workflow_editor_discard_body">%1$d change(s) are not saved yet. Discarding loses this edit (the approval stays, you can edit again).</string>
+    <string name="dsh_workflow_editor_discard_ok">Discard</string>
+    <string name="dsh_workflow_editor_keep_editing">Keep editing</string>
 </resources>

@@ -254,9 +254,126 @@ ok(/WorkflowPermissions\.Gate\.submit/.test(SRC.screen), "页面自己运行也�
   ok(extraZh.length === 0, "两份文案键集完全一致（多出：" + extraZh.join(",") + "）");
 }
 
-console.log("\u2500 #11 新门禁登记进两条 CI 清单");
+console.log("\u2500 #11 编辑页真的能画出全部六类节点（且默认值合法）");
+ok(/private val NODE_CATALOG = listOf\(/.test(SRC.dialogs), "有动作目录（不是只能加 shell 节点）");
+for (const t of ["EXECUTE", "CONDITION", "EXTRACT", "WAIT", "LOGIC"]) {
+  ok(new RegExp("NodeKind\\(\\s*WorkflowNodeType\\." + t).test(SRC.dialogs) || new RegExp("WorkflowNodeType\\." + t + ",").test(SRC.dialogs),
+    `目录里有 ${t}`);
+}
+ok(/NODE_CATALOG/.test(SRC.dialogs) && /WorkflowNodeType.TRIGGER/.test(SRC.dialogs),
+  "trigger 由定义自带（不可新增第二个）");
+ok(/for \(action in WorkflowActionType.entries\)/.test(SRC.dialogs), "execute 的动作是选择器，不是自由文本");
+ok(/onChange\(node.copy\(config = configForAction\(action\)\)\)/.test(SRC.dialogs),
+  "换动作时整份替换 config（不留上一个动作的垃圾键）");
+ok(/private fun configForAction\(action: WorkflowActionType\)/.test(SRC.dialogs) &&
+  /private fun editableKeys\(node: WorkflowNode\)/.test(SRC.dialogs) &&
+  !/listOf\("action", "cmd"\)/.test(SRC.dialogs),
+  "动作键由选择器写入，editableKeys 只暴露要填的值");
+ok(/mapOf\("source" to "exitCode", "op" to "equals", "value" to "0"\)/.test(SRC.dialogs),
+  "判断节点的默认值合法（source/op 都已填好）");
+
+ok(/if \(patchLines\.isEmpty\(\)\) onCancel\(\) else confirmDiscard = true/.test(SRC.dialogs) &&
+  /dsh_workflow_editor_discard_title/.test(SRC.dialogs),
+  "编辑页有改动时返回要先确认（一键点掉等于无声清空用户改了几分钟的东西）");
+// 草稿落盘这条**故意没做**：审批只存在于内存里（进程一死这次审批就没了），
+// 恢复出来的草稿没有去处。留着 saveDraft/loadDraft 没人调用就是死代码，所以删掉了。
+ok(!/workflowDraftDir|saveDraft|loadDraft|clearDraft/.test(SRC.store + read("app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt")),
+  "没有没人调用的草稿 API（审批是内存态的，草稿恢复无去处）");
+
+console.log("\u2500 #12 新门禁登记进两条 CI 清单");
 ok(/node tools\/check-workflow\.js/.test(SRC.buildYml), "build.yml 里有 check-workflow");
 ok(/node tools\/check-workflow\.js/.test(SRC.betaYml), "beta.yml 里有 check-workflow");
+
+// CLI 的行为测试：参数 → 请求体。
+// 放在函数里而不是顶层块：本文件是 CommonJS，顶层 await 会让 Node 拒绝加载。
+async function checkCli() {
+  console.log("\u2500 #13 真跑 dsh-workflow CLI（参数→请求体）");
+  const m = SRC.runtime.match(/val WORKFLOW_CLI_SCRIPT = """([\s\S]*?)"""\.trimIndent\(\)/);
+  // Kotlin 的 trimIndent() 是编译期行为，源码里抽出来的是**带缩进**的原文；
+  // 这里补等价处理，否则缩进的 shebang 落在第二行，node 直接语法错误。
+  const dedent = (t) => {
+    const lines = t.replace(/^\n/, "").split("\n");
+    const indents = lines.filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length);
+    const min = indents.length ? Math.min(...indents) : 0;
+    return lines.map((l) => l.slice(min)).join("\n");
+  };
+  const body = m ? dedent(m[1]) : "";
+  const os = require("os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-wf-cli-"));
+  const cfgPath = path.join(dir, "fs-bridge.json");
+  const scriptPath = path.join(dir, "dsh-workflow");
+  const reqs = [];
+  const server = require("http").createServer((rq, rs) => {
+    let b = "";
+    rq.on("data", (c) => (b += c));
+    rq.on("end", () => {
+      reqs.push({ method: rq.method, url: rq.url, token: rq.headers["x-dsh-fs-token"], len: rq.headers["content-length"], body: b });
+      rs.writeHead(200, { "Content-Type": "application/json" });
+      rs.end('{"ok":true}');
+    });
+  });
+  const conns = new Set();
+  server.on("connection", (sock) => {
+    conns.add(sock);
+    sock.on("close", () => conns.delete(sock));
+  });
+  await new Promise((res) => server.listen(0, "127.0.0.1", res));
+  fs.writeFileSync(cfgPath, JSON.stringify({ port: server.address().port, token: "tok" }));
+  fs.writeFileSync(scriptPath, body.replace("'/root/.dsh/fs-bridge.json'", JSON.stringify(cfgPath)));
+  // 必须是**异步** spawn：桩服务器跑在本进程里，spawnSync 会把本进程的事件循环冻住，
+  // 请求永远等不到应答（表现是 CLI 挂住、超时被杀、reqs 为空）。带超时是因为门禁自己卡住
+  // 比漏判更糟 —— CI 会一直挂到超时。
+  const run = (args) =>
+    new Promise((res) => {
+      require("child_process").execFile(
+        "node", [scriptPath].concat(args), { timeout: 20000 },
+        (err, stdout, stderr) => res({
+          status: err ? (typeof err.code === "number" ? err.code : 124) : 0,
+          stdout: stdout || "",
+          stderr: stderr || "",
+        }),
+      );
+    });
+  // 1) 跑已保存的流程：**不需要**再给定义（修之前这条命令会被 readDef 拦掉）
+  const r1 = await run(["run", "--workflow", "wf_x", "--reason", "because"]);
+  eq(r1.status, 0, "run --workflow <id> 能跑通（不需要 --file/--json）");
+  const j1 = reqs.length ? JSON.parse(reqs[reqs.length - 1].body) : {};
+  eq(j1.workflowId, "wf_x", "请求体带 workflowId");
+  eq(j1.definition, undefined, "不留一个空 definition");
+  eq(j1.wait, false, "默认不阻塞（wait=false）");
+  eq(reqs[reqs.length - 1].token, "tok", "带上回环 token");
+  ok(reqs[reqs.length - 1].len !== undefined, "显式 Content-Length（否则宿主 400）");
+  // 2) 内联定义建流程
+  const r2 = await run(["create", "--json", '{"id":"wf_y","name":"n","nodes":[],"edges":[]}', "--reason", "r"]);
+  eq(r2.status, 0, "create --json 能跑通");
+  eq(JSON.parse(reqs[reqs.length - 1].body).definition.id, "wf_y", "请求体带 definition");
+  // 3) 少了 reason 必须被拦（与端点一致）
+  const r3 = await run(["create", "--json", "{}"]);
+  eq(r3.status, 1, "没有 --reason 时退出码 1");
+  ok(/--reason is required/.test(r3.stderr), "并说清为什么");
+  // 4) run --wait 会显式要求阻塞
+  const r4 = await run(["run", "--workflow", "wf_x", "--wait", "--reason", "r"]);
+  eq(r4.status, 0, "run --wait 能跑通");
+  eq(JSON.parse(reqs[reqs.length - 1].body).wait, true, "wait=true 传到请求体");
+  // 5) status 的行号续读
+  const r5 = await run(["status", "--run", "run_1", "--from", "7", "--no-logs"]);
+  eq(r5.status, 0, "status 能跑通");
+  const u = reqs[reqs.length - 1].url;
+  ok(u.includes("runId=run_1") && u.includes("fromLine=7") && u.includes("includeLogs=0"), "status 查询串正确：" + u);
+  // 6) cancel
+  const r6 = await run(["cancel", "--run", "run_1"]);
+  eq(r6.status, 0, "cancel 能跑通");
+  eq(JSON.parse(reqs[reqs.length - 1].body).runId, "run_1", "cancel 带 runId");
+  // 7) 非 2xx 必须让调用方看到失败
+  server.removeAllListeners("request");
+  server.on("request", (rq, rs) => { rs.writeHead(403, { "Content-Type": "application/json" }); rs.end('{"ok":false,"reason":"rejected_by_user"}'); });
+  const r7 = await run(["run", "--workflow", "wf_x", "--reason", "r"]);
+  eq(r7.status, 1, "被拒绝时退出码非 0（agent 才知道这次没成）");
+  ok(/rejected_by_user/.test(r7.stdout), "并把服务端的理由原样打出来");
+  if (typeof server.closeAllConnections === "function") server.closeAllConnections();
+  for (const sock of conns) sock.destroy();
+  server.close();
+}
 
 console.log("");
 // #12 真跑插件 asset：工具表能建出正确 argv，且失败时**返回字符串而不是抛异常**
@@ -281,6 +398,8 @@ console.log("");
   const out = await run.execute({ workflowId: "wf_x", reason: "test" });
   eq(typeof out, "string", "execute 永远返回字符串（不抛异常）");
   ok(out.length > 0, "失败也有可读输出：" + out.slice(0, 60).replace(/\n/g, " "));
+
+  await checkCli();
 
   console.log("");
   if (failures) {

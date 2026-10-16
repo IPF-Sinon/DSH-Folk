@@ -150,9 +150,6 @@ internal object WorkflowEngine {
 
     fun status(ctx: Context, runId: String): WorkflowRun? = WorkflowStore.loadRun(ctx, runId)
 
-    fun runs(ctx: Context, workflowId: String? = null, limit: Int = 30): List<WorkflowRun> =
-        WorkflowStore.listRuns(ctx, workflowId, limit)
-
     // ────────────────────────── 执行 ──────────────────────────
 
     private suspend fun execute(ctx: Context, initial: WorkflowRun) {

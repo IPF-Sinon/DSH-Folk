@@ -79,6 +79,10 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
     // 运行/取消之后列表与详情要跟着变；引擎的 tick 是所有状态推进的汇合点。
     val tick by WorkflowEngine.tick.collectAsState()
 
+    // 打开这一页也做一次对账：桥平时只在有请求时才跑 reconcileInterrupted，而用户完全可能
+    // 一直没让 AI 碰过工作流 —— 那一页上就会永久挂着一个 running（其实是进程被杀掉的）运行。
+    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { WorkflowStore.reconcileInterrupted(ctx.applicationContext) } }
+
     val workflows = remember(listKey, tick) { WorkflowStore.list(ctx) }
     val runs = remember(listKey, tick) { WorkflowStore.listRuns(ctx, limit = 12) }
     val detail = detailRunId?.let { id -> runs.firstOrNull { it.runId == id } ?: WorkflowEngine.status(ctx, id) }

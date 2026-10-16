@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -409,6 +410,7 @@ private fun WorkflowEditorOverlay(
     var selected by remember { mutableStateOf<String?>(null) }
     var linkFrom by remember { mutableStateOf<String?>(null) }
     var linkWhen by remember { mutableStateOf("") }
+    var confirmDiscard by remember { mutableStateOf(false) }
     val def = draft ?: return
     // 差异在组合期算成不可变列表：写 state 会造成重组循环。
     val patchLines: List<WorkflowPatch> =
@@ -469,29 +471,41 @@ private fun WorkflowEditorOverlay(
                 }
             }
             Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     stringResource(R.string.dsh_workflow_editor_drag_hint),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = {
-                    // 新增一个 shell 节点（最常用）；其余类型在下面的类型选择里
-                    val id = "n" + (def.nodes.size + 1)
-                    draft = def.copy(
-                        nodes = def.nodes + WorkflowNode(
-                            id = id,
-                            type = WorkflowNodeType.EXECUTE,
-                            name = id,
-                            posX = 20 + def.nodes.size * 8,
-                            posY = 20 + def.nodes.size * 30,
-                            config = mapOf("action" to "shell", "cmd" to ""),
-                        ),
-                    )
-                }) {
-                    Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
-                    Text(stringResource(R.string.dsh_workflow_editor_add_node))
+                Icon(Icons.Filled.Add, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    stringResource(R.string.dsh_workflow_editor_add_node),
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 6.dp),
+                )
+                // 动作目录：每类都带**合法默认 config**。默认值不只是省事 —— 用户拿到的是
+                // 「把 equals 改成 contains」这种改值动作，而不是「自己敲对键名」（敲错要等到
+                // 批准那一刻才被校验器拦下，那时他已经改了五分钟）。
+                for (kind in NODE_CATALOG) {
+                    TextButton(onClick = {
+                        val id = "n" + (def.nodes.size + 1)
+                        draft = def.copy(
+                            nodes = def.nodes + WorkflowNode(
+                                id = id,
+                                type = kind.type,
+                                name = kind.label(),
+                                posX = 16 + (def.nodes.size % 4) * 90,
+                                posY = 16 + (def.nodes.size / 4) * 44,
+                                config = kind.defaults,
+                            ),
+                        )
+                    }) {
+                        Text(stringResource(kind.labelRes))
+                    }
                 }
             }
             val sel = selected?.let { def.node(it) }
@@ -544,13 +558,42 @@ private fun WorkflowEditorOverlay(
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onCancel) { Text(stringResource(R.string.dsh_workflow_action_cancel)) }
+                TextButton(onClick = {
+                    // 有改动就先问清楚「要不要丢掉」：编辑页的取消键和保存键挨在一起，
+                    // 一键点掉等于把用户改了几分钟的东西无声清空。
+                    if (patchLines.isEmpty()) onCancel() else confirmDiscard = true
+                }) { Text(stringResource(R.string.dsh_workflow_action_cancel)) }
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = { onSave(def.toJson().toString()) }) {
                     Text(stringResource(R.string.dsh_workflow_editor_save))
                 }
             }
         }
+    }
+
+    // 放在覆盖层内部：与编辑页同一棵组合树，否则「放弃改动」的弹窗会被全屏 Surface 盖住。
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text(stringResource(R.string.dsh_workflow_editor_discard_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.dsh_workflow_editor_discard_body, patchLines.size),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDiscard = false
+                    onCancel()
+                }) { Text(stringResource(R.string.dsh_workflow_editor_discard_ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDiscard = false }) {
+                    Text(stringResource(R.string.dsh_workflow_editor_keep_editing))
+                }
+            },
+        )
     }
 }
 
@@ -575,6 +618,24 @@ private fun NodeEditor(
             }
             Icon(Icons.Filled.Delete, null, Modifier.size(18.dp).clickable { onDelete() })
         }
+        if (node.type == WorkflowNodeType.EXECUTE) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                for (action in WorkflowActionType.entries) {
+                    val selected = node.actionType == action
+                    TextButton(onClick = {
+                        // 换动作时**换掉整份 config**：把 notify 的 title/text 留给 shell 只会变成垃圾键，
+                        // 而垃圾键会在批准时被校验器点名（用户看不出为什么要改）。
+                        onChange(node.copy(config = configForAction(action)))
+                    }) {
+                        Text(
+                            stringResource(actionLabelRes(action)),
+                            color = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
         OutlinedTextField(
             value = node.name,
             onValueChange = { onChange(node.copy(name = it)) },
@@ -594,12 +655,45 @@ private fun NodeEditor(
     }
 }
 
+/** 动作目录的一项：新增节点时用它的类型 + 一份**合法**默认 config。 */
+private data class NodeKind(val type: WorkflowNodeType, val labelRes: Int, val defaults: Map<String, String>) {
+    fun label(): String = type.id
+}
+
+/** 能新增的节点类型（覆盖全部六类；缺哪一类都意味着有一类流程用户画不出来）。 */
+private val NODE_CATALOG = listOf(
+    NodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_shell, configForAction(WorkflowActionType.SHELL)),
+    NodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_dsh, configForAction(WorkflowActionType.DSH)),
+    NodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_notify, configForAction(WorkflowActionType.NOTIFY)),
+    NodeKind(
+        WorkflowNodeType.CONDITION, R.string.dsh_workflow_kind_condition,
+        mapOf("source" to "exitCode", "op" to "equals", "value" to "0"),
+    ),
+    NodeKind(WorkflowNodeType.EXTRACT, R.string.dsh_workflow_kind_extract, mapOf("source" to "lastOutput", "mode" to "text", "var" to "value")),
+    NodeKind(WorkflowNodeType.WAIT, R.string.dsh_workflow_kind_wait, mapOf("ms" to "1000")),
+    NodeKind(WorkflowNodeType.LOGIC, R.string.dsh_workflow_kind_logic, mapOf("op" to "and", "sources" to "")),
+)
+
+/** 某个动作的默认 config（切入这个动作时整份替换，避免留下另一个动作的垃圾键）。 */
+private fun configForAction(action: WorkflowActionType): Map<String, String> = when (action) {
+    WorkflowActionType.SHELL -> mapOf("action" to action.id, "cmd" to "")
+    WorkflowActionType.DSH -> mapOf("action" to action.id, "cmd" to "")
+    WorkflowActionType.NOTIFY -> mapOf("action" to action.id, "title" to "", "text" to "")
+}
+
+private fun actionLabelRes(action: WorkflowActionType): Int = when (action) {
+    WorkflowActionType.SHELL -> R.string.dsh_workflow_kind_shell
+    WorkflowActionType.DSH -> R.string.dsh_workflow_kind_dsh
+    WorkflowActionType.NOTIFY -> R.string.dsh_workflow_kind_notify
+}
+
 /** 这个类型允许编辑的 config 键（与 [WorkflowValidator] 认的键一致）。 */
 private fun editableKeys(node: WorkflowNode): List<String> = when (node.type) {
     WorkflowNodeType.TRIGGER -> listOf("requireDsh", "autostartDsh")
-    WorkflowNodeType.EXECUTE -> when (node.actionType?.id) {
-        "notify" -> listOf("action", "title", "text")
-        else -> listOf("action", "cmd")
+    // action 由上面的选择器负责，这里只列「值」：把键暴露给自由文本输入等于让用户手打键名。
+    WorkflowNodeType.EXECUTE -> when (node.actionType) {
+        WorkflowActionType.NOTIFY -> listOf("title", "text")
+        else -> listOf("cmd")
     }
     WorkflowNodeType.CONDITION -> listOf("source", "op", "value")
     WorkflowNodeType.LOGIC -> listOf("op", "sources")

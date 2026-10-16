@@ -619,11 +619,4 @@ object DshEnv {
 
     /** 每次运行的逐节点结果（`<runId>.json`）与日志（`<runId>.log`）。 */
     fun workflowRunDir(ctx: Context): File = File(workflowDir(ctx), "runs")
-
-    /**
-     * 编辑器里还没批准的草稿快照。
-     *
-     * 与正式定义分开存：用户正在改、还没点批准的东西不该出现在工作流列表里；取消编辑即删。
-     */
-    fun workflowDraftDir(ctx: Context): File = File(workflowDir(ctx), "drafts")
 }

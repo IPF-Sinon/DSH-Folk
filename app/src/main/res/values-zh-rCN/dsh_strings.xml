@@ -1758,4 +1758,10 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_workflow_err_edited_invalid">用户编辑后的定义未通过校验：%1$s</string>
     <string name="dsh_workflow_err_save_failed">保存定义失败（磁盘）</string>
     <string name="dsh_workflow_err_start_failed">启动运行失败：%1$s</string>
+    <string name="dsh_workflow_kind_shell">执行命令</string>
+    <string name="dsh_workflow_kind_dsh">执行命令（需 DSH）</string>
+    <string name="dsh_workflow_editor_discard_title">放弃改动？</string>
+    <string name="dsh_workflow_editor_discard_body">有 %1$d 处改动还没保存。放弃后这次编辑就没了（审批还在，可以重新编辑）。</string>
+    <string name="dsh_workflow_editor_discard_ok">放弃改动</string>
+    <string name="dsh_workflow_editor_keep_editing">继续编辑</string>
 </resources>

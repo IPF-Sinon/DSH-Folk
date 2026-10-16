@@ -1196,7 +1196,10 @@ object DshRuntime {
             // Content-Length must be explicit (same as dsh-fs): write(body) alone goes chunked and the host answers 400.
             if (body) headers['Content-Length'] = Buffer.byteLength(body);
             const r = http.request({
-              host: '127.0.0.1', port: cfg.port, method: method, path: path, headers: headers
+              host: '127.0.0.1', port: cfg.port, method: method, path: path, headers: headers,
+              // agent:false = do not reuse connections. One command makes one request; keep-alive
+              // only leaves the process hanging on an open socket after the response arrives.
+              agent: false
             }, function (res) {
               const chunks = [];
               res.on('data', function (c) { chunks.push(c); });
@@ -1254,18 +1257,23 @@ object DshRuntime {
                 console.error(USAGE);
                 process.exit(1);
               }
-              let def;
-              try { def = JSON.parse(readDef()); } catch (e) {
-                console.error('dsh-workflow: definition is not valid JSON: ' + e.message);
-                process.exit(1);
-              }
-              const body = { definition: def, reason: opt.reason };
+              // `run --workflow <id>` runs a SAVED workflow: this path neither needs nor may read a
+              // definition. (Before, readDef() was called unconditionally, so `run --workflow wf_x`
+              // died with "need --file" and the documented command was unreachable.)
+              const byId = cmd === 'run' && opt.workflow && !opt.file && !opt.json && !a[0];
+              const body = { reason: opt.reason };
               if (opt.name) body.name = opt.name;
-              if (cmd === 'run') {
-                if (opt.workflow && !opt.file && !opt.json && !a[0]) {
-                  body.workflowId = opt.workflow;
-                  delete body.definition;
+              if (byId) {
+                body.workflowId = opt.workflow;
+              } else {
+                let def;
+                try { def = JSON.parse(readDef()); } catch (e) {
+                  console.error('dsh-workflow: definition is not valid JSON: ' + e.message);
+                  process.exit(1);
                 }
+                body.definition = def;
+              }
+              if (cmd === 'run') {
                 body.wait = !!opt.wait;
                 say(await req('POST', '/workflow/run', JSON.stringify(body)));
               } else {
