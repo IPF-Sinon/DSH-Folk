@@ -308,6 +308,15 @@ ok(!/workflowDraftDir|saveDraft|loadDraft|clearDraft/.test(SRC.store + read("app
   }
 }
 
+// Kotlin raw string 里拼错模板的典型形态是 ${$}（我拼过一次）：它在 JSON 里完全合法，
+// 只有编译器会报「Expecting an expression」，所以必须在这里钉住。
+{
+  const raw = [SRC.runtime.match(/val WORKFLOW_SAMPLES: Map<String, String> = mapOf\(([\s\S]*?)\n    \)/) || []];
+  const text = raw[0] ? raw[0][1] : "";
+  ok(!/\$\{\$\}/.test(text), "样例里没有拼坏的模板（${$} 形态）");
+  ok(text.includes("${D}{tag}"), "样例用 ${D}{tag} 写出运行时的 ${tag}（变量演示是真的在演示变量）");
+}
+
 console.log("\u2500 #14 样例定义：用户与 AI 的起点，必须真的合法");
 {
   const m = SRC.runtime.match(/val WORKFLOW_SAMPLES: Map<String, String> = mapOf\(([\s\S]*?)\n    \)/);

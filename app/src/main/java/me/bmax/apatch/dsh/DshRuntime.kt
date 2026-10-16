@@ -1632,7 +1632,7 @@ object DshRuntime {
       "onError": "stop",
       "config": {
         "action": "shell",
-        "cmd": "echo got ${$}tag${$}"
+        "cmd": "echo got ${D}{tag}"
       }
     },
     {
@@ -1660,7 +1660,7 @@ object DshRuntime {
       "config": {
         "action": "notify",
         "title": "workflow ok",
-        "text": "tag is ${$}tag${$}"
+        "text": "tag is ${D}{tag}"
       }
     },
     {
@@ -1674,7 +1674,7 @@ object DshRuntime {
       "config": {
         "action": "notify",
         "title": "workflow odd",
-        "text": "tag is not ${$}tag${$}"
+        "text": "tag is not ${D}{tag}"
       }
     }
   ],
