@@ -109,6 +109,7 @@ import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.WebScripts
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
+import me.bmax.apatch.ui.component.WorkflowDialogHosts
 import me.bmax.apatch.ui.theme.APatchTheme
 import me.bmax.apatch.util.DshWebCompat
 import me.bmax.apatch.util.LauncherIconUtils
@@ -401,6 +402,9 @@ class DshWebUiActivity : AppCompatActivity() {
                 // 提权申请弹窗：用户此刻正看着 WebUI，只挂在 MainActivity 上的话
                 // 这份申请他永远看不到（60 秒后静默超时算拒绝）
                 ElevationRequestDialogHost()
+            // 工作流审批（黄=建/红=跑）与运行前的权限检查：两处都要挂 —— WebUI 是独立 Activity，
+            // 不挂过去，用户在 WebUI 里让 agent 建工作流就等不到弹窗（桥那边会一直阻塞到超时）。
+            WorkflowDialogHosts()
 
                 // 旧内核上**自动**注入兼容垫片，然后只说明一次。
                 //

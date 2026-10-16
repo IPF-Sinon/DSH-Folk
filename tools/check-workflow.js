@@ -1,0 +1,287 @@
+/**
+ * 自动化工作流的门禁。
+ *
+ * 这个功能的安全模型只有一句话：**用户批准前看到的流程图，必须就是实际会执行的东西**。
+ * 因此这里断言的不是「代码风格」，而是那条链路上的每一环：定义只能声明不能变代码、批准前
+ * 一定有一道阻塞式确认、免逐条确认的范围恰好等于用户看过的那些能力、危险命令必须单独勾选、
+ * 容器侧拿到的说明必须与宿主实现一致。
+ *
+ * 与 check-native-logic 一样：能用正则查的用正则，能真跑的（插件 asset）就真跑。
+ */
+const fs = require("fs");
+const path = require("path");
+
+let failures = 0;
+let total = 0;
+function ok(cond, msg) {
+  total += 1;
+  if (cond) {
+    console.log("  \u2713 " + msg);
+  } else {
+    failures += 1;
+    console.log("  \u2717 " + msg);
+  }
+}
+function eq(a, b, msg) {
+  ok(a === b, msg + (a === b ? "" : `（实际 ${JSON.stringify(a)} 期望 ${JSON.stringify(b)}）`));
+}
+
+const read = (p) => fs.readFileSync(p, "utf8");
+const SRC = {
+  models: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowModels.kt"),
+  validator: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowValidator.kt"),
+  store: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowStore.kt"),
+  engine: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowEngine.kt"),
+  grants: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowGrants.kt"),
+  approvals: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowApprovals.kt"),
+  bridge: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowBridge.kt"),
+  perms: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowPermissions.kt"),
+  native: read("app/src/main/java/me/bmax/apatch/dsh/DshNativeBridge.kt"),
+  fsbridge: read("app/src/main/java/me/bmax/apatch/dsh/DshFsBridge.kt"),
+  runtime: read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt"),
+  hostPrompt: read("app/src/main/java/me/bmax/apatch/dsh/DshHostPrompt.kt"),
+  engineHarness: read("app/src/main/java/me/bmax/apatch/dsh/HarnessService.kt"),
+  settings: read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt"),
+  settingsScreen: read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt"),
+  dialogs: read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowDialogs.kt"),
+  screen: read("app/src/main/java/me/bmax/apatch/ui/screen/WorkflowScreen.kt"),
+  mainActivity: read("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt"),
+  webUiActivity: read("app/src/main/java/me/bmax/apatch/ui/DshWebUiActivity.kt"),
+  buildYml: read(".github/workflows/build.yml"),
+  betaYml: read(".github/workflows/beta.yml"),
+  mjs: read("app/src/main/assets/dsh-folk-workflow.mjs"),
+};
+
+console.log("\u2500 #1 DSL 是数据，不是代码");
+ok(/enum class WorkflowNodeType\(val id: String\)/.test(SRC.models), "节点类型是枚举（落盘 id 稳定，改不了形状）");
+for (const id of ["trigger", "execute", "condition", "logic", "extract", "wait"]) {
+  ok(new RegExp(`\\("${id}"\\)`).test(SRC.models), `节点类型含 ${id}`);
+}
+for (const id of ["shell", "dsh", "notify"]) {
+  ok(new RegExp(`\\("${id}"\\)`).test(SRC.models), `动作类型含 ${id}`);
+}
+ok(!/\beval\s*\(/.test(SRC.models + SRC.validator + SRC.engine), "定义通路里没有 eval");
+ok(!/Class\.forName|getDeclaredMethod|ScriptEngine/.test(SRC.models + SRC.validator + SRC.engine),
+  "没有反射/脚本引擎（否则「批准流程图」就成了摆设）");
+ok(/fun interpolate\(/.test(SRC.models) && !/\$\{.*\?.*:/.test(SRC.models.split("fun interpolate")[1] || ""),
+  "变量插值只做字符串替换，不做表达式求值");
+ok(/if \(v != null\) \{/.test(SRC.models.split("fun interpolate")[1] || ""),
+  "未定义的变量保持原样（不替换成空串：那会让 rm -rf \${dir}/ 变成 rm -rf /）");
+
+console.log("\u2500 #2 校验器：看不懂的定义一律拒绝");
+ok(/fun validate\(def: WorkflowDefinition, allowedCaps: Set<String>\): Result/.test(SRC.validator), "校验是纯函数（不碰设备、可单测）");
+ok(/findCycle\(def\)/.test(SRC.validator), "查环");
+ok(/reachableFrom\(def, entry\)/.test(SRC.validator) && /从 trigger 出发到不了/.test(SRC.validator), "要求每个节点从入口可达");
+ok(/必须且只能有一个 trigger 节点/.test(SRC.validator), "唯一入口");
+ok(/fun branchingNode\(node: WorkflowNode\?\)/.test(SRC.validator), "分支节点判定独立成函数（判断/逻辑/要求 DSH 的入口）");
+ok(/MAX_NODES = 64/.test(SRC.models) && /MAX_EDGES = 256/.test(SRC.models) && /MAX_CMD_CHARS = 8_192/.test(SRC.models),
+  "规模上限存在（64 节点 / 256 边 / 8KB 命令）");
+ok(/when\x27?/.test(SRC.validator) || /只认 true \/ false/.test(SRC.validator), "分支标签只认 true/false");
+
+console.log("\u2500 #3 批准链：阻塞 + 超时即拒绝 + 编辑期暂停");
+ok(/enum class Kind\(val id: String\) \{\s*CREATE\("create"\),\s*RUN\("run"\),/.test(SRC.approvals.replace(/\n/g, " ")) ||
+   /CREATE\("create"\)/.test(SRC.approvals) && /RUN\("run"\)/.test(SRC.approvals), "创建与运行是两个独立决定");
+ok(/const val TTL_MS = 60_000L/.test(SRC.approvals), "确认时限 60 秒");
+ok(/withTimeoutOrNull\(TTL_MS \+ 5_000L\)/.test(SRC.approvals), "等待有硬上限（超时不会把连接挂死）");
+ok(/Decision\.EXPIRED/.test(SRC.approvals) && /expireIfStill/.test(SRC.approvals), "超时按拒绝处理");
+ok(/fun startEditing\(id: Long\)/.test(SRC.approvals) && /expiry\?\.cancel\(\)/.test(SRC.approvals),
+  "打开编辑器会撤掉到期任务（用户在改东西时被判超时不是安全设计）");
+ok(/fun stopEditing\(id: Long, editedJson: String\?\)/.test(SRC.approvals) && /expiresAtMs = System\.currentTimeMillis\(\) \+ TTL_MS/.test(SRC.approvals),
+  "退出编辑器重新给满时限");
+ok(/allowDangerousIds/.test(SRC.approvals) && /val allowDangerous: Boolean = false/.test(SRC.approvals),
+  "危险命令的放行是单独一个结论位");
+ok(/rejectReasons\[id\] = reason\.trim\(\)/.test(SRC.approvals), "拒绝理由被记录（会转达给 AI）");
+
+console.log("\u2500 #4 免逐条确认的范围 = 用户看过的能力，且只在运行期");
+ok(/fun allows\(capId: String\): Grant\?/.test(SRC.grants) && /fun allowsDangerous\(capId: String\): Boolean/.test(SRC.grants),
+  "命中判据分「能力」与「危险」两条");
+ok(/caps = caps\.toSet\(\)/.test(SRC.grants), "授权绑定声明的能力集合");
+ok(/fun revoke\(runId: String\)/.test(SRC.grants) && /WorkflowGrants\.revoke\(runId\)/.test(SRC.engine),
+  "运行结束即撤销授权（在 finally 里，异常路径也撤）");
+ok(/WorkflowGrants\.grant\(\s*runId = runId/.test(SRC.engine) && !/grant\(\s*runId = "pending"/.test(SRC.engine),
+  "授权在开跑前落好，且用的是真实 runId（没有中间态窗口）");
+{
+  const bypass = (SRC.native.match(/!workflowCall &&/g) || []).length;
+  ok(bypass >= 6, `门禁旁路出现在 ${bypass} 处（档位/总开关/读写/系统通知档都要一起放，只放一处等于没放）`);
+  // 逐处点名：只数次数的话，「删掉其中一处、再加一处无意义的」也能凑够数。
+  for (const [pat, what] of [
+    [/if \(!workflowCall && !enabled\(ctx\)\)/, "原生能力总开关"],
+    [/val confirm = !workflowCall && PrivPolicy\.needsConfirm\(/, "限制模式/危险清单确认"],
+    [/if \(\(need != null \|\| confirm\) && !workflowCall\)/, "档位不足与确认共用同一条弹窗路径"],
+    [/if \(!workflowCall && !capCallable\(ctx, cap\)\)/, "能力档位关闭"],
+    [/if \(!workflowCall && path == "\/native\/notify\/system"/, "系统级通知档"],
+    [/if \(!workflowCall && isWriteRequest\(method, path, params\) && !canWrite\(ctx, cap\)\)/, "写档位"],
+    [/if \(!workflowCall && !isWriteRequest\(method, path, params\) && !canRead\(ctx, cap\)\)/, "读档位"],
+  ]) {
+    ok(pat.test(SRC.native), `工作流调用放开了「${what}」`);
+  }
+  ok(/val workflowGrant = grantCap\?\.let \{/.test(SRC.native) && /WorkflowGrants\.allowsDangerous\(it\.id\)/.test(SRC.native),
+    "危险命令走 allowsDangerous（勾过才放行）");
+  ok(!/val workflowCall = true/.test(SRC.native), "没有「无条件视为工作流」的写法");
+  ok(/privDecision = "workflow:" \+/.test(SRC.native), "审计记下是哪一次运行放行的");
+}
+
+console.log("\u2500 #5 Android 权限没有被绕过（运行前专门检查）");
+ok(/object WorkflowPermissions/.test(SRC.perms) && /fun missing\(ctx: Context, caps: List<String>\): List<Item>/.test(SRC.perms),
+  "权限检查按声明能力计算缺失项");
+for (const cap of ["CAMERA", "MIC", "LOCATION", "CONTACTS", "CALENDAR", "SMS", "PHONE", "MEDIA", "NOTIFY",
+  "FULL_SCREEN_NOTIFY", "A11Y", "USAGE", "SETTINGS", "INSTALL", "SHELL", "DISPLAY"]) {
+  ok(new RegExp(`Cap\\.${cap}\\.id`).test(SRC.perms), `权限预检覆盖 Cap.${cap}`);
+}
+ok(/Kind\.RUNTIME/.test(SRC.perms) && /Kind\.SPECIAL/.test(SRC.perms) && /settingsIntent\(/.test(SRC.perms),
+  "区分运行时权限与特殊访问（后者只能跳设置页）");
+ok(/const val TTL_MS = 300_000L/.test(SRC.perms), "权限检查时限 5 分钟（跳设置页开无障碍 60 秒不够）");
+ok(/fun granted\(ctx: Context, item: Item\)/.test(SRC.perms) && /required\(ctx, caps\)\.filter \{ !granted\(ctx, it\) \}/.test(SRC.perms),
+  "已授权的项从清单里消失（回来后重算，不会停在旧快照）");
+ok(/WorkflowPermissions\.Gate\.pending/.test(SRC.dialogs) && /WorkflowPermissions\.Gate\.start/.test(SRC.dialogs),
+  "弹窗接在同一个 Gate 状态机上");
+
+console.log("\u2500 #6 端点：同一 token 守卫 + 总开关 + 前台才弹");
+for (const ep of ["/workflow/list", "/workflow/status", "/workflow/create", "/workflow/run", "/workflow/cancel"]) {
+  ok(SRC.bridge.includes(`"${ep}"`), `实现 ${ep}`);
+}
+ok(/path\.startsWith\("\/workflow\/"\) -> dispatchWorkflow\(/.test(SRC.fsbridge), "DshFsBridge 路由到 /workflow/");
+ok(/private fun dispatchWorkflow\(/.test(SRC.fsbridge) && /readJsonBody\(input, headers, 256L \* 1024\)/.test(SRC.fsbridge),
+  "请求体单独放宽到 256KB（定义比普通原生调用大）");
+ok(/KEY_WORKFLOW_ENABLED, false/.test(SRC.bridge) && /dsh_workflow_err_disabled/.test(SRC.bridge),
+  "总开关默认关，关着回 403 disabled");
+ok(/if \(!DshNativeBridge\.isForeground\(ctx\)\)/.test(SRC.bridge), "不在前台不弹窗（否则连接等一个永远不出现的弹窗）");
+ok(/if \(reason\.isBlank\(\)\) return 400/.test(SRC.bridge), "reason 必填，弹窗上才有「发起理由」可显示");
+
+console.log("\u2500 #7 编辑后的 diff 必须随结果回传");
+ok(/fun workflowDiff\(before: WorkflowDefinition, after: WorkflowDefinition\): List<WorkflowPatch>/.test(SRC.models),
+  "结构差异单独一个纯函数");
+ok(/OP_ADD_NODE/.test(SRC.models) && /OP_REMOVE_NODE/.test(SRC.models) && /OP_UPDATE_NODE/.test(SRC.models) &&
+  /OP_ADD_EDGE/.test(SRC.models) && /OP_REMOVE_EDGE/.test(SRC.models), "patch 词汇与 Operit 的 node_patches 对齐（增删改/连线）");
+ok(/diff = workflowDiff\(submitted, edited\)/.test(SRC.bridge) && /effective = edited/.test(SRC.bridge),
+  "用户改过就按改动后的版本执行");
+ok(/\.put\("diffText", JSONArray\(diff\.map \{ it\.humanize\(\) \}\)\)/.test(SRC.bridge), "diff 有机器可读与人类可读两份");
+ok(/val recheck = WorkflowValidator\.validate\(edited, allowedCaps\)/.test(SRC.bridge),
+  "用户编辑后的版本**重新校验**（改坏了不执行）");
+ok(/diff = diff,/.test(SRC.engine) && /\.put\("diff"/.test(SRC.bridge), "diff 也随运行结果一起给出");
+
+console.log("\u2500 #8 执行：DSH 拉起与等待、可取消、结果可查");
+ok(/suspend fun awaitRunning\(timeoutMs: Long\): Boolean/.test(SRC.runtime), "DshRuntime 有「等 DSH 真的在跑」");
+ok(/HarnessService\.start\(ctx\)/.test(SRC.engine) && /awaitRunning\(node\.timeoutMs\)/.test(SRC.engine),
+  "trigger 会自主拉起 DSH 并等待（未启动 DSH 时先阻塞启动）");
+ok(/hasFalse/.test(SRC.engine) && /dsh_unavailable/.test(SRC.engine),
+  "起不来时走 false 分支（可条件判断进入其它流程）或判失败");
+ok(/destroyForcibly\(\)/.test(SRC.engine) && /currentProcess\[runId\] = proc/.test(SRC.engine),
+  "取消会杀掉当前节点进程（只 cancel 协程要等到命令自己结束）");
+ok(/proc\.exitValue\(\)/.test(SRC.engine), "自己取退出码（「跑完了」与「失败了」必须能分辨）");
+ok(/WorkflowStore\.saveRun\(ctx, run\)/.test(SRC.engine) && /appendLog\(ctx, runId/.test(SRC.engine),
+  "每步落盘 + 日志边跑边追加（状态可查，不是只在内存里）");
+ok(/fun reconcileInterrupted\(ctx: Context\)/.test(SRC.store) && /WorkflowStore\.reconcileInterrupted/.test(SRC.bridge),
+  "重启后把挂着的运行标成 INTERRUPTED（不谎报 running）");
+ok(/fun cancel\(ctx: Context, runId: String, reason: String\): Boolean/.test(SRC.engine), "取消是显式的");
+ok(/HarnessService\.hold\(/.test(SRC.engine) && /ACTION_HOLD/.test(SRC.engineHarness),
+  "长流程用前台服务钉住进程，且不顺带启动容器");
+ok(/fromHold -> false/.test(SRC.engineHarness), "HOLD 不会拉起容器（纯 shell 工作流不该拖起一整套 DSH）");
+{
+  const line = SRC.runtime.match(/val WORKFLOW_CLI_SCRIPT = """([\s\S]*?)"""\.trimIndent\(\)/);
+  ok(line !== null, "容器侧 dsh-workflow CLI 存在");
+  const body = line ? line[1] : "";
+  ok(!/[^\x00-\x7F]/.test(body), "CLI 字面量纯 ASCII（既有 check-native-cli 的规矩）");
+  ok(/"dsh-workflow" to WORKFLOW_CLI_SCRIPT/.test(SRC.runtime), "CLI 被写进 /usr/local/bin");
+  ok(/--reason is required/.test(body), "CLI 强制 --reason（与端点一致）");
+  ok(/\/workflow\/status/.test(body) && /\/workflow\/cancel/.test(body), "CLI 覆盖状态与取消");
+}
+
+console.log("\u2500 #9 容器侧插件：降级 + 说明文档 + 版本号独立");
+{
+  const s = SRC.mjs;
+  ok(/export const name = 'dsh-folk-workflow'/.test(s), "插件有 name");
+  ok(/export const inject = \['systemPrompt'\]/.test(s) && !/inject = \['tools'/.test(s),
+    "只注入 systemPrompt（工具服务在旧运行时可能不存在，声明它会让整个 entry 不激活）");
+  ok(/export function apply\(ctx\)/.test(s), "有 apply（cordis 插件契约）");
+  for (const tool of ["workflow_create", "workflow_run", "workflow_status", "workflow_cancel"]) {
+    ok(s.includes(`'${tool}'`) || s.includes(`"${tool}"`) || s.includes(tool), `注册工具 ${tool}`);
+  }
+  ok(/typeof defineTool === 'function'\) return ctx\.tools\.register\(defineTool\(specObj\)\)/.test(s) &&
+    /return ctx\.tools\.register\(specObj\)/.test(s),
+    "工具注册有降级路径（defineTool → 裸 spec）");
+  ok(/writeStatus\(\{\s*state: 'degraded'/.test(s) && /writeStatus\(\{\s*state: 'unavailable'/.test(s),
+    "注册失败会落盘状态（设置页才能如实告诉用户）");
+  ok(/DSL_DOC = '\/root\/\.dsh\/workflow-dsl\.md'/.test(s) && /FALLBACK_SECTION/.test(s),
+    "提示词段读宿主写的 DSL 文档，读不到用兜底");
+  ok(/'dsh-workflow', '\/usr\/local\/bin\/dsh-workflow'/.test(s), "工具走 CLI（与人手敲命令同一条实现）");
+  ok(/WORKFLOW_PLUGIN_REV = 1/.test(SRC.hostPrompt) && /KEY_WORKFLOW_PLUGIN_REV/.test(SRC.hostPrompt),
+    "工作流插件有独立版本号");
+  ok(/private const val PLUGIN_REV = 20/.test(SRC.hostPrompt),
+    "宿主提示词插件的 PLUGIN_REV 未被牵连抬高（内容没变）");
+  ok(/PluginSpec\(\s*WORKFLOW_ASSET_NAME/.test(SRC.hostPrompt), "工作流插件在落盘/patch 清单里");
+  ok(/private val WORKFLOW_DSL_DOC = """/.test(SRC.runtime) && /WORKFLOW_DSL_DOC_NAME/.test(SRC.runtime),
+    "宿主写 DSL 说明进容器");
+  ok(/MAX_NODES|node types|trigger/.test(SRC.runtime.split("WORKFLOW_DSL_DOC = \"\"\"")[1] || ""),
+    "DSL 说明里有节点类型（agent 照它写定义，才不会撞校验器）");
+}
+
+console.log("\u2500 #10 UI：两个宿主都挂、设置项接上、文案两份齐全");
+ok((SRC.mainActivity.match(/WorkflowDialogHosts\(\)/g) || []).length === 1, "MainActivity 挂了弹窗宿主");
+ok((SRC.webUiActivity.match(/WorkflowDialogHosts\(\)/g) || []).length === 1, "DshWebUiActivity 也挂了（它是独立 Activity）");
+ok(/WorkflowDialogHosts\(\)/.test(SRC.dialogs), "宿主同时渲染审批与权限检查");
+ok(/WorkflowApprovals\.approve\(request\.id, dangerous\)/.test(SRC.dialogs), "批准带上危险命令结论");
+ok(/WorkflowApprovals\.startEditing\(request\.id\)/.test(SRC.dialogs) && /WorkflowEditorOverlay\(/.test(SRC.dialogs),
+  "编辑页在宿主里（编辑期间审批弹窗不渲染）");
+ok(/WorkflowGraphPreview\(definition\)/.test(SRC.dialogs), "批准弹窗里有流程图预览");
+ok(/posX/.test(SRC.dialogs) && /detectDragGestures/.test(SRC.dialogs), "编辑页节点可拖动且位置写回定义");
+ok(/function_workflow/.test(SRC.settings) && /onOpenWorkflow/.test(SRC.settings), "设置里有入口卡片");
+ok(/onOpenWorkflow = \{ navigator\.navigate\(WorkflowScreenDestination\) \}/.test(SRC.settingsScreen),
+  "卡片真的会打开工作流页（不是只声明一个没人用的参数）");
+ok(/@Destination<RootGraph>/.test(SRC.screen) && /fun WorkflowScreen\(navigator: DestinationsNavigator\)/.test(SRC.screen),
+  "工作流页是真目的地");
+ok(/KEY_WORKFLOW_ENABLED/.test(SRC.screen), "页面能开关总开关");
+ok(/WorkflowPermissions\.Gate\.submit/.test(SRC.screen), "页面自己运行也要过权限检查");
+{
+  const zh = read("app/src/main/res/values-zh-rCN/dsh_strings.xml");
+  const en = read("app/src/main/res/values/dsh_strings.xml");
+  const used = new Set();
+  for (const f of Object.values(SRC)) {
+    for (const m of f.matchAll(/R\.string\.(dsh_workflow[a-zA-Z0-9_]*)/g)) used.add(m[1]);
+  }
+  const inFile = (t) => new Set([...t.matchAll(/name="(dsh_workflow[a-zA-Z0-9_]*)"/g)].map((m) => m[1]));
+  const zhKeys = inFile(zh);
+  const enKeys = inFile(en);
+  const missZh = [...used].filter((k) => !zhKeys.has(k));
+  const missEn = [...used].filter((k) => !enKeys.has(k));
+  const extraZh = [...zhKeys].filter((k) => !enKeys.has(k));
+  ok(missZh.length === 0 && missEn.length === 0, `引用的 ${used.size} 条文案中英都有` +
+    `${missZh.length ? "，zh 缺 " + missZh.join(",") : ""}${missEn.length ? "，en 缺 " + missEn.join(",") : ""}`);
+  ok(extraZh.length === 0, "两份文案键集完全一致（多出：" + extraZh.join(",") + "）");
+}
+
+console.log("\u2500 #11 新门禁登记进两条 CI 清单");
+ok(/node tools\/check-workflow\.js/.test(SRC.buildYml), "build.yml 里有 check-workflow");
+ok(/node tools\/check-workflow\.js/.test(SRC.betaYml), "beta.yml 里有 check-workflow");
+
+console.log("");
+// #12 真跑插件 asset：工具表能建出正确 argv，且失败时**返回字符串而不是抛异常**
+(async () => {
+  console.log("\u2500 #12 真跑 dsh-folk-workflow.mjs");
+  const mod = await import("../app/src/main/assets/dsh-folk-workflow.mjs");
+  const tools = mod.__test.TOOLS;
+  eq(tools.length, 4, "四个工具都在");
+  const names = tools.map((t) => t.name).sort().join(",");
+  eq(names, "workflow_cancel,workflow_create,workflow_run,workflow_status", "工具名固定");
+  for (const t of tools) {
+    ok(typeof t.description === "string" && t.description.length > 40, `${t.name} 有像样的说明（模型靠它判断何时用）`);
+    ok(typeof t.execute === "function", `${t.name} 有 execute`);
+  }
+  const create = tools.find((t) => t.name === "workflow_create");
+  ok(create.parameters.required.includes("reason"), "workflow_create 要求 reason");
+  const run = tools.find((t) => t.name === "workflow_run");
+  ok(run.parameters.properties.wait !== undefined, "workflow_run 暴露 wait（默认不阻塞，可选阻塞）");
+  const cancel = tools.find((t) => t.name === "workflow_cancel");
+  ok(cancel.parameters.required.includes("runId"), "workflow_cancel 要求 runId");
+  // CLI 不存在时：必须回一句可读的话，而不是把异常抛给 agent 循环
+  const out = await run.execute({ workflowId: "wf_x", reason: "test" });
+  eq(typeof out, "string", "execute 永远返回字符串（不抛异常）");
+  ok(out.length > 0, "失败也有可读输出：" + out.slice(0, 60).replace(/\n/g, " "));
+
+  console.log("");
+  if (failures) {
+    console.error(`\u2717 有失败：${total} 项断言，${failures} 项失败`);
+    process.exit(1);
+  }
+  console.log(`\u2713 全部通过：${total} 项断言，0 项失败`);
+})();

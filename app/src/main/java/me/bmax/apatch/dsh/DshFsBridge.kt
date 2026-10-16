@@ -169,6 +169,10 @@ object DshFsBridge {
                     // DocumentsContract 代办。同一 token + 回环守卫；写操作在 dispatchSaf 内按
                     // Cap.SAF 的读写档 gate（读 App 侧 prefs，不信容器）。
                     path.startsWith("/saf/") -> dispatchSaf(method, path, params, input, headers, out)
+                    // 自动化工作流：容器里的 AI 经 dsh-workflow CLI / 工具插件建流程、跑流程、
+                    // 查状态。同一 token + 回环守卫；总开关在 [WorkflowBridge] 里判（关着回 403），
+                    // 因为它的门禁语义与原生能力那套不同（一次批准、运行期不再逐条问）。
+                    path.startsWith("/workflow/") -> dispatchWorkflow(method, path, params, input, headers)
                     method == "GET" && path == "/health" -> handleHealth()
                     method == "GET" && path == "/list" -> handleList(params)
                     method == "GET" && path == "/stat" -> handleStat(params["path"])
@@ -262,12 +266,32 @@ object DshFsBridge {
     }
 
     /** 读一段有界的 JSON 请求体（补包请求都很小：档位/开关/口令/路径，64KB 足够挡住误用）。 */
-    private fun readJsonBody(input: InputStream, headers: Map<String, String>): JSONObject {
+    private fun readJsonBody(input: InputStream, headers: Map<String, String>, limit: Long = 64L * 1024): JSONObject {
         val len = headers["content-length"]?.toLongOrNull() ?: 0L
-        if (len <= 0 || len > 64L * 1024) return JSONObject()
+        if (len <= 0 || len > limit) return JSONObject()
         val buf = ByteArrayOutputStream()
         pump(input, buf, len)
         return runCatching { JSONObject(buf.toString("UTF-8")) }.getOrDefault(JSONObject())
+    }
+
+    /**
+     * `/workflow/…`：自动化工作流。
+     *
+     * 与 `/native/…` 共用同一套回环 + token 守卫，但门禁语义不同：工作流的模型是「开跑前一次
+     * 批准，运行期不再逐条确认」，所以它的总开关与授权判定都在 [WorkflowBridge] / [WorkflowGrants]
+     * 里，这里只负责把请求体读出来（定义可能比普通 /native 请求大，单独放宽到 256KB）。
+     */
+    private fun dispatchWorkflow(
+        method: String,
+        path: String,
+        params: Map<String, String>,
+        input: InputStream,
+        headers: Map<String, String>,
+    ): Pair<Int, String>? {
+        val ctx = appCtx ?: return 500 to errorJson(str(R.string.dsh_fs_err_native_uninit), "native_uninit")
+        return WorkflowBridge.handle(ctx, method, path, params) {
+            readJsonBody(input, headers, 256L * 1024).toString()
+        }
     }
 
     // ────────────────────────── SAF 桥 ──────────────────────────

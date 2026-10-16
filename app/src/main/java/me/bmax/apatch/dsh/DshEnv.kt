@@ -596,4 +596,34 @@ object DshEnv {
 
     /** 宿主事实文件（JSON），由 App 写、dsh-folk-host 插件读。 */
     fun hostFacts(ctx: Context): File = File(dshHome(ctx), "host-facts.json")
+
+    // ────────────────────────── 自动化工作流 ──────────────────────────
+
+    /**
+     * 「自动化工作流」总开关（默认**关**）。
+     *
+     * 关掉时 `/workflow/…` 一律 403。理由与原生能力桥同款、但更强：工作流能在容器里连着
+     * 跑一长串命令，而容器里跑的**不只是 dsh 本体**，还有用户从插件商店装的第三方插件 ——
+     * 它们共享同一个回环 token（都读 `/root/.dsh/fs-bridge.json`），所以「能调这个接口」
+     * 等价于「容器内任何代码都能调」。这条通路必须由用户显式打开才会存在。
+     */
+    const val KEY_WORKFLOW_ENABLED = "workflow_enabled"
+
+    /**
+     * 工作流定义与运行记录的目录。
+     *
+     * 放在 App 私有目录（`filesDir`）而不是容器里：定义要能被**宿主**校验与执行，而运行
+     * 记录是用户可查的审计材料 —— 容器可以随时被重装（换运行时），这些不该跟着没。
+     */
+    fun workflowDir(ctx: Context): File = File(ctx.filesDir, "workflows")
+
+    /** 每次运行的逐节点结果（`<runId>.json`）与日志（`<runId>.log`）。 */
+    fun workflowRunDir(ctx: Context): File = File(workflowDir(ctx), "runs")
+
+    /**
+     * 编辑器里还没批准的草稿快照。
+     *
+     * 与正式定义分开存：用户正在改、还没点批准的东西不该出现在工作流列表里；取消编辑即删。
+     */
+    fun workflowDraftDir(ctx: Context): File = File(workflowDir(ctx), "drafts")
 }

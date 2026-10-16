@@ -664,7 +664,21 @@ object DshNativeBridge {
         if (path == "/native/elevate") {
             return if (method == "POST") requestElevation(ctx, params) else methodNotAllowed(ctx, method, path)
         }
-        if (!enabled(ctx)) {
+        // 工作流运行期间的调用**不受这套门禁制约**：用户在工作流开跑前对整份流程点过一次头
+        // （弹窗逐项列了它要用的能力），此后每一步再被档位 / 限制模式 / 危险清单拦一次，只会把
+        // 「一次批准」变成几十次形式化点击 —— 那种设计最后的产物是人闭眼点「允许」。
+        //
+        // 真正兜底的是 **Android 自己的权限**：运行时权限、特殊访问（无障碍/用量/全屏通知…）
+        // 一样都没被这里绕过，缺了照样失败；而且工作流开跑前有一个专门的检查弹窗先把它们
+        // 确认好（见 [WorkflowPermissions]）。危险命令另有一道条件：批准时必须**单独勾选**过。
+        val grantCap = capOf(path)
+        val grantDanger = grantCap == Cap.SHELL &&
+            PrivPolicy.shellRisk(ctx, params["cmd"].orEmpty()) == PrivRisk.DANGEROUS
+        val workflowGrant = grantCap?.let {
+            if (grantDanger) WorkflowGrants.allowsDangerous(it.id) else WorkflowGrants.allows(it.id)
+        }
+        val workflowCall = workflowGrant != null
+        if (!workflowCall && !enabled(ctx)) {
             return 403 to err(str(ctx, R.string.dsh_native_err_disabled), "disabled")
         }
 
@@ -680,7 +694,7 @@ object DshNativeBridge {
             )
         // 档位不够时**不**直接 403，而是阻塞着问用户。用户同意就把这次调用就地执行掉并返回真实
         // 结果 —— agent 不需要「申请 → 再调一次」，也就不会看到「申请成功了但调用还是失败」。
-        val need = insufficient(ctx, cap, method, path, params)
+        val need = if (workflowCall) null else insufficient(ctx, cap, method, path, params)
         // 档位够不代表就能直接跑：还要过「限制模式 + 危险操作清单」这一关（[PrivPolicy]）。
         //
         // 判据只有两个来源，**对所有能力一视同仁**：
@@ -691,7 +705,7 @@ object DshNativeBridge {
         // 能力；现在把 CAMERA 之类放进能力清单才是真的新增了一道闸。
         val danger = cap == Cap.SHELL &&
             PrivPolicy.shellRisk(ctx, params["cmd"].orEmpty()) == PrivRisk.DANGEROUS
-        val confirm = PrivPolicy.needsConfirm(
+        val confirm = !workflowCall && PrivPolicy.needsConfirm(
             restrictMode = PrivPolicy.restrictMode(ctx),
             capRestricted = PrivPolicy.isRestricted(ctx, cap),
             danger = danger,
@@ -703,7 +717,11 @@ object DshNativeBridge {
         } else {
             PrivRisk.WRITE
         }
-        if (need != null || confirm) {
+        if (workflowCall) {
+            // 审计里要能回答「这条命令是哪个工作流的哪一次运行放行的」——这就是那条线索。
+            privDecision = "workflow:" + (workflowGrant?.runId ?: "")
+        }
+        if ((need != null || confirm) && !workflowCall) {
             // 弹窗只有在前台才看得见；不在前台就别把这条连接挂在这里等一个永远不会出现的弹窗
             if (!isForeground(ctx)) {
                 val result = 409 to err(
@@ -770,12 +788,12 @@ object DshNativeBridge {
         }
         // 免确认直接跑掉的时候，"为什么不用问"要能分辨：限制模式关着，还是这个能力不在清单里
         // —— 事后复盘时这两者的含义完全不同（前者是全局默认，后者是用户把它移出了清单）。
-        if (need == null && !confirm) {
+        if (!workflowCall && need == null && !confirm) {
             privDecision = if (PrivPolicy.restrictMode(ctx)) "cap_not_listed" else "restrict_off"
         }
         // 兜底：走到这里档位仍不够（例如申请期间用户在别处把开关关掉了）。维持原来的 403，
         // 而不是假装放行。
-        if (!capCallable(ctx, cap)) {
+        if (!workflowCall && !capCallable(ctx, cap)) {
             val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_cap_disabled, capName(ctx, cap)),
                 "cap_disabled",
@@ -783,12 +801,12 @@ object DshNativeBridge {
             audit(ctx, method, path, params, cap, reason, result)
             return result
         }
-        if (path == "/native/notify/system" && effectiveAccess(ctx, cap) != Access.CONTROL) {
+        if (!workflowCall && path == "/native/notify/system" && effectiveAccess(ctx, cap) != Access.CONTROL) {
             val result = 403 to err(str(ctx, R.string.dsh_native_err_control_disabled, capName(ctx, cap)), "control_disabled")
             audit(ctx, method, path, params, cap, reason, result)
             return result
         }
-        if (isWriteRequest(method, path, params) && !canWrite(ctx, cap)) {
+        if (!workflowCall && isWriteRequest(method, path, params) && !canWrite(ctx, cap)) {
             val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_write_disabled, capName(ctx, cap)),
                 "write_disabled",
@@ -796,7 +814,7 @@ object DshNativeBridge {
             audit(ctx, method, path, params, cap, reason, result)
             return result
         }
-        if (!isWriteRequest(method, path, params) && !canRead(ctx, cap)) {
+        if (!workflowCall && !isWriteRequest(method, path, params) && !canRead(ctx, cap)) {
             val result = 403 to err(
                 str(ctx, R.string.dsh_native_err_read_disabled, capName(ctx, cap)),
                 "read_disabled",

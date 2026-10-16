@@ -87,6 +87,45 @@ object DshHostPrompt {
      * 新增 CAP_USAGE 的 saf 段与 CAP_CAVEAT 的 saf 注意事项。
      */
     private const val PLUGIN_REV = 20
+
+    /**
+     * 第二个插件：容器里的工作流工具（workflow_create / run / status / cancel）。
+     *
+     * 与提示词插件分成两个 entry，而不是合成一个：工具注册**会**失败（不同 dsh 版本的工具
+     * API 不一样），而提示词段不该跟着一起消失 —— 合在一起的话，工具注册抛异常会让整棵插件树
+     * 加载失败，连「怎么用 CLI」的说明都没了。分开之后两边各自独立降级。
+     */
+    private const val WORKFLOW_ASSET_NAME = "dsh-folk-workflow.mjs"
+    private const val WORKFLOW_GUEST_PATH = "/root/.dsh/plugins/dsh-folk-workflow.mjs"
+    private const val WORKFLOW_HOST_REL = "root/.dsh/plugins/dsh-folk-workflow.mjs"
+    private const val WORKFLOW_ENTRY_ID = "dsh-folk-workflow"
+
+    /**
+     * 工作流插件的版本号，**独立于** [PLUGIN_REV]。
+     *
+     * 两个插件各有各的内容与版本：改工作流插件不该让宿主提示词插件被重写一遍（反之亦然）。
+     * 版本号是 [ensureInstalled] 重新落盘的唯一依据，共用一份会让「只改了一个」也全量重写。
+     */
+    private const val WORKFLOW_PLUGIN_REV = 1
+    private const val KEY_WORKFLOW_PLUGIN_REV = "workflow_plugin_rev"
+
+    /** 要落盘与挂 patch 的插件清单（顺序即 patch 里的顺序）。 */
+    private data class PluginSpec(
+        val asset: String,
+        val hostRel: String,
+        val guestPath: String,
+        val entryId: String,
+        val revKey: String,
+        val rev: Int,
+    )
+
+    private val PLUGINS = listOf(
+        PluginSpec(ASSET_NAME, PLUGIN_HOST_REL, PLUGIN_GUEST_PATH, ENTRY_ID, KEY_PLUGIN_REV, PLUGIN_REV),
+        PluginSpec(
+            WORKFLOW_ASSET_NAME, WORKFLOW_HOST_REL, WORKFLOW_GUEST_PATH, WORKFLOW_ENTRY_ID,
+            KEY_WORKFLOW_PLUGIN_REV, WORKFLOW_PLUGIN_REV,
+        ),
+    )
     private const val KEY_PLUGIN_REV = "host_prompt_plugin_rev"
 
     private fun prefs(ctx: Context) =
@@ -112,15 +151,16 @@ object DshHostPrompt {
     fun ensureInstalled(ctx: Context) {
         if (!DshEnv.isRuntimeInstalled(ctx)) return
         runCatching {
-            val dst = File(DshEnv.rootfs(ctx), PLUGIN_HOST_REL)
-            val revOk = prefs(ctx).getInt(KEY_PLUGIN_REV, 0) == PLUGIN_REV
-            if (!revOk || !dst.isFile || dst.length() == 0L) {
-                val body = ctx.assets.open(ASSET_NAME).use {
+            for (spec in PLUGINS) {
+                val dst = File(DshEnv.rootfs(ctx), spec.hostRel)
+                val revOk = prefs(ctx).getInt(spec.revKey, 0) == spec.rev
+                if (revOk && dst.isFile && dst.length() > 0L) continue
+                val body = ctx.assets.open(spec.asset).use {
                     it.readBytes().toString(StandardCharsets.UTF_8)
                 }
                 dst.parentFile?.mkdirs()
                 dst.writeText(body, StandardCharsets.UTF_8)
-                prefs(ctx).edit { putInt(KEY_PLUGIN_REV, PLUGIN_REV) }
+                prefs(ctx).edit { putInt(spec.revKey, spec.rev) }
             }
             writeFacts(ctx)
             ensurePatchRow(ctx)
@@ -162,9 +202,16 @@ object DshHostPrompt {
      * 数组，否则**整个 profile 启动失败**）。
      */
     private fun ensurePatchRow(ctx: Context) {
+        // 逐个插件保证：任何一个的形状坏了只修它自己，不牵连另一个。
+        for (spec in PLUGINS) ensurePatchRow(ctx, spec)
+    }
+
+    private fun ensurePatchRow(ctx: Context, spec: PluginSpec) {
         val f = File(DshEnv.rootfs(ctx), HOME_PATCH_REL)
+        val entryId = spec.entryId
+        val guestPath = spec.guestPath
         val existing = if (f.isFile) f.readText(StandardCharsets.UTF_8) else ""
-        val idLine = "- id: $ENTRY_ID"
+        val idLine = "- id: $entryId"
         val lines = existing.split("\n")
         val at = lines.indexOfFirst { it.trim() == idLine }
         // 有缩进 = 它在 `- insert:` 之下，形状正确，不碰别人写的任何行
@@ -200,8 +247,8 @@ object DshHostPrompt {
             if (head.isNotEmpty()) append(head).append('\n')
             append(OUR_COMMENT_PREFIX).append("（App 自动维护；删掉这几行即可停用）\n")
             append("- insert:\n")
-            append("    - id: $ENTRY_ID\n")
-            append("      name: $PLUGIN_GUEST_PATH\n")
+            append("    - id: $entryId\n")
+            append("      name: $guestPath\n")
         }
         if (body == existing) return
         f.parentFile?.mkdirs()
@@ -212,7 +259,7 @@ object DshHostPrompt {
             tmp.delete()
             android.util.Log.w(TAG, "写 cordis.patch.yml 失败（rename）")
         } else {
-            android.util.Log.i(TAG, "cordis.patch.yml 已写：dsh-folk-host（insert 形状，at=$at）")
+            android.util.Log.i(TAG, "cordis.patch.yml 已写：$entryId（insert 形状，at=$at）")
         }
     }
 

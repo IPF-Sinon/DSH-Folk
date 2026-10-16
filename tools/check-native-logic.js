@@ -722,7 +722,9 @@ console.log("\n── 特权通道约束 ──");
   ok(/"\/native\/shell" -> Cap\.SHELL/.test(bridge), "端点映射到 Cap.SHELL");
   ok(/PrivilegedShell\.riskOf\(params\["cmd"\]\.orEmpty\(\)\) != PrivRisk\.READONLY/.test(bridge),
     "读写判定看命令本身（否则「读」档位连 getprop 都用不了）");
-  ok(/val confirm = PrivPolicy\.needsConfirm\(\s*\n?\s*restrictMode = PrivPolicy\.restrictMode\(ctx\),\s*\n?\s*capRestricted = PrivPolicy\.isRestricted\(ctx, cap\),\s*\n?\s*danger = danger,/.test(bridge),
+  // 工作流运行期间的调用不受门禁制约（见 WorkflowGrants），所以 confirm 现在带一个前缀；
+  // 不变的是：判据仍然逐参数具名，而不是靠位置传参。
+  ok(/val confirm = (!workflowCall && )?PrivPolicy\.needsConfirm\(\s*\n?\s*restrictMode = PrivPolicy\.restrictMode\(ctx\),\s*\n?\s*capRestricted = PrivPolicy\.isRestricted\(ctx, cap\),\s*\n?\s*danger = danger,/.test(bridge),
     "限制模式接在闸门上（参数名逐个写出来，别靠位置）");
   ok(/val danger = cap == Cap\.SHELL &&\s*\n?\s*PrivPolicy\.shellRisk\(ctx, params\["cmd"\]\.orEmpty\(\)\) == PrivRisk\.DANGEROUS/.test(bridge),
     "危险判定来自清单，且只对 shell 命令（其余能力没有「危险动作」这个概念，它在不在清单里才是判据）");
@@ -770,7 +772,14 @@ console.log("\n── 特权通道约束 ──");
     const expect = dispRead.includes(path) ? "readonly" : "write";
     eq(byRisk === expect, true, "风险分级与 isWriteRequest 在 " + path + " 上一致");
   }
-  ok(/if \(need != null \|\| confirm\)/.test(bridge), "「档位不足」与「按严格程度要确认」走同一条弹窗路径");
+  // 唯一的分叉是 workflowCall（工作流运行期免逐条确认）；其余情况下两者仍然共用同一条路径，
+  // 而且免确认必须**同时**放开这两条 —— 只放一条会让「档位够但危险」仍被弹窗拦住。
+  ok(/if \(\(need != null \|\| confirm\) && !workflowCall\)/.test(bridge),
+    "「档位不足」与「按严格程度要确认」走同一条弹窗路径");
+  ok(/val need = if \(workflowCall\) null else insufficient\(ctx, cap, method, path, params\)/.test(bridge) &&
+    /if \(!workflowCall && !capCallable\(ctx, cap\)\)/.test(bridge) &&
+    /if \(!workflowCall && isWriteRequest\(method, path, params\) && !canWrite\(ctx, cap\)\)/.test(bridge),
+    "工作流调用同时放开 「档位不足 / 档位关闭 / 写档位」三处（只放一处等于没放）");
   ok(/Kind\.CALL/.test(bridge) && /Kind\.LEVEL/.test(bridge), "两种弹窗分开了（长期授权只对 LEVEL 有意义）");
   ok(/.put\("decision", decision\)/.test(bridge), "审计记录了「用户点过头还是自动放行」");
   ok(/\.put\("restrictMode", PrivPolicy\.restrictMode\(ctx\)\)/.test(bridge), "审计记录了当时的限制模式");
@@ -1472,11 +1481,11 @@ console.log("── 限制模式页与弹窗 ──");
     "function_auto_open_webui", "function_auto_start_service", "function_autostart",
     "function_clean_storage", "function_docs_access", "function_gh_mirror", "function_lan",
     "function_port", "function_repair_plugins", "function_run_mode", "function_runtime",
-    "function_verify_install", "function_webui_mode", "function_webui_pip",
+    "function_verify_install", "function_webui_mode", "function_webui_pip", "function_workflow",
   ].sort();
   const inMap = blockKeys(settings, /internal val FUNCTION_GROUP_ITEMS/);
   ok(inMap !== null && JSON.stringify(inMap) === JSON.stringify(functional),
-    "分类→卡片映射正好覆盖 14 张功能卡（实际 " + (inMap ? inMap.length : 0) + " 张）");
+    "分类→卡片映射正好覆盖 15 张功能卡（实际 " + (inMap ? inMap.length : 0) + " 张）");
   const inTitle = blockKeys(settings, /private val FUNCTION_ITEM_TITLE/);
   ok(inTitle !== null && JSON.stringify(inTitle) === JSON.stringify(functional),
     "入口层搜索的卡片标题表与分类映射是同一批 key（实际 " + (inTitle ? inTitle.length : 0) + " 张）");
@@ -1520,15 +1529,15 @@ console.log("── 限制模式页与弹窗 ──");
       "入口页的卡片两侧留 16dp（不再顶到屏幕两边）");
   }
 
-  // 重排后 16 张卡（14 张功能卡 + 安全页那 2 张）一个不少、不重复、不改名
+  // 重排后 17 张卡（15 张功能卡 + 安全页那 2 张）一个不少、不重复、不改名
   const keys = [...settings.matchAll(/item\(key = "(function_[a-z_]+)"/g)].map((m) => m[1]);
   const wantKeys = functional.concat(["function_permission", "function_storage_mount"]).sort();
   const gotKeys = keys.slice().sort();
   const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
   const missing = wantKeys.filter((k) => !gotKeys.includes(k));
   const extra = gotKeys.filter((k) => !wantKeys.includes(k));
-  ok(keys.length === 16 && dup.length === 0 && missing.length === 0 && extra.length === 0,
-    `重排后 16 张卡一个不少、不重复、不改名（实际 ${keys.length}` +
+  ok(keys.length === 17 && dup.length === 0 && missing.length === 0 && extra.length === 0,
+    `重排后 17 张卡一个不少、不重复、不改名（实际 ${keys.length}` +
     `${dup.length ? "，重复 " + dup.join(",") : ""}${missing.length ? "，缺 " + missing.join(",") : ""}` +
     `${extra.length ? "，多 " + extra.join(",") : ""}）`);
   // 可见性交给层级（安全页一组 / 次级页一类），不再每张卡自己 visible

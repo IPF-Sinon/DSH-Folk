@@ -50,7 +50,14 @@ class HarnessService : Service() {
         // 注意判的是 intent 的 action 而不是「进程是不是刚起来」：系统按 START_STICKY
         // 重建服务时给的 intent 是 null，那种情况应当照常拉起 —— 容器本来在跑，是被杀的。
         val fromAutostart = intent?.action == ACTION_AUTOSTART
-        val wantContainer = !fromAutostart || DshAutostart.startContainer(applicationContext)
+        // HOLD：自动化工作流长跑期间把进程钉住用的。它**不**顺带拉容器 —— 纯 shell 的工作流
+        // 不该因为自己存在就启动一整套 DSH（需要 DSH 的工作流由 trigger 节点自己要求）。
+        val fromHold = intent?.action == ACTION_HOLD
+        val wantContainer = when {
+            fromHold -> false
+            fromAutostart -> DshAutostart.startContainer(applicationContext)
+            else -> true
+        }
         if (wantContainer && DshRuntime.state.value.phase != DshPhase.RUNNING) {
             DshRuntime.bootstrap()
         }
@@ -148,8 +155,25 @@ class HarnessService : Service() {
          */
         const val ACTION_AUTOSTART = "top.funcun.dshfolk.action.AUTOSTART"
 
+        /**
+         * 「只占住进程」专用 action：自动化工作流开始跑时用它。
+         *
+         * 为什么需要第三种：工作流可能只是几条容器命令，此时把它按普通 `start` 起来会顺带
+         * `bootstrap()` 一整套 DSH（下载/启动/占内存），而用户根本没要那个；按 `AUTOSTART`
+         * 起又要读「自启是否连容器一起拉起」那个用户开关，语义也不对。HOLD 的语义只有一条：
+         * 进程别被系统回收掉，容器的事一概不碰。
+         */
+        const val ACTION_HOLD = "top.funcun.dshfolk.action.HOLD_HARNESS"
+
         fun start(context: Context) {
             context.startForegroundService(Intent(context, HarnessService::class.java))
+        }
+
+        /** 工作流运行期间把进程钉住（见 [ACTION_HOLD]）。 */
+        fun hold(context: Context) {
+            context.startForegroundService(
+                Intent(context, HarnessService::class.java).apply { action = ACTION_HOLD }
+            )
         }
 
         /** 自启动路径专用入口（广播 / 无障碍两条都走它；root 脚本走 `am` 直接指同一个 action）。 */

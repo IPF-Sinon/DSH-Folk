@@ -19,11 +19,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import me.bmax.apatch.R
 import me.bmax.apatch.util.LocaleCtx
 import me.bmax.apatch.util.UpdateChecker
@@ -1152,6 +1154,217 @@ object DshRuntime {
           }
         })();
     """.trimIndent()
+
+    /**
+     * 容器里的 `dsh-workflow`：建流程 / 跑流程 / 查状态 / 取消。
+     *
+     * 与 `dsh-fs` / `dsh-native` / `dsh-saf` 完全同一条路（同一个回环端口与 token），所以
+     * 容器里任何能跑命令的东西都能用它 —— 包括**没有**注册成工具的那些运行时（工具插件注册
+     * 失败时这条路就是唯一的入口，见 assets/dsh-folk-workflow.mjs 的三级降级）。
+     *
+     * 字面量必须保持纯 ASCII：`check-native-cli` 门禁会拒掉带 CJK 的脚本（容器里 locale 可能
+     * 是 POSIX，中文提示会变成乱码；而 agent 读英文 DSL 文档没有问题）。
+     */
+    private val WORKFLOW_CLI_SCRIPT = """
+        #!/usr/bin/env node
+        const fs = require('fs');
+        const http = require('http');
+        const CFG = '/root/.dsh/fs-bridge.json';
+        if (!fs.existsSync(CFG)) { console.error('dsh-workflow: bridge config missing: ' + CFG); process.exit(1); }
+        const cfg = JSON.parse(fs.readFileSync(CFG, 'utf8'));
+        const USAGE = [
+          'dsh-workflow <command> [options]',
+          '',
+          '  list                                list saved workflows',
+          '  status [--run <runId>] [--workflow <id>] [--from <line>] [--no-logs]',
+          '                                      where a run is now + results of finished steps',
+          '  create --file <path|-> [--reason <text>] [--name <text>]',
+          '  create --json <json>   [--reason <text>] [--name <text>]',
+          '                                      ask the user (yellow dialog) and save a workflow',
+          '  run --workflow <id>    [--wait] [--reason <text>]',
+          '  run --file <path|->    [--wait] [--reason <text>]',
+          '                                      ask the user (red dialog) and run it;',
+          '                                      without --wait the run continues in background',
+          '  cancel --run <runId>   [--reason <text>]',
+          '',
+          'The user sees a flow-chart preview before answering; if they edit the definition the',
+          'response carries a diff. Every option is required to name a --reason.'
+        ].join('\n');
+        function req(method, path, body) {
+          return new Promise(function (resolve, reject) {
+            const headers = { 'X-Dsh-Fs-Token': cfg.token };
+            // Content-Length must be explicit (same as dsh-fs): write(body) alone goes chunked and the host answers 400.
+            if (body) headers['Content-Length'] = Buffer.byteLength(body);
+            const r = http.request({
+              host: '127.0.0.1', port: cfg.port, method: method, path: path, headers: headers
+            }, function (res) {
+              const chunks = [];
+              res.on('data', function (c) { chunks.push(c); });
+              res.on('end', function () { resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString() }); });
+            });
+            r.on('error', reject);
+            if (body) r.write(body);
+            r.end();
+          });
+        }
+        const argv = process.argv.slice(2);
+        const cmd = argv[0];
+        const opt = {};
+        const a = [];
+        for (let i = 1; i < argv.length; i++) {
+          const t = argv[i];
+          if (t.slice(0, 2) === '--') {
+            const eq = t.indexOf('=');
+            if (eq > 2) { opt[t.slice(2, eq)] = t.slice(eq + 1); }
+            else if (i + 1 < argv.length && argv[i + 1].slice(0, 2) !== '--') { opt[t.slice(2)] = argv[++i]; }
+            else { opt[t.slice(2)] = '1'; }
+          } else { a.push(t); }
+        }
+        function readDef() {
+          if (opt.json) return opt.json;
+          const p = opt.file || a[0];
+          if (!p) { console.error('dsh-workflow: need --file <path|-> or --json <json>'); process.exit(1); }
+          return p === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(p, 'utf8');
+        }
+        function say(r) {
+          process.stdout.write(r.body + '\n');
+          if (r.status < 200 || r.status >= 300) process.exit(1);
+        }
+        (async function () {
+          try {
+            if (!cmd) { console.error(USAGE); process.exit(1); }
+            if (cmd === 'list') {
+              say(await req('GET', '/workflow/list', null));
+            } else if (cmd === 'status') {
+              const qs = [];
+              if (opt.run) qs.push('runId=' + encodeURIComponent(opt.run));
+              if (opt.workflow) qs.push('workflowId=' + encodeURIComponent(opt.workflow));
+              if (opt.from) qs.push('fromLine=' + encodeURIComponent(opt.from));
+              if (opt['no-logs']) qs.push('includeLogs=0');
+              say(await req('GET', '/workflow/status' + (qs.length ? '?' + qs.join('&') : ''), null));
+            } else if (cmd === 'cancel') {
+              if (!opt.run) { console.error('dsh-workflow: cancel needs --run <runId>'); process.exit(1); }
+              say(await req('POST', '/workflow/cancel', JSON.stringify({
+                runId: opt.run, reason: opt.reason || 'canceled by agent'
+              })));
+            } else if (cmd === 'create' || cmd === 'run') {
+              // reason is required: the approval dialog shows why it wants to create/run, otherwise it shows raw JSON.
+              if (!opt.reason) {
+                console.error('dsh-workflow: --reason is required (shown to the user in the dialog)');
+                console.error(USAGE);
+                process.exit(1);
+              }
+              let def;
+              try { def = JSON.parse(readDef()); } catch (e) {
+                console.error('dsh-workflow: definition is not valid JSON: ' + e.message);
+                process.exit(1);
+              }
+              const body = { definition: def, reason: opt.reason };
+              if (opt.name) body.name = opt.name;
+              if (cmd === 'run') {
+                if (opt.workflow && !opt.file && !opt.json && !a[0]) {
+                  body.workflowId = opt.workflow;
+                  delete body.definition;
+                }
+                body.wait = !!opt.wait;
+                say(await req('POST', '/workflow/run', JSON.stringify(body)));
+              } else {
+                say(await req('POST', '/workflow/create', JSON.stringify(body)));
+              }
+            } else {
+              console.error(USAGE);
+              process.exit(1);
+            }
+          } catch (e) {
+            console.error('dsh-workflow: ' + (e && e.message ? e.message : e));
+            process.exit(1);
+          }
+        })();
+    """.trimIndent()
+
+    /**
+     * 给容器里 AI 的工作流 DSL 说明（写到 `/root/.dsh/workflow-dsl.md`，由工具插件的提示词段读）。
+     *
+     * 为什么由 App 写、而不是写死在插件里：DSL 的形状由宿主实现决定（校验器认哪些键、上限是
+     * 多少、哪些动作存在），把它放在 App 侧意味着**改实现时文档跟着改**，否则 agent 会照着
+     * 一份过时的说明写定义、然后在校验器那里撞墙。
+     *
+     * 同样保持纯 ASCII：读它的是模型，不是用户；而 CJK 在容器 locale 下会让文件更难读。
+     */
+    private val WORKFLOW_DSL_DOC = """
+        # Workflows (dsh-folk)
+
+        A workflow is **declarative data**, not a script: the host app reads the whole definition,
+        shows the user a flow chart, and only runs what that chart shows. There is no expression
+        language and no way to execute code from inside a definition.
+
+        ## Two separate steps, two separate confirmations
+
+        - `dsh-workflow create ...` -> **yellow** dialog: "save this workflow". Nothing runs.
+        - `dsh-workflow run ...`    -> **red** dialog: "run it now", plus an Android permission
+          check dialog before the first step. Long runs are allowed here (a run may call the
+          native bridge many times without asking again -- the one approval covers the run).
+
+        Both dialogs show a preview. The user may **edit** the definition there; when they do, the
+        response contains a `diff` (node/edge add/remove/modify) -- read it, because it is what
+        actually ran. They may also reject with a reason; you get `reason: rejected_by_user`.
+
+        Runs are **non-blocking by default**: `run` returns a `runId` immediately. Pass `--wait`
+        only when the whole point is the result. Otherwise follow up with `status`.
+
+        ## Node types
+
+        Every node: `id` (letter first, [A-Za-z0-9_-], <=32), `type`, `name`, `posX`, `posY`
+        (left/top in the editor; 0/0 lets the app lay it out), `timeoutMs` (1000..3600000,
+        default 120000), `onError` = `stop` (default) | `continue` | `skip`, and `config`.
+
+        - `trigger` -- exactly one, must have no incoming edge. config: `requireDsh` = 0|1,
+          `autostartDsh` = 0|1 (default 1). With `requireDsh=1` the host starts DSH if needed and
+          waits; then it takes the `true` edge. If DSH cannot come up it takes the `false` edge
+          (draw one if you want a fallback flow) or fails the run.
+        - `execute` -- config: `action` = `shell` | `dsh` | `notify`.
+          - `shell`: `cmd` (<=8192 chars, run in the container)
+          - `dsh`: same as shell, but DSH is started and waited for first
+          - `notify`: `title` (optional), `text`
+        - `condition` -- config: `source` = `exitCode` | `lastOutput` | `var:<name>` |
+          `branch:<nodeId>` | `step:<nodeId>`, `op` = `contains` | `equals` | `matches` |
+          `exists` | `empty`, `value` (not needed for exists/empty). Gives `true`/`false` edges.
+        - `logic` -- config: `op` = `and` | `or` | `not`, `sources` = comma-separated ids of
+          condition/logic nodes. Gives `true`/`false` edges.
+        - `extract` -- pull one value out of a step's output into a run variable.
+          config: `source` = `lastOutput` | `step:<nodeId>`, `mode` = `text` | `regex` | `json`,
+          `pattern` (regex) or `path` (dotted JSON path), `var` (the variable name).
+        - `wait` -- config: `ms` (<=86400000) or `untilDsh` = `running` | `stopped`.
+
+        ## Edges
+
+        `{ "from": "<id>", "to": "<id>", "when": "" | "true" | "false" }`.
+        Only `condition` / `logic` (and a `trigger` with `requireDsh=1`) may use `when`, and such
+        nodes must have **both** a `true` and a `false` edge. Everything else uses `"when": ""`.
+        The graph must be acyclic and every node must be reachable from the trigger.
+
+        ## Variables
+
+        `${name}` inside `cmd` / `notify` text is replaced from the run's variables (`extract`
+        writes them). Undefined names are left as-is on purpose -- silently substituting an empty
+        string turns `rm -rf ${dir}/` into `rm -rf /`. These are pre-seeded: `run_id`,
+        `workflow_id`, `workflow_name`, `dsh_port`, `dsh_url`, `dsh_state`.
+
+        ## Limits
+
+        <=64 nodes, <=256 edges, <=8KB per command, log line <=4KB, a single run's log is kept
+        per run under `filesDir/workflows/runs/<runId>.log` inside the app.
+
+        ## Following up
+
+        `dsh-workflow status [--run <runId>] [--from <line>]` returns the run state, every finished
+        step (state / exitCode / duration / reason / output tail) and new log lines. Reuse
+        `logNextLine` as the next `--from` so you never re-read the whole log. `cancel --run` kills
+        the currently running step.
+    """.trimIndent()
+
+    /** 写到容器里的 DSL 文档文件名（与 `dsh-workflow` / 工具插件约定）。 */
+    private const val WORKFLOW_DSL_DOC_NAME = "workflow-dsl.md"
 
     /**
      * 插件树/客户端包加载失败的日志签名。
@@ -2385,6 +2598,7 @@ object DshRuntime {
             "dsh-fs" to FS_BRIDGE_CLI_SCRIPT,
             "dsh-native" to NATIVE_CLI_SCRIPT,
             "dsh-saf" to SAF_BRIDGE_CLI_SCRIPT,
+            "dsh-workflow" to WORKFLOW_CLI_SCRIPT,
         )) {
             runCatching {
                 val f = File(bin, name)
@@ -2403,6 +2617,14 @@ object DshRuntime {
             if (doc.isFile && runCatching { doc.readText() }.getOrNull() == text) return@runCatching
             doc.writeText(text, StandardCharsets.UTF_8)
         }.onFailure { android.util.Log.w(TAG, "写 $TROUBLESHOOT_DOC_NAME 失败: ${it.message}") }
+        // 工作流 DSL 说明：容器里的 `dsh-workflow` 与工具插件的提示词段都读它，写在这儿是为了
+        // 「实现改了、文档跟着改」——否则 agent 会照着一份过时说明写定义，然后在校验器那里撞墙。
+        runCatching {
+            val doc = File(DshEnv.dshHome(appContext), WORKFLOW_DSL_DOC_NAME)
+            doc.parentFile?.mkdirs()
+            if (doc.isFile && runCatching { doc.readText() }.getOrNull() == WORKFLOW_DSL_DOC) return@runCatching
+            doc.writeText(WORKFLOW_DSL_DOC, StandardCharsets.UTF_8)
+        }.onFailure { android.util.Log.w(TAG, "写 $WORKFLOW_DSL_DOC_NAME 失败: ${it.message}") }
     }
 
     /**
@@ -3522,6 +3744,24 @@ object DshRuntime {
     }
 
     // ────────────────────────── web 服务 ──────────────────────────
+
+    /**
+     * 等到 `dsh web` 真的在跑（或超时）。
+     *
+     * 自动化工作流的 `trigger` 节点用它：DSH 没起来时先拉起再继续，起不来就走 `false` 分支
+     * （用户要的「未启动 DSH 时先阻塞启动 DSH，也可条件判断进入其它流程」）。
+     *
+     * 判据只看 phase == RUNNING：那是 [startServer] 与端口探测共同判定的结果，比「进程还活着」
+     * 更接近事实 —— 进程活着但端口连不上的时候，工作流后面的 `dsh` 命令必然失败。
+     */
+    suspend fun awaitRunning(timeoutMs: Long): Boolean {
+        if (!ready) return false
+        if (_state.value.phase == DshPhase.RUNNING) return true
+        return withTimeoutOrNull(timeoutMs) {
+            state.first { it.phase == DshPhase.RUNNING }
+            true
+        } ?: false
+    }
 
     /**
      * 启动 `dsh web`。

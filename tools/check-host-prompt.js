@@ -236,9 +236,15 @@ ok(/if \(line\.trim\(\) == idLine\)/.test(hpCode) &&
   /lines\[i\]\.length - lines\[i\]\.trimStart\(\)\.length > base/.test(hpCode),
   "会把压平的整条（含 name 等更深缩进行）摘掉");
 ok(/append\("- insert:\\n"\)/.test(hpCode) &&
-  /append\(" {4}- id: \$ENTRY_ID\\n"\)/.test(hpCode) &&
-  /append\(" {6}name: \$PLUGIN_GUEST_PATH\\n"\)/.test(hpCode),
-  "写回的正是 insert + 4/6 空格缩进的三行");
+  /append\(" {4}- id: \$entryId\\n"\)/.test(hpCode) &&
+  /append\(" {6}name: \$guestPath\\n"\)/.test(hpCode),
+  "写回的正是 insert + 4/6 空格缩进的三行（entryId/guestPath 改成逐插件参数）");
+// 现在有两个插件（宿主提示词 + 工作流工具），由一个循环各写一条 insert：
+// 形状不变，但**不再**假设只有一个 ENTRY_ID。
+ok(/for \(spec in PLUGINS\) ensurePatchRow\(ctx, spec\)/.test(hpCode),
+  "两个插件各写一条 insert，互不牵连");
+ok(/PluginSpec\(ASSET_NAME, PLUGIN_HOST_REL, PLUGIN_GUEST_PATH, ENTRY_ID, KEY_PLUGIN_REV, PLUGIN_REV\)/.test(hpCode),
+  "宿主提示词插件仍是自己的 rev（PLUGIN_REV 不因第二个插件被动抬）");
 ok(/if \(body == existing\) return/.test(hpCode), "内容没变就不写盘（幂等、少一次 rename）");
 
 // ─────────────────────────────────────────────────────────────────────────────

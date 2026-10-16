@@ -159,6 +159,7 @@ import me.bmax.apatch.util.UpdateChecker
 import me.bmax.apatch.ui.component.UpdateDialog
 import me.bmax.apatch.ui.component.DshFileHandoffDialog
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
+import me.bmax.apatch.ui.component.WorkflowDialogHosts
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.A11yOwn
 import me.bmax.apatch.dsh.DshBackupCrypto
@@ -502,6 +503,9 @@ class MainActivity : AppCompatActivity() {
                 // 提权申请弹窗：实现搬到了 component/ElevationRequestDialog.kt ——
                 // WebUI 是独立 Activity，那份也要挂（见该文件 KDoc）
                 ElevationRequestDialogHost()
+            // 工作流审批（黄=建/红=跑）与运行前的权限检查：两处都要挂 —— WebUI 是独立 Activity，
+            // 不挂过去，用户在 WebUI 里让 agent 建工作流就等不到弹窗（桥那边会一直阻塞到超时）。
+            WorkflowDialogHosts()
 
                 val loadingDialog = rememberLoadingDialog()
                 val showThemeImportDialog = remember { mutableStateOf(false) }
