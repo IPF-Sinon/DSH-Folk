@@ -1512,6 +1512,13 @@ console.log("── 限制模式页与弹窗 ──");
     /import me\.bmax\.apatch\.ui\.component\.HubRow/.test(hubScreen) &&
     /import me\.bmax\.apatch\.ui\.component\.HubHitRow/.test(hubScreen),
     "两个入口页共用同一套行组件（没有第二份 private HubRow）");
+  // 用户：「卡片与两边没什么边距 —— 连在一起了」。HubCard 是这两个入口页共用的那一份，
+  // 边距只能有一处：给 16dp（与 SplicedColumnGroup 同一套），而不是各调用点自己加。
+  {
+    const hubList = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/component/HubList.kt", "utf8");
+    ok(/ExpressiveCard\(modifier = Modifier\.padding\(horizontal = 16\.dp\)\)/.test(hubList),
+      "入口页的卡片两侧留 16dp（不再顶到屏幕两边）");
+  }
 
   // 重排后 16 张卡（14 张功能卡 + 安全页那 2 张）一个不少、不重复、不改名
   const keys = [...settings.matchAll(/item\(key = "(function_[a-z_]+)"/g)].map((m) => m[1]);

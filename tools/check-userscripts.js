@@ -542,6 +542,10 @@ ok(/GROUP_EXTENSIONS -> ScrollableEmptyState\(/.test(pluginHome) &&
 ok(/if \(group == GROUP_SCRIPTS\) \{\s*\n\s*IconButton\(onClick = \{\s*\n\s*val next = !hideBuiltins/.test(pluginHome) &&
   /if \(hideBuiltins\) Icons\.Outlined\.Visibility\s*\n\s*else Icons\.Outlined\.VisibilityOff/.test(pluginHome),
   "「隐藏内置」只在脚本页显示，且隐藏之后换成「显示」那只眼睛");
+// 用户：「默认状态为隐藏内置脚本」—— 内置那几段（只读）不再占着列表顶部。
+// 默认值只此一处，改回 false 就是回退这条需求。
+ok(/getBoolean\(KEY_USERSCRIPTS_HIDE_BUILTINS, true\)/.test(env),
+  "「隐藏内置」的默认值是 true（默认隐藏，想用的人按那只眼睛放出来）");
 // 用户：「插件页（插件组）：缺少链接安装按钮，把插件商店的从GitHub链接安装移除」。
 const store = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/DshPluginStoreScreen.kt", "utf8");
 ok(/labelRes = R\.string\.dsh_plugin_install_link/.test(pluginHome) &&

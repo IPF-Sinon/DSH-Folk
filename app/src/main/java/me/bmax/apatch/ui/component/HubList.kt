@@ -27,7 +27,10 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 internal fun HubCard(content: @Composable () -> Unit) {
-    ExpressiveCard {
+    // 两侧留 16dp：与 [SplicedColumnGroup] 同一套边距。不加的话卡片会顶到屏幕两边，
+    // 而同一页上面的说明文字又是缩进的 —— 看起来就像卡片「连到边框上了」（用户报的就是这个）。
+    // 放在这里而不是各调用点：两个入口页共用这一份，边距也只能有一处。
+    ExpressiveCard(modifier = Modifier.padding(horizontal = 16.dp)) {
         Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) { content() }
     }
 }

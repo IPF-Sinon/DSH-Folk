@@ -415,11 +415,16 @@ object DshEnv {
         webuiPipMain(ctx) &&
             ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_WEBUI_PIP_AUTO, true)
 
-    /** 脚本页「隐藏内置」：默认**显示**（true 才是隐藏）。 */
+    /**
+     * 脚本页「隐藏内置」：**默认隐藏**（true = 隐藏）。
+     *
+     * 用户要求默认隐藏：内置脚本那几段（DSH-Folk 自带的）是只读的，列表里长期占着顶部，
+     * 多数人不需要天天看见它们；想用的人按顶栏那只眼睛就能放出来（值会记住）。
+     */
     const val KEY_USERSCRIPTS_HIDE_BUILTINS = "userscripts_hide_builtins"
 
     fun userscriptsHideBuiltins(ctx: Context): Boolean =
-        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_USERSCRIPTS_HIDE_BUILTINS, false)
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_USERSCRIPTS_HIDE_BUILTINS, true)
 
     fun setUserscriptsHideBuiltins(ctx: Context, hide: Boolean) {
         ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
