@@ -45,12 +45,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
+import me.bmax.apatch.dsh.DshNativeBridge
+import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.WorkflowApprovals
 import me.bmax.apatch.dsh.WorkflowDefinition
+import me.bmax.apatch.dsh.WorkflowEdge
 import me.bmax.apatch.dsh.WorkflowEngine
+import me.bmax.apatch.dsh.WorkflowNode
+import me.bmax.apatch.dsh.WorkflowNodeType
+import me.bmax.apatch.dsh.WorkflowOnError
 import me.bmax.apatch.dsh.WorkflowPermissions
 import me.bmax.apatch.dsh.WorkflowRunState
 import me.bmax.apatch.dsh.WorkflowStore
+import me.bmax.apatch.dsh.WorkflowValidator
+import me.bmax.apatch.ui.component.WorkflowDefinitionEditor
 import me.bmax.apatch.ui.component.WorkflowGraphPreview
 import java.io.File
 import org.json.JSONObject
@@ -81,7 +89,16 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
 
     // 打开这一页也做一次对账：桥平时只在有请求时才跑 reconcileInterrupted，而用户完全可能
     // 一直没让 AI 碰过工作流 —— 那一页上就会永久挂着一个 running（其实是进程被杀掉的）运行。
-    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { WorkflowStore.reconcileInterrupted(ctx.applicationContext) } }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            WorkflowStore.reconcileInterrupted(ctx.applicationContext)
+            // 升级 App 后容器可能一直没重启：这里的 dsh-workflow / 指南 / 样例就还是旧的（甚至没有）。
+            DshRuntime.refreshContainerCli()
+        }
+        listKey++
+    }
+    // 用户自己建/改流程：与审批时的编辑页是**同一个** [WorkflowDefinitionEditor]。
+    var editing by remember { mutableStateOf<WorkflowDefinition?>(null) }
 
     val workflows = remember(listKey, tick) { WorkflowStore.list(ctx) }
     val runs = remember(listKey, tick) { WorkflowStore.listRuns(ctx, limit = 12) }
@@ -121,6 +138,8 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                     onCheckedChange = { on ->
                         enabled = on
                         prefs.edit().putBoolean(DshEnv.KEY_WORKFLOW_ENABLED, on).apply()
+                        if (on) scope.launch { withContext(Dispatchers.IO) { DshRuntime.refreshContainerCli() } }
+                        listKey++
                     },
                 )
             }
@@ -134,9 +153,25 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
             }
             Spacer(Modifier.height(12.dp))
             Text(stringResource(R.string.dsh_workflow_tools_status, toolStatus), style = MaterialTheme.typography.bodySmall)
+            if (toolStatus != "ok") {
+                Text(
+                    stringResource(R.string.dsh_workflow_tools_restart),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(12.dp))
 
-            Text(stringResource(R.string.dsh_workflow_list_title), style = MaterialTheme.typography.titleSmall)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.dsh_workflow_list_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { editing = starter() }, enabled = enabled) {
+                    Text(stringResource(R.string.dsh_workflow_new))
+                }
+            }
             if (workflows.isEmpty()) {
                 Text(
                     stringResource(R.string.dsh_workflow_empty),
@@ -146,12 +181,20 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
             }
             for (def in workflows) {
                 Spacer(Modifier.height(8.dp))
+                // 校验结果就地算：定义不合法时**运行按钮点不动**，并把同一批错误显示给用户
+                // （与 AI 收到的那份错误同源，省得「AI 说能跑、这里跑不了」）。
+                val errors = remember(def) {
+                    WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
+                }
                 WorkflowRow(
                     def = def,
                     lastState = runs.firstOrNull { it.workflowId == def.id }?.state,
                     enabled = enabled,
+                    valid = errors.isEmpty(),
+                    errors = errors,
                     dangerousAck = dangerousAck,
                     onDangerousAck = { dangerousAck = it },
+                    onEdit = { editing = def },
                     onOpenDetail = {
                         detailRunId = runs.firstOrNull { it.workflowId == def.id }?.runId
                     },
@@ -250,6 +293,61 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
             Spacer(Modifier.height(24.dp))
         }
     }
+
+    // 编辑器铺满整页（它自带全屏 Surface），保存后回到列表并重新读盘。
+    editing?.let { target ->
+        WorkflowDefinitionEditor(
+            initial = target,
+            title = stringResource(R.string.dsh_workflow_editor_title),
+            onSave = { edited ->
+                WorkflowStore.save(ctx, edited)
+                editing = null
+                listKey++
+            },
+            onCancel = { editing = null },
+        )
+    }
+}
+
+/**
+ * 用户自建流程的起点：入口 + 一条 shell 命令，已经是**合法**定义（能直接跑）。
+ *
+ * 为什么默认给一条 echo 而不是空命令：空 cmd 会被校验器判为不合法，用户点完「新建」第一件
+ * 事就是撞见红色错误 —— 从一个能跑的最小流程开始改，才符合「自己建」的心理模型。
+ */
+@Composable
+private fun starter(): WorkflowDefinition {
+    val name = stringResource(R.string.dsh_workflow_new_name)
+    return remember(name) {
+        WorkflowDefinition(
+            id = WorkflowStore.newId(),
+            name = name,
+            description = "",
+            declaredCaps = emptyList(),
+            nodes = listOf(
+                WorkflowNode(
+                    id = "trigger",
+                    type = WorkflowNodeType.TRIGGER,
+                    name = "trigger",
+                    posX = 16,
+                    posY = 16,
+                    timeoutMs = 60_000L,
+                    onError = WorkflowOnError.STOP,
+                    config = mapOf("requireDsh" to "0"),
+                ),
+                WorkflowNode(
+                    id = "step1",
+                    type = WorkflowNodeType.EXECUTE,
+                    name = "step1",
+                    posX = 16,
+                    posY = 72,
+                    onError = WorkflowOnError.STOP,
+                    config = mapOf("action" to "shell", "cmd" to "echo hello"),
+                ),
+            ),
+            edges = listOf(WorkflowEdge("trigger", "step1", "")),
+        )
+    }
 }
 
 @Composable
@@ -257,8 +355,11 @@ private fun WorkflowRow(
     def: WorkflowDefinition,
     lastState: WorkflowRunState?,
     enabled: Boolean,
+    valid: Boolean,
+    errors: List<String>,
     dangerousAck: Boolean,
     onDangerousAck: (Boolean) -> Unit,
+    onEdit: () -> Unit,
     onOpenDetail: () -> Unit,
     onRun: () -> Unit,
     onDelete: () -> Unit,
@@ -279,7 +380,19 @@ private fun WorkflowRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Button(onClick = onRun, enabled = enabled) { Text(stringResource(R.string.dsh_workflow_action_run)) }
+            Button(onClick = onRun, enabled = enabled && valid) { Text(stringResource(R.string.dsh_workflow_action_run)) }
+        }
+        if (!valid) {
+            Text(
+                stringResource(R.string.dsh_workflow_invalid_run),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text(
+                errors.take(4).joinToString("\n"),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         if (expanded) {
             WorkflowGraphPreview(def)
@@ -300,6 +413,7 @@ private fun WorkflowRow(
                 }
             }
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onEdit) { Text(stringResource(R.string.dsh_workflow_action_edit)) }
                 TextButton(onClick = onOpenDetail) { Text(stringResource(R.string.dsh_workflow_detail)) }
                 TextButton(onClick = onDelete) { Text(stringResource(R.string.dsh_workflow_action_delete)) }
             }

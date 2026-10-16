@@ -225,7 +225,7 @@ ok((SRC.mainActivity.match(/WorkflowDialogHosts\(\)/g) || []).length === 1, "Mai
 ok((SRC.webUiActivity.match(/WorkflowDialogHosts\(\)/g) || []).length === 1, "DshWebUiActivity 也挂了（它是独立 Activity）");
 ok(/WorkflowDialogHosts\(\)/.test(SRC.dialogs), "宿主同时渲染审批与权限检查");
 ok(/WorkflowApprovals\.approve\(request\.id, dangerous\)/.test(SRC.dialogs), "批准带上危险命令结论");
-ok(/WorkflowApprovals\.startEditing\(request\.id\)/.test(SRC.dialogs) && /WorkflowEditorOverlay\(/.test(SRC.dialogs),
+ok(/WorkflowApprovals\.startEditing\(request\.id\)/.test(SRC.dialogs) && /WorkflowDefinitionEditor\(/.test(SRC.dialogs),
   "编辑页在宿主里（编辑期间审批弹窗不渲染）");
 ok(/WorkflowGraphPreview\(definition\)/.test(SRC.dialogs), "批准弹窗里有流程图预览");
 ok(/posX/.test(SRC.dialogs) && /detectDragGestures/.test(SRC.dialogs), "编辑页节点可拖动且位置写回定义");
@@ -306,6 +306,110 @@ ok(!/workflowDraftDir|saveDraft|loadDraft|clearDraft/.test(SRC.store + read("app
       ok(/import me\.bmax\.apatch\.R\b/.test(text), name + " 引用了 R.* 就必须 import me.bmax.apatch.R");
     }
   }
+}
+
+console.log("\u2500 #14 样例定义：用户与 AI 的起点，必须真的合法");
+{
+  const m = SRC.runtime.match(/val WORKFLOW_SAMPLES: Map<String, String> = mapOf\(([\s\S]*?)\n    \)/);
+  ok(m !== null, "有三份样例定义（最小可跑 / DSH 拉起与 false 分支 / 变量与取值）");
+  const raw = m ? m[1] : "";
+  // Kotlin raw string 里的 ${D} 会被拼成美元；测试里还原成 JSON 见过的样子
+  const names = [...raw.matchAll(/"([a-z0-9-]+)" to """/g)].map((x) => x[1]);
+  eq(names.sort().join(","), "dsh-ready,minimal,variables", "样例名固定");
+  const bodies = [...raw.matchAll(/"""\n([\s\S]*?)\n"""/g)].map((x) => x[1].split("${D}").join("$"));
+  eq(bodies.length, 3, "三份样例正文都能取到");
+  // 复刻校验器的硬规则：样例是给人抄的，抄出一份不合法的样例比没有样例更糟
+  const TYPES = ["trigger", "execute", "condition", "logic", "extract", "wait"];
+  const NEED = { trigger: [], execute: ["action"], condition: ["source", "op"], logic: ["op", "sources"],
+    extract: ["source", "mode", "var"], wait: [] };
+  const isBranch = (n) => n.type === "condition" || n.type === "logic" ||
+    (n.type === "trigger" && String(n.config && n.config.requireDsh) === "1");
+  bodies.forEach((text, i) => {
+    let def = null;
+    try { def = JSON.parse(text); } catch (e) { /* 下面报 */ }
+    ok(def !== null, names[i] + " 是合法 JSON" + (def === null ? "（" + String(text.slice(0, 40)) + "）" : ""));
+    if (!def) return;
+    const ids = def.nodes.map((n) => n.id);
+    eq(new Set(ids).size, ids.length, names[i] + " 节点 id 不重复");
+    eq(ids.filter((id) => def.nodes.find((n) => n.id === id).type === "trigger").length, 1, names[i] + " 恰好一个 trigger");
+    const trig = def.nodes.find((n) => n.type === "trigger");
+    ok(!def.edges.some((e) => e.to === trig.id), names[i] + " trigger 没有入边");
+    ok(def.nodes.every((n) => TYPES.includes(n.type)), names[i] + " 节点类型都在白名单里");
+    ok(def.nodes.every((n) => ids.includes(n.id) && (n.timeoutMs === undefined || (n.timeoutMs >= 1000 && n.timeoutMs <= 3600000))),
+      names[i] + " 节点 id 合法、超时在范围内");
+    ok(def.nodes.every((n) => NEED[n.type].every((k) => n.config && String(n.config[k] || "").length > 0)),
+      names[i] + " 每个节点的必填 config 都在");
+    ok(def.nodes.filter((n) => n.type === "execute").every((n) => ["shell", "dsh", "notify"].includes(n.config.action)),
+      names[i] + " execute 的 action 都是 shell/dsh/notify");
+    ok(def.edges.every((e) => ids.includes(e.from) && ids.includes(e.to) && e.from !== e.to),
+      names[i] + " 连线两端都存在且不是自环");
+    ok(def.edges.every((e) => (e.when === "" || e.when === "true" || e.when === "false") &&
+      (e.when === "" || isBranch(def.nodes.find((n) => n.id === e.from)))),
+      names[i] + " when 只在判断节点的出边上出现");
+    ok(def.nodes.filter(isBranch).every((n) => {
+      const out = def.edges.filter((e) => e.from === n.id);
+      return out.some((e) => e.when === "true") && out.some((e) => e.when === "false");
+    }), names[i] + " 判断节点都有 true / false 两条出边");
+    // 无环 + 可达
+    const adj = {};
+    for (const n of def.nodes) adj[n.id] = [];
+    for (const e of def.edges) adj[e.from].push(e.to);
+    const seen = new Set([trig.id]);
+    const q = [trig.id];
+    while (q.length) for (const nx of adj[q.shift()]) if (!seen.has(nx)) { seen.add(nx); q.push(nx); }
+    eq(seen.size, def.nodes.length, names[i] + " 每个节点都能从 trigger 走到（无断链、无环外孤岛）");
+  });
+}
+
+console.log("\u2500 #15 指南与样例：命令里就能拿到（不依赖提示词段）");
+{
+  const cli = SRC.runtime.match(/val WORKFLOW_CLI_SCRIPT = """([\s\S]*?)"""\.trimIndent\(\)/);
+  const body = cli ? cli[1] : "";
+  ok(/cmd === .guide./.test(body), "dsh-workflow guide 打印完整指南");
+  ok(/cmd === .samples./.test(body) && /cmd === .sample./.test(body), "samples 列出、sample <name> 打印一份");
+  ok(/opt\.sample/.test(body) && /--sample <name>/.test(body), "create/run 支持 --sample <name>（直接拿样例当模板）");
+  ok(/invalid_definition/.test(body) && /guide/.test(body), "定义被拒时把「去看 guide / 用样例」写在错误旁边");
+  ok(/\/root\/\.dsh\/workflow-samples/.test(body), "CLI 知道样例目录在哪");
+  ok(/\/root\/\.dsh\/workflow-dsl\.md/.test(body), "CLI 从容器里的指南文件读（宿主写、实现改了文档跟着改）");
+  const doc = SRC.runtime.match(/val WORKFLOW_DSL_DOC = """([\s\S]*?)"""\.trimIndent\(\)/);
+  const docText = doc ? doc[1] : "";
+  ok(/dsh-workflow guide/.test(docText), "指南里写明「随时 dsh-workflow guide」");
+  ok(/dsh-workflow samples/.test(docText) && /workflow-samples/.test(docText), "指南里写明样例怎么用");
+  ok(/```json/.test(docText) && /"edges"/.test(docText), "指南里有一份完整可抄的例子");
+  ok(/Settings > Features > Automation workflows/.test(docText), "指南里告诉 agent 用户也能自己建（名字/描述是给人看的）");
+}
+
+console.log("\u2500 #16 格式放到了模型必定看得见的地方");
+{
+  ok(/const FORMAT = \[/.test(SRC.mjs), "插件里有一份格式速查（单一真相）");
+  ok(/FALLBACK_SECTION = \[[\s\S]*?FORMAT,/.test(SRC.mjs), "提示词兜底里带完整格式（不是「见文档」这种死路）");
+  // 取 workflow_create 那一段 spec（到下一个 spec( 为止），否则 split 会切在别处
+  const createSeg = (SRC.mjs.match(/workflow_create'[\s\S]*?\n  spec\(/) || [""])[0];
+  ok(/\+ FORMAT/.test(createSeg), "workflow_create 的工具描述里直接带格式");
+  ok(/workflow_run[\s\S]{0,900}?FORMAT/.test(SRC.mjs), "workflow_run 也指向同一份格式");
+  ok(/dsh-workflow samples/.test(SRC.mjs), "工具描述里给出「先抄样例」的路径");
+  ok(/type: .object.,[\s\S]{0,400}?Must match the FORMAT/.test(SRC.mjs), "definition 参数自己就说清必须符合格式");
+}
+
+console.log("\u2500 #17 用户自己也能建/改流程");
+{
+  ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),
+    "编辑器接受一份定义（不是只能照着 AI 提交的 JSON 改）");
+  const callers = (SRC.dialogs.match(/WorkflowDefinitionEditor\(/g) || []).length + (SRC.screen.match(/WorkflowDefinitionEditor\(/g) || []).length;
+  ok(callers >= 3, "审批弹窗与设置页共用同一个编辑器（共 " + callers + " 处调用，含定义本身）");
+  ok(/WorkflowApprovals\.stopEditing\(request\.id, edited\.toJson\(\)\.toString\(\)\)/.test(SRC.dialogs), "审批路径保存回待批状态");
+  ok(/WorkflowStore\.save\(ctx, edited\)/.test(SRC.screen), "设置页路径直接落盘");
+  ok(/private fun starter\(\): WorkflowDefinition/.test(SRC.screen) && /WorkflowStore\.newId\(\)/.test(SRC.screen),
+    "有「新建流程」的合法起点（不是空定义）");
+  ok(/config = mapOf\("action" to "shell", "cmd" to "echo hello"\)/.test(SRC.screen),
+    "起点自带一条可跑的命令（空 cmd 一建出来就是错的）");
+  ok(/WorkflowValidator\.validate\(def, DshNativeBridge\.Cap\.entries/.test(SRC.screen), "列表就地校验");
+  ok(/enabled = enabled && valid/.test(SRC.screen), "不合法时运行按钮点不动");
+  ok(/dsh_workflow_invalid_run/.test(SRC.screen) && /dsh_workflow_editor_errors/.test(SRC.dialogs),
+    "同一批错误既在列表也在编辑页显示（与 AI 收到的是同源）");
+  ok(/DshRuntime\.refreshContainerCli\(\)/.test(SRC.screen), "打开页面/打开开关时刷新容器侧 CLI 与指南");
+  ok(/fun refreshContainerCli\(\)/.test(SRC.runtime), "DshRuntime 提供刷新入口");
+  ok(/dsh_workflow_tools_restart/.test(SRC.screen), "如实说明「工具插件要重启 DSH 才注册」");
 }
 
 console.log("\u2500 #12 新门禁登记进两条 CI 清单");

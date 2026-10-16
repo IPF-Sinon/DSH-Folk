@@ -37,14 +37,67 @@ const DSL_DOC = '/root/.dsh/workflow-dsl.md';
 const STATUS_FILE = '/root/.dsh/workflow-tool-status.json';
 const CLI_CANDIDATES = ['dsh-workflow', '/usr/local/bin/dsh-workflow'];
 
-/** 提示词段的兜底文案：宿主 DSL 文档读不到时至少告诉 agent CLI 存在且 --reason 必填。 */
+/**
+ * 格式速查：工具描述与提示词兜底**共用同一份文本**。
+ *
+ * 为什么放在工具描述里（而不是只放在系统提示词的 DSL 段）：工具描述一定会随工具 schema 到达
+ * 模型，而提示词段依赖「宿主把 DSL 文档写进容器 + 这个插件真的激活」两个前提。实测里 agent
+ * 正是卡在「不知道格式」上 —— 那就把格式放在最不可能丢的那条通道上。
+ */
+const FORMAT = [
+  "  FORMAT (a workflow is plain data; nothing else is accepted):",
+  "    { \"schemaVersion\": 1, \"id\": \"<id>\", \"name\": \"<name>\", \"description\": \"<optional>\",",
+  "      \"declaredCaps\": [\"notify\"], \"nodes\": [ ... ], \"edges\": [ ... ] }",
+  "",
+  "  Node = { \"id\", \"type\", \"name\", \"posX\", \"posY\", \"timeoutMs\", \"onError\", \"config\" }",
+  "    id: letter first, then [A-Za-z0-9_-], <= 32 chars, unique",
+  "    timeoutMs: 1000..3600000 (default 120000); onError: \"stop\" (default) | \"continue\" | \"skip\"",
+  "    types and their REQUIRED config:",
+  "      trigger   - exactly one, no incoming edge. config: requireDsh \"0\"|\"1\", autostartDsh \"0\"|\"1\".",
+  "                  With requireDsh \"1\" it starts DSH if needed, then takes the \"true\" edge; if DSH",
+  "                  cannot start it takes \"false\" (draw one) or the run fails.",
+  "      execute   - config: action \"shell\" | \"dsh\" | \"notify\".",
+  "                  shell: cmd (<=8192 chars, runs in the container)",
+  "                  dsh:   cmd (same, but DSH is started and awaited first)",
+  "                  notify: title (optional), text",
+  "      condition - config: source \"exitCode\" | \"lastOutput\" | \"var:<name>\" | \"branch:<id>\" |",
+  "                  \"step:<id>\", op \"contains\" | \"equals\" | \"matches\" | \"exists\" | \"empty\",",
+  "                  value. Gives a \"true\" and a \"false\" edge.",
+  "      logic     - config: op \"and\" | \"or\" | \"not\", sources \"id,id\". Gives true/false edges.",
+  "      extract   - config: source \"lastOutput\" | \"step:<id>\", mode \"text\" | \"regex\" | \"json\",",
+  "                  pattern (regex) or path (dotted JSON path), var (name it writes)",
+  "      wait      - config: ms (<=86400000) or untilDsh \"running\" | \"stopped\"",
+  "",
+  "  Edge = { \"from\": \"<nodeId>\", \"to\": \"<nodeId>\", \"when\": \"\" | \"true\" | \"false\" }",
+  "    only condition / logic, and a trigger with requireDsh \"1\", may use when, and they need BOTH",
+  "    a true and a false edge. The graph must be acyclic; every node must be reachable from trigger.",
+  "",
+  "  Variables: ${name} inside cmd / notify text comes from the run. extract writes them; these are",
+  "    pre-seeded: run_id, workflow_id, workflow_name, dsh_port, dsh_url, dsh_state.",
+  "",
+  "  Minimal valid example (also: dsh-workflow sample minimal):",
+  "    { \"schemaVersion\": 1, \"id\": \"sample-minimal\", \"name\": \"minimal\", \"declaredCaps\": [],",
+  "      \"nodes\": [",
+  "        { \"id\": \"trigger\", \"type\": \"trigger\", \"name\": \"trigger\", \"config\": { \"requireDsh\": \"0\" } },",
+  "        { \"id\": \"hello\", \"type\": \"execute\", \"name\": \"hello\",",
+  "          \"config\": { \"action\": \"shell\", \"cmd\": \"echo hello\" } } ],",
+  "      \"edges\": [ { \"from\": \"trigger\", \"to\": \"hello\", \"when\": \"\" } ] }",
+  "",
+  "  Cheaper starting points: run `dsh-workflow samples`, print one with `dsh-workflow sample <name>`,",
+  "  create straight from it with `dsh-workflow create --file /root/.dsh/workflow-samples/<name>.json",
+  "  --reason \"...\"`, or read the whole guide with `dsh-workflow guide`.",].join("\n");
+
+/** 提示词段的兜底文案：宿主 DSL 文档读不到时也要给出**完整格式**（否则 agent 只能瞎猜）。 */
 const FALLBACK_SECTION = [
   '## Workflows (dsh-folk)',
   '',
-  'This device can run saved, user-approved workflows: use the `dsh-workflow` CLI in the',
-  'container (`dsh-workflow list | status | create --file ... | run --workflow ...`).',
-  'Every create/run needs `--reason "..."` (the user sees it in the confirmation dialog), and',
-  '`run` is non-blocking unless you pass `--wait`. Follow a run with `dsh-workflow status`.',
+  'This device can run saved, user-approved workflows. Two ways in:',
+  '  - CLI in the container: dsh-workflow list | status | create --file ... | run --workflow ...',
+  '  - Tools: workflow_create / workflow_run / workflow_status / workflow_cancel (if registered)',
+  'Every create/run needs a reason (the user sees it in the confirmation dialog); run is',
+  'non-blocking unless you ask for wait; follow a run with dsh-workflow status.',
+  '',
+  FORMAT,
 ].join('\n');
 
 function runCli(args, timeoutMs) {
@@ -88,13 +141,15 @@ const TOOLS = [
     'workflow_create',
     'Save an automation workflow. The user sees a YELLOW confirmation dialog with a flow-chart ' +
       'preview and may edit or reject it; nothing runs. The response carries the workflowId and, ' +
-      'if the user edited the definition, a diff you must read.',
+      'if the user edited the definition, a diff you must read.\n\n' + FORMAT,
     {
       type: 'object',
       properties: {
         definition: {
           type: 'object',
-          description: 'The workflow definition (nodes + edges). See the DSL section in the system prompt.',
+          description: 'The workflow definition (nodes + edges). Must match the FORMAT given in this ' +
+            'tool description; an invalid definition is rejected with a list of errors, it is never ' +
+            'partially executed. Copy a sample from dsh-workflow samples when unsure.',
         },
         reason: { type: 'string', description: 'Why you want to create this workflow (shown to the user).' },
         name: { type: 'string', description: 'Optional display name override.' },
@@ -111,13 +166,18 @@ const TOOLS = [
   spec(
     'workflow_run',
     'Run a workflow. The user sees a RED confirmation dialog with the flow chart, then an Android ' +
-      'permission check. Non-blocking by default: returns a runId immediately — follow it with ' +
-      'workflow_status. Pass wait=true only when the whole point is the result.',
+      'permission check. Non-blocking by default: returns a runId immediately - follow it with ' +
+      'workflow_status. Pass wait=true only when the whole point is the result.\n\n' +
+      'Either pass workflowId (a saved workflow) or a full definition in the FORMAT below.',
     {
       type: 'object',
       properties: {
         workflowId: { type: 'string', description: 'Id of a saved workflow.' },
-        definition: { type: 'object', description: 'Or run a one-off definition instead of a saved one.' },
+        definition: {
+          type: 'object',
+          description: 'Or run a one-off definition instead of a saved one (same FORMAT as ' +
+            'workflow_create). A definition that fails validation is rejected before anything runs.',
+        },
         wait: { type: 'boolean', description: 'Block until the run finishes (default false).' },
         reason: { type: 'string', description: 'Why you want to run this (shown to the user).' },
       },
@@ -137,7 +197,8 @@ const TOOLS = [
   spec(
     'workflow_status',
     'Where a run is now: state, every finished step (state / exitCode / duration / reason / output ' +
-      'tail) and new log lines. Reuse logNextLine as the next fromLine so you never re-read the log.',
+      'tail) and new log lines. Reuse logNextLine as the next fromLine so you never re-read the log. ' +
+      'This is how you follow a run started without wait=true.',
     {
       type: 'object',
       properties: {

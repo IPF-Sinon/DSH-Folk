@@ -1790,4 +1790,9 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_workflow_editor_discard_body">%1$d change(s) are not saved yet. Discarding loses this edit (the approval stays, you can edit again).</string>
     <string name="dsh_workflow_editor_discard_ok">Discard</string>
     <string name="dsh_workflow_editor_keep_editing">Keep editing</string>
+    <string name="dsh_workflow_new">New workflow</string>
+    <string name="dsh_workflow_new_name">New workflow</string>
+    <string name="dsh_workflow_editor_errors">This definition is not valid yet (fix it to run):</string>
+    <string name="dsh_workflow_invalid_run">Not runnable yet, the definition is invalid:</string>
+    <string name="dsh_workflow_tools_restart">The container tool plugin is registered after DSH restarts; the guide and the dsh-workflow command work immediately.</string>
 </resources>

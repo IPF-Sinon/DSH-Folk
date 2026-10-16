@@ -1175,14 +1175,19 @@ object DshRuntime {
         const USAGE = [
           'dsh-workflow <command> [options]',
           '',
+          '  guide                               print the full guide (DSL + worked example)',
+          '  samples                             list sample definitions under /root/.dsh/workflow-samples',
+          '  sample <name>                       print one sample definition',
           '  list                                list saved workflows',
           '  status [--run <runId>] [--workflow <id>] [--from <line>] [--no-logs]',
           '                                      where a run is now + results of finished steps',
           '  create --file <path|-> [--reason <text>] [--name <text>]',
+          '  create --sample <name> [--reason <text>] [--name <text>]',
           '  create --json <json>   [--reason <text>] [--name <text>]',
           '                                      ask the user (yellow dialog) and save a workflow',
           '  run --workflow <id>    [--wait] [--reason <text>]',
           '  run --file <path|->    [--wait] [--reason <text>]',
+          '  run --sample <name>    [--wait] [--reason <text>]',
           '                                      ask the user (red dialog) and run it;',
           '                                      without --wait the run continues in background',
           '  cancel --run <runId>   [--reason <text>]',
@@ -1224,6 +1229,16 @@ object DshRuntime {
           } else { a.push(t); }
         }
         function readDef() {
+          // --sample <name>: take a checked definition from the sample directory. The most common
+          // first move for an agent is "copy a sample and edit it", so it should not have to
+          // remember where the sample files live.
+          if (opt.sample) {
+            const p = '/root/.dsh/workflow-samples/' + String(opt.sample).replace(/\.json$/, '') + '.json';
+            try { return fs.readFileSync(p, 'utf8'); } catch (e) {
+              console.error('dsh-workflow: no such sample: ' + opt.sample + ' (see `dsh-workflow samples`)');
+              process.exit(1);
+            }
+          }
           if (opt.json) return opt.json;
           const p = opt.file || a[0];
           if (!p) { console.error('dsh-workflow: need --file <path|-> or --json <json>'); process.exit(1); }
@@ -1231,12 +1246,50 @@ object DshRuntime {
         }
         function say(r) {
           process.stdout.write(r.body + '\n');
-          if (r.status < 200 || r.status >= 300) process.exit(1);
+          if (r.status < 200 || r.status >= 300) {
+            // When the validator rejects a definition, the most useful next step is the full format.
+            // Put that entry point right next to the error instead of hoping the agent remembers to
+            // look it up (measured: it does not).
+            if (r.body.indexOf('invalid_definition') >= 0) {
+              console.error('dsh-workflow: that definition was rejected. `dsh-workflow guide` prints the');
+              console.error('dsh-workflow: full format; `dsh-workflow samples` lists ready-made ones, and');
+              console.error('dsh-workflow: `--sample <name>` creates straight from one.');
+            }
+            process.exit(1);
+          }
         }
         (async function () {
           try {
             if (!cmd) { console.error(USAGE); process.exit(1); }
-            if (cmd === 'list') {
+            if (cmd === 'guide' || cmd === 'help' || cmd === '--help' || cmd === '-h') {
+              // The guide is written into the container by the host app, so it always matches the
+              // validator that will actually judge the definition. Print USAGE if it is missing.
+              try {
+                process.stdout.write(fs.readFileSync('/root/.dsh/workflow-dsl.md', 'utf8'));
+              } catch (e) {
+                console.error(USAGE);
+                process.exit(1);
+              }
+            } else if (cmd === 'samples') {
+              const dir = '/root/.dsh/workflow-samples';
+              let names = [];
+              try {
+                names = fs.readdirSync(dir).filter(function (n) { return /\.json$/.test(n); }).sort();
+              } catch (e) { names = []; }
+              if (!names.length) {
+                console.error('dsh-workflow: no samples in ' + dir);
+                process.exit(1);
+              }
+              names.forEach(function (n) { console.log(dir + '/' + n); });
+            } else if (cmd === 'sample') {
+              const n = a[0] || opt.name;
+              if (!n) { console.error('dsh-workflow: sample needs a name (see `dsh-workflow samples`)'); process.exit(1); }
+              const p = '/root/.dsh/workflow-samples/' + String(n).replace(/\.json$/, '') + '.json';
+              try { process.stdout.write(fs.readFileSync(p, 'utf8')); } catch (e) {
+                console.error('dsh-workflow: no such sample: ' + n);
+                process.exit(1);
+              }
+            } else if (cmd === 'list') {
               say(await req('GET', '/workflow/list', null));
             } else if (cmd === 'status') {
               const qs = [];
@@ -1306,6 +1359,38 @@ object DshRuntime {
         shows the user a flow chart, and only runs what that chart shows. There is no expression
         language and no way to execute code from inside a definition.
 
+        ## Read this first
+
+        - `dsh-workflow guide` prints this document at any time.
+        - `dsh-workflow samples` lists ready-made definitions (in /root/.dsh/workflow-samples).
+          Copy one and change it: `dsh-workflow sample dsh-ready`, then
+          `dsh-workflow create --file /root/.dsh/workflow-samples/dsh-ready.json --reason "..."`.
+          Starting from a sample is much safer than writing JSON from scratch - the samples are
+          checked to be valid, so you cannot miss a required field.
+        - The user can also create and edit workflows by hand in the app
+          (Settings > Features > Automation workflows). Names and descriptions are what they read,
+          so keep them meaningful; an invalid definition cannot be run and the app shows them the
+          same validation errors you would get back.
+
+        ## A complete example (the `minimal` sample)
+
+        ```json
+        {
+          "schemaVersion": 1,
+          "id": "sample-minimal",
+          "name": "minimal",
+          "description": "smallest runnable flow: one shell command",
+          "declaredCaps": [],
+          "nodes": [
+            { "id": "trigger", "type": "trigger", "name": "trigger", "timeoutMs": 60000,
+              "onError": "stop", "config": { "requireDsh": "0" } },
+            { "id": "hello", "type": "execute", "name": "hello", "timeoutMs": 120000,
+              "onError": "stop", "config": { "action": "shell", "cmd": "echo hello" } }
+          ],
+          "edges": [ { "from": "trigger", "to": "hello", "when": "" } ]
+        }
+        ```
+
         ## Two separate steps, two separate confirmations
 
         - `dsh-workflow create ...` -> **yellow** dialog: "save this workflow". Nothing runs.
@@ -1373,6 +1458,264 @@ object DshRuntime {
 
     /** raw string 里没法直接写美元加大括号（Kotlin 会当模板求值），用这个常量拼。 */
     private const val D = "$"
+
+    private val WORKFLOW_SAMPLES: Map<String, String> = mapOf(
+        // 三份各自演示一件最容易写错的事：最小可跑 / DSH 拉起与 false 分支 / 变量与取值。
+        "minimal" to """
+{
+  "schemaVersion": 1,
+  "id": "sample-minimal",
+  "name": "minimal",
+  "description": "smallest runnable flow: one shell command",
+  "declaredCaps": [],
+  "declaresDangerous": false,
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "trigger",
+      "name": "trigger",
+      "posX": 16,
+      "posY": 16,
+      "timeoutMs": 60000,
+      "onError": "stop",
+      "config": {
+        "requireDsh": "0"
+      }
+    },
+    {
+      "id": "hello",
+      "type": "execute",
+      "name": "hello",
+      "posX": 16,
+      "posY": 70,
+      "timeoutMs": 120000,
+      "onError": "stop",
+      "config": {
+        "action": "shell",
+        "cmd": "echo hello from a workflow"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "trigger",
+      "to": "hello",
+      "when": ""
+    }
+  ]
+}
+""",
+        "dsh-ready" to """
+{
+  "schemaVersion": 1,
+  "id": "sample-dsh-ready",
+  "name": "dsh-ready",
+  "description": "start DSH if needed, then run a dsh command; false branch notifies the user",
+  "declaredCaps": [
+    "notify"
+  ],
+  "declaresDangerous": false,
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "trigger",
+      "name": "trigger",
+      "posX": 16,
+      "posY": 16,
+      "timeoutMs": 180000,
+      "onError": "stop",
+      "config": {
+        "requireDsh": "1",
+        "autostartDsh": "1"
+      }
+    },
+    {
+      "id": "dshcli",
+      "type": "execute",
+      "name": "dsh-cli",
+      "posX": 16,
+      "posY": 70,
+      "timeoutMs": 120000,
+      "onError": "stop",
+      "config": {
+        "action": "dsh",
+        "cmd": "dsh --version"
+      }
+    },
+    {
+      "id": "tell",
+      "type": "execute",
+      "name": "notify",
+      "posX": 16,
+      "posY": 124,
+      "timeoutMs": 30000,
+      "onError": "continue",
+      "config": {
+        "action": "notify",
+        "title": "DSH is not running",
+        "text": "Start DSH in DSH-Folk, then run this workflow again."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "trigger",
+      "to": "dshcli",
+      "when": "true"
+    },
+    {
+      "from": "trigger",
+      "to": "tell",
+      "when": "false"
+    }
+  ]
+}
+""",
+        "variables" to """
+{
+  "schemaVersion": 1,
+  "id": "sample-variables",
+  "name": "variables",
+  "description": "extract a value from one step and use it in the next",
+  "declaredCaps": [
+    "notify"
+  ],
+  "declaresDangerous": false,
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "trigger",
+      "name": "trigger",
+      "posX": 16,
+      "posY": 16,
+      "timeoutMs": 60000,
+      "onError": "stop",
+      "config": {
+        "requireDsh": "0"
+      }
+    },
+    {
+      "id": "produce",
+      "type": "execute",
+      "name": "produce",
+      "posX": 16,
+      "posY": 70,
+      "timeoutMs": 60000,
+      "onError": "stop",
+      "config": {
+        "action": "shell",
+        "cmd": "printf '{\\\"tag\\\":\\\"v1\\\"}'"
+      }
+    },
+    {
+      "id": "pick",
+      "type": "extract",
+      "name": "pick",
+      "posX": 16,
+      "posY": 124,
+      "timeoutMs": 60000,
+      "onError": "stop",
+      "config": {
+        "source": "step:produce",
+        "mode": "json",
+        "path": "tag",
+        "var": "tag"
+      }
+    },
+    {
+      "id": "use",
+      "type": "execute",
+      "name": "use",
+      "posX": 16,
+      "posY": 178,
+      "timeoutMs": 60000,
+      "onError": "stop",
+      "config": {
+        "action": "shell",
+        "cmd": "echo got ${$}tag${$}"
+      }
+    },
+    {
+      "id": "check",
+      "type": "condition",
+      "name": "check",
+      "posX": 16,
+      "posY": 232,
+      "timeoutMs": 60000,
+      "onError": "stop",
+      "config": {
+        "source": "var:tag",
+        "op": "equals",
+        "value": "v1"
+      }
+    },
+    {
+      "id": "ok",
+      "type": "execute",
+      "name": "ok",
+      "posX": 16,
+      "posY": 286,
+      "timeoutMs": 30000,
+      "onError": "continue",
+      "config": {
+        "action": "notify",
+        "title": "workflow ok",
+        "text": "tag is ${$}tag${$}"
+      }
+    },
+    {
+      "id": "bad",
+      "type": "execute",
+      "name": "bad",
+      "posX": 200,
+      "posY": 286,
+      "timeoutMs": 30000,
+      "onError": "continue",
+      "config": {
+        "action": "notify",
+        "title": "workflow odd",
+        "text": "tag is not ${$}tag${$}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "trigger",
+      "to": "produce",
+      "when": ""
+    },
+    {
+      "from": "produce",
+      "to": "pick",
+      "when": ""
+    },
+    {
+      "from": "pick",
+      "to": "use",
+      "when": ""
+    },
+    {
+      "from": "use",
+      "to": "check",
+      "when": ""
+    },
+    {
+      "from": "check",
+      "to": "ok",
+      "when": "true"
+    },
+    {
+      "from": "check",
+      "to": "bad",
+      "when": "false"
+    }
+  ]
+}
+""",
+    )
+
+    /** 样例目录名（容器内 `/root/.dsh/<这个名字>/`）。 */
+    private const val WORKFLOW_SAMPLES_DIR = "workflow-samples"
 
     /** 写到容器里的 DSL 文档文件名（与 `dsh-workflow` / 工具插件约定）。 */
     private const val WORKFLOW_DSL_DOC_NAME = "workflow-dsl.md"
@@ -2630,6 +2973,16 @@ object DshRuntime {
         }.onFailure { android.util.Log.w(TAG, "写 $TROUBLESHOOT_DOC_NAME 失败: ${it.message}") }
         // 工作流 DSL 说明：容器里的 `dsh-workflow` 与工具插件的提示词段都读它，写在这儿是为了
         // 「实现改了、文档跟着改」——否则 agent 会照着一份过时说明写定义，然后在校验器那里撞墙。
+        // 样例定义：agent 抄一份改，比从零写更不容易漏字段；设置页也拿它当新建模板。
+        runCatching {
+            val dir = File(DshEnv.dshHome(appContext), WORKFLOW_SAMPLES_DIR)
+            dir.mkdirs()
+            for ((sampleName, sampleText) in WORKFLOW_SAMPLES) {
+                val f = File(dir, sampleName + ".json")
+                if (f.isFile && runCatching { f.readText() }.getOrNull() == sampleText) continue
+                f.writeText(sampleText, StandardCharsets.UTF_8)
+            }
+        }.onFailure { android.util.Log.w(TAG, "写工作流样例失败: ${it.message}") }
         runCatching {
             val doc = File(DshEnv.dshHome(appContext), WORKFLOW_DSL_DOC_NAME)
             doc.parentFile?.mkdirs()
@@ -2662,6 +3015,20 @@ object DshRuntime {
         appendLine(appContext.appString(R.string.dsh_troubleshoot_perm))
         appendLine()
         appendLine(appContext.appString(R.string.dsh_troubleshoot_rom))
+    }
+
+    /**
+     * 把容器侧的 CLI / 工作流指南 / 样例定义按当前版本重写一遍。
+     *
+     * 为什么需要单独一个入口：这些文件平时只在**容器启动**时对一遍（[ensureFsBridgeCli]），
+     * 而用户完全可能「升了 App、容器一直没重启」—— 那时的容器里没有 dsh-workflow、没有指南、
+     * 没有样例，agent 就会卡在「不知道该怎么用、格式是什么」上（实测就是这样）。设置页打开
+     * 或打开工作流开关时调一次，把这段窗口补上；工具插件要重启 DSH 才生效，这一条如实写在
+     * 设置页上。
+     */
+    fun refreshContainerCli() {
+        runCatching { ensureFsBridgeCli() }
+            .onFailure { android.util.Log.w(TAG, "刷新容器侧 CLI 失败: ${it.message}") }
     }
 
     /** 启动回环桥（选空闲端口 + 写配置 + 监听）。文件端点与原生端点共用它。 */

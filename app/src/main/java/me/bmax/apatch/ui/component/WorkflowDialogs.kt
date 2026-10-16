@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.delay
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.WorkflowApprovals
 import me.bmax.apatch.dsh.WorkflowDefinition
@@ -61,6 +62,7 @@ import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
 import me.bmax.apatch.dsh.WorkflowPatch
 import me.bmax.apatch.dsh.WorkflowPermissions
+import me.bmax.apatch.dsh.WorkflowValidator
 import me.bmax.apatch.dsh.definitionFromJson
 import me.bmax.apatch.dsh.toJson
 import me.bmax.apatch.dsh.workflowDiff
@@ -91,13 +93,20 @@ fun WorkflowDialogHosts() {
 
     approval?.let { request ->
         if (request.editing) {
-            WorkflowEditorOverlay(
-                originalJson = request.originalJson,
-                onSave = { edited ->
-                    WorkflowApprovals.stopEditing(request.id, edited)
-                },
-                onCancel = { WorkflowApprovals.stopEditing(request.id, null) },
-            )
+            val initial = remember(request.id) { definitionFromJson(request.originalJson) }
+            if (initial != null) {
+                WorkflowDefinitionEditor(
+                    initial = initial,
+                    title = stringResource(R.string.dsh_workflow_editor_title),
+                    onSave = { edited ->
+                        WorkflowApprovals.stopEditing(request.id, edited.toJson().toString())
+                    },
+                    onCancel = { WorkflowApprovals.stopEditing(request.id, null) },
+                )
+            } else {
+                // 解析失败（提交前校验过，理论上不会）：直接退出编辑，桥那边按原版走。
+                LaunchedEffect(request.id) { WorkflowApprovals.stopEditing(request.id, null) }
+            }
         } else {
             WorkflowApprovalDialog(
                 request = request,
@@ -396,31 +405,39 @@ internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
 }
 
 /**
- * 编辑页（全屏层）：改节点、改参数、挪位置、加删连线。
+ * 定义编辑器（全屏层）：改节点、改参数、挪位置、加删连线。
+ *
+ * **审批流程与设置页共用这一份**：AI 提交后用户点「编辑」看到的界面，就是他平时自己建流程
+ * 的界面。一旦分成两份实现，迟早会出现「AI 能改的字段用户改不了」（或者反过来）。
  *
  * 位置是**画布上的真实坐标**（拖完写回 `posX/posY`），与预览一样落进定义里 —— 蓝图编辑器
  * 的摆位如果不存，用户摆好的图下次打开就自己跳了。
+ *
+ * 校验结果就地显示：不合法时用户在这里就能看到和 AI 收到的那份同源的错误，而不是保存之后
+ * 在运行时撞一个 invalid_definition。
  */
 @Composable
-private fun WorkflowEditorOverlay(
-    originalJson: String,
-    onSave: (String) -> Unit,
+internal fun WorkflowDefinitionEditor(
+    initial: WorkflowDefinition,
+    title: String,
+    onSave: (WorkflowDefinition) -> Unit,
     onCancel: () -> Unit,
 ) {
-    val ctx = LocalContext.current
-    var draft by remember { mutableStateOf(definitionFromJson(originalJson)) }
+    var draft by remember { mutableStateOf(initial) }
     var selected by remember { mutableStateOf<String?>(null) }
     var linkFrom by remember { mutableStateOf<String?>(null) }
     var linkWhen by remember { mutableStateOf("") }
     var confirmDiscard by remember { mutableStateOf(false) }
-    val def = draft ?: return
+    val def = draft
     // 差异在组合期算成不可变列表：写 state 会造成重组循环。
-    val patchLines: List<WorkflowPatch> =
-        remember(def) { definitionFromJson(originalJson)?.let { workflowDiff(it, def) } ?: emptyList() }
+    val patchLines: List<WorkflowPatch> = remember(def) { workflowDiff(initial, def) }
+    val errors: List<String> = remember(def) {
+        WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
+    }
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
-            Text(stringResource(R.string.dsh_workflow_editor_title), style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.titleMedium)
             Text(
                 stringResource(R.string.dsh_workflow_editor_hint),
                 style = MaterialTheme.typography.bodySmall,
@@ -558,6 +575,19 @@ private fun WorkflowEditorOverlay(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (errors.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.dsh_workflow_editor_errors),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Text(
+                    errors.take(5).joinToString("\n"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = {
@@ -566,7 +596,7 @@ private fun WorkflowEditorOverlay(
                     if (patchLines.isEmpty()) onCancel() else confirmDiscard = true
                 }) { Text(stringResource(R.string.dsh_workflow_action_cancel)) }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { onSave(def.toJson().toString()) }) {
+                Button(onClick = { onSave(def) }) {
                     Text(stringResource(R.string.dsh_workflow_editor_save))
                 }
             }

@@ -1764,4 +1764,9 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_workflow_editor_discard_body">有 %1$d 处改动还没保存。放弃后这次编辑就没了（审批还在，可以重新编辑）。</string>
     <string name="dsh_workflow_editor_discard_ok">放弃改动</string>
     <string name="dsh_workflow_editor_keep_editing">继续编辑</string>
+    <string name="dsh_workflow_new">新建流程</string>
+    <string name="dsh_workflow_new_name">新工作流</string>
+    <string name="dsh_workflow_editor_errors">这个定义还不合法（修好才能运行）：</string>
+    <string name="dsh_workflow_invalid_run">定义不合法，暂时不能运行：</string>
+    <string name="dsh_workflow_tools_restart">容器里的工具插件需要重启 DSH 后才注册；指南与 dsh-workflow 命令已即时可用。</string>
 </resources>
