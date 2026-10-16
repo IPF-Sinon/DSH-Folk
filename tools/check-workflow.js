@@ -115,8 +115,12 @@ ok(/WorkflowGrants\.grant\(\s*runId = runId/.test(SRC.engine) && !/grant\(\s*run
   ]) {
     ok(pat.test(SRC.native), `工作流调用放开了「${what}」`);
   }
-  ok(/val workflowGrant = grantCap\?\.let \{/.test(SRC.native) && /WorkflowGrants\.allowsDangerous\(it\.id\)/.test(SRC.native),
+  ok(/val workflowGrant: WorkflowGrants\.Grant\? = if \(grantDanger\)/.test(SRC.native) &&
+    /WorkflowGrants\.allowsDangerous\(grantCap\.id\)/.test(SRC.native),
     "危险命令走 allowsDangerous（勾过才放行）");
+  // 类型必须显式写成 Grant?：if/else 两分支类型不同（Boolean? 与 Grant?）会被推断成 Any?，
+  // 后面取 .runId 编译不过 —— CI 上已经踩过一次。
+  ok(/val workflowGrant: WorkflowGrants\.Grant\?/.test(SRC.native), "授权变量的类型是显式的 Grant?");
   ok(!/val workflowCall = true/.test(SRC.native), "没有「无条件视为工作流」的写法");
   ok(/privDecision = "workflow:" \+/.test(SRC.native), "审计记下是哪一次运行放行的");
 }

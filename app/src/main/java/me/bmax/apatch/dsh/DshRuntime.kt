@@ -1345,9 +1345,9 @@ object DshRuntime {
 
         ## Variables
 
-        `${name}` inside `cmd` / `notify` text is replaced from the run's variables (`extract`
+        ${D}{name} inside `cmd` / `notify` text is replaced from the run's variables (`extract`
         writes them). Undefined names are left as-is on purpose -- silently substituting an empty
-        string turns `rm -rf ${dir}/` into `rm -rf /`. These are pre-seeded: `run_id`,
+        string turns `rm -rf ${D}{dir}/` into `rm -rf /`. These are pre-seeded: `run_id`,
         `workflow_id`, `workflow_name`, `dsh_port`, `dsh_url`, `dsh_state`.
 
         ## Limits
@@ -1362,6 +1362,9 @@ object DshRuntime {
         `logNextLine` as the next `--from` so you never re-read the whole log. `cancel --run` kills
         the currently running step.
     """.trimIndent()
+
+    /** raw string 里没法直接写美元加大括号（Kotlin 会当模板求值），用这个常量拼。 */
+    private const val D = "$"
 
     /** 写到容器里的 DSL 文档文件名（与 `dsh-workflow` / 工具插件约定）。 */
     private const val WORKFLOW_DSL_DOC_NAME = "workflow-dsl.md"

@@ -674,8 +674,16 @@ object DshNativeBridge {
         val grantCap = capOf(path)
         val grantDanger = grantCap == Cap.SHELL &&
             PrivPolicy.shellRisk(ctx, params["cmd"].orEmpty()) == PrivRisk.DANGEROUS
-        val workflowGrant = grantCap?.let {
-            if (grantDanger) WorkflowGrants.allowsDangerous(it.id) else WorkflowGrants.allows(it.id)
+        // 两个分支返回的类型必须一致：写成 if (danger) allowsDangerous(...) else allows(...) 会让
+        // 推断结果变成 Any?（Boolean? 与 Grant? 的公共父类型），后面取 .runId 就编译不过。
+        val workflowGrant: WorkflowGrants.Grant? = if (grantDanger) {
+            if (grantCap != null && WorkflowGrants.allowsDangerous(grantCap.id)) {
+                WorkflowGrants.allows(grantCap.id)
+            } else {
+                null
+            }
+        } else {
+            grantCap?.let { WorkflowGrants.allows(it.id) }
         }
         val workflowCall = workflowGrant != null
         if (!workflowCall && !enabled(ctx)) {
