@@ -99,6 +99,7 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
     }
     // 用户自己建/改流程：与审批时的编辑页是**同一个** [WorkflowDefinitionEditor]。
     var editing by remember { mutableStateOf<WorkflowDefinition?>(null) }
+    val newFlowName = stringResource(R.string.dsh_workflow_new_name)
 
     val workflows = remember(listKey, tick) { WorkflowStore.list(ctx) }
     val runs = remember(listKey, tick) { WorkflowStore.listRuns(ctx, limit = 12) }
@@ -168,7 +169,7 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { editing = starter() }, enabled = enabled) {
+                TextButton(onClick = { editing = starter(newFlowName) }, enabled = enabled) {
                     Text(stringResource(R.string.dsh_workflow_new))
                 }
             }
@@ -315,10 +316,8 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
  * 为什么默认给一条 echo 而不是空命令：空 cmd 会被校验器判为不合法，用户点完「新建」第一件
  * 事就是撞见红色错误 —— 从一个能跑的最小流程开始改，才符合「自己建」的心理模型。
  */
-@Composable
-private fun starter(): WorkflowDefinition {
-    val name = stringResource(R.string.dsh_workflow_new_name)
-    return remember(name) {
+private fun starter(name: String): WorkflowDefinition =
+    run {
         WorkflowDefinition(
             id = WorkflowStore.newId(),
             name = name,
@@ -348,7 +347,6 @@ private fun starter(): WorkflowDefinition {
             edges = listOf(WorkflowEdge("trigger", "step1", "")),
         )
     }
-}
 
 @Composable
 private fun WorkflowRow(

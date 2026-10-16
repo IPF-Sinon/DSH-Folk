@@ -408,7 +408,7 @@ console.log("\u2500 #17 用户自己也能建/改流程");
   ok(callers >= 3, "审批弹窗与设置页共用同一个编辑器（共 " + callers + " 处调用，含定义本身）");
   ok(/WorkflowApprovals\.stopEditing\(request\.id, edited\.toJson\(\)\.toString\(\)\)/.test(SRC.dialogs), "审批路径保存回待批状态");
   ok(/WorkflowStore\.save\(ctx, edited\)/.test(SRC.screen), "设置页路径直接落盘");
-  ok(/private fun starter\(\): WorkflowDefinition/.test(SRC.screen) && /WorkflowStore\.newId\(\)/.test(SRC.screen),
+  ok(/private fun starter\(/.test(SRC.screen) && /WorkflowStore\.newId\(\)/.test(SRC.screen),
     "有「新建流程」的合法起点（不是空定义）");
   ok(/config = mapOf\("action" to "shell", "cmd" to "echo hello"\)/.test(SRC.screen),
     "起点自带一条可跑的命令（空 cmd 一建出来就是错的）");
