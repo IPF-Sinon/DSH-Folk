@@ -3029,6 +3029,11 @@ object DshRuntime {
     fun refreshContainerCli() {
         runCatching { ensureFsBridgeCli() }
             .onFailure { android.util.Log.w(TAG, "刷新容器侧 CLI 失败: ${it.message}") }
+        // 插件与 cordis 挂载项也要一起补：agent 看到工作流的**唯一**通道就是这两个插件
+        // （工具描述 + 提示词段）。只补 CLI 与指南的话，升级后没重启过容器的设备上，agent
+        // 依然什么都不知道 —— 这正是实测里「折腾半天不知道怎么用」的成因。
+        runCatching { DshHostPrompt.ensureInstalled(appContext) }
+            .onFailure { android.util.Log.w(TAG, "刷新容器侧插件失败: ${it.message}") }
     }
 
     /** 启动回环桥（选空闲端口 + 写配置 + 监听）。文件端点与原生端点共用它。 */

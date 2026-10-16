@@ -1795,4 +1795,16 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_workflow_editor_errors">This definition is not valid yet (fix it to run):</string>
     <string name="dsh_workflow_invalid_run">Not runnable yet, the definition is invalid:</string>
     <string name="dsh_workflow_tools_restart">The container tool plugin is registered after DSH restarts; the guide and the dsh-workflow command work immediately.</string>
+    <string name="dsh_workflow_selfcheck">Self-check: can the AI see workflows</string>
+    <string name="dsh_workflow_selfcheck_cli">container command dsh-workflow</string>
+    <string name="dsh_workflow_selfcheck_guide">guide file workflow-dsl.md</string>
+    <string name="dsh_workflow_selfcheck_samples">sample definitions (workflow-samples)</string>
+    <string name="dsh_workflow_selfcheck_plugin">tool plugin file</string>
+    <string name="dsh_workflow_selfcheck_patch">plugin entry (cordis.patch.yml)</string>
+    <string name="dsh_workflow_selfcheck_tools">tool registration state</string>
+    <string name="dsh_workflow_fix_assets">Write missing container files</string>
+    <string name="dsh_workflow_restart_dsh">Restart DSH (so the AI sees the tools and guide)</string>
+    <string name="dsh_workflow_restart_title">Restart DSH</string>
+    <string name="dsh_workflow_restart_body">The tool plugin and guide section are loaded only when DSH restarts. A restart briefly interrupts running sessions.</string>
+    <string name="dsh_workflow_restart_now">Restart now</string>
 </resources>

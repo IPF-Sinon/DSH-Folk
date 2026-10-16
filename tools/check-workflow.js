@@ -419,6 +419,14 @@ console.log("\u2500 #17 用户自己也能建/改流程");
   ok(/DshRuntime\.refreshContainerCli\(\)/.test(SRC.screen), "打开页面/打开开关时刷新容器侧 CLI 与指南");
   ok(/fun refreshContainerCli\(\)/.test(SRC.runtime), "DshRuntime 提供刷新入口");
   ok(/dsh_workflow_tools_restart/.test(SRC.screen), "如实说明「工具插件要重启 DSH 才注册」");
+  ok(/DshHostPrompt\.ensureInstalled/.test(SRC.runtime) && /fun refreshContainerCli\(\)/.test(SRC.runtime),
+    "刷新容器资产时**连插件与挂载项一起补**（只补 CLI 与指南的话，没重启过容器的设备上 agent 依旧什么都不知道）");
+  ok(/containerChecks\(ctx\)/.test(SRC.screen) && /dsh_workflow_selfcheck/.test(SRC.screen),
+    "设置页有自检面板（缺哪一环是文件系统事实，不是猜）");
+  ok(/DshRuntime\.restart\(\)/.test(SRC.screen) && /dsh_workflow_restart_body/.test(SRC.screen),
+    "有一键重启 DSH 并说明为什么需要重启");
+  ok(/plugin\.isFile && plugin\.length\(\) > 0L/.test(SRC.screen) && /patchHasEntry/.test(SRC.screen),
+    "自检真的去看插件文件与 cordis 挂载项");
 }
 
 console.log("\u2500 #12 新门禁登记进两条 CI 清单");

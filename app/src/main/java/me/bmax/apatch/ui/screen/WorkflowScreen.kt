@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,6 +106,10 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
     val runs = remember(listKey, tick) { WorkflowStore.listRuns(ctx, limit = 12) }
     val detail = detailRunId?.let { id -> runs.firstOrNull { it.runId == id } ?: WorkflowEngine.status(ctx, id) }
     val toolStatus = remember(listKey) { readToolStatus(ctx) }
+    // 自检：agent 到底有没有拿到「工具 + 指南」。缺哪一项、下一步做什么，都摆在这一屏上 ——
+    // 否则用户只能看到「AI 不会用」，而没有任何可查的证据。
+    val checks = remember(listKey) { containerChecks(ctx) }
+    var restartOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -160,6 +165,26 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(stringResource(R.string.dsh_workflow_selfcheck), style = MaterialTheme.typography.labelLarge)
+            for (c in checks) {
+                Text(
+                    (if (c.ok) "\u2713 " else "\u2717 ") + stringResource(c.labelRes) + (if (c.detail.isBlank()) "" else "：" + c.detail),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (c.ok) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                )
+            }
+            if (checks.any { !it.ok }) {
+                TextButton(onClick = {
+                    scope.launch {
+                        withContext(Dispatchers.IO) { DshRuntime.refreshContainerCli() }
+                        listKey++
+                    }
+                }) { Text(stringResource(R.string.dsh_workflow_fix_assets)) }
+            }
+            TextButton(onClick = { restartOpen = true }, enabled = enabled) {
+                Text(stringResource(R.string.dsh_workflow_restart_dsh))
             }
             Spacer(Modifier.height(12.dp))
 
@@ -293,6 +318,34 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    if (restartOpen) {
+        AlertDialog(
+            onDismissRequest = { restartOpen = false },
+            title = { Text(stringResource(R.string.dsh_workflow_restart_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.dsh_workflow_restart_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    restartOpen = false
+                    scope.launch {
+                        withContext(Dispatchers.IO) { DshRuntime.refreshContainerCli() }
+                        DshRuntime.restart()
+                        listKey++
+                    }
+                }) { Text(stringResource(R.string.dsh_workflow_restart_now)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { restartOpen = false }) {
+                    Text(stringResource(R.string.dsh_workflow_action_cancel))
+                }
+            },
+        )
     }
 
     // 编辑器铺满整页（它自带全屏 Surface），保存后回到列表并重新读盘。
@@ -438,6 +491,36 @@ private suspend fun awaitPermissions(
  * 如实显示：`ok` = 四个工具都注册上了；`degraded`/`unavailable` = agent 只能用 `dsh-workflow`
  * CLI。用户看到这句才知道「agent 说没有 workflow_run 这个工具」是不是正常现象。
  */
+/** 自检的一项。 */
+private data class ContainerCheck(val labelRes: Int, val ok: Boolean, val detail: String = "")
+
+/**
+ * 容器侧自检：agent 要能看到工作流，必需的东西到底在不在。
+ *
+ * 这几项**都是文件系统事实**（不是猜），所以用户报「AI 不会用」时，看一眼就知道缺哪一环：
+ * 命令/指南/样例是即时可用的；插件与挂载项决定 agent 是否知道它存在，而插件要 DSH 重启才加载。
+ */
+private fun containerChecks(ctx: android.content.Context): List<ContainerCheck> {
+    val rootfs = DshEnv.rootfs(ctx)
+    val home = DshEnv.dshHome(ctx)
+    val cli = File(rootfs, "usr/local/bin/dsh-workflow")
+    val guide = File(home, "workflow-dsl.md")
+    val samples = File(home, "workflow-samples")
+    val plugin = File(home, "plugins/dsh-folk-workflow.mjs")
+    val patch = File(home, "cordis.patch.yml")
+    val sampleCount = samples.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.size ?: 0
+    val patchHasEntry = runCatching { patch.isFile && patch.readText().contains("dsh-folk-workflow") }
+        .getOrDefault(false)
+    return listOf(
+        ContainerCheck(R.string.dsh_workflow_selfcheck_cli, cli.isFile && cli.length() > 0L),
+        ContainerCheck(R.string.dsh_workflow_selfcheck_guide, guide.isFile && guide.length() > 0L, "${guide.length()} B"),
+        ContainerCheck(R.string.dsh_workflow_selfcheck_samples, sampleCount > 0, "$sampleCount"),
+        ContainerCheck(R.string.dsh_workflow_selfcheck_plugin, plugin.isFile && plugin.length() > 0L, "${plugin.length()} B"),
+        ContainerCheck(R.string.dsh_workflow_selfcheck_patch, patchHasEntry),
+        ContainerCheck(R.string.dsh_workflow_selfcheck_tools, readToolStatus(ctx) == "ok", readToolStatus(ctx)),
+    )
+}
+
 private fun readToolStatus(ctx: android.content.Context): String {
     val f = File(DshEnv.dshHome(ctx), "workflow-tool-status.json")
     if (!f.isFile) return "unknown"

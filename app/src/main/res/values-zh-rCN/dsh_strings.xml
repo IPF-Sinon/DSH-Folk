@@ -1769,4 +1769,16 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_workflow_editor_errors">这个定义还不合法（修好才能运行）：</string>
     <string name="dsh_workflow_invalid_run">定义不合法，暂时不能运行：</string>
     <string name="dsh_workflow_tools_restart">容器里的工具插件需要重启 DSH 后才注册；指南与 dsh-workflow 命令已即时可用。</string>
+    <string name="dsh_workflow_selfcheck">自检：agent 能不能看到工作流</string>
+    <string name="dsh_workflow_selfcheck_cli">容器内命令 dsh-workflow</string>
+    <string name="dsh_workflow_selfcheck_guide">指南文件 workflow-dsl.md</string>
+    <string name="dsh_workflow_selfcheck_samples">样例定义（workflow-samples）</string>
+    <string name="dsh_workflow_selfcheck_plugin">工具插件文件</string>
+    <string name="dsh_workflow_selfcheck_patch">插件挂载项（cordis.patch.yml）</string>
+    <string name="dsh_workflow_selfcheck_tools">工具注册状态</string>
+    <string name="dsh_workflow_fix_assets">补齐容器侧文件</string>
+    <string name="dsh_workflow_restart_dsh">重启 DSH（让 AI 看到工具与指南）</string>
+    <string name="dsh_workflow_restart_title">重启 DSH</string>
+    <string name="dsh_workflow_restart_body">工具插件与指南段要 DSH 重启后才会加载；重启会短暂中断正在运行的会话。</string>
+    <string name="dsh_workflow_restart_now">立即重启</string>
 </resources>
