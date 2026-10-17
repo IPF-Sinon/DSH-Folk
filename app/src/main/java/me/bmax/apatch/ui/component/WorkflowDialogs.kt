@@ -383,7 +383,9 @@ internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
     // 主题色必须在 Canvas **外面**取：Canvas 的 lambda 是 DrawScope，不是 composable 作用域，
     // 在里面读 MaterialTheme 会直接编译不过（CI 已抓过一次）。
     val edgeColor = MaterialTheme.colorScheme.outline
-    // ?: 0f 而不是 ?: 0：Float? 与 Int 的公共父类型会让 + 190 找不到候选（CI 抓过一次）。
+    val gridNormal = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+    val gridStrong = MaterialTheme.colorScheme.outline.copy(alpha = 0.32f)
+    val width    // ?: 0f 而不是 ?: 0：Float? 与 Int 的公共父类型会让 + 190 找不到候选（CI 抓过一次）。
     val width = (placed.maxOfOrNull { it.x } ?: 0f) + 190f
     val height = (placed.maxOfOrNull { it.y } ?: 0f) + 70f
     Box(
@@ -394,7 +396,7 @@ internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
     ) {
         Box(Modifier.width(width.dp).height(height.dp)) {
-            Canvas(Modifier.fillMaxSize()) { drawGrid() }
+            Canvas(Modifier.fillMaxSize()) { drawGrid(gridNormal, gridStrong) }
             Canvas(Modifier.fillMaxSize()) {
                 drawWorkflowEdges(placed, definition, edgeColor)
             }
@@ -425,6 +427,8 @@ private fun NodeCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     onDrag: ((Float, Float) -> Unit)? = null,
+    /** 类型名水印：编辑页开着（卡片大、好看），预览/详情里关掉 —— 小卡片上它会和标题挤成两行字。 */
+    showWatermark: Boolean = false,
 ) {
     val accent = nodeColor(node.type)
     val base = modifier.width(NODE_W).height(NODE_H)
@@ -451,12 +455,14 @@ private fun NodeCard(
         modifier = draggable,
     ) {
         Box {
-            Text(
-                node.type.id,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f),
-                modifier = Modifier.align(Alignment.Center),
-            )
+            if (showWatermark) {
+                Text(
+                    node.type.id,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f),
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
@@ -488,14 +494,15 @@ private fun NodeCard(
 /**
  * 画布网格：方格线（规格：12dp 单元格、每 10 格加粗），颜色取主题 outline 压暗。
  */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGrid() {
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGrid(
+    normal: androidx.compose.ui.graphics.Color,
+    strong: androidx.compose.ui.graphics.Color,
+) {
     // 方格线而不是点阵：点击助手的画布是 12dp 方格（源码 GRID_DP_SIZE=12），普通线 0.5px、
     // 每 10 格加粗 2px。加粗那一档让画布有尺度感，不至于看成一片细线。
     val step = CANVAS_STEP_DP.dp.toPx()
     val thin = 0.5f
     val thick = 2f
-    val normal = androidx.compose.ui.graphics.Color(0x22000000)
-    val strong = androidx.compose.ui.graphics.Color(0x33000000)
     var i = 0
     var x = 0f
     while (x < size.width) {
@@ -553,18 +560,41 @@ private data class PlacedNode(val id: String, val x: Float, val y: Float)
 
 private fun layoutNodes(definition: WorkflowDefinition): List<PlacedNode> {
     val anyPlaced = definition.nodes.any { it.posX != 0 || it.posY != 0 }
-    if (anyPlaced) return definition.nodes.map { PlacedNode(it.id, it.posX.toFloat(), it.posY.toFloat()) }
+    if (anyPlaced) {
+        val stored = definition.nodes.map { PlacedNode(it.id, it.posX.toFloat(), it.posY.toFloat()) }
+        // 落盘坐标可能互相压住（早期版本没写回坐标、或 AI 生成的定义给了同一组数），
+        // 真机上就是「节点叠在一起、标签串行」。压住就退回自动分层，别把糊掉的图端给用户。
+        if (!overlaps(stored)) return stored
+    }
     val layers = graphLayers(definition)
     val out = mutableListOf<PlacedNode>()
     for ((depth, nodes) in layers.withIndex()) {
         for ((i, n) in nodes.withIndex()) {
-            out += PlacedNode(n.id, 16f + i * 168f, 16f + depth * 74f)
+            // 行距 82（> 卡片 46 + 底部针脚标签 ~20）：标签不再压到下一行的卡片上
+            out += PlacedNode(n.id, snapGrid(16f + i * 168f), 16f + depth * 82f)
         }
     }
     return out
 }
 
-/** 分支标签的位置：贴在这条连线的中段上方。 */
+/** 两个节点的矩形是否相交（含底部标签约 20dp 的余量）。 */
+private fun overlaps(placed: List<PlacedNode>): Boolean {
+    for (i in placed.indices) {
+        for (j in i + 1 until placed.size) {
+            val a = placed[i]
+            val b = placed[j]
+            if (kotlin.math.abs(a.x - b.x) < 148f && kotlin.math.abs(a.y - b.y) < 66f) return true
+        }
+    }
+    return false
+}
+
+/** 位置吸附到 12dp 网格（规格里卡片的坐标量纲就是格号）。 */
+private fun snapGrid(v: Float): Float = kotlin.math.round(v / 12f) * 12f
+
+/**
+ * 分支标签的位置：贴在**源卡片的底部**（规格里 true/false 就是卡片底部的针脚标题）。
+ */
 private data class EdgeLabel(val text: String, val x: Float, val y: Float)
 
 private fun edgeLabels(placed: List<PlacedNode>, definition: WorkflowDefinition): List<EdgeLabel> {
@@ -644,10 +674,13 @@ internal fun WorkflowDefinitionEditor(
             ) {
                 val placed = layoutNodes(def)
                 val edgeColor = MaterialTheme.colorScheme.outline
-                val canvasW = ((placed.maxOfOrNull { it.x } ?: 0f) + 190f).dp
-                val canvasH = ((placed.maxOfOrNull { it.y } ?: 0f) + 80f).dp
+                val gridNormal = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                val gridStrong = MaterialTheme.colorScheme.outline.copy(alpha = 0.32f)
+                // 至少铺满视口：否则节点只占左上角一小块，剩下整片灰底看着像没画出来（真机）
+                val canvasW = maxOf((placed.maxOfOrNull { it.x } ?: 0f) + 190f, 340f).dp
+                val canvasH = maxOf((placed.maxOfOrNull { it.y } ?: 0f) + 80f, 300f).dp
                 Box(Modifier.width(canvasW).height(canvasH)) {
-                    Canvas(Modifier.fillMaxSize()) { drawGrid() }
+                    Canvas(Modifier.fillMaxSize()) { drawGrid(gridNormal, gridStrong) }
                     Canvas(Modifier.fillMaxSize()) {
                         drawWorkflowEdges(placed, def, edgeColor)
                     }
@@ -655,6 +688,7 @@ internal fun WorkflowDefinitionEditor(
                         NodeCard(
                             node = node,
                             selected = selected == node.id,
+                            showWatermark = true,
                             modifier = Modifier.offset(node.posX.dp, node.posY.dp),
                             onClick = {
                                 val from = linkFrom
@@ -667,8 +701,9 @@ internal fun WorkflowDefinitionEditor(
                                 }
                             },
                             onDrag = { dx, dy ->
-                                val nx = (node.posX + dx.toInt()).coerceIn(0, 600)
-                                val ny = (node.posY + dy.toInt()).coerceIn(0, 900)
+                                // 吸附到 12dp 网格（规格：位置量纲 = 格号），摆出来的图才整齐
+                                val nx = snapGrid(node.posX + dx).toInt().coerceIn(0, 600)
+                                val ny = snapGrid(node.posY + dy).toInt().coerceIn(0, 900)
                                 draft = def.copy(
                                     nodes = def.nodes.map {
                                         if (it.id == node.id) it.copy(posX = nx, posY = ny) else it

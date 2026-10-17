@@ -1,5 +1,3 @@
-package me.bmax.apatch.ui.screen
-
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -22,8 +21,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -38,12 +37,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -59,15 +64,16 @@ import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
 import me.bmax.apatch.dsh.WorkflowOnError
 import me.bmax.apatch.dsh.WorkflowPermissions
+import me.bmax.apatch.dsh.WorkflowRun
 import me.bmax.apatch.dsh.WorkflowRunState
 import me.bmax.apatch.dsh.WorkflowStore
-import me.bmax.apatch.dsh.WorkflowRun
 import me.bmax.apatch.dsh.WorkflowValidator
 import me.bmax.apatch.dsh.toJson
 import me.bmax.apatch.ui.component.WorkflowDefinitionEditor
 import me.bmax.apatch.ui.component.WorkflowGraphPreview
-import java.io.File
 import org.json.JSONObject
+package me.bmax.apatch.ui.screen
+
 
 /**
  * 设置 → 功能 → 自动化工作流。
@@ -513,13 +519,60 @@ private fun RunDetailDialog(run: WorkflowRun, onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.labelLarge,
                 )
                 if (def != null) {
-                    WorkflowGraphPreview(def)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        def.toJson().toString(2),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    // 预览可缩放（真机反馈「预览图不能缩放」）：外层双向滚动 + graphicsLayer 缩放，
+                    // 并按缩放后的尺寸占位 —— 只加 scale 不占位的话，放大后右半边会被裁掉。
+                    var zoom by remember(run.runId) { mutableStateOf(1f) }
+                    var content by remember(run.runId) { mutableStateOf(IntSize.Zero) }
+                    val density = LocalDensity.current
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { zoom = (zoom - 0.25f).coerceAtLeast(0.75f) }) { Text("-") }
+                        Text(
+                            stringResource(R.string.dsh_workflow_zoom, (zoom * 100).toInt()),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        TextButton(onClick = { zoom = (zoom + 0.25f).coerceAtMost(2.5f) }) { Text("+") }
+                        TextButton(onClick = { zoom = 1f }) {
+                            Text(stringResource(R.string.dsh_workflow_zoom_reset))
+                        }
+                    }
+                    Box(
+                        Modifier
+                            .height(320.dp)
+                            .horizontalScroll(rememberScrollState())
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Box(
+                            Modifier
+                                .requiredSize(
+                                    with(density) { (content.width * zoom).toDp() },
+                                    with(density) { (content.height * zoom).toDp() },
+                                )
+                                .graphicsLayer(
+                                    scaleX = zoom,
+                                    scaleY = zoom,
+                                    transformOrigin = TransformOrigin(0f, 0f),
+                                ),
+                        ) {
+                            Box(Modifier.onSizeChanged { content = it }) { WorkflowGraphPreview(def) }
+                        }
+                    }
+                    // 定义 JSON 默认收起：展开的长 JSON 会把流程图和结果挤在一起（真机截图就是糊的）
+                    var showJson by remember(run.runId) { mutableStateOf(false) }
+                    TextButton(onClick = { showJson = !showJson }) {
+                        Text(
+                            stringResource(
+                                if (showJson) R.string.dsh_workflow_detail_json_hide
+                                else R.string.dsh_workflow_detail_json_show,
+                            ),
+                        )
+                    }
+                    if (showJson) {
+                        Text(
+                            def.toJson().toString(2),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 } else {
                     Text(
                         stringResource(R.string.dsh_workflow_detail_no_definition),

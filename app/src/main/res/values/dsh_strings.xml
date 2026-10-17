@@ -1815,4 +1815,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_workflow_detail_logs">Run log</string>
     <string name="dsh_workflow_action_close">Close</string>
     <string name="dsh_workflow_editor_linking">Tap a target node on the canvas to finish the link (from %1$s)</string>
+    <string name="dsh_workflow_zoom">Zoom %1$d%%</string>
+    <string name="dsh_workflow_zoom_reset">Reset</string>
+    <string name="dsh_workflow_detail_json_show">Show definition JSON</string>
+    <string name="dsh_workflow_detail_json_hide">Hide definition JSON</string>
 </resources>

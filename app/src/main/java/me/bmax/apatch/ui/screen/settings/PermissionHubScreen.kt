@@ -128,114 +128,7 @@ fun PermissionHubScreen(navigator: DestinationsNavigator) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
 
-                HubCard {
-                    HubRow(
-                        icon = Icons.Filled.Security,
-                        title = stringResource(R.string.dsh_perm_cat_privileged),
-                        summary = stringResource(R.string.dsh_perm_cat_privileged_summary, channelLabel),
-                        onClick = { navigator.navigate(PrivilegedChannelScreenDestination) },
-                    )
-                    HubRow(
-                        icon = Icons.Filled.Wifi,
-                        title = stringResource(R.string.dsh_perm_cat_wireless_adb),
-                        // 这一行常显（没 root 也没 Shizuku 的用户，这是唯一一条能自己配出来的
-                        // 通道，藏起来就没法发现了），所以副标题必须说清它现在到底能不能用。
-                        summary = stringResource(
-                            if (perm.adbPaired) R.string.dsh_adb_paired
-                            else R.string.dsh_perm_state_adb_unconfigured
-                        ) + " · " + stringResource(R.string.dsh_adb_summary),
-                        onClick = { navigator.navigate(WirelessAdbScreenDestination) },
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = stringResource(R.string.dsh_perm_hub_cat_native),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                if (!bridgeEnabled) {
-                    // 总开关关着就必须在这一层说出来。原先把能力列表整块收在开关里面，用户一眼
-                    // 就知道"现在什么都不通、但档位还留着"；列表搬到次级页之后，这个信号如果
-                    // 只留在页内，安全页上就只剩一个入口，读不出任何状态。
-                    Text(
-                        text = if (activeCaps > 0) {
-                            stringResource(R.string.dsh_native_off_hint_kept, activeCaps)
-                        } else {
-                            stringResource(R.string.dsh_native_off_hint)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                HubCard {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.dsh_native_enable),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = stringResource(R.string.dsh_native_enable_summary),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        ExpressiveSwitch(
-                            checked = bridgeEnabled,
-                            onCheckedChange = { on ->
-                                bridgeEnabled = on
-                                DshNativeBridge.setEnabled(context.applicationContext, on)
-                                // 提示词里写着「哪些能力开着」，开关一变就得让容器侧看到新事实
-                                DshHostPrompt.writeFacts(context.applicationContext)
-                            },
-                        )
-                    }
-                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                    for (group in CapGroup.entries) {
-                        HubRow(
-                            icon = groupIcon(group),
-                            title = stringResource(group.titleRes),
-                            summary = stringResource(R.string.dsh_perm_caps_count, group.caps.size),
-                            onClick = { navigateToGroup(navigator, group) },
-                        )
-                    }
-                    // 放在**最下面**：它不是一个能力分类，而是"还要不要再问"这件事本身 ——
-                    // 一个开关 + 两张跨全部能力的清单。挤在分类之间会让人以为它也是其中一类。
-                    HubRow(
-                        icon = Icons.Filled.VerifiedUser,
-                        title = stringResource(R.string.dsh_priv_restrict_title),
-                        summary = stringResource(
-                            R.string.dsh_priv_restrict_hub_summary,
-                            stringResource(
-                                if (PrivPolicy.restrictMode(context)) R.string.dsh_priv_restrict_on
-                                else R.string.dsh_priv_restrict_off
-                            ),
-                            PrivPolicy.restrictedCaps(context).size,
-                        ),
-                        onClick = { navigator.navigate(RestrictModeScreenDestination) },
-                    )
-                }
-                if (bridgeEnabled) {
-                    // 只在桥开着时给这条提示：关着桥还教人怎么调 CLI 是自相矛盾的
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.dsh_native_cli_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                }
+                PermissionEntriesSection(navigator)
                 Spacer(Modifier.height(16.dp))
             }
         } else {
@@ -275,6 +168,141 @@ private sealed interface HubTarget {
     data object Channel : HubTarget
     data object WirelessAdb : HubTarget
     data object Restrict : HubTarget
+}
+
+/**
+ * 权限管理正文（分类入口 + 原生桥总开关 + 六类能力 + 限制模式 + CLI 提示）。
+ *
+ * 抽出来的原因是它有两个宿主：权限中心页（PermissionHubScreen，带搜索），以及**安全首页**。
+ * 真机反馈「安全页太空了」—— 安全页当时只有两张生物识别卡和一个入口，权限管理本来就该在
+ * 首页上，而不是藏进二级页。正文原样搬过来，两处渲染同一份，不会再各自漂移。
+ */
+@Composable
+internal fun PermissionEntriesSection(
+    navigator: DestinationsNavigator,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val perm by PermissionManager.status.collectAsStateWithLifecycle()
+    val channelLabel = perm.label(context)
+    // 总开关与档位都可能在别处被改（系统设置、功能页），回到本页时重读一遍
+    var bridgeEnabled by remember { mutableStateOf(DshNativeBridge.enabled(context)) }
+    var activeCaps by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        bridgeEnabled = DshNativeBridge.enabled(context)
+        activeCaps = DshNativeBridge.accessMap(context).values.count { it != DshNativeBridge.Access.OFF }
+        onPauseOrDispose { }
+    }
+    Column(modifier) {
+        HubCard {
+            HubRow(
+                icon = Icons.Filled.Security,
+                title = stringResource(R.string.dsh_perm_cat_privileged),
+                summary = stringResource(R.string.dsh_perm_cat_privileged_summary, channelLabel),
+                onClick = { navigator.navigate(PrivilegedChannelScreenDestination) },
+            )
+            HubRow(
+                icon = Icons.Filled.Wifi,
+                title = stringResource(R.string.dsh_perm_cat_wireless_adb),
+                // 这一行常显（没 root 也没 Shizuku 的用户，这是唯一一条能自己配出来的
+                // 通道，藏起来就没法发现了），所以副标题必须说清它现在到底能不能用。
+                summary = stringResource(
+                    if (perm.adbPaired) R.string.dsh_adb_paired
+                    else R.string.dsh_perm_state_adb_unconfigured
+                ) + " · " + stringResource(R.string.dsh_adb_summary),
+                onClick = { navigator.navigate(WirelessAdbScreenDestination) },
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.dsh_perm_hub_cat_native),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        if (!bridgeEnabled) {
+            // 总开关关着就必须在这一层说出来。原先把能力列表整块收在开关里面，用户一眼
+            // 就知道"现在什么都不通、但档位还留着"；列表搬到次级页之后，这个信号如果
+            // 只留在页内，安全页上就只剩一个入口，读不出任何状态。
+            Text(
+                text = if (activeCaps > 0) {
+                    stringResource(R.string.dsh_native_off_hint_kept, activeCaps)
+                } else {
+                    stringResource(R.string.dsh_native_off_hint)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        HubCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.dsh_native_enable),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = stringResource(R.string.dsh_native_enable_summary),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                ExpressiveSwitch(
+                    checked = bridgeEnabled,
+                    onCheckedChange = { on ->
+                        bridgeEnabled = on
+                        DshNativeBridge.setEnabled(context.applicationContext, on)
+                        // 提示词里写着「哪些能力开着」，开关一变就得让容器侧看到新事实
+                        DshHostPrompt.writeFacts(context.applicationContext)
+                    },
+                )
+            }
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+            for (group in CapGroup.entries) {
+                HubRow(
+                    icon = groupIcon(group),
+                    title = stringResource(group.titleRes),
+                    summary = stringResource(R.string.dsh_perm_caps_count, group.caps.size),
+                    onClick = { navigateToGroup(navigator, group) },
+                )
+            }
+            // 放在**最下面**：它不是一个能力分类，而是"还要不要再问"这件事本身 ——
+            // 一个开关 + 两张跨全部能力的清单。挤在分类之间会让人以为它也是其中一类。
+            HubRow(
+                icon = Icons.Filled.VerifiedUser,
+                title = stringResource(R.string.dsh_priv_restrict_title),
+                summary = stringResource(
+                    R.string.dsh_priv_restrict_hub_summary,
+                    stringResource(
+                        if (PrivPolicy.restrictMode(context)) R.string.dsh_priv_restrict_on
+                        else R.string.dsh_priv_restrict_off
+                    ),
+                    PrivPolicy.restrictedCaps(context).size,
+                ),
+                onClick = { navigator.navigate(RestrictModeScreenDestination) },
+            )
+        }
+        if (bridgeEnabled) {
+            // 只在桥开着时给这条提示：关着桥还教人怎么调 CLI 是自相矛盾的
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.dsh_native_cli_hint),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+    }
 }
 
 private fun navigateToGroup(navigator: DestinationsNavigator, group: CapGroup) {

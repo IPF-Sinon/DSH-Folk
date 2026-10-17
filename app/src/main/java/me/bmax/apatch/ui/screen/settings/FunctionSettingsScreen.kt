@@ -705,6 +705,16 @@ internal fun DshSettingsScreen(
             }
             if (permissionOnly) {
                 item {
+                    // 权限管理正文直接摆在安全首页上（真机反馈「安全页太空了」）：它本来属于这一页，
+                    // 只留一个二级入口的话，安全页就只剩两张生物识别卡。
+                    Text(
+                        text = stringResource(R.string.dsh_perm_hub_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                    PermissionEntriesSection(navigator = navigator)
+                }
+                item {
                     SecuritySettingsContent(
                         snackBarHost = snackBarHost,
                         highlightKey = highlightKey,

@@ -1789,4 +1789,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_workflow_detail_logs">运行日志</string>
     <string name="dsh_workflow_action_close">关闭</string>
     <string name="dsh_workflow_editor_linking">点画布上的目标节点完成连线（当前从 %1$s 出发）</string>
+    <string name="dsh_workflow_zoom">缩放 %1$d%%</string>
+    <string name="dsh_workflow_zoom_reset">重置</string>
+    <string name="dsh_workflow_detail_json_show">显示定义 JSON</string>
+    <string name="dsh_workflow_detail_json_hide">收起定义 JSON</string>
 </resources>

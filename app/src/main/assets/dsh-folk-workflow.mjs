@@ -31,7 +31,10 @@ export const name = 'dsh-folk-workflow';
 // 只声明 systemPrompt：工具服务在旧运行时上可能不存在，而 cordis 对「声明了却拿不到的
 // 服务」会让**整个 entry** 不激活 —— 那样连提示词段都没了，agent 会以为这台设备根本不支持
 // 工作流。工具能力改为进 apply 后探测 ctx.tools（见下），探测不到就退化成只有 CLI。
-export const inject = ['systemPrompt'];
+// 必须把 tools 一起注入：cordis 对**没声明 inject 的服务**会直接抛
+// 「cannot get property 'tools' without inject」，而不是返回 undefined —— 只声明 systemPrompt 时
+// ctx.tools 一读就炸，结果工具永远注册不上（真机自检里那句 unavailable 的真凶）。
+export const inject = ['systemPrompt', 'tools'];
 
 const DSL_DOC = '/root/.dsh/workflow-dsl.md';
 const STATUS_FILE = '/root/.dsh/workflow-tool-status.json';

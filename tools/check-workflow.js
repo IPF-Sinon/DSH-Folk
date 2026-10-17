@@ -195,8 +195,13 @@ console.log("\u2500 #9 容器侧插件：降级 + 说明文档 + 版本号独立
 {
   const s = SRC.mjs;
   ok(/export const name = 'dsh-folk-workflow'/.test(s), "插件有 name");
-  ok(/export const inject = \['systemPrompt'\]/.test(s) && !/inject = \['tools'/.test(s),
-    "只注入 systemPrompt（工具服务在旧运行时可能不存在，声明它会让整个 entry 不激活）");
+  // 这一条以前写反了：当时的理由是「旧运行时的 tools 服务可能不存在，声明它会让 entry 不激活」，
+  // 但 cordis 的真实行为是 —— 没声明 inject 就**不许读**该服务，ctx.tools 直接抛。于是工具永远
+  // 注册不上，自检长期显示 unavailable（真机截图）。现在两个都注入，并钉住这一点。
+  ok(/export const inject = \['systemPrompt', 'tools'\]/.test(s),
+    "systemPrompt 与 tools 都在 inject 里（否则 ctx.tools 会抛 without inject）");
+  ok(!/ctx\.tools/.test(s) || /inject = \[[^\]]*'tools'/.test(s),
+    "读 ctx.tools 之前必须先在 inject 里声明它");
   ok(/export function apply\(ctx\)/.test(s), "有 apply（cordis 插件契约）");
   for (const tool of ["workflow_create", "workflow_run", "workflow_status", "workflow_cancel"]) {
     ok(s.includes(`'${tool}'`) || s.includes(`"${tool}"`) || s.includes(tool), `注册工具 ${tool}`);
