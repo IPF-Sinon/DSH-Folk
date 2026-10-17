@@ -385,7 +385,7 @@ internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
     val edgeColor = MaterialTheme.colorScheme.outline
     val gridNormal = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
     val gridStrong = MaterialTheme.colorScheme.outline.copy(alpha = 0.32f)
-    val width    // ?: 0f 而不是 ?: 0：Float? 与 Int 的公共父类型会让 + 190 找不到候选（CI 抓过一次）。
+    // ?: 0f 而不是 ?: 0：Float? 与 Int 的公共父类型会让 + 190 找不到候选（CI 抓过一次）。
     val width = (placed.maxOfOrNull { it.x } ?: 0f) + 190f
     val height = (placed.maxOfOrNull { it.y } ?: 0f) + 70f
     Box(
