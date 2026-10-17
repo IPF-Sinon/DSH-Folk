@@ -279,6 +279,17 @@ ok(seedLine && !seedLine[1].includes("dsh-file-upload"),
   `SEED_PLUGINS 不再含 dsh-file-upload（现在是 ${seedLine ? seedLine[1].trim() : "?"}）`);
 ok(/RETIRED_SEED_PLUGINS = mapOf\("dsh-file-upload" to "file-upload"\)/.test(rt),
   "退役表仍记得它（否则已装的卸不掉、冲突也认不出来）");
+// 运行时通道规则（真机反馈）：测试通道 = 在正式通道的基础上「也接受」测试版，同口味候选里取
+// 更新的一份；正式通道仍只认正式版；重装必须仍按已装那份取（不能顺手升级）。
+ok(/CHANNEL_STABLE, CHANNEL_SLIM -> true/.test(rt) && /CHANNEL_BETA, CHANNEL_SLIM_BETA -> beta/.test(rt),
+  "测试通道接受正式版+测试版，正式通道不接受测试版");
+ok(/private fun fetchNewestMeta\(\)/.test(rt) &&
+  /val meta = fetchNewestMeta\(\) \?: return@withContext RuntimeCheckResult\(failure = true\)/.test(rt),
+  "检查更新在候选里取最新（不再只看所选通道那一个 tag）");
+ok(/private suspend fun downloadAndInstall\(preserveData: Boolean = true, newest: Boolean = true\)/.test(rt) &&
+  /val meta = if \(newest\) fetchNewestMeta\(\) else fetchMeta\(\)/.test(rt) &&
+  /downloadAndInstall\(preserveData, newest = false\)/.test(rt),
+  "更新装检测到的那份，重装仍装已装那份");
 ok(/RETIRE_MIN_DSH_VERSION = "0.1.5"/.test(rt), "退役判定版本下界 = 0.1.5");
 ok(/private fun runtimeSupportsRetiredSeed[\s\S]{0,700}compareVersions\(core, RETIRE_MIN_DSH_VERSION\) >= 0/.test(rt),
   "判定走 compareVersions(core, 0.1.5) ≥ 0");

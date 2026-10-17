@@ -193,8 +193,11 @@ data class RuntimeVersion(
         fun matchesFilter(entry: RuntimeVersion, slim: Boolean, beta: Boolean): Boolean {
             val want = if (slim) FLAVOR_SLIM else FLAVOR_FULL
             if (flavorOf(entry) != want) return false
+            // 测试通道 = 在正式通道的基础上**也**接受测试版。以前这里把测试版当「替代」：选了测试
+            // 通道就只认测试版，于是正式通道更新到 0.2.1-rc.2 之后，选着测试的人既看不到它、也
+            // 检测不到它（真机反馈）。正式通道（beta=false）仍只认正式版，不把人推到测试版。
             return when (entry.channel) {
-                CHANNEL_STABLE, CHANNEL_SLIM -> !beta
+                CHANNEL_STABLE, CHANNEL_SLIM -> true
                 CHANNEL_BETA, CHANNEL_SLIM_BETA -> beta
                 else -> true
             }
@@ -3093,7 +3096,8 @@ object DshRuntime {
                 stopServer()
                 // 重装等于换了一套全新 rootfs，容器里的插件确实没了，该重新预装
                 clearSeedLedger()
-                downloadAndInstall(preserveData)
+                // 重装 = 装回已装那一份，不跟着通道走（否则「重装」会变成静默升级）
+                downloadAndInstall(preserveData, newest = false)
                 if (_state.value.phase != DshPhase.ERROR) {
                     setupResolvConf()
                     seedPlugins()
@@ -3200,7 +3204,7 @@ object DshRuntime {
         }
     }
 
-    private suspend fun downloadAndInstall(preserveData: Boolean = true) {
+    private suspend fun downloadAndInstall(preserveData: Boolean = true, newest: Boolean = true) {
         clearLog()
         _state.update {
             it.copy(
@@ -3230,7 +3234,8 @@ object DshRuntime {
             logInfo(R.string.dsh_log_source_chosen, sourceName(DshSource.pickBest(results, appContext)))
         }
         logInfo(R.string.dsh_log_fetching_meta)
-        val meta = fetchMeta()
+        // newest=false 只给「重装当前版本」用：那条路要装的必须是已装那一份，不能顺手升级。
+        val meta = if (newest) fetchNewestMeta() else fetchMeta()
         if (meta == null) {
             fail(str(R.string.dsh_err_meta_failed))
             return
@@ -3334,6 +3339,32 @@ object DshRuntime {
     }
 
     private fun fetchMeta(): DshMeta? = fetchMetaFrom(runtimeMetaUrl())
+
+    /**
+     * 本通道当前该用的那份 metadata：同口味的候选里取**更新的一份**。
+     *
+     * 规则（真机反馈定下的）：测试通道 = 在正式通道的基础上「也接受」测试版 —— 所以候选是
+     * 正式与测试两份，谁新用谁；正式通道不变，只认正式那份，绝不自动把人推到测试版。
+     *
+     * 为什么不做进 [fetchMeta]：它同时被「重装」用着（重装要装的是**已装那一份**）。若让它永远
+     * 返回最新候选，用户点重装就会被装成另一份。所以候选逻辑只加在「检查更新 + 更新」这条路上。
+     */
+    private fun fetchNewestMeta(): DshMeta? {
+        val slim = DshSource.acceptRuntimeSlim(appContext)
+        val suffix = if (DshSource.runtimeArch() == "arm64-v8a") "" else "-x86_64"
+        val stableTag = if (slim) "runtime-slim-latest" else "runtime-latest"
+        val betaTag = if (slim) "runtime-slim-beta-latest" else "runtime-beta-latest"
+        val tags = if (DshSource.acceptRuntimeBeta(appContext)) listOf(stableTag, betaTag)
+        else listOf(stableTag)
+        val metas = tags.mapNotNull { tag -> fetchMetaOfTag(tag, suffix) }
+        if (metas.isEmpty()) return null
+        // 定序用 metadata 里的 dsh（0.2.1-rc.2 > 0.2.0-rc.2）；rootfs 修订号（-r6）不参与定序，
+        // 因为两段相同内容不同修订谁新无从判断 —— 那时保持候选顺序（正式优先）。
+        return metas.reduce { best, cur ->
+            if (cur.dsh.isNotBlank() && (best.dsh.isBlank() || compareVersions(cur.dsh, best.dsh) > 0)) cur
+            else best
+        }
+    }
 
     /**
      * 运行时通道当前生效的下载源。
@@ -3457,7 +3488,7 @@ object DshRuntime {
      */
     suspend fun checkRuntimeUpdate(): RuntimeCheckResult = withContext(Dispatchers.IO) {
         if (!DshEnv.isRuntimeInstalled(appContext)) return@withContext RuntimeCheckResult()
-        val meta = fetchMeta() ?: return@withContext RuntimeCheckResult(failure = true)
+        val meta = fetchNewestMeta() ?: return@withContext RuntimeCheckResult(failure = true)
         val local = prefs().getString(DshEnv.KEY_RUNTIME_VERSION, null).orEmpty()
         // 本地版本未知（早期版本装的，没记过）时不谎报有更新：重装要重下 150MB，
         // 不能靠猜就让用户付这个代价；也没法说「已是最新」——那同样是猜的

@@ -138,10 +138,12 @@ console.log("\n── 列表：按滑块筛选 + 当前版本钉在最上面 ─
   const filter = RUNTIME.slice(RUNTIME.indexOf("fun matchesFilter("), RUNTIME.indexOf("fun channelRank("));
   ok(/if \(flavorOf\(entry\) != want\) return false/.test(filter),
     "版本类型是硬条件（滑块说的就是它）");
-  ok(/CHANNEL_STABLE, CHANNEL_SLIM -> !beta/.test(filter) &&
+  // 规则在 2.1.2 变了：测试通道 = 在正式通道的基础上**也**接受测试版。以前是「替代」——
+  // 选了测试通道就只认测试版，于是正式通道更新之后，选着测试的人既看不到也检测不到它。
+  ok(/CHANNEL_STABLE, CHANNEL_SLIM -> true/.test(filter) &&
      /CHANNEL_BETA, CHANNEL_SLIM_BETA -> beta/.test(filter) &&
      /else -> true/.test(filter),
-    "通道按四个滚动 tag 分边，历史版本两边都给（tag 里没有通道信息，只给一边等于让人找不到降级包）");
+    "测试通道里正式版与测试版都留下（选测试也要能看到更新的正式版），测试版只在测试通道给；历史版本两边都给");
   const flavor = RUNTIME.slice(RUNTIME.indexOf("fun flavorOf("), RUNTIME.indexOf("fun matchesFilter("));
   ok(/entry\.flavor\.isNotEmpty\(\) -> entry\.flavor/.test(flavor) &&
      /entry\.tag\.contains\("slim"\) -> FLAVOR_SLIM/.test(flavor),
