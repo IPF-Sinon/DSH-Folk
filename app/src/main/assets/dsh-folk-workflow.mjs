@@ -241,9 +241,19 @@ const TOOLS = [
   ),
 ];
 
-function writeStatus(status) {
+/**
+ * 把诊断写进状态文件（设置页「自检」读它）。
+ *
+ * 为什么要分 sectionState / toolsState 并带上 reason：实测里设置页显示「工具注册 unavailable」，
+ * 但 agent 用 CLI 干得好好的 —— 只有一个笼统的 state 时，用户只能看到「爆红」却不知道红在哪。
+ * 分开之后每一环各自诚实：提示词段成没成、工具注册成没成、失败原因是什么。
+ */
+function writeStatus(patch) {
   try {
-    writeFileSync(STATUS_FILE, JSON.stringify(Object.assign({ updatedAt: Date.now() }, status), null, 2));
+    let prev = {};
+    try { prev = JSON.parse(readFileSync(STATUS_FILE, 'utf8')); } catch (e) { prev = {}; }
+    const next = Object.assign({}, prev, patch, { updatedAt: Date.now() });
+    writeFileSync(STATUS_FILE, JSON.stringify(next, null, 2));
   } catch (e) {
     // 状态文件只是给设置页看的，写不了不该影响功能
   }
@@ -272,8 +282,12 @@ export function apply(ctx) {
     } else {
       ctx.systemPrompt.section(section);
     }
+    writeStatus({ sectionState: 'ok' });
   } catch (e) {
-    writeStatus({ state: 'unavailable', reason: 'systemPrompt section failed: ' + (e && e.message ? e.message : e) });
+    writeStatus({
+      sectionState: 'unavailable',
+      sectionReason: 'systemPrompt section failed: ' + (e && e.message ? e.message : e),
+    });
   }
 
   // 2) 工具注册，三级降级
@@ -290,8 +304,18 @@ export function apply(ctx) {
     } catch (e) {
       outcomes.push('dsh-tools import failed: ' + (e && e.message ? e.message : e));
     }
+    // 工具服务可能比本插件晚就绪（cordis 的服务是懒注入的）：等一小会儿再试，别把
+    // 「还没就绪」写成「不可用」—— 那正是设置页那个假红点。
+    for (let attempt = 0; attempt < 20 && (!ctx.tools || typeof ctx.tools.register !== 'function'); attempt++) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    const shape = ctx.tools ? typeof ctx.tools.register : 'no ctx.tools';
     if (!ctx.tools || typeof ctx.tools.register !== 'function') {
-      writeStatus({ state: 'unavailable', reason: 'no tools.register on ctx', outcomes });
+      writeStatus({
+        toolsState: 'unavailable',
+        toolsReason: 'tools service never became available (register=' + shape + '); use the dsh-workflow CLI',
+        outcomes,
+      });
       return;
     }
     for (const t of TOOLS) {
@@ -302,6 +326,8 @@ export function apply(ctx) {
         // 一个工具注册不上就整体退回「只有 CLI」——半个工具集比没有更让人困惑
         writeStatus({
           state: 'degraded',
+          toolsState: 'degraded',
+          toolsReason: 'tool registration failed: ' + outcomes[outcomes.length - 1],
           reason: 'tool registration failed; use the dsh-workflow CLI',
           outcomes,
         });
@@ -310,12 +336,19 @@ export function apply(ctx) {
     }
     writeStatus({
       state: 'ok',
+      toolsState: 'ok',
+      toolsReason: '',
       tools: TOOLS.map((t) => t.name),
       defineTool: typeof defineTool === 'function',
       outcomes,
     });
   })().catch((e) => {
-    writeStatus({ state: 'unavailable', reason: String((e && e.message) || e), outcomes });
+    writeStatus({
+      state: 'unavailable',
+      toolsState: 'unavailable',
+      toolsReason: String((e && e.message) || e),
+      outcomes,
+    });
   });
 }
 

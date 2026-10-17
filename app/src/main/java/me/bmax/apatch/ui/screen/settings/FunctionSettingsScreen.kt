@@ -427,6 +427,7 @@ internal fun DshSettingsScreen(
                     )
                 },
                 modifier = Modifier.padding(paddingValues),
+                onOpenWorkflow = { navigator.navigate(WorkflowScreenDestination) },
             )
             return@Scaffold
         }
@@ -632,7 +633,6 @@ internal fun DshSettingsScreen(
                     onOpenAllFilesSettings = { openAllFilesSettings() },
                     onOpenFileAccess = { navigator.navigate(FileAccessScreenDestination) },
                     onOpenDeepClean = { navigator.navigate(DshDeepCleanScreenDestination) },
-                    onOpenWorkflow = { navigator.navigate(WorkflowScreenDestination) },
                     onOpenPermissionHub = { navigator.navigate(PermissionHubScreenDestination) },
                     mountEnabled = storageMount,
                     onSetMount = { on ->

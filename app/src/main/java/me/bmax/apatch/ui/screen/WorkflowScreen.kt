@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -21,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -58,7 +61,9 @@ import me.bmax.apatch.dsh.WorkflowOnError
 import me.bmax.apatch.dsh.WorkflowPermissions
 import me.bmax.apatch.dsh.WorkflowRunState
 import me.bmax.apatch.dsh.WorkflowStore
+import me.bmax.apatch.dsh.WorkflowRun
 import me.bmax.apatch.dsh.WorkflowValidator
+import me.bmax.apatch.dsh.toJson
 import me.bmax.apatch.ui.component.WorkflowDefinitionEditor
 import me.bmax.apatch.ui.component.WorkflowGraphPreview
 import java.io.File
@@ -83,7 +88,7 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
     val prefs = remember { ctx.getSharedPreferences(DshEnv.PREF, android.content.Context.MODE_PRIVATE) }
     var enabled by remember { mutableStateOf(prefs.getBoolean(DshEnv.KEY_WORKFLOW_ENABLED, false)) }
     var listKey by remember { mutableIntStateOf(0) }
-    var detailRunId by remember { mutableStateOf<String?>(null) }
+    var detailRun by remember { mutableStateOf<WorkflowRun?>(null) }
     var dangerousAck by remember { mutableStateOf(false) }
     // 运行/取消之后列表与详情要跟着变；引擎的 tick 是所有状态推进的汇合点。
     val tick by WorkflowEngine.tick.collectAsState()
@@ -104,8 +109,6 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
 
     val workflows = remember(listKey, tick) { WorkflowStore.list(ctx) }
     val runs = remember(listKey, tick) { WorkflowStore.listRuns(ctx, limit = 12) }
-    val detail = detailRunId?.let { id -> runs.firstOrNull { it.runId == id } ?: WorkflowEngine.status(ctx, id) }
-    val toolStatus = remember(listKey) { readToolStatus(ctx) }
     // 自检：agent 到底有没有拿到「工具 + 指南」。缺哪一项、下一步做什么，都摆在这一屏上 ——
     // 否则用户只能看到「AI 不会用」，而没有任何可查的证据。
     val checks = remember(listKey) { containerChecks(ctx) }
@@ -158,8 +161,12 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                 )
             }
             Spacer(Modifier.height(12.dp))
-            Text(stringResource(R.string.dsh_workflow_tools_status, toolStatus), style = MaterialTheme.typography.bodySmall)
-            if (toolStatus != "ok") {
+            val tool = readToolStatus(ctx)
+            Text(
+                stringResource(R.string.dsh_workflow_tools_status, tool.state),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (tool.state != "ok") {
                 Text(
                     stringResource(R.string.dsh_workflow_tools_restart),
                     style = MaterialTheme.typography.labelSmall,
@@ -170,12 +177,15 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
             Text(stringResource(R.string.dsh_workflow_selfcheck), style = MaterialTheme.typography.labelLarge)
             for (c in checks) {
                 Text(
-                    (if (c.ok) "\u2713 " else "\u2717 ") + stringResource(c.labelRes) + (if (c.detail.isBlank()) "" else "：" + c.detail),
+                    (if (c.ok) "\u2713 " else if (c.warn) "\u26a0 " else "\u2717 ") + stringResource(c.labelRes) +
+                        (if (c.detail.isBlank()) "" else "：" + c.detail),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (c.ok) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    color = if (c.ok) MaterialTheme.colorScheme.onSurfaceVariant
+                    else if (c.warn) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error,
                 )
             }
-            if (checks.any { !it.ok }) {
+            if (checks.any { !it.ok && !it.warn }) {
                 TextButton(onClick = {
                     scope.launch {
                         withContext(Dispatchers.IO) { DshRuntime.refreshContainerCli() }
@@ -222,7 +232,7 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                     onDangerousAck = { dangerousAck = it },
                     onEdit = { editing = def },
                     onOpenDetail = {
-                        detailRunId = runs.firstOrNull { it.workflowId == def.id }?.runId
+                        detailRun = runs.firstOrNull { it.workflowId == def.id }
                     },
                     onRun = {
                         scope.launch {
@@ -251,73 +261,59 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.dsh_workflow_runs_title), style = MaterialTheme.typography.titleSmall)
                 for (run in runs) {
-                    Spacer(Modifier.height(6.dp))
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(
-                            Modifier
-                                .weight(1f)
-                                .clickableRow { detailRunId = if (detailRunId == run.runId) null else run.runId },
+                    Spacer(Modifier.height(8.dp))
+                    Surface(
+                        tonalElevation = 1.dp,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                "${run.workflowName} · ${run.state.id}",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                "${run.runId} · ${run.steps.size} " + stringResource(R.string.dsh_workflow_steps),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        if (run.running) {
-                            TextButton(onClick = {
-                                WorkflowEngine.cancel(ctx, run.runId, "canceled by user")
-                                listKey++
-                            }) { Text(stringResource(R.string.dsh_workflow_action_cancel)) }
-                        } else {
-                            TextButton(onClick = { detailRunId = run.runId }) {
-                                Text(stringResource(R.string.dsh_workflow_detail))
-                            }
-                        }
-                    }
-                    if (detailRunId == run.runId) {
-                        val steps = run.steps
-                        for (s in steps) {
-                            Text(
-                                "· ${s.name} [${s.state.id}]" +
-                                    (s.exitCode?.let { " exit=$it" } ?: "") +
-                                    (if (s.reason.isBlank()) "" else " (${s.reason})"),
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                            if (s.outputTail.isNotBlank()) {
+                            Column(Modifier.weight(1f)) {
+                                Text(run.workflowName, style = MaterialTheme.typography.bodyMedium)
                                 Text(
-                                    s.outputTail.lines().takeLast(6).joinToString("\n"),
+                                    stringResource(
+                                        R.string.dsh_workflow_run_summary,
+                                        run.state.id,
+                                        run.steps.size,
+                                        run.runId,
+                                    ),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = if (run.running) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                if (run.cancelReason.isNotBlank()) {
+                                    Text(
+                                        run.cancelReason,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
                             }
-                        }
-                        if (run.diff.isNotEmpty()) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(stringResource(R.string.dsh_workflow_run_diff), style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                run.diff.joinToString("\n") { it.humanize() },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            if (run.running) {
+                                TextButton(onClick = {
+                                    WorkflowEngine.cancel(ctx, run.runId, "canceled by user")
+                                    listKey++
+                                }) { Text(stringResource(R.string.dsh_workflow_action_cancel)) }
+                            } else {
+                                // 详情走弹窗：里面给**当时那一版定义**与逐步结果 —— 用户要看的正是
+                                // 「它当时到底跑了什么、结果是什么」，而不是列表里挤出来的几行。
+                                TextButton(onClick = { detailRun = run }) {
+                                    Text(stringResource(R.string.dsh_workflow_detail))
+                                }
+                            }
                         }
                     }
                 }
             }
-            if (detail != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    stringResource(R.string.dsh_workflow_detail_hint, detail.runId),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    detailRun?.let { run ->
+        RunDetailDialog(run = run, onDismiss = { detailRun = null })
     }
 
     if (restartOpen) {
@@ -491,8 +487,108 @@ private suspend fun awaitPermissions(
  * 如实显示：`ok` = 四个工具都注册上了；`degraded`/`unavailable` = agent 只能用 `dsh-workflow`
  * CLI。用户看到这句才知道「agent 说没有 workflow_run 这个工具」是不是正常现象。
  */
-/** 自检的一项。 */
-private data class ContainerCheck(val labelRes: Int, val ok: Boolean, val detail: String = "")
+/**
+ * 一次运行的详情弹窗：**当时那一版定义**（流程图 + JSON）、逐步结果、用户改动 diff、日志尾部。
+ *
+ * 为什么是弹窗而不是就地把列表撑开：定义 + 结果 + 日志三块放在列表里会把一页拉得很长，而用户
+ * 看详情时想的是「这一次到底跑了什么」，独立出来才读得清。
+ */
+@Composable
+private fun RunDetailDialog(run: WorkflowRun, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val logs = remember(run.runId) { WorkflowStore.readLog(ctx, run.runId, fromLine = 1, maxLines = 200).first }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dsh_workflow_detail_title, run.workflowName)) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+                Text(
+                    stringResource(R.string.dsh_workflow_run_summary, run.state.id, run.steps.size, run.runId),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                val def = run.definition
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    stringResource(R.string.dsh_workflow_detail_definition),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                if (def != null) {
+                    WorkflowGraphPreview(def)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        def.toJson().toString(2),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        stringResource(R.string.dsh_workflow_detail_no_definition),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    stringResource(R.string.dsh_workflow_detail_result),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                for (st in run.steps) {
+                    Text(
+                        st.name + " · " + st.state.id +
+                            (st.exitCode?.let { " exit=" + it } ?: "") +
+                            " · " + st.durationMs + "ms" +
+                            (if (st.reason.isBlank()) "" else " · " + st.reason),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    if (st.outputTail.isNotBlank()) {
+                        Text(
+                            st.outputTail.takeLast(600),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (run.diff.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.dsh_workflow_run_diff),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Text(
+                        run.diff.joinToString("\n") { it.humanize() },
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                if (logs.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        stringResource(R.string.dsh_workflow_detail_logs),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Text(
+                        logs.takeLast(120).joinToString("\n"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dsh_workflow_action_close)) }
+        },
+    )
+}
+
+/** 自检的一项。三态而不是两态：`warn` 表示「不是坏的，只是这一条现在不成立」—— 例如工具插件
+ * 没注册上（agent 还能走 CLI）或者状态文件还没写出来。把 warn 画成红叉，用户就会去修一个
+ * 其实能用的东西（实测里那个假红点就是这么来的）。
+ */
+private data class ContainerCheck(
+    val labelRes: Int,
+    val ok: Boolean,
+    val detail: String = "",
+    val warn: Boolean = false,
+)
 
 /**
  * 容器侧自检：agent 要能看到工作流，必需的东西到底在不在。
@@ -511,20 +607,37 @@ private fun containerChecks(ctx: android.content.Context): List<ContainerCheck> 
     val sampleCount = samples.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.size ?: 0
     val patchHasEntry = runCatching { patch.isFile && patch.readText().contains("dsh-folk-workflow") }
         .getOrDefault(false)
+    val tool = readToolStatus(ctx)
     return listOf(
         ContainerCheck(R.string.dsh_workflow_selfcheck_cli, cli.isFile && cli.length() > 0L),
         ContainerCheck(R.string.dsh_workflow_selfcheck_guide, guide.isFile && guide.length() > 0L, "${guide.length()} B"),
         ContainerCheck(R.string.dsh_workflow_selfcheck_samples, sampleCount > 0, "$sampleCount"),
         ContainerCheck(R.string.dsh_workflow_selfcheck_plugin, plugin.isFile && plugin.length() > 0L, "${plugin.length()} B"),
         ContainerCheck(R.string.dsh_workflow_selfcheck_patch, patchHasEntry),
-        ContainerCheck(R.string.dsh_workflow_selfcheck_tools, readToolStatus(ctx) == "ok", readToolStatus(ctx)),
+        // 工具注册：只有「红」的条件是**两条路都不通**（没有 CLI 也没有工具）。只差工具那一条
+        // 时算黄：agent 照样能用 dsh-workflow 干活，用户没必要为此去修什么。
+        ContainerCheck(
+            R.string.dsh_workflow_selfcheck_tools,
+            ok = tool.state == "ok",
+            detail = if (tool.reason.isBlank()) tool.state else tool.state + " — " + tool.reason.take(120),
+            warn = tool.state != "ok" && cli.isFile && cli.length() > 0L,
+        ),
     )
 }
 
-private fun readToolStatus(ctx: android.content.Context): String {
+/** 插件写回来的诊断（工具注册状态 + 原因）。 */
+private data class ToolStatus(val state: String, val reason: String)
+
+private fun readToolStatus(ctx: android.content.Context): ToolStatus {
     val f = File(DshEnv.dshHome(ctx), "workflow-tool-status.json")
-    if (!f.isFile) return "unknown"
-    return runCatching { JSONObject(f.readText()).optString("state", "unknown") }.getOrDefault("unknown")
+    if (!f.isFile) return ToolStatus("unknown", "")
+    return runCatching {
+        val o = JSONObject(f.readText())
+        ToolStatus(
+            state = o.optString("toolsState", o.optString("state", "unknown")),
+            reason = o.optString("toolsReason", o.optString("reason", "")),
+        )
+    }.getOrDefault(ToolStatus("unknown", ""))
 }
 
 /** 让整行可点（行里没有别的可点元素时用它，触摸范围就是整行）。 */

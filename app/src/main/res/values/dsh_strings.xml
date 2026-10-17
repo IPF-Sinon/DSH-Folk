@@ -1807,4 +1807,12 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_workflow_restart_title">Restart DSH</string>
     <string name="dsh_workflow_restart_body">The tool plugin and guide section are loaded only when DSH restarts. A restart briefly interrupts running sessions.</string>
     <string name="dsh_workflow_restart_now">Restart now</string>
+    <string name="dsh_workflow_run_summary">%1$s · %2$d steps · %3$s</string>
+    <string name="dsh_workflow_detail_title">Run details: %1$s</string>
+    <string name="dsh_workflow_detail_definition">The definition it actually ran</string>
+    <string name="dsh_workflow_detail_no_definition">This run left no definition snapshot.</string>
+    <string name="dsh_workflow_detail_result">Step results</string>
+    <string name="dsh_workflow_detail_logs">Run log</string>
+    <string name="dsh_workflow_action_close">Close</string>
+    <string name="dsh_workflow_editor_linking">Tap a target node on the canvas to finish the link (from %1$s)</string>
 </resources>

@@ -229,9 +229,18 @@ ok(/WorkflowApprovals\.startEditing\(request\.id\)/.test(SRC.dialogs) && /Workfl
   "编辑页在宿主里（编辑期间审批弹窗不渲染）");
 ok(/WorkflowGraphPreview\(definition\)/.test(SRC.dialogs), "批准弹窗里有流程图预览");
 ok(/posX/.test(SRC.dialogs) && /detectDragGestures/.test(SRC.dialogs), "编辑页节点可拖动且位置写回定义");
-ok(/function_workflow/.test(SRC.settings) && /onOpenWorkflow/.test(SRC.settings), "设置里有入口卡片");
+ok(/dsh_workflow_title/.test(SRC.settings) && /onOpenWorkflow: \(\) -> Unit = \{\}/.test(SRC.settings),
+  "功能页入口层有工作流一行（不是塞在某个分类里）");
 ok(/onOpenWorkflow = \{ navigator\.navigate\(WorkflowScreenDestination\) \}/.test(SRC.settingsScreen),
-  "卡片真的会打开工作流页（不是只声明一个没人用的参数）");
+  "那一行真的会打开工作流页（不是只声明一个没人用的参数）");
+ok(/drawDotGrid/.test(SRC.dialogs) && /private fun NodeCard\(/.test(SRC.dialogs),
+  "编辑页/预览是画布（点阵 + 节点卡），不是一列输入框");
+ok(/onDrag = \{ dx, dy ->[\s\S]{0,500}?it\.copy\(posX = nx, posY = ny\)/.test(SRC.dialogs),
+  "拖动把坐标写回定义（蓝图摆位不落盘，下次打开就会自己跳）");
+ok(/private fun RunDetailDialog\(/.test(SRC.screen) && /WorkflowStore\.readLog/.test(SRC.screen),
+  "详情是弹窗，且把当时那一版定义与日志都摆出来");
+ok(/warn = tool\.state != "ok"/.test(SRC.screen),
+  "自检区分红/黄（工具没注册但 CLI 可用时不该画成红的）");
 ok(/@Destination<RootGraph>/.test(SRC.screen) && /fun WorkflowScreen\(navigator: DestinationsNavigator\)/.test(SRC.screen),
   "工作流页是真目的地");
 ok(/KEY_WORKFLOW_ENABLED/.test(SRC.screen), "页面能开关总开关");

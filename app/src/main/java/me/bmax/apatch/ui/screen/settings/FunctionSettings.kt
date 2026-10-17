@@ -175,7 +175,6 @@ internal val FUNCTION_GROUP_ITEMS: Map<FunctionGroup, List<String>> = mapOf(
         "function_runtime",
         "function_repair_plugins",
         "function_verify_install",
-        "function_workflow",
     ),
     FunctionGroup.STORAGE to listOf("function_docs_access", "function_clean_storage"),
 )
@@ -197,7 +196,6 @@ private val FUNCTION_ITEM_TITLE: Map<String, Int> = mapOf(
     "function_runtime" to R.string.dsh_runtime_section,
     "function_repair_plugins" to R.string.dsh_plugin_repair,
     "function_verify_install" to R.string.dsh_verify_after_install,
-    "function_workflow" to R.string.dsh_workflow_title,
     "function_docs_access" to R.string.dsh_docs_access_title,
     "function_clean_storage" to R.string.settings_clean_storage,
 )
@@ -252,6 +250,7 @@ internal fun FunctionHubContent(
     query: String,
     onOpen: (FunctionGroup, String?) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenWorkflow: () -> Unit = {},
 ) {
     val context = LocalContext.current
     if (query.isBlank()) {
@@ -275,6 +274,17 @@ internal fun FunctionHubContent(
                         onClick = { onOpen(group, null) },
                     )
                 }
+            }
+            // 自动化工作流挂在**入口层最后一项**：它不是某一类里的某个开关，而是与「功能」平级的
+            // 一个目的地（有自己的列表、运行、编辑页面）。塞进某一类里时用户根本找不到它。
+            Spacer(Modifier.height(8.dp))
+            HubCard {
+                HubRow(
+                    icon = Icons.Filled.PlayArrow,
+                    title = stringResource(R.string.dsh_workflow_title),
+                    summary = stringResource(R.string.dsh_workflow_summary),
+                    onClick = onOpenWorkflow,
+                )
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -388,7 +398,6 @@ fun FunctionSettingsContent(
     onOpenFileAccess: () -> Unit = {},
     /** 打开「深度清理」页（长按「清理资源和缓存」那张卡进来）。 */
     onOpenDeepClean: () -> Unit = {},
-    onOpenWorkflow: () -> Unit = {},
     /** 打开「权限管理」：特权通道、无线 ADB 与各项原生能力都在那一页里分类 + 可搜索。 */
     onOpenPermissionHub: () -> Unit = {},
     /** 共享存储挂载总开关（挂载 /sdcard + dsh-fs 桥，两者都受黑白名单约束）。 */
@@ -1272,27 +1281,6 @@ fun FunctionSettingsContent(
                     // MT 管理器时出现，看起来像另一个功能，其实只是 MT 那套持久化授权的替代路径 ——
                     // 它在侧栏选中本应用后会报"没有可持久化的授权"（见 [DshDocsAccess]）。
                     // 所以合成一张卡：说明说一次，两条路各一个按钮，装没装 MT 只影响第二个按钮在不在。
-                    item(key = "function_workflow") {
-                        // 自动化工作流：容器里的 AI 可以建流程/跑流程（黄=建、红=跑两道确认 +
-                        // 流程图预览 + 运行前 Android 权限检查），用户自己也能在这一页管已保存的流程。
-                        ExpressiveCard(flat = flat) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onOpenWorkflow() }
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(Icons.Filled.PlayArrow, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                                Spacer(Modifier.width(16.dp))
-                                Column {
-                                    Text(stringResource(R.string.dsh_workflow_title), style = MaterialTheme.typography.bodyLarge)
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(stringResource(R.string.dsh_workflow_summary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                    }
                     item(key = "function_docs_access") {
                         ExpressiveCard(flat = flat) {
                             Column(Modifier.fillMaxWidth().padding(16.dp)) {

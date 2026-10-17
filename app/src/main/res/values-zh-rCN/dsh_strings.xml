@@ -1781,4 +1781,12 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_workflow_restart_title">重启 DSH</string>
     <string name="dsh_workflow_restart_body">工具插件与指南段要 DSH 重启后才会加载；重启会短暂中断正在运行的会话。</string>
     <string name="dsh_workflow_restart_now">立即重启</string>
+    <string name="dsh_workflow_run_summary">%1$s · %2$d 步 · %3$s</string>
+    <string name="dsh_workflow_detail_title">%1$s 的运行详情</string>
+    <string name="dsh_workflow_detail_definition">当时运行的定义</string>
+    <string name="dsh_workflow_detail_no_definition">这次运行没有留下定义快照。</string>
+    <string name="dsh_workflow_detail_result">逐步结果</string>
+    <string name="dsh_workflow_detail_logs">运行日志</string>
+    <string name="dsh_workflow_action_close">关闭</string>
+    <string name="dsh_workflow_editor_linking">点画布上的目标节点完成连线（当前从 %1$s 出发）</string>
 </resources>

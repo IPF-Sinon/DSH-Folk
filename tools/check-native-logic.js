@@ -1477,15 +1477,18 @@ console.log("── 限制模式页与弹窗 ──");
     if (i < 0) return null;
     return [...src.slice(i, src.indexOf("\n)", i)).matchAll(/"(function_[a-z_]+)"/g)].map((m) => m[1]).sort();
   };
+  // settings 就是 FunctionSettings.kt 的全文，直接用它匹配入口层那一段
+  const hubContent = settings;
+  const screenCode = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt", "utf8");
   const functional = [
     "function_auto_open_webui", "function_auto_start_service", "function_autostart",
     "function_clean_storage", "function_docs_access", "function_gh_mirror", "function_lan",
     "function_port", "function_repair_plugins", "function_run_mode", "function_runtime",
-    "function_verify_install", "function_webui_mode", "function_webui_pip", "function_workflow",
+    "function_verify_install", "function_webui_mode", "function_webui_pip",
   ].sort();
   const inMap = blockKeys(settings, /internal val FUNCTION_GROUP_ITEMS/);
   ok(inMap !== null && JSON.stringify(inMap) === JSON.stringify(functional),
-    "分类→卡片映射正好覆盖 15 张功能卡（实际 " + (inMap ? inMap.length : 0) + " 张）");
+    "分类→卡片映射正好覆盖 14 张功能卡（实际 " + (inMap ? inMap.length : 0) + " 张）");
   const inTitle = blockKeys(settings, /private val FUNCTION_ITEM_TITLE/);
   ok(inTitle !== null && JSON.stringify(inTitle) === JSON.stringify(functional),
     "入口层搜索的卡片标题表与分类映射是同一批 key（实际 " + (inTitle ? inTitle.length : 0) + " 张）");
@@ -1529,15 +1532,22 @@ console.log("── 限制模式页与弹窗 ──");
       "入口页的卡片两侧留 16dp（不再顶到屏幕两边）");
   }
 
-  // 重排后 17 张卡（15 张功能卡 + 安全页那 2 张）一个不少、不重复、不改名
+  // 自动化工作流挂在入口层最后一项：它不是某一类的开关，而是与「功能」平级的目的地。
+  // 塞进分类里时用户找不到它（实测反馈），所以钉住「入口层有这一行」。
+  ok(/HubCard \{[\s\S]*?dsh_workflow_title[\s\S]*?onClick = onOpenWorkflow/.test(hubContent),
+    "功能页入口层最后一项是自动化工作流（有自己的列表/运行/编辑页面）");
+  ok(/onOpenWorkflow: \(\) -> Unit = \{\}/.test(hubContent) && /navigator\.navigate\(WorkflowScreenDestination\)/.test(screenCode),
+    "那一行真的会打开工作流页");
+
+  // 重排后 16 张卡（14 张功能卡 + 安全页那 2 张）一个不少、不重复、不改名
   const keys = [...settings.matchAll(/item\(key = "(function_[a-z_]+)"/g)].map((m) => m[1]);
   const wantKeys = functional.concat(["function_permission", "function_storage_mount"]).sort();
   const gotKeys = keys.slice().sort();
   const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
   const missing = wantKeys.filter((k) => !gotKeys.includes(k));
   const extra = gotKeys.filter((k) => !wantKeys.includes(k));
-  ok(keys.length === 17 && dup.length === 0 && missing.length === 0 && extra.length === 0,
-    `重排后 17 张卡一个不少、不重复、不改名（实际 ${keys.length}` +
+  ok(keys.length === 16 && dup.length === 0 && missing.length === 0 && extra.length === 0,
+    `重排后 16 张卡一个不少、不重复、不改名（实际 ${keys.length}` +
     `${dup.length ? "，重复 " + dup.join(",") : ""}${missing.length ? "，缺 " + missing.join(",") : ""}` +
     `${extra.length ? "，多 " + extra.join(",") : ""}）`);
   // 可见性交给层级（安全页一组 / 次级页一类），不再每张卡自己 visible

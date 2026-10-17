@@ -4,6 +4,8 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -361,47 +363,184 @@ private fun WorkflowPermissionDialog(
     )
 }
 
-/** 流程预览：按拓扑分层铺开，判断节点标出 true/false 两条出边。 */
+/** 画布上的固定节点尺寸：Canvas 里的连线坐标与卡片本身必须用同一套数字，否则线会飘。 */
+private val NODE_W = 148.dp
+private val NODE_H = 46.dp
+private const val CANVAS_STEP_DP = 18
+
+/**
+ * 流程画布：点阵背景 + 节点卡片 + 正交连线（带 true/false 标签）。
+ *
+ * 视觉参考的是「蓝图式」编辑器的通行做法（节点是可拖的卡片、连线表达顺序与分支），
+ * 而不是某一家的截图 —— 点击助手的文档只给出了这个概念，没有公开配色/尺寸规格。
+ * 预览与编辑页共用同一套 [NODE_W]/[NODE_H] 与连线画法，所以「看到的图」和「摆的位置」一致。
+ */
 @Composable
 internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
-    val layers = remember(definition) { graphLayers(definition) }
-    Column(Modifier.fillMaxWidth()) {
-        for ((depth, nodes) in layers.withIndex()) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "$depth",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(16.dp),
-                )
-                for (n in nodes) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = nodeColor(n.type).copy(alpha = 0.18f),
-                        modifier = Modifier.padding(end = 6.dp),
-                    ) {
-                        Text(
-                            n.name.ifBlank { nodeLabel(n) },
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                        )
-                    }
-                }
+    val placed = remember(definition) { layoutNodes(definition) }
+    val width = (placed.maxOfOrNull { it.x } ?: 0) + 190
+    val height = (placed.maxOfOrNull { it.y } ?: 0) + 70
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(height.coerceAtMost(420).dp)
+            .horizontalScroll(rememberScrollState())
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+    ) {
+        Box(Modifier.width(width.dp).height(height.dp)) {
+            Canvas(Modifier.fillMaxSize()) { drawDotGrid() }
+            Canvas(Modifier.fillMaxSize()) {
+                drawWorkflowEdges(placed, definition, MaterialTheme.colorScheme.outline)
             }
-            val edges = definition.edges.filter { e -> nodes.any { it.id == e.from } }
-            if (edges.isNotEmpty()) {
+            for (p in placed) {
+                val node = definition.node(p.id) ?: continue
+                NodeCard(node = node, selected = false, modifier = Modifier.offset(p.x.dp, p.y.dp))
+            }
+            for (lbl in edgeLabels(placed, definition)) {
                 Text(
-                    edges.joinToString("　") { e ->
-                        val label = if (e.whenExpr.isBlank()) "" else "[${e.whenExpr}] "
-                        "↓ $label${definition.node(e.to)?.name?.ifBlank { e.to } ?: e.to}"
-                    },
+                    lbl.text,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, top = 2.dp, bottom = 4.dp),
+                    color = if (lbl.text == "true") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .offset(lbl.x.dp, lbl.y.dp)
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 3.dp),
                 )
             }
         }
     }
+}
+
+/** 一张节点卡：左侧按类型着色的竖条 + 名称 + 类型/动作副标题。 */
+@Composable
+private fun NodeCard(
+    node: WorkflowNode,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    onDrag: ((Float, Float) -> Unit)? = null,
+) {
+    val accent = nodeColor(node.type)
+    val base = modifier.width(NODE_W).height(NODE_H)
+    val clickable = if (onClick != null) base.clickable { onClick() } else base
+    val draggable = if (onDrag != null) {
+        clickable.pointerInput(node.id) {
+            detectDragGestures { change, amount ->
+                change.consume()
+                onDrag(amount.x, amount.y)
+            }
+        }
+    } else {
+        clickable
+    }
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else accent.copy(alpha = 0.55f)),
+        tonalElevation = if (selected) 4.dp else 1.dp,
+        modifier = draggable,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .width(4.dp)
+                    .height(NODE_H)
+                    .background(accent),
+            )
+            Column(Modifier.padding(horizontal = 8.dp)) {
+                Text(
+                    node.name.ifBlank { nodeLabel(node) },
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                )
+                Text(
+                    nodeSubtitle(node),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+/** 画布点阵：蓝图编辑器最省事也最能表达「这是一块画布」的背景。 */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDotGrid() {
+    val step = CANVAS_STEP_DP.dp.toPx()
+    val r = 1.dp.toPx()
+    var y = step
+    while (y < size.height) {
+        var x = step
+        while (x < size.width) {
+            drawCircle(color = androidx.compose.ui.graphics.Color(0x33000000), radius = r, center = androidx.compose.ui.geometry.Offset(x, y))
+            x += step
+        }
+        y += step
+    }
+}
+
+/** 正交连线（横-竖-横）：比直线更容易看清「谁接谁」，也便于在中段放分支标签。 */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawWorkflowEdges(
+    placed: List<PlacedNode>,
+    definition: WorkflowDefinition,
+    color: androidx.compose.ui.graphics.Color,
+) {
+    val byId = placed.associateBy { it.id }
+    for (e in definition.edges) {
+        val from = byId[e.from] ?: continue
+        val to = byId[e.to] ?: continue
+        val x1 = (from.x + 148f).dp.toPx()
+        val y1 = (from.y + 23f).dp.toPx()
+        val x2 = to.x.dp.toPx()
+        val y2 = (to.y + 23f).dp.toPx()
+        val midX = (x1 + x2) / 2f
+        val w = 2.dp.toPx()
+        drawLine(color, androidx.compose.ui.geometry.Offset(x1, y1), androidx.compose.ui.geometry.Offset(midX, y1), strokeWidth = w)
+        drawLine(color, androidx.compose.ui.geometry.Offset(midX, y1), androidx.compose.ui.geometry.Offset(midX, y2), strokeWidth = w)
+        drawLine(color, androidx.compose.ui.geometry.Offset(midX, y2), androidx.compose.ui.geometry.Offset(x2, y2), strokeWidth = w)
+        drawCircle(color, radius = 2.5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x2, y2))
+    }
+}
+
+/** 节点在画布上的坐标：有落盘坐标就用它，全为 0（AI 生成的定义）时按拓扑分层自动摆。 */
+private data class PlacedNode(val id: String, val x: Float, val y: Float)
+
+private fun layoutNodes(definition: WorkflowDefinition): List<PlacedNode> {
+    val anyPlaced = definition.nodes.any { it.posX != 0 || it.posY != 0 }
+    if (anyPlaced) return definition.nodes.map { PlacedNode(it.id, it.posX.toFloat(), it.posY.toFloat()) }
+    val layers = graphLayers(definition)
+    val out = mutableListOf<PlacedNode>()
+    for ((depth, nodes) in layers.withIndex()) {
+        for ((i, n) in nodes.withIndex()) {
+            out += PlacedNode(n.id, 16f + i * 168f, 16f + depth * 74f)
+        }
+    }
+    return out
+}
+
+/** 分支标签的位置：贴在这条连线的中段上方。 */
+private data class EdgeLabel(val text: String, val x: Float, val y: Float)
+
+private fun edgeLabels(placed: List<PlacedNode>, definition: WorkflowDefinition): List<EdgeLabel> {
+    val byId = placed.associateBy { it.id }
+    return definition.edges.filter { it.whenExpr.isNotBlank() }.mapNotNull { e ->
+        val from = byId[e.from] ?: return@mapNotNull null
+        val to = byId[e.to] ?: return@mapNotNull null
+        val x1 = from.x + 148f
+        val x2 = to.x
+        val midX = (x1 + x2) / 2f - 10f
+        EdgeLabel(e.whenExpr, midX, (from.y + to.y) / 2f + 10f)
+    }
+}
+
+/** 节点副标题：类型 + 动作/关键配置，让用户一眼看出这一步做什么。 */
+private fun nodeSubtitle(node: WorkflowNode): String = when (node.type) {
+    WorkflowNodeType.TRIGGER -> if (node.config("requireDsh") == "1") "trigger · 需要 DSH" else "trigger"
+    WorkflowNodeType.EXECUTE -> node.actionType?.id + " · " + node.config("cmd").ifBlank { node.config("text") }.take(18)
+    WorkflowNodeType.CONDITION -> "condition · " + node.config("op") + " " + node.config("value").take(10)
+    WorkflowNodeType.LOGIC -> "logic · " + node.config("op")
+    WorkflowNodeType.EXTRACT -> "extract · " + node.config("var")
+    WorkflowNodeType.WAIT -> "wait · " + node.config("ms").ifBlank { node.config("untilDsh") }
 }
 
 /**
@@ -444,47 +583,70 @@ internal fun WorkflowDefinitionEditor(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
+            // 画布：点阵 + 连线 + 可拖节点卡。拖动的结果**写回定义**（posX/posY）——
+            // 蓝图编辑器的摆位不落盘，用户摆好的图下次打开就自己跳了。
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(260.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-                    .verticalScroll(rememberScrollState()),
+                    .height(280.dp)
+                    .horizontalScroll(rememberScrollState())
+                    .verticalScroll(rememberScrollState())
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
             ) {
-                Column {
+                val placed = layoutNodes(def)
+                val canvasW = ((placed.maxOfOrNull { it.x } ?: 0f) + 190f).dp
+                val canvasH = ((placed.maxOfOrNull { it.y } ?: 0f) + 80f).dp
+                Box(Modifier.width(canvasW).height(canvasH)) {
+                    Canvas(Modifier.fillMaxSize()) { drawDotGrid() }
+                    Canvas(Modifier.fillMaxSize()) {
+                        drawWorkflowEdges(placed, def, MaterialTheme.colorScheme.outline)
+                    }
                     for (node in def.nodes) {
-                        var dx by remember(node.id) { mutableStateOf(node.posX.toFloat()) }
-                        var dy by remember(node.id) { mutableStateOf(node.posY.toFloat()) }
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = nodeColor(node.type).copy(alpha = 0.25f),
-                            modifier = Modifier
-                                .padding(start = dx.dp.coerceIn(0.dp, 220.dp), top = dy.dp.coerceIn(0.dp, 400.dp))
-                                .clickable {
-                                    val from = linkFrom
-                                    if (from == null) {
-                                        selected = if (selected == node.id) null else node.id
-                                    } else if (from != node.id) {
-                                        draft = def.copy(
-                                            edges = def.edges + WorkflowEdge(from, node.id, linkWhen),
-                                        )
-                                        linkFrom = null
-                                        linkWhen = ""
-                                    }
+                        NodeCard(
+                            node = node,
+                            selected = selected == node.id,
+                            modifier = Modifier.offset(node.posX.dp, node.posY.dp),
+                            onClick = {
+                                val from = linkFrom
+                                if (from == null) {
+                                    selected = if (selected == node.id) null else node.id
+                                } else if (from != node.id) {
+                                    draft = def.copy(edges = def.edges + WorkflowEdge(from, node.id, linkWhen))
+                                    linkFrom = null
+                                    linkWhen = ""
                                 }
-                                .pointerInput(node.id) {
-                                    detectDragGestures { change, amount ->
-                                        change.consume()
-                                        dx += amount.x
-                                        dy += amount.y
-                                    }
-                                },
-                        ) {
-                            Text(
-                                (if (selected == node.id) "▸ " else "") + node.name.ifBlank { nodeLabel(node) },
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                            )
+                            },
+                            onDrag = { dx, dy ->
+                                val nx = (node.posX + dx.toInt()).coerceIn(0, 600)
+                                val ny = (node.posY + dy.toInt()).coerceIn(0, 900)
+                                draft = def.copy(
+                                    nodes = def.nodes.map {
+                                        if (it.id == node.id) it.copy(posX = nx, posY = ny) else it
+                                    },
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+            if (linkFrom != null) {
+                Spacer(Modifier.height(6.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            stringResource(R.string.dsh_workflow_editor_linking, linkFrom),
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { linkFrom = null }) {
+                            Text(stringResource(R.string.dsh_workflow_action_cancel))
                         }
                     }
                 }
