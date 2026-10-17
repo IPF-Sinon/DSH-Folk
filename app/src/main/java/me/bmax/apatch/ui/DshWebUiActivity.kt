@@ -14,6 +14,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
 import android.util.Base64
@@ -715,6 +716,11 @@ class DshWebUiActivity : AppCompatActivity() {
                                 // 顺序与开关都在 [WebScripts] 里。
                                 scriptsInstalled = installScripts(this, url)
                                 webView = this
+                                // 补一次恢复：本页 WebView 是在 Compose factory 里创建的，而 onStart 早于
+                                // 第一次组合 —— 若上一轮 onStop 暂停了全局定时器之后本页被系统回收重建，
+                                // onStart 那次 resumeTimers() 会打在 null 上，新实例就停在「已暂停」状态。
+                                // resumeWebView() 幂等，在新实例上调用也无害。
+                                resumeWebView()
                                 loadUrl(url)
                             }
                         },
@@ -1165,32 +1171,51 @@ class DshWebUiActivity : AppCompatActivity() {
      * DSH 的 WebUI 是一整个聊天前端（虚拟列表 + 流式渲染），后台空转时 CPU 与 WebView 渲染进程常驻不降，
      * 这是「多会话一起跑就发热耗电」里属于本应回收的那一部分。
      *
-     * 守卫：画中画里页面还在用户眼前，停掉就等于画面冻结 —— 只有真的离开才停。
-     * 本应用只有这一个 WebView（DshWebViewScreen.kt 是唯一创建点），所以 pauseTimers()
-     * 的全局语义在这里安全；将来若再加 WebView，这里要改成引用计数。
+     * 守卫是「画中画 **且** 屏幕亮着」，而不是只看画中画：熄屏时 isInPictureInPictureMode 仍然是
+     * true（PiP 窗口只是没被关掉），只按它判就成了「屏幕黑着、画面谁也看不见」时定时器照跑 ——
+     * 正好是这一版要省掉的那部分耗电。
+     *
+     * 关于 pauseTimers() 的全局语义：它作用于**进程内所有 WebView**，而本应用不止一个 WebView ——
+     * 除了这里这个，还有脚本市场那条应用内浏览页（DshWebViewScreen，由 ScriptMarketScreen 导航
+     * 进入）。同时可见时它们都处于 started、不会走到 onStop，所以这个判断在现实中成立；但若将来
+     * 出现「一个可见、另一个被 stop」的组合（多窗口/画中画叠用），这里必须改成引用计数 —— 现在的
+     * 写法会连另一个页面一起停。
      */
     override fun onStop() {
-        if (!isInPictureInPictureMode) {
+        if (!watchingInPip()) {
             runCatching {
                 webView?.onPause()
                 webView?.pauseTimers()
-            }
+            }.onFailure { Log.w(TAG, "暂停 WebView 定时器失败（后台可能继续空转）", it) }
         }
         super.onStop()
     }
 
     /**
-     * 与 onStop 严格配对，且无条件恢复：resumeTimers() 是全局的、重复调用无害，
+     * 与 onStop 严格配对，且**无条件**恢复：resumeTimers() 是全局的、重复调用无害，
      * 但漏调会让页面回来以后所有定时器都不再触发（消息不刷新、按钮无响应）。
-     * 所以这里不跟 onStop 一样挂 isInPictureInPictureMode 守卫。
      */
     override fun onStart() {
         super.onStart()
+        resumeWebView()
+    }
+
+    /**
+     * 恢复前台。**无条件**调用，理由见 onStart。
+     *
+     * 失败不再静默：吞掉异常的话，「回来以后页面不刷新」在现场将完全无从查起。
+     */
+    private fun resumeWebView() {
         runCatching {
             webView?.resumeTimers()
             webView?.onResume()
-        }
+        }.onFailure { Log.w(TAG, "恢复 WebView 定时器失败（页面可能不再刷新）", it) }
     }
+
+    /** 画中画里页面还在眼前（停掉等于冻结画面）；但熄屏时它并不在眼前。 */
+    private fun watchingInPip(): Boolean =
+        isInPictureInPictureMode &&
+            (getSystemService(PowerManager::class.java)?.isInteractive ?: true)
 
     override fun onDestroy() {
         // 不销毁的话 WebView 会连着 Activity 一起泄漏

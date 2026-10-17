@@ -816,6 +816,14 @@ ok(!/dsh_userscripts_paste/.test(screen) && !/dsh_userscripts_pick/.test(screen)
     /enterPip\(\)/.test(activity) &&
     !/onUserLeaveHint\(\)[\s\S]{0,400}showPipGuide\.value = true/.test(activity),
     "30 以下的兜底是 onUserLeaveHint，且自动进入不弹引导（引导只属于手动按钮那条路）");
+  // 后台降载（PR #11 + 复核补丁）的三条契约。这不是风格问题：三条里任意一条错了，表现都是
+  // 用户侧看得见的「回来以后页面不刷新」或「熄屏了还白跑」。
+  ok(/private fun watchingInPip\(\): Boolean =[\s\S]{0,140}isInPictureInPictureMode &&[\s\S]{0,120}isInteractive/.test(activity),
+    "暂停守卫是「画中画且屏幕亮着」（熄屏时 PiP 标记仍为 true，只看它会白跑电）");
+  ok(/override fun onStart\(\) \{\n        super\.onStart\(\)\n        resumeWebView\(\)\n    \}/.test(activity),
+    "onStart 无条件恢复（给它挂守卫，页面回来以后就永不刷新）");
+  ok(/webView = this\n[\s\S]{0,500}?resumeWebView\(\)/.test(activity),
+    "WebView 创建点补一次恢复（onStart 早于组合时那次会打在 null 上）");
   ok(/if \(!inPip\.value\)/.test(activity) || /isInPictureInPictureMode/.test(activity),
     "已经在画中画时不再触发一次进入");
   ok(/private var suppressAutoPip/.test(activity) &&
