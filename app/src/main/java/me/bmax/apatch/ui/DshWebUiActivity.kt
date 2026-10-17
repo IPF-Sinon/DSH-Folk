@@ -1160,6 +1160,38 @@ class DshWebUiActivity : AppCompatActivity() {
         suppressAutoPip = false
     }
 
+    /**
+     * 离开前台就降载：WebView 不是普通 View，进了后台照样跑 rAF、CSS 动画与页面自己的轮询定时器。
+     * DSH 的 WebUI 是一整个聊天前端（虚拟列表 + 流式渲染），后台空转时 CPU 与 WebView 渲染进程常驻不降，
+     * 这是「多会话一起跑就发热耗电」里属于本应回收的那一部分。
+     *
+     * 守卫：画中画里页面还在用户眼前，停掉就等于画面冻结 —— 只有真的离开才停。
+     * 本应用只有这一个 WebView（DshWebViewScreen.kt 是唯一创建点），所以 pauseTimers()
+     * 的全局语义在这里安全；将来若再加 WebView，这里要改成引用计数。
+     */
+    override fun onStop() {
+        if (!isInPictureInPictureMode) {
+            runCatching {
+                webView?.onPause()
+                webView?.pauseTimers()
+            }
+        }
+        super.onStop()
+    }
+
+    /**
+     * 与 onStop 严格配对，且无条件恢复：resumeTimers() 是全局的、重复调用无害，
+     * 但漏调会让页面回来以后所有定时器都不再触发（消息不刷新、按钮无响应）。
+     * 所以这里不跟 onStop 一样挂 isInPictureInPictureMode 守卫。
+     */
+    override fun onStart() {
+        super.onStart()
+        runCatching {
+            webView?.resumeTimers()
+            webView?.onResume()
+        }
+    }
+
     override fun onDestroy() {
         // 不销毁的话 WebView 会连着 Activity 一起泄漏
         runCatching {
