@@ -54,6 +54,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.delay
 import me.bmax.apatch.R
@@ -653,6 +655,17 @@ internal fun WorkflowDefinitionEditor(
         WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
     }
 
+    // 自己的**全屏窗口**：确认弹窗（AI 创建流程那条路）里点「编辑」时，编辑器若只是弹窗内容树里
+    // 的一个 Surface，就会被那个弹窗的窗口裁成小窗（真机反馈「不要再小窗编辑」）。独立 Dialog 之后
+    // 两条入口（确认弹窗 / 设置页）拿到的都是整页。
+    Dialog(
+        onDismissRequest = { if (patchLines.isEmpty()) onCancel() else confirmDiscard = true },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            dismissOnBackPress = true,
+        ),
+    ) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
@@ -664,10 +677,11 @@ internal fun WorkflowDefinitionEditor(
             Spacer(Modifier.height(8.dp))
             // 画布：点阵 + 连线 + 可拖节点卡。拖动的结果**写回定义**（posX/posY）——
             // 蓝图编辑器的摆位不落盘，用户摆好的图下次打开就自己跳了。
+            // 画布吃满剩余高度：编辑页的主体就是画布（点击助手就是这样），下面那排是工具。
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(280.dp)
+                    .weight(1f)
                     .horizontalScroll(rememberScrollState())
                     .verticalScroll(rememberScrollState())
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
@@ -737,16 +751,19 @@ internal fun WorkflowDefinitionEditor(
                 }
             }
             Spacer(Modifier.height(6.dp))
+            // 提示单独一行：原先它和下面那排「横向滚动」的按钮同处一个 Row，权重被无限宽的
+            // 滚动容器抢光，于是被压成一列竖排的字（真机截图）。
+            Text(
+                stringResource(R.string.dsh_workflow_editor_drag_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    stringResource(R.string.dsh_workflow_editor_drag_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
                 Icon(Icons.Filled.Add, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
                     stringResource(R.string.dsh_workflow_editor_add_node),
@@ -873,6 +890,7 @@ internal fun WorkflowDefinitionEditor(
                 }
             },
         )
+    }
     }
 }
 
