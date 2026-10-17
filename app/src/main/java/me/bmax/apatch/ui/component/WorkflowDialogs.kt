@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -382,17 +383,18 @@ internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
     // 主题色必须在 Canvas **外面**取：Canvas 的 lambda 是 DrawScope，不是 composable 作用域，
     // 在里面读 MaterialTheme 会直接编译不过（CI 已抓过一次）。
     val edgeColor = MaterialTheme.colorScheme.outline
-    val width = (placed.maxOfOrNull { it.x } ?: 0) + 190
-    val height = (placed.maxOfOrNull { it.y } ?: 0) + 70
+    // ?: 0f 而不是 ?: 0：Float? 与 Int 的公共父类型会让 + 190 找不到候选（CI 抓过一次）。
+    val width = (placed.maxOfOrNull { it.x } ?: 0f) + 190f
+    val height = (placed.maxOfOrNull { it.y } ?: 0f) + 70f
     Box(
         Modifier
             .fillMaxWidth()
-            .height(height.coerceAtMost(420).dp)
+            .height(height.coerceAtMost(420f).dp)
             .horizontalScroll(rememberScrollState())
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
     ) {
         Box(Modifier.width(width.dp).height(height.dp)) {
-            Canvas(Modifier.fillMaxSize()) { drawDotGrid() }
+            Canvas(Modifier.fillMaxSize()) { drawGrid() }
             Canvas(Modifier.fillMaxSize()) {
                 drawWorkflowEdges(placed, definition, edgeColor)
             }
@@ -437,48 +439,75 @@ private fun NodeCard(
     } else {
         clickable
     }
+    // 规格：卡片**不按分类着色**（统一 surfaceVariant + 细描边），颜色语义挂在「针脚」上 ——
+    // 这里用一个 18dp 圆点承担（未连线是空的，我们暂无连接状态，所以是实心加点描边）；
+    // 卡片内容之下叠一个 alpha 0.12 的**水印**（用类型名而不是图标：效果一样，且不必再引一批图标）；
+    // 选中 = 换底色 secondaryContainer（规格里唯一的选中表达）。
     Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else accent.copy(alpha = 0.55f)),
-        tonalElevation = if (selected) 4.dp else 1.dp,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(if (selected) 1.dp else 0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = if (selected) 6.dp else 3.dp,
         modifier = draggable,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .width(4.dp)
-                    .height(NODE_H)
-                    .background(accent),
+        Box {
+            Text(
+                node.type.id,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f),
+                modifier = Modifier.align(Alignment.Center),
             )
-            Column(Modifier.padding(horizontal = 8.dp)) {
-                Text(
-                    node.name.ifBlank { nodeLabel(node) },
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(18.dp)
+                        .background(accent, CircleShape),
                 )
-                Text(
-                    nodeSubtitle(node),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    Text(
+                        node.name.ifBlank { nodeLabel(node) },
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                    )
+                    Text(
+                        nodeSubtitle(node),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
 }
 
-/** 画布点阵：蓝图编辑器最省事也最能表达「这是一块画布」的背景。 */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDotGrid() {
+/**
+ * 画布网格：方格线（规格：12dp 单元格、每 10 格加粗），颜色取主题 outline 压暗。
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGrid() {
+    // 方格线而不是点阵：点击助手的画布是 12dp 方格（源码 GRID_DP_SIZE=12），普通线 0.5px、
+    // 每 10 格加粗 2px。加粗那一档让画布有尺度感，不至于看成一片细线。
     val step = CANVAS_STEP_DP.dp.toPx()
-    val r = 1.dp.toPx()
-    var y = step
+    val thin = 0.5f
+    val thick = 2f
+    val normal = androidx.compose.ui.graphics.Color(0x22000000)
+    val strong = androidx.compose.ui.graphics.Color(0x33000000)
+    var i = 0
+    var x = 0f
+    while (x < size.width) {
+        drawLine(if (i % 10 == 0) strong else normal, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), strokeWidth = if (i % 10 == 0) thick else thin)
+        i++
+        x += step
+    }
+    i = 0
+    var y = 0f
     while (y < size.height) {
-        var x = step
-        while (x < size.width) {
-            drawCircle(color = androidx.compose.ui.graphics.Color(0x33000000), radius = r, center = androidx.compose.ui.geometry.Offset(x, y))
-            x += step
-        }
+        drawLine(if (i % 10 == 0) strong else normal, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), strokeWidth = if (i % 10 == 0) thick else thin)
+        i++
         y += step
     }
 }
@@ -498,11 +527,24 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawWorkflowEdges(
         val x2 = to.x.dp.toPx()
         val y2 = (to.y + 23f).dp.toPx()
         val midX = (x1 + x2) / 2f
-        val w = 2.dp.toPx()
-        drawLine(color, androidx.compose.ui.geometry.Offset(x1, y1), androidx.compose.ui.geometry.Offset(midX, y1), strokeWidth = w)
-        drawLine(color, androidx.compose.ui.geometry.Offset(midX, y1), androidx.compose.ui.geometry.Offset(midX, y2), strokeWidth = w)
-        drawLine(color, androidx.compose.ui.geometry.Offset(midX, y2), androidx.compose.ui.geometry.Offset(x2, y2), strokeWidth = w)
-        drawCircle(color, radius = 2.5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x2, y2))
+        // 3dp + 圆角 + 圆头圆角连接：规格里线宽是 gridSize/4，且**没有箭头也没有端点圆点**
+        // —— 分支语义由源卡片底部的针脚标签承担，线上不写字。
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(x1, y1)
+            lineTo(midX, y1)
+            lineTo(midX, y2)
+            lineTo(x2, y2)
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = 3.dp.toPx(),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                join = androidx.compose.ui.graphics.StrokeJoin.Round,
+                pathEffect = androidx.compose.ui.graphics.PathEffect.cornerPathEffect(16f),
+            ),
+        )
     }
 }
 
@@ -527,14 +569,16 @@ private data class EdgeLabel(val text: String, val x: Float, val y: Float)
 
 private fun edgeLabels(placed: List<PlacedNode>, definition: WorkflowDefinition): List<EdgeLabel> {
     val byId = placed.associateBy { it.id }
-    return definition.edges.filter { it.whenExpr.isNotBlank() }.mapNotNull { e ->
-        val from = byId[e.from] ?: return@mapNotNull null
-        val to = byId[e.to] ?: return@mapNotNull null
-        val x1 = from.x + 148f
-        val x2 = to.x
-        val midX = (x1 + x2) / 2f - 10f
-        EdgeLabel(e.whenExpr, midX, (from.y + to.y) / 2f + 10f)
+    // 贴在**源卡片底部**（规格里 true/false 就是卡片底部的针脚标题），而不是浮在连线中段：
+    // 一条线属于哪个节点、走哪个分支，一眼就能对上。
+    val out = mutableListOf<EdgeLabel>()
+    for (p in placed) {
+        val labels = definition.outgoing(p.id).filter { it.whenExpr.isNotBlank() }
+        for ((i, e) in labels.withIndex()) {
+            out += EdgeLabel(e.whenExpr, p.x + i * 46f, p.y + 48f)
+        }
     }
+    return out
 }
 
 /** 节点副标题：类型 + 动作/关键配置，让用户一眼看出这一步做什么。 */
@@ -603,7 +647,7 @@ internal fun WorkflowDefinitionEditor(
                 val canvasW = ((placed.maxOfOrNull { it.x } ?: 0f) + 190f).dp
                 val canvasH = ((placed.maxOfOrNull { it.y } ?: 0f) + 80f).dp
                 Box(Modifier.width(canvasW).height(canvasH)) {
-                    Canvas(Modifier.fillMaxSize()) { drawDotGrid() }
+                    Canvas(Modifier.fillMaxSize()) { drawGrid() }
                     Canvas(Modifier.fillMaxSize()) {
                         drawWorkflowEdges(placed, def, edgeColor)
                     }
@@ -647,7 +691,7 @@ internal fun WorkflowDefinitionEditor(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            stringResource(R.string.dsh_workflow_editor_linking, linkFrom),
+                            stringResource(R.string.dsh_workflow_editor_linking, linkFrom.orEmpty()),
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.weight(1f),
                         )

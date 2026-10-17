@@ -233,8 +233,8 @@ ok(/dsh_workflow_title/.test(SRC.settings) && /onOpenWorkflow: \(\) -> Unit = \{
   "功能页入口层有工作流一行（不是塞在某个分类里）");
 ok(/onOpenWorkflow = \{ navigator\.navigate\(WorkflowScreenDestination\) \}/.test(SRC.settingsScreen),
   "那一行真的会打开工作流页（不是只声明一个没人用的参数）");
-ok(/drawDotGrid/.test(SRC.dialogs) && /private fun NodeCard\(/.test(SRC.dialogs),
-  "编辑页/预览是画布（点阵 + 节点卡），不是一列输入框");
+ok(/drawGrid/.test(SRC.dialogs) && /private fun NodeCard\(/.test(SRC.dialogs),
+  "编辑页/预览是画布（方格线 + 节点卡），不是一列输入框");
 ok(/onDrag = \{ dx, dy ->[\s\S]{0,500}?it\.copy\(posX = nx, posY = ny\)/.test(SRC.dialogs),
   "拖动把坐标写回定义（蓝图摆位不落盘，下次打开就会自己跳）");
 ok(/private fun RunDetailDialog\(/.test(SRC.screen) && /WorkflowStore\.readLog/.test(SRC.screen),
