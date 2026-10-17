@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="?attr/materialCardViewFilledStyle"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="?attr/defaultPadding"
+    android:layout_marginBottom="?attr/defaultPadding"
+    app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Large">
+
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/icon"
+        android:layout_width="?attr/iconButtonSize"
+        android:layout_height="?attr/iconButtonSize"
+        android:layout_gravity="end"
+        android:layout_marginTop="?attr/defaultPadding"
+        android:layout_marginEnd="?attr/iconButtonSize"
+        android:alpha="0.1"
+        android:tint="?attr/colorOnSurfaceVariant" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/taskName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:layout_marginStart="?attr/defaultPadding"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/settingButton"
+                style="?attr/iconButton"
+                app:icon="@drawable/icon_settings" />
+
+        </LinearLayout>
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/taskDesc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="?attr/defaultPadding"
+            android:layout_marginVertical="?attr/defaultOffset"
+            android:alpha="0.75"
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <com.google.android.material.button.MaterialButtonGroup
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:spacing="0dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/editButton"
+                    style="?attr/iconButton"
+                    app:icon="@drawable/icon_edit" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/copyButton"
+                    style="?attr/iconButton"
+                    app:icon="@drawable/icon_content_copy" />
+
+            </com.google.android.material.button.MaterialButtonGroup>
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/deleteButton"
+                style="?attr/iconButton"
+                android:backgroundTint="@color/fill_button_background_error_check"
+                android:checkable="true"
+                app:icon="@drawable/icon_delete"
+                app:iconTint="@color/button_container_check" />
+
+        </LinearLayout>
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/taskError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="?attr/defaultOffset"
+            android:background="?attr/colorError"
+            android:gravity="center"
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+            android:textColor="?attr/colorOnError"
+            android:visibility="visible" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

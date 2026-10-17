@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.button.MaterialButton xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="?attr/materialButtonStyle"
+    android:layout_width="match_parent"
+    android:layout_height="?attr/iconButtonSize"
+    android:backgroundTint="@color/fill_button_background_normal_check"
+    android:insetTop="0dp"
+    android:insetBottom="0dp"
+    android:padding="0dp"
+    android:textColor="@color/button_container_check"
+    app:iconGravity="textStart"
+    app:iconTint="@color/button_container_check"
+    app:opticalCenterEnabled="true" />

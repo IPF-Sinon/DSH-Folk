@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -378,6 +379,9 @@ private const val CANVAS_STEP_DP = 18
 @Composable
 internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
     val placed = remember(definition) { layoutNodes(definition) }
+    // 主题色必须在 Canvas **外面**取：Canvas 的 lambda 是 DrawScope，不是 composable 作用域，
+    // 在里面读 MaterialTheme 会直接编译不过（CI 已抓过一次）。
+    val edgeColor = MaterialTheme.colorScheme.outline
     val width = (placed.maxOfOrNull { it.x } ?: 0) + 190
     val height = (placed.maxOfOrNull { it.y } ?: 0) + 70
     Box(
@@ -390,7 +394,7 @@ internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
         Box(Modifier.width(width.dp).height(height.dp)) {
             Canvas(Modifier.fillMaxSize()) { drawDotGrid() }
             Canvas(Modifier.fillMaxSize()) {
-                drawWorkflowEdges(placed, definition, MaterialTheme.colorScheme.outline)
+                drawWorkflowEdges(placed, definition, edgeColor)
             }
             for (p in placed) {
                 val node = definition.node(p.id) ?: continue
@@ -536,7 +540,8 @@ private fun edgeLabels(placed: List<PlacedNode>, definition: WorkflowDefinition)
 /** 节点副标题：类型 + 动作/关键配置，让用户一眼看出这一步做什么。 */
 private fun nodeSubtitle(node: WorkflowNode): String = when (node.type) {
     WorkflowNodeType.TRIGGER -> if (node.config("requireDsh") == "1") "trigger · 需要 DSH" else "trigger"
-    WorkflowNodeType.EXECUTE -> node.actionType?.id + " · " + node.config("cmd").ifBlank { node.config("text") }.take(18)
+    WorkflowNodeType.EXECUTE -> (node.actionType?.id ?: "execute") + " · " +
+        node.config("cmd").ifBlank { node.config("text") }.take(18)
     WorkflowNodeType.CONDITION -> "condition · " + node.config("op") + " " + node.config("value").take(10)
     WorkflowNodeType.LOGIC -> "logic · " + node.config("op")
     WorkflowNodeType.EXTRACT -> "extract · " + node.config("var")
@@ -594,12 +599,13 @@ internal fun WorkflowDefinitionEditor(
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
             ) {
                 val placed = layoutNodes(def)
+                val edgeColor = MaterialTheme.colorScheme.outline
                 val canvasW = ((placed.maxOfOrNull { it.x } ?: 0f) + 190f).dp
                 val canvasH = ((placed.maxOfOrNull { it.y } ?: 0f) + 80f).dp
                 Box(Modifier.width(canvasW).height(canvasH)) {
                     Canvas(Modifier.fillMaxSize()) { drawDotGrid() }
                     Canvas(Modifier.fillMaxSize()) {
-                        drawWorkflowEdges(placed, def, MaterialTheme.colorScheme.outline)
+                        drawWorkflowEdges(placed, def, edgeColor)
                     }
                     for (node in def.nodes) {
                         NodeCard(

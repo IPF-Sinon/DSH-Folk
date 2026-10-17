@@ -409,6 +409,16 @@ console.log("\u2500 #16 格式放到了模型必定看得见的地方");
   ok(/type: .object.,[\s\S]{0,400}?Must match the FORMAT/.test(SRC.mjs), "definition 参数自己就说清必须符合格式");
 }
 
+// Canvas 的 lambda 是 DrawScope，不是 composable 作用域：在里面读 MaterialTheme 编译不过
+// （CI 抓过一次）。顺带钉住 Modifier.offset 的导入 —— 它同样只在 CI 上暴露。
+{
+  const windows = [...SRC.dialogs.matchAll(/Canvas\(/g)].map((m) => SRC.dialogs.slice(m.index, m.index + 400));
+  ok(windows.length > 0 && windows.every((t) => !/MaterialTheme/.test(t)),
+    "Canvas 的 lambda 里不读主题色（要先提到外面）");
+  ok(!/Modifier\.offset\(/.test(SRC.dialogs) || /import androidx\.compose\.foundation\.layout\.offset/.test(SRC.dialogs),
+    "用了 Modifier.offset 就必须导入它");
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),
