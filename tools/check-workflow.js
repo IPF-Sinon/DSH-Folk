@@ -483,6 +483,18 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   ok(/WorkflowBlueprintCanvas\(/.test(preview.slice(0, 700)), "预览内部委托新画布（对外签名没变）");
 }
 
+console.log("\u2500 #16e 分支未命中的节点标 SKIPPED（阶段 3.1）");
+{
+  const engine = SRC.engine;
+  ok(/branch_not_taken/.test(engine), "未命中分支的下游节点有明确的 reason（branch_not_taken）");
+  const markAt = engine.indexOf("branch_not_taken");
+  const okAt = engine.indexOf("state = WorkflowRunState.SUCCEEDED");
+  ok(markAt > 0 && okAt > markAt, "标记发生在「成功收尾」之前（失败/取消的路径不标）");
+  ok((engine.match(/branch_not_taken/g) || []).length === 1, "只在成功收尾处标一次（不在每步里误标）");
+  ok(/val visited = run\.steps\.map \{ it\.nodeId \}\.toSet\(\)/.test(engine),
+    "以「已产生步骤结果的节点」为已访问集合（引擎只在执行时建步骤，没有 PENDING 兜底）");
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),

@@ -448,6 +448,17 @@ internal object WorkflowEngine {
             }
         }
 
+        // 分支未命中的下游节点：不执行，但不该「从结果里消失」—— 标 SKIPPED 并写明原因。
+        // 以前这些节点在 steps 里根本没有：画布上看着像漏了一块，报告里也读不出「这条分支没走」
+        // 与「根本没跑」的区别。只在**成功走完**时判 —— 失败/取消时未执行的节点属于「没来得及跑」，
+        // 拿 SKIPPED 描述它们会说假话。
+        val visited = run.steps.map { it.nodeId }.toSet()
+        for (candidate in def.nodes) {
+            if (candidate.id !in visited) {
+                markStep(candidate.id, WorkflowStepState.SKIPPED, null, "", "branch_not_taken")
+            }
+        }
+
         run = run.copy(
             state = WorkflowRunState.SUCCEEDED,
             endedAtMs = System.currentTimeMillis(),
