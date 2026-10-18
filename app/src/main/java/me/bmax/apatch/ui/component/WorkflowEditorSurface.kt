@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -21,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -44,15 +43,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.WorkflowActionType
@@ -61,7 +59,6 @@ import me.bmax.apatch.dsh.WorkflowEdge
 import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
 import me.bmax.apatch.dsh.WorkflowPatch
-import me.bmax.apatch.dsh.WorkflowSchema
 import me.bmax.apatch.dsh.WorkflowValidator
 import me.bmax.apatch.dsh.workflowDiff
 
@@ -95,13 +92,11 @@ private fun editorNodeKeyOf(node: WorkflowNode): String = when (node.type) {
 /**
  * 工作流编辑页的**内容本体**（页面与审批弹窗共用）。
  *
- * 布局按点击助手：顶栏（状态栏留白 + 返回/标题/保存）→ 画布（吃掉剩余高度）→ 底部一条小工具条。
- * 节点目录收进「＋ 节点」拉起的抽屉里：抽屉里的卡片可以**往外拖**（向上拖出抽屉 = 在画布上新建
- * 这个节点），也可以直接点一下在画布中央新建。
+ * 结构（对齐点击助手）：顶栏（状态栏留白 + 返回/标题/保存）→ 画布（吃满剩余高度）→ 底部小工具条。
+ * 节点目录收进「＋ 节点」拉起的抽屉里：抽屉里的卡片可以**往外拖**（拖到画布上，松手即落点）。
  *
- * 手势分工（这是「卡片拖不动」的根因所在）：
- *  - 画布：单指按在卡片上 → 拖这张卡；按在空白 → 平移；从右侧输出口拖出 → 松手弹「接哪个节点」。
- *  - 卡片与抽屉里的条目：不放任何拖动手势，只保留「点」。
+ * 手势（关键）：卡片自己接点/拖/拉线，画布只接空白处平移 —— 没有手算命中，也就没有坐标系比错的
+ * 空间；抽屉拖出用**窗口坐标**判定落点。拖动开始时抽屉**视觉收起**（保持组合，手势才不断）。
  */
 @Composable
 internal fun WorkflowEditorSurface(
@@ -116,19 +111,20 @@ internal fun WorkflowEditorSurface(
     var addAfter by remember { mutableStateOf<String?>(null) }
     var sheetOpen by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
-    // 抽屉拖出用的坐标基准：根容器与画布在窗口里的位置（px），以及跟随手指的幽灵卡。
+    // 抽屉拖出：幽灵卡（null = 没在拖）、根容器与画布在窗口里的位置。
+    var ghost by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     var rootOrigin by remember { mutableStateOf(Offset.Zero) }
     var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
-    var ghost by remember { mutableStateOf<Pair<String, Offset>?>(null) }
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
+
     val patchLines: List<WorkflowPatch> = remember(def) { workflowDiff(initial, def) }
+    val errors: List<String> = remember(def) {
+        WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
+    }
     // 系统返回与「取消」同一条路：先问要不要放弃改动。
     androidx.activity.compose.BackHandler {
         if (patchLines.isEmpty()) onCancel() else confirmDiscard = true
-    }
-    val density = androidx.compose.ui.platform.LocalDensity.current.density
-    val errors: List<String> = remember(def) {
-        WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
     }
 
     /** 在指定 dp 位置新建节点（抽屉拖出用：落点 = 松手位置，已吸附 12dp 网格）。 */
@@ -146,17 +142,13 @@ internal fun WorkflowEditorSurface(
         )
     }
 
+    /** 落在默认网格位新建；afterId 非空时顺手连一条出边。 */
     fun addNode(kind: EditorNodeKind, afterId: String?) {
-        val id = "n" + (def.nodes.size + 1) + "_" + (System.currentTimeMillis() % 1000)
         val index = def.nodes.size
-        val node = WorkflowNode(
-            id = id,
-            type = kind.type,
-            name = "",
-            posX = 24 + (index % 3) * (WorkflowNodeCardWidth.value.toInt() + 16),
-            posY = 24 + (index / 3) * 96,
-            config = kind.defaults,
-        )
+        val x = 24 + (index % 3) * 232
+        val y = 24 + (index / 3) * 128
+        val id = "n" + (index + 1) + "_" + (System.currentTimeMillis() % 1000)
+        val node = WorkflowNode(id = id, type = kind.type, name = "", posX = x, posY = y, config = kind.defaults)
         draft = def.copy(
             nodes = def.nodes + node,
             edges = if (afterId != null) def.edges + WorkflowEdge(afterId, id, "") else def.edges,
@@ -169,148 +161,159 @@ internal fun WorkflowEditorSurface(
             .fillMaxSize()
             .onGloballyPositioned { rootOrigin = it.positionInWindow() },
     ) {
-        Column(Modifier.fillMaxSize()) {
-            // ── 顶栏：真正占一行，画布不会和它重叠 ──
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(shape = RoundedCornerShape(50), tonalElevation = 5.dp) {
-                    IconButton(onClick = {
-                        if (patchLines.isEmpty()) onCancel() else confirmDiscard = true
-                    }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.dsh_workflow_action_cancel),
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+                // ── 顶栏（真正占一行，画布不会与它重叠）──
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(shape = CircleShape, tonalElevation = 5.dp) {
+                        IconButton(onClick = {
+                            if (patchLines.isEmpty()) onCancel() else confirmDiscard = true
+                        }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.dsh_workflow_action_cancel),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Surface(shape = RoundedCornerShape(50), tonalElevation = 5.dp) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Button(onClick = { onSave(def) }, shape = RoundedCornerShape(50)) {
+                        Text(stringResource(R.string.dsh_workflow_editor_save))
+                    }
+                }
+
+                // ── 画布 ──
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .onGloballyPositioned {
+                            canvasOrigin = it.positionInWindow()
+                            canvasSize = it.size
+                        },
+                ) {
+                    WorkflowBlueprintCanvas(
+                        definition = def,
+                        positions = editorLayoutFor(def).associate { it.first to Offset(it.second, it.third) },
+                        readOnly = false,
+                        selectedNodeId = selected,
+                        onNodeClick = { id -> selected = if (selected == id) null else id },
+                        onNodeDrag = { id, dxPx, dyPx ->
+                            val node = def.nodes.firstOrNull { it.id == id }
+                            if (node != null) {
+                                val nx = WorkflowGeometry.snapToGridDp(node.posX + WorkflowGeometry.pxToDp(dxPx, density))
+                                    .coerceIn(0, 2000)
+                                val ny = WorkflowGeometry.snapToGridDp(node.posY + WorkflowGeometry.pxToDp(dyPx, density))
+                                    .coerceIn(0, 2000)
+                                draft = def.copy(nodes = def.nodes.map { if (it.id == id) it.copy(posX = nx, posY = ny) else it })
+                            }
+                        },
+                        onWireDrop = { fromId, toId ->
+                            if (toId != null) {
+                                if (def.edges.none { it.from == fromId && it.to == toId }) {
+                                    draft = def.copy(edges = def.edges + WorkflowEdge(fromId, toId, ""))
+                                }
+                            } else {
+                                addAfter = fromId
+                            }
+                        },
+                        onBlankTap = { selected = null },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                // ── 底部小工具条 ──
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(onClick = { sheetOpen = true }, shape = RoundedCornerShape(50)) {
+                        Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.dsh_workflow_editor_add_node))
+                    }
+                    OutlinedButton(
+                        onClick = { draft = def.copy(nodes = def.nodes.map { it.copy(posX = 0, posY = 0) }) },
+                        shape = RoundedCornerShape(50),
+                    ) { Text(stringResource(R.string.dsh_workflow_editor_auto_layout)) }
+                    Spacer(Modifier.weight(1f))
+                    if (errors.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.dsh_workflow_editor_errors) + " " + errors.size,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.dsh_workflow_editor_edges) + " " + def.edges.size,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-                Spacer(Modifier.width(8.dp))
-                Surface(shape = RoundedCornerShape(50), tonalElevation = 5.dp) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Button(onClick = { onSave(def) }, shape = RoundedCornerShape(50)) {
-                    Text(stringResource(R.string.dsh_workflow_editor_save))
-                }
             }
 
-            // ── 画布 ──
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .onGloballyPositioned {
-                        canvasOrigin = it.positionInWindow()
-                        canvasSize = it.size
-                    },
-            ) {
-                val placed = layoutFor(def)
-                WorkflowBlueprintCanvas(
-                    definition = def,
-                    positions = placed.associate { it.first to Offset(it.second, it.third) },
-                    readOnly = false,
-                    selectedNodeId = selected,
-                    onNodeClick = { id -> selected = if (selected == id) null else id },
-                    // 像素 → dp → 吸附 12dp 网格，全部走 WorkflowGeometry；这里不再裸除密度，
-                    // 也不再用 Int 截断（那正是「拖动有点快/回弹」的来源）。
-                    onNodeDrag = { id, dxPx, dyPx ->
-                        val node = def.nodes.firstOrNull { it.id == id }
-                        if (node != null) {
-                            val nx = WorkflowGeometry.snapToGridDp(node.posX + WorkflowGeometry.pxToDp(dxPx, density))
-                                .coerceIn(0, 2000)
-                            val ny = WorkflowGeometry.snapToGridDp(node.posY + WorkflowGeometry.pxToDp(dyPx, density))
-                                .coerceIn(0, 2000)
-                            draft = def.copy(nodes = def.nodes.map { if (it.id == id) it.copy(posX = nx, posY = ny) else it })
-                        }
-                    },
-                    onWireConnect = { fromId, toId ->
-                        if (def.edges.none { it.from == fromId && it.to == toId }) {
-                            draft = def.copy(edges = def.edges + WorkflowEdge(fromId, toId, ""))
-                        }
-                    },
-                    onNodeAddAfter = { id -> addAfter = id },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-
-            // ── 底部小工具条：默认只有这一行 ──
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Button(onClick = { sheetOpen = true }, shape = RoundedCornerShape(50)) {
-                    Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.dsh_workflow_editor_add_node))
-                }
-                OutlinedButton(
-                    onClick = { draft = def.copy(nodes = def.nodes.map { it.copy(posX = 0, posY = 0) }) },
-                    shape = RoundedCornerShape(50),
-                ) { Text(stringResource(R.string.dsh_workflow_editor_auto_layout)) }
-                Spacer(Modifier.weight(1f))
-                if (errors.isNotEmpty()) {
-                    Text(
-                        text = stringResource(R.string.dsh_workflow_editor_errors) + " " + errors.size,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.dsh_workflow_editor_edges) + " " + def.edges.size,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        // 幽灵卡：拖出过程中跟着手指，提示「松手会落在哪」。
-        ghost?.let { (label, pos) ->
-            Surface(
-                shape = RoundedCornerShape(50),
-                tonalElevation = 8.dp,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.offset {
-                    androidx.compose.ui.unit.IntOffset(
-                        (pos.x - rootOrigin.x).toInt(),
-                        (pos.y - rootOrigin.y).toInt(),
-                    )
-                },
-            ) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-            }
-        }
-
-        // ── 节点抽屉：往上拖可以「拖出」一个节点；点一下在画布中央新建 ──
-        if (sheetOpen) {
-            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))) {
+            // ── 幽灵卡：拖出时跟着手指，一眼看出松手会落在哪 ──
+            ghost?.let { (label, pos) ->
                 Surface(
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
+                    tonalElevation = 8.dp,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.offset {
+                        androidx.compose.ui.unit.IntOffset(
+                            (pos.x - rootOrigin.x - 40 * density).toInt(),
+                            (pos.y - rootOrigin.y - 20 * density).toInt(),
+                        )
+                    },
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+            }
+
+            // ── 节点抽屉：往外拖到画布 = 在那个位置新建；点一下 = 画布中央新建 ──
+            if (sheetOpen) {
+                // 拖动中把抽屉与遮罩**视觉收起**（保持组合：移除会让拖动的手势源消失）。
+                if (ghost == null) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)),
+                    )
+                }
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .alpha(if (ghost != null) 0f else 1f),
                     shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
                     tonalElevation = 6.dp,
                     color = MaterialTheme.colorScheme.surface,
                 ) {
                     Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
@@ -319,12 +322,12 @@ internal fun WorkflowEditorSurface(
                                 modifier = Modifier.weight(1f),
                             )
                             IconButton(onClick = { sheetOpen = false }) {
-                                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.dsh_workflow_action_cancel))
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = stringResource(R.string.dsh_workflow_action_cancel),
+                                )
                             }
                         }
-                        // 注意：这里**不能**套任何滚动容器 —— 抽屉是纵向拖出的，外层滚动会先把纵向拖动
-                        // 吃掉（真机反馈「抽屉里的卡片拖不动」）。7 个类型排成两列 4 行，放得下，
-                        // 也就不需要滚动。
                         Column(
                             Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -336,8 +339,10 @@ internal fun WorkflowEditorSurface(
                                 ) {
                                     for (kind in chunk) {
                                         val kindLabel = stringResource(kind.labelRes)
-                                        SheetNodeRow(
+                                        SheetNodeCard(
                                             label = kindLabel,
+                                            subtitle = kind.type.id,
+                                            accent = workflowNodeAccent(kind.type),
                                             modifier = Modifier.weight(1f),
                                             onTap = {
                                                 addNode(kind, null)
@@ -347,7 +352,6 @@ internal fun WorkflowEditorSurface(
                                             onDragMove = { windowPos -> ghost = kindLabel to windowPos },
                                             onDragEnd = { windowPos ->
                                                 ghost = null
-                                                // 只有落在**画布矩形内**才算拖出；松在抽屉里/导航条上 = 取消。
                                                 val inCanvas = windowPos.x >= canvasOrigin.x &&
                                                     windowPos.x <= canvasOrigin.x + canvasSize.width &&
                                                     windowPos.y >= canvasOrigin.y &&
@@ -365,11 +369,10 @@ internal fun WorkflowEditorSurface(
                                             },
                                         )
                                     }
-                                    // 单数个时补一个占位，避免最后一行被拉宽。
                                     if (chunk.size == 1) Spacer(Modifier.weight(1f))
                                 }
                             }
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(10.dp))
                         }
                     }
                 }
@@ -392,13 +395,14 @@ internal fun WorkflowEditorSurface(
                                 draft = def.copy(nodes = def.nodes.map { if (it.id == updated.id) updated else it })
                             },
                         )
-                        if (def.edges.any { it.from == sel.id || it.to == sel.id }) {
+                        val related = def.edges.filter { it.from == sel.id || it.to == sel.id }
+                        if (related.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 stringResource(R.string.dsh_workflow_editor_edges),
                                 style = MaterialTheme.typography.labelLarge,
                             )
-                            for (e in def.edges.filter { it.from == sel.id || it.to == sel.id }) {
+                            for (e in related) {
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         "${e.from} → ${e.to}" + (if (e.whenExpr.isBlank()) "" else " (${e.whenExpr})"),
@@ -431,7 +435,7 @@ internal fun WorkflowEditorSurface(
         }
     }
 
-    // ── 从输出口拉出：选一个类型，建节点并连上 ──
+    // ── 从输出口拉出后落在空白：选一个类型，建节点并连上 ──
     addAfter?.let { after ->
         AlertDialog(
             onDismissRequest = { addAfter = null },
@@ -479,12 +483,15 @@ internal fun WorkflowEditorSurface(
 }
 
 /**
- * 抽屉里的一行：点一下在画布中央新建；**向上拖出抽屉**同样新建（拖出 = 触摸助手那种「拖一张卡
- * 到画布上」的手感）。这里不放画布坐标 —— 拖出后落到默认位置，用户再拖到位即可。
+ * 抽屉里的一张类型卡：色点 + 名称 + 类型；按住往外拖 = 拖到画布上新建，点一下 = 画布中央新建。
+ *
+ * 拖动事件的坐标是**本卡局部坐标**，加上本卡的窗口位置才是窗口坐标 —— 落点判定统一在窗口坐标里做。
  */
 @Composable
-private fun SheetNodeRow(
+private fun SheetNodeCard(
     label: String,
+    subtitle: String,
+    accent: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier,
     onTap: () -> Unit,
     onDragStart: (Offset) -> Unit,
@@ -492,15 +499,14 @@ private fun SheetNodeRow(
     onDragEnd: (Offset) -> Unit,
 ) {
     var dragged by remember { mutableStateOf(false) }
-    // 本行在窗口里的位置：拖出手势的位置是**本行局部坐标**，要加上它才能得到窗口坐标。
     var rowOrigin by remember { mutableStateOf(Offset.Zero) }
     var pointer by remember { mutableStateOf(Offset.Zero) }
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
         modifier = modifier
             .onGloballyPositioned { rowOrigin = it.positionInWindow() }
-            .pointerInput(label) {
+            .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = { start ->
                         dragged = false
@@ -520,14 +526,21 @@ private fun SheetNodeRow(
                 }
             },
     ) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(
-                stringResource(R.string.dsh_workflow_editor_drag_hint),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(10.dp).background(accent, CircleShape))
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
@@ -545,8 +558,7 @@ private fun NodeParamEditor(node: WorkflowNode, onChange: (WorkflowNode) -> Unit
         if (node.type == WorkflowNodeType.EXECUTE) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (action in WorkflowActionType.entries) {
-                    val picked = node.actionType == action
-                    if (picked) {
+                    if (node.actionType == action) {
                         Button(onClick = {}, shape = RoundedCornerShape(50)) { Text(action.id) }
                     } else {
                         OutlinedButton(
@@ -582,11 +594,10 @@ private fun NodeParamEditor(node: WorkflowNode, onChange: (WorkflowNode) -> Unit
     }
 }
 
-/** 摆位：有落盘坐标就用，全是 0 就按拓扑分层。与预览共用同一条规则（放在这里避免两套）。 */
-private fun layoutFor(def: WorkflowDefinition): List<Triple<String, Float, Float>> {
+/** 摆位：有落盘坐标就用，全是 0 就按拓扑分层（BFS 深度）。与预览共用同一套规则。 */
+private fun editorLayoutFor(def: WorkflowDefinition): List<Triple<String, Float, Float>> {
     val anyPlaced = def.nodes.any { it.posX != 0 || it.posY != 0 }
     if (anyPlaced) return def.nodes.map { Triple(it.id, it.posX.toFloat(), it.posY.toFloat()) }
-    // 分层：从入口节点按出边 BFS 算深度。只是「没摆过」时的初始排布，不参与执行。
     val trigger = def.trigger?.id ?: def.nodes.firstOrNull()?.id ?: return emptyList()
     val depth = mutableMapOf(trigger to 0)
     val queue = ArrayDeque(listOf(trigger))

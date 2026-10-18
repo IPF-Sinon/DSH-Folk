@@ -2,7 +2,9 @@ package me.bmax.apatch.ui.component
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,15 +19,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
@@ -56,6 +69,16 @@ internal fun WorkflowNodeCard(
     modifier: Modifier = Modifier,
     status: WorkflowStepState? = null,
     selected: Boolean = false,
+    /** 点一下（选中/编辑）。 */
+    onTap: (() -> Unit)? = null,
+    /** 拖动卡片：参数是**本卡片坐标系**里的像素位移（自己接手势就不会算错命中）。 */
+    onDrag: ((dxPx: Float, dyPx: Float) -> Unit)? = null,
+    /** 把自己的窗口矩形报给画布：拉线落点判定只在窗口坐标里比。 */
+    onBounds: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
+    /** 从右侧输出口拉线：anchor 是线头（窗口坐标），pointer 是手指（窗口坐标）。 */
+    onPinDrag: ((anchorWindow: Offset, pointerWindow: Offset) -> Unit)? = null,
+    /** 拉线松手（窗口坐标）；连到哪由画布判定。 */
+    onPinDrop: ((pointerWindow: Offset) -> Unit)? = null,
 ) {
     val accent = workflowNodeAccent(node.type)
     val borderColor = when (status) {
@@ -73,13 +96,38 @@ internal fun WorkflowNodeCard(
             it.kind == WorkflowPinKind.EXEC_FALSE || it.kind == WorkflowPinKind.DATA_OUT
     }
 
-    // 卡片不接任何手势：拖/点都由画布统一判定（两处手势会抢触摸）。这里只负责：
-    //  - 把自己交给无障碍焦点（focusable + contentDescription），
-    //  - 由画布通过 onSizeChanged 记录真实尺寸做命中判定（固定高度只是兜底）。
+    // 卡片**自己**接手势（点击助手的 View 也是各自 onTouchEvent）：
+    // 命中不需要算 —— 手指按在这张卡上，事件就到这张卡，不存在「坐标系比错」的可能。
+    //  - 点：选中/编辑；拖：移动这张卡；右侧输出口：拉线（见下面的 outputs 区）；
+    //  - 顺手把自己的窗口矩形报给画布，供拉线落点判定（窗口坐标对窗口坐标）。
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
+    var windowOrigin by remember { mutableStateOf(Offset.Zero) }
+    var cardSize by remember { mutableStateOf(IntSize.Zero) }
+    val originState = rememberUpdatedState(windowOrigin)
+    val sizeState = rememberUpdatedState(cardSize)
+
     val base = modifier
         .width(WorkflowNodeCardWidth)
+        .onGloballyPositioned { coords ->
+            windowOrigin = coords.positionInWindow()
+            cardSize = coords.size
+            onBounds?.invoke(coords.boundsInWindow())
+        }
         .focusable()
         .semantics { contentDescription = node.name.ifBlank { workflowNodeLabel(node) } }
+        .then(if (onTap != null) Modifier.clickable { onTap() } else Modifier)
+        .then(
+            if (onDrag != null) {
+                Modifier.pointerInput(node.id) {
+                    detectDragGestures { change, amount ->
+                        change.consume()
+                        onDrag(amount.x, amount.y)
+                    }
+                }
+            } else {
+                Modifier
+            }
+        )
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -138,7 +186,41 @@ internal fun WorkflowNodeCard(
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-,
+                                .then(
+                                    if (onPinDrag == null && onPinDrop == null) {
+                                        Modifier
+                                    } else {
+                                        // key 用 Unit：卡片在拖动中位置一直在变，若拿坐标当 key，
+                                        // 手势检测器会被反复取消重建（正是画布那次的坑）。
+                                        Modifier.pointerInput(Unit) {
+                                            var pointer = Offset.Zero
+                                            detectDragGestures(
+                                                onDragStart = { start ->
+                                                    val origin = originState.value
+                                                    val size = sizeState.value
+                                                    pointer = origin + start
+                                                    val anchor = Offset(
+                                                        origin.x + size.width,
+                                                        origin.y + WorkflowNodeCardAnchorY * density,
+                                                    )
+                                                    onPinDrag?.invoke(anchor, pointer)
+                                                },
+                                                onDragEnd = { onPinDrop?.invoke(pointer) },
+                                                onDragCancel = { onPinDrop?.invoke(pointer) },
+                                            ) { change, amount ->
+                                                change.consume()
+                                                pointer += amount
+                                                val origin = originState.value
+                                                val size = sizeState.value
+                                                val anchor = Offset(
+                                                    origin.x + size.width,
+                                                    origin.y + WorkflowNodeCardAnchorY * density,
+                                                )
+                                                onPinDrag?.invoke(anchor, pointer)
+                                            }
+                                        }
+                                    },
+                                ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                             horizontalAlignment = Alignment.End,
                         ) {
@@ -196,7 +278,7 @@ private fun PinLabel(pin: WorkflowPinSpec, modifier: Modifier = Modifier) {
 
 /** 按节点类型给一条语义色带。取主题角色色，亮/暗都成立。 */
 @Composable
-private fun workflowNodeAccent(type: WorkflowNodeType): Color = when (type) {
+internal fun workflowNodeAccent(type: WorkflowNodeType): Color = when (type) {
     WorkflowNodeType.TRIGGER -> MaterialTheme.colorScheme.tertiary
     WorkflowNodeType.EXECUTE -> MaterialTheme.colorScheme.primary
     WorkflowNodeType.CONDITION, WorkflowNodeType.LOGIC -> MaterialTheme.colorScheme.secondary

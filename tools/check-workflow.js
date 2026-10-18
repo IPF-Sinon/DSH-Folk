@@ -255,8 +255,8 @@ ok(/WorkflowBlueprintCanvas\(/.test(SRC.dialogs) && !/private fun NodeCard\(/.te
 ok(/onNodeDrag = \{ id, dxPx, dyPx ->[\s\S]{0,900}?it\.copy\(posX = nx, posY = ny\)/.test(SRC.editorSurface),
   "拖动把坐标写回定义（像素→dp→吸附网格，摆位不落盘下次打开就会自己跳）");
 ok(/WorkflowBlueprintCanvas\(/.test(SRC.editorSurface) &&
-  /awaitEachGesture/.test(SRC.canvas) && /hitTest\(/.test(SRC.canvas),
-  "编辑页用同一块画布，拖动/平移/拉线由画布统一处理（不再让卡片与画布抢手势）");
+  /onWireDrop/.test(SRC.canvas) && !/hitTest\(/.test(SRC.canvas),
+  "编辑页用同一块画布；手势由卡片自己接（画布不再手算命中）");
 ok(/private fun RunDetailDialog\(/.test(SRC.screen) && /WorkflowStore\.readLog/.test(SRC.screen),
   "详情是弹窗，且把当时那一版定义与日志都摆出来");
 ok(/warn = tool\.state != "ok"/.test(SRC.screen),
@@ -487,8 +487,8 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   ok(/MaterialTheme\.colorScheme\.error/.test(card) && /MaterialTheme\.colorScheme\.tertiary/.test(card),
     "运行态边框按状态取色（失败 error、成功 tertiary）");
   ok(/WorkflowSchema\.defaultPinsFor\(node\)/.test(card), "引脚行来自 defaultPinsFor（与模型同一份推导）");
-  ok(/cubicTo\(/.test(canvas) && /awaitEachGesture/.test(canvas),
-  "画布：贝塞尔连线 + 单一手势循环（拖动卡片/平移画布/输出口拉线）");
+  ok(/cubicTo\(/.test(canvas) && /onWireDrop/.test(canvas) && /detectDragGestures/.test(canvas),
+  "画布：贝塞尔连线 + 空白处平移 + 拉线落点回调");
   ok(/drawBlueprintDots/.test(canvas) && /24\.dp/.test(canvas), "画布有点阵网格");
   ok(!/fun layoutNodes\(/.test(canvas), "画布不自带布局：坐标由调用方传入（预览与编辑器共用摆位）");
   const preview = SRC.dialogs.slice(SRC.dialogs.indexOf("internal fun WorkflowGraphPreview("));
@@ -555,20 +555,23 @@ console.log("\u2500 #16h 坐标换算与手势结构（拖动 1:1 的契约）")
   ok(/WorkflowGeometry\.pxToDp\(dxPx, density\)/.test(SRC.editorSurface) &&
     /WorkflowGeometry\.snapToGridDp\(/.test(SRC.editorSurface), "编辑页写回走 pxToDp + snapToGridDp");
   ok(!/dxPx \/ density/.test(SRC.editorSurface), "编辑页不再裸除密度（截断/加速的来源）");
-  // 手势：单一循环、不回因数据变化重启、命中用实测尺寸。
-  ok(/awaitEachGesture/.test(SRC.canvas) && !/detectTapGestures/.test(SRC.canvas) &&
-    !/detectDragGestures/.test(SRC.canvas), "画布只有一个手势循环（不再 tap/drag 两套抢触摸）");
-  ok(/pointerInput\(Unit\)/.test(SRC.canvas), "手势 key 是 Unit（不会因 positions/definition 每帧变化而重启）");
-  ok(/onSizeChanged \{ sizes\[node\.id\] = it \}/.test(SRC.canvas) && /tolerance/.test(SRC.canvas),
-    "命中用实测尺寸 + 容差（卡片下半截也点得到）");
-  ok(/wireEnd/.test(SRC.canvas), "拉线时画临时曲线");
-  ok(/onWireConnect/.test(SRC.canvas) && /onWireConnect = \{ fromId, toId ->/.test(SRC.editorSurface),
+  // 手势新模型（对齐点击助手）：卡片各自 onTouchEvent，画布只接空白处。
+  ok(/detectDragGestures/.test(SRC.card) && /clickable/.test(SRC.card),
+    "卡片自己接点/拖手势（命中不需要手算，也就不会比错坐标系）");
+  ok(/boundsInWindow/.test(SRC.card) && /onPinDrag/.test(SRC.card),
+    "卡片把自己的窗口矩形与拉线事件报给画布（窗口坐标对窗口坐标）");
+  ok(!/hitTest/.test(SRC.canvas) && !/CARD_H_FALLBACK_DP/.test(SRC.canvas),
+    "画布不再手算命中（删掉了固定高度兜底那套）");
+  ok(/pointerInput\(Unit\)/.test(SRC.card), "卡片手势 key 是 Unit（拖动中位置变化不会重启检测器）");
+  ok(/wireAnchor/.test(SRC.canvas) && /wirePointer/.test(SRC.canvas),
+    "拉线两端都用窗口坐标（不随平移的画布原点换算），所以线跟手");
+  ok(/onWireDrop/.test(SRC.canvas) && /onWireDrop = \{ fromId, toId ->/.test(SRC.editorSurface),
     "松手落在卡片上 = 连边（不是一律弹菜单）");
   // 卡片：不接手势，交给 focusable/semantics 与画布实测。
   ok(/focusable\(\)/.test(SRC.card) && /semantics \{ contentDescription/.test(SRC.card),
     "卡片可被无障碍聚焦，并带名称描述");
-  ok(!/pointerInput\(/.test(SRC.card) && !/detectDragGestures/.test(SRC.card),
-    "卡片不接触摸手势（避免与画布抢）");
+  ok(/detectDragGestures/.test(SRC.card) && !/hitTest/.test(SRC.card),
+    "卡片自己处理拖动（不再依赖画布命中判定）");
   // 平移只应用一次。
   ok(/translationX = pan\.x/.test(SRC.canvas) && !/pos\.x \+ pan/.test(SRC.canvas),
     "画布平移只在图层上应用一次（不再在卡片偏移里重复加）");
