@@ -397,140 +397,7 @@ internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
 
 /** 一张节点卡：左侧按类型着色的竖条 + 名称 + 类型/动作副标题。 */
 @Composable
-private fun NodeCard(
-    node: WorkflowNode,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
-    onDrag: ((Float, Float) -> Unit)? = null,
-    /** 类型名水印：编辑页开着（卡片大、好看），预览/详情里关掉 —— 小卡片上它会和标题挤成两行字。 */
-    showWatermark: Boolean = false,
-) {
-    val accent = nodeColor(node.type)
-    val base = modifier.width(NODE_W).height(NODE_H)
-    val clickable = if (onClick != null) base.clickable { onClick() } else base
-    val draggable = if (onDrag != null) {
-        clickable.pointerInput(node.id) {
-            detectDragGestures { change, amount ->
-                change.consume()
-                onDrag(amount.x, amount.y)
-            }
-        }
-    } else {
-        clickable
-    }
-    // 规格：卡片**不按分类着色**（统一 surfaceVariant + 细描边），颜色语义挂在「针脚」上 ——
-    // 这里用一个 18dp 圆点承担（未连线是空的，我们暂无连接状态，所以是实心加点描边）；
-    // 卡片内容之下叠一个 alpha 0.12 的**水印**（用类型名而不是图标：效果一样，且不必再引一批图标）；
-    // 选中 = 换底色 secondaryContainer（规格里唯一的选中表达）。
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(if (selected) 1.dp else 0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-        tonalElevation = if (selected) 6.dp else 3.dp,
-        modifier = draggable,
-    ) {
-        Box {
-            if (showWatermark) {
-                Text(
-                    node.type.id,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f),
-                    modifier = Modifier.align(Alignment.Center),
-                )
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-            ) {
-                Box(
-                    Modifier
-                        .size(18.dp)
-                        .background(accent, CircleShape),
-                )
-                Spacer(Modifier.width(8.dp))
-                Column {
-                    Text(
-                        node.name.ifBlank { nodeLabel(node) },
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                    )
-                    Text(
-                        nodeSubtitle(node),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * 画布网格：方格线（规格：12dp 单元格、每 10 格加粗），颜色取主题 outline 压暗。
- */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGrid(
-    normal: androidx.compose.ui.graphics.Color,
-    strong: androidx.compose.ui.graphics.Color,
-) {
-    // 方格线而不是点阵：点击助手的画布是 12dp 方格（源码 GRID_DP_SIZE=12），普通线 0.5px、
-    // 每 10 格加粗 2px。加粗那一档让画布有尺度感，不至于看成一片细线。
-    val step = CANVAS_STEP_DP.dp.toPx()
-    val thin = 0.5f
-    val thick = 2f
-    var i = 0
-    var x = 0f
-    while (x < size.width) {
-        drawLine(if (i % 10 == 0) strong else normal, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), strokeWidth = if (i % 10 == 0) thick else thin)
-        i++
-        x += step
-    }
-    i = 0
-    var y = 0f
-    while (y < size.height) {
-        drawLine(if (i % 10 == 0) strong else normal, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), strokeWidth = if (i % 10 == 0) thick else thin)
-        i++
-        y += step
-    }
-}
-
 /** 正交连线（横-竖-横）：比直线更容易看清「谁接谁」，也便于在中段放分支标签。 */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawWorkflowEdges(
-    placed: List<PlacedNode>,
-    definition: WorkflowDefinition,
-    color: androidx.compose.ui.graphics.Color,
-) {
-    val byId = placed.associateBy { it.id }
-    for (e in definition.edges) {
-        val from = byId[e.from] ?: continue
-        val to = byId[e.to] ?: continue
-        val x1 = (from.x + 148f).dp.toPx()
-        val y1 = (from.y + 23f).dp.toPx()
-        val x2 = to.x.dp.toPx()
-        val y2 = (to.y + 23f).dp.toPx()
-        val midX = (x1 + x2) / 2f
-        // 3dp + 圆角 + 圆头圆角连接：规格里线宽是 gridSize/4，且**没有箭头也没有端点圆点**
-        // —— 分支语义由源卡片底部的针脚标签承担，线上不写字。
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(x1, y1)
-            lineTo(midX, y1)
-            lineTo(midX, y2)
-            lineTo(x2, y2)
-        }
-        drawPath(
-            path = path,
-            color = color,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                width = 3.dp.toPx(),
-                cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                join = androidx.compose.ui.graphics.StrokeJoin.Round,
-                pathEffect = androidx.compose.ui.graphics.PathEffect.cornerPathEffect(16f),
-            ),
-        )
-    }
-}
-
 /** 节点在画布上的坐标：有落盘坐标就用它，全为 0（AI 生成的定义）时按拓扑分层自动摆。 */
 private data class PlacedNode(val id: String, val x: Float, val y: Float)
 
@@ -568,36 +435,7 @@ private fun overlaps(placed: List<PlacedNode>): Boolean {
 /** 位置吸附到 12dp 网格（规格里卡片的坐标量纲就是格号）。 */
 private fun snapGrid(v: Float): Float = kotlin.math.round(v / 12f) * 12f
 
-/**
- * 分支标签的位置：贴在**源卡片的底部**（规格里 true/false 就是卡片底部的针脚标题）。
- */
-private data class EdgeLabel(val text: String, val x: Float, val y: Float)
-
-private fun edgeLabels(placed: List<PlacedNode>, definition: WorkflowDefinition): List<EdgeLabel> {
-    val byId = placed.associateBy { it.id }
-    // 贴在**源卡片底部**（规格里 true/false 就是卡片底部的针脚标题），而不是浮在连线中段：
-    // 一条线属于哪个节点、走哪个分支，一眼就能对上。
-    val out = mutableListOf<EdgeLabel>()
-    for (p in placed) {
-        val labels = definition.outgoing(p.id).filter { it.whenExpr.isNotBlank() }
-        for ((i, e) in labels.withIndex()) {
-            out += EdgeLabel(e.whenExpr, p.x + i * 46f, p.y + 48f)
-        }
-    }
-    return out
-}
-
 /** 节点副标题：类型 + 动作/关键配置，让用户一眼看出这一步做什么。 */
-private fun nodeSubtitle(node: WorkflowNode): String = when (node.type) {
-    WorkflowNodeType.TRIGGER -> if (node.config("requireDsh") == "1") "trigger · 需要 DSH" else "trigger"
-    WorkflowNodeType.EXECUTE -> (node.actionType?.id ?: "execute") + " · " +
-        node.config("cmd").ifBlank { node.config("text") }.take(18)
-    WorkflowNodeType.CONDITION -> "condition · " + node.config("op") + " " + node.config("value").take(10)
-    WorkflowNodeType.LOGIC -> "logic · " + node.config("op")
-    WorkflowNodeType.EXTRACT -> "extract · " + node.config("var")
-    WorkflowNodeType.WAIT -> "wait · " + node.config("ms").ifBlank { node.config("untilDsh") }
-}
-
 /**
  * 定义编辑器（全屏层）：改节点、改参数、挪位置、加删连线。
  *
@@ -955,23 +793,6 @@ private fun editableKeys(node: WorkflowNode): List<String> = when (node.type) {
     WorkflowNodeType.LOGIC -> listOf("op", "sources")
     WorkflowNodeType.EXTRACT -> listOf("source", "mode", "pattern", "path", "var")
     WorkflowNodeType.WAIT -> listOf("ms", "untilDsh")
-}
-
-private fun nodeLabel(node: WorkflowNode): String = when (node.type) {
-    WorkflowNodeType.TRIGGER -> "trigger"
-    WorkflowNodeType.EXECUTE -> node.actionType?.id ?: "execute"
-    WorkflowNodeType.CONDITION -> "condition"
-    WorkflowNodeType.LOGIC -> "logic"
-    WorkflowNodeType.EXTRACT -> "extract"
-    WorkflowNodeType.WAIT -> "wait"
-}
-
-private fun nodeColor(type: WorkflowNodeType): Color = when (type) {
-    WorkflowNodeType.TRIGGER -> Color(0xFF3B82F6)
-    WorkflowNodeType.EXECUTE -> Color(0xFF10B981)
-    WorkflowNodeType.CONDITION, WorkflowNodeType.LOGIC -> Color(0xFFB58900)
-    WorkflowNodeType.EXTRACT -> Color(0xFF8B5CF6)
-    WorkflowNodeType.WAIT -> Color(0xFF6B7280)
 }
 
 /** 从 trigger 出发做 BFS，按深度分层（预览用；编辑器用的是落盘坐标）。 */

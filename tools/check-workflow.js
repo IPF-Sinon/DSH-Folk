@@ -238,8 +238,9 @@ ok(/dsh_workflow_title/.test(SRC.settings) && /onOpenWorkflow: \(\) -> Unit = \{
   "功能页入口层有工作流一行（不是塞在某个分类里）");
 ok(/onOpenWorkflow = \{ navigator\.navigate\(WorkflowScreenDestination\) \}/.test(SRC.settingsScreen),
   "那一行真的会打开工作流页（不是只声明一个没人用的参数）");
-ok(/drawGrid/.test(SRC.dialogs) && /private fun NodeCard\(/.test(SRC.dialogs),
-  "编辑页/预览是画布（方格线 + 节点卡），不是一列输入框");
+// 阶段 2.4b：旧的画布/节点卡自绘已删除，画布与卡片只剩新组件这一份实现。
+ok(/WorkflowBlueprintCanvas\(/.test(SRC.dialogs) && !/private fun NodeCard\(/.test(SRC.dialogs),
+  "编辑页/预览用同一块画布，旧的自绘节点卡已删除（不是一列输入框）");
 // 编辑页的画布已换成 WorkflowBlueprintCanvas（与预览同一套）；拖动回调的手势量是像素，
 // 先在密度里换算成 dp 再吸附 12dp 网格，最后写回 posX/posY。
 ok(/onNodeDrag = \{ id, dxPx, dyPx ->[\s\S]{0,900}?it\.copy\(posX = nx, posY = ny\)/.test(SRC.dialogs),
