@@ -2958,21 +2958,16 @@ object DshRuntime {
             "dsh-workflow" to WORKFLOW_CLI_SCRIPT,
         )) {
             runCatching {
-                val f = File(bin, name)
-                f.parentFile?.mkdirs()
-                if (f.isFile && runCatching { f.readText() }.getOrNull() == script) return@runCatching
-                f.writeText(script, StandardCharsets.UTF_8)
-                f.setExecutable(true, false)
+                DshRuntimeFiles.writeScript(File(bin, name), script)
             }.onFailure { android.util.Log.w(TAG, "写 $name 失败: ${it.message}") }
         }
         // 权限桥疑难解答：agent 报错时用 `dsh-native troubleshoot` 读它。和上面的脚本一样
         // 按内容比对再写 —— 换应用语言后这份清单必须跟着变，否则 agent 拿到的是上一门语言的步骤。
         runCatching {
-            val doc = File(DshEnv.dshHome(appContext), TROUBLESHOOT_DOC_NAME)
-            val text = nativeTroubleshootDoc()
-            doc.parentFile?.mkdirs()
-            if (doc.isFile && runCatching { doc.readText() }.getOrNull() == text) return@runCatching
-            doc.writeText(text, StandardCharsets.UTF_8)
+            DshRuntimeFiles.writeIfChanged(
+                File(DshEnv.dshHome(appContext), TROUBLESHOOT_DOC_NAME),
+                nativeTroubleshootDoc(),
+            )
         }.onFailure { android.util.Log.w(TAG, "写 $TROUBLESHOOT_DOC_NAME 失败: ${it.message}") }
         // 工作流 DSL 说明：容器里的 `dsh-workflow` 与工具插件的提示词段都读它，写在这儿是为了
         // 「实现改了、文档跟着改」——否则 agent 会照着一份过时说明写定义，然后在校验器那里撞墙。
@@ -2981,16 +2976,14 @@ object DshRuntime {
             val dir = File(DshEnv.dshHome(appContext), WORKFLOW_SAMPLES_DIR)
             dir.mkdirs()
             for ((sampleName, sampleText) in WORKFLOW_SAMPLES) {
-                val f = File(dir, sampleName + ".json")
-                if (f.isFile && runCatching { f.readText() }.getOrNull() == sampleText) continue
-                f.writeText(sampleText, StandardCharsets.UTF_8)
+                DshRuntimeFiles.writeIfChanged(File(dir, sampleName + ".json"), sampleText)
             }
         }.onFailure { android.util.Log.w(TAG, "写工作流样例失败: ${it.message}") }
         runCatching {
-            val doc = File(DshEnv.dshHome(appContext), WORKFLOW_DSL_DOC_NAME)
-            doc.parentFile?.mkdirs()
-            if (doc.isFile && runCatching { doc.readText() }.getOrNull() == WORKFLOW_DSL_DOC) return@runCatching
-            doc.writeText(WORKFLOW_DSL_DOC, StandardCharsets.UTF_8)
+            DshRuntimeFiles.writeIfChanged(
+                File(DshEnv.dshHome(appContext), WORKFLOW_DSL_DOC_NAME),
+                WORKFLOW_DSL_DOC,
+            )
         }.onFailure { android.util.Log.w(TAG, "写 $WORKFLOW_DSL_DOC_NAME 失败: ${it.message}") }
     }
 
@@ -3838,36 +3831,11 @@ object DshRuntime {
      * localhost 也得手动补：dsh web 绑 127.0.0.1，容器内插件回连 http://localhost:3080
      * 时没有这一行就解析不出来。
      */
-    private fun setupResolvConf() {
-        runCatching {
-            // 安装/重装后强制重写：换网络环境后旧的 nameserver 可能已不可达
-            File(DshEnv.rootfs(appContext), "etc/resolv.conf").delete()
-        }
-        ensureContainerDns()
-    }
+    // 实现搬到同包 DshRuntimeEnv（只接 ctx 的纯落地件）；这里保留同名私有壳，调用点零改动。
+    private fun setupResolvConf() = DshRuntimeEnv.setupResolvConf(appContext)
 
     /** 缺失或空文件才写（不覆盖用户自己改过的内容）。 */
-    private fun ensureContainerDns() {
-        runCatching {
-            val rootfs = DshEnv.rootfs(appContext)
-            if (!File(rootfs, "etc").isDirectory) return@runCatching
-            val rc = File(rootfs, "etc/resolv.conf")
-            if (rc.length() == 0L) {
-                rc.writeText(
-                    "nameserver 223.5.5.5\nnameserver 119.29.29.29\n" +
-                        "nameserver 8.8.8.8\nnameserver 1.1.1.1\n",
-                    StandardCharsets.UTF_8,
-                )
-            }
-            val hosts = File(rootfs, "etc/hosts")
-            if (hosts.length() == 0L) {
-                hosts.writeText(
-                    "127.0.0.1\tlocalhost\n::1\tlocalhost ip6-localhost ip6-loopback\n",
-                    StandardCharsets.UTF_8,
-                )
-            }
-        }
-    }
+    private fun ensureContainerDns() = DshRuntimeEnv.ensureDns(appContext)
 
     /** Android 的 uid/gid 分段偏移（AID_USER_OFFSET）。 */
     private const val AID_USER_OFFSET = 100000

@@ -273,6 +273,22 @@ console.log("\n── README（用户看到的说明） ──");
 // pendingRuntimeOp → RuntimeBackupAdviceDialog → 启动 + 回首页；而首页那条（Activity 级弹窗，
 // 可能在任何页面弹出）是直接 DshRuntime.reinstallRuntime —— 两条入口行为不一致。
 {
+  // 阶段 4 第一刀：能抽的抽成同包 internal object，只接显式参数（不碰 DshRuntime 的 private）。
+  {
+    const env = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeEnv.kt");
+    const wf = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeFiles.kt");
+    const rt = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");
+    ok(/internal object DshRuntimeEnv/.test(env) && /internal object DshRuntimeFiles/.test(wf),
+      "DNS 落地与「内容变了才写」已抽成同包对象");
+    ok(/= DshRuntimeEnv\.setupResolvConf\(appContext\)/.test(rt) &&
+      /= DshRuntimeEnv\.ensureDns\(appContext\)/.test(rt),
+      "DshRuntime 只留同名私有壳（调用点零改动）");
+    ok(/DshRuntimeFiles\.writeScript\(/.test(rt) && /DshRuntimeFiles\.writeIfChanged\(/.test(rt),
+      "脚本 / 说明文档 / 样例统一走 writeIfChanged");
+    ok(!/f\.writeText\(script, StandardCharsets\.UTF_8\)/.test(rt), "旧的重复写入块已删除");
+    ok(/setExecutable\(true, false\)/.test(wf), "写脚本时总是补可执行位（内容没变也补）");
+  }
+
   const main = read("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt");
   const screen = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt");
   // 2.1.2 起首页这条提示的更新动作走 updateRuntime（按通道候选取最新）；仍然先摆备份建议。
