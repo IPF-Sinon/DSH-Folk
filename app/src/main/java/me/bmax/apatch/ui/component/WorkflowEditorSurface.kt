@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -46,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -329,14 +331,15 @@ internal fun WorkflowEditorSurface(
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             for (kind in EDITOR_NODE_CATALOG) {
+                                val kindLabel = stringResource(kind.labelRes)
                                 SheetNodeRow(
-                                    label = stringResource(kind.labelRes),
+                                    label = kindLabel,
                                     onTap = {
                                         addNode(kind, null)
                                         sheetOpen = false
                                     },
-                                    onDragStart = { windowPos -> ghost = stringResource(kind.labelRes) to windowPos },
-                                    onDragMove = { windowPos -> ghost = stringResource(kind.labelRes) to windowPos },
+                                    onDragStart = { windowPos -> ghost = kindLabel to windowPos },
+                                    onDragMove = { windowPos -> ghost = kindLabel to windowPos },
                                     onDragEnd = { windowPos ->
                                         ghost = null
                                         // 只有落在**画布矩形内**才算拖出；松在抽屉里/导航条上 = 取消。
