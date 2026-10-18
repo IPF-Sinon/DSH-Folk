@@ -672,8 +672,8 @@ internal fun WorkflowDefinitionEditor(
                 },
                 onNodeDrag = { id, dxPx, dyPx ->
                     // 手势给的是**像素**，位置量纲是 dp：先在密度里换算，再吸附到 12dp 网格。
-                    val dxDp = with(density) { dxPx.toDp().value }
-                    val dyDp = with(density) { dyPx.toDp().value }
+                    val dxDp = dxPx / density.density
+                    val dyDp = dyPx / density.density
                     val node = def.nodes.firstOrNull { it.id == id }
                     if (node != null) {
                         val nx = snapGrid(node.posX + dxDp).toInt().coerceIn(0, 600)
