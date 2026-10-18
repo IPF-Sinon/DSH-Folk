@@ -103,7 +103,7 @@ fun WorkflowDialogHosts() {
         if (request.editing) {
             val initial = remember(request.id) { definitionFromJson(request.originalJson) }
             if (initial != null) {
-                WorkflowDefinitionEditor(
+                WorkflowEditorDialog(
                     initial = initial,
                     title = stringResource(R.string.dsh_workflow_editor_title),
                     onSave = { edited ->
@@ -464,17 +464,6 @@ internal fun WorkflowDefinitionEditor(
         WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
     }
 
-    // 自己的**全屏窗口**：确认弹窗（AI 创建流程那条路）里点「编辑」时，编辑器若只是弹窗内容树里
-    // 的一个 Surface，就会被那个弹窗的窗口裁成小窗（真机反馈「不要再小窗编辑」）。独立 Dialog 之后
-    // 两条入口（确认弹窗 / 设置页）拿到的都是整页。
-    Dialog(
-        onDismissRequest = { if (patchLines.isEmpty()) onCancel() else confirmDiscard = true },
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnClickOutside = false,
-            dismissOnBackPress = true,
-        ),
-    ) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
@@ -685,6 +674,9 @@ internal fun WorkflowDefinitionEditor(
             },
         )
     }
+    // 系统返回与「取消」同一条路：先问「要不要放弃改动」，别让返回键绕过确认。
+    androidx.activity.compose.BackHandler {
+        if (patchLines.isEmpty()) onCancel() else confirmDiscard = true
     }
 }
 
@@ -811,4 +803,30 @@ private fun graphLayers(definition: WorkflowDefinition): List<List<WorkflowNode>
     return (0..maxDepth).map { d ->
         definition.nodes.filter { (depth[it.id] ?: 0) == d }
     }.filter { it.isNotEmpty() }
+}
+
+/**
+ * 审批路径（AI 创建/修改流程时点「编辑」）用的弹窗包装 —— 内容与页面版是同一份。
+ *
+ * 为什么这条还留着弹窗：审批可以出现在任何前台页面，而编辑器页面是导航图里的一个目的地；
+ * 从一个全局弹窗跳到导航页再带回结果，会把「编辑到一半取消/超时」的状态散在两处。所以设置页
+ * 那条走真正的页面（WorkflowEditorScreen），审批这条继续用全屏弹窗。
+ */
+@Composable
+internal fun WorkflowEditorDialog(
+    initial: WorkflowDefinition,
+    title: String,
+    onSave: (WorkflowDefinition) -> Unit,
+    onCancel: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = { /* 由内容里的取消按钮与 BackHandler 处理，避免绕过「放弃改动」确认 */ },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false,
+        ),
+    ) {
+        WorkflowDefinitionEditor(initial = initial, title = title, onSave = onSave, onCancel = onCancel)
+    }
 }

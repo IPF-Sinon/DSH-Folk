@@ -49,6 +49,7 @@ const SRC = {
   settingsScreen: read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt"),
   dialogs: read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowDialogs.kt"),
   screen: read("app/src/main/java/me/bmax/apatch/ui/screen/WorkflowScreen.kt"),
+  editorScreen: read("app/src/main/java/me/bmax/apatch/ui/screen/WorkflowEditorScreen.kt"),
   mainActivity: read("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt"),
   webUiActivity: read("app/src/main/java/me/bmax/apatch/ui/DshWebUiActivity.kt"),
   buildYml: read(".github/workflows/build.yml"),
@@ -513,15 +514,35 @@ console.log("\u2500 #16f 单步超时（阶段 3.2：核对既有实现，不重
     "超时上下限 1s~1h");
 }
 
+console.log("\u2500 #16g 编辑页是次级页面（不是覆盖层）");
+{
+  ok(/@Destination<RootGraph>/.test(SRC.editorScreen) && /fun WorkflowEditorScreen\(/.test(SRC.editorScreen),
+    "编辑页是导航图里的一个目的地");
+  ok(/WorkflowEditorScreenDestination\(isNew = true\)/.test(SRC.screen) &&
+    /WorkflowEditorScreenDestination\(workflowId = def\.id\)/.test(SRC.screen),
+    "新建与编辑都导航到编辑页（不再在本页盖一层）");
+  ok(!/editing\?\.let/.test(SRC.screen) && !/WorkflowDefinitionEditor\(/.test(SRC.screen),
+    "列表页不再内联渲染编辑器");
+  ok(/WorkflowEditorDialog\(/.test(SRC.dialogs) && /WorkflowDefinitionEditor\(initial = initial/.test(SRC.dialogs),
+    "审批那条仍用全屏弹窗包装，内容与页面版同一份");
+  // 内容本身不该再自带 Dialog：弹窗只是包装，页面直接用它。
+  const editorBody = SRC.dialogs.slice(SRC.dialogs.indexOf("internal fun WorkflowDefinitionEditor("));
+  ok(!/Dialog\(/.test(editorBody.slice(0, 1600)), "编辑器内容不再自带 Dialog（弹窗由 WorkflowEditorDialog 负责）");
+  ok(/BackHandler \{/.test(SRC.dialogs), "系统返回与「取消」同一条路（不绕过放弃改动确认）");
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),
     "编辑器接受一份定义（不是只能照着 AI 提交的 JSON 改）");
-  const callers = (SRC.dialogs.match(/WorkflowDefinitionEditor\(/g) || []).length + (SRC.screen.match(/WorkflowDefinitionEditor\(/g) || []).length;
-  ok(callers >= 3, "审批弹窗与设置页共用同一个编辑器（共 " + callers + " 处调用，含定义本身）");
+  // 编辑页是导航图里的次级页面（WorkflowEditorScreen），审批那条走全屏弹窗包装，两者共用同一份内容。
+  const callers = (SRC.dialogs.match(/WorkflowDefinitionEditor\(/g) || []).length +
+    (SRC.screen.match(/WorkflowDefinitionEditor\(/g) || []).length +
+    (SRC.editorScreen.match(/WorkflowDefinitionEditor\(/g) || []).length;
+  ok(callers >= 3, "审批弹窗与编辑页共用同一个编辑器（共 " + callers + " 处，含定义本身与弹窗包装）");
   ok(/WorkflowApprovals\.stopEditing\(request\.id, edited\.toJson\(\)\.toString\(\)\)/.test(SRC.dialogs), "审批路径保存回待批状态");
-  ok(/WorkflowStore\.save\(ctx, edited\)/.test(SRC.screen), "设置页路径直接落盘");
-  ok(/private fun starter\(/.test(SRC.screen) && /WorkflowStore\.newId\(\)/.test(SRC.screen),
+  ok(/WorkflowStore\.save\(ctx, edited\)/.test(SRC.editorScreen), "编辑页保存直接落盘");
+  ok(/internal fun starter\(/.test(SRC.screen) && /WorkflowStore\.newId\(\)/.test(SRC.screen),
     "有「新建流程」的合法起点（不是空定义）");
   ok(/config = mapOf\("action" to "shell", "cmd" to "echo hello"\)/.test(SRC.screen),
     "起点自带一条可跑的命令（空 cmd 一建出来就是错的）");

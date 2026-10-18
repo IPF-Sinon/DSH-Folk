@@ -112,7 +112,6 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
         listKey++
     }
     // 用户自己建/改流程：与审批时的编辑页是**同一个** [WorkflowDefinitionEditor]。
-    var editing by remember { mutableStateOf<WorkflowDefinition?>(null) }
     val newFlowName = stringResource(R.string.dsh_workflow_new_name)
 
     val workflows = remember(listKey, tick) { WorkflowStore.list(ctx) }
@@ -212,7 +211,7 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { editing = starter(newFlowName) }, enabled = enabled) {
+                TextButton(onClick = { navigator.navigate(WorkflowEditorScreenDestination(isNew = true)) }, enabled = enabled) {
                     Text(stringResource(R.string.dsh_workflow_new))
                 }
             }
@@ -238,7 +237,7 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                     errors = errors,
                     dangerousAck = dangerousAck,
                     onDangerousAck = { dangerousAck = it },
-                    onEdit = { editing = def },
+                    onEdit = { navigator.navigate(WorkflowEditorScreenDestination(workflowId = def.id)) },
                     onOpenDetail = {
                         detailRun = runs.firstOrNull { it.workflowId == def.id }
                     },
@@ -352,19 +351,8 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
         )
     }
 
-    // 编辑器铺满整页（它自带全屏 Surface），保存后回到列表并重新读盘。
-    editing?.let { target ->
-        WorkflowDefinitionEditor(
-            initial = target,
-            title = stringResource(R.string.dsh_workflow_editor_title),
-            onSave = { edited ->
-                WorkflowStore.save(ctx, edited)
-                editing = null
-                listKey++
-            },
-            onCancel = { editing = null },
-        )
-    }
+    // 编辑与新建都走次级页面（WorkflowEditorScreen），不再在本页盖一层。
+
 }
 
 /**
@@ -373,7 +361,7 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
  * 为什么默认给一条 echo 而不是空命令：空 cmd 会被校验器判为不合法，用户点完「新建」第一件
  * 事就是撞见红色错误 —— 从一个能跑的最小流程开始改，才符合「自己建」的心理模型。
  */
-private fun starter(name: String): WorkflowDefinition =
+internal fun starter(name: String): WorkflowDefinition =
     run {
         WorkflowDefinition(
             id = WorkflowStore.newId(),
