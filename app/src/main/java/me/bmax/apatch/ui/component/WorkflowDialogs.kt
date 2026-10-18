@@ -49,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -381,44 +382,16 @@ private const val CANVAS_STEP_DP = 18
  */
 @Composable
 internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
+    // 预览 = 同一块画布、只读模式。摆位仍由 layoutNodes 提供（有落盘坐标就用、压住了退回
+    // 自动分层），于是「预览里看到的」与「编辑器里摆的」是同一份坐标 —— 以前两边各推导一遍，
+    // 漂移过一次。
     val placed = remember(definition) { layoutNodes(definition) }
-    // 主题色必须在 Canvas **外面**取：Canvas 的 lambda 是 DrawScope，不是 composable 作用域，
-    // 在里面读 MaterialTheme 会直接编译不过（CI 已抓过一次）。
-    val edgeColor = MaterialTheme.colorScheme.outline
-    val gridNormal = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
-    val gridStrong = MaterialTheme.colorScheme.outline.copy(alpha = 0.32f)
-    // ?: 0f 而不是 ?: 0：Float? 与 Int 的公共父类型会让 + 190 找不到候选（CI 抓过一次）。
-    val width = (placed.maxOfOrNull { it.x } ?: 0f) + 190f
-    val height = (placed.maxOfOrNull { it.y } ?: 0f) + 70f
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(height.coerceAtMost(420f).dp)
-            .horizontalScroll(rememberScrollState())
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
-    ) {
-        Box(Modifier.width(width.dp).height(height.dp)) {
-            Canvas(Modifier.fillMaxSize()) { drawGrid(gridNormal, gridStrong) }
-            Canvas(Modifier.fillMaxSize()) {
-                drawWorkflowEdges(placed, definition, edgeColor)
-            }
-            for (p in placed) {
-                val node = definition.node(p.id) ?: continue
-                NodeCard(node = node, selected = false, modifier = Modifier.offset(p.x.dp, p.y.dp))
-            }
-            for (lbl in edgeLabels(placed, definition)) {
-                Text(
-                    lbl.text,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (lbl.text == "true") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                    modifier = Modifier
-                        .offset(lbl.x.dp, lbl.y.dp)
-                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 3.dp),
-                )
-            }
-        }
-    }
+    WorkflowBlueprintCanvas(
+        definition = definition,
+        positions = placed.associate { it.id to Offset(it.x, it.y) },
+        readOnly = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** 一张节点卡：左侧按类型着色的竖条 + 名称 + 类型/动作副标题。 */

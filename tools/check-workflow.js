@@ -463,6 +463,22 @@ console.log("\u2500 #16c 步骤状态是 7 态，id 是落盘值，不能改名/
   ok(!/\bSUCCEEDED\b/.test(st), "没有 SUCCEEDED 这种别名（成功是 OK；改名会让已存 run 读不回来）");
 }
 
+console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
+{
+  const card = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowNodeCard.kt");
+  const canvas = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowBlueprintCanvas.kt");
+  ok(card.length > 800 && canvas.length > 800, "两个新组件文件都在");
+  ok(!/Color\(0x/i.test(card + canvas), "新组件里没有硬编码颜色（只用 MaterialTheme.colorScheme）");
+  ok(/MaterialTheme\.colorScheme\.error/.test(card) && /MaterialTheme\.colorScheme\.tertiary/.test(card),
+    "运行态边框按状态取色（失败 error、成功 tertiary）");
+  ok(/WorkflowSchema\.defaultPinsFor\(node\)/.test(card), "引脚行来自 defaultPinsFor（与模型同一份推导）");
+  ok(/cubicTo\(/.test(canvas) && /detectTransformGestures/.test(canvas), "画布：贝塞尔连线 + 缩放平移");
+  ok(/drawBlueprintDots/.test(canvas) && /24\.dp/.test(canvas), "画布有点阵网格");
+  ok(!/fun layoutNodes\(/.test(canvas), "画布不自带布局：坐标由调用方传入（预览与编辑器共用摆位）");
+  const preview = SRC.dialogs.slice(SRC.dialogs.indexOf("internal fun WorkflowGraphPreview("));
+  ok(/WorkflowBlueprintCanvas\(/.test(preview.slice(0, 700)), "预览内部委托新画布（对外签名没变）");
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),
