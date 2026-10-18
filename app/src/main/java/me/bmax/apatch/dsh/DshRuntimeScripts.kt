@@ -2,6 +2,7 @@ package me.bmax.apatch.dsh
 
 import android.content.Context
 import me.bmax.apatch.R
+import me.bmax.apatch.util.appString
 
 /**
  * 容器侧的脚本与文档（原来内嵌在 [DshRuntime] 里，约一千二百行）。
