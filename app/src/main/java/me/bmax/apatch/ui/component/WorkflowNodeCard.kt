@@ -139,13 +139,14 @@ internal fun WorkflowNodeCard(
 private fun WorkflowPinRow(pin: WorkflowPinSpec, alignEnd: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (alignEnd) {
-            PinLabel(pin, alignEnd)
+            PinLabel(pin, Modifier.weight(1f, fill = false))
             Spacer(Modifier.width(4.dp))
             PinDot(pin)
         } else {
             PinDot(pin)
             Spacer(Modifier.width(4.dp))
-            PinLabel(pin, alignEnd)
+            // weight 是 RowScope 扩展：必须在 Row 的 lambda 里取，不能带进子 composable
+            PinLabel(pin, Modifier.weight(1f, fill = false))
         }
     }
 }
@@ -164,7 +165,7 @@ private fun PinDot(pin: WorkflowPinSpec) {
 }
 
 @Composable
-private fun PinLabel(pin: WorkflowPinSpec, alignEnd: Boolean) {
+private fun PinLabel(pin: WorkflowPinSpec, modifier: Modifier = Modifier) {
     if (pin.label.isBlank()) return
     Text(
         text = pin.label,
@@ -172,7 +173,7 @@ private fun PinLabel(pin: WorkflowPinSpec, alignEnd: Boolean) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f, fill = false),
+        modifier = modifier,
     )
 }
 
