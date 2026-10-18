@@ -647,6 +647,16 @@ internal fun DshSettingsScreen(
                     onGoUpdateApp = {
                         navigator.navigate(GeneralSettingsScreenDestination("general_check_update"))
                     },
+                    onUpdateRuntime = { preserve ->
+                        // 更新 = 按通道候选取最新（测试通道会取到更新的正式版）；重装仍装回已装那份
+                        pendingRuntimeOp = {
+                            DshRuntime.updateRuntime(preserve)
+                            navigator.navigate(HomeScreenDestination) {
+                                popUpTo(NavGraphs.root)
+                                launchSingleTop = true
+                            }
+                        }
+                    },
                     onReinstallRuntime = { preserve ->
                         // 会替换整个 rootfs（rootfs/tmp 等不在保留清单）——先弹「建议备份」，用户决定后再跑
                         pendingRuntimeOp = {

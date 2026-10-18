@@ -286,6 +286,9 @@ ok(/CHANNEL_STABLE, CHANNEL_SLIM -> true/.test(rt) && /CHANNEL_BETA, CHANNEL_SLI
 ok(/private fun fetchNewestMeta\(\)/.test(rt) &&
   /val meta = fetchNewestMeta\(\) \?: return@withContext RuntimeCheckResult\(failure = true\)/.test(rt),
   "检查更新在候选里取最新（不再只看所选通道那一个 tag）");
+ok(/fun updateRuntime\(preserveData: Boolean = true\)/.test(rt) &&
+  /downloadAndInstall\(preserveData, newest = true\)/.test(rt),
+  "「更新」走候选取最新，与「重装」分道（更新曾借用重装那条，下载的还是旧通道）");
 ok(/private suspend fun downloadAndInstall\(preserveData: Boolean = true, newest: Boolean = true\)/.test(rt) &&
   /val meta = if \(newest\) fetchNewestMeta\(\) else fetchMeta\(\)/.test(rt) &&
   /downloadAndInstall\(preserveData, newest = false\)/.test(rt),

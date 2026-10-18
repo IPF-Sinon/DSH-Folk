@@ -3090,6 +3090,30 @@ object DshRuntime {
     }
 
     /** 重新下载并安装运行时。 */
+    /**
+     * 「更新」：按**通道候选**取最新的一份（测试通道 = 正式 + 测试里更新者）。
+     *
+     * 与 [reinstallRuntime] 分开是必须的：两者以前共用同一条路（UI 上「更新」确认框调的就是
+     * 重装那个回调），于是「测试通道检测到正式版更新」在按下更新后仍然去下当前通道那份 ——
+     * 真机日志里就是这样：检测到新版，下载 URL 还是 runtime-beta-latest。
+     */
+    fun updateRuntime(preserveData: Boolean = true) {
+        scope.launch {
+            bootMutex.withLock {
+                stopServer()
+                clearSeedLedger()
+                downloadAndInstall(preserveData, newest = true)
+                if (_state.value.phase != DshPhase.ERROR) {
+                    setupResolvConf()
+                    seedPlugins()
+                    ensureFsBridgeCli()
+                    if (checkPortConflict()) return@withLock
+                    startAndAwait()
+                }
+            }
+        }
+    }
+
     fun reinstallRuntime(preserveData: Boolean = true) {
         scope.launch {
             bootMutex.withLock {

@@ -425,6 +425,7 @@ fun FunctionSettingsContent(
     onGoUpdateApp: () -> Unit,
     /** 重新下载并覆盖容器。 */
     onReinstallRuntime: (Boolean) -> Unit,
+    onUpdateRuntime: (Boolean) -> Unit,
     runtimeCheckRevision: Int,
     onCheckRuntimeUpdateRequested: () -> Unit,
     onCheckRuntimeUpdate: suspend () -> RuntimeCheckResult,
@@ -1158,7 +1159,8 @@ fun FunctionSettingsContent(
                                         confirmButton = {
                                             TextButton(onClick = {
                                                 updateConfirming = false
-                                                onReinstallRuntime(true)
+                                                // 更新走「候选取最新」，不能借用重装那条（那条装回已装那份）
+                                                onUpdateRuntime(true)
                                             }) { Text(stringResource(R.string.dsh_runtime_update_go)) }
                                         },
                                         dismissButton = {
