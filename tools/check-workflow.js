@@ -424,6 +424,45 @@ console.log("\u2500 #16 格式放到了模型必定看得见的地方");
     "用了 Modifier.offset 就必须导入它");
 }
 
+console.log("\u2500 #16b 引脚展示模型（阶段 1：纯加法，不改落盘格式）");
+{
+  // 引脚是**展示层**：枚举 + 规格 + 按类型推导。它们不参与落盘、不改变校验与执行 ——
+  // 这条断言组的作用就是钉住「它只是加法」：既要有，也不能偷偷进到 JSON 里。
+  ok(/internal enum class WorkflowPinKind/.test(SRC.models), "有 WorkflowPinKind");
+  for (const kind of ["EXEC_IN", "EXEC_OUT", "EXEC_TRUE", "EXEC_FALSE", "DATA_IN", "DATA_OUT"]) {
+    ok(new RegExp(`\\b${kind}\\b`).test(SRC.models), `引脚种类含 ${kind}`);
+  }
+  ok(/internal data class WorkflowPinSpec\(/.test(SRC.models) &&
+    /val dataType: String = "string"/.test(SRC.models) &&
+    /val defaultValue: String = ""/.test(SRC.models),
+    "WorkflowPinSpec 的两个新字段都有默认值（旧构造点不用改）");
+  const pins = SRC.models.slice(SRC.models.indexOf("fun defaultPinsFor("));
+  ok(pins.length > 200, "WorkflowSchema 里有 defaultPinsFor");
+  ok(/WorkflowNodeType\.CONDITION, WorkflowNodeType\.LOGIC -> listOf\(execIn, yes, no\)/.test(pins),
+    "条件/逻辑节点给出真、假两条出口");
+  ok(/WorkflowNodeType\.TRIGGER ->[\s\S]{0,220}?EXEC_FALSE/.test(pins),
+    "trigger 要求 DSH 时也有「未就绪」出口（它本来就走假分支）");
+  ok(/WorkflowActionType\.SHELL, WorkflowActionType\.DSH -> listOf\([\s\S]{0,160}?"cmd"/.test(pins),
+    "shell/dsh 节点的参数引脚是 cmd");
+  ok(/WorkflowNodeType\.EXTRACT -> listOf\([\s\S]{0,200}?DATA_OUT/.test(pins),
+    "extract 节点有变量输出引脚");
+  // 「只是展示」的反向证据：引脚不进 JSON 编解码。
+  ok(!/pin/i.test(SRC.models.slice(SRC.models.indexOf("fun toJson"), SRC.models.indexOf("fun toJson") + 4000)),
+    "引脚不写进 toJson（落盘格式没变）");
+}
+
+console.log("\u2500 #16c 步骤状态是 7 态，id 是落盘值，不能改名/新增");
+{
+  // 交接文档任务 1.4 说「完善五态 Pending/Running/Succeeded/Skipped/Failed」——那个前提是错的：
+  // 实际是 7 态，而且 id 字符串会写进盘上的 run JSON。这里把 id 逐个钉死。
+  const st = SRC.models.slice(SRC.models.indexOf("enum class WorkflowStepState"), SRC.models.indexOf("enum class WorkflowStepState") + 400);
+  for (const pair of [["PENDING", "pending"], ["RUNNING", "running"], ["OK", "ok"], ["FAILED", "failed"],
+    ["TIMEOUT", "timeout"], ["SKIPPED", "skipped"], ["CANCELED", "canceled"]]) {
+    ok(st.includes(pair[0] + "(\"" + pair[1] + "\")"), "步骤状态 " + pair[0] + "(" + pair[1] + ")");
+  }
+  ok(!/\bSUCCEEDED\b/.test(st), "没有 SUCCEEDED 这种别名（成功是 OK；改名会让已存 run 读不回来）");
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),

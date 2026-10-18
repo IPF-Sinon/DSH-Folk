@@ -216,4 +216,19 @@ if (bad) {
     console.log(`\n${bad} 个文件有词法问题`);
     process.exit(1);
 }
+
+// 再把 tools/kt-lint.js 跑一遍：它多查《重构交接规范》第四节那五条（滚动修饰符导错包、
+// 漏导入 offset/Alignment/Arrangement、回调里直接调 @Composable、"${$var}" 模板、
+// 图标没导入）以及括号配平。以前它只是个手动工具，没人调用 —— 于是那些错只能在 CI 编译时
+// 才暴露，白烧一轮。放在这里，一次 CI 就能看见。
+{
+    const { spawnSync } = require('child_process');
+    const r = spawnSync(process.execPath, [path.join(__dirname, 'kt-lint.js'), ...files], {
+        stdio: 'inherit',
+    });
+    if (r.status !== 0) {
+        console.log('\nkt-lint（含静态检查五条）未通过');
+        process.exit(1);
+    }
+}
 console.log(`✓ ${files.length} 个 Kotlin 文件词法闭合（字符串 / 模板 / 注释均未泄漏）`);

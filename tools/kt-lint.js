@@ -283,6 +283,109 @@ function scan(src) {
   return { brace, paren, comment, errors };
 }
 
+/**
+ * 从 `open`（指向 `{` 的下标）找配对的 `}`，**跳过字符串、字符字面量与字符串模板**。
+ *
+ * 不做这件事的配对在 Kotlin 里必然误报：`"${x}"`、`"{a}"` 这类字面量里的花括号会把
+ * 深度算错，于是「回调体」被一路吃到下一个组件声明，看起来就像在 onClick 里调了组件。
+ */
+function matchBrace(code, open) {
+  let depth = 0;
+  for (let i = open; i < code.length; i++) {
+    const c = code[i];
+    if (c === '"') {
+      i++;
+      while (i < code.length && code[i] !== '"') {
+        if (code[i] === "\\") i++;
+        else if (code[i] === "$" && code[i + 1] === "{") { i = matchBrace(code, i + 1); }
+        i++;
+      }
+    } else if (c === "'") {
+      i++;
+      while (i < code.length && code[i] !== "'") { if (code[i] === "\\") i++; i++; }
+    } else if (c === "{") depth++;
+    else if (c === "}") { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+}
+/**
+ * 《重构交接规范》第四节那五条静态检查。
+ *
+ * 五条全部来自真实踩坑（其中四条是这一轮 CI 红过的）：
+ *  1. `verticalScroll/horizontalScroll` 从 `.layout` 导入 —— 那个路径根本不存在；
+ *  2. 用了 `Modifier.offset` / `Alignment` / `Arrangement` 却漏导入；
+ *  3. 在 `onClick` 之类的回调里直接调本文件的 `@Composable`（编译期才会报）；
+ *  4. 字符串模板写成 `"${$var}"`；
+ *  5. 新增 `Icons.*.X` 却没导入那个图标。
+ *
+ * 它们都由编译器最终发现，但那时已经烧掉一轮 CI；放在这里一轮就能看见。
+ * 检查全部**保守**（先剥注释，只在明确使用时触发），宁可漏报也不冤枉人 ——
+ * 一把会狼来了的门禁比没有门禁更糟。
+ */
+function composeHygiene(src) {
+  const out = [];
+  // 剥掉注释：KDoc 里的 `[Icons.Filled.PlayArrow]` 不是使用，不该要求导入。
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  if (/^import\s+androidx\.compose\.foundation\.layout\.(verticalScroll|horizontalScroll)\b/m.test(src)) {
+    out.push("滚动修饰符导错包：verticalScroll/horizontalScroll 在 androidx.compose.foundation，不在 .layout");
+  }
+  if (code.includes("${$")) {
+    out.push('字符串模板写成 "${$var}"（连续 ${ 与 $ 不是合法 Kotlin；变量用 "$var"，表达式用 "${expr}"）');
+  }
+  const isCompose = /@Composable/.test(code);
+  if (isCompose) {
+    const wild = [
+      /^import\s+androidx\.compose\.foundation\.layout\.\*$/m,
+      /^import\s+androidx\.compose\.ui\.\*$/m,
+    ];
+    const need = [
+      [/\bModifier\.offset\s*\(/, /^import\s+androidx\.compose\.foundation\.layout\.offset$/m,
+        "Modifier.offset（需 import androidx.compose.foundation.layout.offset）"],
+      [/(?<![\w.])Alignment\./, /^import\s+androidx\.compose\.ui\.Alignment$/m,
+        "Alignment（需 import androidx.compose.ui.Alignment）"],
+      [/(?<![\w.])Arrangement\./, /^import\s+androidx\.compose\.foundation\.layout\.Arrangement$/m,
+        "Arrangement（需 import androidx.compose.foundation.layout.Arrangement）"],
+    ];
+    for (const [use, imp, label] of need) {
+      if (use.test(code) && !imp.test(src) && !wild.some((w) => w.test(src))) out.push("用了但没导入：" + label);
+    }
+    // 回调闭包里直接调 @Composable：只在「本文件自己定义了同名 composable」时判，避免跨文件误报。
+    const composables = new Set(
+      [...code.matchAll(/@Composable[\s\S]{0,120}?fun\s+(\w+)\s*\(/g)].map((m) => m[1]),
+    );
+    if (composables.size > 0) {
+      for (const cb of ["onClick", "onValueChange", "onCheckedChange", "onDismissRequest"]) {
+        const re = new RegExp("\\b" + cb + "\\s*=\\s*\\{", "g");
+        let m;
+        while ((m = re.exec(code))) {
+          const open = m.index + m[0].length - 1;
+          const close = matchBrace(code, open);
+          if (close < 0) continue;
+          const body = code.slice(open + 1, close);
+          for (const name of composables) {
+            if (new RegExp("\\b" + name + "\\s*\\(").test(body)) {
+              out.push("在 " + cb + " 回调里直接调用了 @Composable " + name + "()（回调里只能改状态，组件要写在组合树里）");
+            }
+          }
+        }
+      }
+    }
+  }
+  // 图标：用了 Icons.Filled.X 就必须导入它（或通配导入该组）。
+  const iconWild = /^import\s+androidx\.compose\.material\.icons\.[\w.]+\*$/m;
+  if (!iconWild.test(src)) {
+    const icons = new Set(
+      [...code.matchAll(/\bIcons\.(?:Filled|Outlined|Rounded|Sharp|TwoTone|AutoMirrored\.Filled|AutoMirrored\.Outlined)\.(\w+)/g)]
+        .map((m) => m[1]),
+    );
+    for (const name of icons) {
+      const imported = new RegExp("^import\\s+androidx\\.compose\\.material\\.icons\\.[\\w.]+\\." + name + "$", "m").test(src);
+      if (!imported) out.push("图标 Icons.*." + name + " 没有导入（新增图标必须显式 import）");
+    }
+  }
+  return out;
+}
+
 function main() {
   const files = process.argv.slice(2);
   if (files.length === 0) {
@@ -301,6 +404,7 @@ function main() {
     }
     const r = scan(src);
     r.errors.push(...gluedStatements(src));
+    r.errors.push(...composeHygiene(src));
     // 「调用了但本文件没定义」只对**明确自洽的函数家族**检查。
     //
     // 通配启发式（凡是大写开头的调用都查）会误报一片跨文件的 composable

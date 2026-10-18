@@ -49,6 +49,53 @@ internal object WorkflowSchema {
 
     /** 一个节点保留的输出尾部（状态查询里回给 AI 的那一段）。 */
     const val OUTPUT_TAIL_CHARS = 8_192
+
+    /**
+     * 按节点类型推导引脚表（画布 / 节点卡的渲染依据）。
+     *
+     * **只做展示**：不写回定义、不影响校验与执行、也不改变落盘格式 —— 引脚是「同一份 DSL
+     * 的另一种画法」，不是第二套模型。规则来自 DSL 的既有语义：
+     *  - trigger：只有出口；`requireDsh=1` 时它本来就是「DSH 起不来走假」，所以给真假两条。
+     *  - execute：入口 + 出口 + 参数（shell/dsh 是 `cmd`，notify 是 `text`）。
+     *  - condition / logic：入口 + 真假两条出口。
+     *  - extract：入口 + 出口 + 变量输出。
+     *  - wait：入口 + 出口。
+     */
+    fun defaultPinsFor(node: WorkflowNode): List<WorkflowPinSpec> {
+        val execIn = WorkflowPinSpec("in", "", WorkflowPinKind.EXEC_IN)
+        val execOut = WorkflowPinSpec("out", "", WorkflowPinKind.EXEC_OUT)
+        val yes = WorkflowPinSpec("out_true", "成立", WorkflowPinKind.EXEC_TRUE)
+        val no = WorkflowPinSpec("out_false", "不成立", WorkflowPinKind.EXEC_FALSE)
+        return when (node.type) {
+            WorkflowNodeType.TRIGGER ->
+                if (node.config("requireDsh") == "1") listOf(
+                    WorkflowPinSpec("out", "就绪", WorkflowPinKind.EXEC_TRUE),
+                    WorkflowPinSpec("out_false", "未就绪", WorkflowPinKind.EXEC_FALSE),
+                ) else listOf(execOut)
+
+            WorkflowNodeType.EXECUTE -> listOf(execIn, execOut) + when (node.actionType) {
+                WorkflowActionType.SHELL, WorkflowActionType.DSH -> listOf(
+                    WorkflowPinSpec("cmd", "命令", WorkflowPinKind.DATA_IN, defaultValue = node.config("cmd")),
+                )
+
+                WorkflowActionType.NOTIFY -> listOf(
+                    WorkflowPinSpec("text", "通知", WorkflowPinKind.DATA_IN, defaultValue = node.config("text")),
+                )
+
+                null -> emptyList()
+            }
+
+            WorkflowNodeType.CONDITION, WorkflowNodeType.LOGIC -> listOf(execIn, yes, no)
+
+            WorkflowNodeType.EXTRACT -> listOf(
+                execIn,
+                execOut,
+                WorkflowPinSpec("var", "变量", WorkflowPinKind.DATA_OUT, defaultValue = node.config("var")),
+            )
+
+            WorkflowNodeType.WAIT -> listOf(execIn, execOut)
+        }
+    }
 }
 
 /** 节点类型。`id` 是落盘值，不要改。 */
@@ -141,6 +188,44 @@ internal enum class WorkflowStepState(val id: String) {
     SKIPPED("skipped"),
     CANCELED("canceled");
 }
+
+/**
+ * 引脚种类。**纯展示语义**：不落盘、不参与校验、也不改变执行。
+ *
+ * 画布用它把「控制流」与「数据」分开画（点击助手的 ExecutePin / ValuePin 分法）：
+ * 控制流是入口/出口/真假分支，数据是参数与可被 `${var}` 引用的输出。
+ *
+ * 为什么放在模型里而不是画布文件里：预览、编辑器、节点卡三处都要按类型推导同一张引脚表，
+ * 各画各的就会漂移（预览与编辑器已经因为坐标推导分家漂过一次）。
+ */
+internal enum class WorkflowPinKind {
+    /** 控制流入口：谁把控制流交给我。 */
+    EXEC_IN,
+    /** 控制流出口：接着跑谁。 */
+    EXEC_OUT,
+    /** 条件成立分支。 */
+    EXEC_TRUE,
+    /** 条件不成立分支。 */
+    EXEC_FALSE,
+    /** 数据输入（参数）。未连线时画布就地把值编辑掉。 */
+    DATA_IN,
+    /** 数据输出（可被后续 `${var}` 引用，或接到别的节点的数据输入）。 */
+    DATA_OUT,
+}
+
+/**
+ * 一个引脚的展示规格。`id` 只在画布内唯一，**不落盘**。
+ *
+ * 两个默认值不是可选项：`dataType` 让画布能按类型选控件，`defaultValue` 让未连线时
+ * 有东西可显示；都带默认参数，所以旧的构造点一个都不用改。
+ */
+internal data class WorkflowPinSpec(
+    val id: String,
+    val label: String,
+    val kind: WorkflowPinKind,
+    val dataType: String = "string",
+    val defaultValue: String = "",
+)
 
 /**
  * 一个节点。
