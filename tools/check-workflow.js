@@ -253,7 +253,7 @@ ok(/WorkflowBlueprintCanvas\(/.test(SRC.dialogs) && !/private fun NodeCard\(/.te
 // 编辑页的画布已换成 WorkflowBlueprintCanvas（与预览同一套）；拖动回调的手势量是像素，
 // 先在密度里换算成 dp 再吸附 12dp 网格，最后写回 posX/posY。
 ok(/onNodeDrag = \{ id, dxPx, dyPx ->[\s\S]{0,700}?dragAcc \+= Offset\(/.test(SRC.editorSurface) &&
-    /onNodeDragEnd = \{ id ->[\s\S]{0,700}?WorkflowGeometry\.snapToGridDp\(preview\.second\)/.test(SRC.editorSurface) &&
+    /onNodeDragEnd = \{ id ->[\s\S]{0,700}?WorkflowGeometry\.snapToGridDp\(preview\.second\.x\)/.test(SRC.editorSurface) &&
     /it\.copy\(posX = nx, posY = ny\)/.test(SRC.editorSurface),
   "拖动把坐标写回定义（像素→dp→吸附网格，摆位不落盘下次打开就会自己跳）");
 ok(/WorkflowBlueprintCanvas\(/.test(SRC.editorSurface) &&
@@ -616,7 +616,7 @@ console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回�
   const cv = SRC.canvas;
   // ① 原地颤抖：拖动过程中每帧吸附会把小位移吞掉；现在累加未吸附位移，松手才吸附。
   ok(/dragAcc \+= Offset\(/.test(e) && /dragPreview = id to Offset\(/.test(e) &&
-    /onNodeDragEnd = \{ id ->/.test(e) && /snapToGridDp\(preview\.second\)/.test(e),
+    /onNodeDragEnd = \{ id ->/.test(e) && /snapToGridDp\(preview\.second\.x\)/.test(e),
     "拖动过程中不吸附（累加未吸附位移），松手才吸附网格");
   ok(/dragPreview\?\.let \{ \(id, p\) -> this\[id\] = p \}/.test(e),
     "拖动中画布用预览位置（1:1 跟手，右不抖）");
