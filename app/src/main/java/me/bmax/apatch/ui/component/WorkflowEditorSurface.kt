@@ -184,12 +184,21 @@ internal fun WorkflowEditorSurface(
                     readOnly = false,
                     selectedNodeId = selected,
                     onNodeClick = { id -> selected = if (selected == id) null else id },
+                    // 像素 → dp → 吸附 12dp 网格，全部走 WorkflowGeometry；这里不再裸除密度，
+                    // 也不再用 Int 截断（那正是「拖动有点快/回弹」的来源）。
                     onNodeDrag = { id, dxPx, dyPx ->
                         val node = def.nodes.firstOrNull { it.id == id }
                         if (node != null) {
-                            val nx = (node.posX + (dxPx / density)).toInt().coerceIn(0, 2000)
-                            val ny = (node.posY + (dyPx / density)).toInt().coerceIn(0, 2000)
+                            val nx = WorkflowGeometry.snapToGridDp(node.posX + WorkflowGeometry.pxToDp(dxPx, density))
+                                .coerceIn(0, 2000)
+                            val ny = WorkflowGeometry.snapToGridDp(node.posY + WorkflowGeometry.pxToDp(dyPx, density))
+                                .coerceIn(0, 2000)
                             draft = def.copy(nodes = def.nodes.map { if (it.id == id) it.copy(posX = nx, posY = ny) else it })
+                        }
+                    },
+                    onWireConnect = { fromId, toId ->
+                        if (def.edges.none { it.from == fromId && it.to == toId }) {
+                            draft = def.copy(edges = def.edges + WorkflowEdge(fromId, toId, ""))
                         }
                     },
                     onNodeAddAfter = { id -> addAfter = id },

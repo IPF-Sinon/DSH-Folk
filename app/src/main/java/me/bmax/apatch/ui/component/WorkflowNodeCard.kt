@@ -2,8 +2,7 @@ package me.bmax.apatch.ui.component
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.dsh.WorkflowActionType
@@ -56,10 +56,6 @@ internal fun WorkflowNodeCard(
     modifier: Modifier = Modifier,
     status: WorkflowStepState? = null,
     selected: Boolean = false,
-    onClick: (() -> Unit)? = null,
-    onDrag: ((Float, Float) -> Unit)? = null,
-    /** 点右侧输出口：从「接口」拉出下一个节点的菜单。 */
-    onAddAfter: (() -> Unit)? = null,
 ) {
     val accent = workflowNodeAccent(node.type)
     val borderColor = when (status) {
@@ -77,25 +73,20 @@ internal fun WorkflowNodeCard(
             it.kind == WorkflowPinKind.EXEC_FALSE || it.kind == WorkflowPinKind.DATA_OUT
     }
 
-    val base = modifier.width(WorkflowNodeCardWidth)
-    val clickable = if (onClick != null) base.clickable { onClick() } else base
-    val draggable = if (onDrag != null) {
-        clickable.pointerInput(node.id) {
-            detectDragGestures { change, amount ->
-                change.consume()
-                onDrag(amount.x, amount.y)
-            }
-        }
-    } else {
-        clickable
-    }
+    // 卡片不接任何手势：拖/点都由画布统一判定（两处手势会抢触摸）。这里只负责：
+    //  - 把自己交给无障碍焦点（focusable + contentDescription），
+    //  - 由画布通过 onSizeChanged 记录真实尺寸做命中判定（固定高度只是兜底）。
+    val base = modifier
+        .width(WorkflowNodeCardWidth)
+        .focusable()
+        .semantics { contentDescription = node.name.ifBlank { workflowNodeLabel(node) } }
 
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(if (thick) 2.dp else 1.dp, borderColor),
         tonalElevation = if (selected) 6.dp else 2.dp,
-        modifier = draggable,
+        modifier = base,
     ) {
         Column {
             Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
@@ -147,9 +138,7 @@ internal fun WorkflowNodeCard(
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .then(
-                                    if (onAddAfter != null) Modifier.clickable { onAddAfter() } else Modifier,
-                                ),
+,
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                             horizontalAlignment = Alignment.End,
                         ) {

@@ -2,18 +2,19 @@ package me.bmax.apatch.ui.component
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,29 +25,35 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.dsh.WorkflowDefinition
 import me.bmax.apatch.dsh.WorkflowStepState
 import kotlin.math.abs
 import kotlin.math.max
 
-/** 卡片尺寸常量必须和 [WorkflowNodeCard] 一致，否则命中判定与连线端点都会偏。 */
 private const val CARD_W_DP = 220f
-private const val CARD_H_DP = 92f
-
-/** 右侧这个宽度内按下并拖出 = 从输出口「拉线」，不是拖动卡片。 */
+private const val CARD_H_FALLBACK_DP = 110f
 private const val PIN_ZONE_DP = 34f
 
+private data class Hit(val id: String, val onPin: Boolean)
+
 /**
- * 蓝图式画布：点阵网格 + 贝塞尔连线 + 节点卡，**手势统一在这里处理**。
+ * 蓝图式画布：点阵 + 贝塞尔连线 + 节点卡。**所有触摸都在这里判**（与点击助手的 onTouchEvent 同一
+ * 种模型：按下点落在哪决定「拖卡 / 拉线 / 平移」，没超过 touch slop 的抬起算「点」）。
  *
- * 为什么手势放在画布而不是卡片里：卡片上有 clickable + 自己的拖动手势，画布上又有平移/缩放手势，
- * 三者会抢触摸（真机表现就是「卡片拖不动」）。现在只留两处：
- *  - 画布：单指按在卡片上 → 拖动这张卡片；按在空白 → 平移整张画布；缩放留给双指（只读画布不开）；
- *  - 卡片：只管「点一下」（选中/编辑）。
- * 从右侧输出口按下并拖出 → 松手时回调 [onNodeAddAfter]（弹出「接哪个节点」的菜单），对应点击助手
- * 的「从针脚拉出下一个动作」。
+ * 为什么不再让卡片自己接手势：卡片 clickable + 卡片拖动 + 画布平移三者会抢触摸（真机表现就是
+ * 「卡片拖不动」）；而现在 `pointerInput(Unit)` 保证手势不会因为数据每帧变化而中途重启
+ * （之前用 definition/positions 当 key，拖动时检测器被反复取消重建 → 位移被重复应用 → 觉得「快」）。
+ *
+ * 命中用**实测卡片尺寸**（卡片创建后回传，见 [onMeasured]），再放宽 8dp —— 点击助手的命中区
+ * 也刻意大于视觉尺寸；固定高度只作为还没测量时的兜底。
  */
 @Composable
 internal fun WorkflowBlueprintCanvas(
@@ -57,27 +64,40 @@ internal fun WorkflowBlueprintCanvas(
     stepStates: Map<String, WorkflowStepState> = emptyMap(),
     selectedNodeId: String? = null,
     onNodeClick: ((String) -> Unit)? = null,
-    onNodeDrag: ((String, Float, Float) -> Unit)? = null,
+    onNodeDrag: ((id: String, dxPx: Float, dyPx: Float) -> Unit)? = null,
     onNodeAddAfter: ((String) -> Unit)? = null,
+    onWireConnect: ((fromId: String, toId: String) -> Unit)? = null,
 ) {
-    // 主题色在 Canvas 之外取：Canvas 的 lambda 是 DrawScope。
     val dotColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
     val edgeColor = MaterialTheme.colorScheme.outline
     val trueColor = MaterialTheme.colorScheme.tertiary
     val falseColor = MaterialTheme.colorScheme.error
+    val wireColor = MaterialTheme.colorScheme.primary
 
+    val density = LocalDensity.current.density
     var pan by remember { mutableStateOf(Offset.Zero) }
-    val density = androidx.compose.ui.platform.LocalDensity.current.density
+    var wireFrom by remember { mutableStateOf<String?>(null) }
+    var wireEnd by remember { mutableStateOf<Offset?>(null) }
+    val sizes = remember { mutableStateMapOf<String, IntSize>() }
 
-    // 命中判定要按「当前屏上的位置」算：positions 是 dp，画布也按 dp 偏移，比例恒为 1（暂不做缩放）。
-    fun hitTest(p: Offset): Pair<String, Boolean>? {
+    // 回调用 rememberUpdatedState 包住：pointerInput(Unit) 不重启，也不会看到旧闭包。
+    val clickState = rememberUpdatedState(onNodeClick)
+    val dragState = rememberUpdatedState(onNodeDrag)
+    val addAfterState = rememberUpdatedState(onNodeAddAfter)
+    val connectState = rememberUpdatedState(onWireConnect)
+
+    fun hitTest(p: Offset): Hit? {
+        val tolerance = 8.dp.value
         for (node in definition.nodes.asReversed()) {
             val pos = positions[node.id] ?: continue
+            val w = (sizes[node.id]?.width ?: (CARD_W_DP * density).toInt()).toFloat()
+            val h = (sizes[node.id]?.height ?: (CARD_H_FALLBACK_DP * density).toInt()).toFloat()
             val x = pos.x * density
             val y = pos.y * density
-            if (p.x >= x && p.x <= x + CARD_W_DP * density && p.y >= y && p.y <= y + CARD_H_DP * density) {
-                val inPinZone = p.x >= x + (CARD_W_DP - PIN_ZONE_DP) * density
-                return node.id to inPinZone
+            val pad = tolerance * density
+            if (p.x >= x - pad && p.x <= x + w + pad && p.y >= y - pad && p.y <= y + h + pad) {
+                val onPin = p.x >= x + w - (PIN_ZONE_DP * density)
+                return Hit(node.id, onPin)
             }
         }
         return null
@@ -86,67 +106,120 @@ internal fun WorkflowBlueprintCanvas(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
-            // 点：选中卡片（编辑与只读都需要）；拖：见下面那条。
-            .pointerInput(definition, positions) {
-                detectTapGestures { p -> hitTest(p)?.let { onNodeClick?.invoke(it.first) } }
-            }
-            .then(
-                if (readOnly) Modifier else Modifier.pointerInput(definition, positions) {
-                    // 单指：卡片上 = 拖动卡片；输出口区 = 拉线（松手弹菜单）；空白 = 平移画布。
-                    var dragId: String? = null
-                    var pinId: String? = null
-                    var total = 0f
-                    detectDragGestures(
-                        onDragStart = { start ->
-                            total = 0f
-                            val hit = hitTest(start)
-                            dragId = hit?.first
-                            pinId = if (hit?.second == true) hit.first else null
-                        },
-                        onDragEnd = {
-                            if (pinId != null && total < 24f) onNodeAddAfter?.invoke(pinId!!)
-                            dragId = null
-                            pinId = null
-                        },
-                        onDragCancel = { dragId = null; pinId = null },
-                    ) { change, amount ->
-                        change.consume()
-                        total += abs(amount.x) + abs(amount.y)
-                        if (dragId != null && pinId == null) {
-                            onNodeDrag?.invoke(dragId!!, amount.x, amount.y)
-                        } else if (dragId == null) {
-                            pan += amount
-                        }
-                    }
-                },
-            ),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)),
     ) {
-        Box(Modifier.fillMaxSize().offset { androidx.compose.ui.unit.IntOffset(pan.x.toInt(), pan.y.toInt()) }) {
-            Canvas(Modifier.fillMaxSize()) { drawBlueprintDots(dotColor, pan) }
-            Canvas(Modifier.fillMaxSize()) { drawBlueprintEdges(definition, positions, pan, edgeColor, trueColor, falseColor) }
+        // 内容层：平移只在这里应用一次（之前在卡片 offset 里又加了一遍 pan → 双重位移）。
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = pan.x
+                    translationY = pan.y
+                },
+        ) {
+            Canvas(Modifier.fillMaxSize()) { drawBlueprintDots(dotColor) }
+            Canvas(Modifier.fillMaxSize()) {
+                drawBlueprintEdges(definition, positions, edgeColor, trueColor, falseColor)
+                val fromId = wireFrom
+                val end = wireEnd
+                if (fromId != null && end != null) {
+                    val from = positions[fromId]
+                    if (from != null) {
+                        val sx = (from.x * density) + CARD_W_DP * density
+                        val sy = (from.y * density) + 26.dp.toPx()
+                        val path = Path().apply {
+                            moveTo(sx, sy)
+                            val ctrl = max(abs(end.x - sx) * 0.5f, 60.dp.toPx())
+                            cubicTo(sx + ctrl, sy, end.x - ctrl, end.y, end.x, end.y)
+                        }
+                        drawPath(path, wireColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+                    }
+                }
+            }
             for (node in definition.nodes) {
                 val pos = positions[node.id] ?: continue
                 WorkflowNodeCard(
                     node = node,
                     status = stepStates[node.id],
                     selected = selectedNodeId == node.id,
-                    modifier = Modifier.offset((pos.x + pan.x / density).dp, (pos.y + pan.y / density).dp),
+                    modifier = Modifier
+                        .offset(x = pos.x.dp, y = pos.y.dp)
+                        .onSizeChanged { sizes[node.id] = it },
                 )
             }
         }
+
+        // 手势层：一个循环决定一切。
+        Box(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        val hit = hitTest(down.position)
+                        var dragging = false
+                        var total = 0f
+                        var last = down.position
+                        var mode = when {
+                            readOnly -> "tap"
+                            hit == null -> "pan"
+                            hit.onPin -> "wire"
+                            else -> "drag"
+                        }
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (change.changedToUpIgnoreConsumed()) {
+                                if (!dragging) {
+                                    hit?.let { clickState.value?.invoke(it.id) }
+                                } else if (mode == "wire") {
+                                    val target = hitTest(change.position)
+                                    val fromId = hit?.id
+                                    if (fromId != null) {
+                                        if (target != null && target.id != fromId) {
+                                            connectState.value?.invoke(fromId, target.id)
+                                        } else {
+                                            addAfterState.value?.invoke(fromId)
+                                        }
+                                    }
+                                }
+                                wireFrom = null
+                                wireEnd = null
+                                break
+                            }
+                            val delta = change.position - last
+                            last = change.position
+                            total += abs(delta.x) + abs(delta.y)
+                            if (!dragging && total > viewConfiguration.touchSlop) {
+                                dragging = true
+                                if (mode == "wire") wireFrom = hit?.id
+                            }
+                            if (dragging) {
+                                change.consume()
+                                when (mode) {
+                                    "drag" -> {
+                                        val id = hit?.id
+                                        if (id != null) dragState.value?.invoke(id, delta.x, delta.y)
+                                    }
+                                    "pan" -> pan += delta
+                                    "wire" -> wireEnd = change.position
+                                    else -> Unit
+                                }
+                            }
+                        }
+                    }
+                },
+        )
     }
 }
 
-/** 点阵网格（24dp 步长），随平移一起移动，看起来像一张可拖的纸。 */
-private fun DrawScope.drawBlueprintDots(color: Color, pan: Offset) {
+/** 点阵网格（24dp），随平移一起移动。 */
+private fun DrawScope.drawBlueprintDots(color: Color) {
     val step = 24.dp.toPx()
     val radius = 1.dp.toPx()
-    val ox = pan.x.mod(step)
-    val oy = pan.y.mod(step)
-    var y = oy
+    var y = step / 2f
     while (y < size.height) {
-        var x = ox
+        var x = step / 2f
         while (x < size.width) {
             drawCircle(color = color, radius = radius, center = Offset(x, y))
             x += step
@@ -159,7 +232,6 @@ private fun DrawScope.drawBlueprintDots(color: Color, pan: Offset) {
 private fun DrawScope.drawBlueprintEdges(
     definition: WorkflowDefinition,
     positions: Map<String, Offset>,
-    pan: Offset,
     normal: Color,
     trueColor: Color,
     falseColor: Color,
@@ -168,10 +240,10 @@ private fun DrawScope.drawBlueprintEdges(
     for (edge in definition.edges) {
         val from = positions[edge.from] ?: continue
         val to = positions[edge.to] ?: continue
-        val fromRight = (from.x * density + CARD_W_DP * density + pan.x)
-        val startY = (from.y * density + 26.dp.toPx() + pan.y)
-        val endX = (to.x * density + pan.x)
-        val endY = (to.y * density + 26.dp.toPx() + pan.y)
+        val fromRight = (from.x * density) + CARD_W_DP * density
+        val startY = (from.y * density) + 26.dp.toPx()
+        val endX = to.x * density
+        val endY = (to.y * density) + 26.dp.toPx()
         val ctrl = max(abs(endX - fromRight) * 0.5f, 60.dp.toPx())
         val path = Path().apply {
             moveTo(fromRight, startY)
