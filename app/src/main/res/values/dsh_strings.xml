@@ -781,6 +781,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_storage_cap_desc">Read and write the whole of shared storage (/sdcard) through dsh-fs. Android requires this to be granted on a system settings page.</string>
     <string name="dsh_storage_need_perm">All files access not granted — tap to open system settings</string>
     <string name="dsh_storage_granted">All files access granted</string>
+    <string name="dsh_storage_row_summary">Mount /sdcard into the container and expose dsh-fs. Takes effect after a dsh restart. Tap to toggle, long-press for the allow/deny lists.</string>
     <string name="dsh_storage_mount_hint">Mount /sdcard into the container and expose dsh-fs (both obey the allow/deny lists). The workspace mappings under File access scope live and die with this switch. Long-press to edit the allow/deny directories.</string>
     <string name="dsh_storage_restart_hint">Changes to this switch or the allow/deny lists take effect in the container mount only after restarting dsh (dsh-fs applies them immediately).</string>
 

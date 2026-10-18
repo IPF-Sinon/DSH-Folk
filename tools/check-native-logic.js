@@ -1488,7 +1488,11 @@ console.log("── 限制模式页与弹窗 ──");
     "安全页不再画「权限管理」入口卡（正文就在本页；按层级隐藏，不开逐卡 visible）");
   ok(/if \(!permissionOnly\) \{[\s\S]{0,200}?item\(key = "function_storage_mount"\)/.test(settings),
     "安全页不再画共享存储大卡（它挪进了权限正文的一行；按层级隐藏）");
-  ok(/StorageMountRow\(mountEnabled\)/.test(permHub), "权限正文里有共享存储一行");
+  ok(/StorageMountRow\(/.test(permHub) && /checked = mountEnabled/.test(permHub), "权限正文里有共享存储一行");
+  // 整行可点是既有行为（旧卡片就是 combinedClickable）；只留右边小开关能点，用户感受就是「点不开」。
+  ok(/private fun StorageMountRow\(/.test(permHub) && /combinedClickable\(/.test(permHub) &&
+    /onLongClick = onOpenScope/.test(permHub), "共享存储整行可点（点按切换、长按进文件访问范围）");
+  ok(/dsh_storage_row_summary/.test(permHub), "行内用短文案（长段落留在文件访问范围页）");
   ok(/if \(perm\.channel == PermissionManager\.Channel\.ADB\)/.test(permHub),
     "无线 ADB 只在特权通道选的是无线 ADB 时才出现");
   ok(/private fun StorageMountRow\(/.test(permHub) &&

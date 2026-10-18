@@ -1,6 +1,7 @@
 package me.bmax.apatch.ui.screen.settings
 
 import android.content.Context
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -207,12 +208,16 @@ internal fun PermissionEntriesSection(
             // 共享存储：一个开关管两件事（容器 bind 挂载 + dsh-fs 桥）。原先它是安全页上
             // 一张大卡、说明一大段；现在挪进权限正文，只留标题 + 一行副标题 —— 这一页是
             // 入口，不是说明书（真机反馈「文字少一点」）。
-            StorageMountRow(mountEnabled) { on ->
-                mountEnabled = on
-                DshFileAccess.setMountEnabled(context, on)
-                // 提示词里写着「哪些能力开着」，开关一变就得让容器侧看到新事实
-                DshHostPrompt.writeFacts(context)
-            }
+            StorageMountRow(
+                checked = mountEnabled,
+                onCheckedChange = { on ->
+                    mountEnabled = on
+                    DshFileAccess.setMountEnabled(context, on)
+                    // 提示词里写着「哪些能力开着」，开关一变就得让容器侧看到新事实
+                    DshHostPrompt.writeFacts(context)
+                },
+                onOpenScope = { navigator.navigate(FileAccessScreenDestination) },
+            )
             // 无线 ADB 只在「特权通道选的就是无线 ADB」时出现：它是那条通道的细项，
             // 不是一件独立功能；常显会让没有 root/Shizuku 的人也以为它是个开关。
             if (perm.channel == PermissionManager.Channel.ADB) {
@@ -326,9 +331,21 @@ internal fun PermissionEntriesSection(
  * 展开「已授予 / 去授权 / 重启 dsh」那几行 —— 那些属于「文件访问范围」页。
  */
 @Composable
-private fun StorageMountRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun StorageMountRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    onOpenScope: () -> Unit,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            // 整行可点：旧卡片就是 combinedClickable(onClick=切换, onLongClick=范围页)。只让右边
+            // 那个小开关能点，用户的感受就是「这一行点不开了」（真机反馈）。
+            .combinedClickable(
+                onClick = { onCheckedChange(!checked) },
+                onLongClick = onOpenScope,
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -337,7 +354,7 @@ private fun StorageMountRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                text = stringResource(R.string.dsh_storage_mount_hint),
+                text = stringResource(R.string.dsh_storage_row_summary),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
