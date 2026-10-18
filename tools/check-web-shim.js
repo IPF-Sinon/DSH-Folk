@@ -286,6 +286,8 @@ ok(/CHANNEL_STABLE, CHANNEL_SLIM -> true/.test(rt) && /CHANNEL_BETA, CHANNEL_SLI
 ok(/private fun fetchNewestMeta\(\)/.test(rt) &&
   /val meta = fetchNewestMeta\(\) \?: return@withContext RuntimeCheckResult\(failure = true\)/.test(rt),
   "检查更新在候选里取最新（不再只看所选通道那一个 tag）");
+ok(/DshRuntime\.updateRuntime\(true\)/.test(fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt", "utf8")) &&
+  "自动检测更新的确认框调 updateRuntime（不是 reinstallRuntime），检测到的新版本才会被真正下载");
 ok(/fun updateRuntime\(preserveData: Boolean = true\)/.test(rt) &&
   /downloadAndInstall\(preserveData, newest = true\)/.test(rt),
   "「更新」走候选取最新，与「重装」分道（更新曾借用重装那条，下载的还是旧通道）");

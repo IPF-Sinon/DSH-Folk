@@ -275,12 +275,13 @@ console.log("\n── README（用户看到的说明） ──");
 {
   const main = read("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt");
   const screen = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt");
-  ok(/pendingRuntimeOp\.value = \{ DshRuntime\.reinstallRuntime\(true\) \}/.test(main) &&
+  // 2.1.2 起首页这条提示的更新动作走 updateRuntime（按通道候选取最新）；仍然先摆备份建议。
+  ok(/pendingRuntimeOp\.value = \{ DshRuntime\.(?:reinstall|update)Runtime\(true\) \}/.test(main) &&
     /RuntimeBackupAdviceDialog\(/.test(main),
     "首页的运行时提示不直接启动替换，而是先摆「建议先备份」");
   ok(/pendingRuntimeOp\.value = null\n\s*op\(\)[\s\S]{0,240}?navigator\.navigate\(HomeScreenDestination\)/.test(main),
     "点「继续」之后启动替换并回首页（下载/解压的进度只在首页看得到）");
-  ok((main.match(/DshRuntime\.reinstallRuntime\(true\)/g) || []).length === 1,
+  ok((main.match(/DshRuntime\.(?:reinstall|update)Runtime\(true\)/g) || []).length === 1,
     "首页只有一处启动替换，就是 pendingRuntimeOp 里那一处");
   ok(/internal fun RuntimeBackupAdviceDialog\(/.test(screen),
     "那个弹窗是 internal：两条入口共用同一份提示（private 的话首页用不上）");

@@ -774,7 +774,10 @@ class MainActivity : AppCompatActivity() {
                                 showRuntimeDialog.value = false
                                 // 通道 metadata 就是刚查到的那个版本，重装即更新。这里不直接跑：
                                 // 先过「建议先备份」，用户点「继续」后再启动并回首页看进度。
-                                pendingRuntimeOp.value = { DshRuntime.reinstallRuntime(true) }
+                                // 自动检测更新这条路的更新动作：必须走 updateRuntime（按通道候选取最新），
+                                // 不能借用 reinstallRuntime —— 那条是「装回已装那份」，会把自动
+                                // 检测到的新版本丢掉、仍旧下当前通道那份（真机复现过）。
+                                pendingRuntimeOp.value = { DshRuntime.updateRuntime(true) }
                             }) { Text(stringResource(R.string.dsh_runtime_update_go)) }
                         },
                         dismissButton = {
