@@ -93,6 +93,7 @@ import me.bmax.apatch.dsh.workflowDiff
  * 编辑期间审批的倒计时是暂停的（见 [WorkflowApprovals.startEditing]）——用户在改东西的时候
  * 被判定超时，那不是安全设计。
  */
+@Composable
 fun WorkflowDialogHosts() {
     val ctx = LocalContext.current
     val approval by WorkflowApprovals.pending.collectAsState()
