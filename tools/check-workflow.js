@@ -50,6 +50,9 @@ const SRC = {
   dialogs: read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowDialogs.kt"),
   screen: read("app/src/main/java/me/bmax/apatch/ui/screen/WorkflowScreen.kt"),
   editorScreen: read("app/src/main/java/me/bmax/apatch/ui/screen/WorkflowEditorScreen.kt"),
+  // 编辑页的内容本体（页面与审批弹窗共用）
+  editorSurface: read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowEditorSurface.kt"),
+  canvas: read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowBlueprintCanvas.kt"),
   mainActivity: read("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt"),
   webUiActivity: read("app/src/main/java/me/bmax/apatch/ui/DshWebUiActivity.kt"),
   buildYml: read(".github/workflows/build.yml"),
@@ -248,10 +251,11 @@ ok(/WorkflowBlueprintCanvas\(/.test(SRC.dialogs) && !/private fun NodeCard\(/.te
   "编辑页/预览用同一块画布，旧的自绘节点卡已删除（不是一列输入框）");
 // 编辑页的画布已换成 WorkflowBlueprintCanvas（与预览同一套）；拖动回调的手势量是像素，
 // 先在密度里换算成 dp 再吸附 12dp 网格，最后写回 posX/posY。
-ok(/onNodeDrag = \{ id, dxPx, dyPx ->[\s\S]{0,900}?it\.copy\(posX = nx, posY = ny\)/.test(SRC.dialogs),
+ok(/onNodeDrag = \{ id, dxPx, dyPx ->[\s\S]{0,900}?it\.copy\(posX = nx, posY = ny\)/.test(SRC.editorSurface),
   "拖动把坐标写回定义（像素→dp→吸附网格，摆位不落盘下次打开就会自己跳）");
-ok(/WorkflowBlueprintCanvas\(/.test(SRC.dialogs) && /zoomable = true/.test(SRC.dialogs),
-  "编辑页用的是同一块画布（可缩放），不是另一套自绘");
+ok(/WorkflowBlueprintCanvas\(/.test(SRC.editorSurface) &&
+  /detectDragGestures\(/.test(SRC.canvas) && /hitTest\(/.test(SRC.canvas),
+  "编辑页用同一块画布，拖动/平移/拉线由画布统一处理（不再让卡片与画布抢手势）");
 ok(/private fun RunDetailDialog\(/.test(SRC.screen) && /WorkflowStore\.readLog/.test(SRC.screen),
   "详情是弹窗，且把当时那一版定义与日志都摆出来");
 ok(/warn = tool\.state != "ok"/.test(SRC.screen),
@@ -296,8 +300,8 @@ ok(/private fun configForAction\(action: WorkflowActionType\)/.test(SRC.dialogs)
 ok(/mapOf\("source" to "exitCode", "op" to "equals", "value" to "0"\)/.test(SRC.dialogs),
   "判断节点的默认值合法（source/op 都已填好）");
 
-ok(/if \(patchLines\.isEmpty\(\)\) onCancel\(\) else confirmDiscard = true/.test(SRC.dialogs) &&
-  /dsh_workflow_editor_discard_title/.test(SRC.dialogs),
+ok(/if \(patchLines\.isEmpty\(\)\) onCancel\(\) else confirmDiscard = true/.test(SRC.editorSurface) &&
+  /dsh_workflow_editor_discard_title/.test(SRC.editorSurface),
   "编辑页有改动时返回要先确认（一键点掉等于无声清空用户改了几分钟的东西）");
 // 草稿落盘这条**故意没做**：审批只存在于内存里（进程一死这次审批就没了），
 // 恢复出来的草稿没有去处。留着 saveDraft/loadDraft 没人调用就是死代码，所以删掉了。
@@ -482,7 +486,8 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   ok(/MaterialTheme\.colorScheme\.error/.test(card) && /MaterialTheme\.colorScheme\.tertiary/.test(card),
     "运行态边框按状态取色（失败 error、成功 tertiary）");
   ok(/WorkflowSchema\.defaultPinsFor\(node\)/.test(card), "引脚行来自 defaultPinsFor（与模型同一份推导）");
-  ok(/cubicTo\(/.test(canvas) && /detectTransformGestures/.test(canvas), "画布：贝塞尔连线 + 缩放平移");
+  ok(/cubicTo\(/.test(canvas) && /detectDragGestures\(/.test(canvas),
+  "画布：贝塞尔连线 + 统一的手势入口（拖动卡片/平移画布/输出口拉线）");
   ok(/drawBlueprintDots/.test(canvas) && /24\.dp/.test(canvas), "画布有点阵网格");
   ok(!/fun layoutNodes\(/.test(canvas), "画布不自带布局：坐标由调用方传入（预览与编辑器共用摆位）");
   const preview = SRC.dialogs.slice(SRC.dialogs.indexOf("internal fun WorkflowGraphPreview("));
@@ -528,7 +533,8 @@ console.log("\u2500 #16g 编辑页是次级页面（不是覆盖层）");
   // 内容本身不该再自带 Dialog：弹窗只是包装，页面直接用它。
   const editorBody = SRC.dialogs.slice(SRC.dialogs.indexOf("internal fun WorkflowDefinitionEditor("));
   ok(!/Dialog\(/.test(editorBody.slice(0, 1600)), "编辑器内容不再自带 Dialog（弹窗由 WorkflowEditorDialog 负责）");
-  ok(/BackHandler \{/.test(SRC.dialogs), "系统返回与「取消」同一条路（不绕过放弃改动确认）");
+  ok(/BackHandler \{/.test(SRC.editorSurface) && /patchLines\.isEmpty\(\)/.test(SRC.editorSurface),
+  "系统返回与「取消」同一条路（不绕过放弃改动确认）");
 }
 
 console.log("\u2500 #17 用户自己也能建/改流程");
@@ -548,7 +554,7 @@ console.log("\u2500 #17 用户自己也能建/改流程");
     "起点自带一条可跑的命令（空 cmd 一建出来就是错的）");
   ok(/WorkflowValidator\.validate\(def, DshNativeBridge\.Cap\.entries/.test(SRC.screen), "列表就地校验");
   ok(/enabled = enabled && valid/.test(SRC.screen), "不合法时运行按钮点不动");
-  ok(/dsh_workflow_invalid_run/.test(SRC.screen) && /dsh_workflow_editor_errors/.test(SRC.dialogs),
+  ok(/dsh_workflow_invalid_run/.test(SRC.screen) && /dsh_workflow_editor_errors/.test(SRC.editorSurface),
     "同一批错误既在列表也在编辑页显示（与 AI 收到的是同源）");
   ok(/DshRuntime\.refreshContainerCli\(\)/.test(SRC.screen), "打开页面/打开开关时刷新容器侧 CLI 与指南");
   ok(/fun refreshContainerCli\(\)/.test(SRC.runtime), "DshRuntime 提供刷新入口");
