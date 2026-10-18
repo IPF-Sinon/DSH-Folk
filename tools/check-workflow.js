@@ -495,6 +495,19 @@ console.log("\u2500 #16e 分支未命中的节点标 SKIPPED（阶段 3.1）");
     "以「已产生步骤结果的节点」为已访问集合（引擎只在执行时建步骤，没有 PENDING 兜底）");
 }
 
+console.log("\u2500 #16f 单步超时（阶段 3.2：核对既有实现，不重复造）");
+{
+  // 文档任务 3.2 说「为单步执行增加超时保护」——实际早就有了：exec 用 reader.join(node.timeoutMs)、
+  // wait 用 deadline、DSH 用 awaitRunning(node.timeoutMs)，默认 120s、校验器限 1s~1h。
+  // 这里把它钉住，避免以后「再加一套」变成两套超时互相掩盖。
+  ok(/reader\.join\(node\.timeoutMs\)/.test(SRC.engine), "exec 步骤有超时（reader.join）");
+  ok(/System\.currentTimeMillis\(\) \+ node\.timeoutMs/.test(SRC.engine), "wait 步骤有 deadline");
+  ok(/awaitRunning\(node\.timeoutMs\)/.test(SRC.engine), "等 DSH 也有超时");
+  ok(/val timeoutMs: Long = 120_000L/.test(SRC.models), "默认单步超时 120s（不是文档说的 60s）");
+  ok(/MIN_TIMEOUT_MS = 1_000L/.test(SRC.models) && /MAX_TIMEOUT_MS = 3_600_000L/.test(SRC.models),
+    "超时上下限 1s~1h");
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),
