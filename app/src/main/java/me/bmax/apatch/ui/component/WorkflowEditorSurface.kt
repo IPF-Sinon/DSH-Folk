@@ -117,6 +117,11 @@ internal fun WorkflowEditorSurface(
     var rootOrigin by remember { mutableStateOf(Offset.Zero) }
     var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    // 拖动卡片：起点 + **未吸附**的累加位移（每帧吸附会让小位移被吞掉 → 原地颤抖），
+    // 松手时才吸附网格落盘。
+    var dragFrom by remember { mutableStateOf<Triple<String, Float, Float>?>(null) }
+    var dragAcc by remember { mutableStateOf(Offset.Zero) }
+    var dragPreview by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     val density = androidx.compose.ui.platform.LocalDensity.current.density
 
     val patchLines: List<WorkflowPatch> = remember(def) { workflowDiff(initial, def) }
@@ -207,21 +212,51 @@ internal fun WorkflowEditorSurface(
                             canvasSize = it.size
                         },
                 ) {
+                    val placed = editorLayoutFor(def)
+                        .associate { it.first to Offset(it.second, it.third) }
+                        .toMutableMap()
+                        .apply { dragPreview?.let { (id, p) -> this[id] = p } }
                     WorkflowBlueprintCanvas(
                         definition = def,
-                        positions = editorLayoutFor(def).associate { it.first to Offset(it.second, it.third) },
+                        positions = placed,
                         readOnly = false,
                         selectedNodeId = selected,
                         onNodeClick = { id -> selected = if (selected == id) null else id },
-                        onNodeDrag = { id, dxPx, dyPx ->
+                        onNodeDragStart = { id ->
                             val node = def.nodes.firstOrNull { it.id == id }
                             if (node != null) {
-                                val nx = WorkflowGeometry.snapToGridDp(node.posX + WorkflowGeometry.pxToDp(dxPx, density))
-                                    .coerceIn(0, 2000)
-                                val ny = WorkflowGeometry.snapToGridDp(node.posY + WorkflowGeometry.pxToDp(dyPx, density))
-                                    .coerceIn(0, 2000)
-                                draft = def.copy(nodes = def.nodes.map { if (it.id == id) it.copy(posX = nx, posY = ny) else it })
+                                dragFrom = Triple(id, node.posX.toFloat(), node.posY.toFloat())
+                                dragAcc = Offset.Zero
+                                dragPreview = id to Offset(node.posX.toFloat(), node.posY.toFloat())
                             }
+                        },
+                        onNodeDrag = { id, dxPx, dyPx ->
+                            val from = dragFrom
+                            if (from != null && from.first == id) {
+                                // 累加**未吸附**位移：拖动过程中 1:1 跟手，松手时再吸附。
+                                dragAcc += Offset(
+                                    WorkflowGeometry.pxToDp(dxPx, density),
+                                    WorkflowGeometry.pxToDp(dyPx, density),
+                                )
+                                dragPreview = id to Offset(
+                                    (from.second + dragAcc.x).coerceIn(0f, 2000f),
+                                    (from.third + dragAcc.y).coerceIn(0f, 2000f),
+                                )
+                            }
+                        },
+                        onNodeDragEnd = { id ->
+                            val from = dragFrom
+                            val preview = dragPreview
+                            if (from != null && preview != null && from.first == id) {
+                                val nx = WorkflowGeometry.snapToGridDp(preview.second).coerceIn(0, 2000)
+                                val ny = WorkflowGeometry.snapToGridDp(preview.third).coerceIn(0, 2000)
+                                draft = def.copy(
+                                    nodes = def.nodes.map { if (it.id == id) it.copy(posX = nx, posY = ny) else it },
+                                )
+                            }
+                            dragFrom = null
+                            dragAcc = Offset.Zero
+                            dragPreview = null
                         },
                         onWireDrop = { fromId, toId ->
                             if (toId != null) {
@@ -278,10 +313,11 @@ internal fun WorkflowEditorSurface(
                     shape = RoundedCornerShape(50),
                     tonalElevation = 8.dp,
                     color = MaterialTheme.colorScheme.primaryContainer,
+                    // 胶囊左上角 = 手指位置 = 松手后节点的左上角：三者对齐，落点才不会看起来「偏右下」。
                     modifier = Modifier.offset {
                         androidx.compose.ui.unit.IntOffset(
-                            (pos.x - rootOrigin.x - 40 * density).toInt(),
-                            (pos.y - rootOrigin.y - 20 * density).toInt(),
+                            (pos.x - rootOrigin.x).toInt(),
+                            (pos.y - rootOrigin.y).toInt(),
                         )
                     },
                 ) {

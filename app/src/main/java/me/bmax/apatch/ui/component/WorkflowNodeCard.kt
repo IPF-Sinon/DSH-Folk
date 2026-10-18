@@ -73,6 +73,12 @@ internal fun WorkflowNodeCard(
     onTap: (() -> Unit)? = null,
     /** 拖动卡片：参数是**本卡片坐标系**里的像素位移（自己接手势就不会算错命中）。 */
     onDrag: ((dxPx: Float, dyPx: Float) -> Unit)? = null,
+    /** 开始拖这张卡（宿主用它记录起点、累加未吸附的位移）。 */
+    onDragStart: (() -> Unit)? = null,
+    /** 拖动结束（宿主在这里吸附网格并落盘）。 */
+    onDragEnd: (() -> Unit)? = null,
+    /** 上报某个输出引脚在窗口里的矩形（拉线与已连的线都从这根针脚画出去）。 */
+    onPinBounds: ((pinKind: String, rect: androidx.compose.ui.geometry.Rect) -> Unit)? = null,
     /** 把自己的窗口矩形报给画布：拉线落点判定只在窗口坐标里比。 */
     onBounds: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
     /** 从右侧输出口拉线：anchor 是线头（窗口坐标），pointer 是手指（窗口坐标）。 */
@@ -119,7 +125,11 @@ internal fun WorkflowNodeCard(
         .then(
             if (onDrag != null) {
                 Modifier.pointerInput(node.id) {
-                    detectDragGestures { change, amount ->
+                    detectDragGestures(
+                        onDragStart = { onDragStart?.invoke() },
+                        onDragEnd = { onDragEnd?.invoke() },
+                        onDragCancel = { onDragEnd?.invoke() },
+                    ) { change, amount ->
                         change.consume()
                         onDrag(amount.x, amount.y)
                     }
@@ -184,47 +194,19 @@ internal fun WorkflowNodeCard(
                             for (pin in inputs) WorkflowPinRow(pin, alignEnd = false)
                         }
                         Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .then(
-                                    if (onPinDrag == null && onPinDrop == null) {
-                                        Modifier
-                                    } else {
-                                        // key 用 Unit：卡片在拖动中位置一直在变，若拿坐标当 key，
-                                        // 手势检测器会被反复取消重建（正是画布那次的坑）。
-                                        Modifier.pointerInput(Unit) {
-                                            var pointer = Offset.Zero
-                                            detectDragGestures(
-                                                onDragStart = { start ->
-                                                    val origin = originState.value
-                                                    val size = sizeState.value
-                                                    pointer = origin + start
-                                                    val anchor = Offset(
-                                                        origin.x + size.width,
-                                                        origin.y + WorkflowNodeCardAnchorY * density,
-                                                    )
-                                                    onPinDrag?.invoke(anchor, pointer)
-                                                },
-                                                onDragEnd = { onPinDrop?.invoke(pointer) },
-                                                onDragCancel = { onPinDrop?.invoke(pointer) },
-                                            ) { change, amount ->
-                                                change.consume()
-                                                pointer += amount
-                                                val origin = originState.value
-                                                val size = sizeState.value
-                                                val anchor = Offset(
-                                                    origin.x + size.width,
-                                                    origin.y + WorkflowNodeCardAnchorY * density,
-                                                )
-                                                onPinDrag?.invoke(anchor, pointer)
-                                            }
-                                        }
-                                    },
-                                ),
+                            modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                             horizontalAlignment = Alignment.End,
                         ) {
-                            for (pin in outputs) WorkflowPinRow(pin, alignEnd = true)
+                            for (pin in outputs) {
+                                WorkflowPinRow(
+                                    pin = pin,
+                                    alignEnd = true,
+                                    onPinBounds = onPinBounds,
+                                    onPinDrag = onPinDrag,
+                                    onPinDrop = onPinDrop,
+                                )
+                            }
                         }
                     }
                 }
@@ -235,12 +217,22 @@ internal fun WorkflowNodeCard(
 
 /** 一个引脚：小圆点 + 标签（执行引脚没有标签，只画点）。 */
 @Composable
-private fun WorkflowPinRow(pin: WorkflowPinSpec, alignEnd: Boolean) {
+private fun WorkflowPinRow(
+    pin: WorkflowPinSpec,
+    alignEnd: Boolean,
+    onPinBounds: ((pinKind: String, rect: androidx.compose.ui.geometry.Rect) -> Unit)? = null,
+    onPinDrag: ((anchorWindow: Offset, pointerWindow: Offset) -> Unit)? = null,
+    onPinDrop: ((pointerWindow: Offset) -> Unit)? = null,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (alignEnd) {
             PinLabel(pin, Modifier.weight(1f, fill = false))
             Spacer(Modifier.width(4.dp))
-            PinDot(pin)
+            if (onPinDrag == null && onPinDrop == null) {
+                PinDot(pin)
+            } else {
+                LinkablePinDot(pin, onPinBounds, onPinDrag, onPinDrop)
+            }
         } else {
             PinDot(pin)
             Spacer(Modifier.width(4.dp))
@@ -261,6 +253,58 @@ private fun PinDot(pin: WorkflowPinSpec) {
                 shape = CircleShape,
             ),
     )
+}
+
+/**
+ * 可拉线的针脚：**手势挂在这颗粒子上**（不是整列）—— 命中范围就是用户看得见的那颗点。
+ *
+ * 线头 = 这颗粒子的窗口中心；手指位置 = 粒子窗口原点 + 本粒子局部坐标，两个都在窗口坐标里，
+ * 所以拉出来就贴着手指。之前把手势挂在整列上，局部坐标是「列」的而不是卡片的，线头因此偏左。
+ */
+@Composable
+private fun LinkablePinDot(
+    pin: WorkflowPinSpec,
+    onPinBounds: ((pinKind: String, rect: androidx.compose.ui.geometry.Rect) -> Unit)?,
+    onPinDrag: ((anchorWindow: Offset, pointerWindow: Offset) -> Unit)?,
+    onPinDrop: ((pointerWindow: Offset) -> Unit)?,
+) {
+    var dotOrigin by remember { mutableStateOf(Offset.Zero) }
+    var dotSize by remember { mutableStateOf(IntSize.Zero) }
+    val originState = rememberUpdatedState(dotOrigin)
+    val sizeState = rememberUpdatedState(dotSize)
+    Box(
+        modifier = Modifier
+            // 触摸目标比视觉圆点大一圈：手指头比 7dp 的点大得多（点击助手的命中区也放大）。
+            .size(26.dp)
+            .onGloballyPositioned { coords ->
+                dotOrigin = coords.positionInWindow()
+                dotSize = coords.size
+                onPinBounds?.invoke(pin.kind.name, coords.boundsInWindow())
+            }
+            .pointerInput(Unit) {
+                var pointer = Offset.Zero
+                fun anchorWindow(): Offset {
+                    val o = originState.value
+                    val s = sizeState.value
+                    return Offset(o.x + s.width / 2f, o.y + s.height / 2f)
+                }
+                detectDragGestures(
+                    onDragStart = { start ->
+                        pointer = originState.value + start
+                        onPinDrag?.invoke(anchorWindow(), pointer)
+                    },
+                    onDragEnd = { onPinDrop?.invoke(pointer) },
+                    onDragCancel = { onPinDrop?.invoke(pointer) },
+                ) { change, amount ->
+                    change.consume()
+                    pointer += amount
+                    onPinDrag?.invoke(anchorWindow(), pointer)
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        PinDot(pin)
+    }
 }
 
 @Composable

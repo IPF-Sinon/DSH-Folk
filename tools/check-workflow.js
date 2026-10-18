@@ -252,7 +252,9 @@ ok(/WorkflowBlueprintCanvas\(/.test(SRC.dialogs) && !/private fun NodeCard\(/.te
   "编辑页/预览用同一块画布，旧的自绘节点卡已删除（不是一列输入框）");
 // 编辑页的画布已换成 WorkflowBlueprintCanvas（与预览同一套）；拖动回调的手势量是像素，
 // 先在密度里换算成 dp 再吸附 12dp 网格，最后写回 posX/posY。
-ok(/onNodeDrag = \{ id, dxPx, dyPx ->[\s\S]{0,900}?it\.copy\(posX = nx, posY = ny\)/.test(SRC.editorSurface),
+ok(/onNodeDrag = \{ id, dxPx, dyPx ->[\s\S]{0,700}?dragAcc \+= Offset\(/.test(SRC.editorSurface) &&
+    /onNodeDragEnd = \{ id ->[\s\S]{0,700}?WorkflowGeometry\.snapToGridDp\(preview\.second\)/.test(SRC.editorSurface) &&
+    /it\.copy\(posX = nx, posY = ny\)/.test(SRC.editorSurface),
   "拖动把坐标写回定义（像素→dp→吸附网格，摆位不落盘下次打开就会自己跳）");
 ok(/WorkflowBlueprintCanvas\(/.test(SRC.editorSurface) &&
   /onWireDrop/.test(SRC.canvas) && !/hitTest\(/.test(SRC.canvas),
@@ -605,6 +607,31 @@ console.log("\u2500 #16i 抽屉拖出：落点就是松手位置（阶段 4）")
   ok(/ghost\?\.let \{/.test(e) && /pos\.x - rootOrigin\.x/.test(e),
     "拖出过程中有跟随手指的幽灵卡");
   ok(!/total < -32f/.test(e), "删掉了「只按向上位移猜」的旧启发式");
+}
+
+console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回归护栏）");
+{
+  const e = SRC.editorSurface;
+  const c = SRC.card;
+  const cv = SRC.canvas;
+  // ① 原地颤抖：拖动过程中每帧吸附会把小位移吞掉；现在累加未吸附位移，松手才吸附。
+  ok(/dragAcc \+= Offset\(/.test(e) && /dragPreview = id to Offset\(/.test(e) &&
+    /onNodeDragEnd = \{ id ->/.test(e) && /snapToGridDp\(preview\.second\)/.test(e),
+    "拖动过程中不吸附（累加未吸附位移），松手才吸附网格");
+  ok(/dragPreview\?\.let \{ \(id, p\) -> this\[id\] = p \}/.test(e),
+    "拖动中画布用预览位置（1:1 跟手，右不抖）");
+  // ② 拉线：手势挂在针脚自己身上，线头就是这颗粒子；局部坐标的基准也是粒子。
+  ok(/private fun LinkablePinDot\(/.test(c) && /pointerInput\(Unit\)/.test(c),
+    "拉线手势挂在针脚粒子自己身上（不是整列，命中范围=看得见的点）");
+  ok(/pointer = originState\.value \+ start/.test(c) && /o\.x \+ s\.width \/ 2f/.test(c),
+    "手指与线头都在窗口坐标里算（粒子原点 + 局部坐标 / 粒子中心）");
+  ok(/onPinBounds\?\.invoke\(pin\.kind\.name, coords\.boundsInWindow\(\)\)/.test(c),
+    "针脚上报窗口矩形（含引脚类型），已连的线也从真针脚画出去");
+  ok(/val pinned = pinRects\[/.test(cv) && /pinned\.right - origin\.x - pan\.x/.test(cv),
+    "已连线优先从针脚矩形起画（窗口→内容层局部坐标）");
+  // ③ 落点/幽灵卡对齐：胶囊左上角 = 手指 = 节点左上角。
+  ok(/pos\.x - rootOrigin\.x\)\.toInt\(\)/.test(e) && !/- 40 \* density/.test(e),
+    "幽灵胶囊与落点对齐（不再自己往左上挪 40/20dp）");
 }
 
 console.log("\u2500 #17 用户自己也能建/改流程");

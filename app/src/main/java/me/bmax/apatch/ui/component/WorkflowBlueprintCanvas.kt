@@ -56,6 +56,8 @@ internal fun WorkflowBlueprintCanvas(
     selectedNodeId: String? = null,
     onNodeClick: ((String) -> Unit)? = null,
     onNodeDrag: ((id: String, dxPx: Float, dyPx: Float) -> Unit)? = null,
+    onNodeDragStart: ((id: String) -> Unit)? = null,
+    onNodeDragEnd: ((id: String) -> Unit)? = null,
     /** 拉线松手：toId 非空 = 连到那张卡；为空 = 落在空白（调用方弹节点菜单）。 */
     onWireDrop: ((fromId: String, toId: String?) -> Unit)? = null,
     onBlankTap: (() -> Unit)? = null,
@@ -74,6 +76,8 @@ internal fun WorkflowBlueprintCanvas(
     var wireFrom by remember { mutableStateOf<String?>(null) }
     var wireAnchor by remember { mutableStateOf(Offset.Zero) }
     var wirePointer by remember { mutableStateOf(Offset.Zero) }
+    // 针脚窗口矩形，键 "节点id:引脚类型名"：已连的线也从真针脚画出去，而不是卡片右上角。
+    var pinRects by remember { mutableStateOf<Map<String, Rect>>(emptyMap()) }
 
     Box(
         modifier = modifier
@@ -112,7 +116,16 @@ internal fun WorkflowBlueprintCanvas(
         ) {
             Canvas(Modifier.fillMaxSize()) { drawBlueprintDots(dotColor) }
             Canvas(Modifier.fillMaxSize()) {
-                drawBlueprintEdges(definition, positions, edgeColor, trueColor, falseColor)
+                drawBlueprintEdges(
+                    definition = definition,
+                    positions = positions,
+                    pinRects = pinRects,
+                    origin = origin,
+                    pan = pan,
+                    normal = edgeColor,
+                    trueColor = trueColor,
+                    falseColor = falseColor,
+                )
             }
             for (node in definition.nodes) {
                 val pos = positions[node.id] ?: continue
@@ -123,7 +136,10 @@ internal fun WorkflowBlueprintCanvas(
                     modifier = Modifier.offset(x = pos.x.dp, y = pos.y.dp),
                     onTap = { onNodeClick?.invoke(node.id) },
                     onDrag = { dx, dy -> onNodeDrag?.invoke(node.id, dx, dy) },
+                    onDragStart = { onNodeDragStart?.invoke(node.id) },
+                    onDragEnd = { onNodeDragEnd?.invoke(node.id) },
                     onBounds = { rect -> bounds = bounds + (node.id to rect) },
+                    onPinBounds = { pinKind, rect -> pinRects = pinRects + ("${node.id}:$pinKind" to rect) },
                     onPinDrag = { anchor, pointer ->
                         wireFrom = node.id
                         wireAnchor = anchor
@@ -177,6 +193,9 @@ private fun DrawScope.drawBlueprintDots(color: Color) {
 private fun DrawScope.drawBlueprintEdges(
     definition: WorkflowDefinition,
     positions: Map<String, Offset>,
+    pinRects: Map<String, Rect>,
+    origin: Offset,
+    pan: Offset,
     normal: Color,
     trueColor: Color,
     falseColor: Color,
@@ -185,8 +204,15 @@ private fun DrawScope.drawBlueprintEdges(
     for (edge in definition.edges) {
         val from = positions[edge.from] ?: continue
         val to = positions[edge.to] ?: continue
-        val fromRight = (from.x * density) + CARD_W_DP * density
-        val startY = (from.y * density) + WorkflowNodeCardAnchorY * density
+        // 线的起点：优先用真针脚的窗口矩形（换算回内容层局部坐标），没有就退回卡片右上角。
+        val pinKind = when (edge.whenExpr) {
+            "true" -> "EXEC_TRUE"
+            "false" -> "EXEC_FALSE"
+            else -> "EXEC_OUT"
+        }
+        val pinned = pinRects["${edge.from}:$pinKind"]
+        val fromRight = if (pinned != null) pinned.right - origin.x - pan.x else (from.x * density) + CARD_W_DP * density
+        val startY = if (pinned != null) pinned.center.y - origin.y - pan.y else (from.y * density) + WorkflowNodeCardAnchorY * density
         val endX = to.x * density
         val endY = (to.y * density) + WorkflowNodeCardAnchorY * density
         val ctrl = max(abs(endX - fromRight) * 0.5f, 60.dp.toPx())
