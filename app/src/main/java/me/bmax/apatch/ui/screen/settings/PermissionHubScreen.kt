@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.FileAccessScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsCaptureScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsControlScreenDestination
 import com.ramcosta.composedestinations.generated.destinations.NativeCapsInteractScreenDestination
