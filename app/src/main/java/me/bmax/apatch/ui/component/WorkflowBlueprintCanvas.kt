@@ -2,18 +2,16 @@ package me.bmax.apatch.ui.component
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -24,10 +22,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.dsh.WorkflowDefinition
@@ -35,17 +31,22 @@ import me.bmax.apatch.dsh.WorkflowStepState
 import kotlin.math.abs
 import kotlin.math.max
 
+/** 卡片尺寸常量必须和 [WorkflowNodeCard] 一致，否则命中判定与连线端点都会偏。 */
+private const val CARD_W_DP = 220f
+private const val CARD_H_DP = 92f
+
+/** 右侧这个宽度内按下并拖出 = 从输出口「拉线」，不是拖动卡片。 */
+private const val PIN_ZONE_DP = 34f
+
 /**
- * 蓝图式画布：点阵网格 + 贝塞尔连线 + 节点卡。
+ * 蓝图式画布：点阵网格 + 贝塞尔连线 + 节点卡，**手势统一在这里处理**。
  *
- * 预览、详情与编辑共用同一份画法（[WorkflowNodeCard] 画卡，这里画背景与线），
- * 差别只在 [readOnly]：预览/详情不响应拖动与点选，只负责看。
- *
- * 为什么坐标由调用方以 `Map<String, Offset>`（dp 值）传进来：摆位规则（有落盘坐标就用、
- * 压住了就退回自动分层）已经在编辑器那边实现过一次，画布不该再有一套自己的布局 —— 两套
- * 布局是「预览里看到的图和编辑器里摆的位置不一致」的根源。
- *
- * [zoomable] 只在编辑页开：双指缩放、单指平移；预览页保持不动，避免与页面滚动抢手势。
+ * 为什么手势放在画布而不是卡片里：卡片上有 clickable + 自己的拖动手势，画布上又有平移/缩放手势，
+ * 三者会抢触摸（真机表现就是「卡片拖不动」）。现在只留两处：
+ *  - 画布：单指按在卡片上 → 拖动这张卡片；按在空白 → 平移整张画布；缩放留给双指（只读画布不开）；
+ *  - 卡片：只管「点一下」（选中/编辑）。
+ * 从右侧输出口按下并拖出 → 松手时回调 [onNodeAddAfter]（弹出「接哪个节点」的菜单），对应点击助手
+ * 的「从针脚拉出下一个动作」。
  */
 @Composable
 internal fun WorkflowBlueprintCanvas(
@@ -55,85 +56,104 @@ internal fun WorkflowBlueprintCanvas(
     modifier: Modifier = Modifier,
     stepStates: Map<String, WorkflowStepState> = emptyMap(),
     selectedNodeId: String? = null,
-    zoomable: Boolean = false,
     onNodeClick: ((String) -> Unit)? = null,
     onNodeDrag: ((String, Float, Float) -> Unit)? = null,
-    /** 点节点右侧输出口：从接口拉出下一个节点（只读画布不响应）。 */
     onNodeAddAfter: ((String) -> Unit)? = null,
 ) {
-    // 主题色必须在 Canvas 之外取：Canvas 的 lambda 是 DrawScope，不是 composable 作用域。
+    // 主题色在 Canvas 之外取：Canvas 的 lambda 是 DrawScope。
     val dotColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
     val edgeColor = MaterialTheme.colorScheme.outline
     val trueColor = MaterialTheme.colorScheme.tertiary
     val falseColor = MaterialTheme.colorScheme.error
 
-    var scale by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
 
-    val contentW = max(positions.values.maxOfOrNull { it.x } ?: 0f, 320f) + 260f
-    val contentH = max(positions.values.maxOfOrNull { it.y } ?: 0f, 220f) + 120f
+    // 命中判定要按「当前屏上的位置」算：positions 是 dp，画布也按 dp 偏移，比例恒为 1（暂不做缩放）。
+    fun hitTest(p: Offset): Pair<String, Boolean>? {
+        for (node in definition.nodes.asReversed()) {
+            val pos = positions[node.id] ?: continue
+            val x = pos.x * density
+            val y = pos.y * density
+            if (p.x >= x && p.x <= x + CARD_W_DP * density && p.y >= y && p.y <= y + CARD_H_DP * density) {
+                val inPinZone = p.x >= x + (CARD_W_DP - PIN_ZONE_DP) * density
+                return node.id to inPinZone
+            }
+        }
+        return null
+    }
 
     Box(
         modifier = modifier
-            .fillMaxWidth()
-            // 高度交给调用方：预览是固定 340dp，编辑页是 weight(1f) 吃满剩余空间。
-            // 自带高度会和 weight 打架，画布要么被固定死、要么留一片空白。
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
+            // 点：选中卡片（编辑与只读都需要）；拖：见下面那条。
+            .pointerInput(definition, positions) {
+                detectTapGestures { p -> hitTest(p)?.let { onNodeClick?.invoke(it.first) } }
+            }
             .then(
-                if (zoomable) {
-                    Modifier.pointerInput(Unit) {
-                        detectTransformGestures { _, panChange, zoomChange, _ ->
-                            scale = (scale * zoomChange).coerceIn(0.45f, 2f)
-                            pan += panChange
+                if (readOnly) Modifier else Modifier.pointerInput(definition, positions) {
+                    // 单指：卡片上 = 拖动卡片；输出口区 = 拉线（松手弹菜单）；空白 = 平移画布。
+                    var dragId: String? = null
+                    var pinId: String? = null
+                    var total = 0f
+                    detectDragGestures(
+                        onDragStart = { start ->
+                            total = 0f
+                            val hit = hitTest(start)
+                            dragId = hit?.first
+                            pinId = if (hit?.second == true) hit.first else null
+                        },
+                        onDragEnd = {
+                            if (pinId != null && total < 24f) onNodeAddAfter?.invoke(pinId!!)
+                            dragId = null
+                            pinId = null
+                        },
+                        onDragCancel = { dragId = null; pinId = null },
+                    ) { change, amount ->
+                        change.consume()
+                        total += abs(amount.x) + abs(amount.y)
+                        if (dragId != null && pinId == null) {
+                            onNodeDrag?.invoke(dragId!!, amount.x, amount.y)
+                        } else if (dragId == null) {
+                            pan += amount
                         }
                     }
                 } else {
-                    Modifier
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures { p ->
+                            val hit = hitTest(p)
+                            if (hit != null) onNodeClick?.invoke(hit.first)
+                        }
+                    }
                 },
             ),
     ) {
-        Box(
-            Modifier
-                .width(contentW.dp)
-                .height(contentH.dp)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = pan.x
-                    translationY = pan.y
-                    transformOrigin = TransformOrigin(0f, 0f)
-                },
-        ) {
-            Canvas(Modifier.fillMaxSize()) { drawBlueprintDots(dotColor) }
-            Canvas(Modifier.fillMaxSize()) { drawBlueprintEdges(definition, positions, edgeColor, trueColor, falseColor) }
+        Box(Modifier.fillMaxSize().offset { androidx.compose.ui.unit.IntOffset(pan.x.toInt(), pan.y.toInt()) }) {
+            Canvas(Modifier.fillMaxSize()) { drawBlueprintDots(dotColor, pan) }
+            Canvas(Modifier.fillMaxSize()) { drawBlueprintEdges(definition, positions, pan, edgeColor, trueColor, falseColor) }
             for (node in definition.nodes) {
                 val pos = positions[node.id] ?: continue
                 WorkflowNodeCard(
                     node = node,
                     status = stepStates[node.id],
                     selected = selectedNodeId == node.id,
-                    modifier = Modifier.offset(x = pos.x.dp, y = pos.y.dp),
-                    onClick = if (readOnly) null else onNodeClick?.let { cb -> { cb(node.id) } },
-                    onAddAfter = if (readOnly) null else onNodeAddAfter?.let { cb -> { cb(node.id) } },
-                    onDrag = if (readOnly) {
-                        null
-                    } else {
-                        onNodeDrag?.let { cb -> { dx: Float, dy: Float -> cb(node.id, dx, dy) } }
-                    },
+                    modifier = Modifier.offset((pos.x + pan.x / density).dp, (pos.y + pan.y / density).dp),
                 )
             }
         }
     }
 }
 
-/** 点阵网格（24dp 步长）。点比线更适合小屏：不会把卡片之间的空隙填满。 */
-private fun DrawScope.drawBlueprintDots(color: Color) {
+/** 点阵网格（24dp 步长），随平移一起移动，看起来像一张可拖的纸。 */
+private fun DrawScope.drawBlueprintDots(color: Color, pan: Offset) {
     val step = 24.dp.toPx()
     val radius = 1.dp.toPx()
-    var y = step / 2f
+    val ox = pan.x.mod(step)
+    val oy = pan.y.mod(step)
+    var y = oy
     while (y < size.height) {
-        var x = step / 2f
+        var x = ox
         while (x < size.width) {
             drawCircle(color = color, radius = radius, center = Offset(x, y))
             x += step
@@ -142,22 +162,23 @@ private fun DrawScope.drawBlueprintDots(color: Color) {
     }
 }
 
-/** 三次贝塞尔连线：真分支用 tertiary、假分支用 error 虚线，默认流用 outline 实线。 */
+/** 三次贝塞尔连线：真分支 tertiary、假分支 error 虚线、默认流 outline 实线。 */
 private fun DrawScope.drawBlueprintEdges(
     definition: WorkflowDefinition,
     positions: Map<String, Offset>,
+    pan: Offset,
     normal: Color,
     trueColor: Color,
     falseColor: Color,
 ) {
+    val density = this.density
     for (edge in definition.edges) {
         val from = positions[edge.from] ?: continue
         val to = positions[edge.to] ?: continue
-        val startY = (from.y + WorkflowNodeCardAnchorY).dp.toPx()
-        val endX = to.x.dp.toPx()
-        val endY = (to.y + WorkflowNodeCardAnchorY).dp.toPx()
-        // 端点从卡片右缘出发：用卡片宽度换成 x
-        val fromRight = (from.x + WorkflowNodeCardWidth.value).dp.toPx()
+        val fromRight = (from.x * density + CARD_W_DP * density + pan.x)
+        val startY = (from.y * density + 26.dp.toPx() + pan.y)
+        val endX = (to.x * density + pan.x)
+        val endY = (to.y * density + 26.dp.toPx() + pan.y)
         val ctrl = max(abs(endX - fromRight) * 0.5f, 60.dp.toPx())
         val path = Path().apply {
             moveTo(fromRight, startY)
