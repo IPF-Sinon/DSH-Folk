@@ -574,6 +574,19 @@ console.log("\u2500 #16h 坐标换算与手势结构（拖动 1:1 的契约）")
     "画布平移只在图层上应用一次（不再在卡片偏移里重复加）");
 }
 
+console.log("\u2500 #16j 抽屉的列表不能是滚动容器（否则纵向拖出会被滚动抢走）");
+{
+  const e = SRC.editorSurface;
+  // 只截「抽屉」这一整块：从 if (sheetOpen) 到「点卡片」弹窗之前。
+  const sheetStart = e.indexOf("if (sheetOpen) {");
+  const sheetEnd = e.indexOf("// ── 点卡片", sheetStart);
+  const sheet = sheetStart >= 0 && sheetEnd > sheetStart ? e.slice(sheetStart, sheetEnd) : "";
+  ok(sheet.length > 0, "能定位到抽屉这一段");
+  ok(!/verticalScroll/.test(sheet), "抽屉里不能有滚动容器（纵向拖动会被它吃掉）");
+  ok(/EDITOR_NODE_CATALOG\.chunked\(2\)/.test(sheet), "抽屉按两列分块（7 个类型 4 行放得下）");
+  ok(/modifier = Modifier\.weight\(1f\)/.test(sheet), "抽屉条目拿到 Row 的权重（两列等宽）");
+}
+
 console.log("\u2500 #16i 抽屉拖出：落点就是松手位置（阶段 4）");
 {
   const e = SRC.editorSurface;

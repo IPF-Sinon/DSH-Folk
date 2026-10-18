@@ -322,43 +322,52 @@ internal fun WorkflowEditorSurface(
                                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.dsh_workflow_action_cancel))
                             }
                         }
+                        // 注意：这里**不能**套任何滚动容器 —— 抽屉是纵向拖出的，外层滚动会先把纵向拖动
+                        // 吃掉（真机反馈「抽屉里的卡片拖不动」）。7 个类型排成两列 4 行，放得下，
+                        // 也就不需要滚动。
                         Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 320.dp)
-                                .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 12.dp),
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            for (kind in EDITOR_NODE_CATALOG) {
-                                val kindLabel = stringResource(kind.labelRes)
-                                SheetNodeRow(
-                                    label = kindLabel,
-                                    onTap = {
-                                        addNode(kind, null)
-                                        sheetOpen = false
-                                    },
-                                    onDragStart = { windowPos -> ghost = kindLabel to windowPos },
-                                    onDragMove = { windowPos -> ghost = kindLabel to windowPos },
-                                    onDragEnd = { windowPos ->
-                                        ghost = null
-                                        // 只有落在**画布矩形内**才算拖出；松在抽屉里/导航条上 = 取消。
-                                        val inCanvas = windowPos.x >= canvasOrigin.x &&
-                                            windowPos.x <= canvasOrigin.x + canvasSize.width &&
-                                            windowPos.y >= canvasOrigin.y &&
-                                            windowPos.y <= canvasOrigin.y + canvasSize.height
-                                        if (inCanvas) {
-                                            val xDp = WorkflowGeometry.snapToGridDp(
-                                                WorkflowGeometry.pxToDp(windowPos.x - canvasOrigin.x, density),
-                                            ).coerceAtLeast(0)
-                                            val yDp = WorkflowGeometry.snapToGridDp(
-                                                WorkflowGeometry.pxToDp(windowPos.y - canvasOrigin.y, density),
-                                            ).coerceAtLeast(0)
-                                            addNodeAt(kind, xDp, yDp)
-                                        }
-                                        sheetOpen = false
-                                    },
-                                )
+                            for (chunk in EDITOR_NODE_CATALOG.chunked(2)) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    for (kind in chunk) {
+                                        val kindLabel = stringResource(kind.labelRes)
+                                        SheetNodeRow(
+                                            label = kindLabel,
+                                            modifier = Modifier.weight(1f),
+                                            onTap = {
+                                                addNode(kind, null)
+                                                sheetOpen = false
+                                            },
+                                            onDragStart = { windowPos -> ghost = kindLabel to windowPos },
+                                            onDragMove = { windowPos -> ghost = kindLabel to windowPos },
+                                            onDragEnd = { windowPos ->
+                                                ghost = null
+                                                // 只有落在**画布矩形内**才算拖出；松在抽屉里/导航条上 = 取消。
+                                                val inCanvas = windowPos.x >= canvasOrigin.x &&
+                                                    windowPos.x <= canvasOrigin.x + canvasSize.width &&
+                                                    windowPos.y >= canvasOrigin.y &&
+                                                    windowPos.y <= canvasOrigin.y + canvasSize.height
+                                                if (inCanvas) {
+                                                    val xDp = WorkflowGeometry.snapToGridDp(
+                                                        WorkflowGeometry.pxToDp(windowPos.x - canvasOrigin.x, density),
+                                                    ).coerceAtLeast(0)
+                                                    val yDp = WorkflowGeometry.snapToGridDp(
+                                                        WorkflowGeometry.pxToDp(windowPos.y - canvasOrigin.y, density),
+                                                    ).coerceAtLeast(0)
+                                                    addNodeAt(kind, xDp, yDp)
+                                                }
+                                                sheetOpen = false
+                                            },
+                                        )
+                                    }
+                                    // 单数个时补一个占位，避免最后一行被拉宽。
+                                    if (chunk.size == 1) Spacer(Modifier.weight(1f))
+                                }
                             }
                             Spacer(Modifier.height(8.dp))
                         }
@@ -476,6 +485,7 @@ internal fun WorkflowEditorSurface(
 @Composable
 private fun SheetNodeRow(
     label: String,
+    modifier: Modifier = Modifier,
     onTap: () -> Unit,
     onDragStart: (Offset) -> Unit,
     onDragMove: (Offset) -> Unit,
@@ -488,8 +498,7 @@ private fun SheetNodeRow(
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .onGloballyPositioned { rowOrigin = it.positionInWindow() }
             .pointerInput(label) {
                 detectDragGestures(
