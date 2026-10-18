@@ -307,7 +307,7 @@ const server = http.createServer((req, res) => {
       "清单路径固定在容器内 /root/.dsh/dsh-native-troubleshoot.txt");
     ok(/TROUBLESHOOT_DOC_NAME = "dsh-native-troubleshoot\.txt"/.test(kt) &&
       /File\(DshEnv\.dshHome\(appContext\), TROUBLESHOOT_DOC_NAME\)/.test(kt) &&
-      /doc\.writeText\(text, StandardCharsets\.UTF_8\)/.test(kt),
+      /DshRuntimeFiles\.writeIfChanged\(/.test(kt),
       "App 侧把清单写进 rootfs/root/.dsh（DshEnv.dshHome），与 CLI 的路径一致");
     ok(/private fun nativeTroubleshootDoc\(\): String = buildString/.test(kt) &&
       /appContext\.appString\(R\.string\.dsh_troubleshoot_/.test(kt),

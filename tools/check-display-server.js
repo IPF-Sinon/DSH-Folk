@@ -495,7 +495,11 @@ for (const f of SHARED) {
   // 送达：必须有一个"非引导路径"的调用点，而且要按内容比对
   const callSites = [...rt.matchAll(/ensureFsBridgeCli\(\)/g)].length;
   must(callSites >= 2, `ensureFsBridgeCli() 只有 ${callSites} 处调用（定义之外一处都没有？）`);
-  must(/f\.readText\(\)\s*\}\s*\.getOrNull\(\)\s*==\s*script/.test(rt),
+  // 比较逻辑已搬进 DshRuntimeFiles.writeIfChanged（阶段 4 拆分），这里认「写入器里按内容比对」
+  // 且 ensureFsBridgeCli 确实调它 —— 行为断言，不绑死在哪个函数里。
+  const writer = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeFiles.kt", "utf8");
+  must(/readText\(\)\s*\}\s*\.getOrNull\(\)\s*==\s*text/.test(writer) &&
+    /DshRuntimeFiles\.writeScript\(/.test(rt),
     'ensureFsBridgeCli 必须按内容比对再写（每次启动都会调用它，无脑重写会白磨盘）');
   must(/forwardOutput\(serverProcess\)[\s\S]{0,400}?ensureFsBridgeCli\(\)/.test(rt),
     'ensureFsBridgeCli 必须挂在每次启动的路径上，否则升级 App 而沿用旧 rootfs 的用户拿不到新 CLI');
