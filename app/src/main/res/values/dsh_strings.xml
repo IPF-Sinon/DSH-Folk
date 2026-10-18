@@ -1820,4 +1820,5 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_workflow_zoom_reset">Reset</string>
     <string name="dsh_workflow_detail_json_show">Show definition JSON</string>
     <string name="dsh_workflow_detail_json_hide">Hide definition JSON</string>
+    <string name="dsh_workflow_editor_auto_layout">Tidy</string>
 </resources>

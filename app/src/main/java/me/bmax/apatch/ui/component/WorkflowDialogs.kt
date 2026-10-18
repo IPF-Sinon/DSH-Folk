@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,6 +38,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -460,11 +466,31 @@ internal fun WorkflowDefinitionEditor(
     var linkFrom by remember { mutableStateOf<String?>(null) }
     var linkWhen by remember { mutableStateOf("") }
     var confirmDiscard by remember { mutableStateOf(false) }
+    /** 非空 = 正在为这个节点的输出口挑「接哪个节点」。 */
+    var addAfter by remember { mutableStateOf<String?>(null) }
     val def = draft
     // 差异在组合期算成不可变列表：写 state 会造成重组循环。
     val patchLines: List<WorkflowPatch> = remember(def) { workflowDiff(initial, def) }
     val errors: List<String> = remember(def) {
         WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
+    }
+
+    /** 在画布上追加一个节点；afterId 非空时顺手连一条出边（从接口「拉出」下一个节点）。 */
+    fun addNode(kind: NodeKind, afterId: String?) {
+        val raw = "n" + (def.nodes.size + 1)
+        val id = if (def.nodes.any { it.id == raw }) "n" + System.currentTimeMillis().toString().takeLast(4) else raw
+        val node = WorkflowNode(
+            id = id,
+            type = kind.type,
+            name = kind.label(),
+            posX = 16 + (def.nodes.size % 4) * 90,
+            posY = 16 + (def.nodes.size / 4) * 44,
+            config = kind.defaults,
+        )
+        draft = def.copy(
+            nodes = def.nodes + node,
+            edges = if (afterId != null) def.edges + WorkflowEdge(afterId, id, "") else def.edges,
+        )
     }
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
@@ -475,6 +501,8 @@ internal fun WorkflowDefinitionEditor(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
+                    // 状态栏高度要留出来：否则返回/保存胶囊会被状态栏图标压住（真机截图）。
+                    .windowInsetsPadding(WindowInsets.statusBars)
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -514,8 +542,9 @@ internal fun WorkflowDefinitionEditor(
                 readOnly = false,
                 zoomable = true,
                 selectedNodeId = selected,
-                // 铺满整页：chrome 与底部面板浮在它上面。
-                modifier = Modifier.fillMaxSize(),
+                onNodeAddAfter = { id -> addAfter = id },
+                // chrome 与底部面板浮在画布上；顶部留出胶囊的高度，节点不会躲到它后面。
+                modifier = Modifier.fillMaxSize().padding(top = 72.dp),
                 onNodeClick = { id ->
                     val from = linkFrom
                     if (from == null) {
@@ -547,6 +576,7 @@ internal fun WorkflowDefinitionEditor(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(8.dp),
             ) {
                 Surface(
@@ -584,66 +614,52 @@ internal fun WorkflowDefinitionEditor(
                     }
                 }
             }
-            Spacer(Modifier.height(6.dp))
-            // 提示单独一行：原先它和下面那排「横向滚动」的按钮同处一个 Row，权重被无限宽的
-            // 滚动容器抢光，于是被压成一列竖排的字（真机截图）。
-            Text(
-                stringResource(R.string.dsh_workflow_editor_drag_hint),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             Spacer(Modifier.height(4.dp))
+            // 工具条（点击助手的做法：功能聚合在一条浮条上，目录收进「＋」的菜单里）。
+            // 原先把所有节点类型平铺成一排横向滚动按钮，手机上大半截在屏幕外，还占掉画布高度。
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Add, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    stringResource(R.string.dsh_workflow_editor_add_node),
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(horizontal = 6.dp),
-                )
-                // 动作目录：每类都带**合法默认 config**。默认值不只是省事 —— 用户拿到的是
-                // 「把 equals 改成 contains」这种改值动作，而不是「自己敲对键名」（敲错要等到
-                // 批准那一刻才被校验器拦下，那时他已经改了五分钟）。
-                for (kind in NODE_CATALOG) {
-                    TextButton(onClick = {
-                        val id = "n" + (def.nodes.size + 1)
-                        draft = def.copy(
-                            nodes = def.nodes + WorkflowNode(
-                                id = id,
-                                type = kind.type,
-                                name = kind.label(),
-                                posX = 16 + (def.nodes.size % 4) * 90,
-                                posY = 16 + (def.nodes.size / 4) * 44,
-                                config = kind.defaults,
-                            ),
-                        )
-                    }) {
-                        Text(stringResource(kind.labelRes))
+                Box {
+                    var menuOpen by remember { mutableStateOf(false) }
+                    Button(onClick = { menuOpen = true }, shape = RoundedCornerShape(50)) {
+                        Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.dsh_workflow_editor_add_node))
+                    }
+                    // 每一类都带**合法默认 config**：用户拿到的是「把 equals 改成 contains」这种
+                    // 改值动作，而不是自己敲对键名（敲错要等批准那一刻才被拦下）。
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        for (kind in NODE_CATALOG) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(kind.labelRes)) },
+                                onClick = {
+                                    menuOpen = false
+                                    addNode(kind, null)
+                                },
+                            )
+                        }
                     }
                 }
-            }
-            val sel = selected?.let { def.node(it) }
-            if (sel != null) {
-                Spacer(Modifier.height(4.dp))
-                NodeEditor(
-                    node = sel,
-                    canLink = linkFrom == null,
-                    onLink = { linkFrom = sel.id },
-                    onDelete = {
-                        draft = def.copy(
-                            nodes = def.nodes.filterNot { it.id == sel.id },
-                            edges = def.edges.filterNot { e -> e.from == sel.id || e.to == sel.id },
-                        )
-                        selected = null
-                    },
-                    onChange = { updated ->
-                        draft = def.copy(nodes = def.nodes.map { if (it.id == updated.id) updated else it })
-                    },
+                OutlinedButton(onClick = {
+                    // 「整理」：位置清零 → layoutNodes 自动分层，把随手拖乱的图排回一条主线。
+                    draft = def.copy(nodes = def.nodes.map { it.copy(posX = 0, posY = 0) })
+                }, shape = RoundedCornerShape(50)) {
+                    Text(stringResource(R.string.dsh_workflow_editor_auto_layout))
+                }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    stringResource(R.string.dsh_workflow_editor_drag_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
+            // 属性面板不再常驻：点卡片才弹修改窗（见下面的 AlertDialog），画布上少一块遮挡。
+
             if (def.edges.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 Text(stringResource(R.string.dsh_workflow_editor_edges), style = MaterialTheme.typography.labelLarge)
@@ -702,6 +718,67 @@ internal fun WorkflowDefinitionEditor(
                 }
             }
         }
+    }
+
+    // 点卡片 → 这张卡片的修改窗（点击助手是「点卡片才编辑」，底部不再常驻属性面板）。
+    selected?.let { sid ->
+        val sel = def.node(sid)
+        if (sel != null) {
+            AlertDialog(
+                onDismissRequest = { selected = null },
+                title = { Text(sel.name.ifBlank { sel.id }) },
+                text = {
+                    Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                        NodeEditor(
+                            node = sel,
+                            canLink = linkFrom == null,
+                            onLink = {
+                                linkFrom = sel.id
+                                selected = null
+                            },
+                            onDelete = {
+                                draft = def.copy(
+                                    nodes = def.nodes.filterNot { it.id == sel.id },
+                                    edges = def.edges.filterNot { e -> e.from == sel.id || e.to == sel.id },
+                                )
+                                selected = null
+                            },
+                            onChange = { updated ->
+                                draft = def.copy(nodes = def.nodes.map { if (it.id == updated.id) updated else it })
+                            },
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { selected = null }) {
+                        Text(stringResource(R.string.dsh_workflow_editor_save))
+                    }
+                },
+            )
+        }
+    }
+
+    // 从接口「拉出」下一个节点：点节点右侧输出口 → 选类型 → 建节点并自动连一条边。
+    addAfter?.let { after ->
+        AlertDialog(
+            onDismissRequest = { addAfter = null },
+            title = { Text(stringResource(R.string.dsh_workflow_editor_add_node)) },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    for (kind in NODE_CATALOG) {
+                        TextButton(onClick = {
+                            addNode(kind, after)
+                            addAfter = null
+                        }) { Text(stringResource(kind.labelRes)) }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { addAfter = null }) {
+                    Text(stringResource(R.string.dsh_workflow_action_cancel))
+                }
+            },
+        )
     }
 
     // 放在覆盖层内部：与编辑页同一棵组合树，否则「放弃改动」的弹窗会被全屏 Surface 盖住。

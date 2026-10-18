@@ -111,6 +111,28 @@ internal fun WorkflowNodeCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                // 关键参数直接写在卡片上：卡片上一眼要能读出「这一步做什么」，而不是只有类型名。
+                val primary = when (node.type) {
+                    WorkflowNodeType.EXECUTE -> node.config("cmd").ifBlank { node.config("text") }
+                    WorkflowNodeType.CONDITION -> (node.config("op") + " " + node.config("value")).trim()
+                    WorkflowNodeType.EXTRACT -> node.config("var")
+                    WorkflowNodeType.WAIT -> node.config("ms")
+                    else -> ""
+                }
+                if (primary.isNotBlank()) {
+                    Text(
+                        text = primary,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                    )
+                }
                 if (inputs.isNotEmpty() || outputs.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

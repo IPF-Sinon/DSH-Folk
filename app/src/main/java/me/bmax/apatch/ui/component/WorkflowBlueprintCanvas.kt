@@ -58,6 +58,8 @@ internal fun WorkflowBlueprintCanvas(
     zoomable: Boolean = false,
     onNodeClick: ((String) -> Unit)? = null,
     onNodeDrag: ((String, Float, Float) -> Unit)? = null,
+    /** 点节点右侧输出口：从接口拉出下一个节点（只读画布不响应）。 */
+    onNodeAddAfter: ((String) -> Unit)? = null,
 ) {
     // 主题色必须在 Canvas 之外取：Canvas 的 lambda 是 DrawScope，不是 composable 作用域。
     val dotColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
@@ -113,6 +115,7 @@ internal fun WorkflowBlueprintCanvas(
                     selected = selectedNodeId == node.id,
                     modifier = Modifier.offset(x = pos.x.dp, y = pos.y.dp),
                     onClick = if (readOnly) null else onNodeClick?.let { cb -> { cb(node.id) } },
+                    onAddAfter = if (readOnly) null else onNodeAddAfter?.let { cb -> { cb(node.id) } },
                     onDrag = if (readOnly) {
                         null
                     } else {
