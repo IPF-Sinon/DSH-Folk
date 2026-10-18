@@ -390,7 +390,7 @@ internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
         definition = definition,
         positions = placed.associate { it.id to Offset(it.x, it.y) },
         readOnly = true,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().height(340.dp),
     )
 }
 
@@ -648,59 +648,44 @@ internal fun WorkflowDefinitionEditor(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
-            // 画布：点阵 + 连线 + 可拖节点卡。拖动的结果**写回定义**（posX/posY）——
-            // 蓝图编辑器的摆位不落盘，用户摆好的图下次打开就自己跳了。
-            // 画布吃满剩余高度：编辑页的主体就是画布（点击助手就是这样），下面那排是工具。
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState())
-                    .verticalScroll(rememberScrollState())
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
-            ) {
-                val placed = layoutNodes(def)
-                val edgeColor = MaterialTheme.colorScheme.outline
-                val gridNormal = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
-                val gridStrong = MaterialTheme.colorScheme.outline.copy(alpha = 0.32f)
-                // 至少铺满视口：否则节点只占左上角一小块，剩下整片灰底看着像没画出来（真机）
-                val canvasW = maxOf((placed.maxOfOrNull { it.x } ?: 0f) + 190f, 340f).dp
-                val canvasH = maxOf((placed.maxOfOrNull { it.y } ?: 0f) + 80f, 300f).dp
-                Box(Modifier.width(canvasW).height(canvasH)) {
-                    Canvas(Modifier.fillMaxSize()) { drawGrid(gridNormal, gridStrong) }
-                    Canvas(Modifier.fillMaxSize()) {
-                        drawWorkflowEdges(placed, def, edgeColor)
+            // 画布：与预览**同一套组件**（点阵 / 贝塞尔 / 缩放平移），只是可编辑。
+            // 拖动的结果写回定义（posX/posY）—— 摆位不落盘，用户摆好的图下次打开就自己跳。
+            // 画布吃满剩余高度：编辑页的主体就是画布，下面是工具与属性面板。
+            val placed = layoutNodes(def)
+            val density = LocalDensity.current
+            WorkflowBlueprintCanvas(
+                definition = def,
+                positions = placed.associate { it.id to Offset(it.x, it.y) },
+                readOnly = false,
+                zoomable = true,
+                selectedNodeId = selected,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                onNodeClick = { id ->
+                    val from = linkFrom
+                    if (from == null) {
+                        selected = if (selected == id) null else id
+                    } else if (from != id) {
+                        draft = def.copy(edges = def.edges + WorkflowEdge(from, id, linkWhen))
+                        linkFrom = null
+                        linkWhen = ""
                     }
-                    for (node in def.nodes) {
-                        NodeCard(
-                            node = node,
-                            selected = selected == node.id,
-                            showWatermark = true,
-                            modifier = Modifier.offset(node.posX.dp, node.posY.dp),
-                            onClick = {
-                                val from = linkFrom
-                                if (from == null) {
-                                    selected = if (selected == node.id) null else node.id
-                                } else if (from != node.id) {
-                                    draft = def.copy(edges = def.edges + WorkflowEdge(from, node.id, linkWhen))
-                                    linkFrom = null
-                                    linkWhen = ""
-                                }
-                            },
-                            onDrag = { dx, dy ->
-                                // 吸附到 12dp 网格（规格：位置量纲 = 格号），摆出来的图才整齐
-                                val nx = snapGrid(node.posX + dx).toInt().coerceIn(0, 600)
-                                val ny = snapGrid(node.posY + dy).toInt().coerceIn(0, 900)
-                                draft = def.copy(
-                                    nodes = def.nodes.map {
-                                        if (it.id == node.id) it.copy(posX = nx, posY = ny) else it
-                                    },
-                                )
+                },
+                onNodeDrag = { id, dxPx, dyPx ->
+                    // 手势给的是**像素**，位置量纲是 dp：先在密度里换算，再吸附到 12dp 网格。
+                    val dxDp = with(density) { dxPx.toDp().value }
+                    val dyDp = with(density) { dyPx.toDp().value }
+                    val node = def.nodes.firstOrNull { it.id == id }
+                    if (node != null) {
+                        val nx = snapGrid(node.posX + dxDp).toInt().coerceIn(0, 600)
+                        val ny = snapGrid(node.posY + dyDp).toInt().coerceIn(0, 900)
+                        draft = def.copy(
+                            nodes = def.nodes.map {
+                                if (it.id == id) it.copy(posX = nx, posY = ny) else it
                             },
                         )
                     }
-                }
-            }
+                },
+            )
             if (linkFrom != null) {
                 Spacer(Modifier.height(6.dp))
                 Surface(

@@ -74,7 +74,8 @@ internal fun WorkflowBlueprintCanvas(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(if (zoomable) 420.dp else 340.dp)
+            // 高度交给调用方：预览是固定 340dp，编辑页是 weight(1f) 吃满剩余空间。
+            // 自带高度会和 weight 打架，画布要么被固定死、要么留一片空白。
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
             .then(

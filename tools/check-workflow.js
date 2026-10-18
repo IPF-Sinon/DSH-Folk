@@ -240,8 +240,12 @@ ok(/onOpenWorkflow = \{ navigator\.navigate\(WorkflowScreenDestination\) \}/.tes
   "那一行真的会打开工作流页（不是只声明一个没人用的参数）");
 ok(/drawGrid/.test(SRC.dialogs) && /private fun NodeCard\(/.test(SRC.dialogs),
   "编辑页/预览是画布（方格线 + 节点卡），不是一列输入框");
-ok(/onDrag = \{ dx, dy ->[\s\S]{0,500}?it\.copy\(posX = nx, posY = ny\)/.test(SRC.dialogs),
-  "拖动把坐标写回定义（蓝图摆位不落盘，下次打开就会自己跳）");
+// 编辑页的画布已换成 WorkflowBlueprintCanvas（与预览同一套）；拖动回调的手势量是像素，
+// 先在密度里换算成 dp 再吸附 12dp 网格，最后写回 posX/posY。
+ok(/onNodeDrag = \{ id, dxPx, dyPx ->[\s\S]{0,900}?it\.copy\(posX = nx, posY = ny\)/.test(SRC.dialogs),
+  "拖动把坐标写回定义（像素→dp→吸附网格，摆位不落盘下次打开就会自己跳）");
+ok(/WorkflowBlueprintCanvas\(/.test(SRC.dialogs) && /zoomable = true/.test(SRC.dialogs),
+  "编辑页用的是同一块画布（可缩放），不是另一套自绘");
 ok(/private fun RunDetailDialog\(/.test(SRC.screen) && /WorkflowStore\.readLog/.test(SRC.screen),
   "详情是弹窗，且把当时那一版定义与日志都摆出来");
 ok(/warn = tool\.state != "ok"/.test(SRC.screen),
