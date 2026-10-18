@@ -248,8 +248,8 @@ internal fun WorkflowEditorSurface(
                             val from = dragFrom
                             val preview = dragPreview
                             if (from != null && preview != null && from.first == id) {
-                                val nx = WorkflowGeometry.snapToGridDp(preview.second).coerceIn(0, 2000)
-                                val ny = WorkflowGeometry.snapToGridDp(preview.third).coerceIn(0, 2000)
+                                val nx = WorkflowGeometry.snapToGridDp(preview.second.x).coerceIn(0, 2000)
+                                val ny = WorkflowGeometry.snapToGridDp(preview.second.y).coerceIn(0, 2000)
                                 draft = def.copy(
                                     nodes = def.nodes.map { if (it.id == id) it.copy(posX = nx, posY = ny) else it },
                                 )
