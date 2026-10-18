@@ -471,7 +471,12 @@ fun FunctionSettingsContent(
             // ───────── 权限管理 ─────────
             // 通道、配对与每一项原生能力都收进了这一页（分类 + 搜索）。原先它们挤在安全页上一条
             // 越接越长的列表里，想找某一项只能一路滚到底 —— 见 PermissionHubScreen 的 KDoc。
-            item(key = "function_permission") {
+            // 安全页（permissionOnly）不画这张入口卡：权限正文已经内联在那一页上，
+            // 再放一张「权限管理」入口卡就是同一个目的地的第二个入口（真机反馈删掉）。
+            // 安全页（permissionOnly）不画这张卡：权限正文已经内联在那一页上。视觉由层级决定，
+            // 不开逐卡的 visible 开关（门禁钉过这一点）。
+            if (!permissionOnly) {
+                item(key = "function_permission") {
                 ExpressiveCard(flat = flat, onClick = onOpenPermissionHub) {
                     Column(Modifier.fillMaxWidth().padding(16.dp)) {
                         SectionHeader(
@@ -482,12 +487,17 @@ fun FunctionSettingsContent(
                     }
                 }
             }
+            }
 
             // ───────── 共享存储（挂载 /sdcard） ─────────
             // 它从来不是"原生能力"的一部分：原生能力是"拿到身份后能动什么"，而它管的是容器里
             // 有没有 /sdcard。原来只是凑巧画在那张卡片里，还被桥的总开关一起藏了起来 ——
             // 桥关着它照样有用（挂载层与 dsh-fs 桥都不经过原生能力桥），所以现在独立成卡。
-            item(key = "function_storage_mount") {
+            // 安全页上这张大卡换成权限正文里的一行（短文案）；功能页仍保留富卡片。
+            // 安全页（permissionOnly）不画这张卡：权限正文已经内联在那一页上。视觉由层级决定，
+            // 不开逐卡的 visible 开关（门禁钉过这一点）。
+            if (!permissionOnly) {
+                item(key = "function_storage_mount") {
                 ExpressiveCard(flat = flat) {
                     Column(Modifier.fillMaxWidth().padding(16.dp)) {
                         // ── 共享存储（挂载 /sdcard） ──
@@ -548,6 +558,7 @@ fun FunctionSettingsContent(
                         }
                     }
                 }
+            }
             }
         }
     } else if (group != null) {

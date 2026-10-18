@@ -1480,6 +1480,21 @@ console.log("── 限制模式页与弹窗 ──");
   // settings 就是 FunctionSettings.kt 的全文，直接用它匹配入口层那一段
   const hubContent = settings;
   const screenCode = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt", "utf8");
+  const permHub = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionHubScreen.kt", "utf8");
+
+  // 安全页取舍（真机反馈）：权限正文已经内联，所以入口卡与共享存储大卡都不再出现在这一页；
+  // 共享存储在权限正文里变成一行开关；无线 ADB 只在「特权通道选的就是它」时出现。
+  ok(/if \(!permissionOnly\) \{[\s\S]{0,200}?item\(key = "function_permission"\)/.test(settings),
+    "安全页不再画「权限管理」入口卡（正文就在本页；按层级隐藏，不开逐卡 visible）");
+  ok(/if \(!permissionOnly\) \{[\s\S]{0,200}?item\(key = "function_storage_mount"\)/.test(settings),
+    "安全页不再画共享存储大卡（它挪进了权限正文的一行；按层级隐藏）");
+  ok(/StorageMountRow\(mountEnabled\)/.test(permHub), "权限正文里有共享存储一行");
+  ok(/if \(perm\.channel == PermissionManager\.Channel\.ADB\)/.test(permHub),
+    "无线 ADB 只在特权通道选的是无线 ADB 时才出现");
+  ok(/private fun StorageMountRow\(/.test(permHub) &&
+    /DshFileAccess\.setMountEnabled\(context, on\)/.test(permHub) &&
+    /DshHostPrompt\.writeFacts\(context\)/.test(permHub),
+    "共享存储开关的语义没变（setMountEnabled + 写一次宿主事实）");
   const functional = [
     "function_auto_open_webui", "function_auto_start_service", "function_autostart",
     "function_clean_storage", "function_docs_access", "function_gh_mirror", "function_lan",

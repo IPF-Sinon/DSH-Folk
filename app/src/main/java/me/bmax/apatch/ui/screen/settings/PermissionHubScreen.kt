@@ -62,6 +62,7 @@ import me.bmax.apatch.ui.component.HubCard
 import me.bmax.apatch.ui.component.HubHitRow
 import me.bmax.apatch.ui.component.HubRow
 import me.bmax.apatch.ui.component.SearchAppBar
+import me.bmax.apatch.dsh.DshFileAccess
 import me.bmax.apatch.dsh.PermissionManager
 import me.bmax.apatch.dsh.PrivPolicy
 
@@ -187,9 +188,11 @@ internal fun PermissionEntriesSection(
     val channelLabel = perm.label(context)
     // 总开关与档位都可能在别处被改（系统设置、功能页），回到本页时重读一遍
     var bridgeEnabled by remember { mutableStateOf(DshNativeBridge.enabled(context)) }
+    var mountEnabled by remember { mutableStateOf(DshFileAccess.mountEnabled(context)) }
     var activeCaps by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         bridgeEnabled = DshNativeBridge.enabled(context)
+        mountEnabled = DshFileAccess.mountEnabled(context)
         activeCaps = DshNativeBridge.accessMap(context).values.count { it != DshNativeBridge.Access.OFF }
         onPauseOrDispose { }
     }
@@ -201,17 +204,28 @@ internal fun PermissionEntriesSection(
                 summary = stringResource(R.string.dsh_perm_cat_privileged_summary, channelLabel),
                 onClick = { navigator.navigate(PrivilegedChannelScreenDestination) },
             )
-            HubRow(
-                icon = Icons.Filled.Wifi,
-                title = stringResource(R.string.dsh_perm_cat_wireless_adb),
-                // 这一行常显（没 root 也没 Shizuku 的用户，这是唯一一条能自己配出来的
-                // 通道，藏起来就没法发现了），所以副标题必须说清它现在到底能不能用。
-                summary = stringResource(
-                    if (perm.adbPaired) R.string.dsh_adb_paired
-                    else R.string.dsh_perm_state_adb_unconfigured
-                ) + " · " + stringResource(R.string.dsh_adb_summary),
-                onClick = { navigator.navigate(WirelessAdbScreenDestination) },
-            )
+            // 共享存储：一个开关管两件事（容器 bind 挂载 + dsh-fs 桥）。原先它是安全页上
+            // 一张大卡、说明一大段；现在挪进权限正文，只留标题 + 一行副标题 —— 这一页是
+            // 入口，不是说明书（真机反馈「文字少一点」）。
+            StorageMountRow(mountEnabled) { on ->
+                mountEnabled = on
+                DshFileAccess.setMountEnabled(context, on)
+                // 提示词里写着「哪些能力开着」，开关一变就得让容器侧看到新事实
+                DshHostPrompt.writeFacts(context)
+            }
+            // 无线 ADB 只在「特权通道选的就是无线 ADB」时出现：它是那条通道的细项，
+            // 不是一件独立功能；常显会让没有 root/Shizuku 的人也以为它是个开关。
+            if (perm.channel == PermissionManager.Channel.ADB) {
+                HubRow(
+                    icon = Icons.Filled.Wifi,
+                    title = stringResource(R.string.dsh_perm_cat_wireless_adb),
+                    summary = stringResource(
+                        if (perm.adbPaired) R.string.dsh_adb_paired
+                        else R.string.dsh_perm_state_adb_unconfigured
+                    ) + " · " + stringResource(R.string.dsh_adb_summary),
+                    onClick = { navigator.navigate(WirelessAdbScreenDestination) },
+                )
+            }
         }
 
         Spacer(Modifier.height(12.dp))
@@ -302,6 +316,34 @@ internal fun PermissionEntriesSection(
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
+    }
+}
+
+/**
+ * 共享存储的一行开关（权限正文里用）。
+ *
+ * 开关语义与之前那张大卡完全一样（bind 挂载 + dsh-fs，改完写一次宿主事实），只是不再在行内
+ * 展开「已授予 / 去授权 / 重启 dsh」那几行 —— 那些属于「文件访问范围」页。
+ */
+@Composable
+private fun StorageMountRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.dsh_storage_cap_title),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(R.string.dsh_storage_mount_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        ExpressiveSwitch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
