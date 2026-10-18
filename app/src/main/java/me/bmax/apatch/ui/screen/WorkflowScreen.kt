@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
+import com.ramcosta.composedestinations.generated.destinations.WorkflowEditorScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import java.io.File
 import kotlinx.coroutines.Dispatchers

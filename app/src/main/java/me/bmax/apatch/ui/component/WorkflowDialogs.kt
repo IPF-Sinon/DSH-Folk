@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Warning
@@ -35,6 +36,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -54,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -465,14 +468,41 @@ internal fun WorkflowDefinitionEditor(
     }
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                stringResource(R.string.dsh_workflow_editor_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
+        // 画布是整页主角，chrome 浮在它上面 —— 与点击助手的编辑页同一种结构：
+        // 左上「返回」、中「任务名」、右上「保存」，底部是可折叠的工具/属性面板。
+        Box(Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(shape = RoundedCornerShape(50), tonalElevation = 5.dp) {
+                    IconButton(onClick = {
+                        if (patchLines.isEmpty()) onCancel() else confirmDiscard = true
+                    }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.dsh_workflow_action_cancel),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                Surface(shape = RoundedCornerShape(50), tonalElevation = 5.dp) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                Button(onClick = { onSave(def) }, shape = RoundedCornerShape(50)) {
+                    Text(stringResource(R.string.dsh_workflow_editor_save))
+                }
+            }
             // 画布：与预览**同一套组件**（点阵 / 贝塞尔 / 缩放平移），只是可编辑。
             // 拖动的结果写回定义（posX/posY）—— 摆位不落盘，用户摆好的图下次打开就自己跳。
             // 画布吃满剩余高度：编辑页的主体就是画布，下面是工具与属性面板。
@@ -484,7 +514,8 @@ internal fun WorkflowDefinitionEditor(
                 readOnly = false,
                 zoomable = true,
                 selectedNodeId = selected,
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                // 铺满整页：chrome 与底部面板浮在它上面。
+                modifier = Modifier.fillMaxSize(),
                 onNodeClick = { id ->
                     val from = linkFrom
                     if (from == null) {
@@ -511,6 +542,26 @@ internal fun WorkflowDefinitionEditor(
                     }
                 },
             )
+            // 底部面板（可折叠的「工具 + 属性」区）：浮在画布下沿，不占画布高度。
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(8.dp),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 12.dp, bottomEnd = 12.dp),
+                    tonalElevation = 3.dp,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                ) {
+                    // 面板最高占屏 40% 左右：再长就该滚动，而不是把画布吃掉一大半。
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 340.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    ) {
             if (linkFrom != null) {
                 Spacer(Modifier.height(6.dp))
                 Surface(
@@ -643,8 +694,11 @@ internal fun WorkflowDefinitionEditor(
                     if (patchLines.isEmpty()) onCancel() else confirmDiscard = true
                 }) { Text(stringResource(R.string.dsh_workflow_action_cancel)) }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { onSave(def) }) {
-                    Text(stringResource(R.string.dsh_workflow_editor_save))
+                        Button(onClick = { onSave(def) }) {
+                            Text(stringResource(R.string.dsh_workflow_editor_save))
+                        }
+                    }
+                    }
                 }
             }
         }
