@@ -119,13 +119,6 @@ internal fun WorkflowBlueprintCanvas(
                             pan += amount
                         }
                     }
-                } else {
-                    Modifier.pointerInput(Unit) {
-                        detectTapGestures { p ->
-                            val hit = hitTest(p)
-                            if (hit != null) onNodeClick?.invoke(hit.first)
-                        }
-                    }
                 },
             ),
     ) {

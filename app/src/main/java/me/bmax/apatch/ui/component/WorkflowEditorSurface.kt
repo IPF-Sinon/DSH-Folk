@@ -61,28 +61,25 @@ import me.bmax.apatch.dsh.WorkflowSchema
 import me.bmax.apatch.dsh.WorkflowValidator
 import me.bmax.apatch.dsh.workflowDiff
 
-/** 画布上一个节点的落点（dp）。 */
-private data class Placed(val id: String, val x: Float, val y: Float)
+private data class EditorNodeKind(val type: WorkflowNodeType, val labelRes: Int, val defaults: Map<String, String>)
 
-private data class NodeKind(val type: WorkflowNodeType, val labelRes: Int, val defaults: Map<String, String>)
-
-private val NODE_CATALOG = listOf(
-    NodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_shell, configForAction(WorkflowActionType.SHELL)),
-    NodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_dsh, configForAction(WorkflowActionType.DSH)),
-    NodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_notify, configForAction(WorkflowActionType.NOTIFY)),
-    NodeKind(WorkflowNodeType.CONDITION, R.string.dsh_workflow_kind_condition, mapOf("source" to "exitCode", "op" to "equals", "value" to "0")),
-    NodeKind(WorkflowNodeType.EXTRACT, R.string.dsh_workflow_kind_extract, mapOf("source" to "lastOutput", "mode" to "text", "var" to "value")),
-    NodeKind(WorkflowNodeType.WAIT, R.string.dsh_workflow_kind_wait, mapOf("ms" to "1000")),
-    NodeKind(WorkflowNodeType.LOGIC, R.string.dsh_workflow_kind_logic, mapOf("op" to "and", "sources" to "")),
+private val EDITOR_NODE_CATALOG = listOf(
+    EditorNodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_shell, editorConfigForAction(WorkflowActionType.SHELL)),
+    EditorNodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_dsh, editorConfigForAction(WorkflowActionType.DSH)),
+    EditorNodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_notify, editorConfigForAction(WorkflowActionType.NOTIFY)),
+    EditorNodeKind(WorkflowNodeType.CONDITION, R.string.dsh_workflow_kind_condition, mapOf("source" to "exitCode", "op" to "equals", "value" to "0")),
+    EditorNodeKind(WorkflowNodeType.EXTRACT, R.string.dsh_workflow_kind_extract, mapOf("source" to "lastOutput", "mode" to "text", "var" to "value")),
+    EditorNodeKind(WorkflowNodeType.WAIT, R.string.dsh_workflow_kind_wait, mapOf("ms" to "1000")),
+    EditorNodeKind(WorkflowNodeType.LOGIC, R.string.dsh_workflow_kind_logic, mapOf("op" to "and", "sources" to "")),
 )
 
-private fun configForAction(action: WorkflowActionType): Map<String, String> = when (action) {
+private fun editorConfigForAction(action: WorkflowActionType): Map<String, String> = when (action) {
     WorkflowActionType.SHELL -> mapOf("action" to "shell", "cmd" to "echo hello")
     WorkflowActionType.DSH -> mapOf("action" to "dsh", "cmd" to "dsh --version")
     WorkflowActionType.NOTIFY -> mapOf("action" to "notify", "text" to "流程完成")
 }
 
-private fun nodeKeyOf(node: WorkflowNode): String = when (node.type) {
+private fun editorNodeKeyOf(node: WorkflowNode): String = when (node.type) {
     WorkflowNodeType.EXECUTE -> if (node.actionType == WorkflowActionType.NOTIFY) "text" else "cmd"
     WorkflowNodeType.CONDITION -> "value"
     WorkflowNodeType.EXTRACT -> "var"
@@ -125,7 +122,7 @@ internal fun WorkflowEditorSurface(
         WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
     }
 
-    fun addNode(kind: NodeKind, afterId: String?) {
+    fun addNode(kind: EditorNodeKind, afterId: String?) {
         val id = "n" + (def.nodes.size + 1) + "_" + (System.currentTimeMillis() % 1000)
         val index = def.nodes.size
         val node = WorkflowNode(
@@ -266,7 +263,7 @@ internal fun WorkflowEditorSurface(
                                 .padding(horizontal = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            for (kind in NODE_CATALOG) {
+                            for (kind in EDITOR_NODE_CATALOG) {
                                 SheetNodeRow(
                                     label = stringResource(kind.labelRes),
                                     onTap = {
@@ -348,7 +345,7 @@ internal fun WorkflowEditorSurface(
             title = { Text(stringResource(R.string.dsh_workflow_editor_add_node)) },
             text = {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    for (kind in NODE_CATALOG) {
+                    for (kind in EDITOR_NODE_CATALOG) {
                         TextButton(onClick = { addNode(kind, after); addAfter = null }) {
                             Text(stringResource(kind.labelRes))
                         }
@@ -428,7 +425,7 @@ private fun SheetNodeRow(label: String, onTap: () -> Unit, onDragOut: () -> Unit
 /** 节点参数编辑（点卡片弹出的窗里用）：按类型只显示这个类型认识的键。 */
 @Composable
 private fun NodeParamEditor(node: WorkflowNode, onChange: (WorkflowNode) -> Unit) {
-    val key = nodeKeyOf(node)
+    val key = editorNodeKeyOf(node)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             node.type.id + (node.actionType?.let { " · " + it.id } ?: ""),
@@ -444,7 +441,7 @@ private fun NodeParamEditor(node: WorkflowNode, onChange: (WorkflowNode) -> Unit
                     } else {
                         OutlinedButton(
                             onClick = {
-                                onChange(node.copy(config = configForAction(action) + mapOf("action" to action.id)))
+                                onChange(node.copy(config = editorConfigForAction(action) + mapOf("action" to action.id)))
                             },
                             shape = RoundedCornerShape(50),
                         ) { Text(action.id) }
