@@ -93,7 +93,6 @@ import me.bmax.apatch.dsh.workflowDiff
  * 编辑期间审批的倒计时是暂停的（见 [WorkflowApprovals.startEditing]）——用户在改东西的时候
  * 被判定超时，那不是安全设计。
  */
-@Composable
 fun WorkflowDialogHosts() {
     val ctx = LocalContext.current
     val approval by WorkflowApprovals.pending.collectAsState()
@@ -395,9 +394,6 @@ internal fun WorkflowGraphPreview(definition: WorkflowDefinition) {
     )
 }
 
-/** 一张节点卡：左侧按类型着色的竖条 + 名称 + 类型/动作副标题。 */
-@Composable
-/** 正交连线（横-竖-横）：比直线更容易看清「谁接谁」，也便于在中段放分支标签。 */
 /** 节点在画布上的坐标：有落盘坐标就用它，全为 0（AI 生成的定义）时按拓扑分层自动摆。 */
 private data class PlacedNode(val id: String, val x: Float, val y: Float)
 
