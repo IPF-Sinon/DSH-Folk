@@ -45,10 +45,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.WorkflowActionType
@@ -112,6 +114,11 @@ internal fun WorkflowEditorSurface(
     var addAfter by remember { mutableStateOf<String?>(null) }
     var sheetOpen by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
+    // 抽屉拖出用的坐标基准：根容器与画布在窗口里的位置（px），以及跟随手指的幽灵卡。
+    var rootOrigin by remember { mutableStateOf(Offset.Zero) }
+    var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    var ghost by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     val patchLines: List<WorkflowPatch> = remember(def) { workflowDiff(initial, def) }
     // 系统返回与「取消」同一条路：先问要不要放弃改动。
     androidx.activity.compose.BackHandler {
@@ -120,6 +127,21 @@ internal fun WorkflowEditorSurface(
     val density = androidx.compose.ui.platform.LocalDensity.current.density
     val errors: List<String> = remember(def) {
         WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
+    }
+
+    /** 在指定 dp 位置新建节点（抽屉拖出用：落点 = 松手位置，已吸附 12dp 网格）。 */
+    fun addNodeAt(kind: EditorNodeKind, xDp: Int, yDp: Int) {
+        val id = "n" + (def.nodes.size + 1) + "_" + (System.currentTimeMillis() % 1000)
+        draft = def.copy(
+            nodes = def.nodes + WorkflowNode(
+                id = id,
+                type = kind.type,
+                name = "",
+                posX = xDp,
+                posY = yDp,
+                config = kind.defaults,
+            ),
+        )
     }
 
     fun addNode(kind: EditorNodeKind, afterId: String?) {
@@ -139,7 +161,12 @@ internal fun WorkflowEditorSurface(
         )
     }
 
-    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { rootOrigin = it.positionInWindow() },
+    ) {
         Column(Modifier.fillMaxSize()) {
             // ── 顶栏：真正占一行，画布不会和它重叠 ──
             Row(
@@ -176,7 +203,15 @@ internal fun WorkflowEditorSurface(
             }
 
             // ── 画布 ──
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .onGloballyPositioned {
+                        canvasOrigin = it.positionInWindow()
+                        canvasSize = it.size
+                    },
+            ) {
                 val placed = layoutFor(def)
                 WorkflowBlueprintCanvas(
                     definition = def,
@@ -241,6 +276,27 @@ internal fun WorkflowEditorSurface(
             }
         }
 
+        // 幽灵卡：拖出过程中跟着手指，提示「松手会落在哪」。
+        ghost?.let { (label, pos) ->
+            Surface(
+                shape = RoundedCornerShape(50),
+                tonalElevation = 8.dp,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.offset {
+                    androidx.compose.ui.unit.IntOffset(
+                        (pos.x - rootOrigin.x).toInt(),
+                        (pos.y - rootOrigin.y).toInt(),
+                    )
+                },
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+
         // ── 节点抽屉：往上拖可以「拖出」一个节点；点一下在画布中央新建 ──
         if (sheetOpen) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))) {
@@ -279,8 +335,24 @@ internal fun WorkflowEditorSurface(
                                         addNode(kind, null)
                                         sheetOpen = false
                                     },
-                                    onDragOut = {
-                                        addNode(kind, null)
+                                    onDragStart = { windowPos -> ghost = stringResource(kind.labelRes) to windowPos },
+                                    onDragMove = { windowPos -> ghost = stringResource(kind.labelRes) to windowPos },
+                                    onDragEnd = { windowPos ->
+                                        ghost = null
+                                        // 只有落在**画布矩形内**才算拖出；松在抽屉里/导航条上 = 取消。
+                                        val inCanvas = windowPos.x >= canvasOrigin.x &&
+                                            windowPos.x <= canvasOrigin.x + canvasSize.width &&
+                                            windowPos.y >= canvasOrigin.y &&
+                                            windowPos.y <= canvasOrigin.y + canvasSize.height
+                                        if (inCanvas) {
+                                            val xDp = WorkflowGeometry.snapToGridDp(
+                                                WorkflowGeometry.pxToDp(windowPos.x - canvasOrigin.x, density),
+                                            ).coerceAtLeast(0)
+                                            val yDp = WorkflowGeometry.snapToGridDp(
+                                                WorkflowGeometry.pxToDp(windowPos.y - canvasOrigin.y, density),
+                                            ).coerceAtLeast(0)
+                                            addNodeAt(kind, xDp, yDp)
+                                        }
                                         sheetOpen = false
                                     },
                                 )
@@ -399,23 +471,40 @@ internal fun WorkflowEditorSurface(
  * 到画布上」的手感）。这里不放画布坐标 —— 拖出后落到默认位置，用户再拖到位即可。
  */
 @Composable
-private fun SheetNodeRow(label: String, onTap: () -> Unit, onDragOut: () -> Unit) {
+private fun SheetNodeRow(
+    label: String,
+    onTap: () -> Unit,
+    onDragStart: (Offset) -> Unit,
+    onDragMove: (Offset) -> Unit,
+    onDragEnd: (Offset) -> Unit,
+) {
     var dragged by remember { mutableStateOf(false) }
+    // 本行在窗口里的位置：拖出手势的位置是**本行局部坐标**，要加上它才能得到窗口坐标。
+    var rowOrigin by remember { mutableStateOf(Offset.Zero) }
+    var pointer by remember { mutableStateOf(Offset.Zero) }
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
         modifier = Modifier
             .fillMaxWidth()
+            .onGloballyPositioned { rowOrigin = it.positionInWindow() }
             .pointerInput(label) {
-                var total = 0f
                 detectDragGestures(
-                    onDragStart = { total = 0f },
-                    onDragEnd = { if (total < -32f) onDragOut() else if (!dragged) onTap(); dragged = false },
+                    onDragStart = { start ->
+                        dragged = false
+                        pointer = rowOrigin + start
+                        onDragStart(pointer)
+                    },
+                    onDragEnd = {
+                        if (dragged) onDragEnd(pointer) else onTap()
+                        dragged = false
+                    },
                     onDragCancel = { dragged = false },
                 ) { change, amount ->
                     change.consume()
                     dragged = true
-                    total += amount.y
+                    pointer += amount
+                    onDragMove(pointer)
                 }
             },
     ) {

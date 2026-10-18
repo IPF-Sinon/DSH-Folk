@@ -574,6 +574,23 @@ console.log("\u2500 #16h 坐标换算与手势结构（拖动 1:1 的契约）")
     "画布平移只在图层上应用一次（不再在卡片偏移里重复加）");
 }
 
+console.log("\u2500 #16i 抽屉拖出：落点就是松手位置（阶段 4）");
+{
+  const e = SRC.editorSurface;
+  ok(/positionInWindow\(\)/.test(e) && /onGloballyPositioned/.test(e),
+    "抽屉与画布都用窗口坐标做基准（否则局部坐标算不出落点）");
+  ok(/var pointer by remember/.test(e) && /pointer \+= amount/.test(e),
+    "拖出时累计的是**窗口坐标**里的指针位置，不是相对抽屉的位移");
+  ok(/val inCanvas = windowPos\.x >= canvasOrigin\.x/.test(e) && /canvasSize\.height/.test(e),
+    "只有落在画布矩形内才算拖出（松在抽屉/导航条上 = 取消）");
+  ok(/addNodeAt\(kind, xDp, yDp\)/.test(e) &&
+    /WorkflowGeometry\.snapToGridDp\(\s*WorkflowGeometry\.pxToDp\(windowPos\.x - canvasOrigin\.x, density\)/.test(e),
+    "落点经 pxToDp + 12dp 吸附后落盘");
+  ok(/ghost\?\.let \{/.test(e) && /pos\.x - rootOrigin\.x/.test(e),
+    "拖出过程中有跟随手指的幽灵卡");
+  ok(!/total < -32f/.test(e), "删掉了「只按向上位移猜」的旧启发式");
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),
