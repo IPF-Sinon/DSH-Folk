@@ -58,6 +58,8 @@ internal fun WorkflowNodeCard(
     selected: Boolean = false,
     onClick: (() -> Unit)? = null,
     onDrag: ((Float, Float) -> Unit)? = null,
+    /** 点右侧输出口：从「接口」拉出下一个节点的菜单。 */
+    onAddAfter: (() -> Unit)? = null,
 ) {
     val accent = workflowNodeAccent(node.type)
     val borderColor = when (status) {
@@ -143,7 +145,11 @@ internal fun WorkflowNodeCard(
                             for (pin in inputs) WorkflowPinRow(pin, alignEnd = false)
                         }
                         Column(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(
+                                    if (onAddAfter != null) Modifier.clickable { onAddAfter() } else Modifier,
+                                ),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                             horizontalAlignment = Alignment.End,
                         ) {
