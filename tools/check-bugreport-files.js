@@ -191,7 +191,7 @@ ok(!/system\/dropbox \/sys\/fs\/pstore[\s\S]{0,80}head -1/.test(code),
 
 console.log("── 诊断来源：dsh 的日志都要能进归档 ──");
 // 起服务时会清空 dsh 的日志，所以必须轮转留一份 —— 否则「重启之后再采集」只有本次运行的内容
-const runtime = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8");
+const runtime = (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8"));
 const env = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt", "utf8");
 ok(/fun serverLogPrev\(ctx: Context\): File = File\(ctx\.filesDir, "logs\/dsh-web\.prev\.log"\)/.test(env),
   "DshEnv 提供「上一次运行」的日志路径");
@@ -376,7 +376,7 @@ console.log("── 日志时间窗口裁切（DshLogWindow） ──");
 // basic.txt 里，但那份要解压、翻文件；横幅只要厂商 + 型号 + Android 版本这三样。
 console.log("── 启动日志里的设备信息 ──");
 {
-  const runtime = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8");
+  const runtime = (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8"));
   const zh = fs.readFileSync("app/src/main/res/values-zh-rCN/dsh_strings.xml", "utf8");
   ok(/name="dsh_log_device"/.test(zh), "dsh_log_device 有中文文案");
   ok(/logInfo\(\s*R\.string\.dsh_log_device,/.test(runtime) &&

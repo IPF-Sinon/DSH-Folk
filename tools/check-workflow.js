@@ -38,7 +38,11 @@ const SRC = {
   perms: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowPermissions.kt"),
   native: read("app/src/main/java/me/bmax/apatch/dsh/DshNativeBridge.kt"),
   fsbridge: read("app/src/main/java/me/bmax/apatch/dsh/DshFsBridge.kt"),
-  runtime: read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt"),
+  // 内嵌脚本（dsh-workflow CLI / DSL 文档 / 样例）已搬到 DshRuntimeScripts.kt。
+  runtime:
+    (read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt") + "\n" + read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt")) +
+    "\n" +
+    read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt"),
   hostPrompt: read("app/src/main/java/me/bmax/apatch/dsh/DshHostPrompt.kt"),
   engineHarness: read("app/src/main/java/me/bmax/apatch/dsh/HarnessService.kt"),
   settings: read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt"),
@@ -219,7 +223,7 @@ console.log("\u2500 #9 容器侧插件：降级 + 说明文档 + 版本号独立
   ok(/private const val PLUGIN_REV = 20/.test(SRC.hostPrompt),
     "宿主提示词插件的 PLUGIN_REV 未被牵连抬高（内容没变）");
   ok(/PluginSpec\(\s*WORKFLOW_ASSET_NAME/.test(SRC.hostPrompt), "工作流插件在落盘/patch 清单里");
-  ok(/private val WORKFLOW_DSL_DOC = """/.test(SRC.runtime) && /WORKFLOW_DSL_DOC_NAME/.test(SRC.runtime),
+  ok(/val WORKFLOW_DSL_DOC = """/.test(SRC.runtime) && /WORKFLOW_DSL_DOC_NAME/.test(SRC.runtime),
     "宿主写 DSL 说明进容器");
   ok(/MAX_NODES|node types|trigger/.test(SRC.runtime.split("WORKFLOW_DSL_DOC = \"\"\"")[1] || ""),
     "DSL 说明里有节点类型（agent 照它写定义，才不会撞校验器）");

@@ -13,10 +13,16 @@ const os = require("os");
 
 const run = promisify(execFile);
 const SRC = "app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt";
-const kt = fs.readFileSync(SRC, "utf8");
+// 内嵌 CLI 已搬到同包 DshRuntimeScripts.kt（阶段 4 第二刀），抽取时两文件拼起来看。
+const kt = fs.readFileSync(SRC, "utf8") +
+  "\n" +
+  fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8");
+const ktRuntimeOnly = fs.readFileSync(SRC, "utf8");
 
 function extract(name) {
-  const start = kt.indexOf("private val " + name + " = \"\"\"");
+  // 搬进 DshRuntimeScripts 之后是 `val NAME = """`（对象成员，无 private）。
+  let start = kt.indexOf("val " + name + " = \"\"\"");
+  if (start >= 0) start = kt.lastIndexOf(" val ", start) >= 0 ? start : start;
   if (start < 0) throw new Error(name + " 找不到");
   const from = kt.indexOf("\n", start) + 1;
   const end = kt.indexOf("\"\"\".trimIndent()", from);
@@ -309,8 +315,9 @@ const server = http.createServer((req, res) => {
       /File\(DshEnv\.dshHome\(appContext\), TROUBLESHOOT_DOC_NAME\)/.test(kt) &&
       /DshRuntimeFiles\.writeIfChanged\(/.test(kt),
       "App 侧把清单写进 rootfs/root/.dsh（DshEnv.dshHome），与 CLI 的路径一致");
-    ok(/private fun nativeTroubleshootDoc\(\): String = buildString/.test(kt) &&
-      /appContext\.appString\(R\.string\.dsh_troubleshoot_/.test(kt),
+    // 实现在 DshRuntimeScripts（ctx 参数），DshRuntime 只留一行委托。
+    ok(/fun nativeTroubleshootDoc\([^)]*\): String = buildString/.test(kt) &&
+      /appString\(R\.string\.dsh_troubleshoot_/.test(kt),
       "清单用资源串组装（跟着应用内语言走，不写死一种语言）");
     for (const reason of ["REASON_ROOT_UNVERIFIED", "REASON_SHIZUKU_UNAUTHORIZED", "REASON_ADB_UNPAIRED"]) {
       ok(kt.includes("PrivilegedShell." + reason + "))"),

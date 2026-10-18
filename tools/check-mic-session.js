@@ -24,7 +24,7 @@ const fs = require("fs");
 const ROOT = __dirname + "/..";
 const read = (rel) => fs.readFileSync(require("path").join(ROOT, rel), "utf8");
 const bridge = read("app/src/main/java/me/bmax/apatch/dsh/DshNativeBridge.kt");
-const cli = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");
+const cli = (read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt") + "\n" + read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt"));
 const host = read("app/src/main/assets/dsh-folk-host.mjs");
 const cliGate = read("tools/check-native-cli.js");
 const zhStrings = read("app/src/main/res/values-zh-rCN/dsh_strings.xml");

@@ -16,7 +16,7 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const must = (c, m) => { if (!c) errors.push(m); };
 
 const env = read('app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt');
-const runtime = read('app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt');
+const runtime = (read('app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt') + "\n" + read('app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt'));
 const source = read('app/src/main/java/me/bmax/apatch/dsh/DshSource.kt');
 const repo = read('app/src/main/java/me/bmax/apatch/dsh/DshPluginRepo.kt');
 const appUpdater = read('app/src/main/java/me/bmax/apatch/util/AppUpdater.kt');

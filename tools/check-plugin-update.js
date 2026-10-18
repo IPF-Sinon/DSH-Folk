@@ -19,7 +19,7 @@ const must = (c, m) => { if (!c) errors.push(m); };
 const repo = read('app/src/main/java/me/bmax/apatch/dsh/DshPluginRepo.kt');
 const vm = read('app/src/main/java/me/bmax/apatch/ui/viewmodel/DshPluginViewModel.kt');
 const screen = read('app/src/main/java/me/bmax/apatch/ui/screen/DshPluginScreen.kt');
-const runtime = read('app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt');
+const runtime = (read('app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt') + "\n" + read('app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt'));
 
 // 1. 有显式的 latest 常量，且 install 会把它拼成 `pkg@latest`
 must(/const val VERSION_LATEST = "latest"/.test(repo),
