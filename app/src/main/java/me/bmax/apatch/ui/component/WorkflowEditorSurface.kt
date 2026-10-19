@@ -125,6 +125,8 @@ internal fun WorkflowEditorSurface(
     val def = draft
     var selected by remember { mutableStateOf<String?>(null) }
     var addAfter by remember { mutableStateOf<String?>(null) }
+    // 拉线落在空白时的**松手窗口坐标**：菜单里选完类型，新节点就落在这里（不是默认网格位）。
+    var addAfterAt by remember { mutableStateOf(Offset.Zero) }
     var sheetOpen by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
     // 抽屉拖出：幽灵卡（null = 没在拖）、根容器与画布在窗口里的位置。
@@ -148,8 +150,11 @@ internal fun WorkflowEditorSurface(
         if (patchLines.isEmpty()) onCancel() else confirmDiscard = true
     }
 
-    /** 在指定 dp 位置新建节点（抽屉拖出用：落点 = 松手位置，已吸附 12dp 网格）。 */
-    fun addNodeAt(kind: EditorNodeKind, xDp: Int, yDp: Int) {
+    /**
+     * 在指定 dp 位置新建节点（落点 = 松手位置，已吸附 12dp 网格）。
+     * afterId 非空时顺手连一条出边（从针脚拉出来、却落在空白的情况）。
+     */
+    fun addNodeAt(kind: EditorNodeKind, xDp: Int, yDp: Int, afterId: String? = null) {
         val id = "n" + (def.nodes.size + 1) + "_" + (System.currentTimeMillis() % 1000)
         draft = def.copy(
             nodes = def.nodes + WorkflowNode(
@@ -160,8 +165,19 @@ internal fun WorkflowEditorSurface(
                 posY = yDp,
                 config = kind.defaults,
             ),
+            edges = if (afterId != null) def.edges + WorkflowEdge(afterId, id, "") else def.edges,
         )
     }
+
+    /** 窗口坐标 → 画布 dp（吸附 12dp 网格）。拉线/抽屉拖出的落点都走这里。 */
+    fun dropPointDp(pointerWindow: Offset): Pair<Int, Int> = Pair(
+        WorkflowGeometry.snapToGridDp(
+            WorkflowGeometry.pxToDp(pointerWindow.x - canvasOrigin.x, density),
+        ).coerceAtLeast(0),
+        WorkflowGeometry.snapToGridDp(
+            WorkflowGeometry.pxToDp(pointerWindow.y - canvasOrigin.y, density),
+        ).coerceAtLeast(0),
+    )
 
     /** 落在默认网格位新建；afterId 非空时顺手连一条出边。 */
     fun addNode(kind: EditorNodeKind, afterId: String?) {
@@ -273,12 +289,14 @@ internal fun WorkflowEditorSurface(
                             dragAcc = Offset.Zero
                             dragPreview = null
                         },
-                        onWireDrop = { fromId, toId ->
+                        onWireDrop = { fromId, toId, pointer ->
                             if (toId != null) {
                                 if (def.edges.none { it.from == fromId && it.to == toId }) {
                                     draft = def.copy(edges = def.edges + WorkflowEdge(fromId, toId, ""))
                                 }
                             } else {
+                                // 落在空白：记住松手坐标，菜单选完类型后按它建节点。
+                                addAfterAt = pointer
                                 addAfter = fromId
                             }
                         },
@@ -409,12 +427,7 @@ internal fun WorkflowEditorSurface(
                                                     windowPos.y >= canvasOrigin.y &&
                                                     windowPos.y <= canvasOrigin.y + canvasSize.height
                                                 if (inCanvas) {
-                                                    val xDp = WorkflowGeometry.snapToGridDp(
-                                                        WorkflowGeometry.pxToDp(windowPos.x - canvasOrigin.x, density),
-                                                    ).coerceAtLeast(0)
-                                                    val yDp = WorkflowGeometry.snapToGridDp(
-                                                        WorkflowGeometry.pxToDp(windowPos.y - canvasOrigin.y, density),
-                                                    ).coerceAtLeast(0)
+                                                    val (xDp, yDp) = dropPointDp(windowPos)
                                                     addNodeAt(kind, xDp, yDp)
                                                 }
                                                 sheetOpen = false
@@ -495,7 +508,11 @@ internal fun WorkflowEditorSurface(
             text = {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     for (kind in EDITOR_NODE_CATALOG) {
-                        TextButton(onClick = { addNode(kind, after); addAfter = null }) {
+                        TextButton(onClick = {
+                            val (x, y) = dropPointDp(addAfterAt)
+                            addNodeAt(kind, x, y, after)
+                            addAfter = null
+                        }) {
                             Text(stringResource(kind.labelRes))
                         }
                     }

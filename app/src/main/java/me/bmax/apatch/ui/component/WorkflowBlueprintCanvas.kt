@@ -59,8 +59,11 @@ internal fun WorkflowBlueprintCanvas(
     onNodeDrag: ((id: String, dxPx: Float, dyPx: Float) -> Unit)? = null,
     onNodeDragStart: ((id: String) -> Unit)? = null,
     onNodeDragEnd: ((id: String) -> Unit)? = null,
-    /** 拉线松手：toId 非空 = 连到那张卡；为空 = 落在空白（调用方弹节点菜单）。 */
-    onWireDrop: ((fromId: String, toId: String?) -> Unit)? = null,
+    /**
+     * 拉线松手：toId 非空 = 连到那张卡；为空 = 落在空白（调用方弹节点菜单）。
+     * pointer 是松手时的**窗口坐标** —— 菜单里选了节点类型后，新节点要落在松手的位置。
+     */
+    onWireDrop: ((fromId: String, toId: String?, pointerWindow: Offset) -> Unit)? = null,
     onBlankTap: (() -> Unit)? = null,
 ) {
     val dotColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
@@ -154,7 +157,7 @@ internal fun WorkflowBlueprintCanvas(
                         wireFrom = null
                         if (from != null) {
                             val target = bounds.entries.firstOrNull { it.key != from && it.value.contains(pointer) }?.key
-                            wireDropCb.value?.invoke(from, target)
+                            wireDropCb.value?.invoke(from, target, pointer)
                         }
                     },
                 )

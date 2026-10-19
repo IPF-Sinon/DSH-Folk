@@ -567,7 +567,7 @@ console.log("\u2500 #16h 坐标换算与手势结构（拖动 1:1 的契约）")
   ok(/pointerInput\(Unit\)/.test(SRC.card), "卡片手势 key 是 Unit（拖动中位置变化不会重启检测器）");
   ok(/wireAnchor/.test(SRC.canvas) && /wirePointer/.test(SRC.canvas),
     "拉线两端都用窗口坐标（不随平移的画布原点换算），所以线跟手");
-  ok(/onWireDrop/.test(SRC.canvas) && /onWireDrop = \{ fromId, toId ->/.test(SRC.editorSurface),
+  ok(/onWireDrop/.test(SRC.canvas) && /onWireDrop = \{ fromId, toId, pointer ->/.test(SRC.editorSurface),
     "松手落在卡片上 = 连边（不是一律弹菜单）");
   // 卡片：不接手势，交给 focusable/semantics 与画布实测。
   ok(/focusable\(\)/.test(SRC.card) && /semantics \{ contentDescription/.test(SRC.card),
@@ -602,8 +602,9 @@ console.log("\u2500 #16i 抽屉拖出：落点就是松手位置（阶段 4）")
   ok(/val inCanvas = windowPos\.x >= canvasOrigin\.x/.test(e) && /canvasSize\.height/.test(e),
     "只有落在画布矩形内才算拖出（松在抽屉/导航条上 = 取消）");
   ok(/addNodeAt\(kind, xDp, yDp\)/.test(e) &&
-    /WorkflowGeometry\.snapToGridDp\(\s*WorkflowGeometry\.pxToDp\(windowPos\.x - canvasOrigin\.x, density\)/.test(e),
-    "落点经 pxToDp + 12dp 吸附后落盘");
+    /fun dropPointDp\(pointerWindow: Offset\): Pair<Int, Int>/.test(e) &&
+    /WorkflowGeometry\.snapToGridDp\(\s*WorkflowGeometry\.pxToDp\(pointerWindow\.x - canvasOrigin\.x, density\)/.test(e),
+    "落点经 pxToDp + 12dp 吸附后落盘（抽屉与拉线共用同一处换算）");
   ok(/ghost\?\.let \{/.test(e) && /pos\.x - rootOrigin\.x/.test(e),
     "拖出过程中有跟随手指的幽灵卡");
   ok(!/total < -32f/.test(e), "删掉了「只按向上位移猜」的旧启发式");
@@ -651,6 +652,21 @@ console.log("\u2500 #16l 手势回调的闭包新鲜度（第二次拖动跳回�
   ok(/val baseline = remember\(initial\)/.test(e) &&
     /editorLayoutFor\(initial\)/.test(e) && /workflowDiff\(baseline, def\)/.test(e),
     "自动布局在打开时就写进模型（模型=显示），且差异以 baseline 为基准（取消不误报改动）");
+}
+
+console.log("\u2500 #16m 拉线落空白：菜单选完按松手坐标建节点");
+{
+  const e = SRC.editorSurface;
+  const cv = SRC.canvas;
+  ok(/onWireDrop: \(\(fromId: String, toId: String\?, pointerWindow: Offset\) -> Unit\)\?/.test(cv) &&
+    /wireDropCb\.value\?\.invoke\(from, target, pointer\)/.test(cv),
+    "画布把松手坐标一起交给宿主");
+  ok(/addAfterAt = pointer/.test(e) && /dropPointDp\(addAfterAt\)/.test(e) &&
+    /addNodeAt\(kind, x, y, after\)/.test(e),
+    "菜单里选了类型后按松手坐标建节点，并连上源节点");
+  ok(/fun addNodeAt\(kind: EditorNodeKind, xDp: Int, yDp: Int, afterId: String\? = null\)/.test(e) &&
+    /edges = if \(afterId != null\) def\.edges \+ WorkflowEdge\(afterId, id, ""\) else def\.edges/.test(e),
+    "落点建节点时可以顺手连边（from → 新节点）");
 }
 
 console.log("\u2500 #17 用户自己也能建/改流程");
