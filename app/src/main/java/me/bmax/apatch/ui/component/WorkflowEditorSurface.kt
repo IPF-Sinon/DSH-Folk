@@ -106,7 +106,22 @@ internal fun WorkflowEditorSurface(
     onSave: (WorkflowDefinition) -> Unit,
     onCancel: () -> Unit,
 ) {
-    var draft by remember { mutableStateOf(initial) }
+    // 打开时的**基准**：模型里坐标全是 0（AI 生成 / 新建流程）时，先把自动布局算进模型 ——
+    // 否则「显示的位置」来自自动布局、「模型的位置」还是 0，拖动一上手就会跳。
+    val baseline = remember(initial) {
+        if (initial.nodes.isNotEmpty() && initial.nodes.all { it.posX == 0 && it.posY == 0 }) {
+            val laid = editorLayoutFor(initial)
+            initial.copy(
+                nodes = initial.nodes.map { n ->
+                    val p = laid.firstOrNull { it.first == n.id }
+                    if (p != null) n.copy(posX = p.second.toInt(), posY = p.third.toInt()) else n
+                },
+            )
+        } else {
+            initial
+        }
+    }
+    var draft by remember { mutableStateOf(baseline) }
     val def = draft
     var selected by remember { mutableStateOf<String?>(null) }
     var addAfter by remember { mutableStateOf<String?>(null) }
@@ -124,7 +139,7 @@ internal fun WorkflowEditorSurface(
     var dragPreview by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     val density = androidx.compose.ui.platform.LocalDensity.current.density
 
-    val patchLines: List<WorkflowPatch> = remember(def) { workflowDiff(initial, def) }
+    val patchLines: List<WorkflowPatch> = remember(def) { workflowDiff(baseline, def) }
     val errors: List<String> = remember(def) {
         WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
     }

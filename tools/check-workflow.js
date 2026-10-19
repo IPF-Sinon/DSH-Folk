@@ -634,6 +634,25 @@ console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回�
     "幽灵胶囊与落点对齐（不再自己往左上挪 40/20dp）");
 }
 
+console.log("\u2500 #16l 手势回调的闭包新鲜度（第二次拖动跳回原位的根因）");
+{
+  const c = SRC.card;
+  const cv = SRC.canvas;
+  const e = SRC.editorSurface;
+  ok(/val dragCb = rememberUpdatedState\(onDrag\)/.test(c) &&
+    /val dragStartCb = rememberUpdatedState\(onDragStart\)/.test(c) &&
+    /val dragEndCb = rememberUpdatedState\(onDragEnd\)/.test(c),
+    "卡片拖动回调经 rememberUpdatedState（key 不变的手势块不会重启，否则用的是旧闭包）");
+  ok(/dragCb\.value\?\.invoke\(amount\.x, amount\.y\)/.test(c) && /dragStartCb\.value\?\.invoke\(\)/.test(c),
+    "手势块里读的是 .value（最新回调），不是捕获的旧闭包");
+  ok(/val pinDragCb = rememberUpdatedState\(onPinDrag\)/.test(c) &&
+    /val blankTapCb = rememberUpdatedState\(onBlankTap\)/.test(cv),
+    "拉线与空白点击回调同样保持最新");
+  ok(/val baseline = remember\(initial\)/.test(e) &&
+    /editorLayoutFor\(initial\)/.test(e) && /workflowDiff\(baseline, def\)/.test(e),
+    "自动布局在打开时就写进模型（模型=显示），且差异以 baseline 为基准（取消不误报改动）");
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),

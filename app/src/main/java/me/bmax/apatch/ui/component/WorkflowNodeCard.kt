@@ -111,6 +111,15 @@ internal fun WorkflowNodeCard(
     var cardSize by remember { mutableStateOf(IntSize.Zero) }
     val originState = rememberUpdatedState(windowOrigin)
     val sizeState = rememberUpdatedState(cardSize)
+    // 手势块（pointerInput(node.id) / pointerInput(Unit)）的 key 不会因为回调变化而重启，
+    // 所以回调必须经 rememberUpdatedState 读取最新值 —— 否则第二次拖动拿到的是第一次组合时的
+    // 闭包，会读到最初的坐标（真机表现：第二次拖动一下跳回原位）。
+    val tapCb = rememberUpdatedState(onTap)
+    val dragCb = rememberUpdatedState(onDrag)
+    val dragStartCb = rememberUpdatedState(onDragStart)
+    val dragEndCb = rememberUpdatedState(onDragEnd)
+    val pinDragCb = rememberUpdatedState(onPinDrag)
+    val pinDropCb = rememberUpdatedState(onPinDrop)
 
     val base = modifier
         .width(WorkflowNodeCardWidth)
@@ -121,17 +130,17 @@ internal fun WorkflowNodeCard(
         }
         .focusable()
         .semantics { contentDescription = node.name.ifBlank { workflowNodeLabel(node) } }
-        .then(if (onTap != null) Modifier.clickable { onTap() } else Modifier)
+        .then(if (onTap != null) Modifier.clickable { tapCb.value?.invoke() } else Modifier)
         .then(
             if (onDrag != null) {
                 Modifier.pointerInput(node.id) {
                     detectDragGestures(
-                        onDragStart = { onDragStart?.invoke() },
-                        onDragEnd = { onDragEnd?.invoke() },
-                        onDragCancel = { onDragEnd?.invoke() },
+                        onDragStart = { dragStartCb.value?.invoke() },
+                        onDragEnd = { dragEndCb.value?.invoke() },
+                        onDragCancel = { dragEndCb.value?.invoke() },
                     ) { change, amount ->
                         change.consume()
-                        onDrag(amount.x, amount.y)
+                        dragCb.value?.invoke(amount.x, amount.y)
                     }
                 }
             } else {
@@ -272,6 +281,8 @@ private fun LinkablePinDot(
     var dotSize by remember { mutableStateOf(IntSize.Zero) }
     val originState = rememberUpdatedState(dotOrigin)
     val sizeState = rememberUpdatedState(dotSize)
+    val pinDragCb = rememberUpdatedState(onPinDrag)
+    val pinDropCb = rememberUpdatedState(onPinDrop)
     Box(
         modifier = Modifier
             // 触摸目标比视觉圆点大一圈：手指头比 7dp 的点大得多（点击助手的命中区也放大）。
@@ -291,14 +302,14 @@ private fun LinkablePinDot(
                 detectDragGestures(
                     onDragStart = { start ->
                         pointer = originState.value + start
-                        onPinDrag?.invoke(anchorWindow(), pointer)
+                        pinDragCb.value?.invoke(anchorWindow(), pointer)
                     },
-                    onDragEnd = { onPinDrop?.invoke(pointer) },
-                    onDragCancel = { onPinDrop?.invoke(pointer) },
+                    onDragEnd = { pinDropCb.value?.invoke(pointer) },
+                    onDragCancel = { pinDropCb.value?.invoke(pointer) },
                 ) { change, amount ->
                     change.consume()
                     pointer += amount
-                    onPinDrag?.invoke(anchorWindow(), pointer)
+                    pinDragCb.value?.invoke(anchorWindow(), pointer)
                 }
             },
         contentAlignment = Alignment.Center,

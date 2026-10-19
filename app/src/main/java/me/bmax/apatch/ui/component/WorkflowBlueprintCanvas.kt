@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +74,9 @@ internal fun WorkflowBlueprintCanvas(
     var origin by remember { mutableStateOf(Offset.Zero) }
     // 卡片窗口矩形（卡片自己报上来）：拉线落点只在这里比，坐标口径唯一。
     var bounds by remember { mutableStateOf<Map<String, Rect>>(emptyMap()) }
+    // 画布的空白点击与拉线回调也要最新值（手势块的 key 不会因回调变化而重启）。
+    val blankTapCb = rememberUpdatedState(onBlankTap)
+    val wireDropCb = rememberUpdatedState(onWireDrop)
     var wireFrom by remember { mutableStateOf<String?>(null) }
     var wireAnchor by remember { mutableStateOf(Offset.Zero) }
     var wirePointer by remember { mutableStateOf(Offset.Zero) }
@@ -88,7 +92,7 @@ internal fun WorkflowBlueprintCanvas(
                 if (readOnly) {
                     // 只读（预览）：只有点空白取消选中，没有平移。
                     Modifier.pointerInput(Unit) {
-                        detectTapGestures { onBlankTap?.invoke() }
+                        detectTapGestures { blankTapCb.value?.invoke() }
                     }
                 } else {
                     Modifier
@@ -100,7 +104,7 @@ internal fun WorkflowBlueprintCanvas(
                             }
                         }
                         .pointerInput(Unit) {
-                            detectTapGestures { onBlankTap?.invoke() }
+                            detectTapGestures { blankTapCb.value?.invoke() }
                         }
                 },
             ),
@@ -150,7 +154,7 @@ internal fun WorkflowBlueprintCanvas(
                         wireFrom = null
                         if (from != null) {
                             val target = bounds.entries.firstOrNull { it.key != from && it.value.contains(pointer) }?.key
-                            onWireDrop?.invoke(from, target)
+                            wireDropCb.value?.invoke(from, target)
                         }
                     },
                 )
