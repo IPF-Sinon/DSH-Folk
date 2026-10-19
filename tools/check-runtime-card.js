@@ -28,7 +28,8 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 
 const SETTINGS = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt");
 const TOGGLE = read("app/src/main/java/me/bmax/apatch/ui/component/ToggleSettingCard.kt");
-const RUNTIME = (read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt") + "\n" + read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt"));
+// 模型类型在 DshRuntimeModels.kt（同包纯搬家），源码级断言要三份一起读。
+const RUNTIME = (read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt") + "\n" + read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt") + "\n" + read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt"));
 const SCREEN = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettingsScreen.kt");
 const STR_EN = read("app/src/main/res/values/dsh_strings.xml");
 const STR_ZH = read("app/src/main/res/values-zh-rCN/dsh_strings.xml");
@@ -277,7 +278,7 @@ console.log("\n── README（用户看到的说明） ──");
   {
     const env = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeEnv.kt");
     const wf = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeFiles.kt");
-    const rt = (read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt") + "\n" + read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt"));
+    const rt = (read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt") + "\n" + read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt") + "\n" + read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt"));
     ok(/internal object DshRuntimeEnv/.test(env) && /internal object DshRuntimeFiles/.test(wf),
       "DNS 落地与「内容变了才写」已抽成同包对象");
     ok(/= DshRuntimeEnv\.setupResolvConf\(appContext\)/.test(rt) &&

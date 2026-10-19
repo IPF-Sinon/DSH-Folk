@@ -16,7 +16,8 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const must = (c, m) => { if (!c) errors.push(m); };
 
 const env = read('app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt');
-const runtime = (read('app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt') + "\n" + read('app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt'));
+// 模型类型已搬到 DshRuntimeModels.kt（同包，纯搬家）：读源码做断言的地方要一起拼上。
+const runtime = (read('app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt') + "\n" + read('app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt') + "\n" + read('app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt'));
 const source = read('app/src/main/java/me/bmax/apatch/dsh/DshSource.kt');
 const repo = read('app/src/main/java/me/bmax/apatch/dsh/DshPluginRepo.kt');
 const appUpdater = read('app/src/main/java/me/bmax/apatch/util/AppUpdater.kt');
@@ -252,7 +253,8 @@ console.log('check-race-channel: 通过');
   want(/SOURCE_GHPROXY_MAIN to "https:\/\/gh-proxy\.org\/"/.test(src) && /private fun migrateLegacySourceChoice/.test(src),
     '新增线路必须在 MIRRORS 里，且老固定源选择要有迁移（不许把用户的明确选择悄悄重置成全选）');
 // 下载候选必须收敛到 DshSource.proxyCandidates（各消费点不许再写死两条线路）
-  const dshRuntime = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt'), 'utf8');
+  const dshRuntime = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt'), 'utf8') +
+    "\n" + fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt'), 'utf8');
   const appUpdater2 = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/util/AppUpdater.kt'), 'utf8');
   const updateChecker = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/util/UpdateChecker.kt'), 'utf8');
   want(/fun proxyCandidates\(url: String\): List<String>/.test(src), '缺 DshSource.proxyCandidates');
