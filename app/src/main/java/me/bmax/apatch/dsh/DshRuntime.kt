@@ -307,20 +307,21 @@ object DshRuntime : DshRuntimeHost {
     private val _state = MutableStateFlow(DshState())
     val state: StateFlow<DshState> = _state.asStateFlow()
 
-    /** [DshRuntimeHost] 需要的只读入口（与 [state] 同一个流）。 */
+    // ────────── DshRuntimeHost：安装簇等辅助文件只认这个接口 ──────────
+    // 接口由本 object 直接实现：冲突的 10 个私有成员已放宽为 internal（外部调用为 0），
+    // 6 个公开成员加 override（名字与可见性不变，7 处外部调用点照旧）。
+    /** [DshRuntimeHost] 的只读入口（与 [state] 同一个流）。 */
     override val stateFlow: StateFlow<DshState> get() = _state
 
-    /** [DshRuntimeHost] 需要的写入口（与内部 `_state.update` 同义）。 */
+    /** [DshRuntimeHost] 的写入口（与内部 `_state.update` 同义）。 */
+    /** [DshRuntimeHost] 的同步读入口。 */
+    override val current: DshState get() = _state.value
+
     override fun setState(update: (DshState) -> DshState) { _state.update(update) }
 
     override val elfMachineAarch64: Int get() = ELF_MACHINE_AARCH64
     override val elfMachineX86_64: Int get() = ELF_MACHINE_X86_64
 
-    // ────────── DshRuntimeHost：安装簇等辅助文件只认这个接口 ──────────
-    // 接口由本 object 直接实现：冲突的 10 个私有成员已放宽为 internal（外部调用为 0），
-    // 6 个公开成员加 override（名字与可见性不变，7 处外部调用点照旧）。
-    override val stateFlow: StateFlow<DshState> get() = _state
-    override fun setState(update: (DshState) -> DshState) { _state.update(update) }
 
     /** 宿主 Context（安装簇的扩展函数也要用；原先 private，外部无调用）。 */
     internal lateinit var appContext: Context

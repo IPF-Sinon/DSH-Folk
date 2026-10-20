@@ -20,6 +20,16 @@ internal interface DshRuntimeHost {
     val stateFlow: StateFlow<DshState>
 
     /** 用一次函数式更新改状态（与 `_state.update {}` 同义）。 */
+    /** 当前运行态（同步读，供扩展函数里做判断）。 */
+    val current: DshState
+
+    /**
+     * 写运行态（形参是普通函数类型，不是 receiver lambda）。
+     *
+     * 为什么不写成 `DshState.() -> DshState`：安装簇里写作 `setState { it.copy(...) }`，
+     * receiver lambda 会让外层的 this（DshRuntime）与 lambda 的 this 打架，`it` 推断失败并
+     * 与同名的 state/stateFlow 形成歧义 —— 正是 CI 那条 Overload resolution ambiguity。
+     */
     fun setState(update: (DshState) -> DshState)
 
     /** 共享偏好（端口、已装版本、自动检查开关等都在这）。 */

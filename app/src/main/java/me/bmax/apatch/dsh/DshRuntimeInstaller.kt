@@ -66,8 +66,8 @@ internal fun DshRuntime.elfMachine(f: File): Int? = runCatching {
 
 internal suspend fun DshRuntime.downloadAndInstall(preserveData: Boolean = true, newest: Boolean = true) {
     this.clearLog()
-    this.setState {
-        it.copy(
+    this.setState { s ->
+        s.copy(
             phase = DshPhase.DOWNLOADING,
             progress = 0f,
             speedBytesPerSec = 0L,
@@ -127,8 +127,8 @@ internal suspend fun DshRuntime.installMeta(meta: DshMeta, preserveData: Boolean
     // 最低 App 版本闸门：在下载之前拦住（同 startServer 里那道闸门）。置位
     // appUpdateRequired 让 UI 显示「请先更新应用」，而不是下 150MB 装完才炸。
     if (meta.minAppVersion.isNotEmpty() && !this.appSatisfies(meta.minAppVersion)) {
-        this.setState {
-            it.copy(appUpdateRequired = true, requiredAppVersion = meta.minAppVersion)
+        this.setState { s ->
+            s.copy(appUpdateRequired = true, requiredAppVersion = meta.minAppVersion)
         }
         this.fail(this.str(R.string.dsh_runtime_min_app_required, meta.minAppVersion))
         return
@@ -165,8 +165,8 @@ internal suspend fun DshRuntime.installMeta(meta: DshMeta, preserveData: Boolean
         return
     }
     this.logInfo(R.string.dsh_log_sha_ok)
-    this.setState {
-        it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = this.str(R.string.dsh_msg_installing))
+    this.setState { s ->
+        s.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = this.str(R.string.dsh_msg_installing))
     }
     val ok = withContext(Dispatchers.IO) { this.installRuntimeArchive(tarball, preserveData) }
     tarball.delete()
@@ -184,8 +184,8 @@ internal suspend fun DshRuntime.installMeta(meta: DshMeta, preserveData: Boolean
     // phase 必须回 NOT_READY，不能直接置 STARTING：[bootstrap] 下一步就调
     // [startServer]，而它的防重入守卫会把 STARTING 当成「已经在启动了」直接
     // return——首次安装后服务永远起不来就是这个自我拦截造成的。
-    this.setState {
-        it.copy(
+    this.setState { s ->
+        s.copy(
             phase = DshPhase.NOT_READY,
             installed = true,
             runtimeVersion = meta.version,
@@ -252,8 +252,8 @@ internal fun DshRuntime.downloadWithFallback(meta: DshMeta, target: File): Boole
     }
     for ((i, url) in candidates.withIndex()) {
         this.logInfo(R.string.dsh_log_source_try, i + 1, candidates.size, url)
-        this.setState {
-            it.copy(message = this.str(R.string.dsh_msg_downloading, meta.version), speedBytesPerSec = 0L)
+        this.setState { s ->
+            s.copy(message = this.str(R.string.dsh_msg_downloading, meta.version), speedBytesPerSec = 0L)
         }
         if (this.downloadFile(url, target, meta.sizeBytes)) {
             this.logInfo(R.string.dsh_log_source_ok, i + 1)
@@ -285,8 +285,8 @@ internal fun DshRuntime.downloadFile(url: String, target: File, sizeBytes: Long)
                 lastLoggedBucket = pctInt / 5
                 this.logInfo(R.string.dsh_log_downloading, pctInt, this.formatSpeed(p.speedBytesPerSec))
             }
-            this.setState {
-                it.copy(
+            this.setState { s ->
+                s.copy(
                     progress = p.fraction,
                     speedBytesPerSec = p.speedBytesPerSec,
                     message = this.str(R.string.dsh_msg_downloading_pct, pctInt, this.formatSpeed(p.speedBytesPerSec)),
