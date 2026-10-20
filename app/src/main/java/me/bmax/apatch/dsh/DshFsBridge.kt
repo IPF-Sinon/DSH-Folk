@@ -53,7 +53,7 @@ import java.security.MessageDigest
  *   不是只校验入口。
  */
 object DshFsBridge {
-    private const val TAG = "DshFsBridge"
+    internal const val TAG = "DshFsBridge"
     private const val HEADER_TOKEN = "X-Dsh-Fs-Token"
 
     /** 单次 /read 的上限。超过就让调用方用 offset/length 分段，而不是塞满内存。 */
