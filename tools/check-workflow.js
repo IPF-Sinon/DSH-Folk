@@ -692,6 +692,22 @@ console.log("\u2500 #16n 回环桥的守卫与拆分（阶段 4：DshBridgeGuard
   ok(!/private fun saf[A-Z]/.test(bridge), '主文件不再保留 SAF 实现（避免两份）');
 }
 
+console.log("\u2500 #16o 首页阶段名只有一份映射（阶段 5：Home 收敛）");
+{
+  const shared = read("app/src/main/java/me/bmax/apatch/ui/screen/DshHomeShared.kt");
+  const dsh = read("app/src/main/java/me/bmax/apatch/ui/screen/HomeDsh.kt");
+  ok(/fun dshPhaseLabelOf\(phase: DshPhase, installed: Boolean\): String/.test(shared),
+    '共享侧提供按基本类型取名的唯一映射');
+  ok(/fun dshPhaseLabel\(state: DshHomeUiState\): String = dshPhaseLabelOf\(state\.phase, state\.installed\)/.test(shared),
+    'dshPhaseLabel 委托给它（不再各写一份 when）');
+  ok(/private fun phaseLabel\(phase: DshPhase, installed: Boolean\): String =\s*\n\s*dshPhaseLabelOf\(phase, installed\)/.test(dsh),
+    'HomeDsh 的本地 phaseLabel 也委托给共享映射');
+  // 关键：HomeDsh 里不应再出现第二份阶段名 when（出现即两份映射会分叉）
+  const dshBody = dsh.slice(dsh.indexOf('private fun phaseLabel('));
+  ok(!/R\.string\.dsh_phase_downloading/.test(dshBody), 'HomeDsh 不再自带阶段名字符串表');
+  ok(/R\.string\.dsh_phase_downloading/.test(shared), '阶段名字符串表只在共享侧');
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),

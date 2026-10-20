@@ -244,10 +244,20 @@ fun ProvideDshHomeState(content: @Composable () -> Unit) {
  * 「未安装 · v0.1.1-rc.2-ubuntunoble」—— 既说没装又报出版本号，自相矛盾。
  */
 @Composable
-fun dshPhaseLabel(state: DshHomeUiState): String = stringResource(
-    when (state.phase) {
+fun dshPhaseLabel(state: DshHomeUiState): String = dshPhaseLabelOf(state.phase, state.installed)
+
+/**
+ * 阶段名的**唯一映射**（按基本类型取，不看 [DshHomeUiState]）。
+ *
+ * 为什么单拆这一层：HomeDsh 那张 Hero 卡拿到的是分散的 phase/installed/progress（它自己有动画与
+ * 布局），但它显示的名字必须与其余五套布局完全一致。原先它各自抄了一份 when —— 两份映射一旦
+ * 分叉，同一个运行时状态在不同主题下会显示不同文案。现在只有这一个 when。
+ */
+@Composable
+fun dshPhaseLabelOf(phase: DshPhase, installed: Boolean): String = stringResource(
+    when (phase) {
         DshPhase.NOT_READY ->
-            if (state.installed) R.string.dsh_phase_stopped else R.string.dsh_phase_not_ready
+            if (installed) R.string.dsh_phase_stopped else R.string.dsh_phase_not_ready
         DshPhase.DOWNLOADING -> R.string.dsh_phase_downloading
         DshPhase.EXTRACTING -> R.string.dsh_phase_extracting
         DshPhase.STARTING -> R.string.dsh_phase_starting

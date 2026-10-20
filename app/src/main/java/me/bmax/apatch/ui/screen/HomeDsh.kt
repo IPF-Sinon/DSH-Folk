@@ -460,17 +460,13 @@ private fun DshSmallCard(
     }
 }
 
+/**
+ * 阶段名。
+ *
+ * **委托给共享映射** [dshPhaseLabelOf]：原先这里抄了一份 when，而共享版（其余五套布局用的）
+ * 也有同样一份 —— 两份映射一旦分叉，同一个运行时状态在不同主题下就会显示不同文案。
+ * 「未安装 · v0.1.1-rc.2」那种自相矛盾的行正是这类分叉的产物，所以这里不再保留第二份。
+ */
 @Composable
-private fun phaseLabel(phase: DshPhase, installed: Boolean): String = stringResource(
-    when (phase) {
-        // NOT_READY 兼表「未安装」与「装好但停着」，只按 phase 取名会在停止时
-        // 显示「未安装 · v0.1.1-rc.2」这种自相矛盾的行
-        DshPhase.NOT_READY ->
-            if (installed) R.string.dsh_phase_stopped else R.string.dsh_phase_not_ready
-        DshPhase.DOWNLOADING -> R.string.dsh_phase_downloading
-        DshPhase.EXTRACTING -> R.string.dsh_phase_extracting
-        DshPhase.STARTING -> R.string.dsh_phase_starting
-        DshPhase.RUNNING -> R.string.dsh_phase_running
-        DshPhase.ERROR -> R.string.dsh_phase_error
-    }
-)
+private fun phaseLabel(phase: DshPhase, installed: Boolean): String =
+    dshPhaseLabelOf(phase, installed)
