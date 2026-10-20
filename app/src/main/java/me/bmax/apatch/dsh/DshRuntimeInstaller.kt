@@ -172,7 +172,9 @@ internal suspend fun DshRuntime.installMeta(meta: DshMeta, preserveData: Boolean
     this.setState { s ->
         s.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = extractingMsg)
     }
-    val ok = withContext(Dispatchers.IO) { this.installRuntimeArchive(tarball, preserveData) }
+    // 同上：withContext 的 lambda 里 this 是协程作用域，不是 DshRuntime —— 先取接收者再调用。
+    val self = this
+    val ok = withContext(Dispatchers.IO) { self.installRuntimeArchive(tarball, preserveData) }
     tarball.delete()
     if (!ok) {
         this.fail(this.str(R.string.dsh_err_extract_failed))
