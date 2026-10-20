@@ -66,12 +66,14 @@ internal fun DshRuntime.elfMachine(f: File): Int? = runCatching {
 
 internal suspend fun DshRuntime.downloadAndInstall(preserveData: Boolean = true, newest: Boolean = true) {
     this.clearLog()
+    // lambda 里的 this 指向 lambda 自身，不是 DshRuntime：文本先算好再传进去。
+    val fetchingMsg = this.str(R.string.dsh_msg_fetching_meta)
     this.setState { s ->
         s.copy(
             phase = DshPhase.DOWNLOADING,
             progress = 0f,
             speedBytesPerSec = 0L,
-            message = this.str(R.string.dsh_msg_fetching_meta),
+            message = fetchingMsg,
         )
     }
     if (DshSource.setting(appContext) == DshSource.SOURCE_AUTO &&
@@ -165,8 +167,10 @@ internal suspend fun DshRuntime.installMeta(meta: DshMeta, preserveData: Boolean
         return
     }
     this.logInfo(R.string.dsh_log_sha_ok)
+    // 注意：lambda 里的 this 指向 lambda 自身，不是 DshRuntime —— 文本先取出来再传进去。
+    val extractingMsg = this.str(R.string.dsh_msg_installing)
     this.setState { s ->
-        s.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = this.str(R.string.dsh_msg_installing))
+        s.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = extractingMsg)
     }
     val ok = withContext(Dispatchers.IO) { this.installRuntimeArchive(tarball, preserveData) }
     tarball.delete()
@@ -184,6 +188,7 @@ internal suspend fun DshRuntime.installMeta(meta: DshMeta, preserveData: Boolean
     // phase 必须回 NOT_READY，不能直接置 STARTING：[bootstrap] 下一步就调
     // [startServer]，而它的防重入守卫会把 STARTING 当成「已经在启动了」直接
     // return——首次安装后服务永远起不来就是这个自我拦截造成的。
+    val readyMsg = this.str(R.string.dsh_msg_runtime_ready)
     this.setState { s ->
         s.copy(
             phase = DshPhase.NOT_READY,
@@ -191,7 +196,7 @@ internal suspend fun DshRuntime.installMeta(meta: DshMeta, preserveData: Boolean
             runtimeVersion = meta.version,
             progress = 1f,
             speedBytesPerSec = 0L,
-            message = this.str(R.string.dsh_msg_runtime_ready),
+            message = readyMsg,
         )
     }
     // 刚解压完，体积是全新的：后台量一次并落缓存，界面随 state 自动更新
@@ -252,8 +257,9 @@ internal fun DshRuntime.downloadWithFallback(meta: DshMeta, target: File): Boole
     }
     for ((i, url) in candidates.withIndex()) {
         this.logInfo(R.string.dsh_log_source_try, i + 1, candidates.size, url)
+        val downloadingMsg = this.str(R.string.dsh_msg_downloading, meta.version)
         this.setState { s ->
-            s.copy(message = this.str(R.string.dsh_msg_downloading, meta.version), speedBytesPerSec = 0L)
+            s.copy(message = downloadingMsg, speedBytesPerSec = 0L)
         }
         if (this.downloadFile(url, target, meta.sizeBytes)) {
             this.logInfo(R.string.dsh_log_source_ok, i + 1)
@@ -285,11 +291,12 @@ internal fun DshRuntime.downloadFile(url: String, target: File, sizeBytes: Long)
                 lastLoggedBucket = pctInt / 5
                 this.logInfo(R.string.dsh_log_downloading, pctInt, this.formatSpeed(p.speedBytesPerSec))
             }
+            val pctMsg = this.str(R.string.dsh_msg_downloading_pct, pctInt, this.formatSpeed(p.speedBytesPerSec))
             this.setState { s ->
                 s.copy(
                     progress = p.fraction,
                     speedBytesPerSec = p.speedBytesPerSec,
-                    message = this.str(R.string.dsh_msg_downloading_pct, pctInt, this.formatSpeed(p.speedBytesPerSec)),
+                    message = pctMsg,
                 )
             }
         },
