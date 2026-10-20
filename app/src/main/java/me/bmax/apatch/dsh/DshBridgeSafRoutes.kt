@@ -104,7 +104,9 @@ internal fun DshFsBridge.safSegments(rel: String?): List<String>? {
     }
 
     /** 一个 SAF 文档节点：documentId + display name + mime + 大小 + mtime。 */
-    private data class SafDoc(
+    // internal 而不是 private：本文件里那些 internal 扩展函数以它为返回/参数类型，
+    // private-in-file 的类型不能让 internal 函数暴露（Kotlin 会直接报错）。
+    internal data class SafDoc(
         val docId: String,
         val name: String,
         val mime: String,

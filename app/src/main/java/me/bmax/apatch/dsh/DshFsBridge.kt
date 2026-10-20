@@ -57,15 +57,15 @@ object DshFsBridge {
     private const val HEADER_TOKEN = "X-Dsh-Fs-Token"
 
     /** 单次 /read 的上限。超过就让调用方用 offset/length 分段，而不是塞满内存。 */
-    private const val MAX_READ_BYTES = 64L * 1024 * 1024
+    internal const val MAX_READ_BYTES = 64L * 1024 * 1024
 
     /** 递归遍历的默认/最大深度。 */
     private const val DEFAULT_MAX_DEPTH = 8
     private const val MAX_MAX_DEPTH = 32
 
     /** list/find 的默认/最大返回条数。 */
-    private const val DEFAULT_LIST_LIMIT = 1000
-    private const val MAX_LIST_LIMIT = 10_000
+    internal const val DEFAULT_LIST_LIMIT = 1000
+    internal const val MAX_LIST_LIMIT = 10_000
     private const val DEFAULT_FIND_LIMIT = 500
     private const val MAX_FIND_LIMIT = 5_000
 
@@ -86,7 +86,7 @@ object DshFsBridge {
     @Volatile private var token: String = ""
 
     /** 原生能力端点需要 Context；由 [start] 注入 application context。 */
-    @Volatile private var appCtx: Context? = null
+    @Volatile internal var appCtx: Context? = null
 
     /** 白名单根：共享存储。 */
     private val root: File get() = Environment.getExternalStorageDirectory()
