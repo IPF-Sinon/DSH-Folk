@@ -34,7 +34,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** 运行时阶段。 */
-object DshRuntime {
+object DshRuntime : DshRuntimeHost {
     private const val TAG = "DSH-Folk"
     /**
      * 等服务就绪的上限。
@@ -256,7 +256,7 @@ object DshRuntime {
      *   测试版」，而只比核心段会让它永远成立：正式版 App 的预发布段被丢掉后比较恒为「满足」，
      *   于是这条要求等于没写。
      */
-    private fun appSatisfies(minAppVersion: String): Boolean {
+    override fun appSatisfies(minAppVersion: String): Boolean {
         if (minAppVersion.isBlank()) return true
         val exact = minAppVersion.substringBefore('+').contains('-')
         val installed = if (exact) me.bmax.apatch.BuildConfig.VERSION_NAME else appCoreVersion()
@@ -307,13 +307,21 @@ object DshRuntime {
     private val _state = MutableStateFlow(DshState())
     val state: StateFlow<DshState> = _state.asStateFlow()
 
+    /** [DshRuntimeHost] 需要的只读入口（与 [state] 同一个流）。 */
+    override val stateFlow: StateFlow<DshState> get() = _state
+
+    /** [DshRuntimeHost] 需要的写入口（与内部 `_state.update` 同义）。 */
+    override fun setState(update: (DshState) -> DshState) { _state.update(update) }
+
+    override val elfMachineAarch64: Int get() = ELF_MACHINE_AARCH64
+    override val elfMachineX86_64: Int get() = ELF_MACHINE_X86_64
+
     // ────────── 交给 DshRuntimeHostAdapter 的口子（安装簇等辅助文件只认接口）──────────
     // 为什么要适配器：object 里已有的 private 成员与接口同签名，直接实现接口会 Conflicting
     // overloads；而给它们改名又会动到公开 API（startServer/raceEnabled/clearLog/runtime 等有
     // 9 处外部调用点）。所以接口由下面这个适配器实现，object 本身保持原样。
     val stateFlow: StateFlow<DshState> get() = _state
     fun setState(update: (DshState) -> DshState) { _state.update(update) }
-
 
     private lateinit var appContext: Context
     private var serverProcess: Process? = null
@@ -387,7 +395,7 @@ object DshRuntime {
      * 只允许从这里进入 [dirSize]：它要遍历十万级文件，在组合期同步调用会让
      * 每次导航回首页都卡两秒以上（真机 MIUIScout 实测 duration=2505ms）。
      */
-    fun refreshRootfsSize() {
+    override fun refreshRootfsSize() {
         if (!ready) return
         scope.launch {
             val bytes = withContext(Dispatchers.IO) { dirSize(DshEnv.rootfs(appContext)) }
@@ -396,7 +404,7 @@ object DshRuntime {
         }
     }
 
-    private fun prefs() = appContext.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
+    override fun prefs() = appContext.getSharedPreferences(DshEnv.PREF, Context.MODE_PRIVATE)
 
     fun port(): Int {
         if (!ready) return DshEnv.DEFAULT_PORT
@@ -506,7 +514,7 @@ object DshRuntime {
      *
      * 分开关默认开：老用户此前的行为就是「能加速就加速」，升级后不该悄悄变慢。
      */
-    fun raceEnabled(channel: String): Boolean {
+    override fun raceEnabled(channel: String): Boolean {
         if (!raceMasterEnabled()) return false
         val key = when (channel) {
             RACE_PLUGINS -> DshEnv.KEY_RACE_PLUGINS
@@ -605,7 +613,7 @@ object DshRuntime {
     }
 
     /** 解析出实际可用的运行时；选中的不可用时静默回退 proot。 */
-    fun runtime(): ContainerRuntime {
+    override fun runtime(): ContainerRuntime {
         val proot = ContainerRuntime.Proot(appContext, nativeLib("libproot.so"))
         if (runtimeId() != "proroot") return proot
         val proroot = ContainerRuntime.Proroot(appContext, ContainerRuntime.Proroot.defaultDir(appContext))
@@ -932,7 +940,7 @@ object DshRuntime {
      * 而 HarnessService 在 DOWNLOADING / EXTRACTING 阶段依然会放行 bootstrap，
      * 连点两次启动就会开两条 135MB 下载。用互斥锁 + 阶段判定拦住。
      */
-    fun bootstrap() {
+    override fun bootstrap() {
         scope.launch {
             if (busy()) return@launch
             bootMutex.withLock {
@@ -1759,7 +1767,7 @@ object DshRuntime {
      * 竞速**关掉**（总开关或「运行时」分开关）时不再测速：用户若在「下载渠道」里明确指定过某个源，
      * 就按他指定的走（那是手选、不是竞速）；只有 `auto`（= 交给竞速决定）才退化为直连 GitHub。
      */
-    private fun runtimeSource(ctx: Context): String {
+    override fun runtimeSource(ctx: Context): String {
         val setting = DshSource.setting(ctx)
         if (!raceEnabled(RACE_RUNTIME)) {
             return if (setting == DshSource.SOURCE_AUTO) DshSource.SOURCE_GITHUB else setting
@@ -2119,7 +2127,7 @@ object DshRuntime {
      * 服务默认只绑 127.0.0.1；开启「局域网访问」后追加 --host 0.0.0.0。
      * 鉴权由 dsh 自己的登录页负责。
      */
-    fun startServer() {
+    override fun startServer() {
         // 守卫只看真实进程，不看 phase。看 phase 会把上一步（例如安装完成）
         // 自己写下的 STARTING 误当成「已有人在启动」。
         if (serverProcess?.isAlive == true) return
@@ -2505,7 +2513,7 @@ object DshRuntime {
      * 本次运行的内容：真机上导入会话报错发生在 12:xx，14:24 的报告里 dsh.log 只有 1 KB
      * （就是那次启动之后的新内容），只能靠猜。留一份上一次运行的日志，问题才有可能回溯。
      */
-    fun clearLog() {
+    override fun clearLog() {
         if (!::appContext.isInitialized) return
         val log = DshEnv.serverLog(appContext)
         if (log.isFile && log.length() > 0L) {
@@ -2571,7 +2579,7 @@ object DshRuntime {
         }
     }
 
-    private fun fail(message: String) {
+    override fun fail(message: String) {
         appendLog("! $message")
         _state.update { it.copy(phase = DshPhase.ERROR, message = message, speedBytesPerSec = 0L) }
     }
@@ -2584,7 +2592,7 @@ object DshRuntime {
      * **系统语言**。少了这一层，界面切成英文之后首页状态和启动日志依旧是中文
      * （风味语言那几套皮更是一行都不会出现，它们永远不是系统语言）。
      */
-    private fun str(resId: Int, vararg args: Any): String =
+    override fun str(resId: Int, vararg args: Any): String =
         if (::appContext.isInitialized) appContext.appString(resId, *args) else ""
 
     /**
@@ -2593,10 +2601,10 @@ object DshRuntime {
      * 与 [appendLog] 分开的意义：调用方只提供资源 id 与参数，不再拼中文字面量 ——
      * 日志同时进首页日志卡和 bugreport 的 dsh.log，两处都该跟随应用语言。
      */
-    private fun logInfo(resId: Int, vararg args: Any) = appendLog("> " + str(resId, *args))
+    override fun logInfo(resId: Int, vararg args: Any) = appendLog("> " + str(resId, *args))
 
     /** 写一行「异常」日志（`!` 前缀）。 */
-    private fun logWarn(resId: Int, vararg args: Any) = appendLog("! " + str(resId, *args))
+    override fun logWarn(resId: Int, vararg args: Any) = appendLog("! " + str(resId, *args))
 
     private fun joinForLog(items: Collection<String>): String = DshRuntimeEnv.joinForLog(items)
 
@@ -2606,7 +2614,7 @@ object DshRuntime {
      * 走 [DshSource.labelRes] —— 与设置页、更新对话框同一份映射。日志此前用的是
      * DshSource 里一份硬编码中文的 displayName()，现在那个函数已经不存在了。
      */
-    private fun sourceName(source: String): String = str(DshSource.labelRes(source))
+    override fun sourceName(source: String): String = str(DshSource.labelRes(source))
 
     /**
      * 让一段文本能安全地放进 shell 的单引号里。
@@ -2626,13 +2634,13 @@ object DshRuntime {
         else -> "$bytesPerSec B/s"
     }
 
-    private fun verifySha256(file: File, expected: String): Boolean {
+    override fun verifySha256(file: File, expected: String): Boolean {
         // metadata 里没给 sha256 时不拦（早期 runtime 发布没有这一项）
         if (expected.isBlank()) return true
         return DshDownloader.sha256(file).equals(expected, ignoreCase = true)
     }
 
-    private fun availableSpace(dir: File): Long = runCatching {
+    override fun availableSpace(dir: File): Long = runCatching {
         dir.mkdirs()
         StatFs(dir.absolutePath).availableBytes
     }.getOrDefault(-1L)

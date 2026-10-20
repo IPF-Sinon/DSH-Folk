@@ -67,7 +67,8 @@ must(/fun raceEnabled\(\): Boolean = DshRuntime\.raceEnabled\(DshRuntime\.RACE_A
   'AppUpdater.raceEnabled 必须接 RACE_APP_UPDATE');
 must(/if \(!AppUpdater\.raceEnabled\(\)\)/.test(dialog),
   '更新对话框必须在竞速关闭时跳过测速、直接直连下载（而不是仍去测速）');
-must(/private fun runtimeSource\(ctx: Context\): String/.test(runtime) &&
+// runtimeSource 现在是 DshRuntimeHost 的实现（修饰符 private → override）。
+must(/(?:private|override) fun runtimeSource\(ctx: Context\): String/.test(runtime) &&
      /raceEnabled\(RACE_RUNTIME\)/.test(runtime),
   '运行时通道必须经 runtimeSource() 判 RACE_RUNTIME');
 must(/runtimeSource\(appContext\)/.test(runtime) && /runtimeMetaUrl\(\)/.test(runtime),
