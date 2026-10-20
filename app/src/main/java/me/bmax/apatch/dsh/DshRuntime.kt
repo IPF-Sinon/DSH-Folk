@@ -316,14 +316,14 @@ object DshRuntime : DshRuntimeHost {
     override val elfMachineAarch64: Int get() = ELF_MACHINE_AARCH64
     override val elfMachineX86_64: Int get() = ELF_MACHINE_X86_64
 
-    // ────────── 交给 DshRuntimeHostAdapter 的口子（安装簇等辅助文件只认接口）──────────
-    // 为什么要适配器：object 里已有的 private 成员与接口同签名，直接实现接口会 Conflicting
-    // overloads；而给它们改名又会动到公开 API（startServer/raceEnabled/clearLog/runtime 等有
-    // 9 处外部调用点）。所以接口由下面这个适配器实现，object 本身保持原样。
-    val stateFlow: StateFlow<DshState> get() = _state
-    fun setState(update: (DshState) -> DshState) { _state.update(update) }
+    // ────────── DshRuntimeHost：安装簇等辅助文件只认这个接口 ──────────
+    // 接口由本 object 直接实现：冲突的 10 个私有成员已放宽为 internal（外部调用为 0），
+    // 6 个公开成员加 override（名字与可见性不变，7 处外部调用点照旧）。
+    override val stateFlow: StateFlow<DshState> get() = _state
+    override fun setState(update: (DshState) -> DshState) { _state.update(update) }
 
-    private lateinit var appContext: Context
+    /** 宿主 Context（安装簇的扩展函数也要用；原先 private，外部无调用）。 */
+    internal lateinit var appContext: Context
     private var serverProcess: Process? = null
     private var startedAt: Long = 0L
 
@@ -1776,7 +1776,7 @@ object DshRuntime : DshRuntimeHost {
     }
 
     /** 当前该拉的 metadata.json 地址（自定义源仍走它自己的 URL）。 */
-    private fun runtimeMetaUrl(): String {
+    internal fun runtimeMetaUrl(): String {
         val src = runtimeSource(appContext)
         if (src == DshSource.SOURCE_CUSTOM) return DshSource.effectiveMetaUrl(appContext)
         return DshSource.proxyPrefix(src) + DshSource.metaUrl()
@@ -1788,7 +1788,7 @@ object DshRuntime : DshRuntimeHost {
      * 取文本走 [fetchJsonText]（直连优先，其次各代理前缀）：版本列表里每个 release 的
      * metadata 都是固定的 GitHub 下载地址，用不上测速排序那一套。
      */
-    private fun fetchMetaFrom(url: String): DshMeta? {
+    internal fun fetchMetaFrom(url: String): DshMeta? {
         val text = fetchJsonText(url) ?: return null
         return runCatching {
             val json = JSONObject(text)
@@ -1813,7 +1813,7 @@ object DshRuntime : DshRuntimeHost {
     }
 
     /** 某个 release tag 在**本机架构**下的 metadata。 */
-    private fun fetchMetaOfTag(tag: String, suffix: String): DshMeta? =
+    internal fun fetchMetaOfTag(tag: String, suffix: String): DshMeta? =
         fetchMetaFrom(DshSource.releaseBase(tag) + "metadata$suffix.json")
 
     /**
@@ -2606,7 +2606,7 @@ object DshRuntime : DshRuntimeHost {
     /** 写一行「异常」日志（`!` 前缀）。 */
     override fun logWarn(resId: Int, vararg args: Any) = appendLog("! " + str(resId, *args))
 
-    private fun joinForLog(items: Collection<String>): String = DshRuntimeEnv.joinForLog(items)
+    internal fun joinForLog(items: Collection<String>): String = DshRuntimeEnv.joinForLog(items)
 
     /**
      * 下载源的本地化名字。
