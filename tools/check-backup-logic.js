@@ -33,7 +33,10 @@ const SRC_CONFIG = "app/src/main/java/me/bmax/apatch/ui/theme/BackupConfig.kt";
 const SRC_CLOUD = "app/src/main/java/me/bmax/apatch/dsh/DshCloudBackup.kt";
 const SRC_CLOUD_APPDATA = "app/src/main/java/me/bmax/apatch/dsh/DshCloudAppData.kt";
 const SRC_FSBRIDGE = "app/src/main/java/me/bmax/apatch/dsh/DshFsBridge.kt";
+// SEED_PLUGINS / SEED_SPECS / SEED_MIN_VERSIONS 已搬到 DshRuntimeConstants.kt（同包纯搬家），
+// 所以「读源码断言这些常量」的地方要把两份拼起来。
 const SRC_RUNTIME = "app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt";
+const SRC_RUNTIME_CONSTS = "app/src/main/java/me/bmax/apatch/dsh/DshRuntimeConstants.kt";
 const SRC_WIZARD = "app/src/main/java/me/bmax/apatch/ui/screen/settings/BackupWizard.kt";
 const SRC_WIZARD_SCREEN = "app/src/main/java/me/bmax/apatch/ui/screen/settings/RestoreWizardScreen.kt";
 const SRC_WIZARD_MODEL = "app/src/main/java/me/bmax/apatch/dsh/DshImportWizard.kt";
@@ -94,7 +97,7 @@ const config = fs.readFileSync(SRC_CONFIG, "utf8");
 const cloud = fs.readFileSync(SRC_CLOUD, "utf8");
 const cloudAppData = fs.readFileSync(SRC_CLOUD_APPDATA, "utf8");
 const fsBridge = fs.readFileSync(SRC_FSBRIDGE, "utf8");
-const runtime = fs.readFileSync(SRC_RUNTIME, "utf8");
+const runtime = fs.readFileSync(SRC_RUNTIME, "utf8") + "\n" + fs.readFileSync(SRC_RUNTIME_CONSTS, "utf8");
 const wizard = fs.readFileSync(SRC_WIZARD, "utf8");
 const wizardModel = fs.readFileSync(SRC_WIZARD_MODEL, "utf8");
 const appData = fs.readFileSync(SRC_APPDATA, "utf8");

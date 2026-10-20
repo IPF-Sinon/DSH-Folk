@@ -272,7 +272,7 @@ ok(webui.includes("addDocumentStartJavaScript") && webui.includes("DOCUMENT_STAR
 
 console.log("\n── dsh-file-upload 退役 ──");
 
-const rt = (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeInstaller.kt", "utf8"));
+const rt = (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeConstants.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeInstaller.kt", "utf8"));
 const seedLine = rt.match(/val SEED_PLUGINS =\s*\n?\s*listOf\(([^)]*)\)/);
 ok(seedLine !== null, "SEED_PLUGINS 可解析");
 ok(seedLine && !seedLine[1].includes("dsh-file-upload"),

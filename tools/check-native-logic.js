@@ -29,7 +29,7 @@ const SRC = {
   pd: fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshPersonalData.kt", "utf8"),
   ds: fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshDeviceSense.kt", "utf8"),
   bridge: fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshNativeBridge.kt", "utf8"),
-  rt: (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8")),
+  rt: (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeConstants.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8")),
 };
 const CODE = Object.fromEntries(Object.entries(SRC).map(([k, v]) => [k, code(v)]));
 
@@ -425,7 +425,7 @@ ok(SRC.rt.includes("dsh_log_bundle_unresolvable_user"),
     SRC.rt.indexOf("private suspend fun awaitWebToken"),
     SRC.rt.indexOf("private fun httpResponds"),
   );
-  ok(/TOKEN_WAIT_MS/.test(waitBody) && /private const val TOKEN_WAIT_MS = \d+_?\d*L/.test(SRC.rt),
+  ok(/TOKEN_WAIT_MS/.test(waitBody) && /internal const val TOKEN_WAIT_MS = \d+_?\d*L/.test(SRC.rt),
     "等待有上限：拿不到 token 也不能把启动卡死");
   ok(waitBody.includes("serverProcess?.isAlive != false"), "进程死了就不等了（超时日志会盖掉真正的失败原因）");
   ok(/logInfo\(R\.string\.dsh_log_token_captured, token\.length\)/.test(waitBody),
@@ -1234,7 +1234,7 @@ ok(/保留/.test(nativeZh),
 // "No usable native binding found for node-addon-require-builtin-linux-arm64-gnu"。
 // 这个开关必须放在 applyEnv（所有 exec 路径共用）里，而不是只加在 startServer 那一处。
 {
-  const runtime = (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8"));
+  const runtime = (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeConstants.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8"));
   const envFn = (runtime.match(/private fun applyEnv\(pb: ProcessBuilder\) \{[\s\S]*?\n    \}/) || [""])[0];
   ok(envFn.length > 0, "找到 applyEnv（容器环境构造的唯一入口）");
   ok(/env\["NARB_DISABLE_NATIVE_CACHE"\] = "1"/.test(envFn),

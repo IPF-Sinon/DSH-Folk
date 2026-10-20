@@ -36,37 +36,8 @@ import org.json.JSONObject
 /** 运行时阶段。 */
 object DshRuntime : DshRuntimeHost {
     private const val TAG = "DSH-Folk"
-    /**
-     * 等服务就绪的上限。
-     *
-     * 从 180s 压到 90s：proroot 现在失败一次就回退（见 [PROROOT_FAIL_LIMIT]），
-     * 而「卡住不退」的 proroot 唯一表现就是耗尽这个超时 —— 等待越久，用户从
-     * 坏运行时走到可用运行时的时间就越长。node 起 dsh web 正常在 10s 内。
-     */
-    private const val READY_TIMEOUT_MS = 90_000L
 
-    /**
-     * 端口已响应后，再等认证 token 多久才按「没有 token」继续。
-     *
-     * web 服务器**激活即监听**（dsh-host-webserver：「Activation listens immediately」），
-     * 而带 token 的那行 URL 是**插件树加载完**才打印的（dsh-web-app 的 announceReady 等
-     * `loader.await()`），两者之间有一段时间差；这段时间里发出的地址没有 token，打开就是
-     * 认证墙。等这个差值是修掉「外部浏览器打开时链接没有 token」的关键。
-     *
-     * 取 30s：手机上插件树加载通常在这个量级以内。等不到也不卡死 —— 超时就按无 token
-     * 继续（那说明这份运行时的输出格式变了，日志里会写明）。
-     */
-    private const val TOKEN_WAIT_MS = 30_000L
 
-    /** 等 token 时的轮询间隔：这行通常在 1s 内到，密一点能让「已就绪」尽快翻过来。 */
-    private const val TOKEN_POLL_MS = 200L
-    /**
-     * proroot 连续失败到此次数即强制回退 proot 并清掉用户选择。
-     *
-     * 取 1（失败即回退）：proroot 的失败模式是内核相关的确定性失败，重试同一台
-     * 设备不会有不同结果，让用户白等第二、三次没有意义。
-     */
-    private const val PROROOT_FAIL_LIMIT = 1
 
     /**
      * 从 dsh 打印的 `dsh web: http://…?token=…` 里提取认证 token。
@@ -83,12 +54,7 @@ object DshRuntime : DshRuntimeHost {
 
     /** ELF `e_machine`：183 = AArch64，62 = x86-64（见 [rootfsArchMismatch]）。 */
 
-    /** profile pnpm 设置里固定导入方式（见 [ensureProfilePnpmSettings]）。 */
-    private const val PNPM_IMPORT_KEY = "packageImportMethod"
-    private const val PNPM_IMPORT_LINE = "packageImportMethod: copy"
 
-    /** v1.3 写进 /root/.npmrc 的无效行，只为清理它而保留。 */
-    private const val NPMRC_LEGACY_LINE = "package-import-method=copy"
 
     /** web profile 在 rootfs 内的相对路径（guest 侧是 /root/.dsh/profiles/web）。 */
     private const val PROFILE_GUEST_REL = DshRuntimeEnv.PROFILE_GUEST_REL
@@ -108,37 +74,7 @@ object DshRuntime : DshRuntimeHost {
     private val TROUBLESHOOT_DOC_NAME: String get() = DshRuntimeScripts.TROUBLESHOOT_DOC_NAME
     private fun nativeTroubleshootDoc(): String = DshRuntimeScripts.nativeTroubleshootDoc(appContext)
 
-    /**
-     * 首启预装的插件（npm 包名，已人工验证可装）。
-     *
-     * 手机上没有这几个体验差很多：dsh-web-mobile 做移动端适配，dshmarket 提供
-     * WebUI 内的插件市场，dsh-config-manager 则是**本应用配置备份的依赖** ——
-     * 设置里的导出/导入走的正是它的回环 HTTP API（见 [DshConfigBackup]），
-     * 没装的话那一页直接不可用。dsh-file-upload 补上手机端最缺的一环：
-     * 拖拽/回形针上传、文档转 Markdown、图片 OCR、语音输入 —— 手机上没有
-     * 命令行贴文件这条路，全靠它把本地文件送进会话。
-     *
-     * 往这个清单里加包是安全的：[seedPlugins] 按包名逐个记账，老用户下次冷启动
-     * 会补装增量（不会因为「已完成」标记而永远跳过）。
-     */
-    val SEED_PLUGINS =
-        listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager", "dsh-folk-cloud")
 
-    /**
-     * 预装包名 → 安装 spec 的覆盖表（缺省 spec 就是包名本身）。
-     *
-     * `dsh-folk-cloud` **不发布到 npm**（免得和别的包撞名，也免去维护发布口令），
-     * 靠 GitHub 仓库直接装：`github:owner/name` 规格由 [DshPluginRepo.install] 里的
-     * `resolveSpec` 解析成 pnpm 能吃的形态。但账本（[SEED_PLUGINS]、`installed`、
-     * `attempted`、补修）全部按**包名**记 —— spec 只在真正调 install 的那一刻替换，
-     * 这样「装了没有」的判断不会因为 spec 形态而错位。
-     *
-     * 它依赖 dsh-config-manager，但只经回环 HTTP 调用（从不 import），因此其 package.json
-     * 把 dsh-config-manager 记为**可选 peer**：pnpm 不会在它底下再嵌一份，避免
-     * `config-manager` 这个 loader id 被声明两次而整棵插件树起不来。两者都在本清单里、
-     * 各自独立安装到 profile 顶层，互为并列。
-     */
-    private val SEED_SPECS = mapOf("dsh-folk-cloud" to "github:IPF-Sinon/dsh-folk-cloud")
 
     /**
      * 预装插件的「最低要求版本」名单（见 [applySeedVersionUpgrade]）。
@@ -174,25 +110,7 @@ object DshRuntime : DshRuntimeHost {
     // dsh-web-mobile 3.0.3：**上游最新就是它**，且范围明确 `<0.2.0`，没有双兼容版本可抬，
     //   故保持不动。实测它在 0.2.0 上并未被跳过（它不是 profile bundle，不吃那道闸门）且 UI 正常。
     // dsh-config-manager 0.1.64：范围本来就是 `>=0.1.0-rc.6 <0.3.0-0`，天然双兼容。
-    private val SEED_MIN_VERSIONS = mapOf(
-        "dsh-folk-cloud" to "0.6.0",
-        "dsh-config-manager" to "0.1.64",
-        "dshmarket" to "1.66.8",
-        "dsh-web-mobile" to "3.0.3",
-    )
 
-    /**
-     * 预装包 → 正式 release tgz 直链的兜底表（钉死版本）。
-     *
-     * 正常路径是 [SEED_SPECS] 的 `github:` 规格（跟最新代码，经 gh-proxy 镜像装）；只有
-     * git 全线路都失败时，才回落到这里的 tgz 直链——纯 HTTP 下载、完全绕开 git，由
-     * [DshPluginRepo.install] 在镜像线路里当作最后一条候选。tgz 装的是这个固定版本，
-     * 装上后用户可在插件商店自行更新到更新的版本。
-     */
-    private val SEED_FALLBACK_TGZ = mapOf(
-        "dsh-folk-cloud" to
-            "https://github.com/IPF-Sinon/dsh-folk-cloud/releases/download/v0.6.0/dsh-folk-cloud-0.6.0.tgz",
-    )
 
     /** 取某个预装包的安装 spec（默认即包名）。 */
     fun seedSpec(pkg: String): String = SEED_SPECS[pkg] ?: pkg
@@ -200,41 +118,11 @@ object DshRuntime : DshRuntimeHost {
     /** 取某个预装包的 tgz 兜底直链（没有则 null）。 */
     fun seedFallbackTgz(pkg: String): String? = SEED_FALLBACK_TGZ[pkg]
 
-    /**
-     * **退役**的预装包 → 它当年会插入的 entry id。
-     *
-     * 退役 = 上游已经自带同名能力，预装它不但多余，还会让整棵插件树报
-     * `duplicate loader entry id` 而根本起不来。dsh 0.1.5 起 `dsh-web-app` 自带
-     * `file-upload`（`@deepseek-ai/dsh-client-file-upload`，见其 cordis.patch.yml 的
-     * `- id: file-upload`），所以三方 `dsh-file-upload` 退役。
-     *
-     * 用它做三件事，**全部不依赖运行时探测**：
-     * 1. [seedPlugins] 在启动前把已装的退役包卸掉；
-     * 2. 账本 / 补修 / 换运行时重试一律忽略退役包（它们已不在 [SEED_PLUGINS] 里）；
-     * 3. [repairDuplicateLoaderEntry] 的候选集合 —— 早先这里靠 `pluginEntries()` 读
-     *    实际 entry id 再反查包名，可那条路在 yaml 解析失败时会**静默返回空表**，
-     *    于是冲突检测整个失效、退役包被反复预装（真机复现）。
-     *
-     * 判定阈值：只有运行时的 dsh ≥ [RETIRE_MIN_DSH_VERSION] 才自动卸载 —— 老运行时
-     * 没有内置能力，卸掉会让用户失去文件上传；版本读不出来时也不动。
-     *
-     * 离线核对过：`@deepseek-ai/dsh-web-app@0.1.5-rc.1` 的 cordis.patch.yml 声明了 94 条
-     * entry id，与预装包声明的 `dsh-web-mobile` / `dsh-market` / `config-manager` /
-     * `file-upload` 相比**只撞这一条**。核对方式（不需要设备）：
-     * `npm view @deepseek-ai/dsh-web-app@<版本> dist.tarball` 取包，读它 package.json 里
-     * `dsh.bundle.patch` 指向的文件的 `- id:` 行，再和预装包的同类声明取交集。
-     */
-    private val RETIRED_SEED_PLUGINS = mapOf("dsh-file-upload" to "file-upload")
 
     /** 退役判定用的 dsh 版本下界：从这个版本起上游自带 `file-upload`。 */
     private const val RETIRE_MIN_DSH_VERSION = "0.1.5"
 
-    /** 启动日志里「profile 声明了 bundles 但包解析不到」的行（声明残留时出现）。 */
-    private val PROFILE_BUNDLE_RE =
-        Regex("cannot resolve profile bundle [\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
 
-    /** 启动日志里「重复 loader entry id」的行（0.1.5 内置能力与三方插件重名时出现）。 */
-    private val DUP_ENTRY_RE = Regex("duplicate loader entry id[: ]+([A-Za-z0-9_.@/-]+)", RegexOption.IGNORE_CASE)
 
     /**
      * 当前 App 的 semver 核心段（去掉 `-beta.N` 这类预发布后缀）。
@@ -263,24 +151,7 @@ object DshRuntime : DshRuntimeHost {
         return compareVersions(installed, minAppVersion) >= 0
     }
 
-    /**
-     * 「预装补修」轮次（见 [applySeedRepair]）。
-     *
-     * 修好一个会让预装失败的根因后 +1，让**记过账但实际没生效**的预装包再试一次。
-     *   1 = 1.7.7：修 pnpm 拦构建脚本导致 dsh-file-upload 装了但没进 bundles
-     *   2 = 1.9.2.7：github/git 插件安装改走 gh-proxy 镜像线路（1.9.2.6）后，重试一次
-     *       之前因直连 github 失败而记账没生效的预装包（dsh-folk-cloud 首当其冲）
-     */
-    private const val SEED_REPAIR_REV = 2
 
-    /**
-     * 同一个运行时版本下，最多允许几轮「补装没生效的预装包」。
-     *
-     * 给的是**瞬时故障**的余地（网络抽风、pnpm 首次拉包超时）：第一次失败后下次开机
-     * 还能再试一次；两次都不行就认定这个环境下装不上，不再每次开机重跑 pnpm。
-     * 换运行时版本会重置这个计数（见 [applySeedEnvRetry]）。
-     */
-    private const val SEED_MAX_PASSES = 2
 
     /** 预装插件集合（供插件列表/商店渲染「预装」标签）。 */
     fun isSeedPlugin(pkg: String): Boolean = pkg in SEED_PLUGINS
@@ -288,20 +159,6 @@ object DshRuntime : DshRuntimeHost {
     /** raw string 里没法直接写美元加大括号（Kotlin 会当模板求值），用这个常量拼。 */
     private const val D = "$"
 
-    /** 样例目录名（容器内 `/root/.dsh/<这个名字>/`）。 */
-    /** 写到容器里的 DSL 文档文件名（与 `dsh-workflow` / 工具插件约定）。 */
-    /**
-     * 插件树/客户端包加载失败的日志签名。
-     *
-     * 命中这些就**不能**判定为 proroot 故障：它与容器运行时无关，换 proot 重试
-     * 照样失败（真机实测就是这样），而 [PROROOT_FAIL_LIMIT] = 1 会一次就把用户的
-     * proroot 偏好静默清掉。
-     */
-    private val PLUGIN_FAILURE_MARKS = listOf(
-        "plugin tree failed to load",
-        "client bundles not found",
-        "failed to apply loader entry modules",
-    )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow(DshState())
