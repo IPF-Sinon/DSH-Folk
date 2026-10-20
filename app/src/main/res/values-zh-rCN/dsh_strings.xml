@@ -1165,6 +1165,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_fs_err_no_storage">尚未授予「所有文件访问」，请在 设置 → 功能 → 共享存储 里开启</string>
     <string name="dsh_fs_err_storage_off">共享存储已关闭，请在 设置 → 功能 → 共享存储 里开启</string>
     <string name="dsh_fs_err_loopback_only">仅允许回环访问</string>
+    <string name="dsh_fs_err_rate_limited">请求过于频繁（本次已被限流）</string>
     <string name="dsh_fs_err_bad_token">token 不匹配</string>
     <string name="dsh_fs_err_unknown_endpoint">未知端点 %1$s %2$s</string>
     <string name="dsh_fs_err_internal">内部错误：%1$s</string>

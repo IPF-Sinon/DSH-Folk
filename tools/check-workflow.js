@@ -669,6 +669,29 @@ console.log("\u2500 #16m 拉线落空白：菜单选完按松手坐标建节点"
     "落点建节点时可以顺手连边（from → 新节点）");
 }
 
+console.log("\u2500 #16n 回环桥的守卫与拆分（阶段 4：DshBridgeGuard / DshBridgeSafRoutes）");
+{
+  const bridge = read("app/src/main/java/me/bmax/apatch/dsh/DshFsBridge.kt");
+  const guard = read("app/src/main/java/me/bmax/apatch/dsh/DshBridgeGuard.kt");
+  const saf = read("app/src/main/java/me/bmax/apatch/dsh/DshBridgeSafRoutes.kt");
+  ok(/internal object DshBridgeGuard/.test(guard), '守卫单独成文件');
+  ok(/const val WINDOW_MS = 60_000L/.test(guard) && /const val MAX_PER_WINDOW = 600/.test(guard),
+    '滑动窗口 60s / 600 次每分钟');
+  ok(/const val ENFORCE = false/.test(guard), '限流默认只记账不拦截（先观测再决定，安全行为不静默改变）');
+  ok(/fun record\(endpoint: String\): Boolean/.test(guard) && /fun audit\(ctx: Context\?, endpoint: String/.test(guard),
+    '守卫有记账与审计两个出口');
+  ok(/byEndpoint/.test(guard), '按端点计数（一眼看出哪个接口被刷）');
+  // 宿主必须真的接上守卫，而不是只写了类不用
+  ok(/DshBridgeGuard\.record\(endpoint\)/.test(bridge) && /DshBridgeGuard\.audit\(/.test(bridge),
+    'DshFsBridge 每次请求都经守卫记账与审计');
+  ok(/fun normalizeEndpoint\(path: String\)/.test(bridge), '端点归一化（审计记接口名，不记文件名）');
+  ok(/if \(limited && DshBridgeGuard\.ENFORCE\)/.test(bridge), '超限只在 ENFORCE 打开时回 429');
+  // SAF 路由搬出后，主文件不再有 saf 实现，但分发仍在主文件
+  ok(/internal fun DshFsBridge\.dispatchSaf\(/.test(saf) && /path\.startsWith\("\/saf\/"\) -> dispatchSaf\(/.test(bridge),
+    'SAF 路由搬到独立文件，主文件仍负责分发');
+  ok(!/private fun saf[A-Z]/.test(bridge), '主文件不再保留 SAF 实现（避免两份）');
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),

@@ -1187,6 +1187,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_fs_err_no_storage">All files access is not granted — enable it in Settings › Features › Shared storage</string>
     <string name="dsh_fs_err_storage_off">Shared storage is turned off — enable it in Settings › Features › Shared storage</string>
     <string name="dsh_fs_err_loopback_only">Loopback access only</string>
+    <string name="dsh_fs_err_rate_limited">Too many requests (rate limited)</string>
     <string name="dsh_fs_err_bad_token">Token mismatch</string>
     <string name="dsh_fs_err_unknown_endpoint">Unknown endpoint %1$s %2$s</string>
     <string name="dsh_fs_err_internal">Internal error: %1$s</string>
