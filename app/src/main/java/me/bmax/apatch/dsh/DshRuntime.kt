@@ -34,57 +34,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** 运行时阶段。 */
-object DshRuntime : DshRuntimeHost {
-    // ────────── DshRuntimeHost 实现（安装簇等辅助文件只认这个接口）──────────
-    override val stateFlow: StateFlow<DshState> get() = _state
-    override fun setState(update: (DshState) -> DshState) { _state.update(update) }
-    override fun prefs(): SharedPreferences = hostPrefs()
-    override fun logInfo(resId: Int, vararg args: Any) = hostLogInfo(resId, *args)
-    override fun logWarn(resId: Int, vararg args: Any) = hostLogWarn(resId, *args)
-    override fun str(resId: Int, vararg args: Any): String = hostStr(resId, *args)
-    override fun fail(message: String) = hostFail(message)
-    override fun startServer() = hostStartServer()
-    override fun bootstrap() = hostBootstrap()
-    override fun refreshRootfsSize() = hostRefreshRootfsSize()
-    override fun availableSpace(dir: File): Long = hostAvailableSpace(dir)
-    override fun verifySha256(file: File, expected: String): Boolean = hostVerifySha256(file, expected)
-    override fun downloadWithFallback(meta: DshMeta, target: File): Boolean = hostDownloadWithFallback(meta, target)
-    override fun fetchMeta(): DshMeta? = hostFetchMeta()
-    override fun fetchNewestMeta(): DshMeta? = hostFetchNewestMeta()
-    override fun raceEnabled(channel: String): Boolean = hostRaceEnabled(channel)
-    override fun clearLog() = hostClearLog()
-    override fun sourceName(source: String): String = hostSourceName(source)
-    override fun appSatisfies(minAppVersion: String): Boolean = hostAppSatisfies(minAppVersion)
-    override fun downloadFile(url: String, target: File, sizeBytes: Long): Boolean = hostDownloadFile(url, target, sizeBytes)
-    override fun elfMachine(f: File): Int? = hostElfMachine(f)
-    override fun runtime(): ContainerRuntime = hostRuntime()
-    override fun runtimeSource(ctx: Context): String = hostRuntimeSource(ctx)
-    override val elfMachineAarch64: Int get() = ELF_MACHINE_AARCH64
-
-    // 私有别名：override 与目标同名会在 object 内部解析到 override 自己（无限递归），所以显式换名。
-    private fun hostPrefs(): SharedPreferences = prefs()
-    private fun hostLogInfo(resId: Int, vararg args: Any) = logInfo(resId, *args)
-    private fun hostLogWarn(resId: Int, vararg args: Any) = logWarn(resId, *args)
-    private fun hostStr(resId: Int, vararg args: Any): String = str(resId, *args)
-    private fun hostFail(message: String) = fail(message)
-    private fun hostStartServer() = startServerImpl()
-    private fun hostBootstrap() = bootstrapImpl()
-    private fun hostRefreshRootfsSize() = refreshRootfsSizeImpl()
-    private fun hostAvailableSpace(dir: File): Long = availableSpace(dir)
-    private fun hostVerifySha256(file: File, expected: String): Boolean = verifySha256(file, expected)
-    private fun hostDownloadWithFallback(meta: DshMeta, target: File): Boolean = this.downloadWithFallbackExt(meta, target)
-    private fun hostFetchMeta(): DshMeta? = this.fetchMetaExt()
-    private fun hostFetchNewestMeta(): DshMeta? = this.fetchNewestMetaExt()
-    private fun hostRaceEnabled(channel: String): Boolean = raceEnabledImpl(channel)
-    private fun hostClearLog() = clearLogImpl()
-    private fun hostSourceName(source: String): String = sourceName(source)
-    private fun hostAppSatisfies(minAppVersion: String): Boolean = appSatisfies(minAppVersion)
-    private fun hostDownloadFile(url: String, target: File, sizeBytes: Long): Boolean = this.downloadFileExt(url, target, sizeBytes)
-    private fun hostElfMachine(f: File): Int? = this.elfMachineExt(f)
-    private fun hostRuntime(): ContainerRuntime = runtimeImpl()
-    private fun hostRuntimeSource(ctx: Context): String = runtimeSource(ctx)
-    override val elfMachineX86_64: Int get() = ELF_MACHINE_X86_64
-
+object DshRuntime {
     private const val TAG = "DSH-Folk"
     /**
      * 等服务就绪的上限。
@@ -136,7 +86,6 @@ object DshRuntime : DshRuntimeHost {
     /** profile pnpm 设置里固定导入方式（见 [ensureProfilePnpmSettings]）。 */
     private const val PNPM_IMPORT_KEY = "packageImportMethod"
     private const val PNPM_IMPORT_LINE = "packageImportMethod: copy"
-
 
     /** v1.3 写进 /root/.npmrc 的无效行，只为清理它而保留。 */
     private const val NPMRC_LEGACY_LINE = "package-import-method=copy"
@@ -358,6 +307,14 @@ object DshRuntime : DshRuntimeHost {
     private val _state = MutableStateFlow(DshState())
     val state: StateFlow<DshState> = _state.asStateFlow()
 
+    // ────────── 交给 DshRuntimeHostAdapter 的口子（安装簇等辅助文件只认接口）──────────
+    // 为什么要适配器：object 里已有的 private 成员与接口同签名，直接实现接口会 Conflicting
+    // overloads；而给它们改名又会动到公开 API（startServer/raceEnabled/clearLog/runtime 等有
+    // 9 处外部调用点）。所以接口由下面这个适配器实现，object 本身保持原样。
+    val stateFlow: StateFlow<DshState> get() = _state
+    fun setState(update: (DshState) -> DshState) { _state.update(update) }
+
+
     private lateinit var appContext: Context
     private var serverProcess: Process? = null
     private var startedAt: Long = 0L
@@ -430,7 +387,7 @@ object DshRuntime : DshRuntimeHost {
      * 只允许从这里进入 [dirSize]：它要遍历十万级文件，在组合期同步调用会让
      * 每次导航回首页都卡两秒以上（真机 MIUIScout 实测 duration=2505ms）。
      */
-    private fun refreshRootfsSizeImpl() {
+    fun refreshRootfsSize() {
         if (!ready) return
         scope.launch {
             val bytes = withContext(Dispatchers.IO) { dirSize(DshEnv.rootfs(appContext)) }
@@ -549,7 +506,7 @@ object DshRuntime : DshRuntimeHost {
      *
      * 分开关默认开：老用户此前的行为就是「能加速就加速」，升级后不该悄悄变慢。
      */
-    private fun raceEnabledImpl(channel: String): Boolean {
+    fun raceEnabled(channel: String): Boolean {
         if (!raceMasterEnabled()) return false
         val key = when (channel) {
             RACE_PLUGINS -> DshEnv.KEY_RACE_PLUGINS
@@ -648,7 +605,7 @@ object DshRuntime : DshRuntimeHost {
     }
 
     /** 解析出实际可用的运行时；选中的不可用时静默回退 proot。 */
-    private fun runtimeImpl(): ContainerRuntime {
+    fun runtime(): ContainerRuntime {
         val proot = ContainerRuntime.Proot(appContext, nativeLib("libproot.so"))
         if (runtimeId() != "proroot") return proot
         val proroot = ContainerRuntime.Proroot(appContext, ContainerRuntime.Proroot.defaultDir(appContext))
@@ -975,7 +932,7 @@ object DshRuntime : DshRuntimeHost {
      * 而 HarnessService 在 DOWNLOADING / EXTRACTING 阶段依然会放行 bootstrap，
      * 连点两次启动就会开两条 135MB 下载。用互斥锁 + 阶段判定拦住。
      */
-    private fun bootstrapImpl() {
+    fun bootstrap() {
         scope.launch {
             if (busy()) return@launch
             bootMutex.withLock {
@@ -1019,7 +976,6 @@ object DshRuntime : DshRuntimeHost {
         logWarn(R.string.dsh_log_node_machine, machine, want)
         true
     }.getOrDefault(false)
-
 
     /**
      * 预装内置插件（首启，以及从旧版本升级后补装新增的那几个）。
@@ -1797,10 +1753,6 @@ object DshRuntime : DshRuntimeHost {
         }
     }
 
-
-
-
-
     /**
      * 运行时通道当前生效的下载源。
      *
@@ -2025,14 +1977,6 @@ object DshRuntime : DshRuntimeHost {
         )
     }
 
-
-
-
-
-
-
-
-
     /** 写容器 DNS（国内解析优先，谷歌/CF 兜底）。 */
     /**
      * 写入容器的 DNS 与 hosts。
@@ -2050,10 +1994,6 @@ object DshRuntime : DshRuntimeHost {
     /** 缺失或空文件才写（不覆盖用户自己改过的内容）。 */
     private fun ensureContainerDns() = DshRuntimeEnv.ensureDns(appContext)
 
-
-
-
-
     /** 落地件的日志桥：按接口把日志口子交出去，辅助文件不需要认识整个单例。 */
     private val logBridge = object : DshRuntimeLog {
         override fun info(resId: Int, vararg args: Any) = logInfo(resId, *args)
@@ -2066,7 +2006,6 @@ object DshRuntime : DshRuntimeHost {
     /** 公开入口保持原签名（DshPluginRepo 会调）。 */
     fun allowProfileBuilds(packages: List<String>, onLine: (String) -> Unit = {}): List<String> =
         DshRuntimeEnv.allowProfileBuilds(appContext, packages, onLine)
-
 
     /**
      * 让容器内的 pnpm 用「复制」而不是「硬链接」从内容存储装包。
@@ -2149,7 +2088,6 @@ object DshRuntime : DshRuntimeHost {
         return str(R.string.dsh_log_pnpm_from_profile, value)
     }
 
-
     // ────────────────────────── web 服务 ──────────────────────────
 
     /**
@@ -2181,7 +2119,7 @@ object DshRuntime : DshRuntimeHost {
      * 服务默认只绑 127.0.0.1；开启「局域网访问」后追加 --host 0.0.0.0。
      * 鉴权由 dsh 自己的登录页负责。
      */
-    private fun startServerImpl() {
+    fun startServer() {
         // 守卫只看真实进程，不看 phase。看 phase 会把上一步（例如安装完成）
         // 自己写下的 STARTING 误当成「已有人在启动」。
         if (serverProcess?.isAlive == true) return
@@ -2567,7 +2505,7 @@ object DshRuntime : DshRuntimeHost {
      * 本次运行的内容：真机上导入会话报错发生在 12:xx，14:24 的报告里 dsh.log 只有 1 KB
      * （就是那次启动之后的新内容），只能靠猜。留一份上一次运行的日志，问题才有可能回溯。
      */
-    private fun clearLogImpl() {
+    fun clearLog() {
         if (!::appContext.isInitialized) return
         val log = DshEnv.serverLog(appContext)
         if (log.isFile && log.length() > 0L) {

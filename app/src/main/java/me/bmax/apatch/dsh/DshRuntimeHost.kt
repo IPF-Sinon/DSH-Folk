@@ -77,3 +77,40 @@ internal interface DshRuntimeHost {
     val elfMachineAarch64: Int
     val elfMachineX86_64: Int
 }
+
+/**
+ * [DshRuntimeHost] 的适配器：转发到 [DshRuntime] 已存在的公开成员。
+ *
+ * 为什么不把接口实现在 DshRuntime 上：object 里已有同签名的 private 成员（prefs / logInfo / str…），
+ * 再写一遍 override 会构成 **Conflicting overloads**（Kotlin 不把 private 成员当作接口实现）；
+ * 而把这些成员逐一改名又会动到公开 API（startServer / raceEnabled / clearLog / runtime 等有 9 处
+ * 外部调用点）。放进独立对象后两边各自解析、互不冲突，DshRuntime 一个字符都不用改。
+ */
+internal object DshRuntimeHostAdapter : DshRuntimeHost {
+    override val stateFlow: StateFlow<DshState> get() = DshRuntime.stateFlow
+    override fun setState(update: (DshState) -> DshState) = DshRuntime.setState(update)
+    override fun prefs(): android.content.SharedPreferences = DshRuntime.prefs()
+    override fun logInfo(resId: Int, vararg args: Any) = DshRuntime.logInfo(resId, *args)
+    override fun logWarn(resId: Int, vararg args: Any) = DshRuntime.logWarn(resId, *args)
+    override fun str(resId: Int, vararg args: Any): String = DshRuntime.str(resId, *args)
+    override fun fail(message: String) = DshRuntime.fail(message)
+    override fun startServer() = DshRuntime.startServer()
+    override fun bootstrap() = DshRuntime.bootstrap()
+    override fun refreshRootfsSize() = DshRuntime.refreshRootfsSize()
+    override fun availableSpace(dir: File): Long = DshRuntime.availableSpace(dir)
+    override fun verifySha256(file: File, expected: String): Boolean = DshRuntime.verifySha256(file, expected)
+    override fun downloadWithFallback(meta: DshMeta, target: File): Boolean = DshRuntime.downloadWithFallback(meta, target)
+    override fun fetchMeta(): DshMeta? = DshRuntime.fetchMeta()
+    override fun fetchNewestMeta(): DshMeta? = DshRuntime.fetchNewestMeta()
+    override fun raceEnabled(channel: String): Boolean = DshRuntime.raceEnabled(channel)
+    override fun clearLog() = DshRuntime.clearLog()
+    override fun sourceName(source: String): String = DshRuntime.sourceName(source)
+    override fun appSatisfies(minAppVersion: String): Boolean = DshRuntime.appSatisfies(minAppVersion)
+    override fun downloadFile(url: String, target: File, sizeBytes: Long): Boolean =
+        DshRuntime.downloadFile(url, target, sizeBytes)
+    override fun elfMachine(f: File): Int? = DshRuntime.elfMachine(f)
+    override fun runtime(): ContainerRuntime = DshRuntime.runtime()
+    override fun runtimeSource(ctx: Context): String = DshRuntime.runtimeSource(ctx)
+    override val elfMachineAarch64: Int get() = ELF_MACHINE_AARCH64
+    override val elfMachineX86_64: Int get() = ELF_MACHINE_X86_64
+}

@@ -438,15 +438,3 @@ internal fun DshRuntime.recoverInterruptedRuntimeInstall() {
     }
     if (pending.exists()) pending.deleteRecursively()
 }
-
-// ────────── 给 DshRuntime 内部用的同义转发 ──────────
-// 为什么需要：object 内部的裸调用（`fetchMeta()`）会优先解析到**成员**（接口 override），
-// 而不是同包扩展函数 —— 别名若写成 `= fetchMeta()` 会调回自己（无限递归）。
-// 所以扩展函数额外暴露一批 `xxxExt` 名字，object 内部只用这几个名字调用。
-internal fun DshRuntime.fetchMetaExt(): DshMeta? = this.fetchMeta()
-internal fun DshRuntime.fetchNewestMetaExt(): DshMeta? = this.fetchNewestMeta()
-internal fun DshRuntime.downloadWithFallbackExt(meta: DshMeta, target: File): Boolean =
-    this.downloadWithFallback(meta, target)
-internal fun DshRuntime.downloadFileExt(url: String, target: File, sizeBytes: Long): Boolean =
-    this.downloadFile(url, target, sizeBytes)
-internal fun DshRuntime.elfMachineExt(f: File): Int? = this.elfMachine(f)

@@ -35,8 +35,7 @@ for (const k of ['KEY_RACE_PLUGINS', 'KEY_RACE_APP_UPDATE', 'KEY_RACE_RUNTIME'])
 }
 
 // 2. 总开关关掉时通道一律不生效
-// raceEnabled 现在是「公开 override + private raceEnabledImpl」：判总开关的逻辑在 Impl 里。
-const raceFn = (runtime.match(/fun raceEnabledImpl\(channel: String\): Boolean \{[\s\S]*?\n    \}/) || [''])[0];
+const raceFn = (runtime.match(/fun raceEnabled\(channel: String\): Boolean \{[\s\S]*?\n    \}/) || [''])[0];
 must(raceFn.length > 0, '找不到 DshRuntime.raceEnabled');
 must(/if \(!raceMasterEnabled\(\)\) return false/.test(raceFn),
   'raceEnabled 必须先判总开关（关掉时任何通道都不生效）');
