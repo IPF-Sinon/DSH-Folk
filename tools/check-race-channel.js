@@ -17,7 +17,7 @@ const must = (c, m) => { if (!c) errors.push(m); };
 
 const env = read('app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt');
 // 模型类型已搬到 DshRuntimeModels.kt（同包，纯搬家）：读源码做断言的地方要一起拼上。
-const runtime = (read('app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt') + "\n" + read('app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt') + "\n" + read('app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt'));
+const runtime = (read('app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt') + "\n" + read('app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt') + "\n" + read('app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt') + "\n" + read('app/src/main/java/me/bmax/apatch/dsh/DshRuntimeInstaller.kt'));
 const source = read('app/src/main/java/me/bmax/apatch/dsh/DshSource.kt');
 const repo = read('app/src/main/java/me/bmax/apatch/dsh/DshPluginRepo.kt');
 const appUpdater = read('app/src/main/java/me/bmax/apatch/util/AppUpdater.kt');
@@ -35,7 +35,8 @@ for (const k of ['KEY_RACE_PLUGINS', 'KEY_RACE_APP_UPDATE', 'KEY_RACE_RUNTIME'])
 }
 
 // 2. 总开关关掉时通道一律不生效
-const raceFn = (runtime.match(/fun raceEnabled\(channel: String\): Boolean \{[\s\S]*?\n    \}/) || [''])[0];
+// raceEnabled 现在是「公开 override + private raceEnabledImpl」：判总开关的逻辑在 Impl 里。
+const raceFn = (runtime.match(/fun raceEnabledImpl\(channel: String\): Boolean \{[\s\S]*?\n    \}/) || [''])[0];
 must(raceFn.length > 0, '找不到 DshRuntime.raceEnabled');
 must(/if \(!raceMasterEnabled\(\)\) return false/.test(raceFn),
   'raceEnabled 必须先判总开关（关掉时任何通道都不生效）');
@@ -254,12 +255,15 @@ console.log('check-race-channel: 通过');
     '新增线路必须在 MIRRORS 里，且老固定源选择要有迁移（不许把用户的明确选择悄悄重置成全选）');
 // 下载候选必须收敛到 DshSource.proxyCandidates（各消费点不许再写死两条线路）
   const dshRuntime = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt'), 'utf8') +
-    "\n" + fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt'), 'utf8');
+    "\n" + fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt'), 'utf8') +
+    "\n" + fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/dsh/DshRuntimeInstaller.kt'), 'utf8');
   const appUpdater2 = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/util/AppUpdater.kt'), 'utf8');
   const updateChecker = fs2.readFileSync(p2.join(rootDir, 'app/src/main/java/me/bmax/apatch/util/UpdateChecker.kt'), 'utf8');
   want(/fun proxyCandidates\(url: String\): List<String>/.test(src), '缺 DshSource.proxyCandidates');
   want(/DshSource\.proxyCandidates\(meta\.url\)/.test(dshRuntime),
     '运行时下载必须用 DshSource.proxyCandidates（只认 metadata.mirrors 会让新增线路永远用不上）');
+  // 上面那条现在由 DshRuntimeInstaller.kt（同包扩展函数）满足 —— 读源码做断言的脚本必须把它一起拼上，
+  // 否则「代码搬了家」会被误报成「行为丢了」。
   want(/DshSource\.proxyCandidates\(status\.apkUrl\)/.test(appUpdater2),
     'APK 下载必须用 DshSource.proxyCandidates');
   want(/DshSource\.proxyCandidates\(url\)/.test(updateChecker),

@@ -34,7 +34,57 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** 运行时阶段。 */
-object DshRuntime {
+object DshRuntime : DshRuntimeHost {
+    // ────────── DshRuntimeHost 实现（安装簇等辅助文件只认这个接口）──────────
+    override val stateFlow: StateFlow<DshState> get() = _state
+    override fun setState(update: (DshState) -> DshState) { _state.update(update) }
+    override fun prefs(): SharedPreferences = hostPrefs()
+    override fun logInfo(resId: Int, vararg args: Any) = hostLogInfo(resId, *args)
+    override fun logWarn(resId: Int, vararg args: Any) = hostLogWarn(resId, *args)
+    override fun str(resId: Int, vararg args: Any): String = hostStr(resId, *args)
+    override fun fail(message: String) = hostFail(message)
+    override fun startServer() = hostStartServer()
+    override fun bootstrap() = hostBootstrap()
+    override fun refreshRootfsSize() = hostRefreshRootfsSize()
+    override fun availableSpace(dir: File): Long = hostAvailableSpace(dir)
+    override fun verifySha256(file: File, expected: String): Boolean = hostVerifySha256(file, expected)
+    override fun downloadWithFallback(meta: DshMeta, target: File): Boolean = hostDownloadWithFallback(meta, target)
+    override fun fetchMeta(): DshMeta? = hostFetchMeta()
+    override fun fetchNewestMeta(): DshMeta? = hostFetchNewestMeta()
+    override fun raceEnabled(channel: String): Boolean = hostRaceEnabled(channel)
+    override fun clearLog() = hostClearLog()
+    override fun sourceName(source: String): String = hostSourceName(source)
+    override fun appSatisfies(minAppVersion: String): Boolean = hostAppSatisfies(minAppVersion)
+    override fun downloadFile(url: String, target: File, sizeBytes: Long): Boolean = hostDownloadFile(url, target, sizeBytes)
+    override fun elfMachine(f: File): Int? = hostElfMachine(f)
+    override fun runtime(): ContainerRuntime = hostRuntime()
+    override fun runtimeSource(ctx: Context): String = hostRuntimeSource(ctx)
+    override val elfMachineAarch64: Int get() = ELF_MACHINE_AARCH64
+
+    // 私有别名：override 与目标同名会在 object 内部解析到 override 自己（无限递归），所以显式换名。
+    private fun hostPrefs(): SharedPreferences = prefs()
+    private fun hostLogInfo(resId: Int, vararg args: Any) = logInfo(resId, *args)
+    private fun hostLogWarn(resId: Int, vararg args: Any) = logWarn(resId, *args)
+    private fun hostStr(resId: Int, vararg args: Any): String = str(resId, *args)
+    private fun hostFail(message: String) = fail(message)
+    private fun hostStartServer() = startServerImpl()
+    private fun hostBootstrap() = bootstrapImpl()
+    private fun hostRefreshRootfsSize() = refreshRootfsSizeImpl()
+    private fun hostAvailableSpace(dir: File): Long = availableSpace(dir)
+    private fun hostVerifySha256(file: File, expected: String): Boolean = verifySha256(file, expected)
+    private fun hostDownloadWithFallback(meta: DshMeta, target: File): Boolean = this.downloadWithFallbackExt(meta, target)
+    private fun hostFetchMeta(): DshMeta? = this.fetchMetaExt()
+    private fun hostFetchNewestMeta(): DshMeta? = this.fetchNewestMetaExt()
+    private fun hostRaceEnabled(channel: String): Boolean = raceEnabledImpl(channel)
+    private fun hostClearLog() = clearLogImpl()
+    private fun hostSourceName(source: String): String = sourceName(source)
+    private fun hostAppSatisfies(minAppVersion: String): Boolean = appSatisfies(minAppVersion)
+    private fun hostDownloadFile(url: String, target: File, sizeBytes: Long): Boolean = this.downloadFileExt(url, target, sizeBytes)
+    private fun hostElfMachine(f: File): Int? = this.elfMachineExt(f)
+    private fun hostRuntime(): ContainerRuntime = runtimeImpl()
+    private fun hostRuntimeSource(ctx: Context): String = runtimeSource(ctx)
+    override val elfMachineX86_64: Int get() = ELF_MACHINE_X86_64
+
     private const val TAG = "DSH-Folk"
     /**
      * 等服务就绪的上限。
@@ -82,8 +132,6 @@ object DshRuntime {
     private val DSH_WEB_TOKEN_RE = Regex("[?&]token=([A-Za-z0-9_%+/.=~-]+)")
 
     /** ELF `e_machine`：183 = AArch64，62 = x86-64（见 [rootfsArchMismatch]）。 */
-    private const val ELF_MACHINE_AARCH64 = 183
-    private const val ELF_MACHINE_X86_64 = 62
 
     /** profile pnpm 设置里固定导入方式（见 [ensureProfilePnpmSettings]）。 */
     private const val PNPM_IMPORT_KEY = "packageImportMethod"
@@ -382,7 +430,7 @@ object DshRuntime {
      * 只允许从这里进入 [dirSize]：它要遍历十万级文件，在组合期同步调用会让
      * 每次导航回首页都卡两秒以上（真机 MIUIScout 实测 duration=2505ms）。
      */
-    fun refreshRootfsSize() {
+    private fun refreshRootfsSizeImpl() {
         if (!ready) return
         scope.launch {
             val bytes = withContext(Dispatchers.IO) { dirSize(DshEnv.rootfs(appContext)) }
@@ -501,7 +549,7 @@ object DshRuntime {
      *
      * 分开关默认开：老用户此前的行为就是「能加速就加速」，升级后不该悄悄变慢。
      */
-    fun raceEnabled(channel: String): Boolean {
+    private fun raceEnabledImpl(channel: String): Boolean {
         if (!raceMasterEnabled()) return false
         val key = when (channel) {
             RACE_PLUGINS -> DshEnv.KEY_RACE_PLUGINS
@@ -600,7 +648,7 @@ object DshRuntime {
     }
 
     /** 解析出实际可用的运行时；选中的不可用时静默回退 proot。 */
-    fun runtime(): ContainerRuntime {
+    private fun runtimeImpl(): ContainerRuntime {
         val proot = ContainerRuntime.Proot(appContext, nativeLib("libproot.so"))
         if (runtimeId() != "proroot") return proot
         val proroot = ContainerRuntime.Proroot(appContext, ContainerRuntime.Proroot.defaultDir(appContext))
@@ -927,7 +975,7 @@ object DshRuntime {
      * 而 HarnessService 在 DOWNLOADING / EXTRACTING 阶段依然会放行 bootstrap，
      * 连点两次启动就会开两条 135MB 下载。用互斥锁 + 阶段判定拦住。
      */
-    fun bootstrap() {
+    private fun bootstrapImpl() {
         scope.launch {
             if (busy()) return@launch
             bootMutex.withLock {
@@ -972,22 +1020,6 @@ object DshRuntime {
         true
     }.getOrDefault(false)
 
-    /** 读 ELF 头的 `e_machine`（偏移 0x12，2 字节）。不是 ELF 或读不到返回 null。 */
-    private fun elfMachine(f: File): Int? = runCatching {
-        if (!f.isFile) return@runCatching null
-        FileInputStream(f).use { s ->
-            val head = ByteArray(20)
-            if (s.read(head) < 20) return@runCatching null
-            if (head[0] != 0x7f.toByte() || head[1] != 'E'.code.toByte() ||
-                head[2] != 'L'.code.toByte() || head[3] != 'F'.code.toByte()
-            ) {
-                return@runCatching null
-            }
-            val lo = head[18].toInt() and 0xff
-            val hi = head[19].toInt() and 0xff
-            if (head[5] == 1.toByte()) lo or (hi shl 8) else hi or (lo shl 8)
-        }
-    }.getOrNull()
 
     /**
      * 预装内置插件（首启，以及从旧版本升级后补装新增的那几个）。
@@ -1765,167 +1797,9 @@ object DshRuntime {
         }
     }
 
-    private suspend fun downloadAndInstall(preserveData: Boolean = true, newest: Boolean = true) {
-        clearLog()
-        _state.update {
-            it.copy(
-                phase = DshPhase.DOWNLOADING,
-                progress = 0f,
-                speedBytesPerSec = 0L,
-                message = str(R.string.dsh_msg_fetching_meta),
-            )
-        }
-        if (DshSource.setting(appContext) == DshSource.SOURCE_AUTO &&
-            raceEnabled(RACE_RUNTIME)
-        ) {
-            logInfo(R.string.dsh_log_speedtest_start)
-            val results = DshSource.speedTest()
-            for (r in results.sortedBy { it.estimatedMs }) {
-                val latency = r.latencyMs
-                if (latency == null) {
-                    // 不可达就说不可达：老实现把哨兵值 Long.MAX_VALUE/4 当延迟打出来，
-                    // 用户看到的是「延迟 2305843009213693951ms」。
-                    logInfo(R.string.dsh_log_speedtest_unreachable, sourceName(r.source))
-                    continue
-                }
-                val speed = if (r.speedKBps > 0.0) String.format("%.1f MB/s", r.speedKBps / 1024.0)
-                else str(R.string.dsh_log_speedtest_untested)
-                logInfo(R.string.dsh_log_speedtest_row, sourceName(r.source), latency, speed)
-            }
-            logInfo(R.string.dsh_log_source_chosen, sourceName(DshSource.pickBest(results, appContext)))
-        }
-        logInfo(R.string.dsh_log_fetching_meta)
-        // newest=false 只给「重装当前版本」用：那条路要装的必须是已装那一份，不能顺手升级。
-        val meta = if (newest) fetchNewestMeta() else fetchMeta()
-        if (meta == null) {
-            fail(str(R.string.dsh_err_meta_failed))
-            return
-        }
-        installMeta(meta, preserveData)
-    }
 
-    /**
-     * 用一份**已知**的 metadata 走完安装：架构闸门 → 最低 App 闸门 → 空间 → 下载
-     * （多镜像竞速）→ sha256 → 解压 → 落盘版本。
-     *
-     * 从 [downloadAndInstall] 里拆出来是为了版本列表：那条路径的 metadata 来自用户
-     * 选中的那个 release，而不是当前通道 —— 否则「切换到历史版本」会变成「又装了一遍
-     * 最新版」。
-     */
-    private suspend fun installMeta(meta: DshMeta, preserveData: Boolean) {
-        // 架构必须先对上：自定义源可以指向任何 metadata.json，下错架构的 rootfs 要到
-        // 启动 node 时才报 "Exec format error"，白下 130 MB 还看不懂错在哪。
-        //
-        // 判据是 [DshSource.runtimeArch]（= APK 里 proot 的真实架构），**不是**
-        // `Build.SUPPORTED_ABIS.contains(...)`：带 arm 转译层的 x86_64 设备两个 ABI 都报，
-        // 用 contains 判会把 arm64 的 rootfs 放行，而 proot 是 x86_64 原生二进制、
-        // 不走转译层，执行 arm64 的 ld.so 直接 SIGILL（1.7.6 真机上就是这么炸的）。
-        val want = DshSource.runtimeArch()
-        if (meta.arch.isNotEmpty() && meta.arch != want) {
-            fail(str(R.string.dsh_err_arch_mismatch, meta.arch, want))
-            return
-        }
-        // 最低 App 版本闸门：在下载之前拦住（同 startServer 里那道闸门）。置位
-        // appUpdateRequired 让 UI 显示「请先更新应用」，而不是下 150MB 装完才炸。
-        if (meta.minAppVersion.isNotEmpty() && !appSatisfies(meta.minAppVersion)) {
-            _state.update {
-                it.copy(appUpdateRequired = true, requiredAppVersion = meta.minAppVersion)
-            }
-            fail(str(R.string.dsh_runtime_min_app_required, meta.minAppVersion))
-            return
-        }
-        // 空间检查放在下载之前：rootfs 解压后约为压缩包的 3 倍，加上压缩包自身
-        // 需要约 4 倍余量。等下载完再查等于白下 100 多 MB。
-        if (meta.sizeBytes > 0) {
-            val free = availableSpace(appContext.filesDir)
-            val need = meta.sizeBytes * 4
-            if (free in 1..need) {
-                fail(str(R.string.dsh_err_no_space, free / 1024 / 1024, need / 1024 / 1024))
-                return
-            }
-        }
-        val tarball = DshEnv.downloadZip(appContext)
-        logInfo(R.string.dsh_log_download_start, meta.version, meta.nodeVersion, meta.dsh)
-        if (!downloadWithFallback(meta, tarball)) {
-            fail(str(R.string.dsh_err_download_failed))
-            return
-        }
-        logInfo(R.string.dsh_log_download_done, tarball.length() / 1024 / 1024)
-        if (!verifySha256(tarball, meta.sha256)) {
-            // 校验失败说明这份文件本身是坏的（续传时拼错、镜像给了旧包）——
-            // 必须删掉，否则下次续传会一直基于这份坏数据往后接，永远校验不过。
-            runCatching { tarball.delete() }
-            fail(str(R.string.dsh_err_sha_mismatch))
-            return
-        }
-        // 二次确认：metadata 里的 sizeBytes 可能与实际有偏差，用真实体积再算一次
-        val free = availableSpace(appContext.filesDir)
-        val need = (tarball.length() * 3.0).toLong()
-        if (free in 1..need) {
-            fail(str(R.string.dsh_err_no_space, free / 1024 / 1024, need / 1024 / 1024))
-            return
-        }
-        logInfo(R.string.dsh_log_sha_ok)
-        _state.update {
-            it.copy(phase = DshPhase.EXTRACTING, progress = 0f, message = str(R.string.dsh_msg_installing))
-        }
-        val ok = withContext(Dispatchers.IO) { installRuntimeArchive(tarball, preserveData) }
-        tarball.delete()
-        if (!ok) {
-            fail(str(R.string.dsh_err_extract_failed))
-            return
-        }
-        logInfo(R.string.dsh_log_install_done)
-        // 要求与版本一起落盘：下一次 attach() 才能离线判断「这份运行时需不需要
-        // 更新的 App」。App 升级后 compareVersions 重算，满足即自动放行。
-        prefs().edit()
-            .putString(DshEnv.KEY_RUNTIME_VERSION, meta.version)
-            .putString(DshEnv.KEY_RUNTIME_MIN_APP, meta.minAppVersion)
-            .apply()
-        // phase 必须回 NOT_READY，不能直接置 STARTING：[bootstrap] 下一步就调
-        // [startServer]，而它的防重入守卫会把 STARTING 当成「已经在启动了」直接
-        // return——首次安装后服务永远起不来就是这个自我拦截造成的。
-        _state.update {
-            it.copy(
-                phase = DshPhase.NOT_READY,
-                installed = true,
-                runtimeVersion = meta.version,
-                progress = 1f,
-                speedBytesPerSec = 0L,
-                message = str(R.string.dsh_msg_runtime_ready),
-            )
-        }
-        // 刚解压完，体积是全新的：后台量一次并落缓存，界面随 state 自动更新
-        refreshRootfsSize()
-    }
 
-    private fun fetchMeta(): DshMeta? = fetchMetaFrom(runtimeMetaUrl())
 
-    /**
-     * 本通道当前该用的那份 metadata：同口味的候选里取**更新的一份**。
-     *
-     * 规则（真机反馈定下的）：测试通道 = 在正式通道的基础上「也接受」测试版 —— 所以候选是
-     * 正式与测试两份，谁新用谁；正式通道不变，只认正式那份，绝不自动把人推到测试版。
-     *
-     * 为什么不做进 [fetchMeta]：它同时被「重装」用着（重装要装的是**已装那一份**）。若让它永远
-     * 返回最新候选，用户点重装就会被装成另一份。所以候选逻辑只加在「检查更新 + 更新」这条路上。
-     */
-    private fun fetchNewestMeta(): DshMeta? {
-        val slim = DshSource.acceptRuntimeSlim(appContext)
-        val suffix = if (DshSource.runtimeArch() == "arm64-v8a") "" else "-x86_64"
-        val stableTag = if (slim) "runtime-slim-latest" else "runtime-latest"
-        val betaTag = if (slim) "runtime-slim-beta-latest" else "runtime-beta-latest"
-        val tags = if (DshSource.acceptRuntimeBeta(appContext)) listOf(stableTag, betaTag)
-        else listOf(stableTag)
-        val metas = tags.mapNotNull { tag -> fetchMetaOfTag(tag, suffix) }
-        if (metas.isEmpty()) return null
-        // 定序用 metadata 里的 dsh（0.2.1-rc.2 > 0.2.0-rc.2）；rootfs 修订号（-r6）不参与定序，
-        // 因为两段相同内容不同修订谁新无从判断 —— 那时保持候选顺序（正式优先）。
-        return metas.reduce { best, cur ->
-            if (cur.dsh.isNotBlank() && (best.dsh.isBlank() || compareVersions(cur.dsh, best.dsh) > 0)) cur
-            else best
-        }
-    }
 
     /**
      * 运行时通道当前生效的下载源。
@@ -2151,218 +2025,13 @@ object DshRuntime {
         )
     }
 
-    /**
-     * 逐个下载源尝试，第一个成功即返回。
-     *
-     * metadata 的 mirrors 本身就是加了代理前缀的 URL，再给它们叠一次前缀只会产生
-     * 重复项 —— 去重前实测 6 个候选里有 3 个是重的，等于同一个失败的 URL 连试两次。
-     *
-     * 顺序按 [DshSource.downloadRank]（= 刚才的测速结论）排，**不是** metadata 里
-     * mirrors 的书写顺序：实测过 AxisNow 在测速阶段就 SSL 握手失败，却因为在
-     * mirrors 里排第二而抢在 GitHub 直连前面被试一遍，白等一次超时。
-     * `sortedBy` 是稳定排序，所以同权重（含未参与测速的自定义源）保持原相对顺序。
-     */
-    private fun downloadWithFallback(meta: DshMeta, target: File): Boolean {
-        val prefix = DshSource.proxyPrefix(runtimeSource(appContext))
-        val candidates = if (raceEnabled(RACE_RUNTIME)) {
-            // 竞速：候选＝全部已知线路 × 官方直链（按测速结论排序），再加 metadata 里发布方给的备选。
-            // 早先候选只来自 metadata.mirrors，老运行时里只写了两条，新增线路就永远用不上。
-            (DshSource.proxyCandidates(meta.url) + meta.mirrors)
-                .distinct().sortedBy { DshSource.downloadRank(it) }
-        } else {
-            // 不竞速：只走当前选定的那一条（手选源，或 auto 退化成直连 github）+ 原址/发布方备选，
-            // 顺序保持发布方原样，不按测速排序。
-            val preferred = if (prefix.isEmpty()) emptyList() else listOf(prefix + meta.url)
-            (preferred + listOf(meta.url) + meta.mirrors).distinct()
-        }
-        for ((i, url) in candidates.withIndex()) {
-            logInfo(R.string.dsh_log_source_try, i + 1, candidates.size, url)
-            _state.update {
-                it.copy(message = str(R.string.dsh_msg_downloading, meta.version), speedBytesPerSec = 0L)
-            }
-            if (downloadFile(url, target, meta.sizeBytes)) {
-                logInfo(R.string.dsh_log_source_ok, i + 1)
-                return true
-            }
-            logWarn(R.string.dsh_log_source_fail, i + 1)
-        }
-        return false
-    }
 
-    /**
-     * 下载单个文件，支持断点续传。
-     *
-     * 续传逻辑本身住在 [DshDownloader]（APK 更新也用同一套）；这里只把进度接到
-     * 运行时的状态与启动日志上。
-     */
-    private fun downloadFile(url: String, target: File, sizeBytes: Long): Boolean {
-        var lastLoggedBucket = -1
-        return DshDownloader.download(
-            url = url,
-            target = target,
-            expectedSize = sizeBytes,
-            onLog = { appendLog(it) },
-            onProgress = { p ->
-                if (p.contentLength <= 0) return@download
-                val pctInt = p.percent
-                // 日志每 5% 一行就够了，否则 400 行上限很快被下载进度占满
-                if (pctInt / 5 > lastLoggedBucket) {
-                    lastLoggedBucket = pctInt / 5
-                    logInfo(R.string.dsh_log_downloading, pctInt, formatSpeed(p.speedBytesPerSec))
-                }
-                _state.update {
-                    it.copy(
-                        progress = p.fraction,
-                        speedBytesPerSec = p.speedBytesPerSec,
-                        message = str(R.string.dsh_msg_downloading_pct, pctInt, formatSpeed(p.speedBytesPerSec)),
-                    )
-                }
-            },
-        )
-    }
 
-    /**
-     * 在线下载与本地导入共用的安全安装流程：先解压到旁路目录，完成关键文件和架构校验，
-     * 再用目录改名切换；切换失败或进程在中途被杀时，旧 rootfs 可恢复。
-     */
-    private fun installRuntimeArchive(tarball: File, preserveData: Boolean): Boolean = runCatching {
-        val dest = DshEnv.rootfs(appContext)
-        val pending = File(appContext.filesDir, ".runtime-install")
-        val backup = File(appContext.filesDir, ".runtime-rollback")
-        recoverInterruptedRuntimeInstall()
-        if (pending.exists()) pending.deleteRecursively()
-        pending.mkdirs()
-        TarGzipExtractor.extractRootfs(tarball, pending)
-        if (!validateRuntimeRoot(pending)) {
-            pending.deleteRecursively()
-            return@runCatching false
-        }
 
-        if (preserveData && !stashPreservedData(dest)) {
-            pending.deleteRecursively()
-            return@runCatching false
-        }
-        if (backup.exists()) backup.deleteRecursively()
-        if (dest.exists()) {
-            if (!dest.renameTo(backup)) {
-                if (preserveData) DshEnv.recoverPreserved(appContext)
-                pending.deleteRecursively()
-                return@runCatching false
-            }
-        } else {
-            backup.mkdirs()
-        }
-        if (!pending.renameTo(dest)) {
-            if (backup.exists()) backup.renameTo(dest)
-            if (preserveData) DshEnv.recoverPreserved(appContext)
-            return@runCatching false
-        }
-        if (preserveData && !restorePreservedData(dest)) {
-            returnRestoredDataToStash(dest)
-            dest.deleteRecursively()
-            if (backup.exists()) backup.renameTo(dest)
-            DshEnv.recoverPreserved(appContext)
-            return@runCatching false
-        }
-        if (backup.exists()) backup.deleteRecursively()
-        true
-    }.getOrElse {
-        logWarn(R.string.dsh_log_extract_failed, "${it.javaClass.simpleName}: ${it.message}")
-        recoverInterruptedRuntimeInstall()
-        false
-    }
 
-    private fun stashPreservedData(root: File): Boolean {
-        val stash = DshEnv.dshPreserve(appContext)
-        DshEnv.recoverPreserved(appContext)
-        if (stash.exists()) stash.deleteRecursively()
-        for (rel in DshEnv.PRESERVED_PATHS) {
-            val src = File(root, rel)
-            if (!src.exists()) continue
-            val dst = File(stash, rel)
-            dst.parentFile?.mkdirs()
-            if (!src.renameTo(dst)) {
-                logWarn(R.string.dsh_log_preserve_failed, rel)
-                DshEnv.recoverPreserved(appContext)
-                return false
-            }
-        }
-        return true
-    }
 
-    private fun restorePreservedData(root: File): Boolean {
-        val stash = DshEnv.dshPreserve(appContext)
-        for (rel in DshEnv.PRESERVED_PATHS) {
-            val src = File(stash, rel)
-            if (!src.exists()) continue
-            val dst = File(root, rel)
-            dst.parentFile?.mkdirs()
-            if (dst.exists()) dst.deleteRecursively()
-            if (!src.renameTo(dst)) {
-                logWarn(R.string.dsh_log_restore_failed, rel, stash.name)
-                return false
-            }
-        }
-        if (stash.exists()) stash.deleteRecursively()
-        return true
-    }
 
-    private fun returnRestoredDataToStash(root: File) {
-        val stash = DshEnv.dshPreserve(appContext)
-        for (rel in DshEnv.PRESERVED_PATHS) {
-            val src = File(root, rel)
-            val dst = File(stash, rel)
-            if (!src.exists() || dst.exists()) continue
-            dst.parentFile?.mkdirs()
-            src.renameTo(dst)
-        }
-    }
 
-    private fun validateRuntimeRoot(root: File): Boolean {
-        val required = listOf(
-            "usr/bin/bash" to "bash",
-            "usr/local/bin/node" to "node",
-            "usr/local/bin/pnpm" to "pnpm",
-            "usr/local/lib/node_modules/@deepseek-ai/dsh/package.json" to "dsh",
-        )
-        val missing = required.filterNot { File(root, it.first).exists() }
-        if (missing.isNotEmpty()) {
-            logWarn(R.string.dsh_log_missing_after_extract, joinForLog(missing.map { it.second }))
-            return false
-        }
-        val machine = elfMachine(File(root, "usr/local/bin/node"))
-        val want = if (DshSource.runtimeArch() == "arm64-v8a") ELF_MACHINE_AARCH64 else ELF_MACHINE_X86_64
-        if (machine != null && machine != want) {
-            logWarn(R.string.dsh_log_node_machine, machine, want)
-            return false
-        }
-        if (!File(root, "usr/bin/python3").exists()) logWarn(R.string.dsh_log_missing_python)
-        if (!File(root, "usr/local/bin/pnpm").exists()) logWarn(R.string.dsh_log_missing_pnpm)
-        return true
-    }
-
-    private fun recoverInterruptedRuntimeInstall() {
-        val dest = DshEnv.rootfs(appContext)
-        val pending = File(appContext.filesDir, ".runtime-install")
-        val backup = File(appContext.filesDir, ".runtime-rollback")
-        if (!dest.exists() && backup.exists()) {
-            backup.renameTo(dest)
-            DshEnv.recoverPreserved(appContext)
-        } else if (dest.exists() && backup.exists()) {
-            val stash = DshEnv.dshPreserve(appContext)
-            if (!stash.exists() || restorePreservedData(dest)) {
-                backup.deleteRecursively()
-            } else {
-                returnRestoredDataToStash(dest)
-                dest.deleteRecursively()
-                backup.renameTo(dest)
-                DshEnv.recoverPreserved(appContext)
-            }
-        } else {
-            DshEnv.recoverPreserved(appContext)
-        }
-        if (pending.exists()) pending.deleteRecursively()
-    }
 
     /** 写容器 DNS（国内解析优先，谷歌/CF 兜底）。 */
     /**
@@ -2512,7 +2181,7 @@ object DshRuntime {
      * 服务默认只绑 127.0.0.1；开启「局域网访问」后追加 --host 0.0.0.0。
      * 鉴权由 dsh 自己的登录页负责。
      */
-    fun startServer() {
+    private fun startServerImpl() {
         // 守卫只看真实进程，不看 phase。看 phase 会把上一步（例如安装完成）
         // 自己写下的 STARTING 误当成「已有人在启动」。
         if (serverProcess?.isAlive == true) return
@@ -2898,7 +2567,7 @@ object DshRuntime {
      * 本次运行的内容：真机上导入会话报错发生在 12:xx，14:24 的报告里 dsh.log 只有 1 KB
      * （就是那次启动之后的新内容），只能靠猜。留一份上一次运行的日志，问题才有可能回溯。
      */
-    fun clearLog() {
+    private fun clearLogImpl() {
         if (!::appContext.isInitialized) return
         val log = DshEnv.serverLog(appContext)
         if (log.isFile && log.length() > 0L) {

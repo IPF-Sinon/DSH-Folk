@@ -195,7 +195,8 @@ const runtime = (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntim
 const env = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshEnv.kt", "utf8");
 ok(/fun serverLogPrev\(ctx: Context\): File = File\(ctx\.filesDir, "logs\/dsh-web\.prev\.log"\)/.test(env),
   "DshEnv 提供「上一次运行」的日志路径");
-ok(/fun clearLog\(\)[\s\S]{0,500}?copyTo\(DshEnv\.serverLogPrev\(appContext\), overwrite = true\)/.test(runtime),
+// clearLog 现在是「公开的 override 壳 + private clearLogImpl」：轮转逻辑在 Impl 里。
+ok(/fun clearLogImpl\(\)[\s\S]{0,500}?copyTo\(DshEnv\.serverLogPrev\(appContext\), overwrite = true\)/.test(runtime),
   "clearLog 先轮转再清空（清空发生在每次起服务时）");
 ok(/fun tailPrevLog\(lines: Int = 2000\)/.test(runtime), "DshRuntime 能读回上一次运行的日志");
 

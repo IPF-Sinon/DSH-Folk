@@ -272,7 +272,7 @@ ok(webui.includes("addDocumentStartJavaScript") && webui.includes("DOCUMENT_STAR
 
 console.log("\n── dsh-file-upload 退役 ──");
 
-const rt = (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt", "utf8"));
+const rt = (fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeScripts.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeModels.kt", "utf8") + "\n" + fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeInstaller.kt", "utf8"));
 const seedLine = rt.match(/val SEED_PLUGINS =\s*\n?\s*listOf\(([^)]*)\)/);
 ok(seedLine !== null, "SEED_PLUGINS 可解析");
 ok(seedLine && !seedLine[1].includes("dsh-file-upload"),
@@ -283,7 +283,8 @@ ok(/RETIRED_SEED_PLUGINS = mapOf\("dsh-file-upload" to "file-upload"\)/.test(rt)
 // 更新的一份；正式通道仍只认正式版；重装必须仍按已装那份取（不能顺手升级）。
 ok(/CHANNEL_STABLE, CHANNEL_SLIM -> true/.test(rt) && /CHANNEL_BETA, CHANNEL_SLIM_BETA -> beta/.test(rt),
   "测试通道接受正式版+测试版，正式通道不接受测试版");
-ok(/private fun fetchNewestMeta\(\)/.test(rt) &&
+// fetchNewestMeta 已搬到 DshRuntimeInstaller.kt（同包扩展函数）：断言改为看「扩展函数 + 调用点」。
+ok(/internal fun DshRuntime\.fetchNewestMeta\(\): DshMeta\?/.test(rt) &&
   /val meta = fetchNewestMeta\(\) \?: return@withContext RuntimeCheckResult\(failure = true\)/.test(rt),
   "检查更新在候选里取最新（不再只看所选通道那一个 tag）");
 ok(/DshRuntime\.updateRuntime\(true\)/.test(fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt", "utf8")) &&
@@ -291,8 +292,9 @@ ok(/DshRuntime\.updateRuntime\(true\)/.test(fs.readFileSync("app/src/main/java/m
 ok(/fun updateRuntime\(preserveData: Boolean = true\)/.test(rt) &&
   /downloadAndInstall\(preserveData, newest = true\)/.test(rt),
   "「更新」走候选取最新，与「重装」分道（更新曾借用重装那条，下载的还是旧通道）");
-ok(/private suspend fun downloadAndInstall\(preserveData: Boolean = true, newest: Boolean = true\)/.test(rt) &&
-  /val meta = if \(newest\) fetchNewestMeta\(\) else fetchMeta\(\)/.test(rt) &&
+// downloadAndInstall 现在是 DshRuntime 的扩展函数（同包搬家），内部调用带 this. 前缀。
+ok(/internal suspend fun DshRuntime\.downloadAndInstall\(preserveData: Boolean = true, newest: Boolean = true\)/.test(rt) &&
+  /val meta = if \(newest\) this\.fetchNewestMeta\(\) else this\.fetchMeta\(\)/.test(rt) &&
   /downloadAndInstall\(preserveData, newest = false\)/.test(rt),
   "更新装检测到的那份，重装仍装已装那份");
 ok(/RETIRE_MIN_DSH_VERSION = "0.1.5"/.test(rt), "退役判定版本下界 = 0.1.5");
