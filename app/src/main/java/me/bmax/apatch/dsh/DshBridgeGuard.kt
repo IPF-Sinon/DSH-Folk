@@ -47,48 +47,87 @@ internal object DshBridgeGuard {
     /** 审计文件上限，与原生能力审计同规格（2MB 后轮转）。 */
     private const val AUDIT_MAX_BYTES = 2L * 1024 * 1024
 
-    private val windowStart = AtomicLong(System.currentTimeMillis())
-    private val windowCount = AtomicLong(0)
+    /**
+     * 分端点阈值（每分钟）。**未列出的端点一律用 [MAX_PER_WINDOW]**。
+     *
+     * 为什么要有这张表：全局 600/分钟对 `fs` 那族端点的批量文件操作是合理的（同步一万个小文件正好这个
+     * 量级），但对「一次点击就该只发生一次」的端点太松 —— 剪贴板读、通知、震动、toast 都是用户
+     * 可感知的骚扰面，agent 死循环时 600/分钟已经足够把状态栏刷满。
+     *
+     * 取值口径（都不动默认拦截行为，只让「超限」这件事记得更准）：
+     * - `/native/clipboard` 10/分钟：剪贴板是人工动作，正常用法一分钟几次；
+     * - `/native/notify` 30/分钟：一个 agent 一分钟发 30 条通知已经该被记下来了；
+     * - `/native/vibrate`、`/native/toast` 30/分钟：同上，都是即时反馈类；
+     * - `/native/a11y` 维持 600：AI 驱动界面确实高频（一次 tree+click 就是两三条），不宜收紧，
+     *   它的风险在别处（已由能力档位与限制模式管），不在频率。
+     */
+    private val thresholds = mapOf(
+        "/native/clipboard" to 10,
+        "/native/notify" to 30,
+        "/native/vibrate" to 30,
+        "/native/toast" to 30,
+        "/native/a11y" to MAX_PER_WINDOW,
+    )
+
+    /** 某个端点实际生效的阈值（未列出则回退全局）。 */
+    fun thresholdFor(endpoint: String): Int = thresholds[endpoint] ?: MAX_PER_WINDOW
+
     private val limitedTotal = AtomicLong(0)
     private val requestTotal = AtomicLong(0)
     private val byEndpoint = ConcurrentHashMap<String, AtomicLong>()
+
+    /** 每个端点各自一个窗口：全局一个计数器的话，`fs` 那族端点的批量操作会把剪贴板的额度吃掉。 */
+    private class Window {
+        val start = AtomicLong(System.currentTimeMillis())
+        val count = AtomicLong(0)
+
+        fun roll() {
+            val now = System.currentTimeMillis()
+            val s = start.get()
+            if (now - s >= WINDOW_MS) {
+                if (start.compareAndSet(s, now)) count.set(0)
+            }
+        }
+    }
+
+    private val windows = ConcurrentHashMap<String, Window>()
 
     fun totalRequests(): Long = requestTotal.get()
 
     fun limitedRequests(): Long = limitedTotal.get()
 
-    /** 当前窗口内已记账的请求数。 */
-    fun windowRequests(): Long {
-        rollWindow()
-        return windowCount.get()
+    /** 某个端点当前窗口内已记账的请求数。 */
+    fun windowRequests(endpoint: String = ""): Long {
+        if (endpoint.isEmpty()) return windows.values.sumOf { it.count.get() }
+        val w = windows[endpoint] ?: return 0
+        w.roll()
+        return w.count.get()
     }
 
     fun endpointCounts(): Map<String, Long> =
         byEndpoint.entries.associate { it.key to it.value.get() }
 
-    /** 记一笔请求并返回是否超限。 */
+    /**
+     * 记一笔请求并返回是否超限。
+     *
+     * 阈值**按端点取**（见 [thresholds]）；窗口也按端点各自滚动。
+     */
     fun record(endpoint: String): Boolean {
         requestTotal.incrementAndGet()
         byEndpoint.computeIfAbsent(endpoint) { AtomicLong(0) }.incrementAndGet()
-        rollWindow()
-        val n = windowCount.incrementAndGet()
-        if (n > MAX_PER_WINDOW) {
+        val w = windows.computeIfAbsent(endpoint) { Window() }
+        w.roll()
+        val n = w.count.incrementAndGet()
+        val limit = thresholdFor(endpoint)
+        if (n > limit) {
             limitedTotal.incrementAndGet()
             // 不让日志自己变成放大器：每 100 次超限才记一条
             if (limitedTotal.get() % 100L == 1L) {
-                Log.w(TAG, "回环桥请求超限：窗口内 $n 次（上限 $MAX_PER_WINDOW），累计 ${limitedTotal.get()} 次")
+                Log.w(TAG, "回环桥请求超限：$endpoint 窗口内 $n 次（上限 $limit/分钟），累计 ${limitedTotal.get()} 次")
             }
             return true
         }
         return false
-    }
-
-    private fun rollWindow() {
-        val now = System.currentTimeMillis()
-        val start = windowStart.get()
-        if (now - start >= WINDOW_MS) {
-            if (windowStart.compareAndSet(start, now)) windowCount.set(0)
-        }
     }
 
     /**
@@ -116,6 +155,8 @@ internal object DshBridgeGuard {
                 .put("status", status)
                 .put("costMs", costMs)
                 .put("limited", limited)
+                // 实际生效的阈值：事后才能判断「到底超了多少」，而不是只知道超了
+                .put("threshold", thresholdFor(endpoint))
             file.appendText(entry.toString() + "\n")
         }.onFailure { Log.w(TAG, "写桥审计失败: ${it.message}") }
     }

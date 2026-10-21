@@ -708,6 +708,29 @@ console.log("\u2500 #16o 首页阶段名只有一份映射（阶段 5：Home 收
   ok(/R\.string\.dsh_phase_downloading/.test(shared), '阶段名字符串表只在共享侧');
 }
 
+console.log("\u2500 #16p 回环桥分端点阈值（任务 1）");
+{
+  const guard = read("app/src/main/java/me/bmax/apatch/dsh/DshBridgeGuard.kt");
+  const bridge = read("app/src/main/java/me/bmax/apatch/dsh/DshFsBridge.kt");
+  ok(/private val thresholds = mapOf\(/.test(guard), '有分端点阈值表');
+  ok(/"\/native\/clipboard" to 10/.test(guard), "剪贴板 10/分钟");
+  ok(/"\/native\/notify" to 30/.test(guard), "通知 30/分钟");
+  ok(/"\/native\/vibrate" to 30/.test(guard) && /"\/native\/toast" to 30/.test(guard),
+    "震动与 toast 30/分钟");
+  ok(/fun thresholdFor\(endpoint: String\): Int = thresholds\[endpoint\] \?: MAX_PER_WINDOW/.test(guard),
+    "未列出的端点回退全局阈值（不误伤 fs 批量操作）");
+  // 窗口必须按端点各自滚动：全局一个计数器会让 fs 批量操作吃掉剪贴板的额度
+  ok(/private class Window/.test(guard) && /windows\.computeIfAbsent\(endpoint\)/.test(guard),
+    "每个端点各自一个滑动窗口");
+  ok(/const val ENFORCE = false/.test(guard), "仍然只记账不拦截（安全行为不静默改变）");
+  ok(/\.put\("threshold", thresholdFor\(endpoint\)\)/.test(guard), "审计带上实际生效阈值");
+  // 守卫必须在分发之前集中调用，不能被改成各路由分散调用
+  const guardAt = bridge.indexOf("DshBridgeGuard.record(endpoint)");
+  const dispatchAt = bridge.indexOf('path.startsWith("/native/")');
+  ok(guardAt > 0 && dispatchAt > 0 && guardAt < dispatchAt,
+    "守卫在 when 分发之前集中调用（所有路由含 native 都覆盖）");
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),
