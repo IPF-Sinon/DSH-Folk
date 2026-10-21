@@ -754,6 +754,27 @@ console.log("\u2500 #16q 连边即时防成环（任务 2）");
   ok(/findCycle\(def\)/.test(v), 'validate 里的环检查仍在（保存/执行前兜底）');
 }
 
+console.log("\u2500 #16r 解压诊断三联（任务 3 / Issue #12）");
+{
+  const ext = read("app/src/main/java/me/bmax/apatch/dsh/TarGzipExtractor.java");
+  const inst = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeInstaller.kt");
+  // ① 计数器必须存在**且被读取**：以前 lastSkipped/lastChmodFailures 全仓无人读，
+  //    用户只看到一句「rootfs 不完整」，没有任何可判断的线索。
+  ok(/public static volatile int lastChmodFailures = 0/.test(ext), 'chmod 失败有计数器');
+  ok(/public static volatile String lastChmodFailNote = ""/.test(ext), 'chmod 失败记首个路径');
+  ok(/private static void resetDiagnostics\(\)/.test(ext), '有统一的重置函数');
+  const resets = (ext.match(/resetDiagnostics\(\);/g) || []).length;
+  ok(resets >= 5, '所有解压入口都重置计数器（实际 ' + resets + ' 处，含定义 1 处）');
+  ok(/lastChmodFailures\+\+/.test(ext) && !/catch \(Throwable ignored\)/.test(ext.split('chmodBestEffort')[2] || ''),
+    'chmodBestEffort 不再静默吞异常');
+  // ② 安装侧必须真的把这些读出来并打日志
+  ok(/internal fun DshRuntime\.logExtractDiagnostics\(/.test(inst), '安装侧有诊断输出函数');
+  ok(/TarGzipExtractor\.lastSkipped/.test(inst), '读取跳过计数');
+  ok(/TarGzipExtractor\.lastChmodFailures/.test(inst), '读取 chmod 失败计数');
+  ok(/logExtractDiagnostics\(root, required\)/.test(inst), '校验失败时输出诊断');
+  ok(/存在=\$exists 大小=\$size 可执行=\$exec/.test(inst), '逐个必需文件报「存在/大小/可执行」');
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),

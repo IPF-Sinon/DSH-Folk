@@ -25,10 +25,29 @@ public final class TarGzipExtractor {
     /** 单次解压总输出上限：给足 rootfs/备份空间，同时拦截无限增长。 */
     private static final long MAX_TOTAL_BYTES = 64L * 1024 * 1024 * 1024;
 
-    /** 最近一次宽松解压跳过的条目数（0=全部恢复） */
+    /** 最近一次解压跳过的条目数（0=全部解出）。宽松模式会跳过可疑条目；严格模式会直接抛错。 */
     public static volatile int lastSkipped = 0;
-    /** 最近一次宽松解压跳过的条目名摘要（截断，用于给用户看） */
+    /** 最近一次解压跳过的条目名摘要（截断，用于给用户看） */
     public static volatile String lastSkipNote = "";
+
+    /**
+     * 最近一次解压里 **chmod 失败** 的次数与第一个失败路径。
+     *
+     * 为什么要单独统计：`chmodBestEffort` 以前把异常整个吞掉 —— 「文件在、但可执行位没落上」
+     * 这件事完全无声。而 rootfs 里的 bash/node/pnpm 必须可执行才起得来，Issue #12 报的
+     * 「解压后 rootfs 不完整」当时只有「文件在不在」一个判据，看不出这种状态。
+     */
+    public static volatile int lastChmodFailures = 0;
+    /** 第一个 chmod 失败的路径（截断，用于给用户看） */
+    public static volatile String lastChmodFailNote = "";
+
+    /** 每次解压开始前清零计数器（**所有入口**都要调，否则会读到上一次的残留值）。 */
+    private static void resetDiagnostics() {
+        lastSkipped = 0;
+        lastSkipNote = "";
+        lastChmodFailures = 0;
+        lastChmodFailNote = "";
+    }
 
     private TarGzipExtractor() {}
 
@@ -40,12 +59,14 @@ public final class TarGzipExtractor {
      * Ubuntu 的 alternatives 链（awk / which / pager / rmt）就全没了。
      */
     public static void extractRootfs(File tarball, File dest) throws IOException {
+        resetDiagnostics();
         try (InputStream raw = new FileInputStream(tarball)) {
             extractAuto(raw, dest, 0, false, false, true);
         }
     }
 
     public static void extract(File tarball, File dest) throws IOException {
+        resetDiagnostics();
         extract(tarball, dest, 0);
     }
 
@@ -53,14 +74,14 @@ public final class TarGzipExtractor {
      *  宽容策略：可疑/超大条目只跳过并计入 {@link #lastSkipped}，绝不让一条坏记录
      *  废掉整份备份 —— 用户宁可少恢复一个文件，也不要「恢复失败」四个字。 */
     public static void extractLenient(File tarball, File dest) throws IOException {
-        lastSkipped = 0;
-        lastSkipNote = "";
+        resetDiagnostics();
         try (InputStream raw = new FileInputStream(tarball)) {
             extractAuto(raw, dest, 0, true);
         }
     }
 
     public static void extract(File tarball, File dest, int strip) throws IOException {
+        resetDiagnostics();
         try (InputStream raw = new FileInputStream(tarball)) {
             extractAuto(raw, dest, strip);
         }
@@ -68,6 +89,7 @@ public final class TarGzipExtractor {
 
     /** 严格模式解压（插件导入用）：拒绝符号链接/硬链接条目，防链接逃逸。 */
     public static void extractSafe(File tarball, File dest) throws IOException {
+        resetDiagnostics();
         try (InputStream raw = new FileInputStream(tarball)) {
             extractAuto(raw, dest, 0, false, true);
         }
@@ -351,7 +373,14 @@ public final class TarGzipExtractor {
     private static void chmodBestEffort(File f, int mode) {
         try {
             Os.chmod(f.getAbsolutePath(), mode & 0777);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            // 不再静默吞掉：可执行位丢了会让 rootfs 里的 bash/node/pnpm 起不来，
+            // 而「文件存在」的检查看不出来。只记计数与首个路径，避免刷爆内存。
+            lastChmodFailures++;
+            if (lastChmodFailNote.isEmpty()) {
+                lastChmodFailNote = safeName(f.getName()) + "("
+                    + (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()) + ")";
+            }
         }
     }
 

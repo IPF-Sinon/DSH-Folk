@@ -412,17 +412,55 @@ internal fun DshRuntime.validateRuntimeRoot(root: File): Boolean {
     val missing = required.filterNot { File(root, it.first).exists() }
     if (missing.isNotEmpty()) {
         this.logWarn(R.string.dsh_log_missing_after_extract, this.joinForLog(missing.map { it.second }))
+        // 只说「缺了什么」不足以定位 —— Issue #12 的用户就卡在这里：
+        //   「是下载坏了？解压跳过了？还是解出来但大小/权限不对？」
+        // 所以补两份实测证据：解压时的跳过计数，以及每个必需文件的实际大小与可执行位。
+        this.logExtractDiagnostics(root, required)
         return false
     }
     val machine = this.elfMachine(File(root, "usr/local/bin/node"))
     val want = if (DshSource.runtimeArch() == "arm64-v8a") ELF_MACHINE_AARCH64 else ELF_MACHINE_X86_64
     if (machine != null && machine != want) {
         this.logWarn(R.string.dsh_log_node_machine, machine, want)
+        this.logExtractDiagnostics(root, required)
         return false
     }
     if (!File(root, "usr/bin/python3").exists()) this.logWarn(R.string.dsh_log_missing_python)
     if (!File(root, "usr/local/bin/pnpm").exists()) this.logWarn(R.string.dsh_log_missing_pnpm)
     return true
+}
+
+/**
+ * 解压后的**诊断三联**：跳过计数 / 必需文件的实测状态 / chmod 失败。
+ *
+ * 为什么要把这些搬进日志：`TarGzipExtractor.lastSkipped`、`lastChmodFailures` 以前全仓无人读取 ——
+ * 宽容路径跳过了条目、`Os.chmod` 失败了，用户那边只看到一句「解压后 rootfs 不完整」，手上没有任何
+ * 可判断的线索（Issue #12 正是如此）。这三行日志落在运行日志卡片上，且随诊断包导出。
+ */
+internal fun DshRuntime.logExtractDiagnostics(root: File, required: List<Pair<String, String>>) {
+    runCatching {
+        val skipped = TarGzipExtractor.lastSkipped
+        if (skipped > 0) {
+            this.appendLog(
+                "! 解压时跳过了 $skipped 个条目（可能是包损坏，也可能是条目超出安全上限）：" +
+                    TarGzipExtractor.lastSkipNote,
+            )
+        }
+        for ((rel, label) in required) {
+            val f = File(root, rel)
+            val exists = f.exists()
+            val size = if (exists) f.length() else -1L
+            val exec = if (exists) f.canExecute() else false
+            this.appendLog("! 必需文件 $label：存在=$exists 大小=$size 可执行=$exec（$rel）")
+        }
+        val chmodFails = TarGzipExtractor.lastChmodFailures
+        if (chmodFails > 0) {
+            this.appendLog(
+                "! 解压时有 $chmodFails 个文件 chmod 失败（首个：${TarGzipExtractor.lastChmodFailNote}）" +
+                    " —— 可执行位没落上会让 bash/node/pnpm 起不来",
+            )
+        }
+    }
 }
 
 internal fun DshRuntime.recoverInterruptedRuntimeInstall() {
