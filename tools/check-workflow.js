@@ -731,6 +731,29 @@ console.log("\u2500 #16p 回环桥分端点阈值（任务 1）");
     "守卫在 when 分发之前集中调用（所有路由含 native 都覆盖）");
 }
 
+console.log("\u2500 #16q 连边即时防成环（任务 2）");
+{
+  const v = SRC.validator;
+  const e = SRC.editorSurface;
+  // 校验器早就查环（findCycle 三色法 + validate 里拦），任务 2 补的是**编辑期即时**一条。
+  ok(/fun cycleIn\(def: WorkflowDefinition\): List<String>\?/.test(v), '校验器暴露只读的环查询');
+  ok(/fun addEdgeIfAcyclic\(/.test(v), '加边有唯一入口（不成环才落盘）');
+  ok(/if \(fromId == toId\) return def/.test(v), '自环直接拒');
+  ok(/return if \(cycleIn\(next\) != null\) def else next/.test(v), '成环则返回原定义（不落边）');
+  ok(/WorkflowValidator\.addEdgeIfAcyclic\(def, fromId, toId\)/.test(e),
+    '编辑页连边走这个入口');
+  ok(/dsh_workflow_cycle_rejected/.test(e), '被拒时给即时反馈');
+  // 关键：**连接两张已有卡片**这条路径必须经判据。
+  // 另外两处直接拼边在 addNodeAt/addNode 里，连的是本次刚创建的节点（新节点还没有出边，
+  // 按构造不可能成环），所以不需要判 —— 断言按这个真实不变量写。
+  const newNodeEdges = (e.match(/edges = if \(afterId != null\) def\.edges \+ WorkflowEdge\(afterId, id, ""\)/g) || []).length;
+  const otherEdges = (e.match(/def\.edges \+ WorkflowEdge\(/g) || []).length - newNodeEdges;
+  ok(newNodeEdges === 2 && otherEdges === 0,
+    "仅新建节点的两处直接拼边（按构造无环），其余连边一律经 addEdgeIfAcyclic：新节点 " + newNodeEdges + " / 其它 " + otherEdges);
+  // 保存路径仍由 validate 兜底（含环）
+  ok(/findCycle\(def\)/.test(v), 'validate 里的环检查仍在（保存/执行前兜底）');
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),

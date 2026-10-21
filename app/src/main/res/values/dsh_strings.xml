@@ -1795,6 +1795,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_workflow_new">New workflow</string>
     <string name="dsh_workflow_new_name">New workflow</string>
     <string name="dsh_workflow_editor_errors">This definition is not valid yet (fix it to run):</string>
+    <string name="dsh_workflow_cycle_rejected">A workflow cannot contain a loop: that connection would lead back into itself, so it was cancelled</string>
     <string name="dsh_workflow_invalid_run">Not runnable yet, the definition is invalid:</string>
     <string name="dsh_workflow_tools_restart">The container tool plugin is registered after DSH restarts; the guide and the dsh-workflow command work immediately.</string>
     <string name="dsh_workflow_selfcheck">Self-check: can the AI see workflows</string>

@@ -37,6 +37,38 @@ internal object WorkflowValidator {
      * @param allowedCaps 允许声明的能力 id 集合（来自 [DshNativeBridge.Cap]）。传空集合表示
      *   这一版还不支持声明能力，任何非空 declaredCaps 都会被拒。
      */
+    /**
+     * 只查环：给**编辑页连线时**做即时判断用。
+     *
+     * 为什么不复用 [validate]：那条路要求整份定义都合法（节点 id、config、能力声明…），
+     * 而用户正在编辑的中间状态**天然不合法**（比如刚建好还没填命令的节点）。连线时只需要回答
+     * 「这条边会不会成环」，用整份校验会把「还没填完」误报成错误，反而挡住正在做的事。
+     *
+     * @return 成环时返回环上的节点序列（含首尾重复的那个），否则 null。
+     */
+    fun cycleIn(def: WorkflowDefinition): List<String>? =
+        findCycle(def).takeIf { it.isNotEmpty() }?.let {
+            // findCycle 返回的是 ["存在环：a -> b -> a"] 这种可读文案；这里把环拆回序列，
+            // 让调用方能自己决定怎么呈现（编辑页只需要判断真假 + 高亮节点）。
+            it.first().removePrefix("存在环：").split(" -> ")
+        }
+
+    /**
+     * 把一条边加进定义，**前提是它不会成环**。
+     *
+     * 为什么要有这个函数而不是让编辑页各自判断：连边有三条入口（从针脚拉出落在卡片上、
+     * 落空白后从菜单建节点并连、以及 addNode 的 afterId 路径）。只要有一条忘了判，环就会
+     * 从那里漏进去 —— 而环一旦落盘，执行器的拓扑调度会死循环。所以判据只有这一处。
+     *
+     * @return 加边后的定义；成环则返回原定义（不改动），由调用方给用户反馈。
+     */
+    fun addEdgeIfAcyclic(def: WorkflowDefinition, fromId: String, toId: String, whenExpr: String = ""): WorkflowDefinition {
+        if (fromId == toId) return def
+        if (def.edges.any { it.from == fromId && it.to == toId && it.whenExpr == whenExpr }) return def
+        val next = def.copy(edges = def.edges + WorkflowEdge(fromId, toId, whenExpr))
+        return if (cycleIn(next) != null) def else next
+    }
+
     fun validate(def: WorkflowDefinition, allowedCaps: Set<String>): Result {
         val errors = mutableListOf<String>()
 

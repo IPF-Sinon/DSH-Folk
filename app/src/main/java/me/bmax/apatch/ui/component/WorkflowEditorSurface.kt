@@ -1,5 +1,7 @@
 package me.bmax.apatch.ui.component
 
+import android.widget.Toast
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
@@ -140,6 +143,8 @@ internal fun WorkflowEditorSurface(
     var dragAcc by remember { mutableStateOf(Offset.Zero) }
     var dragPreview by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     val density = androidx.compose.ui.platform.LocalDensity.current.density
+    // 连边被拒（成环）时给一次即时反馈：编辑期就要说，不能等到保存才报。
+    val context = LocalContext.current
 
     val patchLines: List<WorkflowPatch> = remember(def) { workflowDiff(baseline, def) }
     val errors: List<String> = remember(def) {
@@ -291,8 +296,19 @@ internal fun WorkflowEditorSurface(
                         },
                         onWireDrop = { fromId, toId, pointer ->
                             if (toId != null) {
-                                if (def.edges.none { it.from == fromId && it.to == toId }) {
-                                    draft = def.copy(edges = def.edges + WorkflowEdge(fromId, toId, ""))
+                                // 成环的边**不落盘**：环一旦进入定义，执行器的拓扑调度会死循环。
+                                // 判据只有 WorkflowValidator.addEdgeIfAcyclic 一处 —— 连边入口若
+                                // 以后增加，也必须走它，否则环会从新入口漏进来。
+                                val next = WorkflowValidator.addEdgeIfAcyclic(def, fromId, toId)
+                                if (next === def) {
+                                    // 返回同一个实例 = 被拒（成环 / 自环 / 重复边）
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.dsh_workflow_cycle_rejected),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                } else {
+                                    draft = next
                                 }
                             } else {
                                 // 落在空白：记住松手坐标，菜单选完类型后按它建节点。
