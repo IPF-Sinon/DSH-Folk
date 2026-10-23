@@ -306,29 +306,93 @@ internal fun DshRuntime.downloadFile(url: String, target: File, sizeBytes: Long)
 }
 
 /**
+ * 目录改名，失败时回退「复制 + 删除」。
+ *
+ * 为什么要回退：Android 上 `File.renameTo` 只要**跨任何一层边界**（不同挂载点、厂商 ROM 上
+ * 被特殊处理的目录、目标名已存在…）就会返回 false 而不抛异常。rootfs 是一棵 ~800MB、几十万
+ * 个条目的树，正是最容易踩到的形状。Issue #12 里「解压 38 秒后无声失败」就发生在这一步：
+ * `pending.renameTo(dest)` 返回 false，而代码此前**既不重试也不记录**，直接返回 false，
+ * 用户只看到一句「rootfs 不完整」。
+ *
+ * @return 成功返回 true；失败时把原因写进 [note]。
+ */
+private fun renameOrCopy(src: File, dst: File, note: (String) -> Unit): Boolean {
+    if (src.renameTo(dst)) return true
+    note("renameTo 失败，回退复制：${src.name} → ${dst.name}")
+    return runCatching {
+        if (dst.exists()) dst.deleteRecursively()
+        src.copyRecursiveTo(dst)
+        src.deleteRecursively()
+        true
+    }.getOrElse {
+        note("复制回退也失败：${it.javaClass.simpleName}: ${it.message}")
+        false
+    }
+}
+
+/** 递归复制（保留可执行位；rootfs 里的 bash/node/pnpm 必须可执行）。 */
+private fun File.copyRecursiveTo(dst: File) {
+    if (isDirectory) {
+        dst.mkdirs()
+        listFiles()?.forEach { child -> child.copyRecursiveTo(File(dst, child.name)) }
+    } else {
+        dst.parentFile?.mkdirs()
+        inputStream().use { input -> dst.outputStream().use { output -> input.copyTo(output) } }
+        // 可执行位必须显式带上：copyTo 只搬字节，权限是 inode 属性
+        if (canExecute()) runCatching { dst.setExecutable(true, false) }
+    }
+}
+
+/**
  * 在线下载与本地导入共用的安全安装流程：先解压到旁路目录，完成关键文件和架构校验，
  * 再用目录改名切换；切换失败或进程在中途被杀时，旧 rootfs 可恢复。
+ *
+ * **每个失败分支都必须留下日志**：这里有 5 个 `return false`，原先只有「校验失败」那一条
+ * 说话，其余四条静默返回 —— Issue #12 的日志里只有最后那句 generic 报错，正是撞上了静默分支，
+ * 排查因此卡了好几天。门禁会核对「每个 return false 之前都有一行日志」。
  */
 internal fun DshRuntime.installRuntimeArchive(tarball: File, preserveData: Boolean): Boolean = runCatching {
     val dest = DshEnv.rootfs(appContext)
     val pending = File(appContext.filesDir, ".runtime-install")
     val backup = File(appContext.filesDir, ".runtime-rollback")
+
+    // 安装全程的诊断：既进运行日志（用户能看到），也写独立文件（不被任何 clearLog/轮转冲掉）。
+    val steps = mutableListOf<String>()
+    fun note(line: String) {
+        steps += line
+        this.appendLog("! [安装] $line")
+        this.writeInstallDiag(steps)
+    }
+
     this.recoverInterruptedRuntimeInstall()
     if (pending.exists()) pending.deleteRecursively()
     pending.mkdirs()
+    note("开始解压到 ${pending.name}（tar 大小 ${tarball.length()} 字节，可用 ${this.availableSpace(appContext.filesDir)}）")
+
     TarGzipExtractor.extractRootfs(tarball, pending)
+    note(
+        "解压完成：跳过 ${TarGzipExtractor.lastSkipped} 条, chmod 失败 ${TarGzipExtractor.lastChmodFailures} 条" +
+            (if (TarGzipExtractor.lastSkipNote.isNotEmpty()) "，跳过项：${TarGzipExtractor.lastSkipNote}" else ""),
+    )
+
     if (!this.validateRuntimeRoot(pending)) {
+        // validateRuntimeRoot 内部已经打出诊断三联（缺失/跳过/chmod），这里补一句总结
+        note("校验失败：rootfs 不完整（详见上面的必需文件清单）")
+        pending.deleteRecursively()
+        return@runCatching false
+    }
+    note("校验通过（bash/node/pnpm/dsh 齐全，架构正确）")
+
+    if (preserveData && !this.stashPreservedData(dest)) {
+        note("保留数据失败：未能把 ${dest.name} 下的用户数据搬进暂存区")
         pending.deleteRecursively()
         return@runCatching false
     }
 
-    if (preserveData && !this.stashPreservedData(dest)) {
-        pending.deleteRecursively()
-        return@runCatching false
-    }
     if (backup.exists()) backup.deleteRecursively()
     if (dest.exists()) {
-        if (!dest.renameTo(backup)) {
+        if (!renameOrCopy(dest, backup, ::note)) {
+            note("移走旧 rootfs 失败：${dest.name} → ${backup.name}（改名与复制回退都不成）")
             if (preserveData) DshEnv.recoverPreserved(appContext)
             pending.deleteRecursively()
             return@runCatching false
@@ -336,12 +400,18 @@ internal fun DshRuntime.installRuntimeArchive(tarball: File, preserveData: Boole
     } else {
         backup.mkdirs()
     }
-    if (!pending.renameTo(dest)) {
+    note("旧 rootfs 已让位（${if (dest.exists()) "移入备份" else "原本就不存在"}）")
+
+    if (!renameOrCopy(pending, dest, ::note)) {
+        note("切换到新 rootfs 失败：${pending.name} → ${dest.name}（改名与复制回退都不成）")
         if (backup.exists()) backup.renameTo(dest)
         if (preserveData) DshEnv.recoverPreserved(appContext)
         return@runCatching false
     }
+    note("新 rootfs 已就位")
+
     if (preserveData && !this.restorePreservedData(dest)) {
+        note("恢复用户数据失败：暂存区内容没能放回新 rootfs")
         this.returnRestoredDataToStash(dest)
         dest.deleteRecursively()
         if (backup.exists()) backup.renameTo(dest)
@@ -349,9 +419,12 @@ internal fun DshRuntime.installRuntimeArchive(tarball: File, preserveData: Boole
         return@runCatching false
     }
     if (backup.exists()) backup.deleteRecursively()
+    note("安装完成")
+    this.clearInstallDiag()
     true
 }.getOrElse {
     this.logWarn(R.string.dsh_log_extract_failed, "${it.javaClass.simpleName}: ${it.message}")
+    this.appendLog("! [安装] 抛出异常：${it.javaClass.simpleName}: ${it.message}")
     this.recoverInterruptedRuntimeInstall()
     false
 }
@@ -428,6 +501,28 @@ internal fun DshRuntime.validateRuntimeRoot(root: File): Boolean {
     if (!File(root, "usr/bin/python3").exists()) this.logWarn(R.string.dsh_log_missing_python)
     if (!File(root, "usr/local/bin/pnpm").exists()) this.logWarn(R.string.dsh_log_missing_pnpm)
     return true
+}
+
+/**
+ * 把安装过程的每一步写进 `<files>/audit/install-diag.txt`。
+ *
+ * 为什么要有这个**独立文件**（而不是只写运行日志）：运行日志会被 `clearLog()` 轮转、被 200 行
+ * 的卡片窗口截断、也可能被后续启动覆盖。Issue #12 里用户贴出来的日志恰好缺了关键几行，
+ * 于是「到底败在哪一步」只能靠猜。这个文件只记安装步骤、每步覆盖写、安装成功后自动删除，
+ * 与 audit 目录同处 —— bugreport 会把它一起收走，用户也可以在文件管理里直接看到。
+ */
+internal fun DshRuntime.writeInstallDiag(steps: List<String>) {
+    runCatching {
+        val dir = File(appContext.filesDir, "audit").apply { mkdirs() }
+        File(dir, "install-diag.txt").writeText(
+            steps.joinToString("\n", postfix = "\n"), StandardCharsets.UTF_8,
+        )
+    }.onFailure { android.util.Log.w("DSH-Folk", "写安装诊断失败: ${it.message}") }
+}
+
+/** 安装成功后删掉诊断文件：它只为「失败后排查」而存在，成功时留着会占位并造成误解。 */
+internal fun DshRuntime.clearInstallDiag() {
+    runCatching { File(File(appContext.filesDir, "audit"), "install-diag.txt").delete() }
 }
 
 /**

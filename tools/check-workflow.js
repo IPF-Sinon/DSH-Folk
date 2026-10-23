@@ -775,6 +775,35 @@ console.log("\u2500 #16r 解压诊断三联（任务 3 / Issue #12）");
   ok(/存在=\$exists 大小=\$size 可执行=\$exec/.test(inst), '逐个必需文件报「存在/大小/可执行」');
 }
 
+console.log("\u2500 #16s 安装失败必须说清败在哪一步（Issue #12 追因）");
+{
+  const inst = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeInstaller.kt");
+  const logEvent = read("app/src/main/java/me/bmax/apatch/util/LogEvent.kt");
+  // 核心约束：installRuntimeArchive 里每个 return false 之前都必须有一行 note()/日志。
+  // 原先 5 个分支只有 1 个说话，Issue #12 的日志里只剩一句 generic 报错，排查卡了好几天。
+  const body = inst.slice(
+    inst.indexOf("internal fun DshRuntime.installRuntimeArchive("),
+    inst.indexOf("internal fun DshRuntime.installRuntimeArchive(") + 4200,
+  );
+  const falseReturns = (body.match(/return@runCatching false/g) || []).length;
+  const notes = (body.match(/note\(/g) || []).length;
+  ok(falseReturns >= 5, '失败分支有 ' + falseReturns + ' 条（≥5）');
+  ok(notes >= falseReturns, '每个失败分支前都有 note() 记录（note ' + notes + ' ≥ 失败 ' + falseReturns + '）');
+  // renameTo 必须有回退：Android 上整目录改名很容易返回 false 而不抛异常
+  ok(/private fun renameOrCopy\(src: File, dst: File/.test(inst), '改名失败有复制回退');
+  ok(/src\.renameTo\(dst\)\) return true/.test(inst), '先试 renameTo');
+  ok(/copyRecursiveTo\(dst\)/.test(inst) && /setExecutable\(true, false\)/.test(inst),
+    '回退复制保留可执行位（bash/node/pnpm 要能跑）');
+  ok(/note\("切换到新 rootfs 失败/.test(inst) || /切换到新 rootfs 失败/.test(inst), '切换失败有明确记录');
+  ok(/note\("移走旧 rootfs 失败/.test(inst) || /移走旧 rootfs 失败/.test(inst), '让位失败有明确记录');
+  // 独立诊断文件：不被 clearLog/轮转/卡片截断影响，且必须进 bugreport
+  ok(/internal fun DshRuntime\.writeInstallDiag\(/.test(inst), '有独立诊断文件写入');
+  ok(/internal fun DshRuntime\.clearInstallDiag\(/.test(inst), '安装成功后清除诊断文件');
+  ok(/File\(dir, "install-diag.txt"\)/.test(inst), "诊断文件路径固定");
+  ok(/install-diag\.txt/.test(logEvent), "bugreport 会收走这份诊断");
+  ok(/redactInPlace\(installDiagFile, notes\)/.test(logEvent), '诊断进包前过脱敏');
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),

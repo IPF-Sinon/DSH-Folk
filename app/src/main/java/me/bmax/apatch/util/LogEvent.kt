@@ -478,6 +478,24 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         }.onSuccess { auditLogFile.writeText(it) }
             .onFailure { notes += "能力调用审计采集失败: ${it.message}" }
 
+        // 运行时安装失败时的**分步诊断**（filesDir/audit/install-diag.txt）。
+        //
+        // 为什么单独收这一项：Issue #12（更新 0.2.1-rc.2 安装失败）的用户贴出来的运行日志里，
+        // 关键几行恰好缺失 —— 因为 installRuntimeArchive 有 5 个 return false，原先只有「校验
+        // 失败」那条会说话，其余四条静默返回，用户只看到一句 generic 的「rootfs 不完整」。
+        // 现在每一步都写进这个文件（安装成功后自动删除），所以**失败时它必定存在**，
+        // 拿到报告的人一眼就能看到败在哪一步（解压 / 校验 / 保留数据 / 改名 / 恢复数据）。
+        val installDiagFile = File(bugreportDir, "install-diag.txt")
+        runCatching {
+            val src = File(apApp.filesDir, "audit/install-diag.txt")
+            val body = if (src.isFile) {
+                src.readText()
+            } else {
+                "# 没有安装失败的记录（该文件在安装成功后会删除）\n"
+            }
+            installDiagFile.writeText("# 运行时安装分步诊断（每次安装覆盖写；成功后删除）\n" + body)
+        }.onFailure { notes += "安装诊断采集失败: ${it.message}" }
+
         // 打包之前过一遍脱敏：dsh.log 里有 WebUI 的 token（dsh 服务端自己打印的启动地址），
         // 容器日志里可能还有别的凭据，props / cmdline 里有设备稳定标识。
         // 归档是要发给别人的，这些不能在里面。
@@ -490,6 +508,8 @@ suspend fun getBugreportFile(context: Context, window: LogWindow = LogWindow.All
         redactInPlace(displayServerLogFile, notes)
         // 审计的返回体里同样可能有 token（例如 shell 回显、WebUI 地址），一起过
         redactInPlace(auditLogFile, notes)
+        // 安装诊断里有文件路径与异常消息，同样过一遍脱敏（归档是要发给别人的）
+        redactInPlace(installDiagFile, notes)
         redactInPlace(propFile, notes)
         redactInPlace(cmdlineFile, notes)
 
