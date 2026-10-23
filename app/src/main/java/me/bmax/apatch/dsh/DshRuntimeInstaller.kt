@@ -330,8 +330,35 @@ private fun renameOrCopy(src: File, dst: File, note: (String) -> Unit): Boolean 
     }
 }
 
-/** 递归复制（保留可执行位；rootfs 里的 bash/node/pnpm 必须可执行）。 */
+/**
+ * 递归复制（保留符号链接与可执行位）。
+ *
+ * **必须原样复制符号链接，而不是跟随它** —— rootfs 里到处是链接（Ubuntu 的 alternatives、
+ * systemd 的 wants 目录之类），其中不少是**悬空链接**（目标在本容器里不存在，
+ * 例如 motd-news 相关的 timer）。跟随它们会得到 `FileNotFoundException: ... ENOENT`，
+ * 于是整个回退复制失败 —— Issue #12 的日志正是这样：
+ *
+ * ```
+ * ! [安装] 复制回退也失败：FileNotFoundException: .../motd-news.timer: ENOENT
+ * ```
+ *
+ * 所以这里先 `readSymbolicLink()` 判断：能读出目标就是链接，用 `Os.symlink` 原样重建，
+ * 目标是否存在与本次复制无关。解压器（[TarGzipExtractor]）也是这么重建链接的。
+ */
 private fun File.copyRecursiveTo(dst: File) {
+    // 符号链接优先判：File.isDirectory/isFile 都会**跟随**链接，必须先问链接本身
+    val linkTarget = runCatching { java.nio.file.Files.readSymbolicLink(toPath()) }.getOrNull()
+    if (linkTarget != null) {
+        dst.parentFile?.mkdirs()
+        runCatching {
+            dst.delete()
+            android.system.Os.symlink(linkTarget.toString(), dst.absolutePath)
+        }.onFailure {
+            // 链接建不出来（少见：文件系统不支持）就跳过这一条，不因一个链接废掉整次安装
+            android.util.Log.w("DSH-Folk", "复制符号链接失败 ${dst.name}: ${it.message}")
+        }
+        return
+    }
     if (isDirectory) {
         dst.mkdirs()
         listFiles()?.forEach { child -> child.copyRecursiveTo(File(dst, child.name)) }
@@ -404,7 +431,10 @@ internal fun DshRuntime.installRuntimeArchive(tarball: File, preserveData: Boole
 
     if (!renameOrCopy(pending, dest, ::note)) {
         note("切换到新 rootfs 失败：${pending.name} → ${dest.name}（改名与复制回退都不成）")
-        if (backup.exists()) backup.renameTo(dest)
+        // 回滚也必须走同一套回退：旧 rootfs 放不回去 = 用户彻底没有运行时，比安装失败更糟
+        if (backup.exists() && !renameOrCopy(backup, dest, ::note)) {
+            note("回滚失败：备份 rootfs 也放不回去（${backup.name} → ${dest.name}）")
+        }
         if (preserveData) DshEnv.recoverPreserved(appContext)
         return@runCatching false
     }
@@ -414,7 +444,9 @@ internal fun DshRuntime.installRuntimeArchive(tarball: File, preserveData: Boole
         note("恢复用户数据失败：暂存区内容没能放回新 rootfs")
         this.returnRestoredDataToStash(dest)
         dest.deleteRecursively()
-        if (backup.exists()) backup.renameTo(dest)
+        if (backup.exists() && !renameOrCopy(backup, dest, ::note)) {
+            note("回滚失败：备份 rootfs 也放不回去（${backup.name} → ${dest.name}）")
+        }
         DshEnv.recoverPreserved(appContext)
         return@runCatching false
     }
@@ -438,7 +470,9 @@ internal fun DshRuntime.stashPreservedData(root: File): Boolean {
         if (!src.exists()) continue
         val dst = File(stash, rel)
         dst.parentFile?.mkdirs()
-        if (!src.renameTo(dst)) {
+        // 复用安装主流程那套回退：子树里符号链接很多（pnpm 存储尤甚），
+        // 整目录 renameTo 失败时靠复制兜住，否则用户数据会被静默丢弃。
+        if (!renameOrCopy(src, dst) { line -> android.util.Log.w("DSH-Folk", "保留数据: $line") }) {
             this.logWarn(R.string.dsh_log_preserve_failed, rel)
             DshEnv.recoverPreserved(appContext)
             return false
@@ -455,7 +489,7 @@ internal fun DshRuntime.restorePreservedData(root: File): Boolean {
         val dst = File(root, rel)
         dst.parentFile?.mkdirs()
         if (dst.exists()) dst.deleteRecursively()
-        if (!src.renameTo(dst)) {
+        if (!renameOrCopy(src, dst) { line -> android.util.Log.w("DSH-Folk", "恢复数据: $line") }) {
             this.logWarn(R.string.dsh_log_restore_failed, rel, stash.name)
             return false
         }
@@ -471,7 +505,8 @@ internal fun DshRuntime.returnRestoredDataToStash(root: File) {
         val dst = File(stash, rel)
         if (!src.exists() || dst.exists()) continue
         dst.parentFile?.mkdirs()
-        src.renameTo(dst)
+        // 放回暂存：失败也不能让数据消失，走同一套回退
+        renameOrCopy(src, dst) { line -> android.util.Log.w("DSH-Folk", "退回暂存: $line") }
     }
 }
 

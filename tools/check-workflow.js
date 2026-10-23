@@ -804,6 +804,27 @@ console.log("\u2500 #16s 安装失败必须说清败在哪一步（Issue #12 追
   ok(/redactInPlace\(installDiagFile, notes\)/.test(logEvent), '诊断进包前过脱敏');
 }
 
+console.log("\u2500 #16t 回退复制必须保留符号链接（Issue #12 真正的原因）");
+{
+  const inst = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeInstaller.kt");
+  // 用户 beta.209 的日志把原因钉死了：
+  //   renameTo 失败 → 回退复制 → 15ms 后 ENOENT: .../motd-news.timer
+  // rootfs 里到处是悬空符号链接，跟随读取必然 ENOENT。所以复制必须先判链接、原样重建。
+  ok(/readSymbolicLink\(toPath\(\)\)/.test(inst), '复制前先读符号链接目标（不跟随）');
+  ok(/Os\.symlink\(linkTarget\.toString\(\), dst\.absolutePath\)/.test(inst), '用 Os.symlink 原样重建链接');
+  const copyFn = inst.slice(inst.indexOf('private fun File.copyRecursiveTo('));
+  const linkCheckAt = copyFn.indexOf('readSymbolicLink');
+  const isDirAt = copyFn.indexOf('if (isDirectory)');
+  ok(linkCheckAt > 0 && isDirAt > 0 && linkCheckAt < isDirAt,
+    '链接判定必须在 isDirectory/isFile 之前（那两个 API 会跟随链接）');
+  // 单条链接建不出来不能废掉整次安装
+  ok(/复制符号链接失败/.test(inst), '单条链接失败只记日志、不中断');
+  // 所有目录搬移都要经回退：装完/回滚/保留数据 三条路径
+  const orCopy = (inst.match(/renameOrCopy\(/g) || []).length;
+  ok(orCopy >= 7, '目录搬移统一走 renameOrCopy（实际 ' + orCopy + ' 处，含定义）');
+  ok(/回滚失败：备份 rootfs 也放不回去/.test(inst), '回滚失败有明确记录（比安装失败更严重）');
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),
