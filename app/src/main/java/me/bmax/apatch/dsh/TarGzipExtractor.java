@@ -79,7 +79,7 @@ public final class TarGzipExtractor {
 
     /** 每次解压开始前清零计数器（**所有入口**都要调，否则会读到上一次的残留值）。 */
     private static void resetDiagnostics(File tarball) {
-        totalTarBytes = tarball != null && tarball.isFile ? tarball.length() : 0L;
+        totalTarBytes = tarball != null && tarball.isFile() ? tarball.length() : 0L;
         lastSkipped = 0;
         lastSkipNote = "";
         lastChmodFailures = 0;
