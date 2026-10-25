@@ -396,7 +396,34 @@ internal fun DshRuntime.installRuntimeArchive(tarball: File, preserveData: Boole
     pending.mkdirs()
     note("开始解压到 ${pending.name}（tar 大小 ${tarball.length()} 字节，可用 ${this.availableSpace(appContext.filesDir)}）")
 
-    TarGzipExtractor.extractRootfs(tarball, pending)
+    // 解压进度：界面此前只显示「开始解压安装…」直到结束，几十秒里看起来像卡死
+    // （Issue #12 的用户反馈）。这里把「已解字节 / tar 总字节」喂给进度条。
+    //
+    // 节流到 1% 才更新一次状态：解压要写几万个文件，每个都 setState 会把主线程刷爆。
+    val extractingPhase = DshPhase.EXTRACTING
+    val extractingText = this.str(R.string.dsh_msg_installing)
+    val totalForProgress = tarball.length().coerceAtLeast(1L)
+    var lastPct = -1
+    TarGzipExtractor.setProgressListener { extracted, total ->
+        val denom = if (total > 0) total else totalForProgress
+        val pct = ((extracted * 100) / denom).toInt().coerceIn(0, 100)
+        if (pct != lastPct) {
+            lastPct = pct
+            this.setState { st ->
+                st.copy(
+                    phase = extractingPhase,
+                    progress = pct / 100f,
+                    message = extractingText,
+                )
+            }
+        }
+    }
+    try {
+        TarGzipExtractor.extractRootfs(tarball, pending)
+    } finally {
+        // 解压结束（无论成败）都要摘掉监听，否则下一阶段的状态更新会被它继续覆盖
+        TarGzipExtractor.setProgressListener(null)
+    }
     note(
         "解压完成：跳过 ${TarGzipExtractor.lastSkipped} 条, chmod 失败 ${TarGzipExtractor.lastChmodFailures} 条" +
             (if (TarGzipExtractor.lastSkipNote.isNotEmpty()) "，跳过项：${TarGzipExtractor.lastSkipNote}" else ""),

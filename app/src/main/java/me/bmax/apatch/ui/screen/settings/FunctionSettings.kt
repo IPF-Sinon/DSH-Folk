@@ -323,6 +323,9 @@ fun FunctionSettingsContent(
     /** proroot 是否在本机可用（不可用时禁选并说明原因）。 */
     prorootAvailable: Boolean,
     prorootUnavailableReason: String,
+    /** chroot 是否可用（= root 通道就绪）。 */
+    chrootAvailable: Boolean,
+    chrootUnavailableReason: String,
     /** 自启动方式（三条路径，见 [DshAutostart.Mode]）。 */
     autostartMode: DshAutostart.Mode,
     onAutostartModeChange: (DshAutostart.Mode) -> Unit,
@@ -597,6 +600,16 @@ fun FunctionSettingsContent(
                                     summary = if (prorootAvailable) stringResource(R.string.dsh_mode_proroot_desc)
                                     else prorootUnavailableReason,
                                     onSelect = { onRuntimeIdChange("proroot") },
+                                )
+                                // chroot：需要 root 通道。说明里写明「它不是沙箱」，
+                                // 免得用户以为选了它就得到了隔离。
+                                RuntimeOption(
+                                    selected = runtimeId == "chroot",
+                                    enabled = chrootAvailable,
+                                    title = stringResource(R.string.dsh_mode_chroot_name),
+                                    summary = if (chrootAvailable) stringResource(R.string.dsh_mode_chroot_desc)
+                                    else chrootUnavailableReason,
+                                    onSelect = { onRuntimeIdChange("chroot") },
                                 )
 
                                 Spacer(Modifier.height(4.dp))

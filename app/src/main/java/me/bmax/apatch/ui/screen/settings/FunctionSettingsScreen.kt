@@ -262,6 +262,8 @@ internal fun DshSettingsScreen(
 
     // proroot 的可用性要读它自己的目录，放 IO 线程算一次即可。
     var prorootAvailable by rememberSaveable { mutableStateOf(false) }
+    var chrootAvailable by rememberSaveable { mutableStateOf(false) }
+    var chrootReason by rememberSaveable { mutableStateOf("") }
     var prorootReason by rememberSaveable { mutableStateOf("") }
 
     /**
@@ -325,12 +327,18 @@ internal fun DshSettingsScreen(
             )
             val ok = proroot.available()
             val reason = if (ok) "" else proroot.unavailableReason()
+            // chroot 只需要 root 通道就绪（不是「沙箱可用」—— 那个取决于内核）
+            val chroot = ContainerRuntime.Chroot(context.applicationContext)
+            val chrootOk = chroot.available()
+            val chrootWhy = if (chrootOk) "" else chroot.unavailableReason()
             // resolve() 在 auto 且无缓存时会真的测速，所以放在同一个 IO 块里
             val resolved = runCatching { DshSource.resolve(context.applicationContext) }
                 .getOrDefault(DshSource.setting(context.applicationContext))
             withContext(Dispatchers.Main) {
                 prorootAvailable = ok
                 prorootReason = reason
+                chrootAvailable = chrootOk
+                chrootReason = chrootWhy
                 effectiveSource = resolved
             }
         }
@@ -443,6 +451,8 @@ internal fun DshSettingsScreen(
                         DshRuntime.setRuntimeId(id)
                     },
                     prorootAvailable = prorootAvailable,
+                    chrootAvailable = chrootAvailable,
+                    chrootUnavailableReason = chrootReason,
                     prorootUnavailableReason = prorootReason,
                     autostartMode = autostartMode,
                     onAutostartModeChange = { m ->

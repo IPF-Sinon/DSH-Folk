@@ -473,6 +473,11 @@ object DshRuntime : DshRuntimeHost {
     /** 解析出实际可用的运行时；选中的不可用时静默回退 proot。 */
     override fun runtime(): ContainerRuntime {
         val proot = ContainerRuntime.Proot(appContext, nativeLib("libproot.so"))
+        // chroot 需要 root 通道；不可用就静默回退 proot（与 proroot 同一套策略）。
+        if (runtimeId() == "chroot") {
+            val chroot = ContainerRuntime.Chroot(appContext)
+            if (chroot.available()) return chroot
+        }
         if (runtimeId() != "proroot") return proot
         val proroot = ContainerRuntime.Proroot(appContext, ContainerRuntime.Proroot.defaultDir(appContext))
         return if (proroot.available()) proroot else proot
@@ -494,7 +499,16 @@ object DshRuntime : DshRuntimeHost {
      * 插件层面的失败不算：见 [PLUGIN_FAILURE_MARKS]。
      */
     fun noteProrootFailure(why: String): Boolean {
-        if (runtimeId() != "proroot") return false
+        // chroot 与 proroot 共用这套「失败即回退」：两者都是实验性启动方式，
+        // 一旦起不来就必须自动回到 proot，否则用户会卡在「每次都失败」。
+        val id = runtimeId()
+        if (id == "chroot") {
+            prefs().edit().putString(DshEnv.KEY_RUNTIME, "proot").apply()
+            logWarn(R.string.dsh_log_proroot_failed, "chroot: " + why)
+            prorootFellBack = true
+            return true
+        }
+        if (id != "proroot") return false
         if (lastLogSuggestsPluginFailure()) {
             logWarn(R.string.dsh_log_plugin_stage_failure)
             return false
@@ -664,8 +678,11 @@ object DshRuntime : DshRuntimeHost {
     /** 在 rootfs 内执行一条 bash 命令（stderr 合并进 stdout）。 */
     fun execRootfs(bashCommand: String): Process {
         ensureRuntimeFiles()
-        val argv = baseArgv()
-        argv += listOf("/bin/bash", "-c", bashCommand)
+        val rt = runtime()
+        // chroot 这类运行时自己接管 argv（命令要写进脚本、经真 root 执行）；
+        // 返回 null 就是 proot/proroot 的老路 —— 行为一个字节不变。
+        val guest = listOf("/bin/bash", "-c", bashCommand)
+        val argv = rt.spawnArgv(guest, guestEnv()) ?: (baseArgv() + guest)
         val pb = ProcessBuilder(argv).redirectErrorStream(true)
         pb.redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
         applyEnv(pb)
@@ -675,13 +692,30 @@ object DshRuntime : DshRuntimeHost {
     /** 启动交互式 bash（供终端页；cd/export 状态保持）。 */
     fun execRootfsInteractive(): Process {
         ensureRuntimeFiles()
-        val argv = baseArgv()
-        argv += "/bin/bash"
+        val rt = runtime()
+        val guest = listOf("/bin/bash")
+        val argv = rt.spawnArgv(guest, guestEnv()) ?: (baseArgv() + guest)
         val pb = ProcessBuilder(argv).redirectErrorStream(true)
         applyEnv(pb)
         pb.environment()["DSH_INTERACTIVE"] = "1"
         return pb.start()
     }
+
+    /**
+     * 容器内的 guest 环境（供 [ContainerRuntime.spawnArgv] 用，不经 ProcessBuilder）。
+     *
+     * 为什么单独抽出来：`su` 会重置环境，所以 chroot 只能把环境写进启动脚本；而 proot/proroot
+     * 走 ProcessBuilder 继承。两者需要的**内容**是同一份 —— 各写一份必然分叉（以前就出现过
+     * 「PTY 里少一个变量就起不来」），所以这里把内容抽成一份，谁用谁取。
+     */
+    private fun guestEnv(): Map<String, String> = linkedMapOf(
+        "HOME" to "/root",
+        "PATH" to "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "TMPDIR" to "/tmp",
+        "LANG" to "C.UTF-8",
+        "DEBIAN_FRONTEND" to "noninteractive",
+        "TERM" to "xterm-256color",
+    )
 
     /**
      * PTY 会话的 argv（终端页用）。默认 `bash -l`，也可指定 guest 命令。
@@ -691,7 +725,15 @@ object DshRuntime : DshRuntimeHost {
      */
     fun ptyArgv(vararg guestCmd: String): Array<String> {
         ensureRuntimeFiles()
+        // chroot 走不了 PTY：Termux 的 terminal-emulator 是 openpty + fork + execvp，而 chroot
+        // 需要先 su 提权、再 mount --bind 组装挂载视图 —— 这两步没法塞进一个 execvp。所以这里
+        // 显式退回 proot 的 argv，而不是返回空列表让 PTY 直接起不来：终端页是「进容器敲命令」
+        // 的入口，宁可用 proot 也必须能用。
         val argv = baseArgv()
+        if (argv.isEmpty()) {
+            argv += ContainerRuntime.Proot(appContext, nativeLib("libproot.so"))
+                .baseArgv(DshEnv.rootfs(appContext), hardlinkSupported())
+        }
         if (guestCmd.isEmpty()) {
             argv += "/bin/bash"
             argv += "-l"

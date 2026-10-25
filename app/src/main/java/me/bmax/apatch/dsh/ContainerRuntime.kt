@@ -43,6 +43,21 @@ interface ContainerRuntime {
     /** 首次使用前的准备（复制依赖库等）。抛异常表示准备失败，调用方应回退。 */
     fun prepare()
 
+    /**
+     * 让运行时**自己接管**「怎么把 guest 命令送进容器」。
+     *
+     * proot/proroot 的 argv 是「运行时前缀 + guest 命令」，调用方直接拼即可；但 chroot 必须以
+     * **真 root** 启动（`su -c …`），而 `su -c` 只接受**一个命令字符串** —— 把任意 guest 命令
+     * 再塞进那层引号就是两层转义地狱（命令里可能有单引号、换行、`$`）。所以 chroot 把命令写进
+     * 脚本文件交给 root 侧执行，argv 里因此不含 guest 命令。
+     *
+     * 传 [env] 是必要的：`su` 不保证继承调用方环境（Magisk 会自己改 PATH），chroot 把这份环境
+     * 以 export 形式写进脚本。
+     *
+     * @return null = 用 `baseArgv() + guest`（proot/proroot 既有行为，一个字节不变）。
+     */
+    fun spawnArgv(guest: List<String>, env: Map<String, String>): List<String>? = null
+
     companion object {
         /**
          * 非存储类 bind（两个运行时共用、与黑白名单无关）。
@@ -209,6 +224,130 @@ interface ContainerRuntime {
 
             /** 存放目录：APK 的 jniLibs 提取目录（Android 10+ W^X：只有这里能执行）。 */
             fun defaultDir(ctx: Context): File = File(ctx.applicationInfo.nativeLibraryDir)
+        }
+    }
+
+    /**
+     * 真 root 的 chroot 启动方式（需要 root 权限通道）。
+     *
+     * ## 它解决什么
+     *
+     * proot 是 ptrace 模拟（不要 root、兼容性最好），proroot 是 LD_PRELOAD 路径翻译。两者的
+     * 共同问题是**进程仍在 zygote 的 seccomp 域里**、且拿不到 CAP_SYS_ADMIN —— 于是 DSH 的
+     * 工作区沙箱（bwrap / Landlock）在容器内一律不可用。chroot 走真 root（su 域）：
+     *  - 可以 `mount --bind` 组装自己的挂载视图；
+     *  - seccomp 由 su 域决定（宽松得多），**bwrap 的 mount namespace 有机会跑起来**。
+     *
+     * ## 它不是什么（重要）
+     *
+     * **chroot 本身不是沙箱**：只改根目录，不拦网络 / 设备 / 内核接口，且有经典逃逸手法。
+     * 它在此的价值是「提供真 root 上下文，让 bwrap 有机会工作」，而不是自己提供隔离。
+     * 已实测：Landlock 在该设备**内核层**就不可用（`landlock-run --probe` 返回 125），那条路
+     * chroot 也救不了。
+     *
+     * ## 实现要点
+     *
+     * - `su -c` 只吃**一个命令字符串**，所以 guest 命令不拼进 argv，而是写进脚本文件；
+     * - 挂载与清理都在 root 侧脚本里，trap 保证异常退出也卸载；
+     * - 环境以 export 写进脚本（`su` 会重置环境，不能指望继承）。
+     */
+    class Chroot(private val ctx: Context) : ContainerRuntime {
+        override fun id() = "chroot"
+
+        override fun displayName() = ctx.appString(R.string.dsh_mode_chroot_name)
+
+        /** 需要 root 通道就绪。不等同于「沙箱可用」—— 沙箱能不能用是 DSH 侧的事。 */
+        override fun available(): Boolean =
+            PrivilegedShell.reach(ctx)?.channel == PermissionManager.Channel.ROOT
+
+        override fun unavailableReason(): String = ctx.appString(R.string.dsh_mode_chroot_needs_root)
+
+        /** 不用宿主 argv 前缀：命令经脚本送进去，见 [spawnArgv]。 */
+        override fun baseArgv(rootfsDir: File, hardlinkSupported: Boolean): List<String> = emptyList()
+
+        override fun applyEnv(env: MutableMap<String, String>, baseDir: File, libDir: File, tmpDir: File) {
+            // 宿主进程不需要设什么；真正生效的环境在启动脚本里
+        }
+
+        override fun prepare() {
+            val dir = workDir(ctx)
+            if (!dir.isDirectory && !dir.mkdirs()) {
+                throw IllegalStateException("无法创建 " + dir.absolutePath)
+            }
+        }
+
+        /**
+         * 生成启动 argv：`/system/bin/sh -c "su -c 'sh <launch.sh>'"`。
+         *
+         * guest 命令与环境都写进脚本文件，argv 里不含它们 —— 这样命令里出现单引号、换行、
+         * `$` 都不会被 `su -c` 那层引号破坏。
+         */
+        override fun spawnArgv(guest: List<String>, env: Map<String, String>): List<String>? {
+            prepare()
+            val dir = workDir(ctx)
+            val rootfs = DshEnv.rootfs(ctx)
+            val launch = File(dir, "launch.sh")
+            launch.writeText(
+                buildLaunchScript(rootfs, dir, env, guest.joinToString(" ") { shellQuote(it) }),
+                Charsets.UTF_8,
+            )
+            launch.setExecutable(true, false)
+            // su 的路径因设备而异（Magisk 常在 /debug_ramdisk 或 /system/bin），交给 sh 解析
+            return listOf(
+                "/system/bin/sh", "-c",
+                "su -c " + shellQuote("sh " + shellQuote(launch.absolutePath)),
+            )
+        }
+
+        /**
+         * 拼启动脚本：建挂载视图 → chroot → 执行 guest 命令 → 退出时卸载。
+         *
+         * 用 raw string 而不是一堆字符串拼接：脚本里到处是 `$` 与引号，拼接极易写错。
+         * Kotlin raw string 里 `$MNT` 要写成 ${'$'}{MNT}，否则会被当成模板插值。
+         */
+        private fun buildLaunchScript(
+            rootfs: File,
+            dir: File,
+            env: Map<String, String>,
+            guestCmd: String,
+        ): String {
+            val mnt = "\${'$'}MNT"
+            val storage = storageBinds(ctx).joinToString("\n") { (host, g) ->
+                "mkdir -p \"$mnt$g\" && mount --bind ${shellQuote(host)} \"$mnt$g\" 2>/dev/null"
+            }
+            // 环境只收不含空格/单引号的项：脚本里用单引号包住 k=v，含这些字符会破坏引号
+            val envLine = env.entries
+                .filter { (k, v) -> k.none { it == ' ' || it == '\'' } && v.none { it == ' ' || it == '\'' } }
+                .joinToString(" ") { (k, v) -> shellQuote("$k=$v") }
+            val script = StringBuilder()
+            script.append("#!/system/bin/sh\n")
+            script.append("# DSH-Folk chroot 启动器（App 生成，勿手改）\n")
+            script.append("RFS=").append(shellQuote(rootfs.absolutePath)).append('\n')
+            script.append("MNT=").append(shellQuote(File(dir, "mnt").absolutePath)).append('\n')
+            script.append("cleanup() {\n")
+            script.append("  for d in \"$mnt/dev\" \"$mnt/proc\" \"$mnt/sys\"; do umount -l \"\$d\" 2>/dev/null; done\n")
+            script.append("}\n")
+            script.append("trap cleanup EXIT INT TERM\n")
+            script.append("mkdir -p \"$mnt\" || exit 90\n")
+            script.append("mount -t tmpfs tmpfs \"$mnt\" || exit 91\n")
+            script.append("mkdir -p \"$mnt/dev\" \"$mnt/proc\" \"$mnt/sys\"\n")
+            script.append("mount --bind /dev \"$mnt/dev\" || exit 92\n")
+            script.append("mount -t proc proc \"$mnt/proc\" || exit 93\n")
+            script.append("mount --bind /sys \"$mnt/sys\" 2>/dev/null\n")
+            if (storage.isNotEmpty()) script.append(storage).append('\n')
+            // 进 chroot 执行：env -i 起干净环境，再逐个喂我们这份
+            script.append("exec chroot \"\$RFS\" /usr/bin/env -i ").append(envLine)
+            script.append(" /bin/bash -c ").append(shellQuote(guestCmd)).append('\n')
+            return script.toString()
+        }
+
+        companion object {
+            /** 脚本与挂载点的工作目录（放 rootfs 之外，免得被运行时替换清掉）。 */
+            fun workDir(ctx: Context): File = File(ctx.filesDir, "chroot")
+
+            /** POSIX 单引号转义：值里的 `'` 写成 `'\''`。 */
+            fun shellQuote(value: String): String =
+                "'" + value.replace("'", "'\\''") + "'"
         }
     }
 }

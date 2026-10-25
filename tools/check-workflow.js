@@ -762,9 +762,10 @@ console.log("\u2500 #16r 解压诊断三联（任务 3 / Issue #12）");
   //    用户只看到一句「rootfs 不完整」，没有任何可判断的线索。
   ok(/public static volatile int lastChmodFailures = 0/.test(ext), 'chmod 失败有计数器');
   ok(/public static volatile String lastChmodFailNote = ""/.test(ext), 'chmod 失败记首个路径');
-  ok(/private static void resetDiagnostics\(\)/.test(ext), '有统一的重置函数');
-  const resets = (ext.match(/resetDiagnostics\(\);/g) || []).length;
-  ok(resets >= 5, '所有解压入口都重置计数器（实际 ' + resets + ' 处，含定义 1 处）');
+  // 签名从 () 变成 (File tarball)：顺手把 tar 体积记下来当解压进度的分母
+  ok(/private static void resetDiagnostics\(File tarball\)/.test(ext), '有统一的重置函数');
+  const resets = (ext.match(/resetDiagnostics\(tarball\);/g) || []).length;
+  ok(resets >= 5, '所有解压入口都重置计数器（实际 ' + resets + ' 处含定义，调用点应 ≥5）');
   ok(/lastChmodFailures\+\+/.test(ext) && !/catch \(Throwable ignored\)/.test(ext.split('chmodBestEffort')[2] || ''),
     'chmodBestEffort 不再静默吞异常');
   // ② 安装侧必须真的把这些读出来并打日志
@@ -823,6 +824,62 @@ console.log("\u2500 #16t 回退复制必须保留符号链接（Issue #12 真正
   const orCopy = (inst.match(/renameOrCopy\(/g) || []).length;
   ok(orCopy >= 7, '目录搬移统一走 renameOrCopy（实际 ' + orCopy + ' 处，含定义）');
   ok(/回滚失败：备份 rootfs 也放不回去/.test(inst), '回滚失败有明确记录（比安装失败更严重）');
+}
+
+console.log("\u2500 #16u 解压进度（Issue #12 用户反馈：安装像卡死）");
+{
+  const ext = read("app/src/main/java/me/bmax/apatch/dsh/TarGzipExtractor.java");
+  const inst = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntimeInstaller.kt");
+  // 解压要几十秒，界面此前只停在「开始解压安装…」→ 看起来像卡死
+  ok(/public interface ProgressListener/.test(ext), '解压器暴露进度回调');
+  ok(/void onProgress\(long extractedBytes, long totalTarBytes\)/.test(ext), '回调带已解/总量两个数');
+  ok(/private static volatile long totalTarBytes/.test(ext), '进度分母来自 tar 文件大小');
+  ok(/reportProgress\(totalBytes, totalTarBytes\)/.test(ext), '每解出一个文件就上报一次');
+  // 回调里抛异常不能影响解压
+  ok(/try \{\s*\n\s*l\.onProgress\(extracted, total\);/.test(ext) || /catch \(Throwable ignored\)/.test(ext),
+    '回调异常被吞掉（进度出错不能影响解压本身）');
+  // 安装侧：节流到 1% + 结束后摘掉监听
+  ok(/TarGzipExtractor\.setProgressListener \{ extracted, total ->/.test(inst), '安装侧接上进度回调');
+  ok(/if \(pct != lastPct\)/.test(inst), '节流：只在百分比变化时更新状态（解压要写几万个文件）');
+  ok(/progress = pct \/ 100f/.test(inst), '进度写进 DshState.progress');
+  ok(/TarGzipExtractor\.setProgressListener\(null\)/.test(inst), '解压结束摘掉监听');
+  // finally 而不是顺序执行：解压抛异常时也必须摘掉，否则后续状态被覆盖
+  ok(/\} finally \{\s*\n\s*\/\/ 解压结束/.test(inst) || /finally \{\s*\n[\s\S]{0,120}setProgressListener\(null\)/.test(inst),
+    '用 finally 摘监听（异常路径也要摘）');
+}
+
+console.log("\u2500 #16v chroot 启动方式（真 root，实验性）");
+{
+  const rt = read("app/src/main/java/me/bmax/apatch/dsh/ContainerRuntime.kt");
+  const dr = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");
+  const fs2 = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt");
+  ok(/class Chroot\(private val ctx: Context\) : ContainerRuntime/.test(rt), '有 Chroot 运行时实现');
+  ok(/override fun id\(\) = "chroot"/.test(rt), 'id 是 chroot');
+  // 可用性 = root 通道，不是「沙箱可用」
+  ok(/PrivilegedShell\.reach\(ctx\)\?\.channel == PermissionManager\.Channel\.ROOT/.test(rt),
+    '可用性判定 = root 通道就绪');
+  // 关键：chroot 不是沙箱，注释必须写明（避免误导）
+  ok(/\*\*chroot 本身不是沙箱\*\*/.test(rt), '类注释明确「chroot 不是沙箱」');
+  ok(/landlock is not enforced|landlock-run --probe.*125/.test(rt), '注释记录实测：Landlock 内核层不可用');
+  // spawnArgv 接管 argv，proot/proroot 保持 null（行为不变）
+  ok(/fun spawnArgv\(guest: List<String>, env: Map<String, String>\): List<String>\? = null/.test(rt),
+    '接口默认 null（proot/proroot 行为零变化）');
+  ok(/override fun spawnArgv\(guest: List<String>, env: Map<String, String>\): List<String>\? \{/.test(rt),
+    'chroot 覆盖 spawnArgv');
+  // guest 命令写进脚本，不进 argv（避免两层转义）
+  ok(/launch\.writeText\(\s*\n?\s*buildLaunchScript/.test(rt), '命令写进脚本文件而非拼进 su -c');
+  ok(/trap cleanup EXIT INT TERM/.test(rt), '脚本用 trap 保证退出时卸载挂载点');
+  ok(/fun shellQuote\(value: String\): String/.test(rt), '有 POSIX 单引号转义');
+  // 调用点：execRootfs / execRootfsInteractive 都经 spawnArgv，null 则回退
+  ok(/rt\.spawnArgv\(guest, guestEnv\(\)\) \?: \(baseArgv\(\) \+ guest\)/.test(dr),
+    '两个 spawn 点都「先问运行时，null 再走老路」');
+  // PTY 必须显式回退：terminal-emulator 是 execvp，chroot 的 argv 为空会让它起不来
+  ok(/chroot 走不了 PTY/.test(dr) && /if \(argv\.isEmpty\(\)\)/.test(dr), 'PTY 对 chroot 显式回退 proot');
+  // 失败即回退
+  ok(/if \(id == "chroot"\)/.test(dr) && /prorootFellBack = true/.test(dr), 'chroot 失败自动回退 proot');
+  // UI 第三项
+  ok(/R\.string\.dsh_mode_chroot_name/.test(fs2) && /R\.string\.dsh_mode_chroot_desc/.test(fs2),
+    '设置页有 chroot 选项且有说明');
 }
 
 console.log("\u2500 #17 用户自己也能建/改流程");

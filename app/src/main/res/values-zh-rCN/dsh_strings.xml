@@ -1798,4 +1798,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_workflow_detail_json_hide">收起定义 JSON</string>
     <string name="dsh_workflow_editor_auto_layout">整理</string>
     <string name="dsh_workflow_editor_delete_node">删除节点</string>
+    <string name="dsh_mode_chroot_name">chroot（真 root）</string>
+    <string name="dsh_mode_chroot_desc">以真实 root 身份进入容器。注意：chroot 只改根目录、不是沙箱；它可能让工作区沙箱模式可用，但取决于设备内核。</string>
+    <string name="dsh_mode_chroot_needs_root">需要 root 权限通道</string>
 </resources>

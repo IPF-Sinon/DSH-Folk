@@ -41,12 +41,51 @@ public final class TarGzipExtractor {
     /** 第一个 chmod 失败的路径（截断，用于给用户看） */
     public static volatile String lastChmodFailNote = "";
 
+    /**
+     * 解压进度监听：每解出一个常规文件回调一次（已解字节 / tar 总字节）。
+     *
+     * 为什么需要：解压 273MB → 约 800MB 在这类设备上要几十秒，而界面此前只显示一句
+     * 「开始解压安装…」直到结束 —— 用户以为卡死（Issue #12 的反馈）。
+     *
+     * 用 **tar 文件总字节数**作分母：gzip 流的原始大小不可靠（多流 gzip 累加不上），
+     * 而「已解字节 / 压缩包字节」与真实进度正相关，足够给一个「在动」的反馈。
+     * 回调在解压线程上同步执行，实现方必须自己保证轻量（节流）。
+     */
+    public interface ProgressListener {
+        void onProgress(long extractedBytes, long totalTarBytes);
+    }
+
+    /** 本次解压的 tar 文件总字节数（进度分母）。0 = 未知（流式入口）。 */
+    private static volatile long totalTarBytes = 0;
+
+    /** 当前解压的进度监听（null = 不回调）。 */
+    private static volatile ProgressListener progressListener = null;
+
+    /** 设置进度监听（null = 取消）。调用方在 extract 之前设置。 */
+    public static void setProgressListener(ProgressListener listener) {
+        progressListener = listener;
+    }
+
+    /** 回调一次进度；不节流（节流由实现方做，见 DshRuntimeInstaller）。 */
+    private static void reportProgress(long extracted, long total) {
+        ProgressListener l = progressListener;
+        if (l == null) return;
+        try {
+            l.onProgress(extracted, total);
+        } catch (Throwable ignored) {
+            // 进度回调出错绝不能影响解压本身
+        }
+    }
+
     /** 每次解压开始前清零计数器（**所有入口**都要调，否则会读到上一次的残留值）。 */
-    private static void resetDiagnostics() {
+    private static void resetDiagnostics(File tarball) {
+        totalTarBytes = tarball != null && tarball.isFile ? tarball.length() : 0L;
         lastSkipped = 0;
         lastSkipNote = "";
         lastChmodFailures = 0;
         lastChmodFailNote = "";
+        // 注意**不动** progressListener：调用方是「先 setProgressListener 再 extract」，
+        // 入口里清掉就等于永远收不到回调。监听由调用方在解压结束后自行置 null。
     }
 
     private TarGzipExtractor() {}
@@ -59,14 +98,14 @@ public final class TarGzipExtractor {
      * Ubuntu 的 alternatives 链（awk / which / pager / rmt）就全没了。
      */
     public static void extractRootfs(File tarball, File dest) throws IOException {
-        resetDiagnostics();
+        resetDiagnostics(tarball);
         try (InputStream raw = new FileInputStream(tarball)) {
             extractAuto(raw, dest, 0, false, false, true);
         }
     }
 
     public static void extract(File tarball, File dest) throws IOException {
-        resetDiagnostics();
+        resetDiagnostics(tarball);
         extract(tarball, dest, 0);
     }
 
@@ -74,14 +113,14 @@ public final class TarGzipExtractor {
      *  宽容策略：可疑/超大条目只跳过并计入 {@link #lastSkipped}，绝不让一条坏记录
      *  废掉整份备份 —— 用户宁可少恢复一个文件，也不要「恢复失败」四个字。 */
     public static void extractLenient(File tarball, File dest) throws IOException {
-        resetDiagnostics();
+        resetDiagnostics(tarball);
         try (InputStream raw = new FileInputStream(tarball)) {
             extractAuto(raw, dest, 0, true);
         }
     }
 
     public static void extract(File tarball, File dest, int strip) throws IOException {
-        resetDiagnostics();
+        resetDiagnostics(tarball);
         try (InputStream raw = new FileInputStream(tarball)) {
             extractAuto(raw, dest, strip);
         }
@@ -89,7 +128,7 @@ public final class TarGzipExtractor {
 
     /** 严格模式解压（插件导入用）：拒绝符号链接/硬链接条目，防链接逃逸。 */
     public static void extractSafe(File tarball, File dest) throws IOException {
-        resetDiagnostics();
+        resetDiagnostics(tarball);
         try (InputStream raw = new FileInputStream(tarball)) {
             extractAuto(raw, dest, 0, false, true);
         }
@@ -262,6 +301,7 @@ public final class TarGzipExtractor {
                     }
                     writeFile(in, out, size, mode, buf);
                     totalBytes += size;
+                    reportProgress(totalBytes, totalTarBytes);
                     break;
                 case '5':
                     out.mkdirs();

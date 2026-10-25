@@ -1824,4 +1824,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_workflow_detail_json_hide">Hide definition JSON</string>
     <string name="dsh_workflow_editor_auto_layout">Tidy</string>
     <string name="dsh_workflow_editor_delete_node">Delete node</string>
+    <string name="dsh_mode_chroot_name">chroot (real root)</string>
+    <string name="dsh_mode_chroot_desc">Enter the container as real root. Note: chroot only changes the root directory - it is not a sandbox; it may make the workspace sandbox mode usable, depending on the device kernel.</string>
+    <string name="dsh_mode_chroot_needs_root">Requires the root permission channel</string>
 </resources>
