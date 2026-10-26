@@ -277,12 +277,20 @@ interface ContainerRuntime {
         }
 
         /**
-         * 生成启动 argv：`/system/bin/sh -c "su -c 'sh <launch.sh>'"`。
+         * 生成启动 argv：`/system/bin/sh -c "<su> -c 'sh <launch.sh>'"`。
          *
-         * guest 命令与环境都写进脚本文件，argv 里不含它们 —— 这样命令里出现单引号、换行、
-         * `$` 都不会被 `su -c` 那层引号破坏。
+         * **su 的路径必须探测，不能写死**：用户设备上 `/system/bin/su` 根本不存在
+         * （`sh: su: inaccessible or not found`），因为 KernelSU / APatch 那类实现的 su 在
+         * `/debug_ramdisk/su`、`/data/adb/ksu/bin/su` 等位置，且常常只有 root 域可见。
+         * 这里用 [PrivilegedShell.resolveSuPath] 借一条已生效的 root shell 问出真实路径。
+         *
+         * guest 命令与环境写进脚本文件，argv 里不含它们 —— 命令里有单引号、换行、`$` 都
+         * 不会被 `su -c` 那层引号破坏。
          */
         override fun spawnArgv(guest: List<String>, env: Map<String, String>): List<String>? {
+            // 解析不到 su 就直接放弃（返回 null → 调用方回退 proot），
+            // 而不是拼一条注定以 "su: not found" 失败的 argv。
+            val su = PrivilegedShell.resolveSuPath(ctx) ?: return null
             prepare()
             val dir = workDir(ctx)
             val rootfs = DshEnv.rootfs(ctx)
@@ -292,10 +300,9 @@ interface ContainerRuntime {
                 Charsets.UTF_8,
             )
             launch.setExecutable(true, false)
-            // su 的路径因设备而异（Magisk 常在 /debug_ramdisk 或 /system/bin），交给 sh 解析
             return listOf(
                 "/system/bin/sh", "-c",
-                "su -c " + shellQuote("sh " + shellQuote(launch.absolutePath)),
+                shellQuote(su) + " -c " + shellQuote("sh " + shellQuote(launch.absolutePath)),
             )
         }
 

@@ -357,6 +357,47 @@ internal object PrivilegedShell {
         return ExecOutcome(exit, clip(body), "", false, null)
     }
 
+    /**
+     * 解析出**这台设备上 su 的真实绝对路径**。
+     *
+     * 为什么要这一步：`su` 不在固定位置 —— 用户这台 Xiaomi 上 `/system/bin/su` 根本不存在
+     * （`/system/bin/sh: su: inaccessible or not found`），因为用的是 KernelSU/APatch 那类
+     * 实现，su 在 `/debug_ramdisk/su`、`/data/adb/ksu/bin/su` 之类的位置，且**只有 root 域
+     * 或特定 PATH 才能看见**。写死 `/system/bin/su` 必然失败。
+     *
+     * 做法：借一条**已经生效的 root shell**（libsu 自己知道怎么找到 su）去问 `command -v su`，
+     * 拿它的绝对路径。这一步只在 chroot 启动前做一次，结果缓存。
+     *
+     * @return su 的绝对路径；拿不到返回 null（调用方应回退 proot）。
+     */
+    fun resolveSuPath(ctx: Context): String? {
+        cachedSuPath?.let { return it.takeIf { it.isNotEmpty() } }
+        val out = ArrayList<String>()
+        val err = ArrayList<String>()
+        val ok = runCatching {
+            getRootShell().newJob()
+                // 顺便把常见位置都报一遍：某些实现只在 root 的 PATH 里有 su，
+                // 而 `command -v` 在非登录 shell 里可能看不到
+                .add("for c in su /system/bin/su /debug_ramdisk/su /data/adb/ksu/bin/su " +
+                    "/data/adb/ap/bin/su /sbin/su; do " +
+                    "if command -v \\"\\$c\\" >/dev/null 2>&1; then command -v \\"\\$c\\"; break; fi; done")
+                .to(out, err)
+                .exec()
+        }.getOrNull()
+        val path = if (ok) out.firstOrNull { it.startsWith("/") }?.trim() else null
+        cachedSuPath = path
+        if (path == null) {
+            Log.w(TAG, "解析 su 路径失败：out=${out.take(3)} err=${err.take(3)}")
+        } else {
+            Log.i(TAG, "su 路径 = $path")
+        }
+        return path
+    }
+
+    /** su 路径缓存（进程内）。空串 = 试过但没找到，避免每次启动都重探。 */
+    @Volatile
+    private var cachedSuPath: String? = null
+
     private fun shellArg(value: String): String =
         if (value.matches(Regex("[A-Za-z0-9._:/+=,-]+"))) value
         else "'" + value.replace("'", "'\\''") + "'"

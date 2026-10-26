@@ -871,8 +871,10 @@ console.log("\u2500 #16v chroot 启动方式（真 root，实验性）");
   ok(/trap cleanup EXIT INT TERM/.test(rt), '脚本用 trap 保证退出时卸载挂载点');
   ok(/fun shellQuote\(value: String\): String/.test(rt), '有 POSIX 单引号转义');
   // 调用点：execRootfs / execRootfsInteractive 都经 spawnArgv，null 则回退
-  ok(/rt\.spawnArgv\(guest, guestEnv\(\)\) \?: \(baseArgv\(\) \+ guest\)/.test(dr),
-    '两个 spawn 点都「先问运行时，null 再走老路」');
+  // 回退目标必须是 **proot** 而不是 baseArgv()：chroot 的 baseArgv 是空列表，
+  // 用它兜底会拼出只有一个元素的非法命令（这条断言最初写的就是那个错误写法）。
+  ok(/rt\.spawnArgv\(guest, guestEnv\(\)\) \?: \(prootBaseArgv\(\) \+ guest\)/.test(dr),
+    '两个 spawn 点都「先问运行时，null 回退 proot」');
   // PTY 必须显式回退：terminal-emulator 是 execvp，chroot 的 argv 为空会让它起不来
   ok(/chroot 走不了 PTY/.test(dr) && /if \(argv\.isEmpty\(\)\)/.test(dr), 'PTY 对 chroot 显式回退 proot');
   // 失败即回退
@@ -880,6 +882,29 @@ console.log("\u2500 #16v chroot 启动方式（真 root，实验性）");
   // UI 第三项
   ok(/R\.string\.dsh_mode_chroot_name/.test(fs2) && /R\.string\.dsh_mode_chroot_desc/.test(fs2),
     '设置页有 chroot 选项且有说明');
+}
+
+console.log("\u2500 #16w chroot 的 su 路径探测与三处回退（真机反馈）");
+{
+  const ps = read("app/src/main/java/me/bmax/apatch/dsh/PrivilegedShell.kt");
+  const rt = read("app/src/main/java/me/bmax/apatch/dsh/ContainerRuntime.kt");
+  const dr = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");
+  // 真机日志：`/system/bin/sh: su: inaccessible or not found` —— 写死 su 必然失败
+  ok(/fun resolveSuPath\(ctx: Context\): String\?/.test(ps), '有 su 路径探测');
+  ok(/\/debug_ramdisk\/su/.test(ps) && /\/data\/adb\/ksu\/bin\/su/.test(ps),
+    '探测覆盖 KernelSU/APatch 的常见位置');
+  ok(/getRootShell\(\)\.newJob\(\)/.test(ps), '借已生效的 root shell 去问（libsu 自己知道怎么找 su）');
+  ok(/cachedSuPath/.test(ps), 'su 路径有缓存（不每次启动都重探）');
+  // chroot 必须用探测到的路径
+  ok(/val su = PrivilegedShell\.resolveSuPath\(ctx\) \?: return null/.test(rt),
+    '解析不到 su 就返回 null（而不是拼一条注定失败的 argv）');
+  ok(/shellQuote\(su\) \+ " -c " \+ shellQuote/.test(rt), 'argv 用的是解析出的 su 绝对路径');
+  // 关键陷阱：chroot 的 baseArgv 是空列表，简单回退会拼出非法 argv
+  ok(/private fun prootBaseArgv\(\): MutableList<String>/.test(dr), '有显式的 proot 回退前缀');
+  ok(/\?: \(prootBaseArgv\(\) \+ guest\)/.test(dr), '两个 exec 点都回退 proot（不是 baseArgv）');
+  ok(/if \(argv\.isEmpty\(\)\) argv \+= prootBaseArgv\(\)/.test(dr), 'PTY 同样回退 proot');
+  // 统一：三处都不得再出现「baseArgv() + guest」这种在 chroot 下会错的写法
+  ok(!/\?: \(baseArgv\(\) \+ guest\)/.test(dr), '没有残留的裸 baseArgv 回退');
 }
 
 console.log("\u2500 #17 用户自己也能建/改流程");

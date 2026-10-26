@@ -628,6 +628,17 @@ object DshRuntime : DshRuntimeHost {
     private fun baseArgv(): MutableList<String> =
         runtime().baseArgv(DshEnv.rootfs(appContext), hardlinkSupported()).toMutableList()
 
+    /**
+     * **proot** 的 argv 前缀，用于「当前运行时无法在这条路径上工作」时的显式回退。
+     *
+     * 为什么需要单独一个：chroot 的 [ContainerRuntime.baseArgv] 是**空列表**（它不走宿主 argv），
+     * 所以凡是「spawnArgv 返回 null 就 baseArgv() + guest」的写法，在 chroot 下都会拼出只有一个
+     * 元素的非法命令。PTY、execRootfs、execRootfsInteractive 三条路统一用这个兜底。
+     */
+    private fun prootBaseArgv(): MutableList<String> =
+        ContainerRuntime.Proot(appContext, nativeLib("libproot.so"))
+            .baseArgv(DshEnv.rootfs(appContext), hardlinkSupported()).toMutableList()
+
     /** 容器内与宿主无关的 guest 环境 + 运行时专用环境。 */
     private fun applyEnv(pb: ProcessBuilder) {
         val rt = runtime()
@@ -682,7 +693,10 @@ object DshRuntime : DshRuntimeHost {
         // chroot 这类运行时自己接管 argv（命令要写进脚本、经真 root 执行）；
         // 返回 null 就是 proot/proroot 的老路 —— 行为一个字节不变。
         val guest = listOf("/bin/bash", "-c", bashCommand)
-        val argv = rt.spawnArgv(guest, guestEnv()) ?: (baseArgv() + guest)
+        // spawnArgv 返回 null = 这个运行时不接管 argv。注意**不能**简单回退 baseArgv()：
+        // chroot 的 baseArgv 是空列表（它本来就不走宿主 argv），拼出来只有一个元素的非法命令。
+        // 所以这里显式回退到 proot —— 与 PTY 那条路同一套策略。
+        val argv = rt.spawnArgv(guest, guestEnv()) ?: (prootBaseArgv() + guest)
         val pb = ProcessBuilder(argv).redirectErrorStream(true)
         pb.redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
         applyEnv(pb)
@@ -694,7 +708,7 @@ object DshRuntime : DshRuntimeHost {
         ensureRuntimeFiles()
         val rt = runtime()
         val guest = listOf("/bin/bash")
-        val argv = rt.spawnArgv(guest, guestEnv()) ?: (baseArgv() + guest)
+        val argv = rt.spawnArgv(guest, guestEnv()) ?: (prootBaseArgv() + guest)
         val pb = ProcessBuilder(argv).redirectErrorStream(true)
         applyEnv(pb)
         pb.environment()["DSH_INTERACTIVE"] = "1"
@@ -727,13 +741,9 @@ object DshRuntime : DshRuntimeHost {
         ensureRuntimeFiles()
         // chroot 走不了 PTY：Termux 的 terminal-emulator 是 openpty + fork + execvp，而 chroot
         // 需要先 su 提权、再 mount --bind 组装挂载视图 —— 这两步没法塞进一个 execvp。所以这里
-        // 显式退回 proot 的 argv，而不是返回空列表让 PTY 直接起不来：终端页是「进容器敲命令」
-        // 的入口，宁可用 proot 也必须能用。
+        // 显式退回 proot 的 argv：终端页是「进容器敲命令」的入口，宁可用 proot 也必须能用。
         val argv = baseArgv()
-        if (argv.isEmpty()) {
-            argv += ContainerRuntime.Proot(appContext, nativeLib("libproot.so"))
-                .baseArgv(DshEnv.rootfs(appContext), hardlinkSupported())
-        }
+        if (argv.isEmpty()) argv += prootBaseArgv()
         if (guestCmd.isEmpty()) {
             argv += "/bin/bash"
             argv += "-l"
