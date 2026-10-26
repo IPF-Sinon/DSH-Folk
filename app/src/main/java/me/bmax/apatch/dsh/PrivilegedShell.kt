@@ -375,14 +375,16 @@ internal object PrivilegedShell {
         val out = ArrayList<String>()
         val err = ArrayList<String>()
         val ok = runCatching {
-            getRootShell().newJob()
-                // 顺便把常见位置都报一遍：某些实现只在 root 的 PATH 里有 su，
-                // 而 `command -v` 在非登录 shell 里可能看不到
-                .add("for c in su /system/bin/su /debug_ramdisk/su /data/adb/ksu/bin/su " +
-                    "/data/adb/ap/bin/su /sbin/su; do " +
-                    "if command -v \\"\\$c\\" >/dev/null 2>&1; then command -v \\"\\$c\\"; break; fi; done")
-                .to(out, err)
-                .exec()
+            // 用 raw string 写这段 shell：里面有大量引号与 $，普通字符串要转义三层，
+            // 上一版就是因为多写了一层反斜杠把 Kotlin 字符串截断了（CI 报 Syntax error Expecting ')'）。
+            // raw string 里 $ 用 ${'$'} 转义，其余原样。
+            val probe = """
+                for c in su /system/bin/su /debug_ramdisk/su /data/adb/ksu/bin/su \
+                /data/adb/ap/bin/su /sbin/su; do
+                  if command -v "${'$'}c" >/dev/null 2>&1; then command -v "${'$'}c"; break; fi
+                done
+            """.trimIndent()
+            getRootShell().newJob().add(probe).to(out, err).exec()
         }.getOrNull()
         val path = if (ok) out.firstOrNull { it.startsWith("/") }?.trim() else null
         cachedSuPath = path
