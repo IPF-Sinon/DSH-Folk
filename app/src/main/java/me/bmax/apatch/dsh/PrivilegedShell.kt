@@ -388,7 +388,7 @@ internal object PrivilegedShell {
             // 退出码不判 —— 探测失败时 output 本来就是空的，下面按输出内容判断。
             getRootShell().newJob().add(probe).to(out, err).exec().isSuccess
         }.getOrNull()
-        val path = if (ok) out.firstOrNull { it.startsWith("/") }?.trim() else null
+        val path = if (ok == true) out.firstOrNull { it.startsWith("/") }?.trim() else null
         cachedSuPath = path
         if (path == null) {
             Log.w(TAG, "解析 su 路径失败：out=${out.take(3)} err=${err.take(3)}")
