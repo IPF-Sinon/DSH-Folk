@@ -384,7 +384,9 @@ internal object PrivilegedShell {
                   if command -v "${'$'}c" >/dev/null 2>&1; then command -v "${'$'}c"; break; fi
                 done
             """.trimIndent()
-            getRootShell().newJob().add(probe).to(out, err).exec()
+            // exec() 返回 Shell.Result（不是 Boolean）：只看「命令有没有成功执行」，
+            // 退出码不判 —— 探测失败时 output 本来就是空的，下面按输出内容判断。
+            getRootShell().newJob().add(probe).to(out, err).exec().isSuccess
         }.getOrNull()
         val path = if (ok) out.firstOrNull { it.startsWith("/") }?.trim() else null
         cachedSuPath = path
