@@ -119,6 +119,7 @@ Split by topic under `docs/`:
 - [Log Collection & Redaction](docs/logs.en.md) — bugreport file ownership, redaction, time-window trimming, and `session.lock` handling
 - [How It Runs](docs/architecture.en.md) — proot/proroot, rootfs, link2symlink, pnpm, ELF closure and the rest of the run chain
 - [Build & Release Internals](docs/dev-notes.en.md) — app/runtime release workflows, the beta-channel mechanism, why the changelog is a local resource
+- [Automation workflows: pitfalls](docs/workflow-pitfalls.en.md) — the four cross-process layers, approval TTL, skipped branches, seven rounds of Compose canvas gesture/coordinate rework, Kotlin runtime traps (**CC BY 4.0**)
 
 ## Project Structure
 

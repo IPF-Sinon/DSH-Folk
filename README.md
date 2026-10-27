@@ -143,6 +143,7 @@ root / Shizuku / 无线 ADB 都是**可选**的，并且**默认不启用**。DS
 - [日志采集与脱敏](docs/logs.md) —— bugreport 的文件归属、脱敏、时间窗口裁剪与 `session.lock` 处理
 - [它是怎么跑起来的](docs/architecture.md) —— proot/proroot、rootfs、link2symlink、pnpm、ELF 闭包等运行链细节
 - [构建与发布内幕](docs/dev-notes.md) —— 应用/运行时的发布工作流、测试版通道机制、更新说明为什么是本地资源
+- [自动化工作流：踩坑指南](docs/workflow-pitfalls.md) —— 四层跨进程契约、审批 TTL、分支跳过、Compose 画布手势与坐标的七次返工、Kotlin 运行期陷阱（**CC BY 4.0**）
 
 ## 项目结构
 

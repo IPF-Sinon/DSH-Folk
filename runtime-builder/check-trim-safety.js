@@ -43,10 +43,21 @@ const DOOMED_DIR = /(^|\/)(test|tests|__tests__|example|examples|docs)\//;
 /**
  * 递归 exports。`conds` 是**条件栈**，子路径键（`"."` / `"./client"`）不进栈 ——
  * 它们是路径分组，不是条件；把两者混起来会把每个包都误判成「自定义条件」。
+ *
+ * `subpath` 记当前所处的子路径键，用来判断「这条导出本身是不是类型/文档路径」：
+ * bowser 2.15 把 `"./README.md"` / `"./index.d.ts"` / `"./index.d.mts"` 也声明成了导出，
+ * 而真实主入口另在 `"."` 的 `import.default`→`bowser.mjs`、`default.default`→`es5.js`。
+ * 那些子路径只有 `import 'bowser/README.md'` 这种写法才命中，运行时代码不会这么引，
+ * 所以不该让 slim 构建因此失败（2026-10-27 的 rc.3 构建就是这么红的）。
  */
-function walkExports(node, conds, out) {
+function walkExports(node, conds, out, subpath) {
   if (typeof node === 'string') {
     if (conds.some((c) => c === 'types' || c.endsWith('types'))) {
+      out.types++;
+      return;
+    }
+    // 子路径键本身指向类型/文档：与「包能不能正常 require」无关。仍计入 types 让边界可见。
+    if (subpath !== undefined && subpath !== '.' && DOOMED_EXT.test(String(node).replace(/^\.\//, ''))) {
       out.types++;
       return;
     }
@@ -60,13 +71,15 @@ function walkExports(node, conds, out) {
   // exports 允许是**数组**（fallback 数组：Node 按顺序取第一个能用的）。数组元素是
   // 同类目标、不是条件 —— 当成对象会把下标 "0"/"1" 变成假条件。
   if (Array.isArray(node)) {
-    for (const v of node) walkExports(v, conds, out);
+    for (const v of node) walkExports(v, conds, out, subpath);
     return;
   }
   if (!node || typeof node !== 'object') return;
   const keys = Object.keys(node);
   const isSubpathMap = keys.length > 0 && keys.every((k) => k.startsWith('.'));
-  for (const k of keys) walkExports(node[k], isSubpathMap ? conds : [...conds, k], out);
+  for (const k of keys) {
+    walkExports(node[k], isSubpathMap ? conds : [...conds, k], out, isSubpathMap ? k : subpath);
+  }
 }
 
 /** 收集一个包的「Node 运行时会解析的入口」。 */
