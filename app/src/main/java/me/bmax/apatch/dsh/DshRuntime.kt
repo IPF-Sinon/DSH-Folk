@@ -599,7 +599,7 @@ object DshRuntime : DshRuntimeHost {
      */
     fun linkBecomesSymlink(): Boolean = !hardlinkSupported() || effectiveRuntimeId() == "proroot"
 
-    /** 复制 proot 的 NEEDED 依赖到可写 lib 目录（proroot 不需要）。 */
+    /** 复制 proot 的 NEEDED 依赖到可写 lib 目录。 */
     private fun ensureRuntimeFiles() {
         val libDir = File(appContext.filesDir, "lib").apply { mkdirs() }
         DshEnv.tmpDir(appContext).mkdirs()
@@ -608,8 +608,17 @@ object DshRuntime : DshRuntimeHost {
         ensureContainerDns()
         ensureProfilePnpmSettings()
         ensureContainerGroups()
-        if (runtime().id() != "proot") return
-        // jniLibs 里叫 libtalloc.so / libandroidshmem.so，proot 按 SONAME 找
+        // **无条件**备好 proot 的 NEEDED 依赖，不按「当前选中的运行时」跳过。
+        //
+        // 这里曾经是 `if (runtime().id() != "proroot") return`（注释还写着「proroot 不需要」），
+        // 在选了 proroot 的设备上直接不复制。那是**回归**：`prootBaseArgv()` 现在是全局兜底
+        // （PTY 在 chroot 下回退、spawnArgv 返回 null 时回退、运行时不可用时回退），于是 proroot
+        // 模式下也会真的去 exec `libproot.so` —— 而它 NEEDED `libtalloc.so.2`（soname；jniLibs
+        // 里只有 `libtalloc.so`）。真机表现（OnePlus PLQ110 / Android 17 / beta.212）：
+        //   CANNOT LINK EXECUTABLE ".../lib/libproot.so": library "libtalloc.so.2" not found
+        // 复制很便宜（31KB；目标已存在且长度相同就直接返回），没有任何理由省这一步。
+        //
+        // jniLibs 里叫 libtalloc.so / libandroidshmem.so，proot 按 SONAME 找。
         copyExec(nativeLib("libtalloc.so"), File(libDir, "libtalloc.so.2"))
         copyExec(nativeLib("libandroidshmem.so"), File(libDir, "libandroid-shmem.so"))
     }

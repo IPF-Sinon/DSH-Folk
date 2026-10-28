@@ -907,6 +907,27 @@ console.log("\u2500 #16w chroot 的 su 路径探测与三处回退（真机反�
   ok(!/\?: \(baseArgv\(\) \+ guest\)/.test(dr), '没有残留的裸 baseArgv 回退');
 }
 
+console.log("\u2500 #16x proot 的 NEEDED 依赖必须无条件就位（真机回归）");
+{
+  const dr = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");
+  // 背景（OnePlus PLQ110 / Android 17 / beta.212 真机）：
+  //   CANNOT LINK EXECUTABLE \".../lib/libproot.so\": library \"libtalloc.so.2\" not found
+  // 根因：ensureRuntimeFiles() 曾按「当前选中的运行时」跳过复制，而 prootBaseArgv() 是全局
+  // 兜底，proroot 模式下也会真的 exec libproot.so —— 它 NEEDED libtalloc.so.2（soname）。
+  ok(/copyExec\(nativeLib\("libtalloc\.so"\), File\(libDir, "libtalloc\.so\.2"\)\)/.test(dr),
+    'libtalloc.so → libtalloc.so.2 的 SONAME 改名仍在');
+  ok(/copyExec\(nativeLib\("libandroidshmem\.so"\), File\(libDir, "libandroid-shmem\.so"\)\)/.test(dr),
+    'libandroidshmem → libandroid-shmem 的 SONAME 改名仍在');
+  // 关键不变量：不能再有「按运行时跳过」的守卫挡在这两行前面
+  const body = dr.slice(dr.indexOf("private fun ensureRuntimeFiles"), dr.indexOf("private fun copyExec"));
+  ok(!/if \(runtime\(\)\.id\(\) != "proot"\) return/.test(body),
+    'ensureRuntimeFiles 不再按选中的运行时跳过 proot 依赖');
+  ok(!/if \(effectiveRuntimeId\(\) != "proot"\) return/.test(body),
+    '也没有换成用 effectiveRuntimeId 跳过（同一个坑的另一种写法）');
+  // 兜底入口必须存在，否则这个不变量没有理由
+  ok(/private fun prootBaseArgv\(\): MutableList<String>/.test(dr), 'proot 全局兜底入口仍在');
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),
