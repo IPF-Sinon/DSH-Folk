@@ -295,10 +295,12 @@ interface ContainerRuntime {
             val dir = workDir(ctx)
             val rootfs = DshEnv.rootfs(ctx)
             val launch = File(dir, "launch.sh")
-            launch.writeText(
-                buildLaunchScript(rootfs, dir, env, guest.joinToString(" ") { shellQuote(it) }),
-                Charsets.UTF_8,
-            )
+            // guest argv **逐项**传下去：绝不在这里拼成一条命令字符串。
+            //
+            // 曾经是 `guest.joinToString(" ") { shellQuote(it) }` 再被外壳又 quote 一次 ——
+            // 那是两层转义，真机报 `launch.sh[26]: no closing quote`（issue #12），
+            // 而且 `bash -c` 收到的参数会错位成 `/bin/bash`。见 buildLaunchScript 的写法。
+            launch.writeText(buildLaunchScript(rootfs, dir, env, guest), Charsets.UTF_8)
             launch.setExecutable(true, false)
             return listOf(
                 "/system/bin/sh", "-c",
@@ -309,14 +311,23 @@ interface ContainerRuntime {
         /**
          * 拼启动脚本：建挂载视图 → chroot → 执行 guest 命令 → 退出时卸载。
          *
-         * 用 raw string 而不是一堆字符串拼接：脚本里到处是 `$` 与引号，拼接极易写错。
-         * Kotlin raw string 里 `$MNT` 要写成 ${'$'}{MNT}，否则会被当成模板插值。
+         * ## 为什么用 `"$@"` 传 guest argv
+         *
+         * 脚本是**由 shell 解析两次**的（`su -c 'sh launch.sh'`，再由 launch.sh 自己 exec），
+         * 所以任何「先把 argv 拼成一条命令字符串、再整体 quote」的写法都会变成两层转义。
+         * 真机上表现就是 `launch.sh[26]: no closing quote`，且 `bash -c` 拿到的参数错位
+         * （第一个参数成了 `/bin/bash` 本身）—— issue #12。
+         *
+         * 正确做法：把 guest argv **逐项**写成脚本自己的位置参数（`set -- a b c`），
+         * 每项只经过 [shellQuote] **一次**，最后用 `"${'$'}@"` 展开。这样：
+         *  - 引号配对由 shell 自己保证，命令里出现单引号/换行/`$` 都不会破坏结构；
+         *  - argv 边界被完整保留（`bash -c "<cmd>"` 的 `<cmd>` 仍是**一个**参数）。
          */
         private fun buildLaunchScript(
             rootfs: File,
             dir: File,
             env: Map<String, String>,
-            guestCmd: String,
+            guest: List<String>,
         ): String {
             val mnt = "\${'$'}MNT"
             val storage = storageBinds(ctx).joinToString("\n") { (host, g) ->
@@ -326,6 +337,8 @@ interface ContainerRuntime {
             val envLine = env.entries
                 .filter { (k, v) -> k.none { it == ' ' || it == '\'' } && v.none { it == ' ' || it == '\'' } }
                 .joinToString(" ") { (k, v) -> shellQuote("$k=$v") }
+            // guest argv → 脚本的位置参数，每项只 quote 一次
+            val guestArgs = guest.joinToString(" ") { shellQuote(it) }
             val script = StringBuilder()
             script.append("#!/system/bin/sh\n")
             script.append("# DSH-Folk chroot 启动器（App 生成，勿手改）\n")
@@ -342,9 +355,11 @@ interface ContainerRuntime {
             script.append("mount -t proc proc \"$mnt/proc\" || exit 93\n")
             script.append("mount --bind /sys \"$mnt/sys\" 2>/dev/null\n")
             if (storage.isNotEmpty()) script.append(storage).append('\n')
-            // 进 chroot 执行：env -i 起干净环境，再逐个喂我们这份
+            // guest argv 交给脚本位置参数；`--` 防止某项以 `-` 开头时被 set 当选项
+            script.append("set -- ").append(guestArgs).append('\n')
+            // 进 chroot 执行：env -i 起干净环境，再逐个喂我们这份，最后摊开 "$@"
             script.append("exec chroot \"\$RFS\" /usr/bin/env -i ").append(envLine)
-            script.append(" /bin/bash -c ").append(shellQuote(guestCmd)).append('\n')
+            script.append(" \"\$\@\"\n")
             return script.toString()
         }
 

@@ -928,6 +928,44 @@ console.log("\u2500 #16x proot 的 NEEDED 依赖必须无条件就位（真机�
   ok(/private fun prootBaseArgv\(\): MutableList<String>/.test(dr), 'proot 全局兜底入口仍在');
 }
 
+console.log("\u2500 #16y chroot 启动脚本不得双层转义 + proot 前提无条件就位（issue #12）");
+{
+  const rt = read("app/src/main/java/me/bmax/apatch/dsh/ContainerRuntime.kt");
+  const dr = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");
+  // ── Bug A：launch.sh 双层转义（真机 launch.sh[26]: no closing quote） ──
+  // guest argv 必须逐项成为脚本的位置参数，用 "$@" 展开；
+  // 绝不能再「先 join 成一条命令字符串、再整体 quote」。
+  ok(/script\.append\("set -- "\)\.append\(guestArgs\)/.test(rt), 'guest argv 走 set -- 位置参数');
+  ok(/append\(" \\\"\\\$\\@\\\"\\\\n"\)/.test(rt) || /\\"\\\$\\@\\"/.test(rt), '用 "$@" 展开（argv 边界保留）');
+  ok(/val guestArgs = guest\.joinToString\(" "\) \{ shellQuote\(it\) \}/.test(rt), '每项只 shellQuote 一次');
+  // 反向断言：不允许再把 argv 拼成字符串传进 buildLaunchScript
+  ok(/buildLaunchScript\(rootfs, dir, env, guest\)/.test(rt), 'buildLaunchScript 收 argv 列表而不是拼接串');
+  ok(!/buildLaunchScript\(rootfs, dir, env, guest\.joinToString/.test(rt),
+    '不再把 guest 拼成命令字符串（那正是双层转义的来源）');
+  // ── Bug B：proot 的运行前提必须无条件就位 ──
+  // 与 ensureRuntimeFiles 里那条同源：prootBaseArgv() 是全局兜底，chroot/proroot 下也可能 exec proot。
+  // 关键：这两行不能再被 if (rt.id() == "proot") 包住
+  // 判据：扫到 `env["LD_LIBRARY_PATH"]` 为止的**括号深度**必须等于 1（函数体本身）。
+  // 用深度而不是「之前有没有出现过 if」：后者在有多个分支时会假阳/假阴。
+  // 这条断言最初写成数括号、又改成「无条件区段包含」，两次都**抓不住注入的回归**
+  // （把这三行包回 `if (proot) {` 后仍然全绿）—— 所以这里用深度重新算，并已自证。
+  const applyEnvBody = dr.slice(dr.indexOf('private fun applyEnv'), dr.indexOf('private fun guestEnv'));
+  const ldLine = 'env["LD_LIBRARY_PATH"]';
+  const lines = applyEnvBody.split('\n');
+  let depth = 0;
+  let ldDepth = -1;
+  for (const line of lines) {
+    // 注释行不计（注释里含大括号会干扰）
+    const code = line.replace(/\/\/.*$/, '');
+    if (code.includes(ldLine)) { ldDepth = depth; break; }
+    depth += (code.match(/\{/g) || []).length - (code.match(/\}/g) || []).length;
+  }
+  ok(ldDepth === 1,
+    'LD_LIBRARY_PATH 写在函数体顶层、不在任何 if 里（实际深度 ' + ldDepth + '；' +
+      'chroot/proroot 下回退 proot 也要能找到 libtalloc.so.2）');
+  ok(/env\["PROOT_LOADER"\]/.test(applyEnvBody), 'PROOT_LOADER 同样无条件设');
+}
+
 console.log("\u2500 #17 用户自己也能建/改流程");
 {
   ok(/fun WorkflowDefinitionEditor\(/.test(SRC.dialogs) && /initial: WorkflowDefinition/.test(SRC.dialogs),

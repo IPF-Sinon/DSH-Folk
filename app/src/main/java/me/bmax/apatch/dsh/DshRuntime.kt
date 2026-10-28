@@ -653,16 +653,25 @@ object DshRuntime : DshRuntimeHost {
         val rt = runtime()
         val libDir = File(appContext.filesDir, "lib")
         val env = pb.environment()
-        if (rt.id() == "proot") {
-            env["PROOT_TMP_DIR"] = DshEnv.tmpDir(appContext).absolutePath
-            env["PROOT_LOADER"] = nativeLib("libprootloader.so").absolutePath
-            env["PROOT_LOADER_32"] = nativeLib("libprootloader32.so").absolutePath
-            env["LD_LIBRARY_PATH"] = "${libDir.absolutePath}:${DshEnv.nativeLibDir(appContext).absolutePath}"
-            // 无硬链接时把 l2s 中间文件集中到 rootfs 内（默认就近存放会随 tmp 被清掉）
-            if (!hardlinkSupported()) {
-                val l2s = DshEnv.l2sDir(appContext).apply { mkdirs() }
-                env["PROOT_L2S_DIR"] = l2s.absolutePath
-            }
+        // proot 的启动前提**无条件**设，不按「当前选中的运行时」跳过。
+        //
+        // 与 ensureRuntimeFiles() 里那条同一个道理：`prootBaseArgv()` 是全局兜底（chroot 的
+        // PTY 回退、spawnArgv 返回 null 时的回退、运行时不可用时的回退），所以即使选的是
+        // chroot/proroot，这个进程也可能真的去 exec libproot.so。缺了会这样：
+        //  - 缺 LD_LIBRARY_PATH → linker 找不到 filesDir/lib/libtalloc.so.2。真机（issue #12，
+        //    chroot 模式）：
+        //      CANNOT LINK EXECUTABLE ".../lib/arm64/libproot.so":
+        //      library "libtalloc.so.2" not found
+        //  - 缺 PROOT_LOADER → proot 直接起不来
+        // 多设三个环境变量没有任何副作用（别的运行时根本不读它们）。
+        env["PROOT_TMP_DIR"] = DshEnv.tmpDir(appContext).absolutePath
+        env["PROOT_LOADER"] = nativeLib("libprootloader.so").absolutePath
+        env["PROOT_LOADER_32"] = nativeLib("libprootloader32.so").absolutePath
+        env["LD_LIBRARY_PATH"] = "${libDir.absolutePath}:${DshEnv.nativeLibDir(appContext).absolutePath}"
+        // 无硬链接时把 l2s 中间文件集中到 rootfs 内（默认就近存放会随 tmp 被清掉）
+        if (!hardlinkSupported()) {
+            val l2s = DshEnv.l2sDir(appContext).apply { mkdirs() }
+            env["PROOT_L2S_DIR"] = l2s.absolutePath
         }
         runCatching { rt.applyEnv(env, appContext.filesDir, libDir, DshEnv.tmpDir(appContext)) }
         // 别让 dsh 的原生插件加载器把 .node 二进制「materialize」一遍。
