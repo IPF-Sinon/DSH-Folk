@@ -933,10 +933,17 @@ console.log("\u2500 #16y chroot 启动脚本不得双层转义 + proot 前提无
   const rt = read("app/src/main/java/me/bmax/apatch/dsh/ContainerRuntime.kt");
   const dr = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");
   // ── Bug A：launch.sh 双层转义（真机 launch.sh[26]: no closing quote） ──
-  // guest argv 必须逐项成为脚本的位置参数，用 "$@" 展开；
+  // 语义断言：脚本必须把位置参数摊开成 "$@"。
+  // 不去精确匹配转义后的字面量 —— 那样会随 raw string / 普通字符串的写法变化，
+  // 实测已因此误报过一次（改 \@ 时断言跟着红，但代码是对的）。
+  const execLine = rt.split('\n').find((l) => l.includes('exec chroot')) || '';
+  const afterEnv = rt.slice(rt.indexOf('env -i '));
+  ok(/append\(\" \\\"\\\$@\\\"\\\\n\"\)/.test(rt) || afterEnv.includes('\$@'),
+    '用 "$@" 展开（argv 边界保留）');
   // 绝不能再「先 join 成一条命令字符串、再整体 quote」。
   ok(/script\.append\("set -- "\)\.append\(guestArgs\)/.test(rt), 'guest argv 走 set -- 位置参数');
-  ok(/append\(" \\\"\\\$\\@\\\"\\\\n"\)/.test(rt) || /\\"\\\$\\@\\"/.test(rt), '用 "$@" 展开（argv 边界保留）');
+  // 展开形式是 " "$@" "（Kotlin 里只转义 $，@ 是普通字符）
+  ok(/\" \\\"\\\$@\\\"\\n\"/.test(rt), '用 "$@" 展开（argv 边界保留，Kotlin 里只转义 $）');
   ok(/val guestArgs = guest\.joinToString\(" "\) \{ shellQuote\(it\) \}/.test(rt), '每项只 shellQuote 一次');
   // 反向断言：不允许再把 argv 拼成字符串传进 buildLaunchScript
   ok(/buildLaunchScript\(rootfs, dir, env, guest\)/.test(rt), 'buildLaunchScript 收 argv 列表而不是拼接串');

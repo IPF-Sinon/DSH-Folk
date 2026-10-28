@@ -359,7 +359,8 @@ interface ContainerRuntime {
             script.append("set -- ").append(guestArgs).append('\n')
             // 进 chroot 执行：env -i 起干净环境，再逐个喂我们这份，最后摊开 "$@"
             script.append("exec chroot \"\$RFS\" /usr/bin/env -i ").append(envLine)
-            script.append(" \"\$\@\"\n")
+            // 只转义 $（Kotlin 模板），@ 是普通字符；写成 \@ 会报 Unsupported escape sequence
+            script.append(" \"\$@\"\n")
             return script.toString()
         }
 
