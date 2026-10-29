@@ -295,13 +295,25 @@ interface ContainerRuntime {
             val dir = workDir(ctx)
             val rootfs = DshEnv.rootfs(ctx)
             val launch = File(dir, "launch.sh")
-            // guest argv **逐项**传下去：绝不在这里拼成一条命令字符串。
+            // guest argv **逐项**传下去：绝不在这里拼成一条命令字符串（拼串就得再 quote 一次，
+            // 引号配对与 argv 边界都会失真）。
             //
-            // 曾经是 `guest.joinToString(" ") { shellQuote(it) }` 再被外壳又 quote 一次 ——
-            // 那是两层转义，真机报 `launch.sh[26]: no closing quote`（issue #12），
-            // 而且 `bash -c` 收到的参数会错位成 `/bin/bash`。见 buildLaunchScript 的写法。
+            // 真机那句 `launch.sh[N]: no closing quote`（issue #12）**不在这里** —— 它是
+            // buildLaunchScript 里 `mnt` 的写法造成的，见那里的注释。
             launch.writeText(buildLaunchScript(rootfs, dir, env, guest), Charsets.UTF_8)
             launch.setExecutable(true, false)
+            // 真机兜底：脚本写错一个引号，`su -c sh launch.sh` 只会打印一行
+            // `launch.sh[N]: no closing quote` 然后**服务就没了**，用户看到的报错和原因
+            // 毫无关系（issue #12 就是这三轮）。这里用设备自己的 shell 先做一次语法检查 ——
+            // Android 的 /system/bin/sh 正是真正解析这份脚本的那个 shell。不通过就记原文、
+            // 返回 null 让调用方回退 proot，服务照常能起。
+            val syntaxError = checkLaunchScript(launch)
+            if (syntaxError != null) {
+                DshRuntime.appendLog(
+                    "! chroot: launch.sh 语法检查未通过（已回退 proot）: " + syntaxError
+                )
+                return null
+            }
             return listOf(
                 "/system/bin/sh", "-c",
                 shellQuote(su) + " -c " + shellQuote("sh " + shellQuote(launch.absolutePath)),
@@ -314,9 +326,12 @@ interface ContainerRuntime {
          * ## 为什么用 `"$@"` 传 guest argv
          *
          * 脚本是**由 shell 解析两次**的（`su -c 'sh launch.sh'`，再由 launch.sh 自己 exec），
-         * 所以任何「先把 argv 拼成一条命令字符串、再整体 quote」的写法都会变成两层转义。
-         * 真机上表现就是 `launch.sh[26]: no closing quote`，且 `bash -c` 拿到的参数错位
-         * （第一个参数成了 `/bin/bash` 本身）—— issue #12。
+         * 所以把 argv 拼成一条命令字符串再整体 quote，会让引号配对与 argv 边界都失真。
+         *
+         * 记一笔真机教训：issue #12 那句 `launch.sh[N]: no closing quote` 曾被归因到
+         * 「两层转义」，**那是误判**。真凶是下面的 `mnt` 写法，而 shell 报的行号是
+         * **最后一行 +1**（在 EOF 上才发现引号没闭合），看上去像 exec 那一行出了错，
+         * 把排查带偏了三轮 —— 所以下面这个脚本在真机上多了一道 `sh -n` 自检。
          *
          * 正确做法：把 guest argv **逐项**写成脚本自己的位置参数（`set -- a b c`），
          * 每项只经过 [shellQuote] **一次**，最后用 `"${'$'}@"` 展开。这样：
@@ -329,7 +344,11 @@ interface ContainerRuntime {
             env: Map<String, String>,
             guest: List<String>,
         ): String {
-            val mnt = "\${'$'}MNT"
+            // `"\$MNT"` 求值成字符串 `$MNT`。**不要**写成 `"\${'$'}MNT"`：普通字符串里
+            // 那不是模板求值，而是字面量 `${'$'}MNT`（`${'$'}` 只有在 raw string 里
+            // 才表示字面量 `$`）。mksh 解析这个字面量会在 EOF 处报 `no closing quote` ——
+            // 那正是 issue #12 的真凶。
+            val mnt = "\$MNT"
             val storage = storageBinds(ctx).joinToString("\n") { (host, g) ->
                 "mkdir -p \"$mnt$g\" && mount --bind ${shellQuote(host)} \"$mnt$g\" 2>/dev/null"
             }
@@ -363,6 +382,19 @@ interface ContainerRuntime {
             script.append(" \"\$@\"\n")
             return script.toString()
         }
+
+        /**
+         * 用设备自己的 shell 做一次语法检查（`sh -n`）：通过返回 null，否则返回 shell 的原文。
+         *
+         * 检查本身跑不起来（极不可能）也算通过 —— 不能因为「没法自检」就把 chroot 整个禁用。
+         */
+        private fun checkLaunchScript(launch: File): String? = runCatching {
+            val p = ProcessBuilder("/system/bin/sh", "-n", launch.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+            val out = p.inputStream.bufferedReader().use { it.readText() }.trim()
+            if (p.waitFor() == 0) null else out.ifEmpty { "sh -n 退出码 " + p.exitValue() }
+        }.getOrNull()
 
         companion object {
             /** 脚本与挂载点的工作目录（放 rootfs 之外，免得被运行时替换清掉）。 */

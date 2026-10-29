@@ -586,8 +586,10 @@ fun FunctionSettingsContent(
                                 )
                                 Spacer(Modifier.height(12.dp))
 
+                                // 必须是 `== "proot"`，不能写 `!= "proroot"`：
+                                // 加了 chroot 之后后者会让 proot 和 chroot **同时**显示为选中。
                                 RuntimeOption(
-                                    selected = runtimeId != "proroot",
+                                    selected = runtimeId == "proot",
                                     enabled = true,
                                     title = stringResource(R.string.dsh_mode_proot),
                                     summary = stringResource(R.string.dsh_mode_proot_desc),

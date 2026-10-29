@@ -932,7 +932,7 @@ console.log("\u2500 #16y chroot 启动脚本不得双层转义 + proot 前提无
 {
   const rt = read("app/src/main/java/me/bmax/apatch/dsh/ContainerRuntime.kt");
   const dr = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");
-  // ── Bug A：launch.sh 双层转义（真机 launch.sh[26]: no closing quote） ──
+  // ── 启动脚本：guest argv 逐项传参（「双层转义」那套归因是误判，真凶见 #16z） ──
   // 语义断言：脚本必须把位置参数摊开成 "$@"。
   // 不去精确匹配转义后的字面量 —— 那样会随 raw string / 普通字符串的写法变化，
   // 实测已因此误报过一次（改 \@ 时断言跟着红，但代码是对的）。
@@ -948,7 +948,7 @@ console.log("\u2500 #16y chroot 启动脚本不得双层转义 + proot 前提无
   // 反向断言：不允许再把 argv 拼成字符串传进 buildLaunchScript
   ok(/buildLaunchScript\(rootfs, dir, env, guest\)/.test(rt), 'buildLaunchScript 收 argv 列表而不是拼接串');
   ok(!/buildLaunchScript\(rootfs, dir, env, guest\.joinToString/.test(rt),
-    '不再把 guest 拼成命令字符串（那正是双层转义的来源）');
+    '不再把 guest 拼成命令字符串（引号配对与 argv 边界都会失真）');
   // ── Bug B：proot 的运行前提必须无条件就位 ──
   // 与 ensureRuntimeFiles 里那条同源：prootBaseArgv() 是全局兜底，chroot/proroot 下也可能 exec proot。
   // 关键：这两行不能再被 if (rt.id() == "proot") 包住
@@ -971,6 +971,27 @@ console.log("\u2500 #16y chroot 启动脚本不得双层转义 + proot 前提无
     'LD_LIBRARY_PATH 写在函数体顶层、不在任何 if 里（实际深度 ' + ldDepth + '；' +
       'chroot/proroot 下回退 proot 也要能找到 libtalloc.so.2）');
   ok(/env\["PROOT_LOADER"\]/.test(applyEnvBody), 'PROOT_LOADER 同样无条件设');
+}
+
+console.log("\u2500 #16z launch.sh 的真凶与启动前自检（issue #12 第三轮）");
+{
+  const rt = read("app/src/main/java/me/bmax/apatch/dsh/ContainerRuntime.kt");
+  const fs2 = read("app/src/main/java/me/bmax/apatch/ui/screen/settings/FunctionSettings.kt");
+  // 真凶：`val mnt = "\${'$'}MNT"` 在**普通字符串**里不是 `$MNT`，而是字面量 `${'$'}MNT` ——
+  // mksh 解析这个字面量会在 EOF 处报 `no closing quote`，而且报的行号是**最后一行 +1**，
+  // 所以三轮排查都被引到「exec 那一行」上去。已用 mksh -n 在真脚本上复现与验证。
+  ok(rt.includes('val mnt = "\\$MNT"'), 'mnt 写成 "\\$MNT"（Kotlin 普通字符串，求值成 $MNT）');
+  // 只看代码行（注释里举例说明这个写法是允许的，别把注释也算成违规）
+  const rtCode = rt.split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+  ok(!rtCode.includes("\\" + "$" + "{'$'}"), '代码里不再出现普通字符串的字面量写法（mksh 会报 no closing quote）');
+  // 启动前自检：写盘后先让设备自己的 shell 过一遍语法，不通过就回退 proot
+  ok(/private fun checkLaunchScript\(launch: File\): String\?/.test(rt), '有 launch.sh 语法自检');
+  ok(/ProcessBuilder\("\/system\/bin\/sh", "-n", launch\.absolutePath\)/.test(rt), '用 /system/bin/sh -n 检查（就是真正解析脚本的那个 shell）');
+  ok(/val syntaxError = checkLaunchScript\(launch\)/.test(rt), 'spawnArgv 返回 argv 之前先自检');
+  ok(/DshRuntime\.appendLog\(/.test(rt) && /已回退 proot/.test(rt), '自检不过：把 shell 原文写进日志并回退 proot');
+  // UI：chroot 加入后 `!= "proroot"` 会让 proot 与 chroot 同时显示选中（真机截图）
+  ok(/selected = runtimeId == "proot"/.test(fs2), 'proot 单选项按 == "proot" 判定');
+  ok(!/selected = runtimeId != "proroot"/.test(fs2), '不再用 != "proroot"（会同时选中两项）');
 }
 
 console.log("\u2500 #17 用户自己也能建/改流程");
