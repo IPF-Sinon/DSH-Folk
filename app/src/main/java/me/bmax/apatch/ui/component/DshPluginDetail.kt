@@ -356,6 +356,18 @@ fun DshPluginProgressDialog(
      * 与插件树无关，提示「重启后生效」是错的。
      */
     needsRestart: Boolean = true,
+    /**
+     * 「停止更新」：真正终止这次操作（取消协程 + 杀掉容器内进程树），不是只把窗口关掉。
+     *
+     * 默认 null = 不显示这颗按钮，备份页这些既有调用方的行为一个字节不变。
+     */
+    onStop: (() -> Unit)? = null,
+    /**
+     * 「隐藏窗口」：只收起对话框，操作继续跑；重新打开的入口由调用方负责（插件页列表顶部那条）。
+     */
+    onHide: (() -> Unit)? = null,
+    /** 这次操作被用户停掉了：标题与「重启后生效」提示都要让开，别把它说成失败或完成。 */
+    stopped: Boolean = false,
 ) {
     val scroll = rememberScrollState()
     // 新日志到达就滚到底，否则用户得一直手动追着滚
@@ -368,6 +380,7 @@ fun DshPluginProgressDialog(
             Text(
                 text = when {
                     running -> stringResource(R.string.dsh_plugin_working_on, target)
+                    stopped -> stringResource(R.string.dsh_plugin_stopped_on, target)
                     failed -> stringResource(R.string.dsh_plugin_failed_on, target)
                     else -> stringResource(R.string.dsh_plugin_done_on, target)
                 },
@@ -379,7 +392,7 @@ fun DshPluginProgressDialog(
                 if (running) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                     Spacer(Modifier.height(12.dp))
-                } else if (!failed && needsRestart) {
+                } else if (!failed && !stopped && needsRestart) {
                     // dsh 只在启动时组合 profile 的 patch 层，不重启新插件不会加载
                     Text(
                         text = stringResource(R.string.dsh_plugin_needs_restart),
@@ -405,13 +418,17 @@ fun DshPluginProgressDialog(
             }
         },
         confirmButton = {
-            // 装成功后主操作是重启 DSH：不重启新插件不会被加载
-            if (!running && !failed && needsRestart) {
-                TextButton(onClick = { onDismiss(); onRestart() }) {
+            when {
+                // 运行中的主操作是「隐藏窗口」：让用户把窗口收走、更新继续跑。
+                // 以前这里只有一颗禁用的「关闭」—— 运行中根本关不掉。
+                running && onHide != null -> TextButton(onClick = onHide) {
+                    Text(stringResource(R.string.dsh_plugin_hide_window))
+                }
+                // 装成功后主操作是重启 DSH：不重启新插件不会被加载
+                !running && !failed && !stopped && needsRestart -> TextButton(onClick = { onDismiss(); onRestart() }) {
                     Text(stringResource(R.string.dsh_plugin_restart_now))
                 }
-            } else {
-                TextButton(onClick = onDismiss, enabled = !running) {
+                else -> TextButton(onClick = onDismiss, enabled = !running) {
                     Text(stringResource(R.string.close))
                 }
             }
@@ -428,7 +445,13 @@ fun DshPluginProgressDialog(
                         modifier = Modifier.size(18.dp),
                     )
                 }
-                if (!running && !failed && needsRestart) {
+                // 停止是破坏性动作：放左侧、与复制日志同一排；它真的会终止容器里正在跑的安装
+                if (running && onStop != null) {
+                    TextButton(onClick = onStop) {
+                        Text(stringResource(R.string.dsh_plugin_stop_update))
+                    }
+                }
+                if (!running && !failed && !stopped && needsRestart) {
                     TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
                 }
             }

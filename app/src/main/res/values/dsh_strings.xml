@@ -371,6 +371,12 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_plugin_failed_on">%1$s failed</string>
     <string name="dsh_plugin_done_on">%1$s finished</string>
     <string name="dsh_plugin_waiting_output">Waiting for output…</string>
+    <!-- 进度窗口的两个用户选项：停止是真的终止容器内进程，隐藏只是收起窗口、更新继续 -->
+    <string name="dsh_plugin_stop_update">Stop update</string>
+    <string name="dsh_plugin_hide_window">Hide window</string>
+    <string name="dsh_plugin_show_progress">Show progress</string>
+    <string name="dsh_plugin_stopped_on">%1$s stopped</string>
+    <string name="dsh_plugin_stopped_log">Stopped at your request. The running install has been terminated inside the container.</string>
     <!-- 搜索无结果（与「目录拉取失败」区分开） -->
     <string name="dsh_plugin_no_match">No plugin matches “%1$s”</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>

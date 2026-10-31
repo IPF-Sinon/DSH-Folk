@@ -112,6 +112,28 @@ must(/fallbackTgz = p\.tarball/.test(store) || /fallbackTgz = plugin\.tarball/.t
 must(/Already up to date/.test(repo) || /空操作/.test(repo),
   'install() 上缺少「pnpm 对已声明依赖是空操作」的说明注释');
 
+// 6. 进度窗口的「停止更新 / 隐藏窗口」（真机反馈：更新窗口既关不掉也停不掉）
+//    「停止」必须真的终止容器里跑的 pnpm / dsh plugin，而不是只把窗口关掉、也不是 cancel 协程了事。
+const rtCode = runtime.split("\n")
+  .map((l) => l.replace(/\/\/.*$/, "").replace(/^\s*\*.*$/, ""))
+  .join("\n");
+must(/fun stopInstall\(\)/.test(vm), "ViewModel 缺 stopInstall()：「停止更新」没有落点");
+must(/DshRuntime\.killPluginOperations\(\)/.test(vm), "「停止更新」没有真的去终止容器里的安装进程");
+must(/fun killPluginOperations\(\)/.test(runtime), "DshRuntime 缺 killPluginOperations()");
+must(/pgrep -f 'pnpm'/.test(runtime) && /DSHFOLK_PLUGIN_STOP_SENTINEL/.test(runtime),
+  "容器侧终止没杀 pnpm，或缺哨兵保护（pgrep -f 会匹配到自己，kill -KILL 先自杀）");
+must(!/pkill\s+-f\s+node/.test(rtCode), "容器侧终止用了裸 pkill -f node（会误杀 agent / 用户的 node）");
+must(/installStopped/.test(vm) && /looksFailed\(raw\)/.test(vm),
+  "停止的收尾没与失败分开：会把半截输出当失败，或把刚好成功的安装说成被停掉");
+must(/fun hideProgress\(\)/.test(vm) && /fun showProgress\(\)/.test(vm),
+  "缺 hideProgress/showProgress：「隐藏窗口」收起来就找不回来了");
+must(/onStop = \{ viewModel\.stopInstall\(\) \}/.test(screen) && /onHide = \{ viewModel\.hideProgress\(\) \}/.test(screen),
+  "进度对话框没有接上 onStop / onHide");
+must(/stopped = viewModel\.installStopped && !viewModel\.installing/.test(screen),
+  "对话框的 stopped 判据不对（运行中会显示成「已停止」）");
+must(/viewModel\.installing && viewModel\.progressHidden/.test(screen),
+  "隐藏后没有「显示进度」入口");
+must(/R\.string\.dsh_plugin_show_progress/.test(screen), "「显示进度」没有走字符串资源");
 if (errors.length) {
   console.error('check-plugin-update FAILED:');
   for (const e of errors) console.error('  ✗ ' + e);

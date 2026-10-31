@@ -450,13 +450,18 @@ internal fun PluginProgressHost(viewModel: DshPluginViewModel) {
         )
     }
 
-    val visible = viewModel.installing || viewModel.installLog.isNotEmpty()
+    // 「隐藏窗口」只是把对话框收起来，操作还在跑 —— 不能因为收起来就把它当成结束
+    val visible = (viewModel.installing || viewModel.installLog.isNotEmpty()) && !viewModel.progressHidden
     if (!visible) return
     DshPluginProgressDialog(
         target = viewModel.installTarget,
         lines = viewModel.installLog,
         running = viewModel.installing,
         failed = viewModel.installFailed,
+        // 停止是用户的意图：只有操作真的结束之后才按「已停止」显示
+        stopped = viewModel.installStopped && !viewModel.installing,
+        onStop = { viewModel.stopInstall() },
+        onHide = { viewModel.hideProgress() },
         onDismiss = { viewModel.dismissInstallLog() },
         onCopy = { clipboard.setText(AnnotatedString(it)) },
         onRestart = {
@@ -566,6 +571,15 @@ private fun DshPluginList(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
+            }
+        }
+        // 窗口被「隐藏窗口」收起来时，这里就是把它叫回来的入口：
+        // 更新还在跑，不能让用户找不到它（以前运行中那颗「关闭」还是禁用的）。
+        if (viewModel.installing && viewModel.progressHidden) {
+            item(key = "plugin-progress-hidden") {
+                TextButton(onClick = { viewModel.showProgress() }) {
+                    Text(stringResource(R.string.dsh_plugin_show_progress))
+                }
             }
         }
         if (builtInVisible) {

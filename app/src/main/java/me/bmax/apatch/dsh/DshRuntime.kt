@@ -2411,6 +2411,31 @@ object DshRuntime : DshRuntimeHost {
         _state.update { it.copy(phase = DshPhase.NOT_READY, pid = null, message = str(R.string.dsh_msg_stopped)) }
     }
 
+    /**
+     * 终止正在跑的插件安装/更新（进度窗口的「停止更新」）。
+     *
+     * 只杀 pnpm 与 `dsh plugin add|remove` 这一类命令行，**绝不裸 pkill node**：proot/chroot
+     * 都不隔离 PID，容器里看得到宿主进程，裸杀会把 agent 或用户自己的 node 一起带走。
+     *
+     * 哨兵字符串的用法与 [stopServer] 同源：这条清理命令自己的 cmdline 里就含 `pnpm`、
+     * `plugin add` 这些字面量，pgrep -f 会把它自己也匹配上（连同 $() 命令替换 fork 出的
+     * 子 shell），必须先按 /proc/<pid>/cmdline 跳过 —— 否则 kill -KILL 会先把自己杀掉，
+     * 真正在跑的安装反而留着。
+     */
+    fun killPluginOperations() {
+        runCatching {
+            execRootfs(
+                ": DSHFOLK_PLUGIN_STOP_SENTINEL; " +
+                "_kill() { for _p in " +
+                "\$(pgrep -f 'pnpm' 2>/dev/null; pgrep -f 'plugin add' 2>/dev/null; " +
+                "pgrep -f 'plugin remove' 2>/dev/null); do " +
+                "grep -qa DSHFOLK_PLUGIN_STOP_SENTINEL \"/proc/\$_p/cmdline\" 2>/dev/null && continue; " +
+                "kill \"\$1\" \"\$_p\" 2>/dev/null; done; }; " +
+                "_kill -TERM; sleep 1; _kill -KILL"
+            ).waitFor(8, TimeUnit.SECONDS)
+        }
+    }
+
     fun uptimeMillis(): Long = if (startedAt == 0L) 0L else System.currentTimeMillis() - startedAt
 
     // ────────────────────────── 日志 ──────────────────────────

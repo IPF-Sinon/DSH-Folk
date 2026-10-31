@@ -149,11 +149,55 @@ class DshPluginViewModel : ViewModel() {
     var installFailed by mutableStateOf(false)
         private set
 
+    /**
+     * 用户点了「停止更新」。
+     *
+     * 与 [installFailed] 分开：停止是用户的意图，不是失败 —— 标题、日志尾巴与「重启后生效」
+     * 的提示都不能按失败/完成来说。
+     */
+    var installStopped by mutableStateOf(false)
+        private set
+
+    /**
+     * 进度窗口被用户收起来了（「隐藏窗口」）。操作继续跑，列表顶部留一条「显示进度」。
+     *
+     * 与 [installing] 分开：收起的是窗口，不是操作。
+     */
+    var progressHidden by mutableStateOf(false)
+        private set
+
+    /**
+     * 「停止更新」：真的终止容器里正在跑的 pnpm / dsh plugin，而不是只把窗口关掉。
+     *
+     * 只置标志、不 cancel 协程：真正让上面那次阻塞读流结束的是容器侧进程被杀（见
+     * [DshRuntime.killPluginOperations]），协程随后自然走到「已停止」的收尾分支。
+     */
+    fun stopInstall() {
+        if (!installing || installStopped) return
+        installStopped = true
+        // 容器侧终止自己也要起一次容器命令，放 IO；不能占主线程
+        viewModelScope.launch(Dispatchers.IO) { runCatching { DshRuntime.killPluginOperations() } }
+    }
+
+    /** 收起进度窗口，操作继续。 */
+    fun hideProgress() {
+        if (!installing) return
+        progressHidden = true
+    }
+
+    /** 从列表顶部把进度窗口叫回来。 */
+    fun showProgress() {
+        if (!installing) return
+        progressHidden = false
+    }
+
     fun dismissInstallLog() {
         if (installing) return
         installLog = emptyList()
         installTarget = ""
         installFailed = false
+        installStopped = false
+        progressHidden = false
     }
 
     /** 插件设置页的开关（key 沿用 FolkPatch 模块页的名字，兼容旧配置）。 */
@@ -460,6 +504,8 @@ class DshPluginViewModel : ViewModel() {
             try {
                 installing = true
                 installFailed = false
+                installStopped = false
+                progressHidden = false
                 installTarget = target
                 installLog = emptyList()
                 // onLine 在容器输出的读线程上被调，不能直接写 Compose 状态，
@@ -476,6 +522,16 @@ class DshPluginViewModel : ViewModel() {
                 // 包名跟规格根本不是一回事，拿规格 remove 会失败）
                 val before = if (verify) withContext(Dispatchers.IO) { DshPluginRepo.bundles() } else emptyList()
                 val raw = action(append)
+                // 用户点了「停止更新」，而且这次**确实没跑完**：按停止收尾，不算失败、
+                // 不提示重启。若恰好在停止的同时正常结束，仍按结果算 —— 不能把一次成功的
+                // 安装说成被停掉。
+                if (installStopped && looksFailed(raw)) {
+                    val msg = apApp.appString(R.string.dsh_plugin_stopped_log)
+                    append("[DSH-Folk] $msg")
+                    lastOutput = msg
+                    installFailed = false
+                    return@launch
+                }
                 var failed = looksFailed(raw)
                 var extra = ""
 
