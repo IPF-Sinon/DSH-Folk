@@ -2091,6 +2091,10 @@ object DshRuntime : DshRuntimeHost {
         restoreAttachmentStore()
         // 归一化到出厂实现后，再打 v3（rename 发布）—— 历史版本的 v1/v2 都会被还原掉，状态确定。
         patchAttachmentStoreV3()
+        // 同类问题在会话持久化上也存在：子会话文件是悬空链接 → Agent Teams 的 spawn_teammate 失败。
+        // 先清理历史悬空项并体检，再把该处的 link 发布换成 rename 发布。
+        sessionStoreDiag()
+        patchSessionPersistence()
         // 让外部浏览器（App 用 Intent 拉起的 Chrome）也能一次登进 dsh web：把会话 cookie 的
         // SameSite=Strict 放宽为 Lax（见 [patchBrowserCookieSameSite]）。每次启动前幂等重打。
         patchBrowserCookieSameSite()
@@ -2239,6 +2243,69 @@ object DshRuntime : DshRuntimeHost {
         }
     }
 
+
+
+    /**
+     * 会话存储体检：扫 `$DSH_HOME/sessions` 下的会话文件，识别并清理**悬空符号链接**。
+     *
+     * 由来（Agent Teams spawn 失败）：子会话目录里有 `session.v4.jsonl.zstd`，`readdir` 列得到，
+     * 但 `open` 报 ENOENT —— 这正是 proroot `--link2symlink` 留下的悬空链接：
+     * 发布时 link 建的是「锚点 + 符号链接组」，锚点（staging 名）被删，目标名就失效。
+     * 悬空项本身没有任何数据（目标已不存在），删掉是安全的；下次该会话会被重新创建。
+     *
+     * 只删**确实打不开**的链接，正常文件与正常链接一律不动。
+     */
+    private fun sessionStoreDiag() {
+        runCatching {
+            val out = execRootfsForOutput("node -e 'const fs=require(\"fs\"),p=require(\"path\");const root=\"/root/.dsh/sessions\";let names=[];try{names=fs.readdirSync(root)}catch(e){console.log(\"sessions-dir-missing\");process.exit(0)}let dirs=0,files=0,sym=0,dang=0;for(const d of names){const dp=p.join(root,d);let st;try{st=fs.lstatSync(dp)}catch(e){continue}if(!st.isDirectory())continue;dirs++;let inner=[];try{inner=fs.readdirSync(dp)}catch(e){continue}for(const f of inner){if(f.indexOf(\"session.\")!==0||f.indexOf(\".jsonl\")<0)continue;const fp=p.join(dp,f);let ls;try{ls=fs.lstatSync(fp)}catch(e){continue}if(!ls.isSymbolicLink()){files++;continue}sym++;let ok=true;try{fs.statSync(fp)}catch(e){ok=false}if(!ok){dang++;try{fs.unlinkSync(fp)}catch(e){}}}}console.log(\"dirs=\"+dirs+\" files=\"+files+\" symlinks=\"+sym+\" danglingRemoved=\"+dang)'", 30_000L)
+            out.lineSequence().filter { it.isNotBlank() }.forEach { appendLog("[session] " + it.trim()) }
+        }
+    }
+
+    /**
+     * 会话持久化补丁：把「link 发布」换成 **rename 发布**。
+     *
+     * `dsh-session-persistence-jsonl` 的 `publishCurrentExclusive` 用 `link(staged, currentPath)`
+     * 把迁移产物发布成正式会话文件；在 proroot 的 l2s 下这是「锚点 + 符号链接组」，
+     * 锚点被清理后目标变悬空，于是「readdir 有、open ENOENT」，Agent Teams 的
+     * `spawn_teammate` 正好卡在这一步（`readPersistedSession` 读不到子会话）。
+     *
+     * 改法：同目录 `rename`（原子、只留一个真名字）；目标若已存在且是**悬空链接**，
+     * 先删掉再 rename；是正常文件则沿用原语义「视为冲突」（返回 false，交给调用方校验）。
+     */
+    private fun patchSessionPersistence() {
+        val target = File(
+            DshEnv.rootfs(appContext),
+            "usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js",
+        )
+        if (!target.isFile) {
+            appendLog("[session] 跳过持久化补丁：找不到 dsh-session-persistence-jsonl/lib/index.js")
+            return
+        }
+        runCatching {
+            val src = target.readText(StandardCharsets.UTF_8)
+            if (src.contains("DSH-Folk: Android/proot 下 link()")) {
+                appendLog("[session] 持久化补丁已在位")
+                return
+            }
+            var out = src.replace("import { link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, stat, truncate } from \"node:fs/promises\";", "import { link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, truncate } from \"node:fs/promises\";")
+            val importOk = out != src
+            val before = out.split("\ttry {\n\t\tawait internals.fs.link(staged, currentPath);\n\t} catch (error) {\n\t\t/* v8 ignore else -- a non-collision filesystem error propagates unchanged. */\n\t\tif (isEEXIST(error)) return false;\n\t\t/* v8 ignore next -- the filesystem error is already complete. */\n\t\tthrow error;\n\t}").size - 1
+            out = out.replace("\ttry {\n\t\tawait internals.fs.link(staged, currentPath);\n\t} catch (error) {\n\t\t/* v8 ignore else -- a non-collision filesystem error propagates unchanged. */\n\t\tif (isEEXIST(error)) return false;\n\t\t/* v8 ignore next -- the filesystem error is already complete. */\n\t\tthrow error;\n\t}", "\t// DSH-Folk: Android/proot 下 link() 是「锚点 + 符号链接组」，删锚点后目标变悬空\n\t//（表现为 readdir 列得出、open 报 ENOENT）。改用同目录 rename 发布，并先清掉悬空目标。\n\ttry {\n\t\tconst existing = await internals.fs.lstat(currentPath);\n\t\tif (!existing.isSymbolicLink()) return false;\n\t\tawait internals.fs.rm(currentPath);\n\t} catch (error) {\n\t\tif (!(error !== void 0 && error.code === \"ENOENT\")) throw error;\n\t}\n\tawait rename(staged, currentPath);")
+            appendLog("[session] 持久化补丁：import=" + importOk + " link-publish=" + before)
+            if (!importOk || before != 1) {
+                appendLog("[session] 持久化补丁不完整，未写回（运行时版本可能变了）")
+                return
+            }
+            val tmp = File(target.parentFile, target.name + ".dshfolk.tmp")
+            tmp.writeText(out, StandardCharsets.UTF_8)
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+            appendLog("[session] 持久化补丁已应用（link 发布改为 rename 发布）")
+        }.onFailure { appendLog("[session] 持久化补丁失败：" + (it.message ?: it.javaClass.simpleName)) }
+    }
 
     /**
      * 把容器里的 `dsh-attachment-local` **还原成上游原始实现**（本版是 A/B 对照构建）。

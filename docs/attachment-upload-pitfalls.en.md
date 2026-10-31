@@ -130,3 +130,17 @@ try{fs.linkSync(a,d+"/p2");console.log("LINK_OK symlink="+fs.lstatSync(d+"/p2").
 4. When upstream compresses errors into one generic message, **install a hook to capture the response body first**; do not guess from the error name.
 5. Idempotent patches need **per-anchor count checks**; skipping on a mismatch is far safer than writing a half-applied patch.
 6. Keep the `[attach]` and `[DSH-Folk upload]` log prefixes — they were the main handle for this investigation.
+## 8. Same class of bug: session files (Agent Teams spawn failure)
+
+The same link-based publishing exists for **session persistence**: `publishCurrentExclusive` in
+`dsh-session-persistence-jsonl` uses `link(staged, currentPath)` to publish `session.v4.jsonl.zstd`.
+Under l2s the result is identical — the child session file **lists but cannot be opened** (dangling link):
+
+```
+spawn_teammate → readPersistedSession → open(child, "read")
+  → ENOENT: .../session.v4.jsonl.zstd
+```
+
+Fix as in §5: publish with `rename`; if the target is a **dangling symlink**, remove it first
+(a real file still means “conflict”). Also scan `sessions/` on startup, count and remove dangling
+entries (log prefix `[session]`) — a dangling entry holds no data, so removing it is safe.

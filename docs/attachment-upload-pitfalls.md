@@ -126,3 +126,16 @@ try{fs.linkSync(a,d+"/p2");console.log("LINK_OK symlink="+fs.lstatSync(d+"/p2").
 4. 上游把错误压成通用文案时，**先装钩子把响应体拿出来**，再谈修复；不要凭报错名字猜。
 5. 幂等补丁要**逐处计数校验**；「片段没匹配上就跳过」比「匹配到半截强行写」安全得多。
 6. 线上日志里 `[attach]` / `[DSH-Folk upload]` 这两类前缀是这次排查的主要抓手，保留它们。
+## 8. 同类问题：会话文件（Agent Teams spawn 失败）
+
+同一套「link 发布」在**会话持久化**上也有：`dsh-session-persistence-jsonl` 的 `publishCurrentExclusive`
+用 `link(staged, currentPath)` 把迁移产物发布成 `session.v4.jsonl.zstd`。
+在 l2s 下后果一模一样 —— 子会话目录里文件**列得出来、打不开**（悬空链接），于是：
+
+```
+spawn_teammate → readPersistedSession → open(child, "read")
+  → ENOENT: .../session.v4.jsonl.zstd
+```
+
+修法同 §5：该处改成 `rename` 发布；目标若是**悬空符号链接**先删掉再 rename（正常文件仍按冲突处理）。
+另外启动时扫一遍 `sessions/`，统计并清理悬空项（日志前缀 `[session]`）—— 悬空项本身没有数据，删掉安全。
