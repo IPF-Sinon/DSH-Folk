@@ -2089,6 +2089,8 @@ object DshRuntime : DshRuntimeHost {
         // 用于判定「md 失败 / 压缩包成功」究竟是补丁引入还是上游 + proroot 本身如此。
         // 对照结果出来后，再决定保留 restoreAttachmentStore 还是 patchAttachmentStore。
         restoreAttachmentStore()
+        // 归一化到出厂实现后，再打 v3（rename 发布）—— 历史版本的 v1/v2 都会被还原掉，状态确定。
+        patchAttachmentStoreV3()
         // 让外部浏览器（App 用 Intent 拉起的 Chrome）也能一次登进 dsh web：把会话 cookie 的
         // SameSite=Strict 放宽为 Lax（见 [patchBrowserCookieSameSite]）。每次启动前幂等重打。
         patchBrowserCookieSameSite()
@@ -2294,8 +2296,77 @@ object DshRuntime : DshRuntimeHost {
             appendLog("[attach] 已还原为上游原始存储实现（本次为 A/B 对照构建）")
         }.onFailure { appendLog("[attach] 还原失败：" + (it.message ?: it.javaClass.simpleName)) }
     }
+
     /**
-     * 给容器里的 `dsh-attachment-local` 打一次 Android 兼容补丁。
+     * 存储补丁 v3：把「硬链接发布」换成 **rename 发布**。
+     *
+     * 真机证据（beta.221 = 上游原始实现，Redmi/Android16/proroot）：
+     *  - 启动体检复现了根因：`LINK_OK symlink=false` 紧接着 `CHMOD_AFTER_UNLINK_FAIL ENOENT`
+     *    —— link 看似成功，但删掉源名（`unlink(staged.path)`）之后，目标名也随之消失；
+     *  - 于是上游固定流程 link → unlink(staging) → chmod(target) 必然 ENOENT，
+     *    整条链最后只剩一句 ATTACHMENT_WRITE_FAILED；
+     *  - 这解释了「以前传过的文件能传、新文件不能」：目标已存在时 link 走 EEXIST 分支、
+     *    不会新建那个会被 unlink 带走的名字，所以只有**旧的、已缓存的对象**能通过。
+     *
+     * 为什么 proroot 下会这样：它带 `--link2symlink`，把硬链接模拟成「锚点 + 符号链接组」，
+     * 锚点（staging 名）被删掉，组里的名字就跟着失效 —— 不是真正的独立目录项。
+     *
+     * 所以不再用 link：同一目录内 `rename` 是原子的、只保留一个名字，不需要硬链接；
+     * 别名（files/<sha>/<name>）改用 `copyFile`（源对象始终在）。四处替换都做计数校验，
+     * 任何一处不是恰好 1 次就**不写回**。
+     */
+    private fun patchAttachmentStoreV3() {
+        val target = File(
+            DshEnv.rootfs(appContext),
+            "usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js",
+        )
+        if (!target.isFile) {
+            appendLog("[attach] 跳过存储补丁：找不到 dsh-attachment-local/lib/index.js")
+            return
+        }
+        runCatching {
+            val src = target.readText(StandardCharsets.UTF_8)
+            if (src.contains("DSH-Folk: rename 已消费")) {
+                appendLog("[attach] 存储补丁 v3 已在位")
+                return
+            }
+            var out = src.replace("import { chmod, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from \"node:fs/promises\";", "import { chmod, copyFile, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from \"node:fs/promises\";")
+            val importOk = out != src
+            fun count(s: String) = out.split(s).size - 1
+            val c1 = count("await link(staged.path, target);")
+            out = out.replace("await link(staged.path, target);", "await rename(staged.path, target);")
+            val c2 = count("await unlink(staged.path);")
+            out = out.replace(
+                "await unlink(staged.path);",
+                "/* DSH-Folk: rename 已消费临时名，不能再 unlink（否则目标会随之消失） */",
+            )
+            val c3 = count("await link(source, target);")
+            // 别名目标可能是历史失败留下的**悬空链接**（l2s 的锚点被删），copyFile 会穿过它再失败；
+            // 先删掉那个名字（不存在就忽略），再复制真实字节。
+            out = out.replace(
+                "await link(source, target);",
+                "try { await unlink(target); } catch (e) { /* DSH-Folk: 历史悬空别名，忽略 */ }\n\t\tawait copyFile(source, target);",
+            )
+            appendLog(
+                "[attach] 存储补丁 v3：import=" + importOk + " link→rename=" + c1 +
+                    " drop-unlink=" + c2 + " alias→copy=" + c3,
+            )
+            if (!importOk || c1 != 1 || c2 != 1 || c3 != 1) {
+                appendLog("[attach] 存储补丁 v3 不完整，未写回（运行时版本可能变了）")
+                return
+            }
+            val tmp = File(target.parentFile, target.name + ".dshfolk.tmp")
+            tmp.writeText(out, StandardCharsets.UTF_8)
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+            appendLog("[attach] 存储补丁 v3 已应用（link+unlink 改为 rename；别名改为 copy）")
+        }.onFailure { appendLog("[attach] 存储补丁 v3 失败：" + (it.message ?: it.javaClass.simpleName)) }
+    }
+
+    /**
+     * 给容器里的 `dsh-attachment-local` 打一次 Android 兼容补丁（v2，历史实验，当前未调用）。
      *
      * 真机实测（issue 反馈，Redmi / Android 16 / proroot）上传附件失败，响应体是
      * `{code:"session/attachment-invalid", reason:"ATTACHMENT_WRITE_FAILED"}` —— 落盘那一步挂了。

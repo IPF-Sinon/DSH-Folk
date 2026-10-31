@@ -68,7 +68,18 @@ for (const [name, text] of [['values/dsh_strings.xml', en], ['values-zh-rCN/dsh_
 // 6. 附件落盘补丁（真机 ATTACHMENT_WRITE_FAILED：硬链接/目录 fsync 在 Android 上被拒）
 {
   ok(/private fun patchAttachmentStore\(\)/.test(runtime), '有 patchAttachmentStore()');
-  ok(/^        restoreAttachmentStore\(\)$/m.test(runtime), '本版（A/B 对照）调用的是还原，不是打补丁');
+  ok(/^        restoreAttachmentStore\(\)$/m.test(runtime), '先在 startServer 里把历史补丁还原（状态确定）');
+  ok(/^        patchAttachmentStoreV3\(\)$/m.test(runtime), '还原之后再打 v3（rename 发布）');
+  ok(/private fun patchAttachmentStoreV3\(\)/.test(runtime), '有 patchAttachmentStoreV3()');
+  ok(/"await link\(staged\.path, target\);"/.test(runtime) &&
+    /"await rename\(staged\.path, target\);"/.test(runtime),
+    'v3 用 rename 取代 link（proroot 的 link 是锚点组，删源名会带走目标）');
+  ok(/"await unlink\(staged\.path\);"/.test(runtime), 'v3 要拿掉紧跟其后的 unlink(staging)');
+  ok(/"await link\(source, target\);"/.test(runtime) && /await copyFile\(source, target\);/.test(runtime),
+    '别名创建改用 copyFile（源对象始终存在）');
+  ok(/await unlink\(target\); \} catch \(e\)/.test(runtime),
+    '复制别名前先删掉可能存在的悬空链接（历史失败留下的，copyFile 会穿过它失败）');
+  ok(/c1 != 1 \|\| c2 != 1 \|\| c3 != 1/.test(runtime), '四替换做计数校验：不是恰好各 1 次就不写回');
   ok(/private fun restoreAttachmentStore\(\)/.test(runtime), '有 restoreAttachmentStore()：把 v1/v2 补丁逐条撤回');
   ok(/out\.contains\("DSH-Folk"\) \|\| out\.contains\("linkOrCopy"\)/.test(runtime) &&
     /还原不完整，未写回/.test(runtime), '还原后残留标记就不写回（宁可不动，也不写坏依赖）');
