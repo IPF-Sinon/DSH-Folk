@@ -65,7 +65,20 @@ for (const [name, text] of [['values/dsh_strings.xml', en], ['values-zh-rCN/dsh_
     name + ' 有上传诊断的标题与摘要');
 }
 
-// 6. 行为：脚本必须能真跑起来（语法错的话钩子永远装不上，而 kt-lint 不查 JS）
+// 6. 附件落盘补丁（真机 ATTACHMENT_WRITE_FAILED：硬链接/目录 fsync 在 Android 上被拒）
+{
+  ok(/private fun patchAttachmentStore\(\)/.test(runtime), '有 patchAttachmentStore()');
+  ok(/^        patchAttachmentStore\(\)$/m.test(runtime), 'startServer 里真的调用（只定义不调用=永远不生效）');
+  ok(/dsh-attachment-local\/lib\/index\.js/.test(runtime), '补丁打在上游 dsh-attachment-local 上');
+  ok(/"await link\(source, target\);"/.test(runtime) && /"await link\(staged\.path, target\);"/.test(runtime),
+    '两处 link 调用点都被改写（漏一处就还有一条路会失败）');
+  ok(/copyFile/.test(runtime) && /linkOrCopy/.test(runtime), '用 link 失败则 copy 的回退');
+  ok(/handle\.sync\(\)\.catch/.test(runtime), '目录 fsync 失败被容忍（不再让整次上传失败）');
+  ok(/if \(src\.contains\("function linkOrCopy\("\)\) return/.test(runtime), '已打过就跳过（幂等，不重复追加）');
+  ok(/LINK_OK/.test(runtime) && /FSYNC_DIR_OK/.test(runtime), '启动体检会实探 link 与目录 fsync（补丁覆盖不了时靠它定位）');
+}
+
+// 7. 行为：脚本必须能真跑起来（语法错的话钩子永远装不上，而 kt-lint 不查 JS）
 {
   const vm = require('vm');
   const ctx = {

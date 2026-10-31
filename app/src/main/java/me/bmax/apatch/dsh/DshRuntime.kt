@@ -2085,6 +2085,9 @@ object DshRuntime : DshRuntimeHost {
         _state.update { it.copy(webToken = null) }
 
         if (lanEnabled()) patchLanHost()
+        // 附件落盘依赖硬链接与目录 fsync，这两样在 Android 上会被 SELinux/文件系统拒 ——
+        // 打一次兼容补丁（与 patchLanHost 同款：每次启动幂等重打，运行时重装后自动回补）。
+        patchAttachmentStore()
         // 让外部浏览器（App 用 Intent 拉起的 Chrome）也能一次登进 dsh web：把会话 cookie 的
         // SameSite=Strict 放宽为 Lax（见 [patchBrowserCookieSameSite]）。每次启动前幂等重打。
         patchBrowserCookieSameSite()
@@ -2188,6 +2191,13 @@ object DshRuntime : DshRuntimeHost {
             val out = execRootfsForOutput(
                 "df -h /root 2>/dev/null | tail -n 1; " +
                     "ls -ld /root/.dsh /root/.dsh/attachments 2>&1; " +
+                    // 直接探两个会在 Android 上被拒的系统调用：硬链接、目录 fsync。
+                    // 上传失败时这段结论能立刻区分「是 link 还是目录 fsync」（补丁覆盖不了的就靠它）。
+                    "node -e 'const fs=require(\"fs\");const d=\"/root/.dsh/attachments/v1/tmp\";" +
+                    "fs.mkdirSync(d,{recursive:true,mode:448});const a=d+\"/p1\";fs.writeFileSync(a,\"x\");" +
+                    "try{fs.linkSync(a,d+\"/p2\");console.log(\"LINK_OK\");fs.unlinkSync(d+\"/p2\")}catch(e){console.log(\"LINK_FAIL \"+e.code)}" +
+                    "try{fs.unlinkSync(a)}catch(e){}" +
+                    "try{const fd=fs.openSync(d,\"r\");fs.fsyncSync(fd);fs.closeSync(fd);console.log(\"FSYNC_DIR_OK\")}catch(e){console.log(\"FSYNC_DIR_FAIL \"+e.code)}' 2>&1; " +
                     // 不用 shell 变量：Kotlin 字符串里的 $ 要转义，写错就变成模板插值（真机 compile 才报）。
                     "if dd if=/dev/zero of=/root/.dsh/attachments/.dshfolk-wtest bs=1k count=8 2>/dev/null; " +
                     "then echo WRITE_OK; rm -f /root/.dsh/attachments/.dshfolk-wtest; else echo WRITE_FAIL; fi",
@@ -2221,6 +2231,67 @@ object DshRuntime : DshRuntimeHost {
                 runCatching { reader.close() }
             }
         }
+    }
+
+    /**
+     * 给容器里的 `dsh-attachment-local` 打一次 Android 兼容补丁。
+     *
+     * 真机实测（issue 反馈，Redmi / Android 16 / proroot）上传附件失败，响应体是
+     * `{code:"session/attachment-invalid", reason:"ATTACHMENT_WRITE_FAILED"}` —— 落盘那一步挂了。
+     * 上游的发布路径是「写临时文件 → **hard link** 到内容寻址的目标 → 逐级 fsync 目录」：
+     *
+     *  - 硬链接：本机探测就是 `AccessDeniedException`（App 私有目录建不了硬链接，见启动日志第一行）；
+     *  - 目录 fsync：部分 Android 内核/文件系统对目录句柄 `sync()` 返回 EINVAL/EPERM。
+     *
+     * 两样任一失败，整个上传就变成一句「ATTACHMENT_WRITE_FAILED」。这里把
+     * 「link」改成「link 失败则 copy」、「目录 fsync 失败忽略」——语义不变（内容相同、
+     * 目录项持久化只是崩溃安全优化），只让它在这类设备上能落盘。
+     *
+     * 与 [patchLanHost] 同款：每次启动幂等重打，运行时重装后自动回补；文件形状变了就跳过并记日志。
+     */
+    private fun patchAttachmentStore() {
+        val target = File(
+            DshEnv.rootfs(appContext),
+            "usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js",
+        )
+        if (!target.isFile) {
+            appendLog("[attach] 跳过存储补丁：找不到 dsh-attachment-local/lib/index.js")
+            return
+        }
+        runCatching {
+            val src = target.readText(StandardCharsets.UTF_8)
+            if (src.contains("function linkOrCopy(")) return
+            var out = src
+            out = out.replace(
+                "import { chmod, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from \"node:fs/promises\";",
+                "import { chmod, copyFile, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from \"node:fs/promises\";",
+            )
+            out = out.replace("await link(source, target);", "await linkOrCopy(source, target);")
+            out = out.replace("await link(staged.path, target);", "await linkOrCopy(staged.path, target);")
+            // 只改 syncDirectory 那一段里的 sync()，不动 stageImmutableObject 里那次（文件本身要真持久化）
+            val sdStart = out.indexOf("async function syncDirectory(path) {")
+            val sdEnd = if (sdStart >= 0) out.indexOf("\n}\n", sdStart) else -1
+            if (sdStart >= 0 && sdEnd > sdStart) {
+                val seg = out.substring(sdStart, sdEnd)
+                out = out.substring(0, sdStart) + seg.replace("await handle.sync();", "await handle.sync().catch(() => {});") +
+                    out.substring(sdEnd)
+            }
+            if (out == src) {
+                appendLog("[attach] 存储补丁未应用：文件片段与预期不符（运行时版本变了？）")
+                return
+            }
+            out += "\n" + "async function linkOrCopy(source, target) {\n" +
+                "\ttry {\n\t\tawait link(source, target);\n\t} catch (error) {\n" +
+                "\t\tif (error instanceof Error && \"code\" in error && error.code === \"EEXIST\") throw error;\n" +
+                "\t\tawait copyFile(source, target);\n\t}\n}\n"
+            val tmp = File(target.parentFile, target.name + ".dshfolk.tmp")
+            tmp.writeText(out, StandardCharsets.UTF_8)
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+            appendLog("[attach] 存储补丁已应用（hardlink → copy 回退 + 目录 fsync 容错）")
+        }.onFailure { appendLog("[attach] 存储补丁失败：" + (it.message ?: it.javaClass.simpleName)) }
     }
 
     /**
