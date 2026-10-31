@@ -1640,6 +1640,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_userscripts_builtin_composer_summary">On touch screens, a bare Enter in the chat box starts a new line instead of sending — send with the send button. Upstream binds Enter/Shift+Enter as read-only shortcuts and phone keyboards have no Shift, so without this you cannot write a multi-line message. Takes effect after a refresh.</string>
     <string name="dsh_userscripts_builtin_a11y">Accessible names for web inputs</string>
     <string name="dsh_userscripts_builtin_a11y_summary">Copies the placeholder a page already shows into aria-label, so the accessibility tree (and the agent a11y text --target) can address web input boxes. Always on.</string>
+    <string name="dsh_userscripts_builtin_upload">Upload diagnostics</string>
+    <string name="dsh_userscripts_builtin_upload_summary">Makes a failed file upload state its real reason in the run log (HTTP status plus the server error code and message). The dsh web UI turns every upload failure into one generic retry card and never records why. This changes nothing about uploading itself; always on.</string>
     <string name="dsh_userscripts_builtin_blob">blob:/data: downloads</string>
     <string name="dsh_userscripts_builtin_blob_summary">WebView never fires the download callback for blob:/data:, so this one reads those links as base64 and hands them to the native side. Always on.</string>
     <string name="dsh_userscripts_installed">Installed</string>

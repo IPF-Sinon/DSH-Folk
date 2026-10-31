@@ -2168,11 +2168,35 @@ object DshRuntime : DshRuntimeHost {
         // 必须跟着更新，否则新加的子命令只存在于提示词里（见 ensureFsBridgeCli 的注释）。
         ensureFsBridgeCli()
         startFsBridge()
+        // 附件存储体检：上传失败最常见的两种原因是「磁盘满」与「DSH_HOME 属主不对」，
+        // 而这两种在运行日志里此前一个字都没有。放在后台跑，不拖慢启动。
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) { attachmentDiag() }
         startedAt = System.currentTimeMillis()
         _state.update { it.copy(phase = DshPhase.STARTING, port = port, message = str(R.string.dsh_msg_starting)) }
     }
 
     /** 逐行转发容器输出到日志（node 重定向到文件是块缓冲，不逐行读日志面板会空白）。 */
+    /**
+     * 附件存储体检：可用空间 / DSH_HOME 属主 / 能否真的写进去。
+     *
+     * 上传失败在 dsh 网页端只有一句「上传失败」，而最常见的原因就是磁盘满与属主不对，
+     * 却要用户开终端敲命令才看得到。这里每次启动顺手记三行（[attach] 前缀），
+     * 任何一份 bugreport 都能直接回答「是不是空间/权限」。
+     */
+    private fun attachmentDiag() {
+        runCatching {
+            val out = execRootfsForOutput(
+                "df -h /root 2>/dev/null | tail -n 1; " +
+                    "ls -ld /root/.dsh /root/.dsh/attachments 2>&1; " +
+                    "f=/root/.dsh/attachments/.dshfolk-wtest; " +
+                    "if dd if=/dev/zero of=\"$f\" bs=1k count=8 2>/dev/null; then echo WRITE_OK; rm -f \"$f\"; " +
+                    "else echo WRITE_FAIL; fi",
+                20_000L,
+            )
+            out.lineSequence().filter { it.isNotBlank() }.forEach { appendLog("[attach] " + it.trim()) }
+        }
+    }
+
     private fun forwardOutput(proc: Process?) {
         if (proc == null) return
         val log = LogStore.named(DshEnv.serverLog(appContext))

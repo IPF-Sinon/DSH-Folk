@@ -613,10 +613,14 @@ class DshWebUiActivity : AppCompatActivity() {
                                         msg: android.webkit.ConsoleMessage?,
                                     ): Boolean {
                                         val m = msg ?: return false
-                                        if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
+                                        // 上传诊断（assets/webui-scripts/file-upload.js 打的固定前缀）
+                                        // 必须在**任何级别**都落日志：那条信息本身就是「为什么失败」，
+                                        // 而它不一定是 error 级别（有的浏览器把 console.error 降级）。
+                                        val uploadDiag = m.message().startsWith("[DSH-Folk upload]")
+                                        if (uploadDiag || m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
                                             val line =
-                                                "page error: " + m.message() + " @" +
-                                                    m.sourceId() + ":" + m.lineNumber()
+                                                (if (uploadDiag) "upload: " else "page error: ") +
+                                                    m.message() + " @" + m.sourceId() + ":" + m.lineNumber()
                                             Log.w(TAG, line)
                                             // 也落进 dsh 日志（随 bugreport 带出来）。logcat 只覆盖最近
                                             // 几分钟、还要看采集时机，而页面报错往往发生在启动那一刻：

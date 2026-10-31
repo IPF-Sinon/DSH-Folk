@@ -439,12 +439,12 @@ ok(/val rules = loopbackOriginRules\(url\)[\s\S]{0,200}addDocumentStartJavaScrip
 {
   const order = [...webScripts.matchAll(/id = "([\w-]+)",[\s\S]{0,200}?asset = "webui-scripts\/([\w.-]+)"/g)]
     .map((m) => m[2]);
-  ok(order.length === 5, `注册表里 5 条内置（${order.join(" → ")}）`);
+  ok(order.length === 6, `注册表里 6 条内置（${order.join(" → ")}）`);
   ok(order[0] === "compat.js", "compat 排第一（它补的 API 别的脚本与页面都要用）");
   ok(order[1] === "inset.js", "inset 排第二（第一帧就要就位，晚一点就是一跳）");
 
   const runAts = [...webScripts.matchAll(/runAt = RunAt\.(\w+)/g)].map((m) => m[1]);
-  ok(runAts.length === 5 && runAts[4] === "END" && runAts.filter((r) => r === "END").length === 1,
+  ok(runAts.length === 6 && runAts[5] === "END" && runAts.filter((r) => r === "END").length === 1,
     `只有 blob 用 RunAt.END（其余 ${runAts.filter((r) => r === "START").length} 条必须 document-start）`);
 
   ok(/if \(!builtinEnabled\(ctx, entry\.id\)\) continue/.test(webScripts),
@@ -452,7 +452,7 @@ ok(/val rules = loopbackOriginRules\(url\)[\s\S]{0,200}addDocumentStartJavaScrip
   ok(/"compat" -> DshWebCompat\.shouldInject\(ctx\)/.test(webScripts) &&
     /"composer" -> DshWebCompat\.enterNewline\(ctx\)/.test(webScripts),
     "有开关的那两条映射到既有 pref（与设置页同一处状态）");
-  ok(/else -> true/.test(webScripts), "其余三条常开（内边距是布局前提，a11y/blob 是补页面缺陷）");
+  ok(/else -> true/.test(webScripts), "其余四条常开（内边距是布局前提，a11y/blob 补页面缺陷，上传诊断补日志）");
 
   // 总开关只该关「导入的」那一档：内置绝不能挂在 masterEnabled 上 ——
   // 一个坏脚本把页面弄白时，内边距/无障碍/兼容垫片还得在。

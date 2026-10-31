@@ -151,6 +151,24 @@ internal object WebScripts {
             asset = "webui-scripts/a11y-labels.js",
         ),
         /**
+         * 上传诊断载体（`assets/webui-scripts/file-upload.js`）。
+         *
+         * dsh 网页端把上传失败吞成一句「上传失败，点击重试」：上传路由即便业务失败也回 HTTP 200，
+         * 真实原因只在响应体 `{ok:false,error:{code,message}}` 里，前端既不显示也不打 console。
+         * 上游为此留了启动前钩子 `window.__DSH_FILE_UPLOAD__ = { fetch }`；装上它就能在失败当下
+         * 把 status / 体积 / 响应体带进 App 运行日志（随 bugreport 出来）。
+         *
+         * **它不是修复**：上传在 App 内 WebView 和外部浏览器同时失败时，病因在容器/服务端，
+         * 这个钩子只负责让下一次失败自带原因。
+         */
+        Entry(
+            id = "file-upload",
+            titleRes = R.string.dsh_userscripts_builtin_upload,
+            summaryRes = R.string.dsh_userscripts_builtin_upload_summary,
+            runAt = RunAt.START,
+            asset = "webui-scripts/file-upload.js",
+        ),
+        /**
          * blob:/data: 下载落地（`assets/webui-scripts/blob-download.js`）。
          *
          * WebView 对这两种 scheme 不会触发 DownloadListener（没有网络请求可拦），所以脚本在

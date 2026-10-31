@@ -70,7 +70,7 @@ function builtin(name) {
   return fs.readFileSync(file, "utf8");
 }
 
-const ASSET_FILES = ["compat.js", "inset.js", "composer.js", "a11y-labels.js", "blob-download.js"];
+const ASSET_FILES = ["compat.js", "inset.js", "composer.js", "a11y-labels.js", "file-upload.js", "blob-download.js"];
 
 console.log("\n── WebUI 兼容垫片：在缺 API 的环境里真跑 ──");
 
@@ -265,7 +265,7 @@ ok(/MODE_OFF -> false/.test(compat), "MODE_OFF 仍然完全尊重用户选择");
 ok(webui.includes("DshWebCompat.shouldNotice"), "Activity 用的是 shouldNotice 而不是旧的 shouldAsk");
 ok(!webui.includes("shouldAsk"), "旧的「先问」路径已彻底移除");
 ok(webui.includes("onConsoleMessage"), "WebChromeClient 接了 onConsoleMessage（页面报错进日志）");
-ok(/onConsoleMessage[\s\S]{0,600}MessageLevel\.ERROR[\s\S]{0,400}Log\.w/.test(webui),
+ok(/onConsoleMessage[\s\S]{0,1600}MessageLevel\.ERROR[\s\S]{0,900}Log\.w\(TAG/.test(webui),
   "页面 JS 报错写进应用日志（1.9.2 那次故障在 bugreport 里一个字都没有）");
 ok(webui.includes("addDocumentStartJavaScript") && webui.includes("DOCUMENT_START_SCRIPT"),
   "注入仍是 document-start（模块求值前），不支持时回落 onPageStarted");
@@ -683,7 +683,7 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
   ok(staleConsts.length === 0,
     "旧的 *_SHIM 常量 / 函数已删除" + (staleConsts.length ? `（还剩 ${staleConsts.join(", ")}）` : ""));
 
-  // 五个内置脚本必须都在，且都进了注册表（注册表 ↔ assets 双射，另一侧在 check-userscripts.js）
+  // 六个内置脚本必须都在，且都进了注册表（注册表 ↔ assets 双射，另一侧在 check-userscripts.js）
   for (const f of ASSET_FILES) {
     const exists = fs.existsSync(path.join(ASSET_DIR, f));
     ok(exists, `assets 里有 ${f}`);
