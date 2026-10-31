@@ -120,6 +120,7 @@ Split by topic under `docs/`:
 - [How It Runs](docs/architecture.en.md) — proot/proroot, rootfs, link2symlink, pnpm, ELF closure and the rest of the run chain
 - [Build & Release Internals](docs/dev-notes.en.md) — app/runtime release workflows, the beta-channel mechanism, why the changelog is a local resource
 - [Automation workflows: pitfalls](docs/workflow-pitfalls.en.md) — the four cross-process layers, approval TTL, skipped branches, seven rounds of Compose canvas gesture/coordinate rework, Kotlin runtime traps (**CC BY 4.0**)
+- [Attachment upload: durable-publish pitfalls on Android / proroot](docs/attachment-upload-pitfalls.en.md) — why “some files upload, new ones do not”: `--link2symlink` anchor groups, upstream link→unlink→chmod publishing, how to collect evidence, and a container-side probe (**CC BY 4.0**)
 
 ## Project Structure
 

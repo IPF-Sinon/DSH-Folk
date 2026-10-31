@@ -2262,6 +2262,13 @@ object DshRuntime : DshRuntimeHost {
         }
         runCatching {
             val src = target.readText(StandardCharsets.UTF_8)
+            // v3 已在位时必须直接跳过：否则会去撤 v3 自己加的 copyFile，
+            // 只是因为下面「残留 DSH-Folk 就不写回」的保护才没出事，但每次启动都会刷一条
+            // 「还原不完整」，日志噪声而且掩盖真正的问题。
+            if (src.contains("DSH-Folk: rename 已消费")) {
+                appendLog("[attach] v3 已在位，跳过还原")
+                return
+            }
             if (!src.contains("DSH-Folk")) {
                 appendLog("[attach] 还原：当前已是上游原始实现，无需处理")
                 return

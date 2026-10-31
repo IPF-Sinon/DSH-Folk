@@ -144,6 +144,7 @@ root / Shizuku / 无线 ADB 都是**可选**的，并且**默认不启用**。DS
 - [它是怎么跑起来的](docs/architecture.md) —— proot/proroot、rootfs、link2symlink、pnpm、ELF 闭包等运行链细节
 - [构建与发布内幕](docs/dev-notes.md) —— 应用/运行时的发布工作流、测试版通道机制、更新说明为什么是本地资源
 - [自动化工作流：踩坑指南](docs/workflow-pitfalls.md) —— 四层跨进程契约、审批 TTL、分支跳过、Compose 画布手势与坐标的七次返工、Kotlin 运行期陷阱（**CC BY 4.0**）
+- [附件上传：Android / proroot 下的落盘踩坑](docs/attachment-upload-pitfalls.md) —— 为什么「有的文件能传、新的不能」：`--link2symlink` 的锚点组、上游 link→unlink→chmod 发布流程、取证方法与本机探针（**CC BY 4.0**）
 
 ## 项目结构
 
