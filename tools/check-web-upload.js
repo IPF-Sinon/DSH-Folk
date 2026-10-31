@@ -70,13 +70,21 @@ for (const [name, text] of [['values/dsh_strings.xml', en], ['values-zh-rCN/dsh_
   ok(/private fun patchAttachmentStore\(\)/.test(runtime), '有 patchAttachmentStore()');
   ok(/^        patchAttachmentStore\(\)$/m.test(runtime), 'startServer 里真的调用（只定义不调用=永远不生效）');
   ok(/dsh-attachment-local\/lib\/index\.js/.test(runtime), '补丁打在上游 dsh-attachment-local 上');
-  ok(/"await link\(source, target\);"/.test(runtime) && /"await link\(staged\.path, target\);"/.test(runtime),
-    '两处 link 调用点都被改写（漏一处就还有一条路会失败）');
-  ok(/copyFile/.test(runtime) && /linkOrCopy/.test(runtime), '用 link 失败则 copy 的回退');
+  ok(/"async function publishStagedObject\(root, target, staged\) \{"/.test(runtime) &&
+    /"async function publishImmutableAlias\(root, source, target, sha256\) \{"/.test(runtime),
+    '发布路径的两处入口都被改写（落盘简化成直接复制；漏一处就还有一条路会失败）');
+  ok(/copyFile\(staged\.path, target\)/.test(runtime) && /copyFile\(source, target\)/.test(runtime),
+    '两条发布路径都用 copyFile 而不是 link（proroot 的 link2symlink 会把 link 变成符号链接，删临时文件后就成了悬空链接）');
   ok(/handle\.sync\(\)\.catch/.test(runtime), '目录 fsync 失败被容忍（不再让整次上传失败）');
-  ok(/if \(src\.contains\("function linkOrCopy\("\)\) return/.test(runtime), '已打过就跳过（幂等，不重复追加）');
+  ok(/if \(src\.contains\("DSH-Folk: Android"\)\) return/.test(runtime), '已打过就跳过（幂等，不重复追加）');
+  ok(/out\.contains\("import \{ chmod, copyFile, link,"\)/.test(runtime),
+    '上一版已打过 v1 的机器也能升级（import 里已有 copyFile 时不能判成 hunk 未命中）');
+  ok(/\[DSH-Folk attach\] publish failed/.test(runtime) && /\[DSH-Folk attach\] alias failed/.test(runtime) &&
+    /\[DSH-Folk attach\] stage failed/.test(runtime),
+    '三个失败点都把底层 errno 打进日志（RemoteError 只带 reason，cause 会被丢掉）');
   ok(/LINK_OK/.test(runtime) && /FSYNC_DIR_OK/.test(runtime), '启动体检会实探 link 与目录 fsync（补丁覆盖不了时靠它定位）');
-  ok(/存储补丁：import=/.test(runtime), '逐个 hunk 报告是否命中（运行时版本变了要一眼看出来，而不是静默不生效）');
+  ok(/存储补丁：import=/.test(runtime) && /" publish="/.test(runtime) && /" alias="/.test(runtime) && /" stage="/.test(runtime),
+    '逐个 hunk 报告是否命中（运行时版本变了要一眼看出来，而不是静默不生效）');
   ok(/存储补丁不完整，未写回/.test(runtime), 'hunk 没全命中就不写回（宁可不动，也不写坏依赖）');
 }
 

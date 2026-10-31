@@ -2195,7 +2195,10 @@ object DshRuntime : DshRuntimeHost {
                     // 上传失败时这段结论能立刻区分「是 link 还是目录 fsync」（补丁覆盖不了的就靠它）。
                     "node -e 'const fs=require(\"fs\");const d=\"/root/.dsh/attachments/v1/tmp\";" +
                     "fs.mkdirSync(d,{recursive:true,mode:448});const a=d+\"/p1\";fs.writeFileSync(a,\"x\");" +
-                    "try{fs.linkSync(a,d+\"/p2\");console.log(\"LINK_OK\");fs.unlinkSync(d+\"/p2\")}catch(e){console.log(\"LINK_FAIL \"+e.code)}" +
+                    "try{fs.linkSync(a,d+\"/p2\");const st=fs.lstatSync(d+\"/p2\");console.log(\"LINK_OK symlink=\"+st.isSymbolicLink());" +
+                    "fs.unlinkSync(a);" +
+                    "try{fs.chmodSync(d+\"/p2\",256);console.log(\"CHMOD_AFTER_UNLINK_OK\")}catch(e){console.log(\"CHMOD_AFTER_UNLINK_FAIL \"+e.code)}" +
+                    "fs.unlinkSync(d+\"/p2\")}catch(e){console.log(\"LINK_FAIL \"+e.code)}" +
                     "try{fs.unlinkSync(a)}catch(e){}" +
                     "try{const fd=fs.openSync(d,\"r\");fs.fsyncSync(fd);fs.closeSync(fd);console.log(\"FSYNC_DIR_OK\")}catch(e){console.log(\"FSYNC_DIR_FAIL \"+e.code)}' 2>&1; " +
                     // 不用 shell 变量：Kotlin 字符串里的 $ 要转义，写错就变成模板插值（真机 compile 才报）。
@@ -2243,9 +2246,14 @@ object DshRuntime : DshRuntimeHost {
      *  - 硬链接：本机探测就是 `AccessDeniedException`（App 私有目录建不了硬链接，见启动日志第一行）；
      *  - 目录 fsync：部分 Android 内核/文件系统对目录句柄 `sync()` 返回 EINVAL/EPERM。
      *
-     * 两样任一失败，整个上传就变成一句「ATTACHMENT_WRITE_FAILED」。这里把
-     * 「link」改成「link 失败则 copy」、「目录 fsync 失败忽略」——语义不变（内容相同、
-     * 目录项持久化只是崩溃安全优化），只让它在这类设备上能落盘。
+     * 第一版补丁（beta.219）只做了「link 失败回退 copy + 目录 fsync 容错」，**没有修好**：
+     * 那次真机探测显示容器里 `LINK_OK` / `FSYNC_DIR_OK`，说明 link 并不报错 —— 但它可能是
+     * proroot 的 `--link2symlink` 悄悄建了一个**符号链接**；紧接着 `unlink(临时文件)` 就让
+     * 那个「目标」变成悬空链接，后面 `chmod`/`digest` 一碰就失败（同样是一句 ATTACHMENT_WRITE_FAILED）。
+     *
+     * 所以第二版不再猜哪一步：把发布整段**简化成直接复制字节**（跳过硬链接、EEXIST 去重、
+     * 目录 fsync 那一整套），并在每个失败点把底层 errno 打进日志
+     * （`[DSH-Folk attach] publish/alias/stage failed: <code> <message>`）——补丁再失效时能一眼看出。
      *
      * 与 [patchLanHost] 同款：每次启动幂等重打，运行时重装后自动回补；文件形状变了就跳过并记日志。
      */
@@ -2260,22 +2268,67 @@ object DshRuntime : DshRuntimeHost {
         }
         runCatching {
             val src = target.readText(StandardCharsets.UTF_8)
-            if (src.contains("function linkOrCopy(")) return
+            // 标记随第一处 hunk 一起写进去，重打时据此判幂等
+            if (src.contains("DSH-Folk: Android")) return
             var out = src
             fun chunk(before: String) = before != out
+
             val b0 = out
             out = out.replace(
                 "import { chmod, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from \"node:fs/promises\";",
                 "import { chmod, copyFile, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from \"node:fs/promises\";",
             )
-            val impOk = chunk(b0)
+            // 上一版（beta.219）可能已经打过 v1 补丁：那时 import 里已有 copyFile，这里要认它，
+            // 否则升级后 hunk 匹配不上 → 整包补丁不写回 → 修复永远到不了已经打过 v1 的设备。
+            val impOk = chunk(b0) || out.contains("import { chmod, copyFile, link,")
+
+            // 落盘策略：既然这台的 link/fsync 单测都 OK、真实链路却失败，就**不再猜具体哪一步**，
+            // 直接把发布简化成「复制字节」——跳过硬链接、EEXIST 去重、目录 fsync 那一整套。
             val b1 = out
-            out = out.replace("await link(source, target);", "await linkOrCopy(source, target);")
-            val link1Ok = chunk(b1)
+            out = out.replace(
+                "async function publishStagedObject(root, target, staged) {",
+                "async function publishStagedObject(root, target, staged) {\n" +
+                    "\t// DSH-Folk: Android 上不折腾硬链接/目录 fsync，直接复制字节。\n" +
+                    "\ttry {\n" +
+                    "\t\tawait ensureDurableDirectory(dirname(target), staged.boundary);\n" +
+                    "\t\tawait copyFile(staged.path, target);\n" +
+                    "\t\tawait removeTemporary(staged.path);\n" +
+                    "\t\treturn;\n" +
+                    "\t} catch (error) {\n" +
+                    "\t\tconsole.error(\"[DSH-Folk attach] publish failed: \" + String(error && error.code) + \" \" + String(error && error.message));\n" +
+                    "\t\tawait removeTemporary(staged.path);\n" +
+                    "\t\tthrow new AttachmentError(\"Unable to persist attachment.\", \"ATTACHMENT_WRITE_FAILED\", { cause: error });\n" +
+                    "\t}",
+            )
+            val pubOk = chunk(b1)
+
             val b2 = out
-            out = out.replace("await link(staged.path, target);", "await linkOrCopy(staged.path, target);")
-            val link2Ok = chunk(b2)
-            // 只改 syncDirectory 那一段里的 sync()，不动 stageImmutableObject 里那次（文件本身要真持久化）
+            out = out.replace(
+                "async function publishImmutableAlias(root, source, target, sha256) {",
+                "async function publishImmutableAlias(root, source, target, sha256) {\n" +
+                    "\ttry {\n" +
+                    "\t\tawait ensureDurableDirectory(dirname(target), await ensureDurableHome(dirname(dirname(resolve(root)))));\n" +
+                    "\t\tawait copyFile(source, target);\n" +
+                    "\t\treturn;\n" +
+                    "\t} catch (error) {\n" +
+                    "\t\tconsole.error(\"[DSH-Folk attach] alias failed: \" + String(error && error.code) + \" \" + String(error && error.message));\n" +
+                    "\t\tthrow new AttachmentError(\"Unable to persist attachment.\", \"ATTACHMENT_WRITE_FAILED\", { cause: error });\n" +
+                    "\t}",
+            )
+            val aliasOk = chunk(b2)
+
+            // 写临时文件那一步失败时，也要把底层 errno 打出来（RemoteError 只带一个 reason，cause 会被丢掉）
+            val b3 = out
+            out = out.replace(
+                "\t\tif (error instanceof AttachmentError || signal?.aborted === true) throw error;\n" +
+                    "\t\tthrow new AttachmentError(\"Unable to persist attachment.\", \"ATTACHMENT_WRITE_FAILED\", { cause: error });",
+                "\t\tif (error instanceof AttachmentError || signal?.aborted === true) throw error;\n" +
+                    "\t\tconsole.error(\"[DSH-Folk attach] stage failed: \" + String(error && error.code) + \" \" + String(error && error.message));\n" +
+                    "\t\tthrow new AttachmentError(\"Unable to persist attachment.\", \"ATTACHMENT_WRITE_FAILED\", { cause: error });",
+            )
+            val stageOk = chunk(b3)
+
+            // 目录 fsync 失败别再上抛（ensureDurableDirectory 内部还会走到它）
             val sdStart = out.indexOf("async function syncDirectory(path) {")
             val sdEnd = if (sdStart >= 0) out.indexOf("\n}\n", sdStart) else -1
             if (sdStart >= 0 && sdEnd > sdStart) {
@@ -2283,23 +2336,23 @@ object DshRuntime : DshRuntimeHost {
                 out = out.substring(0, sdStart) + seg.replace("await handle.sync();", "await handle.sync().catch(() => {});") +
                     out.substring(sdEnd)
             }
-            val fsyncOk = out != src
-            appendLog("[attach] 存储补丁：import=" + impOk + " link1=" + link1Ok + " link2=" + link2Ok + " fsync=" + fsyncOk)
-            if (!impOk || !link1Ok || !link2Ok) {
+            val fsyncOk = chunk(b3)
+
+            appendLog(
+                "[attach] 存储补丁：import=" + impOk + " publish=" + pubOk + " alias=" + aliasOk +
+                    " stage=" + stageOk + " fsync=" + fsyncOk,
+            )
+            if (!impOk || !pubOk || !aliasOk || !stageOk) {
                 appendLog("[attach] 存储补丁不完整，未写回（运行时版本可能变了，等下一版适配）")
                 return
             }
-            out += "\n" + "async function linkOrCopy(source, target) {\n" +
-                "\ttry {\n\t\tawait link(source, target);\n\t} catch (error) {\n" +
-                "\t\tif (error instanceof Error && \"code\" in error && error.code === \"EEXIST\") throw error;\n" +
-                "\t\tawait copyFile(source, target);\n\t}\n}\n"
             val tmp = File(target.parentFile, target.name + ".dshfolk.tmp")
             tmp.writeText(out, StandardCharsets.UTF_8)
             if (!tmp.renameTo(target)) {
                 tmp.copyTo(target, overwrite = true)
                 tmp.delete()
             }
-            appendLog("[attach] 存储补丁已应用（hardlink → copy 回退 + 目录 fsync 容错）")
+            appendLog("[attach] 存储补丁已应用（落盘简化为直接复制 + 失败带 errno）")
         }.onFailure { appendLog("[attach] 存储补丁失败：" + (it.message ?: it.javaClass.simpleName)) }
     }
 
