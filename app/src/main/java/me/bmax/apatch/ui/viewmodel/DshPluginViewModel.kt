@@ -525,11 +525,13 @@ class DshPluginViewModel : ViewModel() {
                 // 用户点了「停止更新」，而且这次**确实没跑完**：按停止收尾，不算失败、
                 // 不提示重启。若恰好在停止的同时正常结束，仍按结果算 —— 不能把一次成功的
                 // 安装说成被停掉。
-                if (installStopped && looksFailed(raw)) {
+                if (installStopped && !succeeded(raw)) {
                     val msg = apApp.appString(R.string.dsh_plugin_stopped_log)
                     append("[DSH-Folk] $msg")
                     lastOutput = msg
                     installFailed = false
+                    // 半途终止可能在插件树里留下半成品：拉一次真实状态回来
+                    refresh()
                     return@launch
                 }
                 var failed = looksFailed(raw)
@@ -598,6 +600,17 @@ class DshPluginViewModel : ViewModel() {
      * 「已安装」但插件其实没进 bundles。找不到标记行时（超时、容器没起来）才退回
      * 关键字匹配。
      */
+    /**
+     * 这次操作明确成功了吗（输出里带 `退出码 0` 标记）。
+     *
+     * 用于区分「用户停止」与「刚好装完」：[looksFailed] 对**空输出**返回 false，
+     * 而用户一点停止就杀进程时输出很可能就是空的 —— 不能据此说成成功。
+     */
+    private fun succeeded(raw: String): Boolean {
+        val marker = raw.lineSequence().lastOrNull { it.startsWith(DshPluginRepo.EXIT_MARKER) } ?: return false
+        return marker.removePrefix(DshPluginRepo.EXIT_MARKER).trim().toIntOrNull() == 0
+    }
+
     private fun looksFailed(out: String): Boolean {
         val marker = out.lineSequence().lastOrNull { it.startsWith(DshPluginRepo.EXIT_MARKER) }
         if (marker != null) {

@@ -123,8 +123,9 @@ must(/fun killPluginOperations\(\)/.test(runtime), "DshRuntime 缺 killPluginOpe
 must(/pgrep -f 'pnpm'/.test(runtime) && /DSHFOLK_PLUGIN_STOP_SENTINEL/.test(runtime),
   "容器侧终止没杀 pnpm，或缺哨兵保护（pgrep -f 会匹配到自己，kill -KILL 先自杀）");
 must(!/pkill\s+-f\s+node/.test(rtCode), "容器侧终止用了裸 pkill -f node（会误杀 agent / 用户的 node）");
-must(/installStopped/.test(vm) && /looksFailed\(raw\)/.test(vm),
-  "停止的收尾没与失败分开：会把半截输出当失败，或把刚好成功的安装说成被停掉");
+must(/installStopped && !succeeded\(raw\)/.test(vm),
+  "停止的判据不对：空输出（一点停止就杀）会被当成成功，「刚好装完」也没被区分");
+must(/private fun succeeded\(raw: String\): Boolean/.test(vm), "缺 succeeded()：无法区分「用户停止」与「刚好装完」");
 must(/fun hideProgress\(\)/.test(vm) && /fun showProgress\(\)/.test(vm),
   "缺 hideProgress/showProgress：「隐藏窗口」收起来就找不回来了");
 must(/onStop = \{ viewModel\.stopInstall\(\) \}/.test(screen) && /onHide = \{ viewModel\.hideProgress\(\) \}/.test(screen),
