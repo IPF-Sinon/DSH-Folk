@@ -24,9 +24,13 @@ ok(/existing\.isSymbolicLink\(\)/.test(runtime) && /await internals\.fs\.rm\(cur
   '目标若是悬空符号链接，先删掉再 rename（否则旧悬空项会一直挡住）');
 ok(/before != 1/.test(runtime) && /持久化补丁不完整，未写回/.test(runtime),
   '片段不是恰好 1 次就不写回');
-ok(/private fun sessionStoreDiag\(\)/.test(runtime), '有 sessionStoreDiag() 体检');
-ok(/^        sessionStoreDiag\(\)$/m.test(runtime), 'startServer 里调用体检');
-ok(/danglingRemoved/.test(runtime), '体检会统计并清理悬空项（日志可判定是不是符号链接问题）');
+ok(/private fun sessionStoreDeepDiag\(\)/.test(runtime), '有 sessionStoreDeepDiag() 体检（两层：sessions/<cwd>/<id>/file）');
+ok(/^        sessionStoreDeepDiag\(\)$/m.test(runtime), 'startServer 里调用体检');
+ok(/danglingRemoved/.test(runtime) && /locks=/.test(runtime),
+  '体检统计文件/锁/符号链接/悬空项（可判定是链接问题还是根本没有文件）');
+ok(/private fun patchAgentTeamDiag\(\)/.test(runtime) && /^        patchAgentTeamDiag\(\)$/m.test(runtime),
+  '有并调用 Agent Teams 诊断补丁');
+ok(/\[DSH-Folk team\] spawn failed/.test(runtime), '失败时把 AggregateError 的成员完整打进日志');
 ok(/\[session\] /.test(runtime), '体检与补丁都用 [session] 前缀落日志');
 
 if (failures > 0) { console.error('check-session-store FAILED: ' + failures + ' 项'); process.exit(1); }

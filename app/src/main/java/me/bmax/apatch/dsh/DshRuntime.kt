@@ -2093,8 +2093,9 @@ object DshRuntime : DshRuntimeHost {
         patchAttachmentStoreV3()
         // 同类问题在会话持久化上也存在：子会话文件是悬空链接 → Agent Teams 的 spawn_teammate 失败。
         // 先清理历史悬空项并体检，再把该处的 link 发布换成 rename 发布。
-        sessionStoreDiag()
+        sessionStoreDeepDiag()
         patchSessionPersistence()
+        patchAgentTeamDiag()
         // 让外部浏览器（App 用 Intent 拉起的 Chrome）也能一次登进 dsh web：把会话 cookie 的
         // SameSite=Strict 放宽为 Lax（见 [patchBrowserCookieSameSite]）。每次启动前幂等重打。
         patchBrowserCookieSameSite()
@@ -2260,6 +2261,63 @@ object DshRuntime : DshRuntimeHost {
             val out = execRootfsForOutput("node -e 'const fs=require(\"fs\"),p=require(\"path\");const root=\"/root/.dsh/sessions\";let names=[];try{names=fs.readdirSync(root)}catch(e){console.log(\"sessions-dir-missing\");process.exit(0)}let dirs=0,files=0,sym=0,dang=0;for(const d of names){const dp=p.join(root,d);let st;try{st=fs.lstatSync(dp)}catch(e){continue}if(!st.isDirectory())continue;dirs++;let inner=[];try{inner=fs.readdirSync(dp)}catch(e){continue}for(const f of inner){if(f.indexOf(\"session.\")!==0||f.indexOf(\".jsonl\")<0)continue;const fp=p.join(dp,f);let ls;try{ls=fs.lstatSync(fp)}catch(e){continue}if(!ls.isSymbolicLink()){files++;continue}sym++;let ok=true;try{fs.statSync(fp)}catch(e){ok=false}if(!ok){dang++;try{fs.unlinkSync(fp)}catch(e){}}}}console.log(\"dirs=\"+dirs+\" files=\"+files+\" symlinks=\"+sym+\" danglingRemoved=\"+dang)'", 30_000L)
             out.lineSequence().filter { it.isNotBlank() }.forEach { appendLog("[session] " + it.trim()) }
         }
+    }
+
+
+    /**
+     * 会话存储**深层**体检（sessions/<cwd>/<sessionId>/file 是两层）。
+     *
+     * 上一版只扫了一层，把 cwd 目录当成会话目录数，因此报出 `files=0`（实际文件在第二层）。
+     * 这里递归两层，统计：会话目录数、正常日志文件、session.lock、符号链接、以及**确实打不开**的悬空链接
+     * （悬空 = 目标已不存在；无数据，删除安全）。日志前缀 `[session]`。
+     */
+    private fun sessionStoreDeepDiag() {
+        runCatching {
+            val out = execRootfsForOutput("node -e 'const fs=require(\"fs\"),p=require(\"path\");const root=\"/root/.dsh/sessions\";let names=[];try{names=fs.readdirSync(root)}catch(e){console.log(\"sessions-dir-missing\");process.exit(0)}let dirs=0,files=0,locks=0,sym=0,dang=0;function scan(dp,depth){let inner=[];try{inner=fs.readdirSync(dp)}catch(e){return}for(const f of inner){const fp=p.join(dp,f);let ls;try{ls=fs.lstatSync(fp)}catch(e){continue}if(ls.isDirectory()){if(depth<2)scan(fp,depth+1);continue}if(f===\"session.lock\"){locks++;continue}if(f.indexOf(\"session.\")!==0||f.indexOf(\".jsonl\")<0)continue;if(!ls.isSymbolicLink()){files++;continue}sym++;let ok=true;try{fs.statSync(fp)}catch(e){ok=false}if(!ok){dang++;try{fs.unlinkSync(fp)}catch(e){}}}}for(const d of names){const dp=p.join(root,d);let st;try{st=fs.lstatSync(dp)}catch(e){continue}if(st.isDirectory()){dirs++;scan(dp,1)}}console.log(\"dirs=\"+dirs+\" files=\"+files+\" locks=\"+locks+\" symlinks=\"+sym+\" danglingRemoved=\"+dang)'", 40_000L)
+            out.lineSequence().filter { it.isNotBlank() }.forEach { appendLog("[session] " + it.trim()) }
+        }
+    }
+
+    /**
+     * Agent Teams 的失败诊断：把 `spawn_teammate` 的**完整错误链**打进日志。
+     *
+     * 现象：工具只回一句 `teammate creation and durable failure recording both failed`，
+     * 而真正的原因（子会话打开失败 / 锁失败 / 目录项问题）藏在 AggregateError 的成员里，
+     * 既不在 dsh.log，也不在工具返回值里 —— 于是只能猜。
+     *
+     * 这里在抛出 AggregateError 之前，把两个成员各自打印：`code` + `message` + `stack` 前三行。
+     * 前缀 `[DSH-Folk team]`，只加日志，不改行为。
+     */
+    private fun patchAgentTeamDiag() {
+        val target = File(
+            DshEnv.rootfs(appContext),
+            "usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-experimental-agent-team/lib/index.js",
+        )
+        if (!target.isFile) {
+            appendLog("[team] 跳过诊断补丁：找不到 dsh-experimental-agent-team/lib/index.js")
+            return
+        }
+        runCatching {
+            val src = target.readText(StandardCharsets.UTF_8)
+            if (src.contains("[DSH-Folk team]")) {
+                appendLog("[team] 诊断补丁已在位")
+                return
+            }
+            val hits = src.split("\t\t\t} catch (recordError) {\n\t\t\t\tthrow new AggregateError([error, recordError], \"teammate creation and durable failure recording both failed\");\n\t\t\t}").size - 1
+            val out = src.replace("\t\t\t} catch (recordError) {\n\t\t\t\tthrow new AggregateError([error, recordError], \"teammate creation and durable failure recording both failed\");\n\t\t\t}", "\t\t\t} catch (recordError) {\n\t\t\t\tconsole.error(\"[DSH-Folk team] spawn failed: \" + [error, recordError].map((e) => String((e && e.code) || \"\") + \" \" + String((e && e.message) || e) + \" | \" + String((e && e.stack) || \"\").split(\"\\n\").slice(0, 3).join(\" / \")).join(\" ;; \"));\n\t\t\t\tthrow new AggregateError([error, recordError], \"teammate creation and durable failure recording both failed\");\n\t\t\t}")
+            appendLog("[team] 诊断补丁：anchor=" + hits)
+            if (hits != 1) {
+                appendLog("[team] 诊断补丁锚点不唯一，未写回")
+                return
+            }
+            val tmp = File(target.parentFile, target.name + ".dshfolk.tmp")
+            tmp.writeText(out, StandardCharsets.UTF_8)
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+            appendLog("[team] 诊断补丁已应用（失败时打印完整错误链）")
+        }.onFailure { appendLog("[team] 诊断补丁失败：" + (it.message ?: it.javaClass.simpleName)) }
     }
 
     /**
