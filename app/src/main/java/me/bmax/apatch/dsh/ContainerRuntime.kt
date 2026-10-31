@@ -349,8 +349,19 @@ interface ContainerRuntime {
             // 才表示字面量 `$`）。mksh 解析这个字面量会在 EOF 处报 `no closing quote` ——
             // 那正是 issue #12 的真凶。
             val mnt = "\$MNT"
-            val storage = storageBinds(ctx).joinToString("\n") { (host, g) ->
-                "mkdir -p \"$mnt$g\" && mount --bind ${shellQuote(host)} \"$mnt$g\" 2>/dev/null"
+            val uid = ctx.applicationInfo.uid
+            // 存储与工作区**两套**挂载都要：proot/proroot 两条路都有，chroot 之前只挂了存储，
+            // 「在工作区里挂手机存储」在 chroot 下等于没做（真机表现：新建工作区后列目录 ENOENT）。
+            val binds = ArrayList<Pair<String, String>>()
+            binds += storageBinds(ctx)
+            binds += workspaceBinds(ctx)
+            val mountLines = binds.joinToString("\n") { (host, g) ->
+                val target = "$mnt$g"
+                "mkdir -p \"$target\" && mount --bind ${shellQuote(host)} \"$target\" || " +
+                    "echo " + shellQuote("[DSH-Folk] chroot 挂载失败: $host -> $g")
+            }
+            val unmountLines = binds.map { it.second }.distinct().reversed().joinToString("\n") {
+                "  umount -l \"$mnt$it\" 2>/dev/null"
             }
             // 环境只收不含空格/单引号的项：脚本里用单引号包住 k=v，含这些字符会破坏引号
             val envLine = env.entries
@@ -363,17 +374,39 @@ interface ContainerRuntime {
             script.append("# DSH-Folk chroot 启动器（App 生成，勿手改）\n")
             script.append("RFS=").append(shellQuote(rootfs.absolutePath)).append('\n')
             script.append("MNT=").append(shellQuote(File(dir, "mnt").absolutePath)).append('\n')
+            script.append("APP_UID=").append(uid).append('\n')
+            script.append("APP_GID=").append(uid).append('\n')
             script.append("cleanup() {\n")
-            script.append("  for d in \"$mnt/dev\" \"$mnt/proc\" \"$mnt/sys\"; do umount -l \"\$d\" 2>/dev/null; done\n")
+            script.append("  for d in \"$mnt/sys\" \"$mnt/proc\" \"$mnt/dev\"; do umount -l \"\$d\" 2>/dev/null; done\n")
+            if (unmountLines.isNotEmpty()) script.append(unmountLines).append('\n')
+            script.append("  umount -l \"$mnt\" 2>/dev/null\n")
             script.append("}\n")
             script.append("trap cleanup EXIT INT TERM\n")
+            // Android 应用进程的 umask 是 077，而这里是**真 root**：照它建出来的挂载点是 0700
+            // root 拥有，切回 proot（进程是 App uid）时连穿都穿不过去。umask 000 让本脚本与它
+            // 拉起的容器写出的文件对 App uid 可读写（外层目录是 App 私有的 0700，不对外暴露）。
+            script.append("umask 000\n")
             script.append("mkdir -p \"$mnt\" || exit 90\n")
-            script.append("mount -t tmpfs tmpfs \"$mnt\" || exit 91\n")
+            script.append("chmod 0777 \"$mnt\" 2>/dev/null\n")
+            // **不能**无条件再叠一层 tmpfs：服务运行期间 App 还会起短命的 chroot 子命令
+            // （插件操作、工作区检查等），叠一层会把正在跑的容器里的 /dev、/proc、/sdcard
+            // 全部盖掉 —— 真机表现就是「工作区里列目录 ENOENT」。
+            script.append("if ! grep -qs \" $mnt \" /proc/mounts; then\n")
+            script.append("  mount -t tmpfs tmpfs \"$mnt\" || exit 91\n")
+            script.append("fi\n")
             script.append("mkdir -p \"$mnt/dev\" \"$mnt/proc\" \"$mnt/sys\"\n")
             script.append("mount --bind /dev \"$mnt/dev\" || exit 92\n")
             script.append("mount -t proc proc \"$mnt/proc\" || exit 93\n")
             script.append("mount --bind /sys \"$mnt/sys\" 2>/dev/null\n")
-            if (storage.isNotEmpty()) script.append(storage).append('\n')
+            if (mountLines.isNotEmpty()) script.append(mountLines).append('\n')
+            // 之前以真 root 跑过的话，容器数据是 root 拥有 + umask 077 → 文件 0600、目录 0700，
+            // 切回 proot 立刻 EACCES（真机：/root/.dsh/profiles/web/cordis.patch.yml）。修回 App uid。
+            // `find -user` 是主判据（干净时只是一次遍历）；万一 toybox 的 find 不认识它，
+            // 也不能因此漏掉修复 —— 退化成无条件 chown 一次。
+            script.append("if ! command -v find >/dev/null 2>&1 ||\n")
+            script.append("   [ -n \"\$(find \"\$RFS/root\" ! -user \"\$APP_UID\" 2>/dev/null | head -n 1)\" ]; then\n")
+            script.append("  chown -R \"\$APP_UID:\$APP_GID\" \"\$RFS/root\" \"\$RFS/tmp\" \"\$RFS/usr/local\" 2>/dev/null\n")
+            script.append("fi\n")
             // guest argv 交给脚本位置参数；`--` 防止某项以 `-` 开头时被 set 当选项
             script.append("set -- ").append(guestArgs).append('\n')
             // 进 chroot 执行：env -i 起干净环境，再逐个喂我们这份，最后摊开 "$@"

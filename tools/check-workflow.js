@@ -989,6 +989,13 @@ console.log("\u2500 #16z launch.sh 的真凶与启动前自检（issue #12 第�
   ok(/ProcessBuilder\("\/system\/bin\/sh", "-n", launch\.absolutePath\)/.test(rt), '用 /system/bin/sh -n 检查（就是真正解析脚本的那个 shell）');
   ok(/val syntaxError = checkLaunchScript\(launch\)/.test(rt), 'spawnArgv 返回 argv 之前先自检');
   ok(/DshRuntime\.appendLog\(/.test(rt) && /已回退 proot/.test(rt), '自检不过：把 shell 原文写进日志并回退 proot');
+  // ── 跨运行时互操作 + 挂载（真机：切回 proot 后 /root/.dsh/... EACCES；工作区列目录 ENOENT）──
+  ok(/^\s*binds \+= storageBinds\(ctx\)/m.test(rt) && /^\s*binds \+= workspaceBinds\(ctx\)/m.test(rt),
+    "chroot 同时挂「存储」与「工作区」（proot/proroot 都有；缺工作区就是新建工作区 ENOENT）");
+  ok(rt.includes("挂载失败"), "挂载失败写进日志（不再 2>/dev/null 吞掉，否则只看到 ENOENT）");
+  ok(rt.includes("/proc/mounts"), "tmpfs 幂等：已在挂载中就不叠第二层（否则盖掉运行中容器的 /dev /proc /sdcard）");
+  ok(rt.includes("umask 000"), "真 root + Android 应用 umask 077 的组合必须显式改 umask，否则文件是 root 0600");
+  ok(rt.includes("chown -R") && rt.includes("APP_GID"), "把历史 root 拥有的容器数据修回 App uid（否则切回 proot 必 EACCES）");
   // UI：chroot 加入后 `!= "proroot"` 会让 proot 与 chroot 同时显示选中（真机截图）
   ok(/selected = runtimeId == "proot"/.test(fs2), 'proot 单选项按 == "proot" 判定');
   ok(!/selected = runtimeId != "proroot"/.test(fs2), '不再用 != "proroot"（会同时选中两项）');
