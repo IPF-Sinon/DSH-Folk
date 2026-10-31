@@ -65,5 +65,21 @@ for (const [name, text] of [['values/dsh_strings.xml', en], ['values-zh-rCN/dsh_
     name + ' 有上传诊断的标题与摘要');
 }
 
+// 6. 行为：脚本必须能真跑起来（语法错的话钩子永远装不上，而 kt-lint 不查 JS）
+{
+  const vm = require('vm');
+  const ctx = {
+    console: { error: () => {} },
+    fetch: async () => ({ status: 200, clone: () => ({ text: async () => '{}' }) }),
+  };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  let err = null;
+  try { vm.runInContext(asset, ctx); } catch (e) { err = e; }
+  ok(err === null, '注入脚本可执行' + (err ? '（' + err.message + '）' : ''));
+  ok(ctx.__DSH_FILE_UPLOAD__ && typeof ctx.__DSH_FILE_UPLOAD__.fetch === 'function',
+    '装上后 __DSH_FILE_UPLOAD__.fetch 可调用');
+}
+
 if (failures > 0) { console.error('check-web-upload FAILED: ' + failures + ' 项'); process.exit(1); }
 console.log('check-web-upload: 通过');
