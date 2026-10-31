@@ -2262,12 +2262,19 @@ object DshRuntime : DshRuntimeHost {
             val src = target.readText(StandardCharsets.UTF_8)
             if (src.contains("function linkOrCopy(")) return
             var out = src
+            fun chunk(before: String) = before != out
+            val b0 = out
             out = out.replace(
                 "import { chmod, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from \"node:fs/promises\";",
                 "import { chmod, copyFile, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from \"node:fs/promises\";",
             )
+            val impOk = chunk(b0)
+            val b1 = out
             out = out.replace("await link(source, target);", "await linkOrCopy(source, target);")
+            val link1Ok = chunk(b1)
+            val b2 = out
             out = out.replace("await link(staged.path, target);", "await linkOrCopy(staged.path, target);")
+            val link2Ok = chunk(b2)
             // 只改 syncDirectory 那一段里的 sync()，不动 stageImmutableObject 里那次（文件本身要真持久化）
             val sdStart = out.indexOf("async function syncDirectory(path) {")
             val sdEnd = if (sdStart >= 0) out.indexOf("\n}\n", sdStart) else -1
@@ -2276,8 +2283,10 @@ object DshRuntime : DshRuntimeHost {
                 out = out.substring(0, sdStart) + seg.replace("await handle.sync();", "await handle.sync().catch(() => {});") +
                     out.substring(sdEnd)
             }
-            if (out == src) {
-                appendLog("[attach] 存储补丁未应用：文件片段与预期不符（运行时版本变了？）")
+            val fsyncOk = out != src
+            appendLog("[attach] 存储补丁：import=" + impOk + " link1=" + link1Ok + " link2=" + link2Ok + " fsync=" + fsyncOk)
+            if (!impOk || !link1Ok || !link2Ok) {
+                appendLog("[attach] 存储补丁不完整，未写回（运行时版本可能变了，等下一版适配）")
                 return
             }
             out += "\n" + "async function linkOrCopy(source, target) {\n" +

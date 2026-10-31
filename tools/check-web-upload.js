@@ -76,6 +76,8 @@ for (const [name, text] of [['values/dsh_strings.xml', en], ['values-zh-rCN/dsh_
   ok(/handle\.sync\(\)\.catch/.test(runtime), '目录 fsync 失败被容忍（不再让整次上传失败）');
   ok(/if \(src\.contains\("function linkOrCopy\("\)\) return/.test(runtime), '已打过就跳过（幂等，不重复追加）');
   ok(/LINK_OK/.test(runtime) && /FSYNC_DIR_OK/.test(runtime), '启动体检会实探 link 与目录 fsync（补丁覆盖不了时靠它定位）');
+  ok(/存储补丁：import=/.test(runtime), '逐个 hunk 报告是否命中（运行时版本变了要一眼看出来，而不是静默不生效）');
+  ok(/存储补丁不完整，未写回/.test(runtime), 'hunk 没全命中就不写回（宁可不动，也不写坏依赖）');
 }
 
 // 7. 行为：脚本必须能真跑起来（语法错的话钩子永远装不上，而 kt-lint 不查 JS）
