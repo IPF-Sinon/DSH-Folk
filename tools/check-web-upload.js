@@ -50,6 +50,14 @@ ok(/\[attach\] /.test(runtime), '体检结果带 [attach] 前缀');
 ok(/WRITE_OK/.test(runtime) && /df -h \/root/.test(runtime), '体检真的看空间与写入（不是只打一行结论）');
 ok(/^        scope\.launch\(kotlinx\.coroutines\.Dispatchers\.IO\) \{ attachmentDiag\(\) \}$/m.test(runtime),
   'startServer 里后台调用（不拖慢启动）');
+{
+  // 这条是 CI 真红过一次的教训：Kotlin 普通字符串里的 $ 就是模板插值，
+  // 写 "of=\"$f\"" 会变成「Unresolved reference 'f'」，而本地 kt-lint 只看词法闭合、查不出来。
+  const i = runtime.indexOf("private fun attachmentDiag");
+  const j = runtime.indexOf("private fun forwardOutput", i);
+  const code = runtime.slice(i, j).split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+  ok(i > 0 && j > i && !/\$/.test(code), 'attachmentDiag 的命令串里没有未转义的 $（否则 Kotlin 当成模板，CI 才报）');
+}
 
 // 5. 中英文案都在
 for (const [name, text] of [['values/dsh_strings.xml', en], ['values-zh-rCN/dsh_strings.xml', zh]]) {

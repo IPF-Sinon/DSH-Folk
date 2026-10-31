@@ -2188,9 +2188,9 @@ object DshRuntime : DshRuntimeHost {
             val out = execRootfsForOutput(
                 "df -h /root 2>/dev/null | tail -n 1; " +
                     "ls -ld /root/.dsh /root/.dsh/attachments 2>&1; " +
-                    "f=/root/.dsh/attachments/.dshfolk-wtest; " +
-                    "if dd if=/dev/zero of=\"$f\" bs=1k count=8 2>/dev/null; then echo WRITE_OK; rm -f \"$f\"; " +
-                    "else echo WRITE_FAIL; fi",
+                    // 不用 shell 变量：Kotlin 字符串里的 $ 要转义，写错就变成模板插值（真机 compile 才报）。
+                    "if dd if=/dev/zero of=/root/.dsh/attachments/.dshfolk-wtest bs=1k count=8 2>/dev/null; " +
+                    "then echo WRITE_OK; rm -f /root/.dsh/attachments/.dshfolk-wtest; else echo WRITE_FAIL; fi",
                 20_000L,
             )
             out.lineSequence().filter { it.isNotBlank() }.forEach { appendLog("[attach] " + it.trim()) }
