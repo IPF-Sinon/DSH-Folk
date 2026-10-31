@@ -2085,9 +2085,10 @@ object DshRuntime : DshRuntimeHost {
         _state.update { it.copy(webToken = null) }
 
         if (lanEnabled()) patchLanHost()
-        // 附件落盘依赖硬链接与目录 fsync，这两样在 Android 上会被 SELinux/文件系统拒 ——
-        // 打一次兼容补丁（与 patchLanHost 同款：每次启动幂等重打，运行时重装后自动回补）。
-        patchAttachmentStore()
+        // A/B 对照构建：本版**不**打存储补丁，而是把已打上的补丁还原成上游原始实现，
+        // 用于判定「md 失败 / 压缩包成功」究竟是补丁引入还是上游 + proroot 本身如此。
+        // 对照结果出来后，再决定保留 restoreAttachmentStore 还是 patchAttachmentStore。
+        restoreAttachmentStore()
         // 让外部浏览器（App 用 Intent 拉起的 Chrome）也能一次登进 dsh web：把会话 cookie 的
         // SameSite=Strict 放宽为 Lax（见 [patchBrowserCookieSameSite]）。每次启动前幂等重打。
         patchBrowserCookieSameSite()
@@ -2236,6 +2237,63 @@ object DshRuntime : DshRuntimeHost {
         }
     }
 
+
+    /**
+     * 把容器里的 `dsh-attachment-local` **还原成上游原始实现**（本版是 A/B 对照构建）。
+     *
+     * 背景：beta.220 的「直接复制」补丁让部分上传仍失败，日志给出的是
+     * `publish failed: ENOENT copyfile .../v1/tmp/<uuid> -> .../v1/file-objects/...`。
+     * 为了区分「补丁引入」与「上游/proroot 本身如此」，这一版**不修补丁**，改为把
+     * 已经打上的补丁逐条撤销（v1 的 linkOrCopy 与 v2 的复制短路都要撤），让设备回到出厂实现。
+     *
+     * 逐条撤销、逐条校验：只要还残留 `DSH-Folk` 标记就**不写回**（宁可不动，也不写坏依赖）。
+     * 与 [patchAttachmentStore] 成对存在，后续拿到对照结果后决定保留哪一个。
+     */
+    private fun restoreAttachmentStore() {
+        val target = File(
+            DshEnv.rootfs(appContext),
+            "usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js",
+        )
+        if (!target.isFile) {
+            appendLog("[attach] 还原跳过：找不到 dsh-attachment-local/lib/index.js")
+            return
+        }
+        runCatching {
+            val src = target.readText(StandardCharsets.UTF_8)
+            if (!src.contains("DSH-Folk")) {
+                appendLog("[attach] 还原：当前已是上游原始实现，无需处理")
+                return
+            }
+            var out = src
+            out = out.replace("async function publishStagedObject(root, target, staged) {\n\t// DSH-Folk: Android 上不折腾硬链接/目录 fsync，直接复制字节。\n\ttry {\n\t\tawait ensureDurableDirectory(dirname(target), staged.boundary);\n\t\tawait copyFile(staged.path, target);\n\t\tawait removeTemporary(staged.path);\n\t\treturn;\n\t} catch (error) {\n\t\tconsole.error(\"[DSH-Folk attach] publish failed: \" + String(error && error.code) + \" \" + String(error && error.message));\n\t\tawait removeTemporary(staged.path);\n\t\tthrow new AttachmentError(\"Unable to persist attachment.\", \"ATTACHMENT_WRITE_FAILED\", { cause: error });\n\t}", "async function publishStagedObject(root, target, staged) {")
+            out = out.replace("async function publishImmutableAlias(root, source, target, sha256) {\n\ttry {\n\t\tawait ensureDurableDirectory(dirname(target), await ensureDurableHome(dirname(dirname(resolve(root)))));\n\t\tawait copyFile(source, target);\n\t\treturn;\n\t} catch (error) {\n\t\tconsole.error(\"[DSH-Folk attach] alias failed: \" + String(error && error.code) + \" \" + String(error && error.message));\n\t\tthrow new AttachmentError(\"Unable to persist attachment.\", \"ATTACHMENT_WRITE_FAILED\", { cause: error });\n\t}", "async function publishImmutableAlias(root, source, target, sha256) {")
+            out = out.replace("\t\tif (error instanceof AttachmentError || signal?.aborted === true) throw error;\n\t\tconsole.error(\"[DSH-Folk attach] stage failed: \" + String(error && error.code) + \" \" + String(error && error.message));\n\t\tthrow new AttachmentError(\"Unable to persist attachment.\", \"ATTACHMENT_WRITE_FAILED\", { cause: error });", "\t\tif (error instanceof AttachmentError || signal?.aborted === true) throw error;\n\t\tthrow new AttachmentError(\"Unable to persist attachment.\", \"ATTACHMENT_WRITE_FAILED\", { cause: error });")
+            out = out.replace("await handle.sync().catch(() => {});", "await handle.sync();")
+            out = out.replace("await linkOrCopy(source, target);", "await link(source, target);")
+            out = out.replace("await linkOrCopy(staged.path, target);", "await link(staged.path, target);")
+            out = out.replace("import { chmod, copyFile, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from \"node:fs/promises\";", "import { chmod, link, mkdir, open, readFile, rename, rm, unlink, writeFile } from \"node:fs/promises\";")
+            // 删掉 v1 追加在文件末尾的 linkOrCopy 辅助函数（从声明处截到其闭合括号）
+            val h = out.indexOf("async function linkOrCopy(source, target) {")
+            if (h >= 0) {
+                val hEnd = out.indexOf("\n}\n", h)
+                if (hEnd > h) {
+                    // 原文件以换行结尾：trimEnd 去掉它，这里补回一个，保证与出厂内容逐字节一致
+                    out = out.substring(0, h).trimEnd() + "\n" + out.substring(hEnd + 3)
+                }
+            }
+            if (out.contains("DSH-Folk") || out.contains("linkOrCopy")) {
+                appendLog("[attach] 还原不完整，未写回（残留标记或 linkOrCopy）")
+                return
+            }
+            val tmp = File(target.parentFile, target.name + ".dshfolk.tmp")
+            tmp.writeText(out, StandardCharsets.UTF_8)
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+            appendLog("[attach] 已还原为上游原始存储实现（本次为 A/B 对照构建）")
+        }.onFailure { appendLog("[attach] 还原失败：" + (it.message ?: it.javaClass.simpleName)) }
+    }
     /**
      * 给容器里的 `dsh-attachment-local` 打一次 Android 兼容补丁。
      *

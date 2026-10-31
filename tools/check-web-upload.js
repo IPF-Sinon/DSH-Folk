@@ -68,7 +68,15 @@ for (const [name, text] of [['values/dsh_strings.xml', en], ['values-zh-rCN/dsh_
 // 6. 附件落盘补丁（真机 ATTACHMENT_WRITE_FAILED：硬链接/目录 fsync 在 Android 上被拒）
 {
   ok(/private fun patchAttachmentStore\(\)/.test(runtime), '有 patchAttachmentStore()');
-  ok(/^        patchAttachmentStore\(\)$/m.test(runtime), 'startServer 里真的调用（只定义不调用=永远不生效）');
+  ok(/^        restoreAttachmentStore\(\)$/m.test(runtime), '本版（A/B 对照）调用的是还原，不是打补丁');
+  ok(/private fun restoreAttachmentStore\(\)/.test(runtime), '有 restoreAttachmentStore()：把 v1/v2 补丁逐条撤回');
+  ok(/out\.contains\("DSH-Folk"\) \|\| out\.contains\("linkOrCopy"\)/.test(runtime) &&
+    /还原不完整，未写回/.test(runtime), '还原后残留标记就不写回（宁可不动，也不写坏依赖）');
+  ok(/replace\("await linkOrCopy\(source, target\);", "await link\(source, target\);"\)/.test(runtime) &&
+    /replace\("await linkOrCopy\(staged\.path, target\);", "await link\(staged\.path, target\);"\)/.test(runtime),
+    'v1 的两处 linkOrCopy 也要还原（否则 A/B 对照不干净）');
+  ok(/replace\("await handle\.sync\(\)\.catch\(\(\) => \{\}\);", "await handle\.sync\(\);"\)/.test(runtime),
+    '目录 fsync 的容错也要还原');
   ok(/dsh-attachment-local\/lib\/index\.js/.test(runtime), '补丁打在上游 dsh-attachment-local 上');
   ok(/"async function publishStagedObject\(root, target, staged\) \{"/.test(runtime) &&
     /"async function publishImmutableAlias\(root, source, target, sha256\) \{"/.test(runtime),
