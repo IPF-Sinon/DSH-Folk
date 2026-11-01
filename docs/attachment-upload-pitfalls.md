@@ -139,3 +139,20 @@ spawn_teammate → readPersistedSession → open(child, "read")
 
 修法同 §5：该处改成 `rename` 发布；目标若是**悬空符号链接**先删掉再 rename（正常文件仍按冲突处理）。
 另外启动时扫一遍 `sessions/`，统计并清理悬空项（日志前缀 `[session]`）—— 悬空项本身没有数据，删掉安全。
+### 8.1 三个 link 发布点（社区 DSHM 的补丁对照）
+
+`RochelimitDawn/DSHM` 的 `runtime-builder/patch_runtime.js` 早就为同一原因打了三处补丁，理由写得很清楚：
+**Android 上对 app_data_file 执行 link() 会被 SELinux 拒（EACCES）**，所以把发布改成 rename / copyFile：
+
+| 位置 | 原实现 | Android 上改为 |
+|---|---|---|
+| `attachment-local` `publishStagedObject` | `link(staged, target)` | `rename(staged, target)` |
+| `session-persistence-jsonl` `materializePosix`（**新建会话**） | `link(tmp, finalPath)` | `rename(tmp, finalPath)` |
+| `session-persistence-jsonl` `publishCurrentExclusive`（迁移） | `link(staged, currentPath)` | `rename(...)`（保留 EEXIST 语义） |
+| `dsh-fs-local` `writeFileAtomic`（**新建文件**） | `linkFile(temp, dest)` | `copyFile(temp, dest, 1)`（COPYFILE_EXCL） |
+
+排查顺序建议：`grep -rn "await link(" dsh/node_modules/@deepseek-ai --include=*.js`，
+任何一处「link 之后 rm 掉源名」的发布，在 Android 上都会变成悬空链接或 EACCES。
+
+**教训**：只修「看到报错的那一处」会漏掉真正高频的路径（新建会话 / 新建文件），
+要按「同一类系统调用」把所有发布点一次列全，再逐个替换并各自计数校验。

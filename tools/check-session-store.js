@@ -32,16 +32,16 @@ ok(/private fun patchAgentTeamDiag\(\)/.test(runtime) && /^        patchAgentTea
   '有并调用 Agent Teams 诊断补丁');
 ok(/\[DSH-Folk team\] spawn failed/.test(runtime), '失败时把 AggregateError 的成员完整打进日志');
 // 新建会话走的是 materializePosix（不是 migration），必须单独覆盖
-ok(/await link\(tmp, finalPath\);/.test(runtime) && /await rename\(tmp, finalPath\);/.test(runtime),
-  '新建会话的发布（materializePosix）也改为 rename');
+ok(/^\s*out = out\.replace\("\\t\\t\\tawait link\(tmp, finalPath\);", "\\t\\t\\tawait rename\(tmp, finalPath\);"\)$/m.test(runtime),
+  '新建会话的发布（materializePosix）真的做了 link→rename 替换（行首锚定，注释掉就会红）');
 ok(/beforeMaterialize != 1/.test(runtime), '两处 hunk（migration + create）都要计数校验');
 // dsh-fs-local：createIfAbsent 的 link 发布（影响所有「新建文件」的写出）
 ok(/private fun patchFsLocalWrites\(\)/.test(runtime) && /^        patchFsLocalWrites\(\)$/m.test(runtime),
   '有并调用 dsh-fs-local 写入补丁');
 ok(/dsh-fs-local\/lib\/index\.js/.test(runtime) && /copyFile, link, lstat/.test(runtime),
   'fs-local 的 import 补上 copyFile');
-ok(/await linkFile\(tempPath, absolutePath\);/.test(runtime) &&
-  /await copyFile\(tempPath, absolutePath, 1\);/.test(runtime),
+ok(/^\s*out = out\.replace\(/m.test(runtime) && /await copyFile\(tempPath, absolutePath, 1\);/.test(runtime) &&
+  /await linkFile\(tempPath, absolutePath\);/.test(runtime),
   'createIfAbsent 改为 copyFile(...,1)（COPYFILE_EXCL 保持排他语义）');
 ok(/\[session\] /.test(runtime), '体检与补丁都用 [session] 前缀落日志');
 
