@@ -22,8 +22,10 @@ ok(/await internals\.fs\.link\(staged, currentPath\);/.test(runtime), 'v1 定位
 ok(/await rename\(staged, currentPath\);/.test(runtime), '改为 rename 发布');
 ok(/existing\.isSymbolicLink\(\)/.test(runtime) && /await internals\.fs\.rm\(currentPath\);/.test(runtime),
   '目标若是悬空符号链接，先删掉再 rename（否则旧悬空项会一直挡住）');
-ok(/before != 1/.test(runtime) && /持久化补丁不完整，未写回/.test(runtime),
-  '片段不是恰好 1 次就不写回');
+ok(/!importOkNow \|\| !publishOk \|\| !materializeOk/.test(runtime) && /持久化补丁不完整，未写回/.test(runtime),
+  '三个 hunk 任一缺失或未生效都不写回');
+ok(/out\.contains\("await rename\(tmp, finalPath\);"\)/.test(runtime),
+  '幂等判定用「效果」而不是 marker（老版本只打过 migration 也能补上 create）');
 ok(/private fun sessionStoreDeepDiag\(\)/.test(runtime), '有 sessionStoreDeepDiag() 体检（两层：sessions/<cwd>/<id>/file）');
 ok(/^        sessionStoreDeepDiag\(\)$/m.test(runtime), 'startServer 里调用体检');
 ok(/danglingRemoved/.test(runtime) && /locks=/.test(runtime),
@@ -34,7 +36,7 @@ ok(/\[DSH-Folk team\] spawn failed/.test(runtime), '失败时把 AggregateError 
 // 新建会话走的是 materializePosix（不是 migration），必须单独覆盖
 ok(/^\s*out = out\.replace\("\\t\\t\\tawait link\(tmp, finalPath\);", "\\t\\t\\tawait rename\(tmp, finalPath\);"\)$/m.test(runtime),
   '新建会话的发布（materializePosix）真的做了 link→rename 替换（行首锚定，注释掉就会红）');
-ok(/beforeMaterialize != 1/.test(runtime), '两处 hunk（migration + create）都要计数校验');
+ok(/val materializeOk = beforeMaterialize == 1 \|\| out\.contains/.test(runtime), 'create 那半也有独立的生效校验');
 // dsh-fs-local：createIfAbsent 的 link 发布（影响所有「新建文件」的写出）
 ok(/private fun patchFsLocalWrites\(\)/.test(runtime) && /^        patchFsLocalWrites\(\)$/m.test(runtime),
   '有并调用 dsh-fs-local 写入补丁');

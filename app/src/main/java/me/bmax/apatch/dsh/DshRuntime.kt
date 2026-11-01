@@ -2394,8 +2394,10 @@ object DshRuntime : DshRuntimeHost {
         }
         runCatching {
             val src = target.readText(StandardCharsets.UTF_8)
-            if (src.contains("DSH-Folk: Android/proot 下 link()")) {
-                appendLog("[session] 持久化补丁已在位")
+            // 用「效果」判断而不是 marker：老版本可能只打过 migration 那半，
+            // 而 create(materialize) 那半是后加的；单看 marker 会永远跳过新 hunk（beta.226 踩过）。
+            if (src.contains("await rename(tmp, finalPath);")) {
+                appendLog("[session] 持久化补丁已在位（create + migration）")
                 return
             }
             var out = src.replace("import { link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, stat, truncate } from \"node:fs/promises\";", "import { link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, truncate } from \"node:fs/promises\";")
@@ -2408,7 +2410,10 @@ object DshRuntime : DshRuntimeHost {
                 "[session] 持久化补丁：import=" + importOk + " link-publish=" + before +
                     " materialize=" + beforeMaterialize,
             )
-            if (!importOk || before != 1 || beforeMaterialize != 1) {
+            val publishOk = before == 1 || out.contains("await rename(staged, currentPath);")
+            val materializeOk = beforeMaterialize == 1 || out.contains("await rename(tmp, finalPath);")
+            val importOkNow = importOk || out.contains("realpath, rename, rm")
+            if (!importOkNow || !publishOk || !materializeOk) {
                 appendLog("[session] 持久化补丁不完整，未写回（运行时版本可能变了）")
                 return
             }
