@@ -2096,6 +2096,8 @@ object DshRuntime : DshRuntimeHost {
         sessionStoreDeepDiag()
         patchSessionPersistence()
         patchAgentTeamDiag()
+        // 同一类问题还影响「新建文件」的原子写（dsh-fs-local 的 createIfAbsent 用 link）。
+        patchFsLocalWrites()
         // 让外部浏览器（App 用 Intent 拉起的 Chrome）也能一次登进 dsh web：把会话 cookie 的
         // SameSite=Strict 放宽为 Lax（见 [patchBrowserCookieSameSite]）。每次启动前幂等重打。
         patchBrowserCookieSameSite()
@@ -2320,6 +2322,56 @@ object DshRuntime : DshRuntimeHost {
         }.onFailure { appendLog("[team] 诊断补丁失败：" + (it.message ?: it.javaClass.simpleName)) }
     }
 
+
+    /**
+     * `dsh-fs-local` 的原子写补丁：`writeFileAtomic` 的 createIfAbsent 分支用
+     * `linkFile(tempPath, absolutePath)` 发布新文件（硬链接），Android 上 link 不可用
+     * （SELinux 拒 app_data_file 的 link，或 l2s 造成悬空链接），凡是「新建文件」的写入
+     * 都会失败 —— 表现为各种写配置/写状态的操作报 ENOENT/EACCES。
+     *
+     * 改用 `copyFile(temp, dest, 1)`：1 = COPYFILE_EXCL，**目标存在就失败**，
+     * 与原来 link 的「排他创建」语义一致（不是静默覆盖）。
+     */
+    private fun patchFsLocalWrites() {
+        val target = File(
+            DshEnv.rootfs(appContext),
+            "usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js",
+        )
+        if (!target.isFile) {
+            appendLog("[fs] 跳过写入补丁：找不到 dsh-fs-local/lib/index.js")
+            return
+        }
+        runCatching {
+            val src = target.readText(StandardCharsets.UTF_8)
+            if (src.contains("COPYFILE_EXCL 语义")) {
+                appendLog("[fs] 写入补丁已在位")
+                return
+            }
+            var out = src.replace(
+                "import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, rm, stat } from \"node:fs/promises\";",
+                "import { chmod, copyFile, link, lstat, mkdir, open, readFile, readdir, rename, rm, stat } from \"node:fs/promises\";",
+            )
+            val importOk = out != src
+            val hits = out.split("\t\t\tawait linkFile(tempPath, absolutePath);").size - 1
+            out = out.replace(
+                "\t\t\tawait linkFile(tempPath, absolutePath);",
+                "\t\t\t// DSH-Folk: Android 上 link() 不可用；copyFile(...,1) 保持排他创建（COPYFILE_EXCL 语义）\n\t\t\tawait copyFile(tempPath, absolutePath, 1);",
+            )
+            appendLog("[fs] 写入补丁：import=" + importOk + " createIfAbsent=" + hits)
+            if (!importOk || hits != 1) {
+                appendLog("[fs] 写入补丁不完整，未写回（运行时版本可能变了）")
+                return
+            }
+            val tmp = File(target.parentFile, target.name + ".dshfolk.tmp")
+            tmp.writeText(out, StandardCharsets.UTF_8)
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+            appendLog("[fs] 写入补丁已应用（createIfAbsent: link → copyFile EXCL）")
+        }.onFailure { appendLog("[fs] 写入补丁失败：" + (it.message ?: it.javaClass.simpleName)) }
+    }
+
     /**
      * 会话持久化补丁：把「link 发布」换成 **rename 发布**。
      *
@@ -2350,8 +2402,13 @@ object DshRuntime : DshRuntimeHost {
             val importOk = out != src
             val before = out.split("\ttry {\n\t\tawait internals.fs.link(staged, currentPath);\n\t} catch (error) {\n\t\t/* v8 ignore else -- a non-collision filesystem error propagates unchanged. */\n\t\tif (isEEXIST(error)) return false;\n\t\t/* v8 ignore next -- the filesystem error is already complete. */\n\t\tthrow error;\n\t}").size - 1
             out = out.replace("\ttry {\n\t\tawait internals.fs.link(staged, currentPath);\n\t} catch (error) {\n\t\t/* v8 ignore else -- a non-collision filesystem error propagates unchanged. */\n\t\tif (isEEXIST(error)) return false;\n\t\t/* v8 ignore next -- the filesystem error is already complete. */\n\t\tthrow error;\n\t}", "\t// DSH-Folk: Android/proot 下 link() 是「锚点 + 符号链接组」，删锚点后目标变悬空\n\t//（表现为 readdir 列得出、open 报 ENOENT）。改用同目录 rename 发布，并先清掉悬空目标。\n\ttry {\n\t\tconst existing = await internals.fs.lstat(currentPath);\n\t\tif (!existing.isSymbolicLink()) return false;\n\t\tawait internals.fs.rm(currentPath);\n\t} catch (error) {\n\t\tif (!(error !== void 0 && error.code === \"ENOENT\")) throw error;\n\t}\n\tawait rename(staged, currentPath);")
-            appendLog("[session] 持久化补丁：import=" + importOk + " link-publish=" + before)
-            if (!importOk || before != 1) {
+            val beforeMaterialize = out.split("\t\t\tawait link(tmp, finalPath);").size - 1
+            out = out.replace("\t\t\tawait link(tmp, finalPath);", "\t\t\tawait rename(tmp, finalPath);")
+            appendLog(
+                "[session] 持久化补丁：import=" + importOk + " link-publish=" + before +
+                    " materialize=" + beforeMaterialize,
+            )
+            if (!importOk || before != 1 || beforeMaterialize != 1) {
                 appendLog("[session] 持久化补丁不完整，未写回（运行时版本可能变了）")
                 return
             }
@@ -2361,7 +2418,7 @@ object DshRuntime : DshRuntimeHost {
                 tmp.copyTo(target, overwrite = true)
                 tmp.delete()
             }
-            appendLog("[session] 持久化补丁已应用（link 发布改为 rename 发布）")
+            appendLog("[session] 持久化补丁已应用（两处 link 发布均改为 rename：create + migration）")
         }.onFailure { appendLog("[session] 持久化补丁失败：" + (it.message ?: it.javaClass.simpleName)) }
     }
 
