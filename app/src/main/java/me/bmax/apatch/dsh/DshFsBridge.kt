@@ -218,6 +218,7 @@ object DshFsBridge {
                 if (!responded && e is DeniedPathException) {
                     // 命中黑名单 / 落在白名单外：这是**策略拒绝**，不是崩溃，也不是路径写错。
                     // 明确回 no_access，让容器里的 agent 一眼分清「被遮蔽」与「路径拼错(bad_path)」。
+                    if (e.rel.isNotEmpty()) Log.w(TAG, "文件桥策略拒绝: " + e.rel)
                     runCatching {
                         respondJson(s, 403, errorJson(str(R.string.dsh_fs_err_no_access), "no_access"))
                     }
@@ -361,6 +362,9 @@ object DshFsBridge {
                     break
                 }
                 if (!within(f)) continue
+                // 黑白名单：非递归 list 同样要遮蔽 —— 否则被禁目录/文件的**名字**会直接列给容器
+                // （resolve() 只挡住入口，这里逐个列出的子项它没校验过）
+                if (!policyAllows(f)) continue
                 entries.put(entryJson(f, relativeOf(f)))
             }
         }
@@ -603,14 +607,13 @@ object DshFsBridge {
      */
     private fun walk(base: File, maxDepth: Int, visit: (File) -> Boolean): Boolean {
         var budget = MAX_RECURSIVE_ENTRIES
-        val ctx = appCtx
         fun rec(dir: File, depth: Int): Boolean {
             val children = dir.listFiles() ?: return true
             for (f in children.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))) {
                 if (budget-- <= 0) return false
                 if (!within(f)) continue
                 // 黑白名单：遍历同样要遮蔽——否则 find / 递归 list 会把被禁目录里的文件路径带出来
-                if (ctx != null && !DshFileAccess.pathAllowed(ctx, relativeOf(f))) continue
+                if (!policyAllows(f)) continue
                 if (!visit(f)) return false
                 if (f.isDirectory && depth < maxDepth && !isSymlink(f)) {
                     if (!rec(f, depth + 1)) return false
@@ -634,6 +637,9 @@ object DshFsBridge {
     /** 深度优先删除。符号链接只删链接本身，不跟进去。 */
     private fun deleteRecursive(target: File): Boolean {
         if (!within(target)) return false
+        // 逐层复核黑白名单：命中不跳过、而是拒绝 —— 悄悄跳过会让调用方以为删干净了，
+        // 实际留下一个「被禁」的子树；外层把 DeniedPathException 统一回 403 no_access。
+        if (!policyAllows(target)) throw DeniedPathException(relativeOf(target))
         if (target.isDirectory && !isSymlink(target)) {
             target.listFiles()?.forEach { child ->
                 if (!deleteRecursive(child)) return false
@@ -655,6 +661,8 @@ object DshFsBridge {
                 if (!within(s) || !within(d)) {
                     throw java.io.IOException(str(R.string.dsh_fs_err_escape_named, s.name))
                 }
+                // 逐层复核黑白名单：入口合法不代表子项合法（见 policyAllows 的注释）
+                if (!policyAllows(s) || !policyAllows(d)) throw DeniedPathException(relativeOf(s))
                 if (s.isDirectory && !isSymlink(s)) {
                     if (!d.isDirectory && !d.mkdirs()) {
                         throw java.io.IOException(str(R.string.dsh_fs_err_mkdir_named, d.name))
@@ -678,6 +686,8 @@ object DshFsBridge {
             }
             rec(src, dst)
         }.onFailure { e ->
+            // 策略拒绝要原样抛给外层（回 403 no_access），不能被下面那句 500 泛化掉
+            if (e is DeniedPathException) throw e
             Log.w(TAG, "copy 失败: ${e.message}")
             // 已复制的部分保留：删掉它需要再一次递归删除，风险比留下半份更大
             return 500 to errorJson(str(R.string.dsh_fs_err_copy_failed, e.message ?: "", files), "copy_failed")
@@ -706,8 +716,13 @@ object DshFsBridge {
     private fun storageDenied(): Pair<Int, String> =
         403 to errorJson(str(R.string.dsh_fs_err_no_storage), "no_storage")
 
-    /** [resolve] 命中黑名单/白名单外时抛出：策略拒绝，外层回 403 `no_access`（区别于 bad_path）。 */
-    private class DeniedPathException : Exception()
+    /**
+     * 命中黑名单/白名单外时抛出：策略拒绝，外层回 403 `no_access`（区别于 bad_path）。
+     *
+     * [rel] 只用于日志：递归复制/删除时得知道是**哪一个**子路径被拒，否则只有一句
+     * 「该路径被挡住」，用户无从判断是哪个目录。
+     */
+    private class DeniedPathException(val rel: String = "") : Exception()
 
     /**
      * 文件端点的统一准入：先看挂载总开关，再看「所有文件访问」权限。
@@ -778,9 +793,21 @@ object DshFsBridge {
         val ctx = appCtx
         if (ctx != null) {
             val rel = if (targetCanon == rootCanon) "" else targetCanon.substring(rootCanon.length + 1)
-            if (!DshFileAccess.pathAllowed(ctx, rel)) throw DeniedPathException()
+            if (!DshFileAccess.pathAllowed(ctx, rel)) throw DeniedPathException(rel)
         }
         return File(targetCanon)
+    }
+
+    /**
+     * 黑白名单是否允许这个路径（边界另由 [within] 判）。
+     *
+     * 为什么要逐层判：`resolve()` 只校验**入口**，而递归遍历/复制/删除会走到入口之下的
+     * 每一条路径 —— 「允许的目录里放一个被禁的子目录」就是绕过名单的现成后门。递归 list
+     * （[walk]）一直有这个检查，非递归 list 与 copy/delete 漏了。
+     */
+    private fun policyAllows(f: File): Boolean {
+        val ctx = appCtx ?: return true
+        return DshFileAccess.pathAllowed(ctx, relativeOf(f))
     }
 
     /** 这个 File 的规范路径是否仍落在根内（递归遍历里逐层复查用）。 */
