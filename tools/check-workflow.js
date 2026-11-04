@@ -867,8 +867,13 @@ console.log("\u2500 #16v chroot 启动方式（真 root，实验性）");
   ok(/override fun spawnArgv\(guest: List<String>, env: Map<String, String>\): List<String>\? \{/.test(rt),
     'chroot 覆盖 spawnArgv');
   // guest 命令写进脚本，不进 argv（避免两层转义）
-  ok(/launch\.writeText\(\s*\n?\s*buildLaunchScript/.test(rt), '命令写进脚本文件而非拼进 su -c');
-  ok(/trap cleanup EXIT INT TERM/.test(rt), '脚本用 trap 保证退出时卸载挂载点');
+  // 命令写进脚本文件而非拼进 su -c（脚本内容来自 assets 模板，见 check-chroot.js）
+  ok(/launch\.writeText\(script, Charsets\.UTF_8\)/.test(rt), '命令写进脚本文件而非拼进 su -c');
+  ok(/runCatching \{ buildLaunchScript\(rootfs, dir, env, guest\) \}/.test(rt),
+    '模板读不到就回退 proot（不让一次 chroot 尝试把启动搞死）');
+  // 脚本内容已搬到 assets/chroot/launch.sh，trap 与卸载都在那边（Kotlin 只替换占位符）
+  ok(/trap cleanup EXIT INT TERM/.test(read("app/src/main/assets/chroot/launch.sh")),
+    '脚本用 trap 保证退出时卸载挂载点');
   ok(/fun shellQuote\(value: String\): String/.test(rt), '有 POSIX 单引号转义');
   // 调用点：execRootfs / execRootfsInteractive 都经 spawnArgv，null 则回退
   // 回退目标必须是 **proot** 而不是 baseArgv()：chroot 的 baseArgv 是空列表，
@@ -936,14 +941,12 @@ console.log("\u2500 #16y chroot 启动脚本不得双层转义 + proot 前提无
   // 语义断言：脚本必须把位置参数摊开成 "$@"。
   // 不去精确匹配转义后的字面量 —— 那样会随 raw string / 普通字符串的写法变化，
   // 实测已因此误报过一次（改 \@ 时断言跟着红，但代码是对的）。
-  const execLine = rt.split('\n').find((l) => l.includes('exec chroot')) || '';
-  const afterEnv = rt.slice(rt.indexOf('env -i '));
-  ok(/append\(\" \\\"\\\$@\\\"\\\\n\"\)/.test(rt) || afterEnv.includes('\$@'),
+  // 脚本本体已搬到 assets/chroot/launch.sh（普通 shell 文件，可被 sh -n 检查），
+  // 这里改盯模板 —— 断言语义，不绑死某种字符串写法（以前那样会随写法漂移误报）。
+  const launchAsset = read("app/src/main/assets/chroot/launch.sh");
+  ok(/chroot "\$MNT" \/usr\/bin\/env -i @ENV@ "\$@"/.test(launchAsset),
     '用 "$@" 展开（argv 边界保留）');
-  // 绝不能再「先 join 成一条命令字符串、再整体 quote」。
-  ok(/script\.append\("set -- "\)\.append\(guestArgs\)/.test(rt), 'guest argv 走 set -- 位置参数');
-  // 展开形式是 " "$@" "（Kotlin 里只转义 $，@ 是普通字符）
-  ok(/\" \\\"\\\$@\\\"\\n\"/.test(rt), '用 "$@" 展开（argv 边界保留，Kotlin 里只转义 $）');
+  ok(/^set -- @GUEST_ARGS@$/m.test(launchAsset), 'guest argv 走 set -- 位置参数');
   ok(/val guestArgs = guest\.joinToString\(" "\) \{ shellQuote\(it\) \}/.test(rt), '每项只 shellQuote 一次');
   // 反向断言：不允许再把 argv 拼成字符串传进 buildLaunchScript
   ok(/buildLaunchScript\(rootfs, dir, env, guest\)/.test(rt), 'buildLaunchScript 收 argv 列表而不是拼接串');
@@ -980,10 +983,14 @@ console.log("\u2500 #16z launch.sh 的真凶与启动前自检（issue #12 第�
   // 真凶：`val mnt = "\${'$'}MNT"` 在**普通字符串**里不是 `$MNT`，而是字面量 `${'$'}MNT` ——
   // mksh 解析这个字面量会在 EOF 处报 `no closing quote`，而且报的行号是**最后一行 +1**，
   // 所以三轮排查都被引到「exec 那一行」上去。已用 mksh -n 在真脚本上复现与验证。
-  ok(rt.includes('val mnt = "\\$MNT"'), 'mnt 写成 "\\$MNT"（Kotlin 普通字符串，求值成 $MNT）');
-  // 只看代码行（注释里举例说明这个写法是允许的，别把注释也算成违规）
-  const rtCode = rt.split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n");
-  ok(!rtCode.includes("\\" + "$" + "{'$'}"), '代码里不再出现普通字符串的字面量写法（mksh 会报 no closing quote）');
+  // 启动脚本现在是 assets 里的普通 shell 文件，Kotlin 只做字面 replace ——
+  // 这样本地与 CI 都能直接 `sh -n`（详细断言见 tools/check-chroot.js）。
+  const launchAsset = read("app/src/main/assets/chroot/launch.sh");
+  const assetCode = launchAsset.split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
+  ok(/^#!\/system\/bin\/sh$/m.test(launchAsset), '启动脚本模板在 assets 里且带 shebang');
+  ok(!assetCode.includes("\\" + "$" + "{'$'}"), '模板代码里不再出现非法参数展开（mksh 会报 no closing quote）');
+  ok(/\.replace\("@RFS@"/.test(rt) && /\.replace\("@ENV@"/.test(rt),
+    'Kotlin 用字面 replace 填模板占位符（不再拼字符串）');
   // 启动前自检：写盘后先让设备自己的 shell 过一遍语法，不通过就回退 proot
   ok(/private fun checkLaunchScript\(launch: File\): String\?/.test(rt), '有 launch.sh 语法自检');
   ok(/ProcessBuilder\("\/system\/bin\/sh", "-n", launch\.absolutePath\)/.test(rt), '用 /system/bin/sh -n 检查（就是真正解析脚本的那个 shell）');
@@ -993,9 +1000,20 @@ console.log("\u2500 #16z launch.sh 的真凶与启动前自检（issue #12 第�
   ok(/^\s*binds \+= storageBinds\(ctx\)/m.test(rt) && /^\s*binds \+= workspaceBinds\(ctx\)/m.test(rt),
     "chroot 同时挂「存储」与「工作区」（proot/proroot 都有；缺工作区就是新建工作区 ENOENT）");
   ok(rt.includes("挂载失败"), "挂载失败写进日志（不再 2>/dev/null 吞掉，否则只看到 ENOENT）");
-  ok(rt.includes("/proc/mounts"), "tmpfs 幂等：已在挂载中就不叠第二层（否则盖掉运行中容器的 /dev /proc /sdcard）");
-  ok(rt.includes("umask 000"), "真 root + Android 应用 umask 077 的组合必须显式改 umask，否则文件是 root 0600");
-  ok(rt.includes("chown -R") && rt.includes("APP_GID"), "把历史 root 拥有的容器数据修回 App uid（否则切回 proot 必 EACCES）");
+  ok(launchAsset.includes("/proc/mounts"), "已在挂载中就不叠第二层（否则盖掉运行中容器的 /dev /proc /sdcard）");
+  ok(launchAsset.includes("umask 000"), "真 root + Android 应用 umask 077 的组合必须显式改 umask，否则文件是 root 0600");
+  ok(launchAsset.includes("chown -R") && launchAsset.includes("APP_GID"),
+    "把历史 root 拥有的容器数据修回 App uid（否则切回 proot 必 EACCES）");
+  // 挂载视图必须落在 chroot 根里面，且不能用 exec 收尾（exec 会让 trap 永不执行）
+  ok(/^\s*mount --bind "\$RFS" "\$MNT" \|\| exit 91$/m.test(launchAsset) && /chroot "\$MNT"/.test(launchAsset),
+    "先 bind rootfs 到 $MNT 再 chroot $MNT（否则挂载点全在 rootfs 之外，容器看不到 /dev /proc /sdcard）");
+  ok(!/exec chroot/.test(assetCode), "不能用 exec chroot 收尾");
+  // chroot 失败必须能回退 proot；切回 proot 前要有属主兜底
+  const dshRuntime = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");
+  ok(!/runtimeId\(\) == "proroot" && noteProrootFailure\(/.test(dshRuntime),
+    "noteProrootFailure 的调用点不得写死 proroot（否则 chroot 的回退分支不可达）");
+  ok(/private fun repairRootfsOwnership\(\)/.test(dshRuntime),
+    "有「切回 proot/proroot 前修属主」的兜底（那条路不会执行 chroot 的脚本）");
   // UI：chroot 加入后 `!= "proroot"` 会让 proot 与 chroot 同时显示选中（真机截图）
   ok(/selected = runtimeId == "proot"/.test(fs2), 'proot 单选项按 == "proot" 判定');
   ok(!/selected = runtimeId != "proroot"/.test(fs2), '不再用 != "proroot"（会同时选中两项）');

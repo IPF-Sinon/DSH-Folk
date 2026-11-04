@@ -4,6 +4,7 @@ import android.content.Context
 import me.bmax.apatch.R
 import me.bmax.apatch.util.appString
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 /**
  * 容器运行时抽象：把「怎么进 rootfs 执行命令」独立出来，让 proot 与 proroot 并存、可切换。
@@ -248,7 +249,8 @@ interface ContainerRuntime {
      * ## 实现要点
      *
      * - `su -c` 只吃**一个命令字符串**，所以 guest 命令不拼进 argv，而是写进脚本文件；
-     * - 挂载与清理都在 root 侧脚本里，trap 保证异常退出也卸载；
+     * - 挂载与清理都在 root 侧脚本里，trap 保证异常退出也卸载（脚本因此**不能**用 `exec`
+     *   收尾 —— exec 会让 trap 永远不执行，见 assets/chroot/launch.sh 抬头）；
      * - 环境以 export 写进脚本（`su` 会重置环境，不能指望继承）。
      */
     class Chroot(private val ctx: Context) : ContainerRuntime {
@@ -298,9 +300,17 @@ interface ContainerRuntime {
             // guest argv **逐项**传下去：绝不在这里拼成一条命令字符串（拼串就得再 quote 一次，
             // 引号配对与 argv 边界都会失真）。
             //
-            // 真机那句 `launch.sh[N]: no closing quote`（issue #12）**不在这里** —— 它是
-            // buildLaunchScript 里 `mnt` 的写法造成的，见那里的注释。
-            launch.writeText(buildLaunchScript(rootfs, dir, env, guest), Charsets.UTF_8)
+            // 真机那句 `launch.sh[N]: no closing quote`（issue #12）**不在这里** —— 它出在
+            // 脚本内容里（见 assets/chroot/launch.sh 抬头与 [buildLaunchScript]）。
+            //
+            // 模板读不到 / 生成失败都直接回退 proot：一次 chroot 尝试绝不能把启动搞死
+            val script = runCatching { buildLaunchScript(rootfs, dir, env, guest) }.getOrElse { e ->
+                DshRuntime.appendLog(
+                    "! chroot: 生成 launch.sh 失败（已回退 proot）: " + (e.message ?: e.javaClass.simpleName)
+                )
+                return null
+            }
+            launch.writeText(script, Charsets.UTF_8)
             launch.setExecutable(true, false)
             // 真机兜底：脚本写错一个引号，`su -c sh launch.sh` 只会打印一行
             // `launch.sh[N]: no closing quote` 然后**服务就没了**，用户看到的报错和原因
@@ -321,22 +331,17 @@ interface ContainerRuntime {
         }
 
         /**
-         * 拼启动脚本：建挂载视图 → chroot → 执行 guest 命令 → 退出时卸载。
+         * 生成启动脚本：把 `assets/chroot/launch.sh` 里的占位符换成本次的值。
          *
-         * ## 为什么用 `"$@"` 传 guest argv
+         * 脚本本身是**普通 shell 文件**，不在 Kotlin 里一行行拼。两个理由：
+         *  - 它要被 shell 解析两次（`su -c 'sh launch.sh'`，再由脚本自己解析），引号与 `$`
+         *    极易写错。issue #12 的 `launch.sh[N]: no closing quote` 就是 Kotlin 里的
+         *    `$` 转义写法写岔了，落到脚本里成了一段非法参数展开；shell 直到 EOF 才报错，
+         *    行号还是「最后一行 +1」，把排查带偏了三轮；
+         *  - 放进 assets 后，本地与 CI 都能直接 `sh -n`（tools/check-chroot.js），
+         *    真机上另有 [checkLaunchScript] 兜底。
          *
-         * 脚本是**由 shell 解析两次**的（`su -c 'sh launch.sh'`，再由 launch.sh 自己 exec），
-         * 所以把 argv 拼成一条命令字符串再整体 quote，会让引号配对与 argv 边界都失真。
-         *
-         * 记一笔真机教训：issue #12 那句 `launch.sh[N]: no closing quote` 曾被归因到
-         * 「两层转义」，**那是误判**。真凶是下面的 `mnt` 写法，而 shell 报的行号是
-         * **最后一行 +1**（在 EOF 上才发现引号没闭合），看上去像 exec 那一行出了错，
-         * 把排查带偏了三轮 —— 所以下面这个脚本在真机上多了一道 `sh -n` 自检。
-         *
-         * 正确做法：把 guest argv **逐项**写成脚本自己的位置参数（`set -- a b c`），
-         * 每项只经过 [shellQuote] **一次**，最后用 `"${'$'}@"` 展开。这样：
-         *  - 引号配对由 shell 自己保证，命令里出现单引号/换行/`$` 都不会破坏结构；
-         *  - argv 边界被完整保留（`bash -c "<cmd>"` 的 `<cmd>` 仍是**一个**参数）。
+         * 这里**只做字面 replace**，不要改成 Kotlin 字符串模板。
          */
         private fun buildLaunchScript(
             rootfs: File,
@@ -344,11 +349,6 @@ interface ContainerRuntime {
             env: Map<String, String>,
             guest: List<String>,
         ): String {
-            // `"\$MNT"` 求值成字符串 `$MNT`。**不要**写成 `"\${'$'}MNT"`：普通字符串里
-            // 那不是模板求值，而是字面量 `${'$'}MNT`（`${'$'}` 只有在 raw string 里
-            // 才表示字面量 `$`）。mksh 解析这个字面量会在 EOF 处报 `no closing quote` ——
-            // 那正是 issue #12 的真凶。
-            val mnt = "\$MNT"
             val uid = ctx.applicationInfo.uid
             // 存储与工作区**两套**挂载都要：proot/proroot 两条路都有，chroot 之前只挂了存储，
             // 「在工作区里挂手机存储」在 chroot 下等于没做（真机表现：新建工作区后列目录 ENOENT）。
@@ -356,64 +356,30 @@ interface ContainerRuntime {
             binds += storageBinds(ctx)
             binds += workspaceBinds(ctx)
             val mountLines = binds.joinToString("\n") { (host, g) ->
-                val target = "$mnt$g"
-                "mkdir -p \"$target\" && mount --bind ${shellQuote(host)} \"$target\" || " +
+                "mkdir -p \"\$MNT$g\" && mount --bind ${shellQuote(host)} \"\$MNT$g\" || " +
                     "echo " + shellQuote("[DSH-Folk] chroot 挂载失败: $host -> $g")
             }
-            val unmountLines = binds.map { it.second }.distinct().reversed().joinToString("\n") {
-                "  umount -l \"$mnt$it\" 2>/dev/null"
-            }
+            // 卸载次序与挂载相反；模板里那句 for 会再补上 /sys /proc /dev
+            val unmountTargets = binds.map { it.second }.distinct().reversed()
+                .joinToString(" ") { shellQuote("\$MNT$it") }
             // 环境只收不含空格/单引号的项：脚本里用单引号包住 k=v，含这些字符会破坏引号
             val envLine = env.entries
                 .filter { (k, v) -> k.none { it == ' ' || it == '\'' } && v.none { it == ' ' || it == '\'' } }
                 .joinToString(" ") { (k, v) -> shellQuote("$k=$v") }
             // guest argv → 脚本的位置参数，每项只 quote 一次
             val guestArgs = guest.joinToString(" ") { shellQuote(it) }
-            val script = StringBuilder()
-            script.append("#!/system/bin/sh\n")
-            script.append("# DSH-Folk chroot 启动器（App 生成，勿手改）\n")
-            script.append("RFS=").append(shellQuote(rootfs.absolutePath)).append('\n')
-            script.append("MNT=").append(shellQuote(File(dir, "mnt").absolutePath)).append('\n')
-            script.append("APP_UID=").append(uid).append('\n')
-            script.append("APP_GID=").append(uid).append('\n')
-            script.append("cleanup() {\n")
-            script.append("  for d in \"$mnt/sys\" \"$mnt/proc\" \"$mnt/dev\"; do umount -l \"\$d\" 2>/dev/null; done\n")
-            if (unmountLines.isNotEmpty()) script.append(unmountLines).append('\n')
-            script.append("  umount -l \"$mnt\" 2>/dev/null\n")
-            script.append("}\n")
-            script.append("trap cleanup EXIT INT TERM\n")
-            // Android 应用进程的 umask 是 077，而这里是**真 root**：照它建出来的挂载点是 0700
-            // root 拥有，切回 proot（进程是 App uid）时连穿都穿不过去。umask 000 让本脚本与它
-            // 拉起的容器写出的文件对 App uid 可读写（外层目录是 App 私有的 0700，不对外暴露）。
-            script.append("umask 000\n")
-            script.append("mkdir -p \"$mnt\" || exit 90\n")
-            script.append("chmod 0777 \"$mnt\" 2>/dev/null\n")
-            // **不能**无条件再叠一层 tmpfs：服务运行期间 App 还会起短命的 chroot 子命令
-            // （插件操作、工作区检查等），叠一层会把正在跑的容器里的 /dev、/proc、/sdcard
-            // 全部盖掉 —— 真机表现就是「工作区里列目录 ENOENT」。
-            script.append("if ! grep -qs \" $mnt \" /proc/mounts; then\n")
-            script.append("  mount -t tmpfs tmpfs \"$mnt\" || exit 91\n")
-            script.append("fi\n")
-            script.append("mkdir -p \"$mnt/dev\" \"$mnt/proc\" \"$mnt/sys\"\n")
-            script.append("mount --bind /dev \"$mnt/dev\" || exit 92\n")
-            script.append("mount -t proc proc \"$mnt/proc\" || exit 93\n")
-            script.append("mount --bind /sys \"$mnt/sys\" 2>/dev/null\n")
-            if (mountLines.isNotEmpty()) script.append(mountLines).append('\n')
-            // 之前以真 root 跑过的话，容器数据是 root 拥有 + umask 077 → 文件 0600、目录 0700，
-            // 切回 proot 立刻 EACCES（真机：/root/.dsh/profiles/web/cordis.patch.yml）。修回 App uid。
-            // `find -user` 是主判据（干净时只是一次遍历）；万一 toybox 的 find 不认识它，
-            // 也不能因此漏掉修复 —— 退化成无条件 chown 一次。
-            script.append("if ! command -v find >/dev/null 2>&1 ||\n")
-            script.append("   [ -n \"\$(find \"\$RFS/root\" ! -user \"\$APP_UID\" 2>/dev/null | head -n 1)\" ]; then\n")
-            script.append("  chown -R \"\$APP_UID:\$APP_GID\" \"\$RFS/root\" \"\$RFS/tmp\" \"\$RFS/usr/local\" 2>/dev/null\n")
-            script.append("fi\n")
-            // guest argv 交给脚本位置参数；`--` 防止某项以 `-` 开头时被 set 当选项
-            script.append("set -- ").append(guestArgs).append('\n')
-            // 进 chroot 执行：env -i 起干净环境，再逐个喂我们这份，最后摊开 "$@"
-            script.append("exec chroot \"\$RFS\" /usr/bin/env -i ").append(envLine)
-            // 只转义 $（Kotlin 模板），@ 是普通字符；写成 \@ 会报 Unsupported escape sequence
-            script.append(" \"\$@\"\n")
-            return script.toString()
+            val template = ctx.assets.open(LAUNCH_ASSET).use {
+                it.readBytes().toString(StandardCharsets.UTF_8)
+            }
+            return template
+                .replace("@RFS@", shellQuote(rootfs.absolutePath))
+                .replace("@MNT@", shellQuote(File(dir, "mnt").absolutePath))
+                .replace("@APP_UID@", uid.toString())
+                .replace("@APP_GID@", uid.toString())
+                .replace("@UNMOUNT_TARGETS@", unmountTargets)
+                .replace("@MOUNT_LINES@", mountLines)
+                .replace("@GUEST_ARGS@", guestArgs)
+                .replace("@ENV@", envLine)
         }
 
         /**
@@ -430,6 +396,14 @@ interface ContainerRuntime {
         }.getOrNull()
 
         companion object {
+            /**
+             * 启动脚本模板（assets 里的普通 shell 文件）。
+             *
+             * 放 assets 而不是在 Kotlin 里拼字符串：本地与 CI 都能对它直接跑 `sh -n`，
+             * 而这份脚本历史上正是被引号问题连坑三轮（issue #12）。
+             */
+            const val LAUNCH_ASSET = "chroot/launch.sh"
+
             /** 脚本与挂载点的工作目录（放 rootfs 之外，免得被运行时替换清掉）。 */
             fun workDir(ctx: Context): File = File(ctx.filesDir, "chroot")
 

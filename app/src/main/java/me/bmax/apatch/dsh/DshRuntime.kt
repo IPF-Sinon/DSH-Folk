@@ -529,6 +529,49 @@ object DshRuntime : DshRuntimeHost {
     }
 
     /**
+     * 容器启动前把 rootfs 里的容器数据修回 App uid。
+     *
+     * 为什么必须有：chroot 是**真 root**（见 [ContainerRuntime.Chroot]），它写出的
+     * /root/.dsh、/tmp、/usr/local 归 root；而 proot/proroot 里的进程是 App uid，连读都读不了
+     * —— 真机表现就是 proot 启动直接报
+     * `EACCES ... /root/.dsh/profiles/web/cordis.patch.yml`（issue #12）。
+     * proot 自己修不了（它不是 root），所以只能借一条 root 通道在**起容器之前**做。
+     *
+     * chroot 的启动脚本里也有同样一段（进入前 + 退出时各一次）。这里这份是给
+     * 「用户从 chroot 切回 proot/proroot」兜底 —— 那条路根本不会执行 chroot 的脚本，
+     * 而恰恰是那种情况下会撞上 EACCES。
+     *
+     * 没有 root 通道时直接跳过；失败不阻断启动。
+     */
+    private fun repairRootfsOwnership() {
+        val root = DshEnv.rootfs(appContext)
+        if (!root.isDirectory) return
+        // 与 chroot 能否启动同一判据：root 通道就绪
+        if (!ContainerRuntime.Chroot(appContext).available()) return
+        if (!PrivilegedShell.tryEnter()) {
+            appendLog("[own] 跳过 rootfs 属主修复：特权命令通道忙")
+            return
+        }
+        try {
+            val uid = appContext.applicationInfo.uid
+            val q = { s: String -> ContainerRuntime.Chroot.shellQuote(s) }
+            val script = "if ! command -v find >/dev/null 2>&1 || " +
+                // \$ 是 Kotlin 普通字符串里的字面量 $：这里要的是 shell 的命令替换
+                "[ -n \"\$(find ${q(File(root, "root").path)} ! -user $uid 2>/dev/null | head -n 1)\" ]; then " +
+                "chown -R $uid:$uid ${q(File(root, "root").path)} ${q(File(root, "tmp").path)} " +
+                "${q(File(root, "usr/local").path)} 2>/dev/null; fi"
+            val out = PrivilegedShell.exec(appContext, script, asRoot = true, timeoutMs = 20_000L)
+            if (out.exit == 0) {
+                appendLog("[own] rootfs 属主已核对（非 App uid 的条目已修回）")
+            } else {
+                appendLog("[own] rootfs 属主修复未成功：exit=" + out.exit + " " + out.stderr.take(120))
+            }
+        } finally {
+            PrivilegedShell.exit()
+        }
+    }
+
+    /**
      * 启动日志尾部是否指向插件树加载失败。
      *
      * 保守匹配：宁可漏判（退回旧的误降级行为）也不误判（把真正的 proroot 故障
@@ -1258,7 +1301,7 @@ object DshRuntime : DshRuntimeHost {
 
     /**
      * 启动并等待就绪；插件树冲突可自动修复时先卸载冲突包再重试一次，然后才是
-     * proroot → proot 回退（只重试一次：proot 也起不来就是真错了，再试无意义）。
+     * proroot/chroot → proot 回退（只重试一次：proot 也起不来就是真错了，再试无意义）。
      */
     private suspend fun startAndAwait() {
         prorootFellBack = false
@@ -2105,6 +2148,9 @@ object DshRuntime : DshRuntimeHost {
         // 之后 dsh 自身 reconcile / 启动自愈跑 `dsh plugin` 去 https 克隆 github: 插件就会撞
         // 「无 CA」（CAfile: none）。启动前无条件重设，见 DshPluginRepo.ensureGitCaAtStartup。
         DshPluginRepo.ensureGitCaAtStartup()
+        // chroot 以真 root 写过容器数据的话，切回 proot/proroot 会直接 EACCES（issue #12）。
+        // 放在真正起容器之前，且与运行时无关 —— 只有 root 能 chown。
+        repairRootfsOwnership()
 
         val port = port()
         val lan = lanEnabled()
@@ -2170,7 +2216,10 @@ object DshRuntime : DshRuntimeHost {
             serverProcess = null
             val detail = str(R.string.dsh_err_start_failed, e.message ?: e.javaClass.simpleName)
             appendLog("! $detail")
-            if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
+            // 不再限定 proroot：noteProrootFailure 自己认得 chroot（切回 proot 并返回 true），
+            // 而调用点那句 `runtimeId() == "proroot"` 会让 chroot 的回退分支永远不可达
+            // —— issue #12 里 chroot 起不来时用户就卡在「每次都失败」。
+            if (noteProrootFailure(detail)) {
                 logInfo(R.string.dsh_log_switched_to_proot)
             }
             _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
@@ -2790,7 +2839,7 @@ object DshRuntime : DshRuntimeHost {
             if (serverProcess?.isAlive == false) {
                 val base = str(R.string.dsh_err_process_exited)
                 appendLog("! $base")
-                if (runtimeId() == "proroot" && noteProrootFailure(base)) {
+                if (noteProrootFailure(base)) {
                     logInfo(R.string.dsh_log_switched_to_proot)
                 }
                 // 插件树失败时给出可执行的下一步，而不是只说「进程已退出」
@@ -2805,7 +2854,7 @@ object DshRuntime : DshRuntimeHost {
         // 卡在坏运行时上，自动回退 proot 的兜底形同不存在。
         val detail = str(R.string.dsh_err_start_timeout)
         appendLog("! $detail")
-        if (runtimeId() == "proroot" && noteProrootFailure(detail)) {
+        if (noteProrootFailure(detail)) {
             logInfo(R.string.dsh_log_switched_to_proot)
         }
         _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
