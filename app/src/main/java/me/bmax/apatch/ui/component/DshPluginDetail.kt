@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,16 +40,22 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshSource
 import me.bmax.apatch.ui.screen.formatCount
+import me.bmax.apatch.ui.viewmodel.PluginActionKind
 
 /**
  * 插件详情底部弹层。
@@ -71,6 +78,16 @@ fun DshPluginDetailSheet(
     onOpenRepo: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // 卸载要两段式：第一下只把按钮变红（确认移除），第二下才真的卸。
+    // 弹层是共用组件（已装页 + 商店页都开它），状态放这里两边就都是同一个行为。
+    var uninstallArmed by remember { mutableStateOf(false) }
+    // 8 秒不动就自己复位：变红了却忘了再点一下的话，按钮不该一直停在危险态。
+    LaunchedEffect(uninstallArmed) {
+        if (uninstallArmed) {
+            delay(8_000)
+            uninstallArmed = false
+        }
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
@@ -292,10 +309,31 @@ fun DshPluginDetailSheet(
                         Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.apm_update))
                     }
-                    plugin.installed -> OutlinedButton(onClick = { onDismiss(); onUninstall() }) {
+                    plugin.installed -> OutlinedButton(
+                        onClick = {
+                            if (uninstallArmed) {
+                                uninstallArmed = false
+                                onDismiss()
+                                onUninstall()
+                            } else {
+                                uninstallArmed = true
+                            }
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (uninstallArmed) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                        ),
+                    ) {
                         Icon(Icons.Outlined.Delete, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.apm_remove))
+                        Text(
+                            stringResource(
+                                if (uninstallArmed) R.string.dsh_plugin_confirm_remove else R.string.apm_remove,
+                            ),
+                        )
                     }
                     plugin.installable -> Button(onClick = { onDismiss(); onInstall() }) {
                         Icon(Icons.Outlined.Download, null, Modifier.size(18.dp))
@@ -368,6 +406,14 @@ fun DshPluginProgressDialog(
     onHide: (() -> Unit)? = null,
     /** 这次操作被用户停掉了：标题与「重启后生效」提示都要让开，别把它说成失败或完成。 */
     stopped: Boolean = false,
+    /**
+     * 已经点了「停止」但容器还没收尾。
+     *
+     * 单独一个状态是为了让点击**立刻**有反馈：以前点下去界面一动不动，用户以为按钮坏了。
+     */
+    stopping: Boolean = false,
+    /** 这次操作的种类：决定停止按钮的文案（卸载时不能写「停止更新」）。 */
+    actionKind: PluginActionKind = PluginActionKind.Install,
 ) {
     val scroll = rememberScrollState()
     // 新日志到达就滚到底，否则用户得一直手动追着滚
@@ -379,6 +425,7 @@ fun DshPluginProgressDialog(
         title = {
             Text(
                 text = when {
+                    running && stopping -> stringResource(R.string.dsh_plugin_stopping)
                     running -> stringResource(R.string.dsh_plugin_working_on, target)
                     stopped -> stringResource(R.string.dsh_plugin_stopped_on, target)
                     failed -> stringResource(R.string.dsh_plugin_failed_on, target)
@@ -447,8 +494,16 @@ fun DshPluginProgressDialog(
                 }
                 // 停止是破坏性动作：放左侧、与复制日志同一排；它真的会终止容器里正在跑的安装
                 if (running && onStop != null) {
-                    TextButton(onClick = onStop) {
-                        Text(stringResource(R.string.dsh_plugin_stop_update))
+                    TextButton(onClick = onStop, enabled = !stopping) {
+                        Text(
+                            stringResource(
+                                if (actionKind == PluginActionKind.Uninstall) {
+                                    R.string.dsh_plugin_stop_uninstall
+                                } else {
+                                    R.string.dsh_plugin_stop_update
+                                },
+                            ),
+                        )
                     }
                 }
                 if (!running && !failed && !stopped && needsRestart) {

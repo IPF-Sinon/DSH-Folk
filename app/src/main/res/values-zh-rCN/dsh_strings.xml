@@ -359,6 +359,14 @@
     <string name="dsh_plugin_show_progress">显示进度</string>
     <string name="dsh_plugin_stopped_on">%1$s 已停止</string>
     <string name="dsh_plugin_stopped_log">已按你的请求停止，容器内正在运行的安装进程已终止。</string>
+    <!-- 停止按钮要跟着动作说：卸载时写「停止更新」会让人以为按钮跟正在做的事不是一回事 -->
+    <string name="dsh_plugin_stop_uninstall">停止卸载</string>
+    <string name="dsh_plugin_stopping">正在停止…</string>
+    <string name="dsh_plugin_stopped_forced">已停止：容器进程未确认退出，界面已恢复（可重试）。</string>
+    <!-- 运行中再点别的动作时给句话，别再静默丢弃点击 -->
+    <string name="dsh_plugin_busy">已有操作正在进行，请先停止或等它结束。</string>
+    <!-- 卸载按钮的二次确认态：第一下只变红，再点一下才真的卸载 -->
+    <string name="dsh_plugin_confirm_remove">确认移除</string>
     <!-- 搜索无结果（与「目录拉取失败」区分开） -->
     <string name="dsh_plugin_no_match">没有匹配「%1$s」的插件</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>

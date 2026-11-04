@@ -126,6 +126,14 @@ fun DshPluginStoreScreen(navigator: DestinationsNavigator) {
     // 安装进度：与已安装页共用一份对话框实现
     PluginProgressHost(viewModel)
 
+    // 运行中又点了别的动作时，说明一句为什么没生效（VM 里那次点击不再静默丢弃）
+    LaunchedEffect(viewModel.transientMessage) {
+        viewModel.transientMessage?.let {
+            viewModel.consumeTransientMessage()
+            snackBarHost.showSnackbar(it)
+        }
+    }
+
     val pickTarball = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->

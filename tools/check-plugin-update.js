@@ -32,7 +32,9 @@ must(/val spec = if \(isGit \|\| version\.isBlank\(\)\) resolved else "\$resolve
   'install() 的 spec 组装被改：git 规格会被拼上 @版本（无效规格），或非空 version 不再拼 @');
 
 // 3. 插件页「更新」走 update()（= 显式 @latest），不能退回裸包名的 install()
-must(/fun update\(pkg: String, onDone: \(String\) -> Unit = \{\}\) =\s*\n?\s*install\(pkg, DshPluginRepo\.VERSION_LATEST, onDone = onDone\)/.test(vm),
+// 允许调用形态随参数增减而变化（如 actionKind），但 update() 必须把 VERSION_LATEST 传进 install()
+const updateFn = (vm.match(/fun update\(pkg: String, onDone: \(String\) -> Unit = \{\}\) =[\s\S]*?\n\n/) || [''])[0];
+must(/install\(/.test(updateFn) && /DshPluginRepo\.VERSION_LATEST/.test(updateFn),
   'ViewModel.update() 不再显式传 VERSION_LATEST —— pnpm 会把它当空操作');
 must(/onUpdate = \{ viewModel\.update\(/.test(screen),
   '插件页 onUpdate 没有走 viewModel.update()（退回裸包名 install 就又是空操作）');

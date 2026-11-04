@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -30,6 +32,7 @@ import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +55,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -66,6 +70,7 @@ import com.ramcosta.composedestinations.generated.destinations.DshPluginStoreScr
 import com.ramcosta.composedestinations.generated.destinations.ScriptMarketScreenDestination
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
@@ -109,6 +114,9 @@ private const val GROUP_SCRIPTS = "scripts"
 
 /** 第三页：扩展。目前只有入口与一句「暂不可用」，占位是为了让切换器先把三页的位置定下来。 */
 private const val GROUP_EXTENSIONS = "extensions"
+
+/** 「移除」二次确认态自己复位的时间：变红了却忘了再点一下，按钮不该一直停在危险态。 */
+private const val ARMED_REVERT_MS = 8_000L
 
 /** 切换器里的一页：[id] 是分组常量，[titleRes] 是菜单与标题栏上的名字。 */
 private class PluginPage(val id: String, val titleRes: Int)
@@ -460,6 +468,9 @@ internal fun PluginProgressHost(viewModel: DshPluginViewModel) {
         failed = viewModel.installFailed,
         // 停止是用户的意图：只有操作真的结束之后才按「已停止」显示
         stopped = viewModel.installStopped && !viewModel.installing,
+        // 点了停止但容器还没收尾：标题给「正在停止…」，让点击立刻有反馈
+        stopping = viewModel.installStopped && viewModel.installing,
+        actionKind = viewModel.installActionKind,
         onStop = { viewModel.stopInstall() },
         onHide = { viewModel.hideProgress() },
         onDismiss = { viewModel.dismissInstallLog() },
@@ -522,10 +533,34 @@ private fun DshPluginList(
         viewModel.plugins.firstOrNull { (it.pkg.ifEmpty { it.id }) == id }
     }
 
+    // 「移除」的二次确认态：存的是列表键，同一时刻最多一项是红的。
+    // 第一下只变红，第二下才真的卸载；点别处、8 秒不动、列表刷新都会复位。
+    var pendingUninstall by remember { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(pendingUninstall) {
+        if (pendingUninstall != null) {
+            delay(ARMED_REVERT_MS)
+            pendingUninstall = null
+        }
+    }
+    // 搜索变了、列表重载了，之前那颗红按钮对应的项可能已经不在列表里：复位，免得指向幽灵
+    LaunchedEffect(viewModel.search, list) { pendingUninstall = null }
+    // 滚动也算「点别处」：滚走了还留着红按钮没有意义
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) pendingUninstall = null
+    }
+    // 「为什么这次点击没生效」这类一次性提示（例如运行中又点了别的动作）
+    LaunchedEffect(viewModel.transientMessage) {
+        viewModel.transientMessage?.let {
+            viewModel.consumeTransientMessage()
+            snackBarHost.showSnackbar(it)
+        }
+    }
+
     detail?.let { p ->
         DshPluginDetailSheet(
             plugin = p,
-            onDismiss = { detailId = null },
+            onDismiss = { detailId = null; pendingUninstall = null },
             onInstall = { viewModel.install(p.pkg) },
             onUpdate = { viewModel.update(p.pkg) },
             onUninstall = { viewModel.uninstall(p.pkg) },
@@ -555,7 +590,13 @@ private fun DshPluginList(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier
+            .fillMaxSize()
+            // 点空白处 = 「别处」：被按钮/卡片消费掉的手势不会冒到这里，所以它们照常工作
+            .pointerInput(pendingUninstall) {
+                detectTapGestures { if (pendingUninstall != null) pendingUninstall = null }
+            },
         contentPadding = PaddingValues(
             top = innerPadding.calculateTopPadding() + 8.dp,
             start = 16.dp,
@@ -588,13 +629,33 @@ private fun DshPluginList(
             }
         }
         items(list, key = { it.pkg.ifEmpty { it.id } }) { plugin ->
+            val key = plugin.pkg.ifEmpty { plugin.id }
             DshPluginItem(
                 plugin = plugin,
                 showMoreInfo = viewModel.showMoreInfo,
-                onUpdate = { viewModel.update(plugin.pkg) },
-                onUninstall = { viewModel.uninstall(plugin.pkg) },
-                onToggle = { viewModel.setDisabled(plugin.pkg, !plugin.disabled) },
-                onOpenDetail = { detailId = plugin.pkg.ifEmpty { plugin.id } },
+                onUpdate = {
+                    pendingUninstall = null
+                    viewModel.update(plugin.pkg)
+                },
+                uninstallArmed = pendingUninstall == key,
+                onUninstallClick = {
+                    if (pendingUninstall == key) {
+                        // 第二下：确认过了，真的卸载
+                        pendingUninstall = null
+                        viewModel.uninstall(plugin.pkg)
+                    } else {
+                        // 第一下：只进入确认态，不发任何命令
+                        pendingUninstall = key
+                    }
+                },
+                onToggle = {
+                    pendingUninstall = null
+                    viewModel.setDisabled(plugin.pkg, !plugin.disabled)
+                },
+                onOpenDetail = {
+                    pendingUninstall = null
+                    detailId = key
+                },
             )
         }
         item { HomeBottomSpacer() }
@@ -645,7 +706,9 @@ private fun DshPluginItem(
     plugin: DshPlugin,
     showMoreInfo: Boolean,
     onUpdate: () -> Unit,
-    onUninstall: () -> Unit,
+    /** 这颗「移除」是否已经处在二次确认态（第一下变红，第二下才真的卸载）。 */
+    uninstallArmed: Boolean,
+    onUninstallClick: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onOpenDetail: () -> Unit,
 ) {
@@ -788,10 +851,25 @@ private fun DshPluginItem(
                         Text(stringResource(R.string.apm_update))
                     }
                 }
-                TextButton(onClick = onUninstall) {
+                // 两段式：第一下只把按钮变红（确认移除），第二下才真的卸载；
+                // contentColor 同时管住图标与文字，默认的 primary 就是原来的蓝色。
+                TextButton(
+                    onClick = onUninstallClick,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = if (uninstallArmed) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    ),
+                ) {
                     Icon(Icons.Outlined.Delete, null, Modifier.size(16.dp))
                     Spacer(Modifier.size(6.dp))
-                    Text(stringResource(R.string.apm_remove))
+                    Text(
+                        stringResource(
+                            if (uninstallArmed) R.string.dsh_plugin_confirm_remove else R.string.apm_remove,
+                        ),
+                    )
                 }
             }
         }

@@ -377,6 +377,14 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_plugin_show_progress">Show progress</string>
     <string name="dsh_plugin_stopped_on">%1$s stopped</string>
     <string name="dsh_plugin_stopped_log">Stopped at your request. The running install has been terminated inside the container.</string>
+    <!-- The stop button must match the action: "Stop update" is wrong while uninstalling -->
+    <string name="dsh_plugin_stop_uninstall">Stop uninstall</string>
+    <string name="dsh_plugin_stopping">Stopping…</string>
+    <string name="dsh_plugin_stopped_forced">Stopped: the container process did not confirm exit, so the UI was reset. You can retry.</string>
+    <!-- Say something when another action is tapped while busy, instead of dropping the click -->
+    <string name="dsh_plugin_busy">Another operation is already running — stop it or wait for it to finish.</string>
+    <!-- Armed state of the remove button: the first tap only turns it red, the second one uninstalls -->
+    <string name="dsh_plugin_confirm_remove">Confirm remove</string>
     <!-- 搜索无结果（与「目录拉取失败」区分开） -->
     <string name="dsh_plugin_no_match">No plugin matches “%1$s”</string>
     <string name="dsh_plugin_likes">♡ %1$s</string>

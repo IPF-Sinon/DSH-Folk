@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.APApplication
@@ -17,6 +18,14 @@ import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshPlugin
 import me.bmax.apatch.dsh.DshPluginRepo
 import me.bmax.apatch.dsh.DshRuntime
+
+/**
+ * 这次插件操作的种类。
+ *
+ * 进度窗口的「停止」按钮文案要跟着它走：卸载时写「停止更新」是错的，用户会觉得
+ * 按钮跟正在做的事不是一回事。默认 [Install]，所以老调用点不改也不会崩。
+ */
+enum class PluginActionKind { Install, Update, Uninstall, Toggle, Local, Repair }
 
 /**
  * DSH 插件页状态。
@@ -166,6 +175,23 @@ class DshPluginViewModel : ViewModel() {
     var progressHidden by mutableStateOf(false)
         private set
 
+    /** 正在进行的操作种类：决定进度窗口停止按钮的文案（见 [PluginActionKind]）。 */
+    var installActionKind by mutableStateOf(PluginActionKind.Install)
+        private set
+
+    /**
+     * 一次性提示（snackbar）。
+     *
+     * 用来解释「为什么这次点击没生效」——以前这种事是静默的，用户只能看到按钮没反应。
+     * 读走即清（[consumeTransientMessage]），否则每次重组都会再弹一遍。
+     */
+    var transientMessage by mutableStateOf<String?>(null)
+        private set
+
+    fun consumeTransientMessage() {
+        transientMessage = null
+    }
+
     /**
      * 「停止更新」：真的终止容器里正在跑的 pnpm / dsh plugin，而不是只把窗口关掉。
      *
@@ -177,6 +203,18 @@ class DshPluginViewModel : ViewModel() {
         installStopped = true
         // 容器侧终止自己也要起一次容器命令，放 IO；不能占主线程
         viewModelScope.launch(Dispatchers.IO) { runCatching { DshRuntime.killPluginOperations() } }
+        // 兜底：杀不掉进程时（pgrep 没匹配上、进程卡在不可中断状态）上面那次 [run] 会一直
+        // 阻塞在流上，installing 就永远留在 true，之后每次点击都被静默丢弃 —— 真机反馈的
+        // 「停止没用，接着点别的插件也没反应」就是这么来的。
+        // 过了宽限期还没收尾就强制复位界面；底层进程若仍在跑，它返回时照旧会写真实结果。
+        viewModelScope.launch {
+            delay(STOP_GRACE_MS)
+            if (installing && installStopped) {
+                installing = false
+                lastOutput = apApp.appString(R.string.dsh_plugin_stopped_forced)
+                refresh()
+            }
+        }
     }
 
     /** 收起进度窗口，操作继续。 */
@@ -383,13 +421,20 @@ class DshPluginViewModel : ViewModel() {
         }
     }
 
-    fun install(pkg: String, version: String = "", fallbackTgz: String = "", onDone: (String) -> Unit = {}) {
+    fun install(
+        pkg: String,
+        version: String = "",
+        fallbackTgz: String = "",
+        actionKind: PluginActionKind = PluginActionKind.Install,
+        onDone: (String) -> Unit = {},
+    ) {
         val tgz = fallbackTgz.takeIf { it.isNotBlank() }
         run(
             pkg,
             { DshPluginRepo.install(pkg, version, it, fallbackTgz = tgz) },
             onDone,
             verify = true,
+            actionKind = actionKind,
             // 被 pnpm 拦下构建脚本时，把「放行后重试」记成待确认动作
             retryWithBuilds = { allow, cb ->
                 run(
@@ -397,6 +442,7 @@ class DshPluginViewModel : ViewModel() {
                     { DshPluginRepo.install(pkg, version, it, allowBuilds = allow, fallbackTgz = tgz) },
                     cb,
                     verify = true,
+                    actionKind = actionKind,
                 )
             },
         )
@@ -412,10 +458,15 @@ class DshPluginViewModel : ViewModel() {
      * 原样保留。
      */
     fun update(pkg: String, onDone: (String) -> Unit = {}) =
-        install(pkg, DshPluginRepo.VERSION_LATEST, onDone = onDone)
+        install(
+            pkg,
+            DshPluginRepo.VERSION_LATEST,
+            actionKind = PluginActionKind.Update,
+            onDone = onDone,
+        )
 
     fun uninstall(pkg: String, onDone: (String) -> Unit = {}) {
-        run(pkg, { DshPluginRepo.uninstall(pkg, it) }, onDone)
+        run(pkg, { DshPluginRepo.uninstall(pkg, it) }, onDone, actionKind = PluginActionKind.Uninstall)
     }
 
     /**
@@ -442,6 +493,7 @@ class DshPluginViewModel : ViewModel() {
             },
             onDone,
             verify = false,
+            actionKind = PluginActionKind.Toggle,
         )
     }
 
@@ -451,6 +503,7 @@ class DshPluginViewModel : ViewModel() {
             { DshPluginRepo.installLocal(containerPath, it) },
             onDone,
             verify = true,
+            actionKind = PluginActionKind.Local,
         )
     }
 
@@ -461,7 +514,7 @@ class DshPluginViewModel : ViewModel() {
      * 需要实时日志和失败留存，没有理由另做一套 UI。
      */
     fun repairStore(onDone: (String) -> Unit = {}) {
-        run("重建插件依赖", { DshPluginRepo.repairStore(it) }, onDone)
+        run("重建插件依赖", { DshPluginRepo.repairStore(it) }, onDone, actionKind = PluginActionKind.Repair)
     }
 
     /**
@@ -497,15 +550,24 @@ class DshPluginViewModel : ViewModel() {
         onDone: (String) -> Unit,
         verify: Boolean = false,
         affectsPluginTree: Boolean = true,
+        actionKind: PluginActionKind = PluginActionKind.Install,
         retryWithBuilds: ((List<String>, (String) -> Unit) -> Unit)? = null,
     ) {
-        if (installing) return
+        if (installing) {
+            // 以前这里直接 return：用户点了「更新」看到界面毫无变化，以为按钮坏了
+            // （真机反馈「点更新按钮没反应，点其他插件的更新按钮也是没反应」）。
+            // 现在把进度窗口叫回来并说明原因 —— 上一次操作还在跑，或者卡住了，两种都该被看见。
+            progressHidden = false
+            transientMessage = apApp.appString(R.string.dsh_plugin_busy)
+            return
+        }
         viewModelScope.launch {
             try {
                 installing = true
                 installFailed = false
                 installStopped = false
                 progressHidden = false
+                installActionKind = actionKind
                 installTarget = target
                 installLog = emptyList()
                 // onLine 在容器输出的读线程上被调，不能直接写 Compose 状态，
@@ -562,6 +624,8 @@ class DshPluginViewModel : ViewModel() {
                 lastOutput = if (extra.isEmpty()) out else "$extra\n$out"
                 installFailed = failed
                 installing = false
+                // 真装完了就别再显示「已停止」：停止可能刚好落在完成前一瞬
+                if (!failed) installStopped = false
                 // 回滚过就等于什么都没装，不该提示重启；不动插件树的操作同样不提示
                 if (!failed && affectsPluginTree) needsRestart = true
 
@@ -626,5 +690,13 @@ class DshPluginViewModel : ViewModel() {
 
         /** 安装日志保留行数上限：pnpm 能刷出上万行，全留会拖垮列表渲染。 */
         const val MAX_LOG_LINES = 400
+
+        /**
+         * 「停止」后的宽限期：超过它界面就强制复位。
+         *
+         * 取值依据 [DshRuntime.killPluginOperations] 自身的上限（等 8s + TERM/KILL 各 1s），
+         * 再留足读流收尾的余量 —— 正常停止远用不到这么久。
+         */
+        const val STOP_GRACE_MS = 20_000L
     }
 }
