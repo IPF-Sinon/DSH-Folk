@@ -383,6 +383,14 @@ This overwrites settings files and uninstalls plugins the snapshot does not cont
     <string name="dsh_plugin_stopped_forced">Stopped: the container process did not confirm exit, so the UI was reset. You can retry.</string>
     <!-- Say something when another action is tapped while busy, instead of dropping the click -->
     <string name="dsh_plugin_busy">Another operation is already running — stop it or wait for it to finish.</string>
+    <string name="dsh_plugin_busy_on">%1$s %2$s is already running — stop it or wait for it to finish.</string>
+    <!-- Action names (composed into dsh_plugin_busy_on) -->
+    <string name="dsh_plugin_action_install">Installing</string>
+    <string name="dsh_plugin_action_update">Updating</string>
+    <string name="dsh_plugin_action_uninstall">Uninstalling</string>
+    <string name="dsh_plugin_action_toggle">Toggling</string>
+    <string name="dsh_plugin_action_local">Installing locally</string>
+    <string name="dsh_plugin_action_repair">Rebuilding dependencies for</string>
     <!-- Armed state of the remove button: the first tap only turns it red, the second one uninstalls -->
     <string name="dsh_plugin_confirm_remove">Confirm remove</string>
     <!-- 搜索无结果（与「目录拉取失败」区分开） -->
@@ -1341,6 +1349,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_plug_log_git_fixed">git repaired</string>
     <string name="dsh_plug_log_gh_mirror_try">Trying GitHub mirror %1$s …</string>
     <string name="dsh_plug_log_npm_registry_try">Trying npm registry %1$s …</string>
+    <!-- Only printed when the shell fails to parse: the raw error does not say which command -->
+    <string name="dsh_plug_log_cmd_parse_failed">Plugin command failed to parse in the shell; argument fragment: %1$s</string>
     <string name="dsh_plug_log_git_ca">Configured git CA certificates (from Node\'s trust store)</string>
     <string name="dsh_plug_log_gh_direct_try">Mirrors failed; trying a direct GitHub connection …</string>
     <string name="dsh_plug_log_gh_tgz_try">git failed on every route; falling back to the tarball %1$s …</string>

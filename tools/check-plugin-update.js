@@ -120,7 +120,12 @@ const rtCode = runtime.split("\n")
   .map((l) => l.replace(/\/\/.*$/, "").replace(/^\s*\*.*$/, ""))
   .join("\n");
 must(/fun stopInstall\(\)/.test(vm), "ViewModel 缺 stopInstall()：「停止更新」没有落点");
-must(/DshRuntime\.killPluginOperations\(\)/.test(vm), "「停止更新」没有真的去终止容器里的安装进程");
+// 现在走 requestPluginStop()：它除了杀容器内进程，还要置「已请求停止」标志 ——
+// 安装链是多步重试的，只杀当前那步的话循环会接着试下一个源（真机反馈）。
+must(/DshRuntime\.requestPluginStop\(\)/.test(vm), "「停止更新」没有真的去终止容器里的安装进程");
+must(/fun requestPluginStop\(\)/.test(runtime) && /killPluginOperations\(\)/.test(
+  runtime.slice(runtime.indexOf("fun requestPluginStop()"), runtime.indexOf("fun killPluginOperations()")),
+), "requestPluginStop() 没有同时终止容器里的安装进程");
 must(/fun killPluginOperations\(\)/.test(runtime), "DshRuntime 缺 killPluginOperations()");
 must(/pgrep -f 'pnpm'/.test(runtime) && /DSHFOLK_PLUGIN_STOP_SENTINEL/.test(runtime),
   "容器侧终止没杀 pnpm，或缺哨兵保护（pgrep -f 会匹配到自己，kill -KILL 先自杀）");

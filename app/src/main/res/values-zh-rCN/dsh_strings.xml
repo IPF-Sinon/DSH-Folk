@@ -363,8 +363,16 @@
     <string name="dsh_plugin_stop_uninstall">停止卸载</string>
     <string name="dsh_plugin_stopping">正在停止…</string>
     <string name="dsh_plugin_stopped_forced">已停止：容器进程未确认退出，界面已恢复（可重试）。</string>
-    <!-- 运行中再点别的动作时给句话，别再静默丢弃点击 -->
+    <!-- 运行中再点别的动作时给句话，别再静默丢弃点击；带上正在跑的那件事，用户才知道为什么没生效 -->
     <string name="dsh_plugin_busy">已有操作正在进行，请先停止或等它结束。</string>
+    <string name="dsh_plugin_busy_on">正在%1$s %2$s，请先停止或等它结束。</string>
+    <!-- 动作名（拼进 dsh_plugin_busy_on） -->
+    <string name="dsh_plugin_action_install">安装</string>
+    <string name="dsh_plugin_action_update">更新</string>
+    <string name="dsh_plugin_action_uninstall">卸载</string>
+    <string name="dsh_plugin_action_toggle">切换状态</string>
+    <string name="dsh_plugin_action_local">本地安装</string>
+    <string name="dsh_plugin_action_repair">重建依赖</string>
     <!-- 卸载按钮的二次确认态：第一下只变红，再点一下才真的卸载 -->
     <string name="dsh_plugin_confirm_remove">确认移除</string>
     <!-- 搜索无结果（与「目录拉取失败」区分开） -->
@@ -1316,6 +1324,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_plug_log_git_fixed">git 已修复</string>
     <string name="dsh_plug_log_gh_mirror_try">正在试 GitHub 镜像线路 %1$s …</string>
     <string name="dsh_plug_log_npm_registry_try">正在试 npm 源 %1$s …</string>
+    <!-- 只在 shell 解析失败时打印：光看 "unexpected EOF while looking for matching `'" 不知道是哪条命令 -->
+    <string name="dsh_plug_log_cmd_parse_failed">插件命令被 shell 解析失败，参数片段：%1$s</string>
     <string name="dsh_plug_log_git_ca">已给 git 配置 CA 根证书（取自 Node 信任库）</string>
     <string name="dsh_plug_log_gh_direct_try">镜像都没成，改用直连 GitHub 再试 …</string>
     <string name="dsh_plug_log_gh_tgz_try">git 全线路失败，回落到离线包 %1$s …</string>

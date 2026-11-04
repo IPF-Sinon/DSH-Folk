@@ -2951,6 +2951,30 @@ object DshRuntime : DshRuntimeHost {
      * 子 shell），必须先按 /proc/<pid>/cmdline 跳过 —— 否则 kill -KILL 会先把自己杀掉，
      * 真正在跑的安装反而留着。
      */
+    /**
+     * 用户点了「停止」。
+     *
+     * 除了杀容器里正在跑的 pnpm/dsh plugin，还要置一个标志：安装链是**多步重试**的
+     * （多条 registry / 多条 github 线路 / tgz 兜底），杀掉当前那一步之后，循环会接着试
+     * 下一个源 —— 真机反馈的「停止更新后还会尝试更新」就是这么来的。
+     * 重试链每一步之前问一次 [pluginStopRequested]，用户喊停就真的不再往下试。
+     */
+    @Volatile
+    private var pluginStopFlag = false
+
+    fun requestPluginStop() {
+        pluginStopFlag = true
+        killPluginOperations()
+    }
+
+    /** 本次插件操作是否已被要求停止（重试链用它提前收手）。 */
+    fun pluginStopRequested(): Boolean = pluginStopFlag
+
+    /** 每次插件操作开始时清掉：上一次的停止不能把这一次也拦掉。 */
+    fun clearPluginStop() {
+        pluginStopFlag = false
+    }
+
     fun killPluginOperations() {
         runCatching {
             execRootfs(

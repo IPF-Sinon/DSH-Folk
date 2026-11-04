@@ -201,8 +201,10 @@ class DshPluginViewModel : ViewModel() {
     fun stopInstall() {
         if (!installing || installStopped) return
         installStopped = true
-        // 容器侧终止自己也要起一次容器命令，放 IO；不能占主线程
-        viewModelScope.launch(Dispatchers.IO) { runCatching { DshRuntime.killPluginOperations() } }
+        // 容器侧终止自己也要起一次容器命令，放 IO；不能占主线程。
+        // requestPluginStop 还会置标志：安装链是多步重试的，杀掉当前那步之后循环会接着试
+        // 下一个源（真机反馈「停止更新后还会尝试更新」）。
+        viewModelScope.launch(Dispatchers.IO) { runCatching { DshRuntime.requestPluginStop() } }
         // 兜底：杀不掉进程时（pgrep 没匹配上、进程卡在不可中断状态）上面那次 [run] 会一直
         // 阻塞在流上，installing 就永远留在 true，之后每次点击都被静默丢弃 —— 真机反馈的
         // 「停止没用，接着点别的插件也没反应」就是这么来的。
@@ -558,7 +560,18 @@ class DshPluginViewModel : ViewModel() {
             // （真机反馈「点更新按钮没反应，点其他插件的更新按钮也是没反应」）。
             // 现在把进度窗口叫回来并说明原因 —— 上一次操作还在跑，或者卡住了，两种都该被看见。
             progressHidden = false
-            transientMessage = apApp.appString(R.string.dsh_plugin_busy)
+            // 带上「正在跑的是哪一件」：只说「已有操作在进行」，用户看到进度窗口里是上一个插件的
+            // 信息会以为点错了（真机反馈：更新 A 时点 B，窗口显示的是 A）。目标为空时退回通用文案。
+            val busyTarget = installTarget
+            transientMessage = if (busyTarget.isEmpty()) {
+                apApp.appString(R.string.dsh_plugin_busy)
+            } else {
+                apApp.appString(
+                    R.string.dsh_plugin_busy_on,
+                    apApp.appString(actionLabelRes(installActionKind)),
+                    busyTarget,
+                )
+            }
             return
         }
         viewModelScope.launch {
@@ -568,6 +581,8 @@ class DshPluginViewModel : ViewModel() {
                 installStopped = false
                 progressHidden = false
                 installActionKind = actionKind
+                // 清掉上一次的停止标志：它只对上一次那条重试链有效
+                DshRuntime.clearPluginStop()
                 installTarget = target
                 installLog = emptyList()
                 // onLine 在容器输出的读线程上被调，不能直接写 Compose 状态，
@@ -649,6 +664,16 @@ class DshPluginViewModel : ViewModel() {
                 installing = false
             }
         }
+    }
+
+    /** 动作种类 → 名称资源（拼进「正在更新 X」这类提示）。 */
+    private fun actionLabelRes(kind: PluginActionKind): Int = when (kind) {
+        PluginActionKind.Install -> R.string.dsh_plugin_action_install
+        PluginActionKind.Update -> R.string.dsh_plugin_action_update
+        PluginActionKind.Uninstall -> R.string.dsh_plugin_action_uninstall
+        PluginActionKind.Toggle -> R.string.dsh_plugin_action_toggle
+        PluginActionKind.Local -> R.string.dsh_plugin_action_local
+        PluginActionKind.Repair -> R.string.dsh_plugin_action_repair
     }
 
     /** 安装后验证开关（默认开）。 */

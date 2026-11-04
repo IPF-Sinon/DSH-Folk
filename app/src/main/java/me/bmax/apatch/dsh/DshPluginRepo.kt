@@ -1109,7 +1109,7 @@ object DshPluginRepo {
         // 没绑定 context 就没法读测速缓存：退回原命令（等于竞速未生效），不冒险猜源
         val ctx = DshRuntime.appContextOrNull()
         if (ctx == null || !DshRuntime.raceEnabled(DshRuntime.RACE_PLUGINS)) {
-            return dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+            return dshPlugin("add ${importFlag()}${shellQuoted(spec)}", 900_000, onLine)
         }
         var last = ""
         // 装一个 npm 规格，pnpm 也会**重新解析整个 profile 的依赖树**：只要里面有一条 git
@@ -1120,12 +1120,20 @@ object DshPluginRepo {
         applyGitRewrite(racePrefixes().firstOrNull { it.isNotEmpty() } ?: "")
         try {
             for (registry in DshSource.rankedNpmRegistries(ctx)) {
+                // 用户刚点了「停止」：不再往下试其它源。杀掉当前 pnpm 之后循环本来会接着试
+                // 下一条 —— 真机反馈「停止更新后还会尝试更新」就是这里少了一个判断。
+                if (DshRuntime.pluginStopRequested()) return last
                 line(onLine, R.string.dsh_plug_log_npm_registry_try, registry)
-                last = dshPlugin("add ${importFlag()}--registry '$registry' '$spec'", 900_000, onLine)
+                last = dshPlugin(
+                    "add ${importFlag()}--registry ${shellQuoted(registry)} ${shellQuoted(spec)}",
+                    900_000,
+                    onLine,
+                )
                 if (exitOk(last)) return last
             }
+            if (DshRuntime.pluginStopRequested()) return last
             // 全部 registry 都没成：再按原命令试最后一次（不带 --registry，即用户自己在容器里配的源）
-            last = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+            last = dshPlugin("add ${importFlag()}${shellQuoted(spec)}", 900_000, onLine)
         } finally {
             clearGitRewrite()
         }
@@ -1154,26 +1162,30 @@ object DshPluginRepo {
             // 不绕镜像，但**归一化**仍要有：容器里没有 ssh 凭据，`git+ssh://` 规格直连
             // github 只会得到「Host key verification failed」（见 [GIT_REWRITE_BASES]）。
             applyGitRewrite("")
-            val out = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+            val out = dshPlugin("add ${importFlag()}${shellQuoted(spec)}", 900_000, onLine)
             clearGitRewrite()
             return out
         }
         val prefixes = racePrefixes()
         var last = ""
         for (prefix in prefixes) {
+            // 与 npm 那条链同一个道理：被叫停就别再试下一条线路
+            if (DshRuntime.pluginStopRequested()) { clearGitRewrite(); return last }
             applyGitRewrite(prefix)
             if (prefix.isNotEmpty()) line(onLine, R.string.dsh_plug_log_gh_mirror_try, prefix)
             else line(onLine, R.string.dsh_plug_log_gh_direct_try)
-            last = dshPlugin("add ${importFlag()}'$spec'", 900_000, onLine)
+            last = dshPlugin("add ${importFlag()}${shellQuoted(spec)}", 900_000, onLine)
             if (exitOk(last)) { clearGitRewrite(); return last }
         }
         // git 全线路都没成：有 tgz 直链就绕开 git 再试（同样按线路顺序）
         if (!fallbackTgz.isNullOrBlank()) {
             clearGitRewrite() // tgz 是纯 HTTP 下载，不需要（也不该）带 git 重写
             for (prefix in prefixes) {
+                // 上面已经 clearGitRewrite() 过，这里直接返回
+                if (DshRuntime.pluginStopRequested()) return last
                 val url = prefix + fallbackTgz
                 line(onLine, R.string.dsh_plug_log_gh_tgz_try, url)
-                last = dshPlugin("add ${importFlag()}'$url'", 900_000, onLine)
+                last = dshPlugin("add ${importFlag()}${shellQuoted(url)}", 900_000, onLine)
                 if (exitOk(last)) return last
             }
         }
@@ -1436,7 +1448,7 @@ object DshPluginRepo {
     ): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext str(R.string.dsh_plug_log_no_pkg_remove)
         // remove 不从 store 导入文件，不需要 importFlag
-        dshPlugin("remove '$pkg'", 600_000, onLine)
+        dshPlugin("remove ${shellQuoted(pkg)}", 600_000, onLine)
     }
 
     /** 本地安装：宿主 tgz 路径已由调用方复制进容器可见位置。 */
@@ -1445,7 +1457,7 @@ object DshPluginRepo {
         onLine: (String) -> Unit = {},
     ): String = withContext(Dispatchers.IO) {
         // 绝对路径原样传给 pnpm（dsh 只重写相对路径 spec），tgz 装完同样会被 reconcile
-        val out = dshPlugin("add ${importFlag()}'$containerPath'", 900_000, onLine)
+        val out = dshPlugin("add ${importFlag()}${shellQuoted(containerPath)}", 900_000, onLine)
         out + repairIfLinkageBroken(onLine)
     }
 
@@ -1730,7 +1742,7 @@ object DshPluginRepo {
         withContext(Dispatchers.IO) {
             if (pkg.isBlank()) return@withContext false
             line(onLine, R.string.dsh_plug_log_rollback, pkg)
-            val out = dshPlugin("remove '$pkg'", 600_000, onLine)
+            val out = dshPlugin("remove ${shellQuoted(pkg)}", 600_000, onLine)
             val marker = out.lineSequence().lastOrNull { it.startsWith(EXIT_MARKER) }
             val code = marker?.removePrefix(EXIT_MARKER)?.trim()?.toIntOrNull()
             val ok = code == 0
@@ -1822,6 +1834,7 @@ object DshPluginRepo {
             { line -> filter.accept(line, onLine) },
         )
         reportFiltered(filter.finish(), onLine)
+        reportShellParseFailure(args, out, onLine)
         return out.ifBlank { str(R.string.dsh_plug_no_output) }
     }
 
@@ -1832,6 +1845,18 @@ object DshPluginRepo {
      * 运行时提供（profile 的 node_modules 里本来就没有，上游注释写得很清楚），
      * 每装一个插件铺一屏红字只会让人以为装坏了。
      */
+    /**
+     * 命令被 shell 解析失败时，把**参数片段**写进日志。
+     *
+     * `unexpected EOF while looking for matching \`'\`` 这类报错只说「有一条命令引号不配对」，
+     * 不说是哪一条 —— 这份命令链已经被引号问题坑过多次（issue #12 那三轮也是同类），
+     * 光看输出只能猜。只在这一类报错时打印，平时不刷屏。
+     */
+    private fun reportShellParseFailure(args: String, out: String, onLine: (String) -> Unit) {
+        if (!out.contains("unexpected EOF") && !out.contains("syntax error")) return
+        line(onLine, R.string.dsh_plug_log_cmd_parse_failed, args.take(240))
+    }
+
     private fun reportFiltered(summary: DshPluginLogFilter.Summary, onLine: (String) -> Unit) {
         if (!summary.hasSomething) return
         if (summary.exitCode != 0) {
