@@ -52,8 +52,14 @@ const busyBlock = (vm.match(/if \(installing\) \{[\s\S]*?\n        \}/) || [''])
 must(busyBlock !== '', '找不到 run() 里的「正在忙」分支');
 must(/transientMessage = /.test(busyBlock),
   'run() 在 installing 时仍然静默 return（用户点了看不出任何变化）');
-must(/progressHidden = false/.test(busyBlock),
-  '忙时没有把进度窗口叫回来（若被隐藏，用户找不到它）');
+// 反过来：**不许**在这里把进度窗口叫回来 —— 窗口里是上一个插件的信息，
+// 用户点了 B 却弹出「正在处理 A」，看起来就是弹错了（真机截图反馈）。
+// 要回旧窗口请走列表顶部那条「显示进度」（有独立断言）。
+must(!/progressHidden = false/.test(busyBlock),
+  '忙时又把上一个插件的进度窗口弹出来了（用户会以为弹错了；应只给提示）');
+must(/viewModel\.installing && viewModel\.progressHidden/.test(screen)
+  && /dsh_plugin_show_progress/.test(screen),
+  '进度窗口被隐藏后没有「显示进度」入口（那就真的找不回来了）');
 must(/dsh_plugin_busy_on/.test(busyBlock) && /actionLabelRes/.test(vm),
   '忙时提示没说明「正在跑的是哪一件」（进度窗口显示上一个插件的信息会让人以为点错了）');
 must(/var transientMessage by mutableStateOf<String\?>\(null\)/.test(vm), '缺 transientMessage 状态');
