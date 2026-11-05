@@ -58,8 +58,12 @@ must(/refreshError by mutableStateOf/.test(vm),
 must(vm.includes("plugins = plugins.map { if (it.pkg == pkg) it.copy(disabled = disabled) else it }"),
   'setDisabled() 成功后缺乐观更新 —— 开关要立刻翻转，不等那一轮读盘');
 // run()/refresh() 的 installing/isRefreshing 必须在 finally 里复位（异常不能让后续操作静默失效）
-must(/\} finally \{[\s\S]{0,60}installing = false[\s\S]{0,20}\}/.test(vm),
+// 复位必须落在 finally 里；但允许带「换代」守卫（宽限期强制复位后，上一代迟到地
+// 跑完不能把新操作的 installing 抹掉）—— 所以匹配 finally 块内的条件式复位。
+must(/\} finally \{[\s\S]{0,240}installing = false[\s\S]{0,20}\}/.test(vm),
   'run() 的 installing = false 不在 finally 里 —— 一次异常会让之后所有安装/切换静默失效');
+must(/\} finally \{[\s\S]{0,220}if \(gen == runGeneration\) installing = false/.test(vm),
+  'finally 里的复位没有换代守卫：旧协程迟到收尾会把新操作的 installing 抹掉');
 must(/\} finally \{[\s\S]{0,60}isRefreshing = false/.test(vm),
   'refresh() 的 isRefreshing 复位不在 finally 里 —— 异常会把它永久挂 true');
 // 详情面板持 id 不持实体（否则面板里的开关停在打开那一刻）

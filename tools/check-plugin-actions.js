@@ -138,6 +138,24 @@ must(/out\.contains\("unexpected EOF"\) && !out\.contains\("syntax error"\)/.tes
   || /!out\.contains\("unexpected EOF"\) && !out\.contains\("syntax error"\)/.test(repo),
   '诊断的触发条件不对（只该在 shell 解析失败时打印）');
 
+// ---- 7e. 停止要能真的打断当前那一步（pgrep 模式必须匹配真实 argv） ----
+// 真实 argv 是 `node … plugin --profile web add …`，没有连续的 "plugin add" 子串；
+// 早先那两条模式是死模式，一条进程都匹配不到（外部审计实测 argv 形状后确认）。
+must(/pgrep -f 'plugin --profile'/.test(dshRuntime),
+  "killPluginOperations 的 pgrep 模式匹配不到真实的 dsh plugin argv");
+must(!/pgrep -f 'plugin add'/.test(dshRuntime) && !/pgrep -f 'plugin remove'/.test(dshRuntime),
+  "还在用 'plugin add'/'plugin remove' 这两条死模式（真实 argv 里没有这个连续子串）");
+must(/DSHFOLK_PLUGIN_STOP_SENTINEL/.test(dshRuntime),
+  "pgrep -f 会匹配到执行它的 shell 自己，必须保留哨兵跳过");
+
+// ---- 7f. 宽限期复位后，上一代协程不许再写共享状态 ----
+must(/private var runGeneration = 0/.test(vm), '缺 runGeneration（新旧操作会抢 installLog/lastOutput）');
+must(/val gen = \+\+runGeneration/.test(vm), 'run() 没有在开头换代');
+must(/if \(gen != runGeneration\) return@launch/.test(vm) && /if \(gen == runGeneration\) installing = false/.test(vm),
+  '旧一代的写入/收尾没有被挡住');
+const watchdog = (vm.match(/delay\(STOP_GRACE_MS\)[\s\S]{0,400}?\n            \}/) || [''])[0];
+must(/runGeneration\+\+/.test(watchdog), '强制复位时没有换代（旧协程仍会写进新操作的日志）');
+
 // ---- 8. 字符串两种语言都要有 ----
 for (const name of [
   'dsh_plugin_confirm_remove',

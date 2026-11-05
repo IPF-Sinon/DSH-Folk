@@ -2980,8 +2980,9 @@ object DshRuntime : DshRuntimeHost {
             execRootfs(
                 ": DSHFOLK_PLUGIN_STOP_SENTINEL; " +
                 "_kill() { for _p in " +
-                "\$(pgrep -f 'pnpm' 2>/dev/null; pgrep -f 'plugin add' 2>/dev/null; " +
-                "pgrep -f 'plugin remove' 2>/dev/null); do " +
+                // 真实 argv 是 `node … plugin --profile web add|remove …`（见 DshPluginRepo.dshPlugin），
+                // 没有连续的 "plugin add" 子串 —— 早先那两条模式是**死模式**，一条都匹配不到。
+                "\$(pgrep -f 'pnpm' 2>/dev/null; pgrep -f 'plugin --profile' 2>/dev/null); do " +
                 "grep -qa DSHFOLK_PLUGIN_STOP_SENTINEL \"/proc/\$_p/cmdline\" 2>/dev/null && continue; " +
                 "kill \"\$1\" \"\$_p\" 2>/dev/null; done; }; " +
                 "_kill -TERM; sleep 1; _kill -KILL"

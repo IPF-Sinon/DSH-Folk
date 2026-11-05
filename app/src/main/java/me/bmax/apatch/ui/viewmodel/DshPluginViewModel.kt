@@ -175,6 +175,16 @@ class DshPluginViewModel : ViewModel() {
     var progressHidden by mutableStateOf(false)
         private set
 
+    /**
+     * 当前是第几代操作。
+     *
+     * 存在的理由：点「停止」后 [STOP_GRACE_MS] 到点会**强制复位**界面，但那条协程可能还卡在
+     * 阻塞读上没结束 —— 它随后仍会写 installLog / lastOutput / installing。用户此时若又开了
+     * 新操作，两代就会互相覆盖（真机反馈：更新 A 时点 B，窗口里显示的是 A 的信息）。
+     * 每次 [run] 自增一代，旧一代的写入一律丢弃。
+     */
+    private var runGeneration = 0
+
     /** 正在进行的操作种类：决定进度窗口停止按钮的文案（见 [PluginActionKind]）。 */
     var installActionKind by mutableStateOf(PluginActionKind.Install)
         private set
@@ -212,6 +222,9 @@ class DshPluginViewModel : ViewModel() {
         viewModelScope.launch {
             delay(STOP_GRACE_MS)
             if (installing && installStopped) {
+                // 换代：让上面那条还活着的协程之后写不进任何东西（否则它会跟新一次操作
+                // 抢 installLog / lastOutput）
+                runGeneration++
                 installing = false
                 lastOutput = apApp.appString(R.string.dsh_plugin_stopped_forced)
                 refresh()
@@ -575,6 +588,7 @@ class DshPluginViewModel : ViewModel() {
             return
         }
         viewModelScope.launch {
+            val gen = ++runGeneration
             try {
                 installing = true
                 installFailed = false
@@ -589,6 +603,8 @@ class DshPluginViewModel : ViewModel() {
                 // 所以绕回 viewModelScope（主调度器）再追加。
                 val append: (String) -> Unit = { line ->
                     viewModelScope.launch {
+                        // 上一代的输出：宽限期已经复位过界面，这些行不该再进来
+                        if (gen != runGeneration) return@launch
                         if (line.startsWith(DshPluginRepo.EXIT_MARKER)) return@launch
                         val next = installLog + line
                         installLog = if (next.size > MAX_LOG_LINES) next.takeLast(MAX_LOG_LINES) else next
@@ -599,6 +615,9 @@ class DshPluginViewModel : ViewModel() {
                 // 包名跟规格根本不是一回事，拿规格 remove 会失败）
                 val before = if (verify) withContext(Dispatchers.IO) { DshPluginRepo.bundles() } else emptyList()
                 val raw = action(append)
+                // 这次已经是上一代了（宽限期强制复位 / 被新操作顶掉）：结果一律不写，
+                // 否则会用旧结果覆盖新操作的状态
+                if (gen != runGeneration) return@launch
                 // 用户点了「停止更新」，而且这次**确实没跑完**：按停止收尾，不算失败、
                 // 不提示重启。若恰好在停止的同时正常结束，仍按结果算 —— 不能把一次成功的
                 // 安装说成被停掉。
@@ -657,11 +676,15 @@ class DshPluginViewModel : ViewModel() {
                 refresh()
             } catch (e: Exception) {
                 // 任何一步抛异常都不能把 installing 留在 true —— 那会让之后所有安装/切换静默失效
-                installFailed = true
-                lastOutput = e.message ?: e.javaClass.simpleName
                 Log.w(TAG, "plugin action failed", e)
+                if (gen == runGeneration) {
+                    installFailed = true
+                    lastOutput = e.message ?: e.javaClass.simpleName
+                }
             } finally {
-                installing = false
+                // 只有「当前这一代」才有资格收尾：上一代迟到地跑完，不能把新操作的
+                // installing 抹成 false
+                if (gen == runGeneration) installing = false
             }
         }
     }
