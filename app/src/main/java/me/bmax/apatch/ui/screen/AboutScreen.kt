@@ -57,8 +57,6 @@ import me.bmax.apatch.R
 import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 
-@Destination<RootGraph>
-
 /**
  * 一位赞助者。
  *
@@ -84,6 +82,11 @@ private val SPONSORS = listOf(
         avatarRes = me.bmax.apatch.R.drawable.sponsor_daqiwancheng,
     ),
 )
+
+// 注意：下面这行 @Destination 必须**紧贴** AboutScreen。中间插任何声明都会让
+// composedestinations 把注解当成加在别的东西上，于是 AboutScreenDestination 不再生成
+// （CI 报的就是 Home.kt 里 Unresolved reference 'AboutScreenDestination'）。
+@Destination<RootGraph>
 @Composable
 fun AboutScreen(navigator: DestinationsNavigator) {
     val uriHandler = LocalUriHandler.current
