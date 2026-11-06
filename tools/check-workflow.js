@@ -846,7 +846,8 @@ console.log("\u2500 #16t 回退复制必须保留符号链接（Issue #12 真正
   // rootfs 里到处是悬空符号链接，跟随读取必然 ENOENT。所以复制必须先判链接、原样重建。
   ok(/readSymbolicLink\(toPath\(\)\)/.test(inst), '复制前先读符号链接目标（不跟随）');
   ok(/Os\.symlink\(linkTarget\.toString\(\), dst\.absolutePath\)/.test(inst), '用 Os.symlink 原样重建链接');
-  const copyFn = inst.slice(inst.indexOf('private fun File.copyRecursiveTo('));
+  // 可见性从 private 提到 internal（扩展系统安装也要用它，避免复制一份丢了这个链接语义）
+  const copyFn = inst.slice(inst.indexOf('internal fun File.copyRecursiveTo('));
   const linkCheckAt = copyFn.indexOf('readSymbolicLink');
   const isDirAt = copyFn.indexOf('if (isDirectory)');
   ok(linkCheckAt > 0 && isDirAt > 0 && linkCheckAt < isDirAt,
