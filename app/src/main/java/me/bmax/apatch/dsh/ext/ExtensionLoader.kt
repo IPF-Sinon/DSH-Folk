@@ -64,6 +64,18 @@ object ExtensionLoader {
     /** 加载一个已启用的扩展（含 manifest 校验与日志）。给 [ExtensionEngine] 用。 */
     internal fun boot(ctx: Context, rec: ExtensionRecord): DshExtension? {
         val mf = rec.manifest
+        // minAppVersion 必须在**加载时**拦住，而不是只在市场里拦：
+        // 扩展可能被用户手工拷进 files/extensions/、也可能是「市场里装完、App 后来被降级」。
+        // 不拦的后果是运行时 NoSuchMethodError —— 扩展调的是新版本宿主才有的方法，
+        // 而那个异常会出现在扩展自己的调用栈里，看起来像是「宿主崩了」。
+        val required = mf.minAppVersion
+        if (!required.isNullOrBlank() && !DshRuntime.appSatisfies(required)) {
+            DshRuntime.appendLog(
+                "[ext] " + mf.id + " 要求宿主 >= " + required + "，当前 " +
+                    me.bmax.apatch.BuildConfig.VERSION_NAME + "，已跳过加载",
+            )
+            return null
+        }
         val ext = load(ctx, mf) { why ->
             DshRuntime.appendLog("[ext] " + mf.id + " " + why)
         } ?: return null

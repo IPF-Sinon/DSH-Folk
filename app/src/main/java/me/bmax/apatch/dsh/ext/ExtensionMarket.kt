@@ -229,6 +229,18 @@ object ExtensionMarket {
                 )
             }
 
+            // 3b) 宿主版本门槛：扩展可能依赖只有新版本宿主才有的 API。
+            // 在这里拦是为了「下载完就立刻失败」，而不是等用户重启后才发现它根本没加载
+            // （加载期还有一道兜底，见 ExtensionLoader.boot —— 手工拷进来的扩展走不到这里）。
+            parsed.minAppVersion?.takeIf { it.isNotBlank() }?.let { required ->
+                if (!DshRuntime.appSatisfies(required)) {
+                    throw MarketFailure(
+                        "安装失败：这个扩展要求宿主版本 >= " + required +
+                            "，当前是 " + me.bmax.apatch.BuildConfig.VERSION_NAME,
+                    )
+                }
+            }
+
             // 4) 交给扩展系统：复制到 filesDir、置 enabled=true、写日志都在它内部完成
             val manifest = ExtensionRegistry.installFromDir(ctx, unpacked)
                 ?: throw MarketFailure("安装失败：写入扩展目录失败（详见 dsh.log）")

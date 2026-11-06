@@ -176,6 +176,12 @@ must(/popUpTo\(navController\.graph\.startDestinationId\) \{ saveState = true \}
   /launchSingleTop = true/.test(shellHostImpl) && /restoreState = true/.test(shellHostImpl),
   "ShellHost 的 navigate 没有用与底栏一致的 popUpTo/launchSingleTop/restoreState");
 
+
+// ---- 8e. minAppVersion：扩展依赖新宿主 API 时，旧宿主必须拒绝加载 ----
+must(/minAppVersion/.test(loader) && /DshRuntime\.appSatisfies\(required\)/.test(loader),
+  "ExtensionLoader 没有校验 minAppVersion：旧宿主加载新扩展会在运行期 NoSuchMethodError");
+
+
 const crash = read('app/src/main/java/me/bmax/apatch/ui/CrashHandleActivity.kt');
 must(/ExtensionEngine\.disableAllAndLatch\(/.test(crash), '崩溃页没有「禁用全部扩展」的救援入口');
 must(!/ExtensionUiRegistry/.test(crash), '崩溃页不许接扩展 UI（会被扩展接管，用户就点不到救援按钮了）');
@@ -184,6 +190,10 @@ const screen = read('app/src/main/java/me/bmax/apatch/ui/screen/DshPluginScreen.
 
 // ---- 8b. 扩展市场：下载来的东西比本机的更不可信，三道防线一道都不能少 ----
 const market = read(EXT + "ExtensionMarket.kt");
+// 扩展可能依赖只有新宿主才有的 API（例如 ShellHost.resetToDefaultShell）：旧宿主必须拒装/拒载，
+// 否则运行期是 NoSuchMethodError，而它出现在扩展的调用栈里，看起来像宿主崩了。
+must(/DshRuntime\.appSatisfies\(required\)/.test(market),
+  "市场安装没有校验 minAppVersion：用户要等重启后才发现扩展根本没加载");
 must(/const val DEFAULT_INDEX_URL = "https:\/\/raw\.githubusercontent\.com\/IPF-Sinon\/dsh-folk-plugins\/main\/index\.json"/.test(market),
   "市场目录默认地址必须指向 dsh-folk-plugins 仓库的 index.json");
 must(/MessageDigest\.getInstance\("SHA-256"\)/.test(market),
