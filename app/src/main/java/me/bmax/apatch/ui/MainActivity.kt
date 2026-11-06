@@ -104,6 +104,7 @@ import com.ramcosta.composedestinations.rememberNavHostEngine
 import com.ramcosta.composedestinations.utils.isRouteOnBackStackAsState
 import com.ramcosta.composedestinations.utils.rememberDestinationsNavigator
 import me.bmax.apatch.APApplication
+import me.bmax.apatch.dsh.ext.ExtensionUiRegistry
 import me.bmax.apatch.ui.screen.BottomBarDestination
 import me.bmax.apatch.ui.theme.APatchTheme
 import me.bmax.apatch.ui.theme.APatchThemeWithBackground
@@ -940,6 +941,30 @@ class MainActivity : AppCompatActivity() {
                         onUserScroll = { resetBottomBarAutoHide() }
                     )
 
+                    // ── 外壳替换 ──────────────────────────────────────────────
+                    // 扩展可以整屏接管 App 的导航外壳（顶栏/侧栏/底栏），**页面树本身原样复用**：
+                    // 外壳负责「怎么切页」，宿主负责「页长什么样」。这样即使外壳只画了个半成品，
+                    // 插件页、设置页、终端页也都还能到 —— 那是不让用户被关在空房间里的底线。
+                    var shellTick by remember { mutableStateOf(0) }
+                    val activeShell = remember(shellTick) { ExtensionUiRegistry.shellOverride() }
+                    val shellHost = rememberDshShellHost(
+                        navController = navController,
+                        homeRoute = homeRoute,
+                        currentRoute = currentRoute,
+                        onShellReleased = { shellTick++ },
+                    )
+                    // 两处 DestinationsNavHost 共用同一份参数（原来它们是复制粘贴的两份，
+                    // 现在被外壳分支也要用到，复制第三份就会三处各长各的）。
+                    val navHostSlot: @Composable (Modifier) -> Unit = { m ->
+                        DestinationsNavHost(
+                            modifier = m,
+                            navGraph = NavGraphs.root,
+                            navController = navController,
+                            engine = rememberNavHostEngine(navHostContentAlignment = Alignment.TopCenter),
+                            defaultTransitions = navTransitions
+                        )
+                    }
+
                     Box(modifier = Modifier.fillMaxSize()) {
                         // 键盘弹起时底栏被整块盖住，那 80dp 预留就变成内容与键盘之间
                         // 的空隙（真机实测约 0.15 屏高）——此时收为 0，让页面自己的
@@ -957,7 +982,31 @@ class MainActivity : AppCompatActivity() {
                                 }
                             )
 
-                        if (useNavigationRail) {
+                        // 外壳生效时侧栏/底栏都不画：导航归它管，宿主再画一条就是两条并排的导航。
+                        if (activeShell != null) {
+                            CompositionLocalProvider(
+                                LocalSnackbarHost provides snackBarHostState,
+                                LocalScrollState provides if (isFloatingMode) ScrollState(
+                                    isScrollingDown = isScrollingDown,
+                                    scrollOffset = scrollOffset,
+                                    previousScrollOffset = previousScrollOffset
+                                ) else null,
+                                LocalBottomBarVisible provides bottomBarVisibleState,
+                                LocalIsFloatingNavMode provides isFloatingMode
+                            ) {
+                                // 返回键语义与宿主一致：在非首页返回首页，首页交回系统
+                                BackHandler(enabled = currentRoute in bottomBarRoutes && currentRoute != homeRoute) {
+                                    navController.navigate(homeRoute) {
+                                        popUpTo(NavGraphs.root.route) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                                activeShell.content(shellHost) { inner ->
+                                    navHostSlot(inner.then(baseContentModifier))
+                                }
+                            }
+                        } else if (useNavigationRail) {
                             Row(modifier = Modifier.fillMaxSize()) {
                                 NavigationRailBar(navController)
                                 CompositionLocalProvider(
@@ -977,13 +1026,7 @@ class MainActivity : AppCompatActivity() {
                                             restoreState = true
                                         }
                                     }
-                                    DestinationsNavHost(
-                                        modifier = Modifier.weight(1f).then(baseContentModifier),
-                                        navGraph = NavGraphs.root,
-                                        navController = navController,
-                                        engine = rememberNavHostEngine(navHostContentAlignment = Alignment.TopCenter),
-                                        defaultTransitions = navTransitions
-                                    )
+                                    navHostSlot(Modifier.weight(1f).then(baseContentModifier))
                                 }
                             }
                         } else {
@@ -997,17 +1040,11 @@ class MainActivity : AppCompatActivity() {
                                 LocalBottomBarVisible provides bottomBarVisibleState,
                                 LocalIsFloatingNavMode provides isFloatingMode
                             ) {
-                                DestinationsNavHost(
-                                    modifier = Modifier.fillMaxSize().then(baseContentModifier),
-                                    navGraph = NavGraphs.root,
-                                    navController = navController,
-                                    engine = rememberNavHostEngine(navHostContentAlignment = Alignment.TopCenter),
-                                    defaultTransitions = navTransitions
-                                )
+                                navHostSlot(Modifier.fillMaxSize().then(baseContentModifier))
                             }
                         }
 
-                        if (!useNavigationRail) {
+                        if (!useNavigationRail && activeShell == null) {
                             if (isFloatingMode) {
                                 // Back press on a non-home tab returns to the home tab
                                 // with the floating bar reset; back on the home tab keeps

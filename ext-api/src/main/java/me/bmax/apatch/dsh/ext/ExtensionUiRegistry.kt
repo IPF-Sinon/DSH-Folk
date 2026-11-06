@@ -40,6 +40,22 @@ interface ShellHost {
     /** 当前所在的主页面 id（外壳用来高亮）。 */
     fun currentTabId(): String
 
+    /**
+     * 当前所在主页面的**可观察**版本。
+     *
+     * 为什么光有 [currentTabId] 不够：用户按系统返回键、或被别的入口切页时，外壳收不到通知，
+     * 侧栏高亮会停在上一次调 navigate 的那一页 —— 看起来像点错了。外壳应收集这个流。
+     */
+    fun currentTabStates(): StateFlow<String>
+
+    /**
+     * 切回宿主默认外壳（= 停用当前这个外壳扩展）。
+     *
+     * 必须有这个入口：外壳接管了整个导航，一旦它自己画坏了，用户就没有任何「回去」的路 ——
+     * 只能去扩展页找到它并关掉，而那需要先能看见扩展页，也正是被接管的部分。
+     */
+    fun resetToDefaultShell()
+
     /** 跳到任意目的地 route（设置子页等），外壳一般用不到。 */
     fun navigateRoute(route: String)
 

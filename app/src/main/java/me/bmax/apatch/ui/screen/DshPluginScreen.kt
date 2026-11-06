@@ -93,6 +93,7 @@ import me.bmax.apatch.dsh.ext.ExtensionLayout
 import me.bmax.apatch.dsh.ext.ExtensionRegistry
 import me.bmax.apatch.dsh.ext.ExtensionSafetyGuard
 import me.bmax.apatch.ui.component.AddMenuEntry
+import me.bmax.apatch.ui.component.ExtensionMarketSheet
 import me.bmax.apatch.ui.component.AddMenuFab
 import me.bmax.apatch.ui.component.DshPluginDetailSheet
 import me.bmax.apatch.ui.component.DshPluginProgressDialog
@@ -161,6 +162,11 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
     // 扩展页自己的过滤词（与插件页的 viewModel.search 分开：两页的列表来源完全不同，
     // 共用一个词会让「切页之后搜索框里还留着上一页的词、结果却是另一份列表」）
     var extensionFilter by rememberSaveable { mutableStateOf("") }
+    // 扩展市场弹层开关（扩展页 ＋ 菜单里那颗）
+    var showMarket by remember { mutableStateOf(false) }
+    // 市场装完要让扩展列表重读。列表的事实来源在 ExtensionsPane 内部（磁盘 + prefs，没有可观察流），
+    // 所以用一个自增信号从外面捅它一下，而不是把整份列表状态提到页面级。
+    var extensionRefresh by remember { mutableStateOf(0) }
     // 「隐藏内置」与脚本页那一页共用同一个 pref（两处看的是同一件事）。
     var hideBuiltins by remember { mutableStateOf(DshEnv.userscriptsHideBuiltins(context)) }
     // 脚本那组的安装请求：这一页的顶栏链接图标与右下角 FAB 只发请求，选择器与弹窗仍在
@@ -313,6 +319,17 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                         )
                     }
                 }
+                // 扩展页的 ＋ 只有「装」这一个语义：市场（远端）与从目录（本地）。
+                // 市场是这一轮才开放的；仍然不画「商店」那一条 —— 扩展没有 BSD 那种第三方源。
+                GROUP_EXTENSIONS -> AddMenuFab(
+                    listOf(
+                        AddMenuEntry(
+                            icon = Icons.Outlined.Storefront,
+                            labelRes = R.string.dsh_ext_market,
+                            onClick = { showMarket = true },
+                        ),
+                    ),
+                )
                 GROUP_PLUGINS -> AddMenuFab(
                     listOf(
                         AddMenuEntry(
@@ -369,6 +386,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                         modifier = Modifier.weight(1f),
                         snackBarHost = snackBarHost,
                         filter = extensionFilter,
+                        externalRefresh = extensionRefresh,
                     )
                     else -> DshPluginList(
                         // 外层 Column 已经吃掉 scaffold 的 inset，这里不能再吃一遍
@@ -703,6 +721,8 @@ private fun ExtensionsPane(
     snackBarHost: SnackbarHostState,
     /** 顶栏搜索框里的词（由插件页统一持有，与脚本页各用各的）。 */
     filter: String = "",
+    /** 外部要求重读列表的信号（市场装完一个扩展之后会 +1）。 */
+    externalRefresh: Int = 0,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -710,7 +730,9 @@ private fun ExtensionsPane(
     // 注册表的事实来源是磁盘（files/extensions/）加 SharedPreferences，没有可观察的数据流。
     // 所以拿自增的 refreshTick 当 remember 的 key：开关 / 移除之后 +1，等于重读一次磁盘。
     var refreshTick by remember { mutableStateOf(0) }
-    val allRecords = remember(refreshTick) { ExtensionRegistry.listInstalled(context) }
+    val allRecords = remember(refreshTick, externalRefresh) {
+        ExtensionRegistry.listInstalled(context)
+    }
     // 过滤 + 排序：与插件页同一套「过滤已加载列表」语义。排序改成「启用在前、名称升序」——
     // 插件页那套「有更新优先」在这里没有对应概念（扩展没有远端版本可对比）。
     val records = remember(allRecords, filter) {
@@ -865,6 +887,15 @@ private fun ExtensionsPane(
                 item { HomeBottomSpacer() }
             }
         }
+    }
+
+    if (showMarket) {
+        ExtensionMarketSheet(
+            onDismiss = { showMarket = false },
+            // 装完只重读列表，不自动启用：信任确认必须在用户看得见的那一步做（见 ExtensionsPane
+            // 里那条说明），市场替用户点掉它等于绕过了确认。
+            onInstalled = { extensionRefresh++ },
+        )
     }
 
     // 详情弹层：单击卡片进这里。动作（开关 / 移除）仍然留在卡片上 ——

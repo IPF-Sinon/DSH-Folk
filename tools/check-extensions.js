@@ -146,6 +146,36 @@ must(checkIdx > 0 && bootIdx > checkIdx, '必须「先检测熔断、再加载�
 must(/getDefaultUncaughtExceptionHandler\(\)/.test(app), '没有校验/复原根崩溃处理器（扩展可以劫持崩溃流）');
 must(/ExtensionSafetyGuard\.noteCrash\(/.test(app), '崩溃时没有计入扩展崩溃（连续崩溃不会自动熔断）');
 
+
+// ---- 8d. 外壳替换：接管导航外壳，但页面树必须原样还在 ----
+const main = read("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt");
+must(/ExtensionUiRegistry\.shellOverride\(\)/.test(main), "MainActivity 没有读外壳注册：扩展装了壳也不会生效");
+must(/activeShell\.content\(/.test(main), "MainActivity 没有渲染外壳内容");
+// 页面树必须被**传给**外壳，而不是被外壳替掉：否则外壳一旦画得不全，插件页/设置页就消失了
+must(/navHostSlot\(inner\.then\(baseContentModifier\)\)/.test(main),
+  "外壳分支没有把原有导航树传进去：用户会被关在只剩外壳的空房间里");
+// 至少三处用同一个 slot（外壳 / 侧栏 / 底栏）—— 复制粘贴出第二份就会三处各长各的
+{
+  const uses = (main.match(/navHostSlot\(/g) || []).length;
+  must(uses >= 3, "导航树没有被三处共用（外壳/侧栏/底栏），只找到 " + uses + " 处");
+}
+// else 分支必须保持原路径：外壳为空时行为不能变
+{
+  const shellIdx = main.indexOf("if (activeShell != null)");
+  const railIdx = main.indexOf("else if (useNavigationRail)");
+  must(shellIdx > 0 && railIdx > shellIdx,
+    "外壳判空分支被改过：没有扩展时必须原样走侧栏/底栏那条老路径");
+}
+const shellHostImpl = read("app/src/main/java/me/bmax/apatch/ui/ExtensionShellHost.kt");
+must(/override fun resetToDefaultShell\(\)/.test(shellHostImpl),
+  "ShellHost 没有实现 resetToDefaultShell：外壳画坏时用户没有回去的路");
+must(/override fun currentTabStates\(\)/.test(shellHostImpl),
+  "ShellHost 没有实现可观察的当前页：返回键切页时外壳高亮会不同步");
+// 导航参数必须与底栏同一套，否则同一台机器两种返回栈行为
+must(/popUpTo\(navController\.graph\.startDestinationId\) \{ saveState = true \}/.test(shellHostImpl) &&
+  /launchSingleTop = true/.test(shellHostImpl) && /restoreState = true/.test(shellHostImpl),
+  "ShellHost 的 navigate 没有用与底栏一致的 popUpTo/launchSingleTop/restoreState");
+
 const crash = read('app/src/main/java/me/bmax/apatch/ui/CrashHandleActivity.kt');
 must(/ExtensionEngine\.disableAllAndLatch\(/.test(crash), '崩溃页没有「禁用全部扩展」的救援入口');
 must(!/ExtensionUiRegistry/.test(crash), '崩溃页不许接扩展 UI（会被扩展接管，用户就点不到救援按钮了）');
