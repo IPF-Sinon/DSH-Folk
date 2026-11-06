@@ -126,12 +126,23 @@
 -keep class kotlin.** { *; }
 -keep class kotlinx.coroutines.flow.** { *; }
 
-# Compose：只保名字、允许裁剪优化。宿主是 Compose 应用，扩展用到的 compose 类型基本都
-# 被宿主自己用着，所以裁剪风险低；但名字一旦被改，扩展就链接不上。
--keepnames class androidx.compose.**
--keepnames class androidx.lifecycle.**
--keepnames class androidx.activity.**
+# Compose 必须**整包**保留，不能只保类名。
+#
+# 只写 -keepnames 会留一个很隐蔽的坑：类名保住了、**成员名没保住**。而 Compose 编译器
+# 生成的代码调的是 internal 成员（ComposableLambdaKt.composableLambdaInstance 之类），
+# Compose 自带的 consumer 规则并不保护它们 —— 宿主自己的调用会被 R8 一致重写所以没事，
+# 扩展 dex 里的调用是编译期写死的，于是抛：
+#   No static method composableLambdaInstance(...) in class ...ComposableLambdaKt
+# 真机踩过（beta.242）。
+-keep class androidx.compose.runtime.** { *; }
+-keep class androidx.compose.ui.** { *; }
+-keep class androidx.compose.foundation.** { *; }
+-keep class androidx.compose.material3.** { *; }
+-keep class androidx.compose.material.** { *; }
+-keep class androidx.compose.animation.** { *; }
 
-# 协程的续体/挂起相关类同样以名字被扩展引用。
--keepnames class kotlinx.coroutines.**
+# 协程与 lifecycle / activity：扩展画界面时同样会调到它们的 internal 成员。
+-keep class kotlinx.coroutines.** { *; }
+-keep class androidx.lifecycle.** { *; }
+-keep class androidx.activity.** { *; }
 

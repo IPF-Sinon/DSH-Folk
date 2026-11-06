@@ -211,8 +211,13 @@ must(/minAppVersion/.test(loader) && /DshRuntime\.appSatisfies\(required\)/.test
   // Failed resolution of: Lkotlin/jvm/internal/Intrinsics;（-repackageclasses 把它挪了包）
   must(/-keep class kotlin\.\*\* \{ \*; \}/.test(pg),
     "proguard 没有整包保留 kotlin-stdlib：扩展一进 onLoad 就会 Intrinsics 解析失败");
-  must(/-keepnames class androidx\.compose\.\*\*/.test(pg),
-    "proguard 没有保留 Compose 类名：扩展用 Compose 画界面时会链接不上");
+  // 必须是 -keep（连成员一起），不能是 -keepnames：Compose 编译器生成代码调的是 internal
+  // 成员，只保类名会出 "No static method composableLambdaInstance(...)"（beta.242 踩过）
+  must(/-keep class androidx\.compose\.runtime\.\*\* \{ \*; \}/.test(pg) &&
+    /-keep class androidx\.compose\.ui\.\*\* \{ \*; \}/.test(pg),
+    "proguard 没有整包保留 Compose（含成员）：扩展的 @Composable 会在运行期链接失败");
+  must(!/-keepnames class androidx\.compose/.test(pg),
+    "Compose 只用了 -keepnames（只保类名不保成员），扩展必炸");
   must(/-keep class kotlinx\.coroutines\.flow\.\*\*/.test(pg),
     "proguard 没有保留 kotlinx.coroutines.flow：扩展收集 StateFlow 会失败");
 }
