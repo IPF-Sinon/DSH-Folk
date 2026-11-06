@@ -1,5 +1,9 @@
 plugins {
     alias(libs.plugins.agp.app) apply false
+    // com.android.library 与 application 是同一个 AGP 产物：根里声明一次 apply false，
+    // 子模块（:ext-api）再 alias 才不会撞「plugin is already on the classpath with an
+    // unknown version」—— 那正是第一次跑 CI 时报的那个错。
+    alias(libs.plugins.agp.lib) apply false
     alias(libs.plugins.kotlin) apply false
     alias(libs.plugins.kotlin.compose.compiler) apply false
 }

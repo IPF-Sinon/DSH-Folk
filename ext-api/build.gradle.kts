@@ -1,5 +1,8 @@
 plugins {
     alias(libs.plugins.agp.lib)
+    // kotlin-android 才是「编译 Kotlin」的那个插件；compose-compiler 只是它的编译器插件，
+    // 单写后者会在 ext-api 里一个 .kt 都编不出来。
+    alias(libs.plugins.kotlin)
     alias(libs.plugins.kotlin.compose.compiler)
 }
 

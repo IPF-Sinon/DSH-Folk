@@ -153,6 +153,9 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
     // 当前显示哪一组；以及脚本那一组的过滤词（与插件那边同样是**过滤**语义，所以共用搜索栏）。
     var group by rememberSaveable { mutableStateOf(GROUP_PLUGINS) }
     var scriptFilter by rememberSaveable { mutableStateOf("") }
+    // 扩展页自己的过滤词（与插件页的 viewModel.search 分开：两页的列表来源完全不同，
+    // 共用一个词会让「切页之后搜索框里还留着上一页的词、结果却是另一份列表」）
+    var extensionFilter by rememberSaveable { mutableStateOf("") }
     // 「隐藏内置」与脚本页那一页共用同一个 pref（两处看的是同一件事）。
     var hideBuiltins by remember { mutableStateOf(DshEnv.userscriptsHideBuiltins(context)) }
     // 脚本那组的安装请求：这一页的顶栏链接图标与右下角 FAB 只发请求，选择器与弹窗仍在
@@ -205,15 +208,27 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                 },
                 // 两组的搜索都是「过滤已加载的列表」：插件过滤已装插件，脚本过滤「我装的」。
                 // 语义一样才敢共用一个框 —— 换成"去 GreasyFork 搜"就必须分开（那个框在市场那一页上）。
-                searchText = if (group == GROUP_SCRIPTS) scriptFilter else viewModel.search,
+                searchText = when (group) {
+                    GROUP_SCRIPTS -> scriptFilter
+                    GROUP_EXTENSIONS -> extensionFilter
+                    else -> viewModel.search
+                },
                 onSearchTextChange = {
-                    if (group == GROUP_SCRIPTS) scriptFilter = it else viewModel.search = it
+                    when (group) {
+                        GROUP_SCRIPTS -> scriptFilter = it
+                        GROUP_EXTENSIONS -> extensionFilter = it
+                        else -> viewModel.search = it
+                    }
                 },
                 onClearClick = {
-                    if (group == GROUP_SCRIPTS) scriptFilter = "" else viewModel.search = ""
+                    when (group) {
+                        GROUP_SCRIPTS -> scriptFilter = ""
+                        GROUP_EXTENSIONS -> extensionFilter = ""
+                        else -> viewModel.search = ""
+                    }
                 },
-                // 扩展页目前是占位：这一页没有可搜的东西，就不给一颗点开什么都搜不到的放大镜。
-                searchEnabled = group != GROUP_EXTENSIONS,
+                // 三页都给搜索：扩展页按 名称/id/说明/声明能力 过滤（与插件页同一套「过滤已加载列表」语义）。
+                searchEnabled = true,
                 dropdownContent = {
                     // 刷新只对插件那组有意义；脚本那组的「重读列表」在安装/删除后自己会做。
                     if (group == GROUP_PLUGINS) {
