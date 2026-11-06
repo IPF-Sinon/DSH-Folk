@@ -1,7 +1,6 @@
 package me.bmax.apatch.dsh.ext
 
 import android.content.Context
-import me.bmax.apatch.dsh.DshRuntime
 
 /**
  * [DshExtensionHost] 的宿主实现。
@@ -21,6 +20,6 @@ internal class ExtensionHostImpl(
     val platform: DshPlatform by lazy { DshPlatform(appContext, id) }
 
     override fun log(message: String) {
-        DshRuntime.appendLog("[ext:" + id + "] " + message)
+        ExtLog.log("[" + id + "] " + message)
     }
 }

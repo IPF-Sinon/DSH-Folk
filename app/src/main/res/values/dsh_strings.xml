@@ -1892,4 +1892,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_mode_chroot_name">chroot (real root)</string>
     <string name="dsh_mode_chroot_desc">Enter the container as real root. Note: chroot only changes the root directory - it is not a sandbox; it may make the workspace sandbox mode usable, depending on the device kernel.</string>
     <string name="dsh_mode_chroot_needs_root">Requires the root permission channel</string>
+    <!-- Sponsors block on the About screen -->
+    <string name="dsh_sponsors">Sponsors (%1$d)</string>
+    <string name="dsh_sponsors_hint">Thanks to them this project keeps going.</string>
 </resources>

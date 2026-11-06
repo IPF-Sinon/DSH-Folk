@@ -3,6 +3,19 @@ package me.bmax.apatch.ui.screen
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,6 +58,32 @@ import me.bmax.apatch.ui.component.ExpressiveCard
 import me.bmax.apatch.ui.component.SplicedColumnGroup
 
 @Destination<RootGraph>
+
+/**
+ * 一位赞助者。
+ *
+ * [avatarRes] 为空时界面会退成「首字母圆底」—— 这样新加赞助者不必先准备图片，
+ * 也避免为了一个占位图在 drawable 里堆一堆无用资源。
+ */
+private data class Sponsor(
+    val name: String,
+    val note: String = "",
+    val avatarRes: Int? = null,
+)
+
+/**
+ * 赞助者名单（按贡献先后排列，第一位是最早的支持者）。
+ *
+ * 为什么写在代码里而不是读远端：赞助者数量极少、变动极慢，
+ * 为它引入一次网络请求与失败态不值得；改名单时发一版即可。
+ */
+private val SPONSORS = listOf(
+    Sponsor(
+        name = "大器晚成",
+        // 头像来自赞助者本人提供的那张（drawable-nodpi 下不做密度适配，原样显示）
+        avatarRes = me.bmax.apatch.R.drawable.sponsor_daqiwancheng,
+    ),
+)
 @Composable
 fun AboutScreen(navigator: DestinationsNavigator) {
     val uriHandler = LocalUriHandler.current
@@ -177,6 +216,112 @@ fun AboutScreen(navigator: DestinationsNavigator) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // ── 赞助者 ────────────────────────────────────────────────────────
+            // 默认折叠成一行「赞助者 N 位」，点开才逐个列出。
+            // 为什么不直接摊开：关于页已经有「说明 / 链接 / 致谢」三块，赞助者一多会把整页拉长；
+            // 而它恰恰是「想看才会看」的信息，折叠起来更合适。
+            var sponsorsExpanded by remember { mutableStateOf(false) }
+            ExpressiveCard(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                flat = true,
+            ) {
+                Column(Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { sponsorsExpanded = !sponsorsExpanded }
+                            .padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Favorite,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = stringResource(R.string.dsh_sponsors, SPONSORS.size),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Icon(
+                            imageVector = if (sponsorsExpanded) {
+                                Icons.Outlined.ExpandLess
+                            } else {
+                                Icons.Outlined.ExpandMore
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    AnimatedVisibility(visible = sponsorsExpanded) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            for (s in SPONSORS) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // 头像：圆形裁切。用 ContentScale.Crop 而不是 Fit ——
+                                    // 赞助者给的多是方图或半身像，Fit 会留白边显得很空。
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape),
+                                    ) {
+                                        if (s.avatarRes != null) {
+                                            Image(
+                                                painter = painterResource(id = s.avatarRes),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+                                        } else {
+                                            // 没有头像就退成首字母圆底：比空白方块像样，
+                                            // 也保证新加赞助者时不必先准备图片。
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text(
+                                                    text = s.name.take(1),
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            text = s.name,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium,
+                                        )
+                                        if (s.note.isNotEmpty()) {
+                                            Text(
+                                                text = s.note,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Text(
+                                text = stringResource(R.string.dsh_sponsors_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
             // 致谢：这个 App 是站在这几个项目上做出来的，明确列出来
             ExpressiveCard(
                 modifier = Modifier.padding(horizontal = 16.dp),

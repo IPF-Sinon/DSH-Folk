@@ -1,6 +1,7 @@
 package me.bmax.apatch.ui.component
 
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -29,6 +31,8 @@ import androidx.compose.ui.unit.lerp
 import kotlin.math.cos
 import kotlin.math.sin
 import me.bmax.apatch.R
+import me.bmax.apatch.ui.navigation.LocalBottomBarVisible
+import me.bmax.apatch.ui.navigation.LocalIsFloatingNavMode
 
 /** 主按钮（右下角那颗 ＋/✕）的直径。 */
 private val ADD_FAB_SIZE = 56.dp
@@ -58,10 +62,31 @@ internal class AddMenuEntry(
  * 动画与悬浮球那套同形：progress 0 = 全部叠在主按钮圆心，1 = 各自到位；位移、透明度、缩放
  * 都由它插值出来，所以是「从 ＋ 里长出去」而不是原地淡入。**不过冲** —— 这一格的边正好压在
  * 落点上，弹簧一回弹就会被 Scaffold 的边裁掉。
+ *
+ * ## 为什么整体会上下浮动
+ * 这一格挂在 Scaffold 的 FAB 槽上，槽位是**固定贴底**的。而底栏有两种形态：固定时它就该在最下面，
+ * 悬浮时底栏会浮起来盖住这一带 —— 那时这颗 ＋ 正好被压在底栏底下，点不到。
+ * 所以按「底栏当前形态」给整格一个竖向偏移：悬浮且底栏可见、且不是横屏时上移，让开底栏。
+ * 横屏下底栏不悬浮，不需要让；固定模式下也不动 —— 它本来就该在最下面。
  */
 @Composable
 internal fun AddMenuFab(entries: List<AddMenuEntry>) {
     var expanded by remember { mutableStateOf(false) }
+
+    // 让开悬浮底栏：与底栏自身的升降动画同向，用户看到的是「导航浮起来，＋ 也跟着往上让」。
+    // 88dp ≈ 悬浮底栏高度 + 一点间距；取值与 HomeBottomSpacer 的那套留白一致。
+    val isFloatingMode = LocalIsFloatingNavMode.current
+    val bottomBarVisible = LocalBottomBarVisible.current.value
+    val isLandscape = LocalConfiguration.current.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val liftY by animateDpAsState(
+        targetValue = if (isFloatingMode && bottomBarVisible && !isLandscape) (-88).dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "addMenuLift",
+    )
     val progress by animateFloatAsState(
         targetValue = if (expanded) 1f else 0f,
         animationSpec = spring(
@@ -88,7 +113,7 @@ internal fun AddMenuFab(entries: List<AddMenuEntry>) {
             cy + ADD_RADIUS * sin(rad).toFloat() - ADD_MINI_SIZE / 2
     }
 
-    Box(Modifier.size(box)) {
+    Box(Modifier.size(box).offset(y = liftY)) {
         entries.forEachIndexed { i, entry ->
             val at = slot(i)
             AddMenuButton(

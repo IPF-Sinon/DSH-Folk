@@ -88,8 +88,8 @@ internal class AppExtensionFs(
         ExtensionSafetyGuard.isProtectedPath(ctx, file)
 
     private fun refuse(op: String, file: File) {
-        me.bmax.apatch.dsh.DshRuntime.appendLog(
-            "[ext:" + extensionId + "] 拒绝 " + op + " 保护路径：" + file.absolutePath,
+        ExtLog.log(
+            "[" + extensionId + "] 拒绝 " + op + " 保护路径：" + file.absolutePath,
         )
     }
 }

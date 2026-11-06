@@ -1,7 +1,6 @@
 package me.bmax.apatch.dsh.ext
 
 import android.content.Context
-import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.copyRecursiveTo
 import java.io.File
 
@@ -89,7 +88,7 @@ object ExtensionRegistry {
         if (!ok) return null
         // 装完默认**启用**：用户点安装就是想用；真要关，扩展页一个开关的事
         setEnabled(ctx, mf.id, true)
-        DshRuntime.appendLog("[ext] 已安装 " + mf.name + " v" + mf.version + "（" + mf.id + "）")
+        ExtLog.log("已安装 " + mf.name + " v" + mf.version + "（" + mf.id + "）")
         return mf
     }
 
@@ -99,7 +98,7 @@ object ExtensionRegistry {
         setEnabled(ctx, id, false)
         val dir = ExtensionLayout.dirOf(ctx, id)
         val ok = runCatching { if (dir.exists()) dir.deleteRecursively() else true }.getOrDefault(false)
-        if (ok) DshRuntime.appendLog("[ext] 已移除扩展：" + id)
+        if (ok) ExtLog.log("已移除扩展：" + id)
         return ok
     }
 }

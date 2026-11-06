@@ -42,14 +42,14 @@ object ExtensionBootPipeline {
         val startedAt = System.currentTimeMillis()
         for (e in list.sortedBy { it.priority }) {
             if (System.currentTimeMillis() - startedAt > STAGE_BUDGET_MS) {
-                me.bmax.apatch.dsh.DshRuntime.appendLog(
-                    "[ext] 启动管线 " + stage.name + " 超出 " + STAGE_BUDGET_MS + "ms 预算，已跳过剩余处理",
+                ExtLog.log(
+                    "启动管线 " + stage.name + " 超出 " + STAGE_BUDGET_MS + "ms 预算，已跳过剩余处理",
                 )
                 return
             }
             runCatching { e.handler.handle(ctx) }.onFailure {
-                me.bmax.apatch.dsh.DshRuntime.appendLog(
-                    "[ext:" + e.extensionId + "] 启动管线 " + stage.name + " 抛异常（已跳过）：" +
+                ExtLog.log(
+                    "[" + e.extensionId + "] 启动管线 " + stage.name + " 抛异常（已跳过）：" +
                         (it.message ?: it.javaClass.simpleName),
                 )
             }

@@ -1,7 +1,6 @@
 package me.bmax.apatch.dsh.ext
 
 import android.content.Context
-import me.bmax.apatch.dsh.DshRuntime
 import java.util.concurrent.ConcurrentHashMap
 
 /**

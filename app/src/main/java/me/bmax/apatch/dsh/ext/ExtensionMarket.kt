@@ -125,11 +125,11 @@ object ExtensionMarket {
                 // 取消不是「失败」：调用方的协程已经取消，吞掉它会让上游一直挂着
                 throw ce
             } catch (e: MarketFailure) {
-                DshRuntime.appendLog("[ext] 市场目录拉取失败：" + e.message)
+                ExtLog.log("市场目录拉取失败：" + e.message)
                 Result.failure<List<MarketEntry>>(e)
             } catch (e: Exception) {
                 // 兜底：意料之外的运行时异常也只能变成一句话，不能把市场页崩掉
-                DshRuntime.appendLog("[ext] 市场目录拉取异常：" + reasonOf(e))
+                ExtLog.log("市场目录拉取异常：" + reasonOf(e))
                 Result.failure<List<MarketEntry>>(MarketFailure("拉取市场目录失败：" + reasonOf(e), e))
             }
         }
@@ -159,10 +159,10 @@ object ExtensionMarket {
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: MarketFailure) {
-                DshRuntime.appendLog("[ext] 市场安装失败：" + entry.id + " —— " + e.message)
+                ExtLog.log("市场安装失败：" + entry.id + " —— " + e.message)
                 Result.failure<ExtensionManifest>(e)
             } catch (e: Exception) {
-                DshRuntime.appendLog("[ext] 市场安装异常：" + entry.id + " —— " + reasonOf(e))
+                ExtLog.log("市场安装异常：" + entry.id + " —— " + reasonOf(e))
                 Result.failure<ExtensionManifest>(MarketFailure("安装失败：" + reasonOf(e), e))
             }
         }
@@ -244,8 +244,8 @@ object ExtensionMarket {
             // 4) 交给扩展系统：复制到 filesDir、置 enabled=true、写日志都在它内部完成
             val manifest = ExtensionRegistry.installFromDir(ctx, unpacked)
                 ?: throw MarketFailure("安装失败：写入扩展目录失败（详见 dsh.log）")
-            DshRuntime.appendLog(
-                "[ext] 市场安装完成：" + manifest.name + " v" + manifest.version + "（" + manifest.id + "）"
+            ExtLog.log(
+                "市场安装完成：" + manifest.name + " v" + manifest.version + "（" + manifest.id + "）"
             )
             return manifest
         } finally {

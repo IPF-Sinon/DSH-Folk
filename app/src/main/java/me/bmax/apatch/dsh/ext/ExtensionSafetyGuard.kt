@@ -2,7 +2,6 @@ package me.bmax.apatch.dsh.ext
 
 import android.content.Context
 import android.os.Environment
-import me.bmax.apatch.dsh.DshRuntime
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -118,11 +117,11 @@ object ExtensionSafetyGuard {
             if (marker != null) {
                 setLatched(true)
                 reason = "检测到禁用标志文件：" + marker.absolutePath
-                DshRuntime.appendLog("[ext] 安全模式：" + reason + "（本次启动不加载任何扩展）")
+                ExtLog.log("安全模式：" + reason + "（本次启动不加载任何扩展）")
                 ExtensionRegistry.clearEnabled(ctx)
             }
         }.onFailure {
-            DshRuntime.appendLog("[ext] 安全模式检测异常（已忽略）：" + (it.message ?: it.javaClass.simpleName))
+            ExtLog.log("安全模式检测异常（已忽略）：" + (it.message ?: it.javaClass.simpleName))
         }
     }
 
@@ -136,10 +135,10 @@ object ExtensionSafetyGuard {
             setLatched(true)
             reason = why
             ExtensionRegistry.clearEnabled(ctx)
-            DshRuntime.appendLog("[ext] 进入安全模式：" + why)
+            ExtLog.log("进入安全模式：" + why)
             if (writeMarker) writeKillSwitch(ctx, why)
         }.onFailure {
-            DshRuntime.appendLog("[ext] 写入禁用标志失败（已忽略）：" + (it.message ?: it.javaClass.simpleName))
+            ExtLog.log("写入禁用标志失败（已忽略）：" + (it.message ?: it.javaClass.simpleName))
         }
     }
 
@@ -152,7 +151,7 @@ object ExtensionSafetyGuard {
                 true
             }.getOrDefault(false)
             if (ok) {
-                DshRuntime.appendLog("[ext] 已写入禁用标志：" + file.absolutePath)
+                ExtLog.log("已写入禁用标志：" + file.absolutePath)
                 return file
             }
         }
@@ -167,7 +166,7 @@ object ExtensionSafetyGuard {
         setLatched(false)
         reason = ""
         resetCrashCount(ctx)
-        DshRuntime.appendLog("[ext] 已退出安全模式")
+        ExtLog.log("已退出安全模式")
         return true
     }
 

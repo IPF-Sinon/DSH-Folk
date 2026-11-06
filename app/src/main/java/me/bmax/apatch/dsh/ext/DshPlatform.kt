@@ -225,7 +225,7 @@ class DshPlatform internal constructor(
 
     /** 写进宿主日志，前缀带扩展 id，报障时一眼看出是谁干的。 */
     fun log(message: String) {
-        DshRuntime.appendLog("[ext:" + extensionId + "] " + message)
+        ExtLog.log("[" + extensionId + "] " + message)
     }
 
     /**
