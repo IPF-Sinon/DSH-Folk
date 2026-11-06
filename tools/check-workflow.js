@@ -91,7 +91,17 @@ console.log("\u2500 #3 批准链：阻塞 + 超时即拒绝 + 编辑期暂停");
 ok(/enum class Kind\(val id: String\) \{\s*CREATE\("create"\),\s*RUN\("run"\),/.test(SRC.approvals.replace(/\n/g, " ")) ||
    /CREATE\("create"\)/.test(SRC.approvals) && /RUN\("run"\)/.test(SRC.approvals), "创建与运行是两个独立决定");
 ok(/const val TTL_MS = 60_000L/.test(SRC.approvals), "确认时限 60 秒");
-ok(/withTimeoutOrNull\(TTL_MS \+ 5_000L\)/.test(SRC.approvals), "等待有硬上限（超时不会把连接挂死）");
+// 等待仍必须有硬上限（不能把桥的连接无限挂着），但现在不是「一锤子 65 秒」：
+// 用户进编辑器时倒计时会暂停，等的人也要跟着续期（否则「还在编辑」会被读成 EXPIRED），
+// 所以判据改成「按片等 + 编辑预算上限」两条。
+ok(/const val EDIT_MAX_MS = 30 \* 60_000L/.test(SRC.approvals),
+  "等待没有编辑期的总预算上限（用户在编辑器里待着会把连接挂死）");
+ok(/var remaining = TTL_MS \+ 5_000L/.test(SRC.approvals) &&
+   /withTimeoutOrNull\(slice\) \{ waiter\.await\(\) \}/.test(SRC.approvals),
+  "等待不是按片等（硬上限与编辑期续期都要靠它）");
+ok(/if \(isEditing\(id\)\)/.test(SRC.approvals) &&
+   /remaining = TTL_MS \+ 5_000L/.test(SRC.approvals),
+  "编辑期间没有续期：用户还在改蓝图，桥那边却已经按 EXPIRED 收尾了");
 ok(/Decision\.EXPIRED/.test(SRC.approvals) && /expireIfStill/.test(SRC.approvals), "超时按拒绝处理");
 ok(/fun startEditing\(id: Long\)/.test(SRC.approvals) && /expiry\?\.cancel\(\)/.test(SRC.approvals),
   "打开编辑器会撤掉到期任务（用户在改东西时被判超时不是安全设计）");
@@ -267,6 +277,12 @@ ok(/@Destination<RootGraph>/.test(SRC.screen) && /fun WorkflowScreen\(navigator:
   "工作流页是真目的地");
 ok(/KEY_WORKFLOW_ENABLED/.test(SRC.screen), "页面能开关总开关");
 ok(/WorkflowPermissions\.Gate\.submit/.test(SRC.screen), "页面自己运行也要过权限检查");
+// 单步输出必须边读边截：一条 ls -R / 死循环 echo 以前会把整份输出攒在内存里（P2-1b）
+ok(/private const val MAX_STEP_OUTPUT_CHARS = \d+/.test(read("app/src/main/java/me/bmax/apatch/dsh/WorkflowEngine.kt")),
+  "工作流单步输出没有上限常量");
+ok(/if \(kept < MAX_STEP_OUTPUT_CHARS\)/.test(read("app/src/main/java/me/bmax/apatch/dsh/WorkflowEngine.kt")),
+  "读线程里没有按上限丢弃（还是读完才截）");
+
 // 桥那条路（agent 调 workflow_run）过去**没有**权限预检：声明了能力、系统权限没给也能跑起来。
 // 审计 P1-2a：两条路必须同一套判据（缺失 → 弹窗 → 等结论 → 不给就 403）。
 const wfBridge = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowBridge.kt");

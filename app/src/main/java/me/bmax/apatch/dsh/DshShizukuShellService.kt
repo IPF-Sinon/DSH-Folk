@@ -65,11 +65,11 @@ class DshShizukuShellService : IDshShellService.Stub() {
         val process = ProcessBuilder("sh", "-c", command)
             .redirectErrorStream(false)
             .start()
-        val stdout = StringBuilder()
-        val stderr = StringBuilder()
+        val stdout = CappedLines(MAX_CHARS)
+        val stderr = CappedLines(MAX_CHARS)
         // 必须边读边等：只 waitFor 的话，输出超过管道缓冲时进程会阻塞在写上，永远不退出
-        val outReader = reader { process.inputStream.bufferedReader().forEachLine { stdout.appendLine(it) } }
-        val errReader = reader { process.errorStream.bufferedReader().forEachLine { stderr.appendLine(it) } }
+        val outReader = reader { process.inputStream.bufferedReader().forEachLine { stdout.add(it) } }
+        val errReader = reader { process.errorStream.bufferedReader().forEachLine { stderr.add(it) } }
         val finished = runCatching { process.waitFor(limit, TimeUnit.MILLISECONDS) }.getOrDefault(false)
         if (!finished) {
             runCatching { process.destroyForcibly() }
@@ -77,8 +77,8 @@ class DshShizukuShellService : IDshShellService.Stub() {
             errReader.join(500)
             return JSONObject()
                 .put("exit", -1)
-                .put("stdout", clip(stdout.toString()))
-                .put("stderr", clip(stderr.toString()))
+                .put("stdout", stdout.text)
+                .put("stderr", stderr.text)
                 .put("timedOut", true)
                 .toString()
         }
@@ -86,16 +86,36 @@ class DshShizukuShellService : IDshShellService.Stub() {
         errReader.join(500)
         return JSONObject()
             .put("exit", runCatching { process.exitValue() }.getOrDefault(-1))
-            .put("stdout", clip(stdout.toString()))
-            .put("stderr", clip(stderr.toString()))
+            .put("stdout", stdout.text)
+            .put("stderr", stderr.text)
             .put("timedOut", false)
             .toString()
     }
 
     private fun reader(block: () -> Unit): Thread = Thread(block).apply { isDaemon = true; start() }
 
-    private fun clip(text: String): String =
-        if (text.length <= MAX_CHARS) text else text.take(MAX_CHARS) + "\n…(已截断，完整长度 ${text.length})"
+    /**
+     * 有上限的行缓冲：**边读边丢**，不是读完再 clip。
+     *
+     * 以前是无条件 `appendLine`、返回前才 `clip` —— 那只是「显示」被截断，内存早就被吃掉了：
+     * 一条刷几百万行的命令（`ls -R`、死循环 echo）足以把 App 顶爆（外部审计 P2-1b）。
+     * 丢掉的行只记个数，返回时带一句说明。
+     */
+    private class CappedLines(private val maxChars: Int) {
+        private val sb = StringBuilder()
+        private var dropped = 0
+
+        val text: String
+            get() = if (dropped == 0) sb.toString() else sb.toString() + "…(已截断，另有 $dropped 行未保留)"
+
+        fun add(line: String) {
+            if (sb.length >= maxChars) {
+                dropped++
+                return
+            }
+            sb.append(line).append('\n')
+        }
+    }
 
     private companion object {
         const val TAG = "DshShizukuShell"

@@ -1216,6 +1216,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_fs_err_native_uninit">The native bridge is not initialised</string>
     <string name="dsh_fs_err_bad_path">Illegal path</string>
     <string name="dsh_fs_err_no_access">Path is blocked by the shared-storage allow/deny list (not a wrong path)</string>
+    <!-- Connection quota exhausted: tell the caller we are busy instead of spawning threads until OOM -->
+    <string name="dsh_fs_err_busy">The file bridge has reached its connection limit, please retry later</string>
     <string name="dsh_fs_err_not_found">Path does not exist</string>
     <string name="dsh_fs_err_is_dir">Is a directory</string>
     <string name="dsh_fs_err_not_dir">Not a directory</string>

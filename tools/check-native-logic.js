@@ -713,7 +713,9 @@ console.log("\n── 特权通道约束 ──");
   ok(/runCatching \{\s*\n\s*Shizuku\.bindUserService\(/.test(shizuku) && !/bindUserService\([^)]*\) == 0/.test(shizuku),
     "绑定按「有没有抛 + 等连接回调」判断，而不是比较返回值");
   const shizukuSvc = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshShizukuShellService.kt", "utf8");
-  ok(/MAX_CHARS/.test(shizukuSvc) && /clip\(/.test(shizukuSvc),
+  // 现在不是「读完再 clip」，而是边读边丢（CappedLines）：内存也一起省了（P2-1b），
+  // 但「用户服务侧自己截断」这条不变量不变。
+  ok(/MAX_CHARS/.test(shizukuSvc) && /CappedLines/.test(shizukuSvc),
     "用户服务侧自己截断输出（binder 事务 1MB 上限）");
   ok(/destroyForcibly\(\)/.test(shizukuSvc), "超时由服务侧执行（binder 调用是同步的，应用侧放弃等待不会让命令停下）");
   ok(/aidl/.test(fs.readdirSync("app/src/main").join(",")) , "AIDL 目录存在（user service 的接口就在这里）");

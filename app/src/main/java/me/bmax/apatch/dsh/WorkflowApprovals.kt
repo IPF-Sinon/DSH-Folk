@@ -93,6 +93,16 @@ internal object WorkflowApprovals {
     /** 审批时限：弹窗上的倒计时，也是超时判定的时限。 */
     const val TTL_MS = 60_000L
 
+    /** [awaitDecision] 的切片长度：要在「响应及时」与「别空转」之间取。 */
+    private const val WAIT_SLICE_MS = 1_000L
+
+    /**
+     * 用户停留在蓝图编辑器里的总预算。
+     *
+     * 编辑期间不判超时（那是产品决定），但连接不能真的永远挂着 —— 超过它就按 EXPIRED 收尾。
+     */
+    private const val EDIT_MAX_MS = 30 * 60_000L
+
     private val ids = AtomicLong(0)
 
     private val mutable = MutableStateFlow<Request?>(null)
@@ -163,8 +173,33 @@ internal object WorkflowApprovals {
      * 挂着 —— 一个卡死的连接会让 AI 那次工具调用一直不返回。
      */
     fun awaitDecision(id: Long): Verdict = runBlocking {
-        withTimeoutOrNull(TTL_MS + 5_000L) { waiters[id]?.await() }
-    } ?: Verdict(Decision.EXPIRED, null, "")
+        // 不能写成「一锤子 TTL + 5s」：用户可能点「编辑」进蓝图编辑器，那条路径会**暂停倒计时**
+        //（expireIfStill 里 editing 直接 return，stopEditing 再重新计时），但提交方这边固定
+        // 65 秒就超时了 —— 于是「用户还在编辑」被桥读成 EXPIRED（外部审计 P1-2b）。
+        // 这里按片等：编辑期间不断续期，退出编辑后重新给满一个 TTL；编辑也不是无限等，
+        // 给一个总预算，免得一条连接永远挂着。
+        var remaining = TTL_MS + 5_000L
+        var editingBudget = EDIT_MAX_MS
+        while (true) {
+            val waiter = waiters[id] ?: return@runBlocking Verdict(Decision.EXPIRED, null, "")
+            val slice = minOf(remaining, WAIT_SLICE_MS)
+            withTimeoutOrNull(slice) { waiter.await() }?.let { return@runBlocking it }
+            if (isEditing(id)) {
+                editingBudget -= slice
+                if (editingBudget <= 0) break
+                remaining = TTL_MS + 5_000L // 编辑期间续期；stopEditing 之后从头计时
+            } else {
+                remaining -= slice
+                if (remaining <= 0) break
+            }
+        }
+        Verdict(Decision.EXPIRED, null, "")
+    }
+
+    /** 这个请求是不是正开着编辑器（[awaitDecision] 靠它决定要不要续期）。 */
+    @Synchronized
+    private fun isEditing(id: Long): Boolean =
+        mutable.value?.let { it.id == id && it.editing } == true
 
     @Synchronized
     private fun expireIfStill(id: Long) {

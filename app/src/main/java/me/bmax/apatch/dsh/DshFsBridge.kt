@@ -23,6 +23,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.concurrent.Semaphore
 
 /**
  * 宿主侧回环桥：一个只绑 127.0.0.1 的最小 HTTP 服务。
@@ -76,6 +77,14 @@ object DshFsBridge {
      */
     private const val MAX_RECURSIVE_ENTRIES = 20_000
 
+    /**
+     * 同时在处理的连接数上限。见 [acceptLoop]：过载直接回 503，而不是继续起线程。
+     *
+     * 16 的取法：桥的调用方是容器里的 dsh-fs CLI（串行为主）与 agent 的并发工具调用，
+     * 正常负载个位数；给到 16 是为了不让正常的并发被误伤。
+     */
+    private const val MAX_CONNECTIONS = 16
+
     private const val CR: Byte = 13
     private const val LF: Byte = 10
 
@@ -87,6 +96,9 @@ object DshFsBridge {
 
     /** 原生能力端点需要 Context；由 [start] 注入 application context。 */
     @Volatile internal var appCtx: Context? = null
+
+    /** 并发连接配额（[MAX_CONNECTIONS] 个）。见 [acceptLoop]。 */
+    private val connSlots = Semaphore(MAX_CONNECTIONS)
 
     /** 白名单根：共享存储。 */
     private val root: File get() = Environment.getExternalStorageDirectory()
@@ -133,7 +145,23 @@ object DshFsBridge {
             } catch (e: Exception) {
                 break
             }
-            Thread({ handle(socket) }, "dsh-fs-conn").apply { isDaemon = true }.start()
+            // 以前是「accept 一次就无条件起一个线程」：容器里一个死循环的请求（agent 反复 list、
+            // 或客户端并发刷）能把线程数与内存一起顶爆（外部审计 P2-1a）。
+            // 过载时立刻回 503 并关连接 —— 让调用方知道「现在忙」，而不是等到 OOM。
+            if (!connSlots.tryAcquire()) {
+                runCatching {
+                    respondJson(socket, 503, errorJson(str(R.string.dsh_fs_err_busy), "bridge_busy"))
+                }
+                runCatching { socket.close() }
+                continue
+            }
+            Thread({
+                try {
+                    handle(socket)
+                } finally {
+                    connSlots.release()
+                }
+            }, "dsh-fs-conn").apply { isDaemon = true }.start()
         }
     }
 

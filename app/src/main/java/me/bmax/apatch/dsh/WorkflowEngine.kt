@@ -54,6 +54,14 @@ internal object WorkflowEngine {
     /** 正在跑的 runId（界面与状态查询用）。 */
     val active: StateFlow<Set<String>> = mutableActive.asStateFlow()
 
+    /**
+     * 单步输出保留的字符上限（只保留超出部分的行数，不保留内容）。
+     *
+     * 与 DshShizukuShellService.MAX_CHARS 同一个理由：命令输出以前整份攒在内存里，
+     * 一条刷几百万行的命令足以把 App 顶爆（外部审计 P2-1b）。
+     */
+    private const val MAX_STEP_OUTPUT_CHARS = 100_000
+
     /** 每次状态推进 +1：界面拿它当刷新信号，不必轮询磁盘。 */
     private val mutableTick = MutableStateFlow(0)
     val tick: StateFlow<Int> = mutableTick.asStateFlow()
@@ -308,13 +316,24 @@ internal object WorkflowEngine {
                                 } else {
                                     log("[${node.id}] $ $cmd")
                                     val sb = StringBuilder()
+                                    // 边读边截：一条刷几百万行的命令（ls -R、死循环 echo）以前会把
+                                    // 整份输出攒在内存里（外部审计 P2-1b）。超限的行只计数。
+                                    var kept = 0
+                                    var dropped = 0
                                     val proc = DshRuntime.execRootfs(cmd)
                                     currentProcess[runId] = proc
                                     val reader = Thread {
                                         runCatching {
                                             proc.inputStream.bufferedReader().use { r ->
                                                 r.lineSequence().forEach { line ->
-                                                    synchronized(sb) { sb.appendLine(line) }
+                                                    synchronized(sb) {
+                                                        if (kept < MAX_STEP_OUTPUT_CHARS) {
+                                                            sb.appendLine(line)
+                                                            kept += line.length + 1
+                                                        } else {
+                                                            dropped++
+                                                        }
+                                                    }
                                                     log("[${node.id}] $line")
                                                 }
                                             }
@@ -323,7 +342,10 @@ internal object WorkflowEngine {
                                     reader.isDaemon = true
                                     reader.start()
                                     reader.join(node.timeoutMs)
-                                    output = synchronized(sb) { sb.toString() }
+                                    output = synchronized(sb) {
+                                        if (dropped == 0) sb.toString()
+                                        else sb.toString() + "…(已截断，另有 $dropped 行未保留)"
+                                    }
                                     if (reader.isAlive) {
                                         runCatching { proc.destroyForcibly() }
                                         reader.join(1_000)

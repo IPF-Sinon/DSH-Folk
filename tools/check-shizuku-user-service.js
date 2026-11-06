@@ -148,6 +148,18 @@ must(!/Shizuku\.newProcess/.test(code(cli)),
   "不能用 Shizuku.newProcess：那条路在本项目的依赖版本里返回 @RestrictTo 的内部类型，应用侧编译不过");
 must(/Shizuku\.unbindUserService\(/.test(cli), "解绑要走 unbindUserService（配合 destroy 收尾）");
 
+// ── 输出上限：必须**边读边丢**，不能读完再 clip（外部审计 P2-1b） ──
+// 以前是「无条件 appendLine，返回前才 clip」：那只是显示被截断，内存早就被吃掉了，
+// 一条 ls -R / 死循环 echo 足以把 App 顶爆。
+must(/private class CappedLines\(/.test(svc), "有 CappedLines：输出不会整份攒在内存里");
+must(/val stdout = CappedLines\(MAX_CHARS\)/.test(svc) && /val stderr = CappedLines\(MAX_CHARS\)/.test(svc),
+  "两路输出（stdout/stderr）各自都套上了上限");
+const cliReads = code(svc);
+must(!/StringBuilder\(\)[\s\S]{0,120}?\.bufferedReader\(\)\.forEachLine \{ stdout\.appendLine/.test(cliReads),
+  "读线程里没有「无条件 appendLine、读完才截」的老写法（上限形同虚设）");
+must(/if \(sb\.length >= maxChars\)/.test(svc), "超限的行真的被丢弃（不是只截显示）");
+must(/已截断，另有 \$dropped 行未保留/.test(svc), "丢弃的行数会回给调用方（用户不会以为命令真的没输出）");
+
 if (bad > 0) {
   console.log(`\ncheck-shizuku-user-service FAILED: ${bad} 处`);
   process.exit(1);
