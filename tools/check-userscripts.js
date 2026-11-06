@@ -536,8 +536,13 @@ ok(/GROUP_EXTENSIONS -> ExtensionsPane\(/.test(pluginHome) &&
   const searchBar = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/component/SearchBar.kt", "utf8");
   ok(/searchEnabled: Boolean = true/.test(searchBar) && /if \(searchEnabled\) \{/.test(searchBar),
     "SearchAppBar 支持「这一页没有可搜的东西」：不画放大镜");
-  ok(/searchEnabled = group != GROUP_EXTENSIONS/.test(pluginHome),
-    "扩展页明确关掉搜索（其余两页照旧）");
+  // 扩展页从「暂不可用」占位升级为真实管理页之后，它**也有可搜的东西了**（名称/id/说明/能力），
+  // 所以三页都能搜。但仍然不许三页共用同一个过滤词：扩展列表来自磁盘、插件列表来自容器 npm、
+  // 脚本列表来自 WebScripts，共用会出现「切页后框里还留着上一页的词、结果却是另一份列表」。
+  ok(/searchEnabled = true/.test(pluginHome),
+    "三页都能搜（扩展页不再是「没有可搜的东西」的占位）");
+  ok(/extensionFilter/.test(pluginHome) && /scriptFilter/.test(pluginHome) && /viewModel\.search/.test(pluginHome),
+    "三页各用各的过滤词（不共用，避免切页后词与列表错配）");
 }
 // 用户：「插件页顶栏那颗『隐藏内置』在插件组下按了没反应，修一下，另外隐藏内置时应该换个图标」。
 // 该按钮只作用于脚本组那份列表，所以只该在脚本组出现；图标说「按下去会发生什么」。
