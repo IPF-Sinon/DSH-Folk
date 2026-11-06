@@ -111,3 +111,27 @@
     kotlin.jvm.functions.Function* *;
 }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 扩展依赖的**语言运行时**也必须保留原名。
+#
+# 上面保住了扩展 API 自己的名字，但扩展的字节码还引用 kotlin-stdlib 与 Compose 的类型 ——
+# 而 -repackageclasses 会把它们一起改名挪包。真机表现：类找到了、onLoad 也被调用了，
+# 但一进去就抛 `Failed resolution of: Lkotlin/jvm/internal/Intrinsics;`。
+#
+# 也就是说：宿主在「谁看得见谁」这件事上做混淆时，等于把扩展能用的运行时一起藏了。
+# 扩展是外部编译产物，它引用的这些名字在运行时必须原样存在。
+
+# kotlin-stdlib：整包保留（扩展会调到任意 stdlib 函数，靠裁剪去猜会漏）
+-keep class kotlin.** { *; }
+-keep class kotlinx.coroutines.flow.** { *; }
+
+# Compose：只保名字、允许裁剪优化。宿主是 Compose 应用，扩展用到的 compose 类型基本都
+# 被宿主自己用着，所以裁剪风险低；但名字一旦被改，扩展就链接不上。
+-keepnames class androidx.compose.**
+-keepnames class androidx.lifecycle.**
+-keepnames class androidx.activity.**
+
+# 协程的续体/挂起相关类同样以名字被扩展引用。
+-keepnames class kotlinx.coroutines.**
+

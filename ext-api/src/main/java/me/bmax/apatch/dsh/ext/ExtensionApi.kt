@@ -11,6 +11,15 @@ import java.io.File
  *  - 用户脚本：注入内置 WebView，受浏览器沙箱约束；
  *  - **扩展（本文件）**：加载进 App 进程，与宿主同权。
  *
+ * ## 宿主对混淆的约定（改 proguard 规则前必读）
+ * 扩展是**外部编译产物**，它的字节码里写死了这些名字：
+ *  - `me.bmax.apatch.dsh.ext.**`（本文件与三个注册中心）
+ *  - `kotlin.**`（stdlib，例如 Intrinsics）
+ *  - `androidx.compose.**` 与 `kotlinx.coroutines.flow.**`（画界面、收状态流）
+ * 所以宿主 release 构建**必须**按 proguard-rules.pro 里的 keep 规则保留它们；
+ * 少一条的表现都很隐蔽：不是编译错误，而是「扩展加载失败」或「onLoad 里 Intrinsics 解析失败」，
+ * 且只在 release 包上出现（debug 不混淆）。这条坑真机踩过两次。
+ *
  * 这个接口放在 :ext-api 模块里，所以第三方仓库可以编译出自己的实现；
  * 宿主用 DexClassLoader 加载它（父加载器是宿主 classLoader，因此运行期与宿主同权）。
  */

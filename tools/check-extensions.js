@@ -207,6 +207,14 @@ must(/minAppVersion/.test(loader) && /DshRuntime\.appSatisfies\(required\)/.test
   // release 确实开了混淆 —— 如果哪天关了，上面两条 keep 就只是冗余，这条断言会提醒复查
   must(/isMinifyEnabled = true/.test(gradleSrc),
     "release 的 isMinifyEnabled 变了：请复查扩展 keep 规则是否仍然必要");
+  // 语言运行时同样必须保留原名：真机踩过 —— 类找到了、onLoad 也调用了，但一进去就
+  // Failed resolution of: Lkotlin/jvm/internal/Intrinsics;（-repackageclasses 把它挪了包）
+  must(/-keep class kotlin\.\*\* \{ \*; \}/.test(pg),
+    "proguard 没有整包保留 kotlin-stdlib：扩展一进 onLoad 就会 Intrinsics 解析失败");
+  must(/-keepnames class androidx\.compose\.\*\*/.test(pg),
+    "proguard 没有保留 Compose 类名：扩展用 Compose 画界面时会链接不上");
+  must(/-keep class kotlinx\.coroutines\.flow\.\*\*/.test(pg),
+    "proguard 没有保留 kotlinx.coroutines.flow：扩展收集 StateFlow 会失败");
 }
 
 // 这条不是洁癖：beta.238 的 shell 扩展不生效，而 dsh.log 里一条 [ext] 都没有，
