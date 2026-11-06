@@ -1781,6 +1781,8 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_workflow_err_foreground">需要 App 在前台才能显示确认弹窗</string>
     <string name="dsh_workflow_err_busy">已有一个工作流确认弹窗在等待处理</string>
     <string name="dsh_workflow_err_expired">等待超时（60 秒），已按拒绝处理</string>
+    <!-- 从桥（agent 调 workflow_run）进来时同样会做系统权限预检；缺权限又没给授权就没开始 -->
+    <string name="dsh_workflow_err_permission_denied">系统权限没给全，这次运行没有开始</string>
     <string name="dsh_workflow_err_rejected">用户拒绝了这次操作：%1$s</string>
     <string name="dsh_workflow_err_edited_bad">用户编辑后的定义无法解析</string>
     <string name="dsh_workflow_err_edited_invalid">用户编辑后的定义未通过校验：%1$s</string>

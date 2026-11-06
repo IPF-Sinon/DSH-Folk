@@ -1808,6 +1808,8 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_workflow_err_busy">Another workflow dialog is already waiting</string>
     <string name="dsh_workflow_err_expired">Timed out after 60 seconds and was treated as a rejection</string>
     <string name="dsh_workflow_err_rejected">The user rejected it: %1$s</string>
+    <!-- The bridge path now runs the same system-permission precheck; without the grant the run does not start -->
+    <string name="dsh_workflow_err_permission_denied">Required system permissions were not granted, so the run did not start</string>
     <string name="dsh_workflow_err_edited_bad">The definition the user edited cannot be parsed</string>
     <string name="dsh_workflow_err_edited_invalid">The edited definition failed validation: %1$s</string>
     <string name="dsh_workflow_err_save_failed">Failed to save the definition</string>

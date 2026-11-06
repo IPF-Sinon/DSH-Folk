@@ -75,6 +75,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -82,6 +83,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -286,6 +289,14 @@ class DshWebUiActivity : AppCompatActivity() {
 
     private var webView: WebView? = null
     private var canGoBack = false
+
+    /**
+     * WebView 当前加载的是**哪个 token** 的地址。
+     *
+     * 用来判断运行时重启后要不要重载：见 setContent 里那个 LaunchedEffect。
+     * 用「记下来的 token」而不是比较 URL 字符串 —— URL 会被 WebView 规范化，比字符串容易误判、反复重载。
+     */
+    private var loadedWebToken: String? = null
 
     /**
      * 这一批注入脚本是否已按 document-start 装上。
@@ -726,9 +737,32 @@ class DshWebUiActivity : AppCompatActivity() {
                                 // resumeWebView() 幂等，在新实例上调用也无害。
                                 resumeWebView()
                                 loadUrl(url)
+                                loadedWebToken = DshRuntime.state.value.webToken
                             }
                         },
                     )
+
+                    // 运行时重启（proroot/chroot 回退、手动重启服务、崩溃自愈）会**换一个 token**，
+                    // 而 WebView 只在创建时 loadUrl 过一次 —— 之后页面上的接口调用仍带着旧 token，
+                    // 用户看到的就是一条 {"ok":false,"error":"token 不匹配","reason":"bad_token"}
+                    //（issue #12 真机反馈：「切换运行时之后打开网页提示 token 不匹配」）。
+                    // 这里盯着 state 里的 token：变了就带**新地址**重载一次。
+                    //
+                    // 只取 token 这一项（map + distinctUntilChanged）而不是整份 state：启动期间
+                    // progress/message 变一次就重组一次整个页面，会让启动更卡。
+                    // 重载会回到首页 —— 比停在 bad_token 的报错页好，且只在**真的**换了 token 时发生。
+                    val webToken by remember {
+                        DshRuntime.state.map { it.webToken }.distinctUntilChanged()
+                    }.collectAsState(initial = DshRuntime.state.value.webToken)
+                    LaunchedEffect(webToken) {
+                        if (webToken.isNullOrBlank()) return@LaunchedEffect
+                        // 第一次组合时 WebView 还没建好 / 还没加载：那一份由 factory 自己记
+                        val previous = loadedWebToken ?: return@LaunchedEffect
+                        if (previous == webToken) return@LaunchedEffect
+                        val wv = webView ?: return@LaunchedEffect
+                        loadedWebToken = webToken
+                        wv.loadUrl(DshRuntime.webUrl())
+                    }
 
                     // 加载进度：窗口顶端一条细线，不占布局高度
                     if (progress in 1..99) {

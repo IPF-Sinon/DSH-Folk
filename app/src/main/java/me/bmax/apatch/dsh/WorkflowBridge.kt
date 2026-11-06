@@ -306,9 +306,38 @@ internal object WorkflowBridge {
                 .toString()
         }
 
-        // RUN：授权由 start() 内部在开跑之前落好（能力 = 弹窗上列出的那些；危险命令要看
-        // 用户有没有单独勾选 allowDangerous）。
-        val started = WorkflowEngine.start(ctx, saved, diff, allowDangerous = verdict.allowDangerous)
+        // RUN 之前先过**与工作流页同一套**系统权限预检（对照 WorkflowScreen.onRun → awaitPermissions）。
+        // 以前只有 UI 那条路会检查：从桥（agent 的 workflow_run）进来的运行直接开跑，
+        // 于是「声明了桌面/无障碍能力、系统权限却没给」也能起来 —— 两条路行为不一致（外部审计 P1-2a）。
+        // 缺哪几项由界面现算（[WorkflowPermissions.missing]），这里只负责弹窗 + 等结论。
+        if (kind == WorkflowApprovals.Kind.RUN) {
+            if (WorkflowPermissions.missing(ctx, effective.declaredCaps).isNotEmpty()) {
+                val gate = WorkflowPermissions.Gate.submit(
+                    workflowName = effective.name,
+                    caps = effective.declaredCaps,
+                    reason = effective.name,
+                ) ?: return 409 to err(str(ctx, R.string.dsh_workflow_err_busy), "approval_pending")
+                if (WorkflowPermissions.Gate.awaitDecision(gate.id) !=
+                    WorkflowPermissions.Gate.Decision.START
+                ) {
+                    return 403 to err(
+                        str(ctx, R.string.dsh_workflow_err_permission_denied),
+                        "permission_denied",
+                    )
+                }
+            }
+        }
+
+        // RUN：授权由 start() 内部在开跑之前落好（能力 = 弹窗上列出的那些）。
+        // 危险命令的豁免要**同时**满足两件事：用户勾了 allowDangerous，且**当前这份定义**
+        // 确实含危险命令（dangerousNow 在用户可能编辑过之后再扫一遍）。
+        // 以前只看了前半句，dangerousNow 算了却没人用（审计 P1-2a）。
+        val started = WorkflowEngine.start(
+            ctx,
+            saved,
+            diff,
+            allowDangerous = verdict.allowDangerous && dangerousNow,
+        )
         if (!started.ok || started.runId == null) {
             return 500 to err(str(ctx, R.string.dsh_workflow_err_start_failed, started.reason), "start_failed")
         }

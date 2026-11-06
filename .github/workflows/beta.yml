@@ -123,6 +123,7 @@ jobs:
           node tools/check-plugin-actions.js
           node tools/check-chroot.js
           node tools/check-fs-access.js
+          node tools/check-webui-token.js
           node tools/check-race-channel.js
           node tools/check-fs-scope.js
           node tools/check-host-prompt.js

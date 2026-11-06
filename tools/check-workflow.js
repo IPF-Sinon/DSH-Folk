@@ -267,6 +267,19 @@ ok(/@Destination<RootGraph>/.test(SRC.screen) && /fun WorkflowScreen\(navigator:
   "工作流页是真目的地");
 ok(/KEY_WORKFLOW_ENABLED/.test(SRC.screen), "页面能开关总开关");
 ok(/WorkflowPermissions\.Gate\.submit/.test(SRC.screen), "页面自己运行也要过权限检查");
+// 桥那条路（agent 调 workflow_run）过去**没有**权限预检：声明了能力、系统权限没给也能跑起来。
+// 审计 P1-2a：两条路必须同一套判据（缺失 → 弹窗 → 等结论 → 不给就 403）。
+const wfBridge = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowBridge.kt");
+ok(/WorkflowPermissions\.missing\(ctx, effective\.declaredCaps\)/.test(wfBridge),
+  "桥的 RUN 分支没有做系统权限预检（与工作流页不一致）");
+ok(/kind == WorkflowApprovals\.Kind\.RUN/.test(wfBridge) &&
+  /WorkflowPermissions\.Gate\.submit\(/.test(wfBridge) &&
+  /WorkflowPermissions\.Gate\.awaitDecision\(gate\.id\)/.test(wfBridge),
+  "桥的 RUN 分支只是查了缺失项，却没有弹窗 + 等用户结论");
+ok(/\"permission_denied\"/.test(wfBridge) && /R\.string\.dsh_workflow_err_permission_denied/.test(wfBridge),
+  "缺权限且没给授权时没有回 403 permission_denied（用户会以为「跑了」）");
+ok(/allowDangerous = verdict\.allowDangerous && dangerousNow/.test(wfBridge),
+  "危险命令的豁免没有同时看「用户勾选」与「当前定义确实含危险命令」（dangerousNow 又变成算了不用）");
 {
   const zh = read("app/src/main/res/values-zh-rCN/dsh_strings.xml");
   const en = read("app/src/main/res/values/dsh_strings.xml");
