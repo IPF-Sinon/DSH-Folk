@@ -253,7 +253,8 @@ dependencies {
     implementation(libs.com.github.topjohnwu.libsu.nio)
     implementation(libs.com.github.topjohnwu.libsu.io)
 
-    implementation(libs.dev.rikka.rikkax.parcelablelist)
+    // parcelablelist：本仓 0 import，Shizuku 的 api POM 不带它，Shizuku-API 源码里也 0 处引用
+    // ParcelableListSlice（GitHub code search 核对）—— 属于死依赖，删。
 
     // Shizuku：只做客户端 —— 连接设备上已安装并授权的 Shizuku / Sui。
     // 内置 Shizuku Server 那一套（rikka.shizuku.server / moe.shizuku.starter / rikka.rish）
@@ -284,8 +285,8 @@ dependencies {
     // ini4j：同上，零引用（旧配置解析早已换成 kotlinx/自写解析）
 
     // gson：同上，零引用（本项目的 JSON 一律用 org.json）
-    // 注：dev.rikka.rikkax.parcelablelist 也零引用，但它是 Shizuku 的伴生库、且 Shizuku 的
-    // POM 并不把它带进来（已核实），删它属于「本机无法编译/运行验证」的运行时风险 —— 留待单独一次改动 + 真机复测。
+    // 注：dev.rikka.rikkax.parcelablelist 后来也删掉了 —— 三条证据齐了才敢删：本仓 0 import、
+    // Shizuku 的 api POM 不带它、Shizuku-API 源码里 0 处引用 ParcelableListSlice（GitHub code search）。
 
     implementation(libs.liquid)
 

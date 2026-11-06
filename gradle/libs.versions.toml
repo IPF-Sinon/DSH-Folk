@@ -2,14 +2,14 @@
 agp = "9.3.1"
 kotlin = "2.4.10"
 ksp = "2.3.10"
-compose-bom = "2025.11.01"
+compose-bom = "2026.09.00"
 lifecycle = "2.10.0"
 compose-destination = "2.3.0"
 libsu = "6.0.0"
 biometric = "1.4.0-alpha07"
 liquid = "1.1.1"
-material3 = "1.5.0-alpha17"
-materialKolor = "4.1.1"
+material3 = "1.5.0-beta02"
+materialKolor = "5.0.1"
 shizuku = "13.1.5"
 termux = "0.118.0"
 
@@ -26,7 +26,7 @@ kotlin-compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version = "1.8.0" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version = "1.13.0" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version = "1.2.0" }
-androidx-webkit = { group = "androidx.webkit", name = "webkit", version = "1.16.0" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version = "1.18.0" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
@@ -49,7 +49,6 @@ com-github-topjohnwu-libsu-service = { group = "com.github.topjohnwu.libsu", nam
 com-github-topjohnwu-libsu-nio = { group = "com.github.topjohnwu.libsu", name = "nio", version.ref = "libsu" }
 com-github-topjohnwu-libsu-io = { group = "com.github.topjohnwu.libsu", name = "io", version.ref = "libsu" }
 
-dev-rikka-rikkax-parcelablelist = { module = "dev.rikka.rikkax.parcelablelist:parcelablelist", version = "2.0.1" }
 
 dev-rikka-shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
 dev-rikka-shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
