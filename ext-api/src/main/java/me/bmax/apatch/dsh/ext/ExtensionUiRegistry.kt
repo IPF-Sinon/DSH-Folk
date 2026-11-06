@@ -149,7 +149,7 @@ object ExtensionUiRegistry {
             return
         }
         shells.add(ShellOverride(extensionId, content))
-        ExtLog.log("[ext:" + extensionId + "] 已注册外壳（当前共 " + shells.size + " 个）")
+        ExtLog.info("[" + extensionId + "] 已注册外壳（当前共 " + shells.size + " 个）")
     }
 
     /** 拦截主题色板。 */

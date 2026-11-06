@@ -78,10 +78,26 @@ object ExtensionLayout {
  * 宿主的 dsh.log 里（报障时最有用）。宿主在启动时把 sink 指向自己的 LogStore。
  */
 object ExtLog {
-    /** 宿主导入的实现；扩展仓库独立编译时为空实现（不影响运行期）。 */
+    /** 宿主导入的实现：写进 dsh.log（**只给真正的故障用**）。 */
     @Volatile
     var sink: (String) -> Unit = {}
 
+    /**
+     * 宿主导入的第二条出口：只进 logcat，不写 dsh.log。
+     *
+     * 为什么不全都写 dsh.log：dsh.log 是用户在「设置 → 日志」里看的启动日志，
+     * 塞满「准备加载 xx」「外壳决策」这种例行诊断会把真故障淹没掉。而这些信息在
+     * 排查问题时又必须有 —— 所以走 logcat，bugreport 里照样拿得到。
+     */
+    @Volatile
+    var infoSink: (String) -> Unit = {}
+
+    /** 例行诊断：只进 logcat。 */
+    fun info(message: String) {
+        runCatching { infoSink(message) }
+    }
+
+    /** 故障：进 dsh.log（也进 logcat）。 */
     fun log(message: String) {
         runCatching { sink(message) }
     }

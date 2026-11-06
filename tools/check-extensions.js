@@ -81,12 +81,20 @@ must(/fun noteCrash\(ctx: Context, detail: String\): Boolean/.test(guard), '缺 
 must(/writeMarker = true/.test(guard), '自动熔断没有落标志文件：下次冷启动又会崩在同一个扩展上');
 must(/fun stackTouchesExtension\(trace: String\?\): Boolean/.test(guard), '缺 stackTouchesExtension()：分不清是谁崩的');
 
-// ---- 3. Android 14+ 只读 dex（硬约束） ----
-must(/setReadOnly\(\)/.test(loader), 'ExtensionLoader 没有 setReadOnly()：Android 14+ 会抛 SecurityException（Writable dex file）');
-const readOnlyIdx = loader.indexOf('setReadOnly()');
+// ---- 3. Android 14+ 只读 dex（硬约束）+ 内存加载兜底 ----
+// 真机(beta.239, Android 16/SDK36)踩到：dex 完好、类定义也在 class_defs 里，但
+// DexClassLoader 报 Didn't find class —— ART 把 dex 元素静默丢掉了（只读/odex/校验失败都这样，
+// 都不抛异常）。所以只读要用 Os.chmod 这种真能生效的方式，并且必须有内存加载兜底。
+must(/Os\.chmod\(dex\.absolutePath, 0x124/.test(loader),
+  'ExtensionLoader 没有用 Os.chmod 0400 设只读：File.setReadOnly 可能返回 false 且被静默忽略');
+must(/InMemoryDexClassLoader/.test(loader),
+  '缺内存加载兜底：文件路径一旦被 ART 丢掉 dex 元素，扩展就永远加载不上且看不出原因');
+const readOnlyIdx = loader.indexOf('Os.chmod(dex.absolutePath');
 const dexLoaderIdx = loader.indexOf('DexClassLoader(');
 must(readOnlyIdx > 0 && dexLoaderIdx > readOnlyIdx,
-  'setReadOnly() 必须在 DexClassLoader 之前调用（顺序反了等于没设）');
+  '只读必须在 DexClassLoader 之前设置（顺序反了等于没设）');
+must(/ctx\.classLoader,/.test(loader),
+  'DexClassLoader 的父加载器必须是宿主 classLoader，否则扩展拿不到宿主任何类');
 must(/ctx\.classLoader,/.test(loader),
   'DexClassLoader 的父加载器必须是宿主 classLoader，否则扩展拿不到宿主任何类');
 
@@ -197,7 +205,12 @@ must(/android\.util\.Log\.i\(\"DSH-Folk\", line\)/.test(dshRuntimeSrc),
   must(initIdx > 0 && bootIdx2 > initIdx,
     "ExtensionEngine.bootstrap 必须排在 DshRuntime.init 之后，否则它自己写的日志落不了盘");
 }
-must(/bootstrap 开始：已安装/.test(engine), "bootstrap 没有打印已安装/启用概况");
+// 例行诊断必须有（否则「装了没生效」无从查起），但**不许进 dsh.log**：
+// 那是用户在「设置 → 日志」里看的启动日志，塞满例行行会把真故障淹没。
+must(engine.includes("ExtLog.info(") && engine.includes("已安装 "),
+  "bootstrap 没有打印已安装/启用概况（走 ExtLog.info，只进 logcat）");
+must(!engine.includes('[ext] bootstrap 开始'),
+  "bootstrap 的例行概况写进了 dsh.log，会淹没真故障");
 must(/安全模式，跳过全部第三方扩展；原因=/.test(engine), "安全模式拦截没有打印原因（用户只会看到「没生效」）");
 must(/准备加载：dex=/.test(loader), "加载失败时无法从日志判断 dex 是否存在/多大");
 must(/没有实现 DshExtension，实际类型=/.test(loader), "接口类型不匹配时会静默返回 null（典型：扩展自带了一份 :ext-api）");

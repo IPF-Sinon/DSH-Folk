@@ -29,36 +29,78 @@ object ExtensionLoader {
             onFatal("缺 classes.dex：" + dex.absolutePath)
             return null
         }
-        DshRuntime.appendLog(
-            "[ext] " + manifest.id + " 准备加载：dex=" + dex.absolutePath +
-                "（" + dex.length() + " 字节，可写=" + dex.canWrite() + "），入口类=" + entry,
+        ExtLog.info(
+            manifest.id + " 准备加载：dex=" + dex.absolutePath +
+                "（" + dex.length() + " 字节），入口类=" + entry,
         )
-        // 只读：Android 14+ 的硬性要求，不设就一定加载失败
-        runCatching { dex.setReadOnly() }
+        val instance = instantiate(ctx, manifest, dex, entry, onFatal) ?: return null
+        // as? 失败会让「扩展实现了接口但类型对不上」表现成「加载成功却什么都没发生」，
+        // 所以这里把真实类型打出来（典型原因：扩展打包时自带了一份 :ext-api 的类）。
+        if (instance !is DshExtension) {
+            onFatal(
+                "入口类没有实现 DshExtension，实际类型=" + instance.javaClass.name +
+                    "，其接口=" + instance.javaClass.interfaces.joinToString { it.name },
+            )
+            return null
+        }
+        return instance
+    }
+
+    /**
+     * 两条加载路径依次尝试，返回入口类的实例。
+     *
+     * ## 为什么需要两条
+     * 真机（Android 16 / SDK 36）上踩到过：dex 完全正常（类定义在 class_defs 里、名字也对），
+     * 但 `DexClassLoader.loadClass` 报 `Didn't find class ... DexPathList[[dex file ...]]` ——
+     * 文件在路径里、类却找不到，说明 ART 把这个 dex **元素丢掉了**（只读要求 / odex 输出 /
+     * 校验失败都会这样，而它们都不抛异常，只让元素静默消失）。
+     *
+     * 所以先走文件路径（能吃到 dexopt 缓存、启动更快），失败再走内存路径：
+     * `InMemoryDexClassLoader` 完全不碰文件权限与 odex 目录，绕开上面整类问题。
+     * 小 dex（扩展通常几十 KB）重新校验的开销可以忽略。
+     */
+    private fun instantiate(
+        ctx: Context,
+        manifest: ExtensionManifest,
+        dex: File,
+        entry: String,
+        onFatal: (String) -> Unit,
+    ): Any? {
+        // Android 14+ 要求动态加载的 dex 只读。用 Os.chmod 而不是 File.setReadOnly：
+        // 后者在这类目录上可能返回 false（我们以前直接忽略返回值，等于没设）。
+        val sealed = runCatching {
+            android.system.Os.chmod(dex.absolutePath, 0x124 /* 0444 */)
+            true
+        }.getOrDefault(false) || runCatching { dex.setReadOnly() }.getOrDefault(false)
+        ExtLog.info(manifest.id + " dex 只读=" + sealed + "，canWrite=" + dex.canWrite())
+
         val optimizeDir = File(ctx.codeCacheDir, "ext_" + manifest.id).apply { mkdirs() }
         val assetDir = ExtensionLayout.assetsOf(ctx, manifest.id)
-        return runCatching {
-            val classLoader = DexClassLoader(
+
+        // ① 文件路径
+        val fileError = runCatching {
+            val cl = DexClassLoader(
                 dex.absolutePath,
                 optimizeDir.absolutePath,
                 if (assetDir.isDirectory) assetDir.absolutePath else null,
                 ctx.classLoader,
             )
-            val clazz = classLoader.loadClass(entry)
-            val instance = clazz.getDeclaredConstructor().newInstance()
-            // as? 失败会让「扩展实现了接口但类型对不上」表现成「加载成功却什么都没发生」，
-            // 所以这里把真实类型打出来（典型原因：扩展打包时自带了一份 :ext-api 的类）。
-            if (instance !is DshExtension) {
-                DshRuntime.appendLog(
-                    "[ext] " + manifest.id + " 入口类没有实现 DshExtension，实际类型=" +
-                        instance.javaClass.name + "，其接口=" +
-                        instance.javaClass.interfaces.joinToString { it.name },
-                )
-                return null
-            }
-            instance
+            cl.loadClass(entry).getDeclaredConstructor().newInstance()
         }.onFailure {
-            onFatal("加载失败（" + entry + "）：" + (it.message ?: it.javaClass.simpleName))
+            ExtLog.info(manifest.id + " 文件加载失败，改用内存加载：" + (it.message ?: it.javaClass.simpleName))
+        }.getOrNull()
+        if (fileError != null) return fileError
+
+        // ② 内存路径
+        return runCatching {
+            val bytes = dex.readBytes()
+            val buffer = java.nio.ByteBuffer.allocateDirect(bytes.size)
+            buffer.put(bytes)
+            buffer.position(0)
+            val cl = dalvik.system.InMemoryDexClassLoader(buffer, ctx.classLoader)
+            cl.loadClass(entry).getDeclaredConstructor().newInstance()
+        }.onFailure {
+            onFatal("两条加载路径都失败（" + entry + "）：" + (it.message ?: it.javaClass.simpleName))
         }.getOrNull()
     }
 

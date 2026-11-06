@@ -67,7 +67,9 @@ object ExtensionSafetyGuard {
      * 由 [me.bmax.apatch.APatchApp] 在启动时调用一次；不装也不会崩，只是扩展的日志进不了 dsh.log。
      */
     fun installLogSink() {
+        // 故障进 dsh.log（用户能在「设置 → 日志」里看到），例行诊断只进 logcat
         ExtLog.sink = { line -> DshRuntime.appendLog(line) }
+        ExtLog.infoSink = { line -> android.util.Log.i("DSH-Ext", line) }
     }
 
     /**

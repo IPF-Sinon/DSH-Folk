@@ -37,8 +37,8 @@ object ExtensionEngine {
             // 诊断日志：扩展「装了但没生效」时，这几行是唯一能区分
             // 「没启用 / 熔断拦了 / 加载失败 / 加载了但界面没接」的依据。
             val all = ExtensionRegistry.listInstalled(ctx)
-            DshRuntime.appendLog(
-                "[ext] bootstrap 开始：已安装 " + all.size + " 个（" +
+            ExtLog.info(
+                "bootstrap：已安装 " + all.size + " 个（" +
                     all.joinToString { it.id + (if (it.enabled) "=启用" else "=停用") } + "）",
             )
             if (ExtensionSafetyGuard.isSafeMode(ctx)) {
@@ -52,7 +52,7 @@ object ExtensionEngine {
             }
             val records = all.filter { it.enabled && it.installed }
             if (records.isEmpty()) {
-                DshRuntime.appendLog("[ext] 没有启用的扩展")
+                ExtLog.info("没有启用的扩展")
                 ExtensionBootPipeline.markBootstrapped(ctx)
                 return
             }
@@ -61,7 +61,7 @@ object ExtensionEngine {
                 loaded[rec.id] = ext
             }
             ExtensionBootPipeline.markBootstrapped(ctx)
-            DshRuntime.appendLog("[ext] 已加载 " + loaded.size + " 个扩展")
+            ExtLog.info("已加载 " + loaded.size + " 个扩展")
             // 启动管线第一段就在此时跑（APP_CREATE 阶段）
             ExtensionBootPipeline.run(ExtensionBootPipeline.Stage.APP_CREATE)
         }.onFailure {

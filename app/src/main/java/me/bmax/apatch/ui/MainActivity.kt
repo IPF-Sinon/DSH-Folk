@@ -950,8 +950,8 @@ class MainActivity : AppCompatActivity() {
                     // 只在决策变化时打一行：这是「扩展已注册但界面没换」和「注册就没成功」
                     // 两种情况的唯一分界点。
                     LaunchedEffect(activeShell) {
-                        me.bmax.apatch.dsh.DshRuntime.appendLog(
-                            "[ext] 外壳决策=" + (activeShell?.extensionId ?: "无（用宿主默认外壳）"),
+                        me.bmax.apatch.dsh.ext.ExtLog.info(
+                            "外壳决策=" + (activeShell?.extensionId ?: "无（用宿主默认外壳）"),
                         )
                     }
                     val shellHost = rememberDshShellHost(
