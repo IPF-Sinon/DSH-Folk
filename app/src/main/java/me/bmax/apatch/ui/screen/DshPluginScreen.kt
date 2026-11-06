@@ -201,6 +201,17 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
         }
     }
 
+    // 扩展市场弹层：放在**页面级**而不是 ExtensionsPane 里 —— 它装完要让列表重读，
+    // 而列表的事实来源在 ExtensionsPane 内部，所以靠 extensionRefresh 这个自增信号从外面捅它。
+    if (showMarket) {
+        ExtensionMarketSheet(
+            onDismiss = { showMarket = false },
+            // 装完只重读列表、不自动启用：信任确认必须是用户看得见的那一步，
+            // 市场替用户点掉它等于绕过「这个扩展将获得完整权限」的告知。
+            onInstalled = { extensionRefresh++ },
+        )
+    }
+
     Scaffold(
         topBar = {
             SearchAppBar(
@@ -887,15 +898,6 @@ private fun ExtensionsPane(
                 item { HomeBottomSpacer() }
             }
         }
-    }
-
-    if (showMarket) {
-        ExtensionMarketSheet(
-            onDismiss = { showMarket = false },
-            // 装完只重读列表，不自动启用：信任确认必须在用户看得见的那一步做（见 ExtensionsPane
-            // 里那条说明），市场替用户点掉它等于绕过了确认。
-            onInstalled = { extensionRefresh++ },
-        )
     }
 
     // 详情弹层：单击卡片进这里。动作（开关 / 移除）仍然留在卡片上 ——
