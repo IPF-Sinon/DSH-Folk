@@ -193,7 +193,22 @@ must(/minAppVersion/.test(loader) && /DshRuntime\.appSatisfies\(required\)/.test
 
 
 
-// ---- 8f. 诊断：扩展「装了但没生效」时必须能从日志里查出来 ----
+// ---- 8g. release 混淆必须保留扩展 API（这是 beta.236~240 全都加载不上的根因）----
+// 扩展是独立编译的 DEX，引用写死了 Lme/bmax/apatch/dsh/ext/... 这类名字。release 开了
+// isMinifyEnabled + -repackageclasses，R8 一改名，ART 链接扩展类时就找不到父类型，
+// 表现成「Didn't find class <入口类>」，而扩展包本身完全正常。'
+{
+  const pg = read("app/proguard-rules.pro");
+  const gradleSrc = read("app/build.gradle.kts");
+  must(/-keep class me\.bmax\.apatch\.dsh\.ext\.\*\* \{ \*; \}/.test(pg),
+    "proguard 没有 -keep 扩展 API 整包：release 混淆会把 DshExtension 改名，扩展必然加载失败");
+  must(/-keep interface me\.bmax\.apatch\.dsh\.ext\.\*\*/.test(pg),
+    "proguard 没有 keep 扩展 API 的接口（DshExtensionHost / ExtensionFs / ShellHost）");
+  // release 确实开了混淆 —— 如果哪天关了，上面两条 keep 就只是冗余，这条断言会提醒复查
+  must(/isMinifyEnabled = true/.test(gradleSrc),
+    "release 的 isMinifyEnabled 变了：请复查扩展 keep 规则是否仍然必要");
+}
+
 // 这条不是洁癖：beta.238 的 shell 扩展不生效，而 dsh.log 里一条 [ext] 都没有，
 // 根因是 bootstrap 排在 DshRuntime.init 之前，appendLog 在没有 Context 时静默丢弃。
 const dshRuntimeSrc = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");

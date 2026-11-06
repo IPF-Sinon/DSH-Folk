@@ -91,7 +91,18 @@ object ExtensionLoader {
         }.getOrNull()
         if (fileError != null) return fileError
 
-        // ② 内存路径（顺带做一次自检：确认这个 dex 到底能不能吐出任何一个类）
+        // ② 目录路径：PathClassLoader 指向**整个扩展目录**，由 ART 自己去发现目录里的 dex。
+        // 与 ① 的区别只在「给的是文件还是目录」，用来排除「裸 .dex 文件在个别 ART 版本上
+        // 不被当 dex 容器」这类差异；代价是它会扫描目录里所有文件，所以只作为中间兜底。
+        val dirAttempt = runCatching {
+            val cl = dalvik.system.PathClassLoader(dex.parentFile!!.absolutePath, ctx.classLoader)
+            cl.loadClass(entry).getDeclaredConstructor().newInstance()
+        }.onFailure {
+            ExtLog.info(manifest.id + " 目录加载失败：" + (it.message ?: it.javaClass.simpleName))
+        }.getOrNull()
+        if (dirAttempt != null) return dirAttempt
+
+        // ③ 内存路径（顺带做一次自检：确认这个 dex 到底能不能吐出任何一个类）
         val memLoader: ClassLoader? = runCatching {
             val bytes = dex.readBytes()
             val buffer = java.nio.ByteBuffer.allocateDirect(bytes.size)

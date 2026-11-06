@@ -77,3 +77,37 @@
 -allowaccessmodification
 -overloadaggressively
 -renamesourcefileattribute SourceFile
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 扩展 API 必须**原样保留**：这是本仓库唯一被「外部编译产物」引用的包。
+#
+# 扩展是独立编译的 DEX，里面的引用写死了 `Lme/bmax/apatch/dsh/ext/DshExtension;` 这类名字。
+# release 构建开了 isMinifyEnabled（beta 通道就是 release 变体），R8 会把整个包改名、
+# 还会因为 -repackageclasses / -allowaccessmodification 把它们挪到别的包里。
+# 一旦改名，ART 在链接扩展类时就找不到父类型 —— 表现是「Didn't find class <扩展入口类>」，
+# 而扩展自己的 dex 完全正常（校验和、class_defs、入口类名都对得上）。
+# 这个坑真机踩过：beta.236 ~ beta.240 的扩展全都加载不上，日志只说找不到入口类。
+#
+# 覆盖范围（整包，含成员）：DshExtension / DshExtensionHost / ExtensionLayout /
+# ExtensionManifest / ExtensionFs / 三个注册中心 / ShellHost / ShellContent /
+# RuntimeSummary / ExtensionGate / ExtLog / ExtensionShellTabs。
+-keep class me.bmax.apatch.dsh.ext.** { *; }
+-keep interface me.bmax.apatch.dsh.ext.** { *; }
+
+# 宿主侧的实现也在同一个包里（AppExtensionFs / ExtensionHostImpl / ExtensionEngine 等）：
+# 上面的规则已覆盖。这里额外保一下枚举/常量类不被内联掉 ——
+# 扩展会读 ExtensionShellTabs.HOME 这类常量，内联后名字消失不影响功能，
+# 但 ExtensionUiRegistry.Slot 的字符串常量是接口的一部分，保留更稳。
+-keepclassmembers class me.bmax.apatch.dsh.ext.** {
+    public static final java.lang.String *;
+    public static final int *;
+}
+
+# 顺带：Compose 的 @Composable 函数被扩展以 lambda 形式传入，别让 R8 把它们裁掉。
+-keepclassmembers class me.bmax.apatch.dsh.ext.** {
+    *** Companion;
+}
+-keepclasseswithmembers class me.bmax.apatch.dsh.ext.** {
+    kotlin.jvm.functions.Function* *;
+}
+
