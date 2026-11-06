@@ -136,6 +136,7 @@ must(/fun isValidId\(id: String\): Boolean/.test(read(API + 'ExtensionApi.kt')),
 must(/if \(!ExtensionLayout\.isValidId\(id\)\) return null/.test(manifest),
   'manifest 解析没有校验 id 合法性');
 
+
 // ---- 8. 宿主接线 ----
 const app = read('app/src/main/java/me/bmax/apatch/APatchApp.kt');
 must(/ExtensionSafetyGuard\.checkAndEnforce\(this\)/.test(app), 'APatchApp 没有在启动时检测熔断');
@@ -150,6 +151,30 @@ must(/ExtensionEngine\.disableAllAndLatch\(/.test(crash), '崩溃页没有「禁
 must(!/ExtensionUiRegistry/.test(crash), '崩溃页不许接扩展 UI（会被扩展接管，用户就点不到救援按钮了）');
 
 const screen = read('app/src/main/java/me/bmax/apatch/ui/screen/DshPluginScreen.kt');
+
+// ---- 8b. 扩展市场：下载来的东西比本机的更不可信，三道防线一道都不能少 ----
+const market = read(EXT + "ExtensionMarket.kt");
+must(/const val DEFAULT_INDEX_URL = "https:\/\/raw\.githubusercontent\.com\/IPF-Sinon\/dsh-folk-plugins\/main\/index\.json"/.test(market),
+  "市场目录默认地址必须指向 dsh-folk-plugins 仓库的 index.json");
+must(/MessageDigest\.getInstance\("SHA-256"\)/.test(market),
+  "市场安装没有校验 sha256：下载下来的 dex 会被直接安装");
+must(/canonical/.test(market),
+  "解压没有做 zip slip 校验（canonical 前缀判断）：安装包可以往扩展目录外写文件");
+// 强制 https：明文 HTTP 下目录与 sha256 可以一起被换掉，校验等于没有
+// 用 URL.protocol 判断而不是字符串前缀：前缀判断挡不住 https:/evil（少一个斜杠）这类写法
+must(/protocol != "https"/.test(market), "市场地址没有强制 https（应解析成 URL 后判 protocol）");
+// 清单 id 必须与条目 id 一致，否则一个条目能覆盖另一个已装扩展的目录
+must(/manifest\.id/.test(market) && /!=\s*entry\.id|!=\s*entry\.id/.test(market),
+  "安装没有校验「安装包 manifest.id == 市场条目 id」：一个条目可以覆盖另一个扩展");
+must(/deleteRecursively/.test(market), "市场安装没有清理临时目录（缓存会一直涨）");
+
+// ---- 8c. 扩展页：与插件页/脚本页对齐后该有的东西 ----
+must(/extensionFilter/.test(screen), "扩展页没有自己的过滤词（与插件页共用一个词会串页）");
+must(/R\.string\.dsh_ext_empty_filtered/.test(screen),
+  "扩展页空态没有区分「一个都没装」与「搜索没命中」：会让搜过东西的人以为扩展丢了");
+must(/ExtensionDetailSheet\(/.test(screen), "扩展页没有详情弹层（点卡片没反应）");
+must(/dsh_ext_badge_broken/.test(screen) && /dsh_ext_badge_nocode/.test(screen),
+  "扩展页缺「清单损坏 / 无代码」徽章");
 must(/ExtensionRegistry\.listInstalled\(/.test(screen), '扩展页没有列真实扩展（还是占位文案）');
 must(/ExtensionSafetyGuard\.isSafeMode\(/.test(screen), '扩展页没有安全模式横幅');
 must(/ExtensionEngine\.unload\(/.test(screen), '关闭扩展时没有卸载（会留下仍在跑的扩展）');

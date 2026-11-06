@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -39,7 +40,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
@@ -85,6 +89,7 @@ import me.bmax.apatch.ui.screen.settings.rememberUserscriptInstallRequest
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.ext.ExtensionEngine
 import me.bmax.apatch.dsh.ext.ExtensionRecord
+import me.bmax.apatch.dsh.ext.ExtensionLayout
 import me.bmax.apatch.dsh.ext.ExtensionRegistry
 import me.bmax.apatch.dsh.ext.ExtensionSafetyGuard
 import me.bmax.apatch.ui.component.AddMenuEntry
@@ -363,6 +368,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                     GROUP_EXTENSIONS -> ExtensionsPane(
                         modifier = Modifier.weight(1f),
                         snackBarHost = snackBarHost,
+                        filter = extensionFilter,
                     )
                     else -> DshPluginList(
                         // 外层 Column 已经吃掉 scaffold 的 inset，这里不能再吃一遍
@@ -695,6 +701,8 @@ private fun DshPluginList(
 private fun ExtensionsPane(
     modifier: Modifier = Modifier,
     snackBarHost: SnackbarHostState,
+    /** 顶栏搜索框里的词（由插件页统一持有，与脚本页各用各的）。 */
+    filter: String = "",
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -702,7 +710,24 @@ private fun ExtensionsPane(
     // 注册表的事实来源是磁盘（files/extensions/）加 SharedPreferences，没有可观察的数据流。
     // 所以拿自增的 refreshTick 当 remember 的 key：开关 / 移除之后 +1，等于重读一次磁盘。
     var refreshTick by remember { mutableStateOf(0) }
-    val records = remember(refreshTick) { ExtensionRegistry.listInstalled(context) }
+    val allRecords = remember(refreshTick) { ExtensionRegistry.listInstalled(context) }
+    // 过滤 + 排序：与插件页同一套「过滤已加载列表」语义。排序改成「启用在前、名称升序」——
+    // 插件页那套「有更新优先」在这里没有对应概念（扩展没有远端版本可对比）。
+    val records = remember(allRecords, filter) {
+        val q = filter.trim()
+        allRecords
+            .filter { rec ->
+                q.isEmpty() ||
+                    rec.manifest.name.contains(q, ignoreCase = true) ||
+                    rec.id.contains(q, ignoreCase = true) ||
+                    rec.manifest.description.contains(q, ignoreCase = true) ||
+                    rec.manifest.declaredCaps.any { it.contains(q, ignoreCase = true) }
+            }
+            .sortedWith(
+                compareByDescending<ExtensionRecord> { it.enabled }
+                    .thenBy { it.manifest.name.lowercase() },
+            )
+    }
     // 安全模式不进 remember：刚在崩溃页点过「禁用全部扩展」，回到这一页时熔断位已经变了，
     // 缓存住就会显示成「一切正常」，恰好把用户刚做的处置藏起来。
     val safeMode = ExtensionSafetyGuard.isSafeMode(context)
@@ -722,6 +747,11 @@ private fun ExtensionsPane(
     // files/extensions/），而「开关打开」才是扩展真正获得宿主权限的瞬间。用户从别处拷进来一个
     // 扩展，界面上最该看到这句话的就是这里。
     var trustRecord by remember { mutableStateOf<ExtensionRecord?>(null) }
+    // 详情弹层：只存「哪一条」，实体每次从 records 里按 id 取 —— 开关/移除之后列表会重读，
+    // 存快照的话弹层里的开关会停在打开那一刻的状态（与插件详情弹层同一纪律）。
+    var detailId by remember { mutableStateOf<String?>(null) }
+    val detailRecord = records.firstOrNull { it.id == detailId }
+        ?: (allRecords.firstOrNull { it.id == detailId })
 
     // 「移除」的二次确认态：存扩展 id，同一时刻最多一项是红的。
     // 范式与下方插件列表的 pendingUninstall 完全一致（第一下只变红、第二下才执行，
@@ -749,6 +779,9 @@ private fun ExtensionsPane(
             )
         }
         if (records.isEmpty()) {
+            // 空态分两种：一个都没装（该告诉他怎么装）与搜索没命中（该告诉他换个词）。
+            // 混成一句「还没有安装扩展」会让搜过东西的人以为自己的扩展被弄丢了。
+            val filteredOut = allRecords.isNotEmpty() && filter.isNotBlank()
             // 必须可滚动：否则底栏自动隐藏后无法下拉唤回（见 ScrollableEmptyState）
             ScrollableEmptyState(Modifier.weight(1f)) {
                 Column(
@@ -756,14 +789,22 @@ private fun ExtensionsPane(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = stringResource(R.string.dsh_ext_empty),
+                        text = stringResource(
+                            if (filteredOut) R.string.dsh_ext_empty_filtered else R.string.dsh_ext_empty,
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = stringResource(R.string.dsh_ext_install_hint),
+                        text = stringResource(
+                            if (filteredOut) {
+                                R.string.dsh_ext_empty_filtered_hint
+                            } else {
+                                R.string.dsh_ext_install_hint
+                            },
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 32.dp),
@@ -787,6 +828,7 @@ private fun ExtensionsPane(
                     ExtensionItem(
                         record = record,
                         removeArmed = pendingUninstall == record.id,
+                        onClick = { detailId = record.id },
                         onToggle = { checked ->
                             pendingUninstall = null
                             val appCtx = context.applicationContext
@@ -823,6 +865,15 @@ private fun ExtensionsPane(
                 item { HomeBottomSpacer() }
             }
         }
+    }
+
+    // 详情弹层：单击卡片进这里。动作（开关 / 移除）仍然留在卡片上 ——
+    // 进弹层是为了「看清楚它是什么」，不是为了把常用动作藏起来。
+    detailRecord?.let { rec ->
+        ExtensionDetailSheet(
+            record = rec,
+            onDismiss = { detailId = null },
+        )
     }
 
     // 信任确认：把「它会以完整权限运行」这件事说清楚，并列出扩展自己声明的能力。
@@ -957,10 +1008,14 @@ private fun ExtensionItem(
     removeArmed: Boolean,
     onToggle: (Boolean) -> Unit,
     onRemoveClick: () -> Unit,
+    onClick: () -> Unit,
 ) {
     val caps = record.manifest.declaredCaps
+    // 清单解析失败时 ExtensionRegistry 会造一条 version="?" 的占位记录（否则那个目录永远删不掉）。
+    // 它同时意味着「这个扩展没有任何可用信息」，徽章上必须说清楚，否则用户会以为是自己装错了。
+    val broken = record.manifest.version == "?"
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f),
@@ -977,11 +1032,39 @@ private fun ExtensionItem(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
-                    Text(
-                        text = "v" + record.manifest.version,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (broken) "—" else "v" + record.manifest.version,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        // 徽章按「用户最需要先知道的那件事」排序：坏了 > 没有代码 > 未启用。
+                        if (broken) {
+                            Spacer(Modifier.size(6.dp))
+                            ModuleLabel(
+                                text = stringResource(R.string.dsh_ext_badge_broken),
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        } else if (!record.manifest.hasCode) {
+                            // 纯声明式扩展（只注册槽位/主题，不带 dex）：不是错误，但值得说明，
+                            // 否则用户会奇怪「为什么它没有 classes.dex 也能启用」。
+                            Spacer(Modifier.size(6.dp))
+                            ModuleLabel(
+                                text = stringResource(R.string.dsh_ext_badge_nocode),
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (!record.enabled) {
+                            Spacer(Modifier.size(6.dp))
+                            ModuleLabel(
+                                text = stringResource(R.string.dsh_ext_badge_disabled),
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
                 ModuleLabel(
                     text = stringResource(
@@ -1291,4 +1374,98 @@ internal fun formatCount(n: Long): String = when {
     n >= 1_000 -> String.format("%.1fk", n / 1_000.0)
     else -> n.toString()
 }
+/**
+ * 扩展详情弹层：把「它到底是什么」一次说全。
+ *
+ * 为什么动作不搬进来：开关与移除留在卡片上（那一页的主要操作就是反复开关），
+ * 弹层只负责看清楚 —— id、入口类、安装目录、**完整**的能力清单。
+ * 卡片上最多显示三个能力，是因为那只是给一眼扫过的；真要核对就点开这里。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExtensionDetailSheet(
+    record: ExtensionRecord,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val manifest = record.manifest
+    val broken = manifest.version == "?"
+    val dir = remember(record.id) { ExtensionLayout.dirOf(context, record.id) }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
+        ) {
+            Text(
+                text = manifest.name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (broken) "—" else "v" + manifest.version,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (manifest.description.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text(text = manifest.description, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(12.dp))
+
+            DetailRow(stringResource(R.string.dsh_ext_detail_id), manifest.id)
+            DetailRow(
+                stringResource(R.string.dsh_ext_detail_entry),
+                manifest.entryClass ?: stringResource(R.string.dsh_ext_badge_nocode),
+            )
+            // 目录直接给绝对路径：用户要删/要改 manifest 时，这句话就是唯一有用的信息。
+            DetailRow(stringResource(R.string.dsh_ext_detail_dir), dir.absolutePath)
+
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.dsh_ext_detail_caps_all),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(6.dp))
+            if (manifest.declaredCaps.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.dsh_ext_detail_nocaps),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                // 一条一行，不 Join 成一句：能力名可能很长，逗号串起来会看不清到底声明了几条。
+                for (cap in manifest.declaredCaps) {
+                    Text(
+                        text = "· " + cap,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/** 详情弹层里的一行「标签 + 值」（值是等宽可选的，这里统一正文样式）。 */
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(text = value, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 
