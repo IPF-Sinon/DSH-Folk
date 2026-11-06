@@ -91,7 +91,8 @@ object DshEnv {
             if (dst.isDirectory && dst.list()?.isNotEmpty() == true) continue
             dst.parentFile?.mkdirs()
             if (dst.exists()) dst.deleteRecursively()
-            src.renameTo(dst)
+            // 与运行时恢复同一理由：跨挂载点 renameTo 会静默失败 → 认领回来的数据其实没搬过去
+            renameOrCopy(src, dst) { msg -> DshRuntime.appendLog("[preserve] $msg") }
         }
         if (PRESERVED_PATHS.none { File(stash, it).exists() }) {
             runCatching { stash.deleteRecursively() }

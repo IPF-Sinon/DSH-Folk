@@ -820,7 +820,11 @@ console.log("\u2500 #16s 安装失败必须说清败在哪一步（Issue #12 追
   ok(falseReturns >= 5, '失败分支有 ' + falseReturns + ' 条（≥5）');
   ok(notes >= falseReturns, '每个失败分支前都有 note() 记录（note ' + notes + ' ≥ 失败 ' + falseReturns + '）');
   // renameTo 必须有回退：Android 上整目录改名很容易返回 false 而不抛异常
-  ok(/private fun renameOrCopy\(src: File, dst: File/.test(inst), '改名失败有复制回退');
+  // 现在提到 internal：恢复路径（recoverInterruptedRuntimeInstall / DshEnv.recoverPreserved）
+  // 也要复用它，private 会让那两处只能各写一遍裸 renameTo（评审 P1-3c）。
+  ok(/internal fun renameOrCopy\(src: File, dst: File/.test(inst), '改名失败有复制回退');
+  ok(/renameOrCopy\(backup, dest, note\)/.test(inst),
+    'recoverInterruptedRuntimeInstall 走了 renameOrCopy（不再裸 renameTo 静默失败）');
   ok(/src\.renameTo\(dst\)\) return true/.test(inst), '先试 renameTo');
   ok(/copyRecursiveTo\(dst\)/.test(inst) && /setExecutable\(true, false\)/.test(inst),
     '回退复制保留可执行位（bash/node/pnpm 要能跑）');

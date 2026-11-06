@@ -1,19 +1,36 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  备份 / 换机迁移规则（API 31+）。与 backup_rules.xml 同一套排除理由，
+  只是要分别写 cloud-backup 与 device-transfer 两段。
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="file" path="rootfs" />
+        <exclude domain="file" path="chroot" />
+        <exclude domain="file" path=".dsh-preserve" />
+        <exclude domain="file" path=".runtime-install" />
+        <exclude domain="file" path=".runtime-rollback" />
+        <exclude domain="file" path="extensions" />
+        <exclude domain="file" path="logs" />
+        <exclude domain="file" path="audit" />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <!-- 换机迁移同样排掉 rootfs/token：新设备首次启动会自己下载运行时 -->
+        <exclude domain="file" path="rootfs" />
+        <exclude domain="file" path="chroot" />
+        <exclude domain="file" path=".dsh-preserve" />
+        <exclude domain="file" path=".runtime-install" />
+        <exclude domain="file" path=".runtime-rollback" />
+        <exclude domain="file" path="extensions" />
+        <exclude domain="file" path="logs" />
+        <exclude domain="file" path="audit" />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </device-transfer>
-    -->
 </data-extraction-rules>

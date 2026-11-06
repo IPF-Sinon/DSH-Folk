@@ -1,13 +1,33 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older that API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自动备份规则（API < 31 用这份；31+ 用 data_extraction_rules.xml）。
+
+  为什么必须写：此前两个文件里的 <include>/<exclude> 全被注释掉，等于「什么都不排除」，
+  系统云备份会去扫 files/rootfs（解压后约 800MB）、chroot 挂载点、日志，以及含
+  fs_bridge_token 的 SharedPreferences。云备份配额只有 25MB，扫这些既没意义也有隐私风险
+  （外部审查 P2-2）。
+
+  策略：几乎全部排除。容器可以重新下载，token 每次启动都换，真正需要跨设备的「主题/外观」
+  由应用自己的加密备份通道负责，不依赖系统云备份。
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- 容器与运行时：rootfs 是整份 Ubuntu，体积巨大且可重新下载 -->
+    <exclude domain="file" path="rootfs" />
+    <exclude domain="file" path="chroot" />
+    <exclude domain="file" path=".dsh-preserve" />
+    <exclude domain="file" path=".runtime-install" />
+    <exclude domain="file" path=".runtime-rollback" />
+    <!-- 三方扩展（DEX）绝不跟备份走 -->
+    <exclude domain="file" path="extensions" />
+    <!-- 诊断与审计：含设备信息与命令历史 -->
+    <exclude domain="file" path="logs" />
+    <exclude domain="file" path="audit" />
+    <!-- 其余 files 子目录一并排除（白名单式容易漏，这里取「什么都不备份」） -->
+    <exclude domain="file" path="." />
+    <!-- 数据库：会话/工作流索引 -->
+    <exclude domain="database" path="." />
+    <!-- SharedPreferences：含回环桥 token 与扩展注册表 -->
+    <exclude domain="sharedpref" path="." />
+    <!-- 外部专属目录（导出包等） -->
+    <exclude domain="external" path="." />
 </full-backup-content>

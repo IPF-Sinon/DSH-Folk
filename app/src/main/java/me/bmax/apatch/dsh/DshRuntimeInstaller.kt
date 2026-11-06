@@ -316,7 +316,13 @@ internal fun DshRuntime.downloadFile(url: String, target: File, sizeBytes: Long)
  *
  * @return 成功返回 true；失败时把原因写进 [note]。
  */
-private fun renameOrCopy(src: File, dst: File, note: (String) -> Unit): Boolean {
+/**
+ * 搬目录：先 rename，失败（跨挂载点、厂商 ROM 的怪行为）再复制 + 删除。
+ *
+ * 为什么是 internal：恢复路径（recoverInterruptedRuntimeInstall、DshEnv.recoverPreserved）
+ * 也要用它 —— 那两处此前是裸 renameTo，跨边界失败时**静默返回 false**，用户数据就这么丢了。
+ */
+internal fun renameOrCopy(src: File, dst: File, note: (String) -> Unit): Boolean {
     if (src.renameTo(dst)) return true
     note("renameTo 失败，回退复制：${src.name} → ${dst.name}")
     return runCatching {
@@ -624,8 +630,10 @@ internal fun DshRuntime.recoverInterruptedRuntimeInstall() {
     val dest = DshEnv.rootfs(appContext)
     val pending = File(appContext.filesDir, ".runtime-install")
     val backup = File(appContext.filesDir, ".runtime-rollback")
+    // 裸 renameTo 跨挂载点会静默失败，用户数据就没了（评审 P1-3c）
+    val note: (String) -> Unit = { DshRuntime.appendLog("[runtime] $it") }
     if (!dest.exists() && backup.exists()) {
-        backup.renameTo(dest)
+        renameOrCopy(backup, dest, note)
         DshEnv.recoverPreserved(appContext)
     } else if (dest.exists() && backup.exists()) {
         val stash = DshEnv.dshPreserve(appContext)
@@ -634,7 +642,7 @@ internal fun DshRuntime.recoverInterruptedRuntimeInstall() {
         } else {
             this.returnRestoredDataToStash(dest)
             dest.deleteRecursively()
-            backup.renameTo(dest)
+            renameOrCopy(backup, dest, note)
             DshEnv.recoverPreserved(appContext)
         }
     } else {

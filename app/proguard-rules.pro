@@ -52,6 +52,17 @@
 # Gson
 -keepattributes Signature
 -keepattributes *Annotation*
+# WebView 的 JS 桥：BlobBridge（下载）与 UserscriptBridge（通知）只由网页侧通过注入的对象调用，
+# Kotlin 里没有调用点。AGP 默认规则已含 @JavascriptInterface 的 keepclassmembers，但本文件的
+# -repackageclasses / -allowaccessmodification / -overloadaggressively 是「激进」档，
+# 这里补一份显式规则做兜底 —— 丢了它 Release 包的表现是「下载与通知静默失效」，很难查
+# （外部审查 P0-4）。
+-keepattributes JavascriptInterface
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keep class me.bmax.apatch.ui.DshWebUiActivity$BlobBridge { *; }
+-keep class me.bmax.apatch.ui.DshWebUiActivity$UserscriptBridge { *; }
 -keep class sun.misc.Unsafe { *; }
 -keep class com.google.gson.** { *; }
 -keep class * extends com.google.gson.reflect.TypeToken

@@ -502,16 +502,18 @@ object DshRuntime : DshRuntimeHost {
         // chroot 与 proroot 共用这套「失败即回退」：两者都是实验性启动方式，
         // 一旦起不来就必须自动回到 proot，否则用户会卡在「每次都失败」。
         val id = runtimeId()
+        if (id != "proroot" && id != "chroot") return false
+        // 插件树加载失败与运行时无关：以前这条判据排在 chroot 分支**之后**，于是插件报错
+        // 也会把 chroot 判死并回退 proot（评审 P0-3 附带项）。判据必须先跑。
+        if (lastLogSuggestsPluginFailure()) {
+            logWarn(R.string.dsh_log_plugin_stage_failure)
+            return false
+        }
         if (id == "chroot") {
             prefs().edit().putString(DshEnv.KEY_RUNTIME, "proot").apply()
             logWarn(R.string.dsh_log_proroot_failed, "chroot: " + why)
             prorootFellBack = true
             return true
-        }
-        if (id != "proroot") return false
-        if (lastLogSuggestsPluginFailure()) {
-            logWarn(R.string.dsh_log_plugin_stage_failure)
-            return false
         }
         val n = prefs().getInt(DshEnv.KEY_PROROOT_FAIL, 0) + 1
         return if (n >= PROROOT_FAIL_LIMIT) {

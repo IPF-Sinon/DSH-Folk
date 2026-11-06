@@ -9,6 +9,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PushbackInputStream;
+import java.io.RandomAccessFile;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -47,15 +48,17 @@ public final class TarGzipExtractor {
      * 为什么需要：解压 273MB → 约 800MB 在这类设备上要几十秒，而界面此前只显示一句
      * 「开始解压安装…」直到结束 —— 用户以为卡死（Issue #12 的反馈）。
      *
-     * 用 **tar 文件总字节数**作分母：gzip 流的原始大小不可靠（多流 gzip 累加不上），
-     * 而「已解字节 / 压缩包字节」与真实进度正相关，足够给一个「在动」的反馈。
+     * 分母是**解压后 tar 的总字节数**，从 gzip 尾部的 ISIZE 取（最后 4 字节 = 原始大小 mod 2^32，
+     * rootfs 这种几百 MB 的包完全精确）。旧实现拿「压缩包大小」当分母，而分子是解压后的累计 ——
+     * 两者差约 3 倍，进度条在 1/3 处就满格并卡死（评审 P1-3a）。
+     * 取不到 ISIZE（裸 tar / 超大包）时退回压缩包大小，至少保持「在动」的反馈。
      * 回调在解压线程上同步执行，实现方必须自己保证轻量（节流）。
      */
     public interface ProgressListener {
         void onProgress(long extractedBytes, long totalTarBytes);
     }
 
-    /** 本次解压的 tar 文件总字节数（进度分母）。0 = 未知（流式入口）。 */
+    /** 进度分母：解压后 tar 的总字节数；0 = 未知（流式入口）。 */
     private static volatile long totalTarBytes = 0;
 
     /** 当前解压的进度监听（null = 不回调）。 */
@@ -77,9 +80,32 @@ public final class TarGzipExtractor {
         }
     }
 
+    /**
+     * 从 gzip 尾部取**解压后**字节数（ISIZE，最后 4 字节，小端）。
+     *
+     * 只对单流 gzip 精确；多流或 ≥4GB 时返回 -1，由调用方退回压缩包大小。
+     * 读 4 个字节而已，代价可以忽略 —— 比「再解压一遍数总长」便宜两个数量级。
+     */
+    private static long readGzipPlainSize(File tarball) {
+        if (tarball == null || !tarball.isFile() || tarball.length() < 18) return -1L;
+        try (RandomAccessFile raf = new RandomAccessFile(tarball, "r")) {
+            raf.seek(0);
+            if (raf.read() != 0x1f) return -1L;
+            if (raf.read() != 0x8b) return -1L;
+            raf.seek(tarball.length() - 4);
+            long v = 0L;
+            for (int i = 0; i < 4; i++) v |= ((long) (raf.read() & 0xFF)) << (8 * i);
+            return v > 0 ? v : -1L;
+        } catch (Throwable t) {
+            return -1L;
+        }
+    }
     /** 每次解压开始前清零计数器（**所有入口**都要调，否则会读到上一次的残留值）。 */
     private static void resetDiagnostics(File tarball) {
-        totalTarBytes = tarball != null && tarball.isFile() ? tarball.length() : 0L;
+        long compressed = tarball != null && tarball.isFile() ? tarball.length() : 0L;
+        long plain = readGzipPlainSize(tarball);
+        // 分母优先用解压后大小（与分子同量纲）；取不到才退回压缩包大小
+        totalTarBytes = plain > 0 ? plain : compressed;
         lastSkipped = 0;
         lastSkipNote = "";
         lastChmodFailures = 0;
@@ -231,6 +257,11 @@ public final class TarGzipExtractor {
                     pendingLinkname = parseString(longData, 0, longData.length);
                 } else {
                     pendingName = parsePaxPath(longData);
+                    // PAX 的 linkpath= 此前被整个忽略：长符号链接/硬链接的目标只剩头里那 100
+                    // 字节（被截断），落盘后就是一个坏链接（评审 P1-3b）。
+                    // 与 GNU 'K' 走同一个 pendingLinkname 通道。
+                    String paxLink = parsePaxKey(longData, "linkpath");
+                    if (paxLink != null) pendingLinkname = paxLink;
                 }
                 continue;
             }
@@ -507,16 +538,27 @@ public final class TarGzipExtractor {
         return v;
     }
 
-    private static String parsePaxPath(byte[] data) {
-        // PAX 记录格式： "<len> key=value\n"（len 含 key=value+\n 本身长度）
+    /**
+     * 从 PAX 扩展头里取某个键的值（path= / linkpath= 共用这套解析）。
+     *
+     * 记录格式： {@code "<len> key=value\n"}（len 含 key=value+\n 本身长度）。
+     * 只认第一条匹配 —— 同一个键在一条记录里不会重复出现。
+     */
+    private static String parsePaxKey(byte[] data, String key) {
         String s = new String(data, java.nio.charset.StandardCharsets.UTF_8);
+        String prefix = key + "=";
         for (String line : s.split("\\n")) {
             String t = line.trim();
             int sp = t.indexOf(' ');
             if (sp <= 0) continue;
             String kv = t.substring(sp + 1).trim();
-            if (kv.startsWith("path=")) return kv.substring("path=".length());
+            if (kv.startsWith(prefix)) return kv.substring(prefix.length());
         }
         return null;
+    }
+
+    /** 兼容旧调用点：只取 path=。 */
+    private static String parsePaxPath(byte[] data) {
+        return parsePaxKey(data, "path");
     }
 }
