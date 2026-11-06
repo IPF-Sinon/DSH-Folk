@@ -1,8 +1,6 @@
 package me.bmax.apatch.dsh.ext
 
 import android.content.Context
-import me.bmax.apatch.R
-import me.bmax.apatch.apApp
 import me.bmax.apatch.dsh.DshRuntime
 import java.io.File
 
@@ -90,7 +88,3 @@ object ExtensionLayout {
             id.all { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' } &&
             id != "." && id != ".."
 }
-
-/** 扩展系统共用的文案入口（统一走资源，便于两种语言）。 */
-internal fun extStr(resId: Int, vararg args: Any): String =
-    runCatching { apApp.appString(resId, *args) }.getOrDefault("")

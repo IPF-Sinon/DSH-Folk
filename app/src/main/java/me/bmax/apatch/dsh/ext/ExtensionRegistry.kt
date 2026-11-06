@@ -2,6 +2,7 @@ package me.bmax.apatch.dsh.ext
 
 import android.content.Context
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.dsh.copyRecursiveTo
 import java.io.File
 
 /** 已安装扩展的一条记录。 */

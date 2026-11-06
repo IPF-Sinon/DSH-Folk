@@ -351,7 +351,7 @@ internal fun renameOrCopy(src: File, dst: File, note: (String) -> Unit): Boolean
  * 所以这里先 `readSymbolicLink()` 判断：能读出目标就是链接，用 `Os.symlink` 原样重建，
  * 目标是否存在与本次复制无关。解压器（[TarGzipExtractor]）也是这么重建链接的。
  */
-private fun File.copyRecursiveTo(dst: File) {
+internal fun File.copyRecursiveTo(dst: File) {
     // 符号链接优先判：File.isDirectory/isFile 都会**跟随**链接，必须先问链接本身
     val linkTarget = runCatching { java.nio.file.Files.readSymbolicLink(toPath()) }.getOrNull()
     if (linkTarget != null) {
