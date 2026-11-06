@@ -158,16 +158,21 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
         apApp = this
         sharedPreferences = getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
 
-        // ② 加载「已启用且未被熔断」的扩展。bootstrap 自己吞异常：扩展系统坏掉也不能让 App 起不来。
-        ExtensionEngine.bootstrap(this)
-        // ③ bootstrap 会跑扩展的 onLoad，而 onLoad 里可以换掉根崩溃处理器（见 [hostCrashHandler]）。
-        //    这里立刻复原一次，保证后面所有崩溃仍然回到宿主手里。
-        ensureRootCrashHandler()
-
         // DSH 运行时的 Context 必须在任何 Composable 之前绑定：首页 composition
         // 期间就会读 runtimeId() / port()，只靠首页 LaunchedEffect 里的 attach()
         // 太晚（那时首帧已经在 measure 了），会撞未初始化的 lateinit 直接崩。
         me.bmax.apatch.dsh.DshRuntime.init(this)
+
+        // ② 加载「已启用且未被熔断」的扩展。bootstrap 自己吞异常：扩展系统坏掉也不能让 App 起不来。
+        //
+        // **必须排在 DshRuntime.init 之后**：DshRuntime.appendLog 只在本对象持有 appContext 时才
+        // 真正落盘，而扩展加载是这条路径上最需要日志的一段（加载失败、dex 只读被拒、onLoad 抛异常）。
+        // 顺序反了就会出现真机实测到的那种情况：dsh.log 里一条 [ext] 都没有，装没装上、
+        // 为什么没生效 —— 全靠猜。这个 bug 实际踩过（beta.238 的 shell 扩展不生效却无任何日志）。
+        ExtensionEngine.bootstrap(this)
+        // ③ bootstrap 会跑扩展的 onLoad，而 onLoad 里可以换掉根崩溃处理器（见 [hostCrashHandler]）。
+        //    这里立刻复原一次，保证后面所有崩溃仍然回到宿主手里。
+        ensureRootCrashHandler()
 
         // 权限策略迁移：旧模型（全局严格程度 + 信任名单）→ 新模型（限制模式 + 两张清单）。
         // 放在这里而不是 UI 里：它必须在任何一次能力判定之前跑完，而首页 composition 只是

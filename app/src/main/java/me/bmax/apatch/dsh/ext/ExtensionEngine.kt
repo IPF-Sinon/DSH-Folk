@@ -34,11 +34,23 @@ object ExtensionEngine {
         if (bootstrapped) return
         bootstrapped = true
         runCatching {
+            // 诊断日志：扩展「装了但没生效」时，这几行是唯一能区分
+            // 「没启用 / 熔断拦了 / 加载失败 / 加载了但界面没接」的依据。
+            val all = ExtensionRegistry.listInstalled(ctx)
+            DshRuntime.appendLog(
+                "[ext] bootstrap 开始：已安装 " + all.size + " 个（" +
+                    all.joinToString { it.id + (if (it.enabled) "=启用" else "=停用") } + "）",
+            )
             if (ExtensionSafetyGuard.isSafeMode(ctx)) {
-                DshRuntime.appendLog("[ext] 安全模式，跳过全部第三方扩展")
+                DshRuntime.appendLog(
+                    "[ext] 安全模式，跳过全部第三方扩展；原因=" +
+                        ExtensionSafetyGuard.reason.ifEmpty {
+                            ExtensionSafetyGuard.findKillSwitch(ctx)?.absolutePath ?: "(未知)"
+                        },
+                )
                 return
             }
-            val records = ExtensionRegistry.listInstalled(ctx).filter { it.enabled && it.installed }
+            val records = all.filter { it.enabled && it.installed }
             if (records.isEmpty()) {
                 DshRuntime.appendLog("[ext] 没有启用的扩展")
                 ExtensionBootPipeline.markBootstrapped(ctx)

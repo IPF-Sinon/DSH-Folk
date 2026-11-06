@@ -29,6 +29,10 @@ object ExtensionLoader {
             onFatal("缺 classes.dex：" + dex.absolutePath)
             return null
         }
+        DshRuntime.appendLog(
+            "[ext] " + manifest.id + " 准备加载：dex=" + dex.absolutePath +
+                "（" + dex.length() + " 字节，可写=" + dex.canWrite() + "），入口类=" + entry,
+        )
         // 只读：Android 14+ 的硬性要求，不设就一定加载失败
         runCatching { dex.setReadOnly() }
         val optimizeDir = File(ctx.codeCacheDir, "ext_" + manifest.id).apply { mkdirs() }
@@ -42,7 +46,17 @@ object ExtensionLoader {
             )
             val clazz = classLoader.loadClass(entry)
             val instance = clazz.getDeclaredConstructor().newInstance()
-            instance as? DshExtension
+            // as? 失败会让「扩展实现了接口但类型对不上」表现成「加载成功却什么都没发生」，
+            // 所以这里把真实类型打出来（典型原因：扩展打包时自带了一份 :ext-api 的类）。
+            if (instance !is DshExtension) {
+                DshRuntime.appendLog(
+                    "[ext] " + manifest.id + " 入口类没有实现 DshExtension，实际类型=" +
+                        instance.javaClass.name + "，其接口=" +
+                        instance.javaClass.interfaces.joinToString { it.name },
+                )
+                return null
+            }
+            instance
         }.onFailure {
             onFatal("加载失败（" + entry + "）：" + (it.message ?: it.javaClass.simpleName))
         }.getOrNull()

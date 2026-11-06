@@ -947,6 +947,13 @@ class MainActivity : AppCompatActivity() {
                     // 插件页、设置页、终端页也都还能到 —— 那是不让用户被关在空房间里的底线。
                     var shellTick by remember { mutableStateOf(0) }
                     val activeShell = remember(shellTick) { ExtensionUiRegistry.shellOverride() }
+                    // 只在决策变化时打一行：这是「扩展已注册但界面没换」和「注册就没成功」
+                    // 两种情况的唯一分界点。
+                    LaunchedEffect(activeShell) {
+                        me.bmax.apatch.dsh.DshRuntime.appendLog(
+                            "[ext] 外壳决策=" + (activeShell?.extensionId ?: "无（用宿主默认外壳）"),
+                        )
+                    }
                     val shellHost = rememberDshShellHost(
                         navController = navController,
                         homeRoute = homeRoute,

@@ -111,7 +111,9 @@ must(/unregisterAll\(mf\.id\)/.test(loader),
 // ---- 5. 编排器 ----
 must(/fun bootstrap\(ctx: Context\)/.test(engine), '缺 ExtensionEngine.bootstrap()');
 must(/if \(ExtensionSafetyGuard\.isSafeMode\(ctx\)\)/.test(engine), 'bootstrap 没有先看安全模式');
-must(/ExtensionSafetyGuard\.isSafeMode\(ctx\)\) \{[\s\S]{0,200}return/.test(engine),
+// 判据放宽到 600 字符：安全模式分支里会先打一行「原因=…」的诊断日志再 return，
+// 卡 200 字符会把这条正经活判成违规（写死距离的断言本身也很脆）。
+must(/ExtensionSafetyGuard\.isSafeMode\(ctx\)\) \{[\s\S]{0,600}?return/.test(engine),
   '安全模式下 bootstrap 没有提前返回（熔断了还在加载扩展）');
 must(/fun unloadAll\(ctx: Context\)/.test(engine) && /fun disableAllAndLatch\(ctx: Context, why: String\)/.test(engine),
   '缺 unloadAll / disableAllAndLatch（崩溃页与安全模式都要用）');
@@ -181,6 +183,29 @@ must(/popUpTo\(navController\.graph\.startDestinationId\) \{ saveState = true \}
 must(/minAppVersion/.test(loader) && /DshRuntime\.appSatisfies\(required\)/.test(loader),
   "ExtensionLoader 没有校验 minAppVersion：旧宿主加载新扩展会在运行期 NoSuchMethodError");
 
+
+
+// ---- 8f. 诊断：扩展「装了但没生效」时必须能从日志里查出来 ----
+// 这条不是洁癖：beta.238 的 shell 扩展不生效，而 dsh.log 里一条 [ext] 都没有，
+// 根因是 bootstrap 排在 DshRuntime.init 之前，appendLog 在没有 Context 时静默丢弃。
+const dshRuntimeSrc = read("app/src/main/java/me/bmax/apatch/dsh/DshRuntime.kt");
+must(/android\.util\.Log\.i\(\"DSH-Folk\", line\)/.test(dshRuntimeSrc),
+  "appendLog 在 Context 未绑定时会静默丢弃：启动期日志（扩展加载）会凭空消失");
+{
+  const initIdx = app.indexOf("DshRuntime.init(this)");
+  const bootIdx2 = app.indexOf("ExtensionEngine.bootstrap(this)");
+  must(initIdx > 0 && bootIdx2 > initIdx,
+    "ExtensionEngine.bootstrap 必须排在 DshRuntime.init 之后，否则它自己写的日志落不了盘");
+}
+must(/bootstrap 开始：已安装/.test(engine), "bootstrap 没有打印已安装/启用概况");
+must(/安全模式，跳过全部第三方扩展；原因=/.test(engine), "安全模式拦截没有打印原因（用户只会看到「没生效」）");
+must(/准备加载：dex=/.test(loader), "加载失败时无法从日志判断 dex 是否存在/多大");
+must(/没有实现 DshExtension，实际类型=/.test(loader), "接口类型不匹配时会静默返回 null（典型：扩展自带了一份 :ext-api）");
+must(/已注册外壳/.test(uiReg), "注册外壳没有日志，「注册没成功」与「注册了没渲染」无法区分");
+{
+  const mainSrc2 = read("app/src/main/java/me/bmax/apatch/ui/MainActivity.kt");
+  must(/外壳决策=/.test(mainSrc2), "MainActivity 没有记录外壳决策，无法定位「注册了但没生效」");
+}
 
 const crash = read('app/src/main/java/me/bmax/apatch/ui/CrashHandleActivity.kt');
 must(/ExtensionEngine\.disableAllAndLatch\(/.test(crash), '崩溃页没有「禁用全部扩展」的救援入口');

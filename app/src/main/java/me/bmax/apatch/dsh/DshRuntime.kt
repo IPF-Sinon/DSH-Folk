@@ -3054,7 +3054,15 @@ object DshRuntime : DshRuntimeHost {
     }
 
     fun appendLog(line: String) {
-        if (::appContext.isInitialized) LogStore.named(DshEnv.serverLog(appContext)).append(line)
+        if (::appContext.isInitialized) {
+            LogStore.named(DshEnv.serverLog(appContext)).append(line)
+        } else {
+            // Context 还没绑定时**不能什么都不做**：启动最早那一段（扩展加载、安装恢复）恰恰是
+            // 故障最多、最需要日志的地方，静默丢弃会让「装上了但没生效」变成无从查起
+            // （beta.238 的 shell 扩展不生效、dsh.log 里一条 [ext] 都没有，就是这么来的）。
+            // 退到 logcat，至少 bugreport 的 logcat.txt 里还找得到。
+            android.util.Log.i("DSH-Folk", line)
+        }
     }
 
     /**

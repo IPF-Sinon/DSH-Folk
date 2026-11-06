@@ -143,8 +143,13 @@ object ExtensionUiRegistry {
      * 一起既画不出来也没法解释。
      */
     fun registerShell(extensionId: String, content: ShellContent) {
-        if (ExtensionGate.isLatched()) return
+        if (ExtensionGate.isLatched()) {
+            // 熔断时静默返回会让「扩展加载成功但界面没换」变得完全无法解释，所以留一行
+            ExtLog.log("[ext:" + extensionId + "] registerShell 被熔断拦截，未注册")
+            return
+        }
         shells.add(ShellOverride(extensionId, content))
+        ExtLog.log("[ext:" + extensionId + "] 已注册外壳（当前共 " + shells.size + " 个）")
     }
 
     /** 拦截主题色板。 */
