@@ -115,7 +115,23 @@
 
     <!-- 插件页 -->
     <string name="dsh_plugin_store">Plugin store</string>
-    <string name="dsh_plugins_extensions_unavailable">Extensions are not available yet — use the Plugins and Userscripts pages for now.</string>
+    <!-- App extensions: unlike plugins or userscripts, an extension is loaded into this very process and shares all of the host privileges -->
+    <string name="dsh_ext_title">Extensions</string>
+    <!-- Trust prompt before enabling: extensions run inside the app process with host-equal privileges -->
+    <string name="dsh_ext_trust_title">This extension will get full access</string>
+    <string name="dsh_ext_trust_body">%1$s runs inside the app process with the same privileges as the app itself: it can run privileged commands, read accessibility content, and access every file this app can. Only enable extensions from sources you trust.</string>
+    <string name="dsh_ext_trust_accept">I understand, enable</string>
+    <string name="dsh_ext_empty">No extensions installed yet. Unlike plugins or userscripts, an extension runs inside this app itself and shares all of its privileges.</string>
+    <string name="dsh_ext_install_hint">To install one, put an extension directory under files/extensions/ — one directory per extension, with a manifest.json inside.</string>
+    <string name="dsh_ext_enable">Enabled</string>
+    <string name="dsh_ext_disable">Not enabled</string>
+    <string name="dsh_ext_restart_hint">Takes effect after the app restarts</string>
+    <string name="dsh_ext_safe_mode">Safe mode: all extensions are disabled</string>
+    <string name="dsh_ext_safe_mode_reason">Reason: %1$s</string>
+    <string name="dsh_ext_reenable">Re-enable extensions</string>
+    <string name="dsh_ext_reenable_hint">Extensions are loaded again only after the app restarts.</string>
+    <string name="dsh_ext_crash_disable_all">Disable all extensions and restart</string>
+    <string name="dsh_ext_caps">Capabilities: %1$s</string>
     <string name="dsh_plugin_downloads">Downloads</string>
     <string name="dsh_plugin_stars">Stars</string>
     <string name="dsh_local_install">Install locally</string>

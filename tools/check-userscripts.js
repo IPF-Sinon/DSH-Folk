@@ -525,9 +525,11 @@ ok(/private const val GROUP_PLUGINS = "plugins"/.test(pluginHome) &&
   !/FilterChip\(/.test(pluginHome) &&
   !/ModuleGroupRow/.test(pluginHome),
   "三页切换在右上角那颗菜单按钮里（原来的 FilterChip 行已撤）：插件 / 用户脚本 / 扩展");
-ok(/GROUP_EXTENSIONS -> ScrollableEmptyState\(/.test(pluginHome) &&
-  /dsh_plugins_extensions_unavailable/.test(pluginHome),
-  "扩展页有入口也有一句「暂不可用」（不是画一个空列表）");
+// 扩展页已从「暂不可用」占位升级为真实管理页（App Extensions 落地）：判据改成
+// 「渲染 ExtensionsPane + 读真实扩展列表」，占位文案不再是必要条件。
+ok(/GROUP_EXTENSIONS -> ExtensionsPane\(/.test(pluginHome) &&
+  /ExtensionRegistry\.listInstalled\(/.test(pluginHome),
+  "扩展页列真实扩展（不再是「暂不可用」占位）");
 // 占位页不该给「点了没反应」的控件：扩展页没有可搜的东西，放大镜就不该在（与那颗
 // 「按了没反应的隐藏内置」是同一种毛病）。判据落在 SearchAppBar 的新参数上。
 {

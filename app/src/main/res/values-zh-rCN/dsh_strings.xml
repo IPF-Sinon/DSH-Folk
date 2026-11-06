@@ -107,7 +107,23 @@
     <string name="dsh_phase_error">出错</string>
 
     <string name="dsh_plugin_store">插件商店</string>
-    <string name="dsh_plugins_extensions_unavailable">扩展页暂不可用，先在插件 / 用户脚本两页里用。</string>
+    <!-- 扩展：与插件 / 用户脚本不同，扩展直接加载进本进程、与 App 同权 -->
+    <string name="dsh_ext_title">扩展</string>
+    <!-- 打开扩展开关前的信任确认：扩展跑在 App 进程内、与宿主同权（含 root 通道） -->
+    <string name="dsh_ext_trust_title">这个扩展将获得完整权限</string>
+    <string name="dsh_ext_trust_body">%1$s 会被加载进 App 进程，权限与 App 本身相同：可以执行特权命令、读取无障碍屏幕内容、访问本应用与共享存储里的全部文件。只启用你信任来源的扩展。</string>
+    <string name="dsh_ext_trust_accept">我了解，启用</string>
+    <string name="dsh_ext_empty">还没有安装扩展。扩展与插件 / 用户脚本不同，它直接跑在 App 里、与 App 同权。</string>
+    <string name="dsh_ext_install_hint">把扩展目录放进 files/extensions/ 即可：每个扩展一个目录，里面放 manifest.json。</string>
+    <string name="dsh_ext_enable">已启用</string>
+    <string name="dsh_ext_disable">未启用</string>
+    <string name="dsh_ext_restart_hint">重启 App 后生效</string>
+    <string name="dsh_ext_safe_mode">安全模式：全部扩展已禁用</string>
+    <string name="dsh_ext_safe_mode_reason">原因：%1$s</string>
+    <string name="dsh_ext_reenable">重新启用扩展</string>
+    <string name="dsh_ext_reenable_hint">重启 App 后扩展才会重新加载。</string>
+    <string name="dsh_ext_crash_disable_all">禁用全部扩展并重启</string>
+    <string name="dsh_ext_caps">能力：%1$s</string>
     <string name="dsh_plugin_downloads">下载量</string>
     <string name="dsh_plugin_stars">星标</string>
     <string name="dsh_local_install">本地安装</string>

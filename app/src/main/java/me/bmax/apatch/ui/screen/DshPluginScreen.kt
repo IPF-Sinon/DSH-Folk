@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -82,6 +83,10 @@ import me.bmax.apatch.ui.screen.settings.UserscriptAddFab
 import me.bmax.apatch.ui.screen.settings.UserscriptsContent
 import me.bmax.apatch.ui.screen.settings.rememberUserscriptInstallRequest
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.dsh.ext.ExtensionEngine
+import me.bmax.apatch.dsh.ext.ExtensionRecord
+import me.bmax.apatch.dsh.ext.ExtensionRegistry
+import me.bmax.apatch.dsh.ext.ExtensionSafetyGuard
 import me.bmax.apatch.ui.component.AddMenuEntry
 import me.bmax.apatch.ui.component.AddMenuFab
 import me.bmax.apatch.ui.component.DshPluginDetailSheet
@@ -112,7 +117,13 @@ import me.bmax.apatch.util.ui.LocalSnackbarHost
 private const val GROUP_PLUGINS = "plugins"
 private const val GROUP_SCRIPTS = "scripts"
 
-/** 第三页：扩展。目前只有入口与一句「暂不可用」，占位是为了让切换器先把三页的位置定下来。 */
+/**
+ * 第三页：扩展。
+ *
+ * 它和另外两页不是一回事：插件与脚本装的是「容器里的东西」，扩展会被加载进 **App 自己的
+ * 进程**、与宿主同权（root 通道、无障碍、全部文件）。所以这一页的重点是「怎么把它们关掉」，
+ * 见 [ExtensionsPane]。
+ */
 private const val GROUP_EXTENSIONS = "extensions"
 
 /** 「移除」二次确认态自己复位的时间：变红了却忘了再点一下，按钮不该一直停在危险态。 */
@@ -184,7 +195,9 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                         stringResource(
                             when (group) {
                                 GROUP_SCRIPTS -> R.string.dsh_userscripts_title
-                                GROUP_EXTENSIONS -> R.string.dsh_plugins_extensions
+                                // 标题栏用扩展自己的串（与菜单里那行「扩展」同一份文案）：
+                                // 菜单是给三页做索引的，标题说的是「你现在在哪一页」，两者分开取。
+                                GROUP_EXTENSIONS -> R.string.dsh_ext_title
                                 else -> R.string.dsh_plugins
                             }
                         )
@@ -267,7 +280,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
             // 三页共用一个「＋ 环绕菜单」（[AddMenuFab]）：
             //   - 插件页 → 链接 + 文件 + 商店（链接安装这一颗是从插件商店搬过来的）；
             //   - 脚本页 → 链接 + 文件 + 商店（[UserscriptAddFab] 把三个动作交给同一份实现）；
-            //   - 扩展页 → 还没有可装的东西，不画。
+            //   - 扩展页 → 没有 App 内的安装入口（装法是把目录放进 files/extensions/），不画。
             when (group) {
                 GROUP_SCRIPTS -> {
                     // 正文（UserscriptsContent）只在运行时已装时组合；没装时这一组的界面是「需要先装
@@ -310,7 +323,9 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
             }
         },
     ) { innerPadding ->
-        if (!runtimeInstalled) {
+        // 扩展页不看运行时：扩展跑在 App 自己的进程里，与容器毫无关系。没装运行时的用户
+        // 同样要能进这一页 —— 尤其是某个扩展把 App 弄崩之后，这里是他唯一能把它关掉的地方。
+        if (!runtimeInstalled && group != GROUP_EXTENSIONS) {
             DshRuntimeNeeded(
                 modifier = Modifier.fillMaxSize().padding(innerPadding),
                 onGoHome = { navigator.popBackStack() },
@@ -329,21 +344,11 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                         // 没记来源的那条：更新去市场按名字找一遍
                         onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },
                     )
-                    // 扩展页：入口先占位（用户要的三页切换里它标着「暂不可用」）。
-                    // 不画一个空列表：空列表看起来像「装完就没了」，而不是「这页还没做」。
-                    GROUP_EXTENSIONS -> ScrollableEmptyState(Modifier.weight(1f)) {
-                        Column(
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.dsh_plugins_extensions_unavailable),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 32.dp),
-                            )
-                        }
-                    }
+                    // 扩展页：真实列表 + 安全模式横幅（见 [ExtensionsPane]）。
+                    GROUP_EXTENSIONS -> ExtensionsPane(
+                        modifier = Modifier.weight(1f),
+                        snackBarHost = snackBarHost,
+                    )
                     else -> DshPluginList(
                         // 外层 Column 已经吃掉 scaffold 的 inset，这里不能再吃一遍
                         innerPadding = PaddingValues(0.dp),
@@ -659,6 +664,376 @@ private fun DshPluginList(
             )
         }
         item { HomeBottomSpacer() }
+    }
+}
+
+/**
+ * 扩展页正文：已安装扩展列表 + 安全模式横幅。
+ *
+ * 与插件 / 用户脚本两页最大的不同：扩展不是容器里的东西，它会被加载进**本进程**、与宿主同权。
+ * 所以这一页的重点不是「装了哪些」，而是「哪几个开着、怎么把它们关掉」：
+ *  - 安全模式横幅固定在最上面、不随列表滚动 —— 熔断之后它就是唯一的出口；
+ *  - 开关一关就立刻 unload，不是等下次启动（否则开关写着「未启用」而扩展的行为还在）；
+ *  - 移除沿用插件页那套两段式确认（第一下变红，第二下才真的删目录）。
+ */
+@Composable
+private fun ExtensionsPane(
+    modifier: Modifier = Modifier,
+    snackBarHost: SnackbarHostState,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // 注册表的事实来源是磁盘（files/extensions/）加 SharedPreferences，没有可观察的数据流。
+    // 所以拿自增的 refreshTick 当 remember 的 key：开关 / 移除之后 +1，等于重读一次磁盘。
+    var refreshTick by remember { mutableStateOf(0) }
+    val records = remember(refreshTick) { ExtensionRegistry.listInstalled(context) }
+    // 安全模式不进 remember：刚在崩溃页点过「禁用全部扩展」，回到这一页时熔断位已经变了，
+    // 缓存住就会显示成「一切正常」，恰好把用户刚做的处置藏起来。
+    val safeMode = ExtensionSafetyGuard.isSafeMode(context)
+    // 原因优先用本进程熔断时记下的那句；若磁盘上只是有标志文件（比如用户自己建的），
+    // 就把那个文件的绝对路径摆出来 —— 至少让他知道该去删哪个文件。
+    val safeReason = if (safeMode) {
+        ExtensionSafetyGuard.reason.ifEmpty {
+            ExtensionSafetyGuard.findKillSwitch(context)?.absolutePath.orEmpty()
+        }
+    } else {
+        ""
+    }
+    // 「重新启用扩展」的二次确认：它等于允许那些可能把 App 弄崩的代码下次启动时回来。
+    var confirmReenable by remember { mutableStateOf(false) }
+    // 「这个扩展将获得完整权限」的确认：非空 = 正在为这一项做授权确认。
+    // 为什么放在**打开开关**这一刻而不是安装时：当前没有 App 内安装入口（装法是把目录放进
+    // files/extensions/），而「开关打开」才是扩展真正获得宿主权限的瞬间。用户从别处拷进来一个
+    // 扩展，界面上最该看到这句话的就是这里。
+    var trustRecord by remember { mutableStateOf<ExtensionRecord?>(null) }
+
+    // 「移除」的二次确认态：存扩展 id，同一时刻最多一项是红的。
+    // 范式与下方插件列表的 pendingUninstall 完全一致（第一下只变红、第二下才执行，
+    // 点别处 / 8 秒 / 滚动 / 列表重读都会复位）。同一页里两种「移除」手感不同是最糟的。
+    var pendingUninstall by remember { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(pendingUninstall) {
+        if (pendingUninstall != null) {
+            delay(ARMED_REVERT_MS)
+            pendingUninstall = null
+        }
+    }
+    // 列表重读（启用 / 停用 / 移除）之后，那颗红按钮对应的项可能已经不在了：复位，免得指向幽灵
+    LaunchedEffect(refreshTick) { pendingUninstall = null }
+    // 滚动也算「点别处」：滚走了还留着红按钮没有意义
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) pendingUninstall = null
+    }
+
+    Column(modifier.fillMaxSize()) {
+        if (safeMode) {
+            ExtensionSafeModeBanner(
+                reason = safeReason,
+                onReenable = { confirmReenable = true },
+            )
+        }
+        if (records.isEmpty()) {
+            // 必须可滚动：否则底栏自动隐藏后无法下拉唤回（见 ScrollableEmptyState）
+            ScrollableEmptyState(Modifier.weight(1f)) {
+                Column(
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = stringResource(R.string.dsh_ext_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 32.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.dsh_ext_install_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 32.dp),
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    // 点空白处 = 「别处」：被按钮 / 卡片消费掉的手势不会冒到这里，所以它们照常工作
+                    .pointerInput(pendingUninstall) {
+                        detectTapGestures { if (pendingUninstall != null) pendingUninstall = null }
+                    },
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(records, key = { it.id }) { record ->
+                    ExtensionItem(
+                        record = record,
+                        removeArmed = pendingUninstall == record.id,
+                        onToggle = { checked ->
+                            pendingUninstall = null
+                            val appCtx = context.applicationContext
+                            // 打开 = 授予完整权限，必须先让用户看懂这件事；关闭是安全方向，直接执行。
+                            if (checked) {
+                                trustRecord = record
+                            } else {
+                                ExtensionRegistry.setEnabled(appCtx, record.id, false)
+                                // 关掉不只是「下次启动别加载」：这个实例现在还在内存里跑，
+                                // 它注册的 Hook / SPI / UI 槽位都还挂着。立即卸掉，否则开关
+                                // 显示「未启用」而扩展的行为还在 —— 那是最容易误判的一种状态。
+                                ExtensionEngine.unload(appCtx, record.id)
+                                refreshTick++
+                            }
+                            // 打开的方向不在这里生效：先走信任确认（见下面的信任对话框），
+                            // 用户点「我了解」之后才真正 setEnabled。否则一次误触就等于授权。
+                        },
+                        onRemoveClick = {
+                            if (pendingUninstall == record.id) {
+                                // 第二下：确认过了。先卸载再删目录 —— 反过来的话 onUnload 跑在
+                                // 目录已经消失之后，扩展自己收尾时会踩空。
+                                pendingUninstall = null
+                                val appCtx = context.applicationContext
+                                ExtensionEngine.unload(appCtx, record.id)
+                                ExtensionRegistry.remove(appCtx, record.id)
+                                refreshTick++
+                            } else {
+                                // 第一下：只进入确认态，什么都不删
+                                pendingUninstall = record.id
+                            }
+                        },
+                    )
+                }
+                item { HomeBottomSpacer() }
+            }
+        }
+    }
+
+    // 信任确认：把「它会以完整权限运行」这件事说清楚，并列出扩展自己声明的能力。
+    trustRecord?.let { rec ->
+        AlertDialog(
+            onDismissRequest = { trustRecord = null },
+            title = { Text(stringResource(R.string.dsh_ext_trust_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.dsh_ext_trust_body, rec.manifest.name),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (rec.manifest.declaredCaps.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(
+                                R.string.dsh_ext_caps,
+                                rec.manifest.declaredCaps.joinToString(", "),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val appCtx = context.applicationContext
+                    ExtensionRegistry.setEnabled(appCtx, rec.id, true)
+                    trustRecord = null
+                    refreshTick++
+                    // 启用后要重启才真正加载（运行期不做热加载，理由见 onToggle）
+                    scope.launch {
+                        snackBarHost.showSnackbar(context.getString(R.string.dsh_ext_restart_hint))
+                    }
+                }) {
+                    Text(stringResource(R.string.dsh_ext_trust_accept))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { trustRecord = null }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
+    if (confirmReenable) {
+        AlertDialog(
+            onDismissRequest = { confirmReenable = false },
+            title = { Text(stringResource(R.string.dsh_ext_reenable)) },
+            text = { Text(stringResource(R.string.dsh_ext_reenable_hint)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReenable = false
+                    // 只清标志、解除熔断位：不在这一刻加载任何扩展（运行期热加载会与已经跑着的
+                    // 宿主状态打架），统一「重启后生效」。
+                    ExtensionEngine.reEnable(context.applicationContext)
+                    refreshTick++
+                    scope.launch {
+                        snackBarHost.showSnackbar(context.getString(R.string.dsh_ext_reenable_hint))
+                    }
+                }) {
+                    Text(stringResource(R.string.dsh_ext_reenable))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReenable = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+/**
+ * 安全模式横幅（原生红色，不可被扩展接管）。
+ *
+ * 为什么它必须固定在最上面、而不是混在列表里：熔断之后列表里的每一项都可能已经不在了，
+ * 「怎么退出安全模式」是这一页唯一还确定有效的东西，不能要求用户先滚到某一行。
+ */
+@Composable
+private fun ExtensionSafeModeBanner(
+    reason: String,
+    onReenable: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, top = 12.dp, end = 16.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    text = stringResource(R.string.dsh_ext_safe_mode),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (reason.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.dsh_ext_safe_mode_reason, reason),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            TextButton(onClick = onReenable) {
+                Text(stringResource(R.string.dsh_ext_reenable))
+            }
+        }
+    }
+}
+
+/**
+ * 单个扩展卡片：名字 + 版本 + 能力标签 + 说明 + 启用开关 + 移除。
+ *
+ * 能力（declaredCaps）最多显示三个，逗号分隔：这是扩展**自己声明的**东西，卡片上给一眼
+ * 扫过的量就够了；要逐条核对就去看它的 manifest.json，别把列表撑成一面墙。
+ */
+@Composable
+private fun ExtensionItem(
+    record: ExtensionRecord,
+    removeArmed: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onRemoveClick: () -> Unit,
+) {
+    val caps = record.manifest.declaredCaps
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f),
+        ),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = record.manifest.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "v" + record.manifest.version,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ModuleLabel(
+                    text = stringResource(
+                        if (record.enabled) R.string.dsh_ext_enable else R.string.dsh_ext_disable,
+                    ),
+                    containerColor = if (record.enabled) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    contentColor = if (record.enabled) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+                Spacer(Modifier.size(8.dp))
+                Switch(checked = record.enabled, onCheckedChange = onToggle)
+            }
+
+            if (caps.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.dsh_ext_caps, caps.take(3).joinToString(", ")),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (record.manifest.description.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = record.manifest.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                // 两段式：第一下只把按钮变红（确认移除），第二下才真的删；
+                // contentColor 同时管住图标与文字，默认的 primary 就是原来的蓝色。
+                TextButton(
+                    onClick = onRemoveClick,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = if (removeArmed) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    ),
+                ) {
+                    Icon(Icons.Outlined.Delete, null, Modifier.size(16.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text(
+                        stringResource(
+                            if (removeArmed) R.string.dsh_plugin_confirm_remove else R.string.apm_remove,
+                        ),
+                    )
+                }
+            }
+        }
     }
 }
 
