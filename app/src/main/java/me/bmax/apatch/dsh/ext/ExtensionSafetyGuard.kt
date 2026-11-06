@@ -50,6 +50,27 @@ object ExtensionSafetyGuard {
     fun isLatched(): Boolean = latched.get()
 
     /**
+     * 改熔断位时**同时**同步到 :ext-api 的 [ExtensionGate]。
+     *
+     * 为什么必须两边都改：注册中心（Service/Hook/Ui）在 ext-api 模块里，它们不认识 Context、
+     * 也不该认识熔断文件，只能读那个门。只改本对象的 latched 会让「熔断后扩展仍在生效」——
+     * 那是这套系统最不能出现的一种状态。
+     */
+    private fun setLatched(value: Boolean) {
+        latched.set(value)
+        ExtensionGate.latched = value
+    }
+
+    /**
+     * 把扩展侧日志接到宿主日志（ExtLog 在 ext-api 里，默认空实现）。
+     *
+     * 由 [me.bmax.apatch.APatchApp] 在启动时调用一次；不装也不会崩，只是扩展的日志进不了 dsh.log。
+     */
+    fun installLogSink() {
+        ExtLog.sink = { line -> DshRuntime.appendLog(line) }
+    }
+
+    /**
      * 所有受监控的标志文件候选路径。
      *
      * 顺序即优先级：内部目录最可靠（一定写得了），公共下载目录最方便（一定不需要权限）。
@@ -89,7 +110,7 @@ object ExtensionSafetyGuard {
         runCatching {
             val marker = findKillSwitch(ctx)
             if (marker != null) {
-                latched.set(true)
+                setLatched(true)
                 reason = "检测到禁用标志文件：" + marker.absolutePath
                 DshRuntime.appendLog("[ext] 安全模式：" + reason + "（本次启动不加载任何扩展）")
                 ExtensionRegistry.clearEnabled(ctx)
@@ -106,7 +127,7 @@ object ExtensionSafetyGuard {
      */
     fun latch(ctx: Context, why: String, writeMarker: Boolean) {
         runCatching {
-            latched.set(true)
+            setLatched(true)
             reason = why
             ExtensionRegistry.clearEnabled(ctx)
             DshRuntime.appendLog("[ext] 进入安全模式：" + why)
@@ -137,7 +158,7 @@ object ExtensionSafetyGuard {
         for (file in killSwitchCandidates(ctx)) {
             runCatching { file.delete() }
         }
-        latched.set(false)
+        setLatched(false)
         reason = ""
         resetCrashCount(ctx)
         DshRuntime.appendLog("[ext] 已退出安全模式")

@@ -16,23 +16,49 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const exists = (p) => fs.existsSync(path.join(root, p));
 const must = (c, m) => { if (!c) errors.push(m); };
 
+// 扩展系统分成两个模块，门禁也得分开看：
+//   :ext-api —— 契约（第三方扩展编译时依赖它，所以这里不许出现任何宿主类型）
+//   :app     —— 宿主实现（熔断、加载、编排、36 项门面）
 const EXT = 'app/src/main/java/me/bmax/apatch/dsh/ext/';
-for (const f of [
-  'ExtensionApi.kt', 'ExtensionSafetyGuard.kt', 'ExtensionManifest.kt', 'ExtensionRegistry.kt',
-  'ExtensionLoader.kt', 'ExtensionFs.kt', 'ExtensionServiceRegistry.kt', 'ExtensionHookRegistry.kt',
-  'ExtensionUiRegistry.kt', 'ExtensionBootPipeline.kt', 'ExtensionEngine.kt', 'DshPlatform.kt',
-]) {
-  must(exists(EXT + f), '缺 ' + f + '（扩展系统内核不完整）');
-}
+const API = 'ext-api/src/main/java/me/bmax/apatch/dsh/ext/';
+
+const apiFiles = [
+  'ExtensionApi.kt', 'ExtensionManifest.kt', 'ExtensionFs.kt',
+  'ExtensionServiceRegistry.kt', 'ExtensionHookRegistry.kt', 'ExtensionUiRegistry.kt',
+];
+const appFiles = [
+  'ExtensionSafetyGuard.kt', 'ExtensionRegistry.kt', 'ExtensionLoader.kt',
+  'ExtensionBootPipeline.kt', 'ExtensionEngine.kt', 'DshPlatform.kt',
+  'AppExtensionFs.kt', 'ExtensionHostImpl.kt',
+];
+for (const f of apiFiles) must(exists(API + f), '缺契约文件 ext-api/' + f);
+for (const f of appFiles) must(exists(EXT + f), '缺宿主实现 app/.../ext/' + f);
 
 const guard = read(EXT + 'ExtensionSafetyGuard.kt');
 const loader = read(EXT + 'ExtensionLoader.kt');
 const registry = read(EXT + 'ExtensionRegistry.kt');
-const manifest = read(EXT + 'ExtensionManifest.kt');
+const manifest = read(API + 'ExtensionManifest.kt');
 const engine = read(EXT + 'ExtensionEngine.kt');
-const extFs = read(EXT + 'ExtensionFs.kt');
-const svc = read(EXT + 'ExtensionServiceRegistry.kt');
-const hook = read(EXT + 'ExtensionHookRegistry.kt');
+const extFs = read(API + 'ExtensionFs.kt');
+const svc = read(API + 'ExtensionServiceRegistry.kt');
+const hook = read(API + 'ExtensionHookRegistry.kt');
+const uiReg = read(API + 'ExtensionUiRegistry.kt');
+const apiSrc = apiFiles.map((f) => read(API + f)).join(String.fromCharCode(10));
+
+// ---- 0. 契约模块不得依赖宿主（这条是模块拆分存在的全部意义）----
+must(!/import me\.bmax\.apatch\.(dsh|ui|util)\./.test(apiSrc),
+  'ext-api 里出现了宿主类型 import —— 契约模块一旦依赖 :app，第三方就再也编译不了');
+// 只判**代码**：注释里提到 DshRuntime 是合理的（要解释「为什么不能依赖它」），
+// 把注释一起判会逼着后来人删掉最有价值的那段说明。
+const apiCode = apiSrc
+  .split(String.fromCharCode(10))
+  .map((l) => l.replace(/\/\/.*$/, ''))
+  .join(String.fromCharCode(10))
+  .replace(/\/\*[\s\S]*?\*\//g, '');
+must(!/DshRuntime|DshEnv|DshState|DshPlatform/.test(apiCode),
+  'ext-api 的**代码**里出现了宿主实现类型（DshRuntime/DshEnv/DshState/DshPlatform）');
+must(!/androidx\.compose\.material3\.ColorScheme/.test(apiSrc.replace(/ColorScheme/g, 'ColorScheme')) || true,
+  '占位断言（ColorScheme 是 Compose 公共类型，允许出现）');
 
 // ---- 1. 熔断文件：三条路径都得认，且三种文件名写法都认 ----
 must(/val KILL_SWITCH_NAMES = listOf\([\s\S]{0,200}"\.disable_extensions"[\s\S]{0,200}"disable_extensions"[\s\S]{0,200}"disable_extensions\.txt"/.test(guard),
@@ -65,13 +91,17 @@ must(/ctx\.classLoader,/.test(loader),
   'DexClassLoader 的父加载器必须是宿主 classLoader，否则扩展拿不到宿主任何类');
 
 // ---- 4. 失败隔离：安全模式短路 + 异常不冒泡 ----
-must(/if \(ExtensionSafetyGuard\.isLatched\(\)\) return fallback\(\)/.test(svc),
-  'SPI 在安全模式下没有退回默认实现');
-must(/if \(ExtensionSafetyGuard\.isLatched\(\)\) return true/.test(hook),
-  'Hook 的 around 在安全模式下没有直接放行');
-must(/if \(ExtensionSafetyGuard\.isLatched\(\)\) return emptyList\(\)/.test(read(EXT + 'ExtensionUiRegistry.kt'))
-  || /if \(ExtensionSafetyGuard\.isLatched\(\)\) emptyList\(\)/.test(read(EXT + 'ExtensionUiRegistry.kt')),
-  'UI 槽位在安全模式下没有返回空（熔断后界面必须回到原生样子）');
+must(/if \(ExtensionGate\.isLatched\(\)\) return fallback\(\)/.test(svc),
+  'SPI 在熔断态下没有退回默认实现');
+must(/if \(ExtensionGate\.isLatched\(\)\) return true/.test(hook),
+  'Hook 的 around 在熔断态下没有直接放行');
+// 注册中心在 :ext-api 里，读的是可注入的 ExtensionGate（它不认识 Context / 熔断文件）。
+// 宿主侧 ExtensionSafetyGuard 必须把熔断位同步过去，否则「熔断后扩展仍在生效」。
+must(/if \(ExtensionGate\.isLatched\(\)\) emptyList\(\)/.test(uiReg),
+  'UI 槽位在熔断态下没有返回空（熔断后界面必须回到原生样子）');
+must(/private fun setLatched\(value: Boolean\) \{[\s\S]{0,200}ExtensionGate\.latched = value/.test(guard),
+  '宿主熔断位没有同步到 ExtensionGate：注册中心读不到熔断，扩展会继续生效');
+must(/fun installLogSink\(\)/.test(guard), '缺 installLogSink()：扩展日志进不了 dsh.log，报障时无从定位');
 must(/runCatching \{ handler\.run\(payload\) \}/.test(hook), 'Hook 调用没有 runCatching：扩展异常会冒泡进宿主主流程');
 must(/runCatching \{[\s\S]{0,80}?ext\.onLoad\(host\)/.test(loader),
   'onLoad 没有 runCatching：一个坏扩展能让宿主起不来');
@@ -92,12 +122,16 @@ for (const reg of ['ExtensionServiceRegistry.unregisterAll', 'ExtensionHookRegis
 }
 
 // ---- 6. 目录 API 不得碰熔断标志 ----
-must(/ExtensionSafetyGuard\.isProtectedPath\(ctx, file\)/.test(extFs),
-  'ExtensionFs 没有拦截保护路径：扩展可以把「禁用全部扩展」的标志删掉');
+// 拦截逻辑在宿主实现里（接口自己没法知道熔断标志长什么样）
+const appFsImpl = read(EXT + 'AppExtensionFs.kt');
+must(/ExtensionSafetyGuard\.isProtectedPath\(ctx, file\)/.test(appFsImpl),
+  'AppExtensionFs 没有拦截保护路径：扩展可以把「禁用全部扩展」的标志删掉');
+must(/override fun write\(|override fun delete\(|override fun symlink\(/.test(appFsImpl),
+  'AppExtensionFs 没有实现写/删/链接（ExtensionFs 契约不完整）');
 must(/fun symlink\(/.test(extFs), 'ExtensionFs 缺 symlink（容器相关扩展的基本需求）');
 
 // ---- 7. manifest 校验 ----
-must(/fun isValidId\(id: String\): Boolean/.test(read(EXT + 'ExtensionApi.kt')),
+must(/fun isValidId\(id: String\): Boolean/.test(read(API + 'ExtensionApi.kt')),
   '缺 isValidId()：id 会被直接拼进目录名，必须防 ../ 穿越');
 must(/if \(!ExtensionLayout\.isValidId\(id\)\) return null/.test(manifest),
   'manifest 解析没有校验 id 合法性');

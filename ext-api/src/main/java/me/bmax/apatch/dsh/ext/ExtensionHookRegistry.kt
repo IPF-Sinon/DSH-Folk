@@ -6,13 +6,13 @@ import java.util.concurrent.CopyOnWriteArrayList
 /**
  * 方法级拦截总线（Before / After / Around）。
  *
- * 设计约束（三条都要守住）：
+ * 三条约束都要守住：
  * 1. **没注册时零开销**：宿主热路径（文件桥每个请求、每次原生命令）都会经过这里，
- *    所以只做一次 map 查空即返回，不分配对象。
- * 2. **异常隔离**：扩展的 handler 抛异常只记日志并跳过本次，绝不冒泡进宿主主流程。
- * 3. **安全模式短路**：熔断后一律不调用任何扩展 handler。
+ *    所以只做一次 map 查空即返回，不分配对象；
+ * 2. **异常隔离**：扩展 handler 抛异常只记日志并跳过本次，绝不冒泡进宿主主流程；
+ * 3. **熔断短路**：安全模式下一律不调用任何扩展 handler。
  *
- * 拦截点用字符串常量（[Point]），因为宿主各处调用点很多，用枚举会让新增点位变成破坏性改动。
+ * 拦截点用字符串常量（[Point]）：宿主调用点很多，用枚举会让新增点位变成破坏性改动。
  */
 object ExtensionHookRegistry {
 
@@ -39,7 +39,7 @@ object ExtensionHookRegistry {
         const val DIAGNOSTICS_REDACT = "diagnostics.redactText"
     }
 
-    /** before/after 的统一签名：拿到一个可变的「上下文包」，返回值只用于日志/统计。 */
+    /** before/after 的统一签名：拿到一个可变的「上下文包」。 */
     fun interface Handler {
         fun run(ctx: MutableMap<String, Any?>)
     }
@@ -54,17 +54,17 @@ object ExtensionHookRegistry {
     private val around = ConcurrentHashMap<String, CopyOnWriteArrayList<Pair<String, Around>>>()
 
     fun before(extensionId: String, point: String, handler: Handler) {
-        if (ExtensionSafetyGuard.isLatched()) return
+        if (ExtensionGate.isLatched()) return
         before.getOrPut(point) { CopyOnWriteArrayList() }.add(extensionId to handler)
     }
 
     fun after(extensionId: String, point: String, handler: Handler) {
-        if (ExtensionSafetyGuard.isLatched()) return
+        if (ExtensionGate.isLatched()) return
         after.getOrPut(point) { CopyOnWriteArrayList() }.add(extensionId to handler)
     }
 
     fun around(extensionId: String, point: String, interceptor: Around) {
-        if (ExtensionSafetyGuard.isLatched()) return
+        if (ExtensionGate.isLatched()) return
         around.getOrPut(point) { CopyOnWriteArrayList() }.add(extensionId to interceptor)
     }
 
@@ -72,31 +72,25 @@ object ExtensionHookRegistry {
     fun has(point: String): Boolean =
         before.containsKey(point) || after.containsKey(point) || around.containsKey(point)
 
-    /** 跑 before 段。 */
     fun runBefore(point: String, payload: MutableMap<String, Any?>) {
-        if (ExtensionSafetyGuard.isLatched()) return
+        if (ExtensionGate.isLatched()) return
         val list = before[point] ?: return
         for ((id, handler) in list) {
             runCatching { handler.run(payload) }.onFailure { report(id, point, it) }
         }
     }
 
-    /** 跑 after 段。 */
     fun runAfter(point: String, payload: MutableMap<String, Any?>) {
-        if (ExtensionSafetyGuard.isLatched()) return
+        if (ExtensionGate.isLatched()) return
         val list = after[point] ?: return
         for ((id, handler) in list) {
             runCatching { handler.run(payload) }.onFailure { report(id, point, it) }
         }
     }
 
-    /**
-     * 跑 around 段。返回 false = 有扩展明确要求拦下（宿主应跳过默认实现）。
-     *
-     * 注意：任何一个 interceptor 抛异常都按「不拦」处理 —— 扩展不能靠崩溃来阻止宿主做正确的事。
-     */
+    /** 跑 around 段。返回 false = 有扩展明确要求拦下。异常一律按「不拦」处理。 */
     fun runAround(point: String, payload: MutableMap<String, Any?>): Boolean {
-        if (ExtensionSafetyGuard.isLatched()) return true
+        if (ExtensionGate.isLatched()) return true
         val list = around[point] ?: return true
         for ((id, interceptor) in list) {
             val proceed = runCatching { interceptor.intercept(payload) }.getOrElse {
@@ -120,9 +114,7 @@ object ExtensionHookRegistry {
     }
 
     private fun report(id: String, point: String, e: Throwable) {
-        me.bmax.apatch.dsh.DshRuntime.appendLog(
-            "[ext:" + id + "] hook " + point + " 抛异常（本次跳过）：" +
-                (e.message ?: e.javaClass.simpleName),
-        )
+        ExtLog.log("[ext:" + id + "] hook " + point + " 抛异常（本次跳过）：" +
+            (e.message ?: e.javaClass.simpleName))
     }
 }

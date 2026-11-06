@@ -221,6 +221,10 @@ ksp {
 }
 
 dependencies {
+    // 扩展 API 契约模块：扩展市场里的第三方扩展要能依赖它（:app 是 application，不能被依赖，
+    // 所以契约必须单独成库模块）。详见 ext-api/build.gradle.kts 顶部注释。
+    implementation(project(":ext-api"))
+
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.splashscreen)

@@ -67,7 +67,7 @@ object ExtensionLoader {
         val ext = load(ctx, mf) { why ->
             DshRuntime.appendLog("[ext] " + mf.id + " " + why)
         } ?: return null
-        val host = DshExtensionHost(mf.id, ctx.applicationContext)
+        val host: DshExtensionHost = ExtensionHostImpl(mf.id, ctx.applicationContext)
         return runCatching {
             ext.onLoad(host)
             DshRuntime.appendLog("[ext] 已加载 " + mf.name + " v" + mf.version)

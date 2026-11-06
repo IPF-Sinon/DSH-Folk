@@ -23,3 +23,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "DSH-Folk"
 include(":app")
+// 扩展 API 契约模块：见 ext-api/build.gradle.kts 顶部的说明（第三方扩展要能依赖它）
+include(":ext-api")

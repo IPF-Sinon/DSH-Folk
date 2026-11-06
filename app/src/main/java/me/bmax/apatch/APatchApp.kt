@@ -145,6 +145,9 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
         //    清空并记住原因 —— 这是扩展把启动路径写坏后，用户唯一还走得通的逃生通道。
         //    必须排在 bootstrap 之前：反过来的话坏扩展已经在内存里跑起来了，守卫再快也晚了。
         ExtensionSafetyGuard.checkAndEnforce(this)
+        // 把扩展侧日志接到宿主 dsh.log：ExtLog 在 :ext-api 里默认是空实现，
+        // 不装的话扩展的报错在报障包里完全看不到。
+        ExtensionSafetyGuard.installLogSink()
 
         // 没有 UserManager 的进程（例如 app-zygote）拿不到 SharedPreferences，
         // 这里直接跳过初始化。扩展也一并不加载：它的状态都存在 prefs 里，而那个进程是

@@ -7,7 +7,7 @@ import java.io.File
  * 扩展的 manifest.json 模型。
  *
  * 有意做成「最小必填」：只要 id / name / version 就能装一个**纯声明式**扩展（只做主题、
- * 只注册一个槽位、只挂一个 Hook）；需要跑代码时再补 entryClass + classes.dex。
+ * 只注册槽位、只挂 Hook）；需要跑代码时再补 entryClass + classes.dex。
  */
 data class ExtensionManifest(
     val id: String,
@@ -16,9 +16,9 @@ data class ExtensionManifest(
     /** 实现 [DshExtension] 的类名（全限定）；为空 = 纯声明式扩展，不加载任何字节码。 */
     val entryClass: String?,
     val description: String = "",
-    /** 声明的宿主能力（安装确认框里逐条列给用户看，也是将来做细粒度授权的依据）。 */
+    /** 声明的宿主能力（信任确认框里逐条列给用户看）。 */
     val declaredCaps: List<String> = emptyList(),
-    /** 最低宿主版本（BuildConfig.VERSION_NAME 语义）；为空不校验。 */
+    /** 最低宿主版本；为空不校验。 */
     val minAppVersion: String? = null,
 ) {
     /** 是否需要加载字节码。 */
