@@ -91,17 +91,44 @@ object ExtensionLoader {
         }.getOrNull()
         if (fileError != null) return fileError
 
-        // ② 内存路径
-        return runCatching {
+        // ② 内存路径（顺带做一次自检：确认这个 dex 到底能不能吐出任何一个类）
+        val memLoader: ClassLoader? = runCatching {
             val bytes = dex.readBytes()
             val buffer = java.nio.ByteBuffer.allocateDirect(bytes.size)
             buffer.put(bytes)
             buffer.position(0)
-            val cl = dalvik.system.InMemoryDexClassLoader(buffer, ctx.classLoader)
-            cl.loadClass(entry).getDeclaredConstructor().newInstance()
-        }.onFailure {
-            onFatal("两条加载路径都失败（" + entry + "）：" + (it.message ?: it.javaClass.simpleName))
+            dalvik.system.InMemoryDexClassLoader(buffer, ctx.classLoader) as ClassLoader
         }.getOrNull()
+        if (memLoader != null) {
+            runCatching {
+                memLoader.loadClass(entry).getDeclaredConstructor().newInstance()
+            }.onSuccess { return it }.onFailure { e ->
+                // 自检：从同一个 loader 里试几个**肯定在 dex 里**的类名。
+                // 全失败 = 这个 dex 整体没被 ART 接受；只有入口类失败 = 类名或类型解析的问题。
+                // 两种情况的修法完全不同，所以这一行是必须的（真机上已经在这一点上卡过两轮）。
+                // 两个通用探针，不硬编码任何具体扩展的内部类名：
+                //  - 宿主自己的接口：必须经父加载器解析成功，失败说明父加载器没接上；
+                //  - 入口类的 Kotlin 文件门面（entry + "Kt"）：同一份 dex、同一个 loader，
+                //    它成功而入口类失败，就说明问题出在「这一个类」而不是「整个 dex」。
+                val probes = listOf(
+                    DshExtension::class.java.name,
+                    entry + "Kt",
+                )
+                val probeResult = probes.joinToString { name ->
+                    val ok = runCatching { memLoader.loadClass(name) }.isSuccess
+                    name.substringAfterLast('.') + "=" + (if (ok) "OK" else "缺失")
+                }
+                ExtLog.log(
+                    "两条加载路径都失败（" + entry + "）：" + (e.message ?: e.javaClass.simpleName) +
+                        "；自检 " + probeResult +
+                        "；dex 前 8 字节=" + dex.readBytes().take(8).joinToString("") {
+                            "%02x".format(it)
+                        },
+                )
+            }
+        }
+        onFatal("内存加载无法创建（" + entry + "）")
+        return null
     }
 
     /**
@@ -126,24 +153,23 @@ object ExtensionLoader {
         // 而那个异常会出现在扩展自己的调用栈里，看起来像是「宿主崩了」。
         val required = mf.minAppVersion
         if (!required.isNullOrBlank() && !DshRuntime.appSatisfies(required)) {
-            DshRuntime.appendLog(
-                "[ext] " + mf.id + " 要求宿主 >= " + required + "，当前 " +
+            ExtLog.log(
+                mf.id + " 要求宿主 >= " + required + "，当前 " +
                     me.bmax.apatch.BuildConfig.VERSION_NAME + "，已跳过加载",
             )
             return null
         }
         val ext = load(ctx, mf) { why ->
-            DshRuntime.appendLog("[ext] " + mf.id + " " + why)
+            ExtLog.log(mf.id + " " + why)
         } ?: return null
         val host: DshExtensionHost = ExtensionHostImpl(mf.id, ctx.applicationContext)
         return runCatching {
             ext.onLoad(host)
-            DshRuntime.appendLog("[ext] 已加载 " + mf.name + " v" + mf.version)
+            ExtLog.info("已加载 " + mf.name + " v" + mf.version)
             ext
         }.onFailure {
-            DshRuntime.appendLog(
-                "[ext] " + mf.id + " onLoad 抛异常（已跳过）：" +
-                    (it.message ?: it.javaClass.simpleName),
+            ExtLog.log(
+                mf.id + " onLoad 抛异常（已跳过）：" + (it.message ?: it.javaClass.simpleName),
             )
             // onLoad 半途失败：把它的注册全部撤掉，避免留下悬空 Hook
             runCatching { ExtensionServiceRegistry.unregisterAll(mf.id) }

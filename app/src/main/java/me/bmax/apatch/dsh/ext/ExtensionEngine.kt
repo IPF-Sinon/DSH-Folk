@@ -42,8 +42,9 @@ object ExtensionEngine {
                     all.joinToString { it.id + (if (it.enabled) "=启用" else "=停用") } + "）",
             )
             if (ExtensionSafetyGuard.isSafeMode(ctx)) {
-                DshRuntime.appendLog(
-                    "[ext] 安全模式，跳过全部第三方扩展；原因=" +
+                // 只进 logcat：dsh.log 属于 dsh 运行时自己的启动日志，用户会去读它
+                ExtLog.log(
+                    "安全模式，跳过全部第三方扩展；原因=" +
                         ExtensionSafetyGuard.reason.ifEmpty {
                             ExtensionSafetyGuard.findKillSwitch(ctx)?.absolutePath ?: "(未知)"
                         },
@@ -65,7 +66,7 @@ object ExtensionEngine {
             // 启动管线第一段就在此时跑（APP_CREATE 阶段）
             ExtensionBootPipeline.run(ExtensionBootPipeline.Stage.APP_CREATE)
         }.onFailure {
-            DshRuntime.appendLog("[ext] bootstrap 异常（已忽略）：" + (it.message ?: it.javaClass.simpleName))
+            ExtLog.log("bootstrap 异常（已忽略）：" + (it.message ?: it.javaClass.simpleName))
         }
     }
 
@@ -74,14 +75,14 @@ object ExtensionEngine {
         runCatching {
             loaded.remove(id)?.let { ext ->
                 runCatching { ext.onUnload() }.onFailure {
-                    DshRuntime.appendLog("[ext:" + id + "] onUnload 抛异常（已忽略）")
+                    ExtLog.log("[" + id + "] onUnload 抛异常（已忽略）")
                 }
             }
             ExtensionServiceRegistry.unregisterAll(id)
             ExtensionHookRegistry.unregisterAll(id)
             ExtensionUiRegistry.unregisterAll(id)
             ExtensionBootPipeline.unregisterAll(id)
-            DshRuntime.appendLog("[ext] 已卸载：" + id)
+            ExtLog.info("已卸载：" + id)
         }
     }
 
@@ -109,6 +110,6 @@ object ExtensionEngine {
     /** 重新启用：清掉标志文件，等下次冷启动重新加载（运行期不做热加载 —— 会引入状态不一致）。 */
     fun reEnable(ctx: Context) {
         ExtensionSafetyGuard.clearSafeMode(ctx)
-        DshRuntime.appendLog("[ext] 已允许扩展，重启 App 后生效")
+        ExtLog.info("已允许扩展，重启 App 后生效")
     }
 }

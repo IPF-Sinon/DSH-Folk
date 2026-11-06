@@ -209,6 +209,14 @@ must(/android\.util\.Log\.i\(\"DSH-Folk\", line\)/.test(dshRuntimeSrc),
 // 那是用户在「设置 → 日志」里看的启动日志，塞满例行行会把真故障淹没。
 must(engine.includes("ExtLog.info(") && engine.includes("已安装 "),
   "bootstrap 没有打印已安装/启用概况（走 ExtLog.info，只进 logcat）");
+{
+  const sinkBody = guard.slice(guard.indexOf("fun installLogSink"));
+  must(!sinkBody.slice(0, sinkBody.indexOf("\n    }")).includes("DshRuntime.appendLog"),
+    "扩展日志被写进了 dsh.log：dsh.log 只该有 dsh 运行时自身的启动日志");
+}
+must(!/DshRuntime\.appendLog\(\s*"[^"]*\[ext/.test(engine + loader),
+  "扩展相关日志仍然在写 dsh.log（应统一走 ExtLog，只进 logcat）");
+must(loader.includes("自检"), "加载失败时没有自检：无法区分「dex 整体被拒」与「只有这个类找不到」");
 must(!engine.includes('[ext] bootstrap 开始'),
   "bootstrap 的例行概况写进了 dsh.log，会淹没真故障");
 must(/安全模式，跳过全部第三方扩展；原因=/.test(engine), "安全模式拦截没有打印原因（用户只会看到「没生效」）");

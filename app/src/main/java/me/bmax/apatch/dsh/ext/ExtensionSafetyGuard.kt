@@ -67,8 +67,12 @@ object ExtensionSafetyGuard {
      * 由 [me.bmax.apatch.APatchApp] 在启动时调用一次；不装也不会崩，只是扩展的日志进不了 dsh.log。
      */
     fun installLogSink() {
-        // 故障进 dsh.log（用户能在「设置 → 日志」里看到），例行诊断只进 logcat
-        ExtLog.sink = { line -> DshRuntime.appendLog(line) }
+        // **扩展日志一律只进 logcat**，绝不写 dsh.log。
+        //
+        // 为什么：dsh.log 是「启动 dsh 运行时」的日志，用户会去「设置 → 日志」里读它。
+        // 扩展的加载诊断混在里面，既干扰用户看启动过程，也把真正的 dsh 故障淹没掉
+        // （这条是用户明确要求改的）。排查时看 logcat 即可 —— bugreport 里本来就带 logcat.txt。
+        ExtLog.sink = { line -> android.util.Log.w("DSH-Ext", line) }
         ExtLog.infoSink = { line -> android.util.Log.i("DSH-Ext", line) }
     }
 
