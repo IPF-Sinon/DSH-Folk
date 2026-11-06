@@ -6,10 +6,7 @@ compose-bom = "2025.11.01"
 lifecycle = "2.10.0"
 compose-destination = "2.3.0"
 libsu = "6.0.0"
-sheets-compose-dialogs = "1.3.0"
 biometric = "1.4.0-alpha07"
-gson = "2.14.0"
-vico = "2.0.0-alpha.13"
 liquid = "1.1.1"
 material3 = "1.5.0-alpha17"
 materialKolor = "4.1.1"
@@ -70,17 +67,11 @@ me-zhanghai-android-appiconloader-coil = { group = "me.zhanghai.android.appiconl
 compose-destinations-core = { group = "io.github.raamcosta.compose-destinations", name = "core", version.ref = "compose-destination" }
 compose-destinations-ksp = { group = "io.github.raamcosta.compose-destinations", name = "ksp", version.ref = "compose-destination" }
 
-sheet-compose-dialogs-core = { group = "com.maxkeppeler.sheets-compose-dialogs", name = "core", version.ref = "sheets-compose-dialogs" }
-sheet-compose-dialogs-list = { group = "com.maxkeppeler.sheets-compose-dialogs", name = "list", version.ref = "sheets-compose-dialogs" }
-sheet-compose-dialogs-input = { group = "com.maxkeppeler.sheets-compose-dialogs", name = "input", version.ref = "sheets-compose-dialogs" }
 
 markdown = { group = "io.noties.markwon", name = "core", version = "4.6.2" }
 
-ini4j = { group = "org.ini4j", name = "ini4j", version = "0.5.4" }
 
-google-code-gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 
-vico-compose = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
 
 # 真 PTY 终端：Termux 官方拆出的 terminal-view / terminal-emulator（Apache-2.0，
 # termux-app 整体 GPLv3 但这两个子模块不是）。aar 自带 jni/arm64-v8a/libtermux.so，

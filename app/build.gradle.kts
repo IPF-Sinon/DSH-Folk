@@ -276,15 +276,16 @@ dependencies {
 
     implementation(libs.me.zhanghai.android.appiconloader.coil)
 
-    implementation(libs.sheet.compose.dialogs.core)
-    implementation(libs.sheet.compose.dialogs.list)
-    implementation(libs.sheet.compose.dialogs.input)
+    // sheets-compose-dialogs（core/list/input）：全仓零引用，2026-11 随 dependabot #14 一并清掉
+    // （外部审查 P2-3 与本地 grep 双向确认：com.maxkeppeler.* 在 app/src 下 0 处 import）
 
     implementation(libs.markdown)
 
-    implementation(libs.ini4j)
+    // ini4j：同上，零引用（旧配置解析早已换成 kotlinx/自写解析）
 
-    implementation(libs.google.code.gson)
+    // gson：同上，零引用（本项目的 JSON 一律用 org.json）
+    // 注：dev.rikka.rikkax.parcelablelist 也零引用，但它是 Shizuku 的伴生库、且 Shizuku 的
+    // POM 并不把它带进来（已核实），删它属于「本机无法编译/运行验证」的运行时风险 —— 留待单独一次改动 + 真机复测。
 
     implementation(libs.liquid)
 
