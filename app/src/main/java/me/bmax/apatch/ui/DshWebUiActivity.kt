@@ -1408,6 +1408,64 @@ class DshWebUiActivity : AppCompatActivity() {
 
 
     }
+    /**
+     * 按当前页面的 origin 挂上或摘掉 JavascriptInterface 桥。
+     *
+     * ## 为什么必须动态管理
+     * `addJavascriptInterface` 是**挂在 WebView 实例上**的，一旦挂上，之后加载的所有页面
+     * 都能通过 `window.<名字>` 调到它 —— 它没有 origin 隔离。浏览器模式让 WebView 有机会
+     * 加载任意第三方站点，所以在进入非回环页面之前必须把它们摘掉，否则那个站点就能直接
+     * 调 `DshFolkDownload` 往磁盘写文件。
+     *
+     * 摘掉用 `removeJavascriptInterface`（API 11+），名字与挂上时一致。
+     *
+     * ## 为什么回到 dsh 时要挂回
+     * 进外站时摘掉是必须的，但摘掉之后如果不挂回，用户从外站导航回 dsh 首页时下载桥就没了 ——
+     * 「进过一次外站，dsh 的 blob 下载从此失效」是很难查的 bug。所以两个方向都要处理。
+     */
+    private fun setBridgesFor(view: WebView?, loopback: Boolean) {
+        val v = view ?: return
+        // 记录当前状态，避免同向重复调用（shouldOverrideUrlLoading 会被频繁触发）
+        if (bridgesAttached == loopback) return
+        runCatching {
+            if (loopback) {
+                v.addJavascriptInterface(BlobBridge(), BLOB_BRIDGE)
+                v.addJavascriptInterface(UserscriptBridge(), USERSCRIPT_BRIDGE)
+            } else {
+                v.removeJavascriptInterface(BLOB_BRIDGE)
+                v.removeJavascriptInterface(USERSCRIPT_BRIDGE)
+            }
+            bridgesAttached = loopback
+            Log.i(TAG, "bridges " + (if (loopback) "attached" else "removed") + " for origin switch")
+        }.onFailure {
+            // 摘桥失败比挂桥失败严重得多：留着一个可被第三方站点调用的写文件接口。
+            // 所以失败时按「已摘掉」记账并打警告 —— 下次进回环会重新挂上。
+            Log.w(TAG, "bridge toggle failed", it)
+            bridgesAttached = false
+        }
+    }
+
+
+    /**
+     * 外部站点的 document-start 注入规则：**这一页自己的 origin**。
+     *
+     * 与 [loopbackOriginRules] 的区别：后者把范围钉死在本机 dsh（内置脚本只该在那里跑）；
+     * 这里要的是具体某个站点的 scheme://host[:port]。
+     *
+     * 端口规则与 WebView 的 origin 规则一致：不写端口就默认 80/443，所以
+     * 只有当 URL 显式带端口时才拼上，否则会把 http://example.com:8080 这类页面挡在外面。
+     */
+    private fun originRuleFor(url: String): Set<String> {
+        val parsed = runCatching { Uri.parse(url) }.getOrNull() ?: return emptySet()
+        val scheme = parsed.scheme?.lowercase() ?: return emptySet()
+        val host = parsed.host ?: return emptySet()
+        val port = parsed.port.takeIf { it in 1..65535 }
+        // IPv6 字面量要方括号（WebView origin 规则的格式要求）
+        val hostPart = if (host.contains(':')) "[$host]" else host
+        return setOf(if (port != null) "$scheme://$hostPart:$port" else "$scheme://$hostPart")
+    }
+
+
 }
 
 /**
@@ -1749,62 +1807,4 @@ private fun ExtensionWebUiOverlay() {
         }
     }
 }
-
-
-    /**
-     * 按当前页面的 origin 挂上或摘掉 JavascriptInterface 桥。
-     *
-     * ## 为什么必须动态管理
-     * `addJavascriptInterface` 是**挂在 WebView 实例上**的，一旦挂上，之后加载的所有页面
-     * 都能通过 `window.<名字>` 调到它 —— 它没有 origin 隔离。浏览器模式让 WebView 有机会
-     * 加载任意第三方站点，所以在进入非回环页面之前必须把它们摘掉，否则那个站点就能直接
-     * 调 `DshFolkDownload` 往磁盘写文件。
-     *
-     * 摘掉用 `removeJavascriptInterface`（API 11+），名字与挂上时一致。
-     *
-     * ## 为什么回到 dsh 时要挂回
-     * 进外站时摘掉是必须的，但摘掉之后如果不挂回，用户从外站导航回 dsh 首页时下载桥就没了 ——
-     * 「进过一次外站，dsh 的 blob 下载从此失效」是很难查的 bug。所以两个方向都要处理。
-     */
-    private fun setBridgesFor(view: WebView?, loopback: Boolean) {
-        val v = view ?: return
-        // 记录当前状态，避免同向重复调用（shouldOverrideUrlLoading 会被频繁触发）
-        if (bridgesAttached == loopback) return
-        runCatching {
-            if (loopback) {
-                v.addJavascriptInterface(BlobBridge(), BLOB_BRIDGE)
-                v.addJavascriptInterface(UserscriptBridge(), USERSCRIPT_BRIDGE)
-            } else {
-                v.removeJavascriptInterface(BLOB_BRIDGE)
-                v.removeJavascriptInterface(USERSCRIPT_BRIDGE)
-            }
-            bridgesAttached = loopback
-            Log.i(TAG, "bridges " + (if (loopback) "attached" else "removed") + " for origin switch")
-        }.onFailure {
-            // 摘桥失败比挂桥失败严重得多：留着一个可被第三方站点调用的写文件接口。
-            // 所以失败时按「已摘掉」记账并打警告 —— 下次进回环会重新挂上。
-            Log.w(TAG, "bridge toggle failed", it)
-            bridgesAttached = false
-        }
-    }
-
-
-    /**
-     * 外部站点的 document-start 注入规则：**这一页自己的 origin**。
-     *
-     * 与 [loopbackOriginRules] 的区别：后者把范围钉死在本机 dsh（内置脚本只该在那里跑）；
-     * 这里要的是具体某个站点的 scheme://host[:port]。
-     *
-     * 端口规则与 WebView 的 origin 规则一致：不写端口就默认 80/443，所以
-     * 只有当 URL 显式带端口时才拼上，否则会把 http://example.com:8080 这类页面挡在外面。
-     */
-    private fun originRuleFor(url: String): Set<String> {
-        val parsed = runCatching { Uri.parse(url) }.getOrNull() ?: return emptySet()
-        val scheme = parsed.scheme?.lowercase() ?: return emptySet()
-        val host = parsed.host ?: return emptySet()
-        val port = parsed.port.takeIf { it in 1..65535 }
-        // IPv6 字面量要方括号（WebView origin 规则的格式要求）
-        val hostPart = if (host.contains(':')) "[$host]" else host
-        return setOf(if (port != null) "$scheme://$hostPart:$port" else "$scheme://$hostPart")
-    }
 

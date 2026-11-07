@@ -2860,7 +2860,7 @@ object DshRuntime : DshRuntimeHost {
                 val waitedSec = (nowBeat - (deadline - READY_TIMEOUT_MS)) / 1000
                 appendLog(
                     "[wait] 运行中=" + (p?.isAlive == true) +
-                        (if (p != null) " pid=" + runCatching { p.pid() }.getOrNull() else "") +
+                        (if (p != null) " pid=" + runCatching { p.pid() }.getOrNull<Long?>() else "") +
                         " · 端口=" + port() + " 已监听=" + isPortInUse(port()) +
                         " · 已等=" + waitedSec + "s"
                 )
