@@ -2858,9 +2858,10 @@ object DshRuntime : DshRuntimeHost {
                 lastBeat = nowBeat
                 val p = serverProcess
                 val waitedSec = (nowBeat - (deadline - READY_TIMEOUT_MS)) / 1000
+                // 不打 pid：Process.pid() 在部分 android.jar 里没有定义（CI 直接报 Unresolved reference），
+                // 而这条心跳要回答的是「进程还活着吗、端口通了吗」，pid 对这两个问题没有帮助。
                 appendLog(
                     "[wait] 运行中=" + (p?.isAlive == true) +
-                        (if (p != null) " pid=" + runCatching { p.pid() }.getOrNull<Long?>() else "") +
                         " · 端口=" + port() + " 已监听=" + isPortInUse(port()) +
                         " · 已等=" + waitedSec + "s"
                 )
