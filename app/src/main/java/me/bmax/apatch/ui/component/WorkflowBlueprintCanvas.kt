@@ -31,6 +31,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.dp
+import me.bmax.apatch.dsh.WorkflowActionCatalog
+import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowDefinition
 import me.bmax.apatch.dsh.WorkflowEdgeKind
 import me.bmax.apatch.dsh.WorkflowStepState
@@ -60,6 +62,15 @@ internal fun WorkflowBlueprintCanvas(
     modifier: Modifier = Modifier,
     stepStates: Map<String, WorkflowStepState> = emptyMap(),
     selectedNodeId: String? = null,
+    /** 正在被拖动的那张卡：它周围要画一圈虚线选中框（对齐点击助手）。 */
+    draggingNodeId: String? = null,
+    /**
+     * 已授予的能力 id 集合。卡片据此把自己标成"不可用"。
+     *
+     * 传集合而不是每张卡一个布尔：同一张卡的能力要求是从动作目录推出来的，
+     * 而"哪些已授予"是全局事实 —— 把两者在画布入口合并一次，卡片就只管显示。
+     */
+    grantedCaps: Set<String> = emptySet(),
     onNodeClick: ((String) -> Unit)? = null,
     onNodeDrag: ((id: String, dxPx: Float, dyPx: Float) -> Unit)? = null,
     onNodeDragStart: ((id: String) -> Unit)? = null,
@@ -174,11 +185,41 @@ internal fun WorkflowBlueprintCanvas(
                     dataColor = edgeColor,
                 )
             }
+            // 选中/拖动的卡画一圈虚线框。
+            //
+            // 为什么要有它：拖动时卡片跟着手指走，但它**是不是被选中了**没有任何视觉反馈 ——
+            // 松手之后才发现"我动的是另一张卡"是这类编辑器里最常见的误操作。虚线框用的是
+            // 与卡片自身尺寸无关的固定 padding，所以缩放时框也跟着缩放（它画在内容层里）。
+            val framed = draggingNodeId ?: selectedNodeId
+            if (framed != null) {
+                val p = positions[framed]
+                if (p != null) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        val pad = 8.dp.toPx()
+                        val w = CARD_W_DP * density
+                        val h = 96.dp.toPx()
+                        drawRect(
+                            color = wireColor,
+                            topLeft = Offset(p.x * density - pad, p.y * density - pad),
+                            size = androidx.compose.ui.geometry.Size(w + pad * 2, h + pad * 2),
+                            style = Stroke(
+                                width = 2.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(
+                                    floatArrayOf(10.dp.toPx(), 7.dp.toPx()),
+                                ),
+                            ),
+                        )
+                    }
+                }
+            }
             for (node in definition.nodes) {
                 val pos = positions[node.id] ?: continue
                 WorkflowNodeCard(
                     node = node,
                     status = stepStates[node.id],
+                    // 能力与授予情况由宿主算好传下来：画布每帧重绘，不能在这里查权限。
+                    requiredCaps = requiredCapsOf(node),
+                    granted = requiredCapsOf(node).all { it in grantedCaps },
                     selected = selectedNodeId == node.id,
                     modifier = Modifier.offset(x = pos.x.dp, y = pos.y.dp),
                     onTap = { onNodeClick?.invoke(node.id) },
@@ -234,6 +275,18 @@ internal fun WorkflowBlueprintCanvas(
 private fun dataPinKeyOf(fromPin: String): String = when {
     fromPin.contains(':') -> fromPin.substringAfter(':')
     else -> fromPin
+}
+
+/**
+ * 这张卡需要的系统能力 id。
+ *
+ * 用 [WorkflowActionCatalog] 而不是读 config：能力是**动作定义的一部分**，
+ * 写进 config 就等于让用户能改自己的能力声明，那等于没有声明。
+ */
+private fun requiredCapsOf(node: WorkflowNode): List<String> {
+    val spec = WorkflowActionCatalog.byId(node.config("bridge")) ?: return emptyList()
+    val cap = spec.cap ?: return emptyList()
+    return listOf(cap.id)
 }
 
 /** 点阵网格（24dp）。 */

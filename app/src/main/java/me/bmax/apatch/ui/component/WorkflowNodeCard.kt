@@ -2,6 +2,7 @@ package me.bmax.apatch.ui.component
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -15,8 +16,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
@@ -26,6 +31,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import me.bmax.apatch.R
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -34,8 +43,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
@@ -61,6 +72,9 @@ internal val WorkflowNodeCardAnchorY = 26f
  *  - 外边框按**运行状态**变色（运行中 / 成功 / 失败 / 跳过），「哪一步在跑」不用打开详情；
  *  - 颜色一律取 MaterialTheme 的角色色。硬编码十六进制在这份代码里踩过：画布上直接写 0x22 黑，
  *    深色主题下网格几乎看不见；
+ *  - 参数内联展开：逐行取自 WorkflowNodeFields 的字段表（色点 + 字段名 + 只读值），卡片因此不再
+ *    自己维护一份「主参数」的 when —— 表单认哪些键、卡片就显示哪些键，两份定义不会慢慢分叉；
+ *  - 缺能力（granted = false）时整卡压暗，并追加一条 errorContainer 提示条写明缺哪些能力；
  *  - 引脚行左入右出、标签单行省略 —— 针脚文字与卡片边界挤压，正是真机截图上「糊在一起」的直接原因。
  */
 @Composable
@@ -85,6 +99,17 @@ internal fun WorkflowNodeCard(
     onPinDrag: ((pinKind: String, anchorWindow: Offset, pointerWindow: Offset) -> Unit)? = null,
     /** 拉线松手（窗口坐标）；连到哪由画布判定。 */
     onPinDrop: ((pointerWindow: Offset) -> Unit)? = null,
+    /**
+     * 这张卡需要的系统能力 id（与 WorkflowPermissions 是同一套 id）。
+     *
+     * 默认空列表：预览、详情、画布这些老调用点不传就是「不需要任何能力」，行为不变。
+     */
+    requiredCaps: List<String> = emptyList(),
+    /**
+     * 上面这些能力此刻是否都已授权。默认 true：老调用点不传即视为可用；
+     * 只有编辑器在确认缺失时才显式传 false，卡片才会压暗并显示缺能力的提示条。
+     */
+    granted: Boolean = true,
 ) {
     val accent = workflowNodeAccent(node.type)
     val borderColor = when (status) {
@@ -153,7 +178,8 @@ internal fun WorkflowNodeCard(
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(if (thick) 2.dp else 1.dp, borderColor),
         tonalElevation = if (selected) 6.dp else 2.dp,
-        modifier = base,
+        // 无权限的卡整体压暗：这是"现在用不了"的第一眼信号，比任何徽标都直接。
+        modifier = if (granted) base else base.alpha(0.62f),
     ) {
         Column {
             Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
@@ -171,25 +197,35 @@ internal fun WorkflowNodeCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                // 关键参数直接写在卡片上：卡片上一眼要能读出「这一步做什么」，而不是只有类型名。
-                val primary = when (node.type) {
-                    WorkflowNodeType.EXECUTE -> node.config("cmd").ifBlank { node.config("text") }
-                    WorkflowNodeType.CONDITION -> (node.config("op") + " " + node.config("value")).trim()
-                    WorkflowNodeType.EXTRACT -> node.config("var")
-                    WorkflowNodeType.WAIT -> node.config("ms")
-                    else -> ""
+                // ── 参数内联展开 ──
+                //
+                // 对齐点击助手：参数**直接摆在卡片上**，一行一个，不用点开任何弹窗就能读出
+                // "这一步到底怎么配的"。上一版只显示一个"主参数"，其余全藏在弹窗里，
+                // 于是一屏卡片看下来只能看出节点类型，看不出它们各在做什么。
+                //
+                // 只读展示（不可在卡上编辑）：编辑仍然走点卡片 → 参数窗。
+                // 卡上直接编辑会让每张卡的命中区互相打架（拖卡 vs 输入框抢手势），
+                // 而画布上最需要的是拖动流畅。
+                val rows = cardParamRows(node)
+                if (rows.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    for (row in rows) CardParamRow(row)
                 }
-                if (primary.isNotBlank()) {
+                if (!granted && requiredCaps.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
                     Text(
-                        text = primary,
+                        text = stringResource(R.string.dsh_wf_lock_need, requiredCaps.joinToString("、")),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                            .background(
+                                MaterialTheme.colorScheme.errorContainer,
+                                RoundedCornerShape(6.dp),
+                            )
                             .padding(horizontal = 6.dp, vertical = 3.dp),
                     )
                 }
@@ -367,4 +403,103 @@ private fun workflowNodeSubtitle(node: WorkflowNode): String = when (node.type) 
     WorkflowNodeType.WAIT -> "等待 · " + node.config("ms").ifBlank { node.config("untilDsh") }
     WorkflowNodeType.TRIGGER -> if (node.config("requireDsh") == "1") "触发 · 需要 DSH" else "触发"
     WorkflowNodeType.LOGIC -> "逻辑 · " + node.config("op")
+}
+
+
+/**
+ * 卡片上要展示的一行参数。
+ *
+ * 取值规则：先看字段表（[WorkflowNodeFields.fieldsFor]）里的**非空值**，
+ * 一条都没有时退回该类型的"主参数"（cmd / text / 条件表达式 …）——
+ * 新节点刚建出来时字段大多为空，只显示主参数能让卡片不至于空着。
+ *
+ * 为什么按字段表来而不是写死键名：写死的话，动作目录里新加的参数在卡上永远看不见
+ * （它只在弹窗里出现），而用户根本没理由点开弹窗。
+ */
+private data class CardParamRowModel(
+    val key: String,
+    val label: String,
+    val value: String,
+    val color: Color,
+)
+
+@Composable
+private fun cardParamRows(node: WorkflowNode): List<CardParamRowModel> {
+    val out = mutableListOf<CardParamRowModel>()
+    for (field in WorkflowNodeFields.fieldsFor(node)) {
+        // 元数据不算参数：name/description/onError/timeoutMs 是节点自身的属性，
+        // 摆到卡上只会把真正要看的参数挤下去。
+        if (field.key in setOf("name", "description", "onError", "timeoutMs")) continue
+        if (!field.visible(node)) continue
+        val raw = node.config(field.key)
+        if (raw.isBlank()) continue
+        out += CardParamRowModel(
+            key = field.key,
+            label = stringResource(field.labelRes),
+            value = raw,
+            color = paramDotColor(field.kind),
+        )
+        // 卡就这么宽，超过四行之后参数已经读不过来了；剩下的留给点开弹窗看。
+        if (out.size >= 4) break
+    }
+    if (out.isEmpty()) {
+        val primary = when (node.type) {
+            WorkflowNodeType.EXECUTE -> node.config("cmd").ifBlank { node.config("text") }
+            WorkflowNodeType.CONDITION -> (node.config("op") + " " + node.config("value")).trim()
+            WorkflowNodeType.EXTRACT -> node.config("var")
+            WorkflowNodeType.WAIT -> node.config("ms")
+            else -> ""
+        }
+        if (primary.isNotBlank()) {
+            out += CardParamRowModel(
+                key = "primary",
+                label = "",
+                value = primary,
+                color = MaterialTheme.colorScheme.outline,
+            )
+        }
+    }
+    return out
+}
+
+/** 字段种类的色点。一律取主题角色色 —— 硬编码在这里会让深色主题下几乎看不见。 */
+@Composable
+private fun paramDotColor(kind: WorkflowNodeFields.Kind): Color = when (kind) {
+    WorkflowNodeFields.Kind.TEXT, WorkflowNodeFields.Kind.MULTILINE -> MaterialTheme.colorScheme.primary
+    WorkflowNodeFields.Kind.NUMBER -> MaterialTheme.colorScheme.tertiary
+    WorkflowNodeFields.Kind.BOOL -> MaterialTheme.colorScheme.secondary
+    WorkflowNodeFields.Kind.CHOICE -> MaterialTheme.colorScheme.error
+}
+
+/** 一行参数：色点 + 标签 + 值胶囊。 */
+@Composable
+private fun CardParamRow(row: CardParamRowModel) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(8.dp).background(row.color, CircleShape))
+        if (row.label.isNotBlank()) {
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = row.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = row.value,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
 }

@@ -560,7 +560,7 @@ console.log("\u2500 #16g 编辑页是次级页面（不是覆盖层）");
     "编辑页是导航图里的一个目的地");
   ok(/WorkflowNameDialog\(/.test(SRC.screen) &&
     /WorkflowEditorScreenDestination\(workflowId = id\)/.test(SRC.screen) &&
-    /WorkflowEditorScreenDestination\(workflowId = def\.id\)/.test(SRC.screen),
+    /WorkflowEditorScreenDestination\(workflowId = [a-z]+\.id\)/.test(SRC.screen),
     "新建先收名字（WorkflowNameDialog）再按 id 导航，编辑按 id 导航（不再在本页盖一层）");
   ok(!/editing\?\.let/.test(SRC.screen) && !/WorkflowDefinitionEditor\(/.test(SRC.screen),
     "列表页不再内联渲染编辑器");

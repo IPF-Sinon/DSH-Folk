@@ -74,11 +74,16 @@ fun WorkflowNodePicker(
     groups: List<NodePickerGroup>,
     onPick: (NodePickerEntry) -> Unit,
     onDismiss: () -> Unit,
+    /**
+     * 进面板就直接展开搜索。顶栏的放大镜点完是"我要找某个节点"，再让他在面板里
+     * 点一次放大镜才出现输入框，是白白多一次点击。
+     */
+    initialSearchOpen: Boolean = false,
 ) {
     // 一级 / 二级当前选中项。用 saveable 记住：转屏后不该跳回第一个分类。
     var groupIndex by rememberSaveable { mutableStateOf(0) }
     var subIndex by rememberSaveable { mutableStateOf(0) }
-    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var searchOpen by rememberSaveable { mutableStateOf(initialSearchOpen) }
     var query by rememberSaveable { mutableStateOf("") }
 
     val group = groups.getOrNull(groupIndex)

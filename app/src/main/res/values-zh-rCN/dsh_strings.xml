@@ -2074,4 +2074,23 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_wf_delete_title">删除这一步？</string>
     <string name="dsh_wf_delete_body">「%1$s」以及它的 %2$d 条连线会一起删掉，且无法撤销。</string>
     <string name="dsh_wf_delete_confirm">删除</string>
+
+    <!-- 工作流编辑器 v3：对齐点击助手的顶栏 / 悬浮底栏 / 卡片内联参数 -->
+    <string name="dsh_wf_top_more">更多</string>
+    <string name="dsh_wf_top_search">搜索卡片</string>
+    <string name="dsh_wf_top_search_hint">搜索流程名或卡片名</string>
+    <string name="dsh_wf_top_preview">预览</string>
+    <string name="dsh_wf_top_preview_title">预览：%1$s</string>
+    <string name="dsh_wf_float_add">加节点</string>
+    <string name="dsh_wf_float_copy">复制</string>
+    <string name="dsh_wf_float_delete">删除</string>
+    <string name="dsh_wf_float_delete_confirm">确认删除</string>
+    <string name="dsh_wf_sel_one">已选 1 张卡</string>
+    <string name="dsh_wf_detail_desc">描述</string>
+    <string name="dsh_wf_detail_nodes">%1$d 张卡 · %2$d 条连线</string>
+    <string name="dsh_wf_detail_caps">需要权限：%1$s</string>
+    <string name="dsh_wf_detail_nocaps">无需额外权限</string>
+    <string name="dsh_wf_lock">没有使用这张卡的权限</string>
+    <string name="dsh_wf_lock_need">需要：%1$s</string>
+    <string name="dsh_wf_badge_blocked">%1$d 张不可用</string>
 </resources>

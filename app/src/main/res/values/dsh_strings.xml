@@ -2100,4 +2100,23 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_delete_title">Delete this step?</string>
     <string name="dsh_wf_delete_body">「%1$s」and its %2$d connections will be removed. This cannot be undone.</string>
     <string name="dsh_wf_delete_confirm">Delete</string>
+
+    <!-- 工作流编辑器 v3：对齐点击助手的顶栏 / 悬浮底栏 / 卡片内联参数 -->
+    <string name="dsh_wf_top_more">More</string>
+    <string name="dsh_wf_top_search">Search nodes</string>
+    <string name="dsh_wf_top_search_hint">Search workflow or node name</string>
+    <string name="dsh_wf_top_preview">Preview</string>
+    <string name="dsh_wf_top_preview_title">Preview: %1$s</string>
+    <string name="dsh_wf_float_add">Add node</string>
+    <string name="dsh_wf_float_copy">Copy</string>
+    <string name="dsh_wf_float_delete">Delete</string>
+    <string name="dsh_wf_float_delete_confirm">Delete</string>
+    <string name="dsh_wf_sel_one">1 card selected</string>
+    <string name="dsh_wf_detail_desc">Description</string>
+    <string name="dsh_wf_detail_nodes">%1$d cards · %2$d links</string>
+    <string name="dsh_wf_detail_caps">Needs permissions: %1$s</string>
+    <string name="dsh_wf_detail_nocaps">No extra permissions needed</string>
+    <string name="dsh_wf_lock">No permission to use this card</string>
+    <string name="dsh_wf_lock_need">Needs: %1$s</string>
+    <string name="dsh_wf_badge_blocked">%1$d not usable</string>
 </resources>

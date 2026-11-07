@@ -47,6 +47,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -69,6 +86,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.WorkflowActionCatalog
 import me.bmax.apatch.dsh.WorkflowActionType
+import me.bmax.apatch.dsh.effectiveCaps
 import me.bmax.apatch.dsh.WorkflowDefinition
 import me.bmax.apatch.dsh.WorkflowEdge
 import me.bmax.apatch.dsh.WorkflowNode
@@ -309,6 +327,14 @@ internal fun WorkflowEditorSurface(
     // 拉线落在空白时的**松手窗口坐标**：菜单里选完类型，新节点就落在这里（不是默认网格位）。
     var addAfterAt by remember { mutableStateOf(Offset.Zero) }
     var sheetOpen by remember { mutableStateOf(false) }
+    // 顶栏「搜索」把节点列表切成搜索态、「更多」弹菜单。
+    var searchOpen by remember { mutableStateOf(false) }
+    var moreOpen by remember { mutableStateOf(false) }
+    var previewOpen by remember { mutableStateOf(false) }
+    // 悬浮底栏的删除按钮：第一次点只变红，第二次才真删。
+    var deleteArmed by remember { mutableStateOf(false) }
+    // 选中态一变，就撤销"变红"状态 —— 否则换一张卡时按钮会莫名其妙已经是红的。
+    LaunchedEffect(selected) { deleteArmed = false }
     // 抽屉当前停在一级分类（null = 显示分类列表）。用 saveable 没必要：
     // 旋转后回到分类首页比「停在一个半开的二级页」更符合预期。
     var confirmDiscard by remember { mutableStateOf(false) }
@@ -458,10 +484,22 @@ internal fun WorkflowEditorSurface(
     }
 
     /** 落在默认网格位新建；afterId 非空时顺手连一条出边。 */
+    /**
+     * 落在**当前视野中心**新建（对齐点击助手：点一下节点列表，卡就出现在你正在看的地方）。
+     *
+     * 上一版用的是"按序号排格子"：节点一多就会排到视野外，用户点完看不见任何变化，
+     * 以为没加上。改成视野中心之后，落点永远在眼前。
+     */
     fun addNode(kind: EditorNodeKind, afterId: String?) {
-        val index = def.nodes.size
-        val x = 24 + (index % 3) * 232
-        val y = 24 + (index / 3) * 128
+        // 视野中心 = 画布中心经视口逆变换回到世界坐标。
+        val centerWindow = Offset(
+            canvasOrigin.x + canvasSize.width / 2f,
+            canvasOrigin.y + canvasSize.height / 2f,
+        )
+        val center = viewport.toWorldDp(centerWindow, canvasOrigin, density)
+        val x = WorkflowGeometry.snapToGridDp(center.x - WorkflowNodeCardWidth.value / 2f)
+            .coerceAtLeast(0)
+        val y = WorkflowGeometry.snapToGridDp(center.y - 40f).coerceAtLeast(0)
         val id = newEditorNodeId(def)
         val settled = if (kind.bridge != null) withActionDefaults(kind, kind.bridge) else kind.defaults
         val node = WorkflowNode(
@@ -484,7 +522,10 @@ internal fun WorkflowEditorSurface(
     ) {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
-                // ── 顶栏（真正占一行，画布不会与它重叠）──
+                // ── 顶栏：左「流程名」、右「搜索 / 保存 / 更多」 ──
+                //
+                // 对齐点击助手：左上角显示的是**流程名**（原来是一句固定的「编辑流程」），
+                // 因为用户同时开着好几个流程时，唯一能区分"我在改哪一个"的信息就是名字。
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -504,40 +545,64 @@ internal fun WorkflowEditorSurface(
                     }
                     Spacer(Modifier.width(8.dp))
                     Surface(shape = RoundedCornerShape(50), tonalElevation = 5.dp) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = def.name.ifBlank { title },
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+                            )
+                        }
                     }
                     Spacer(Modifier.weight(1f))
-                    // 保存状态：自动保存时必须让用户看见"存了没有"，否则返回时心里没底。
+                    // 保存状态用一个小圆点 + 文字，放在按钮左边；失败时是红点。
                     if (autosave != null) {
-                        Text(
-                            text = stringResource(
-                                when (saveState) {
-                                    SaveState.IDLE -> R.string.dsh_workflow_save_saved
-                                    SaveState.SAVING -> R.string.dsh_workflow_save_saving
-                                    SaveState.SAVED -> R.string.dsh_workflow_save_saved
-                                    SaveState.FAILED -> R.string.dsh_workflow_save_failed
-                                },
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (saveState == SaveState.FAILED) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .background(
+                                    color = when (saveState) {
+                                        SaveState.FAILED -> MaterialTheme.colorScheme.error
+                                        SaveState.SAVING -> MaterialTheme.colorScheme.tertiary
+                                        else -> MaterialTheme.colorScheme.primary
+                                    },
+                                    shape = CircleShape,
+                                ),
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(6.dp))
                     }
-                    Button(onClick = {
-                        // 手动保存 = 立刻落盘（不等防抖）然后退出。
-                        persistNow(def)
-                        onSave(def)
-                    }, shape = RoundedCornerShape(50)) {
+                    Surface(shape = CircleShape, tonalElevation = 5.dp) {
+                        IconButton(onClick = { searchOpen = !searchOpen }) {
+                            Icon(
+                                Icons.Filled.Search,
+                                contentDescription = stringResource(R.string.dsh_wf_top_search),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    // 保存按钮：图标 + 文字，但只保留图标以避免在窄屏上把顶栏挤爆；
+                    // 手动保存 = 立即落盘（不等防抖）然后退出。
+                    Button(
+                        onClick = {
+                            persistNow(def)
+                            onSave(def)
+                        },
+                        shape = RoundedCornerShape(50),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        Icon(Icons.Filled.Check, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.dsh_workflow_editor_save))
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Surface(shape = CircleShape, tonalElevation = 5.dp) {
+                        IconButton(onClick = { moreOpen = true }) {
+                            Icon(
+                                Icons.Filled.MoreVert,
+                                contentDescription = stringResource(R.string.dsh_wf_top_more),
+                            )
+                        }
                     }
                 }
 
@@ -560,6 +625,11 @@ internal fun WorkflowEditorSurface(
                         positions = placed,
                         readOnly = false,
                         selectedNodeId = selected,
+                        draggingNodeId = dragFrom?.first,
+                        // 已授予的能力：目前按"定义里声明的 + 目录推出来的"整体放行。
+                        // 真正逐项判定在运行前的 WorkflowPermissions 里做，这里只负责显示
+                        // "这张卡的权限有没有到位"，所以取的是同一份 effectiveCaps 的子集关系。
+                        grantedCaps = def.effectiveCaps.toSet(),
                         onNodeClick = { id -> selected = if (selected == id) null else id },
                         onNodeDragStart = { id ->
                             val node = def.nodes.firstOrNull { it.id == id }
@@ -657,74 +727,174 @@ internal fun WorkflowEditorSurface(
                     }
                 }
 
-                // ── 底部小工具条 ──
-                Row(
-                    modifier = Modifier
+            }
+
+            // ── 定义不合法时，底栏上方浮一条红条 ──
+            //
+            // 为什么不塞进底栏胶囊：胶囊里全是图标，塞一段中文会把胶囊撑成一整行（上一版
+            // 就是这么被挤成一列竖排、把底栏撑到满屏高的）。单独一条浮在上面，既能读全，
+            // 又不影响底栏的紧凑形态。运行状态因此可以一眼看见，不必点开任何东西。
+            if (errors.isNotEmpty()) {
+                Box(
+                    Modifier
                         .fillMaxWidth()
                         .windowInsetsPadding(WindowInsets.navigationBars)
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                        .padding(bottom = 84.dp, start = 16.dp, end = 16.dp),
+                    contentAlignment = Alignment.BottomCenter,
                 ) {
-                    Button(onClick = { sheetOpen = true }, shape = RoundedCornerShape(50)) {
-                        Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.dsh_workflow_editor_add_node))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        tonalElevation = 6.dp,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.dsh_workflow_editor_errors) + " " + errors.size,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
                     }
-                    OutlinedButton(
-                        onClick = { draft = def.copy(nodes = def.nodes.map { it.copy(posX = 0, posY = 0) }) },
-                        shape = RoundedCornerShape(50),
-                    ) { Text(stringResource(R.string.dsh_workflow_editor_auto_layout)) }
-                    // 缩放控件：双指也能缩，但工具条给一条明确的路（与运行详情那套 +/- 一致）。
-                    TextButton(onClick = {
-                        viewport = viewport.copy(
-                            scale = (viewport.scale - 0.2f).coerceAtLeast(WorkflowViewport.MIN_SCALE),
-                        )
-                    }) { Text("−") }
-                    Text(
-                        text = (viewport.scale * 100).toInt().toString() + "%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                }
+            }
+
+            // ── 悬浮底栏（居中、浮在画布之上，不占布局高度）──
+            //
+            // 对齐点击助手：底部是一个**浮起来**的胶囊，而不是占满一行的工具条。
+            // 占一行会把画布高度吃掉一截，而画布正是这一页最需要大的部分。
+            // 它在这里、而不是在 Column 里面 —— 只有放在 Column **外面**才叫"浮在画布上"，
+            // 放进去就变成又一行布局，画布照样变矮。
+            //
+            // 两种形态随选中态切换：
+            //  - 没选中：回中 / ＋ 唤出节点列表 / 整理（自动布局）
+            //  - 选中一张卡：复制 / 删除。删除要点第二下才真删 —— 第一下把它变红。
+            //    为什么不用确认弹窗：底栏是高频操作，弹窗会打断节奏；而"变红"既拦住了误触，
+            //    也保住了节奏。真正不可逆的删卡仍然有确认（点卡片弹窗里那条路）。
+            FloatingEditorBar(
+                hasSelection = selected != null,
+                canDelete = def.node(selected.orEmpty())?.type != WorkflowNodeType.TRIGGER,
+                deleteArmed = deleteArmed,
+                onRecenter = {
+                    viewport = WorkflowViewport.fitTo(
+                        editorLayoutFor(def).map { it.second to it.third },
+                        Offset(canvasSize.width.toFloat(), canvasSize.height.toFloat()),
+                        density,
                     )
-                    TextButton(onClick = {
-                        viewport = viewport.copy(
-                            scale = (viewport.scale + 0.2f).coerceAtMost(WorkflowViewport.MAX_SCALE),
+                },
+                onAdd = { sheetOpen = true; searchOpen = false },
+                onReset = { draft = def.copy(nodes = def.nodes.map { it.copy(posX = 0, posY = 0) }) },
+                onCopy = {
+                    val src = selected?.let { def.node(it) }
+                    if (src != null) {
+                        val newId = newEditorNodeId(def)
+                        // 副本**不自动连边**：点「复制」想要的是"再加一张同类型的卡"，
+                        // 而不是"让原来那条链分叉"。接在哪由用户自己拉线决定。
+                        draft = def.copy(
+                            nodes = def.nodes + src.copy(
+                                id = newId,
+                                posX = WorkflowGeometry.snapToGridDp(src.posX.toFloat() + 32f),
+                                posY = WorkflowGeometry.snapToGridDp(src.posY.toFloat() + 32f),
+                            ),
                         )
-                    }) { Text("+") }
-                    TextButton(onClick = {
-                        viewport = WorkflowViewport.fitTo(
-                            editorLayoutFor(def).map { it.second to it.third },
-                            Offset(canvasSize.width.toFloat(), canvasSize.height.toFloat()),
-                            density,
-                        )
-                    }) { Text(stringResource(R.string.dsh_workflow_zoom_reset)) }
-                    Spacer(Modifier.weight(1f))
-                    // 这里的文字**必须限宽限行**。
-                    //
-                    // 之前它是裸 Text：错误文案是「这个定义还不合法（修好才能运行）：」这种长句，
-                    // 与左边的 +/−/百分比/整理/加节点挤在同一行时，Row 不肯压缩自己，于是
-                    // 这段文字被压到一列宽 —— 中文逐字竖排、撑满整屏高度，底栏看上去"奇大无比"
-                    // （真机截图就是这个形态）。weight + maxLines 让它变成两行省略号。
-                    Text(
-                        text = if (errors.isNotEmpty()) {
-                            stringResource(R.string.dsh_workflow_editor_errors) + " " + errors.size
-                        } else {
-                            stringResource(R.string.dsh_workflow_editor_edges) + " " + def.edges.size
+                        selected = newId
+                    }
+                },
+                onDelete = {
+                    if (deleteArmed) {
+                        val delId = selected
+                        if (delId != null) {
+                            draft = def.copy(
+                                nodes = def.nodes.filterNot { it.id == delId },
+                                edges = def.edges.filterNot { e -> e.from == delId || e.to == delId },
+                            )
+                            selected = null
+                        }
+                        deleteArmed = false
+                    } else {
+                        deleteArmed = true
+                    }
+                },
+            )
+
+            // ── 顶栏「更多」菜单 ──
+            //
+            // 放的是"不常用但偶尔必须"的项：预览（只看不改）、自动布局、放弃改动。
+            // 常用操作（加节点、保存、复制、删除）都在别处，所以不塞进来。
+            if (moreOpen) {
+                DropdownMenu(
+                    expanded = true,
+                    onDismissRequest = { moreOpen = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.dsh_wf_top_preview)) },
+                        onClick = { moreOpen = false; previewOpen = true },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.dsh_workflow_editor_auto_layout)) },
+                        onClick = {
+                            moreOpen = false
+                            draft = def.copy(nodes = def.nodes.map { it.copy(posX = 0, posY = 0) })
                         },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (errors.isNotEmpty()) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.dsh_workflow_editor_discard_title)) },
+                        onClick = { moreOpen = false; confirmDiscard = true },
                     )
                 }
             }
 
+            // ── 预览（只读 + 可缩放，不占编辑手势）──
+            if (previewOpen) {
+                Dialog(onDismissRequest = { previewOpen = false }) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        tonalElevation = 6.dp,
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                text = def.name.ifBlank { title },
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            var pzoom by remember { mutableStateOf(1f) }
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(260.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                    .pointerInput(Unit) {
+                                        // 只用来缩放：预览里没有拖动卡的需求，双指就够了。
+                                        detectTransformGestures { _, _, zoomChange, _ ->
+                                            pzoom = (pzoom * zoomChange).coerceIn(0.4f, 1.6f)
+                                        }
+                                    },
+                            ) {
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer {
+                                            transformOrigin = TransformOrigin(0f, 0f)
+                                            scaleX = pzoom
+                                            scaleY = pzoom
+                                        },
+                                ) {
+                                    WorkflowGraphPreview(def)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = { previewOpen = false }) {
+                                    Text(stringResource(R.string.dsh_workflow_action_close))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // ── 节点抽屉：往外拖到画布 = 在那个位置新建；点一下 = 画布中央新建 ──
             // ── 节点选择面板（底部「加节点」入口）──
@@ -742,6 +912,9 @@ internal fun WorkflowEditorSurface(
                         (entry.payload as? EditorNodeKind)?.let { kind -> addNode(kind, null) }
                         sheetOpen = false
                     },
+                    // 顶栏那个放大镜直接把面板切到搜索态：用户点搜索就是"我要找某个节点"，
+                    // 不必再进面板里点一次放大镜。
+                    initialSearchOpen = searchOpen,
                     onDismiss = { sheetOpen = false },
                 )
             }
@@ -970,5 +1143,99 @@ private fun editorLayoutFor(def: WorkflowDefinition): List<Triple<String, Float,
     }
     return def.nodes.mapIndexed { i, node ->
         Triple(node.id, 24f + (i % 3) * (WorkflowNodeCardWidth.value + 16f), 24f + (depth[node.id] ?: 0) * 128f)
+    }
+}
+
+
+/**
+ * 编辑器底部的**悬浮胶囊**（对齐点击助手：浮在画布上，不占一行布局）。
+ *
+ * 为什么浮起来而不占布局：画布高度是这一页最稀缺的资源。占一行工具条会让"看得见的图"变矮
+ * 一截，而底栏在全屏编辑里真正被点到的频率并不高。悬浮 + 半透明底，既保证可达，又不抢地方。
+ *
+ * 两种形态由 [hasSelection] 切：没选卡 = 视图操作（回中/加节点/整理）；选了卡 = 卡片操作
+ * （复制/删除）。不把两种混在同一条里，是因为"我想加节点"和"我想动这张卡"是两种不同意图，
+ * 混在一起时按钮的位置会随选中态跳动，肌肉记忆建立不起来。
+ *
+ * [deleteArmed] 是删除的二次确认：第一下变红（[onDelete] 被调用但调用方只置位），
+ * 第二下才真删。这样拦住了误触，又不必弹窗打断节奏。
+ */
+@Composable
+private fun FloatingEditorBar(
+    hasSelection: Boolean,
+    canDelete: Boolean,
+    deleteArmed: Boolean,
+    onRecenter: () -> Unit,
+    onAdd: () -> Unit,
+    onReset: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(bottom = 12.dp),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            tonalElevation = 8.dp,
+            shadowElevation = 6.dp,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+        ) {
+            Row(
+                Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (hasSelection) {
+                    FloatBarIcon(Icons.Filled.ContentCopy, stringResource(R.string.dsh_wf_float_copy), onCopy)
+                    // 入口卡不给删除按钮：删掉它整张图没有起点，定义立刻不合法。
+                    if (canDelete) {
+                        FloatBarIcon(
+                            icon = if (deleteArmed) Icons.Filled.Warning else Icons.Filled.Delete,
+                            label = if (deleteArmed) {
+                                stringResource(R.string.dsh_wf_float_delete_confirm)
+                            } else {
+                                stringResource(R.string.dsh_wf_float_delete)
+                            },
+                            tint = if (deleteArmed) MaterialTheme.colorScheme.error else null,
+                            onClick = onDelete,
+                        )
+                    }
+                } else {
+                    FloatBarIcon(Icons.Filled.Visibility, stringResource(R.string.dsh_workflow_zoom_reset), onRecenter)
+                    // 中间那颗是实心主色圆：它是这一栏的主操作（唤出节点列表）。
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 2.dp).size(48.dp),
+                    ) {
+                        IconButton(onClick = onAdd) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = stringResource(R.string.dsh_wf_float_add),
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        }
+                    }
+                    FloatBarIcon(Icons.Filled.Refresh, stringResource(R.string.dsh_workflow_editor_auto_layout), onReset)
+                }
+            }
+        }
+    }
+}
+
+/** 悬浮栏里的一个方形图标按钮。[tint] 为空时用 onSurfaceVariant。 */
+@Composable
+private fun FloatBarIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color? = null,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick) {
+        Icon(icon, contentDescription = label, tint = tint ?: MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

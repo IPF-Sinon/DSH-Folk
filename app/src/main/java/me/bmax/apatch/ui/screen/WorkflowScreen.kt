@@ -98,6 +98,8 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
     var enabled by remember { mutableStateOf(prefs.getBoolean(DshEnv.KEY_WORKFLOW_ENABLED, false)) }
     var listKey by remember { mutableIntStateOf(0) }
     var detailRun by remember { mutableStateOf<WorkflowRun?>(null) }
+    // 点流程主体 → 详情弹窗（名称/描述/可缩放预览/编辑/删除），不在列表行里就地展开。
+    var detailDef by remember { mutableStateOf<WorkflowDefinition?>(null) }
     var dangerousAck by remember { mutableStateOf(false) }
     // 运行/取消之后列表与详情要跟着变；引擎的 tick 是所有状态推进的汇合点。
     val tick by WorkflowEngine.tick.collectAsState()
@@ -237,12 +239,7 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                     enabled = enabled,
                     valid = errors.isEmpty(),
                     errors = errors,
-                    dangerousAck = dangerousAck,
-                    onDangerousAck = { dangerousAck = it },
-                    onEdit = { navigator.navigate(WorkflowEditorScreenDestination(workflowId = def.id)) },
-                    onOpenDetail = {
-                        detailRun = runs.firstOrNull { it.workflowId == def.id }
-                    },
+                    onOpenDetail = { detailDef = def },
                     onRun = {
                         scope.launch {
                             if (withContext(Dispatchers.IO) { awaitPermissions(ctx, def) }) {
@@ -259,8 +256,22 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                             }
                         }
                     },
+                )
+            }
+
+            // 详情弹窗：名称 / 描述 / 可缩放预览 / 编辑 / 删除。
+            detailDef?.let { dd ->
+                WorkflowDetailDialog(
+                    def = dd,
+                    lastStateText = runs.firstOrNull { it.workflowId == dd.id }?.state?.id,
+                    onDismiss = { detailDef = null },
+                    onEdit = {
+                        detailDef = null
+                        navigator.navigate(WorkflowEditorScreenDestination(workflowId = dd.id))
+                    },
                     onDelete = {
-                        WorkflowStore.delete(ctx, def.id)
+                        detailDef = null
+                        WorkflowStore.delete(ctx, dd.id)
                         listKey++
                     },
                 )
@@ -407,6 +418,15 @@ internal fun starter(name: String): WorkflowDefinition =
         )
     }
 
+/**
+ * 列表里的一行流程。
+ *
+ * 与上一版最大的不同：**点流程主体是打开详情弹窗**，不再在行里就地展开。
+ * 就地展开的问题是：展开的那块既装流程图又装权限又装按钮，行高忽大忽小，
+ * 用户滚列表时上下文一直在跳；而"看详情"和"改流程"本来就是两件事。
+ *
+ * 行内只保留一个「运行」——它是这一页唯一的高频操作，其余全部收进详情弹窗里。
+ */
 @Composable
 private fun WorkflowRow(
     def: WorkflowDefinition,
@@ -414,20 +434,15 @@ private fun WorkflowRow(
     enabled: Boolean,
     valid: Boolean,
     errors: List<String>,
-    dangerousAck: Boolean,
-    onDangerousAck: (Boolean) -> Unit,
-    onEdit: () -> Unit,
     onOpenDetail: () -> Unit,
     onRun: () -> Unit,
-    onDelete: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(
                 Modifier
                     .weight(1f)
-                    .clickableRow { expanded = !expanded },
+                    .clickableRow(onOpenDetail),
             ) {
                 Text(def.name, style = MaterialTheme.typography.bodyLarge)
                 Text(
@@ -439,41 +454,13 @@ private fun WorkflowRow(
             }
             Button(onClick = onRun, enabled = enabled && valid) { Text(stringResource(R.string.dsh_workflow_action_run)) }
         }
+        // 不合法时把原因摆在行下面：运行按钮是灰的，不说为什么等同于坏的。
         if (!valid) {
             Text(
-                stringResource(R.string.dsh_workflow_invalid_run),
+                stringResource(R.string.dsh_workflow_invalid_run) + " " + errors.size,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.error,
             )
-            Text(
-                errors.take(4).joinToString("\n"),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (expanded) {
-            WorkflowGraphPreview(def)
-            if (def.declaredCaps.isNotEmpty()) {
-                Text(
-                    stringResource(R.string.dsh_workflow_row_caps, def.declaredCaps.joinToString("、")),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            if (def.declaresDangerous) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = dangerousAck, onCheckedChange = onDangerousAck)
-                    Text(
-                        stringResource(R.string.dsh_workflow_row_dangerous),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onEdit) { Text(stringResource(R.string.dsh_workflow_action_edit)) }
-                TextButton(onClick = onOpenDetail) { Text(stringResource(R.string.dsh_workflow_detail)) }
-                TextButton(onClick = onDelete) { Text(stringResource(R.string.dsh_workflow_action_delete)) }
-            }
         }
     }
 }
