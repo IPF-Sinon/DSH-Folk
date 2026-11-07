@@ -1639,15 +1639,15 @@ private fun WebUiFloatingBall(
                 modifier = Modifier
                     .offset(x = x, y = y)
                     .size(BALL_SIZE)
-                    // 长按 = 切换浏览器导航栏；短按 = 原来的环绕菜单。
-                    // 两条手势放在**不同**的 pointerInput 里是安全的：detectTapGestures 遇到拖动
-                    // 会放弃识别，detectDragGestures 只在位移超过阈值才接管，两者不会同时触发。
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onLongPress = { onToggleBrowserBar() },
-                            onTap = { expanded = !expanded },
-                        )
-                    }
+                    // 手势统一在**一个** pointerInput 里处理。
+                    //
+                    // 为什么不能分成两个 pointerInput：Compose 的指针事件沿 modifier 链逐个派发，
+                    // 后面的 detectDragGestures 一旦进入 awaitPointerEventScope 就把事件拿走了，
+                    // 前面的 detectTapGestures 再也等不到 up —— 表现就是「短按与长按**双双失效**」
+                    // （真机报的正是这个）。
+                    //
+                    // 现在把拖动放在前面（离 Surface 更近）：手指没位移时 detectDragGestures 的
+                    // onDragStart 不会触发，事件不被消费，后面的 tap 才拿得到完整的按下-抬起。
                     .pointerInput(maxW, maxH, yMin, yMax) {
                         detectDragGestures(
                             onDragStart = {
@@ -1681,10 +1681,21 @@ private fun WebUiFloatingBall(
                             }
                         }
                     },
+                    // 短按 / 长按放在拖动之后：拖动没开始时它不消费事件，tap 才能拿到完整手势。
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onLongPress = { onToggleBrowserBar() },
+                            onTap = { expanded = !expanded },
+                        )
+                    }
             ) {
-                // onClick 置空：短按已由上面的 detectTapGestures 处理。
-                // 两处都留会一次点击切换两次（展开又立刻收起）。
-                IconButton(onClick = {}) {
+                // 用 Box 而不是 IconButton：IconButton 自己带一颗 clickable，会把点击吃掉，
+                // 上层的 detectTapGestures 就收不到 —— 短按/长按都会失效。
+                // 这里只需要「画一个图标」，点击语义全部由上层的 pointerInput 负责。
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Image(
                         painter = painterResource(LauncherIconUtils.currentIconForeground()),
                         contentDescription = stringResource(R.string.dsh_webui_ball),
