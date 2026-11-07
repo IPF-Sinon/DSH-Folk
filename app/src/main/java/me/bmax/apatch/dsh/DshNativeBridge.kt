@@ -964,8 +964,30 @@ object DshNativeBridge {
             Log.w(TAG, "native endpoint threw $method $path: ${e.message}")
             500 to err(str(ctx, R.string.dsh_native_err_internal, e.message ?: ""), "internal")
         }
-        audit(ctx, method, path, params, cap, reason, result, privAuditExtra(ctx, cap, privDecision))
-        return result
+        // 扩展拦截点（调用后）：结果已经拿到，允许扩展**改写响应**。
+        //
+        // 用途：给敏感内容打码、补充字段、把某个端点的返回统一成扩展自己的格式。
+        // 与 `SHELL_AFTER_EXEC` 的区别是层次不同 —— 这里管的是**桥端点**的响应，
+        // 那里管的是容器内 bash 命令的输出。
+        //
+        // 审计放在改写**之后**：日志里记的应该是模型实际看到的那份内容，
+        // 否则事后对账会对不上。
+        val finalResult = if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.NATIVE_AFTER_INVOKE)) {
+            val payload = mutableMapOf<String, Any?>(
+                "cap" to cap?.id,
+                "path" to path,
+                "code" to result.first,
+                "body" to result.second,
+            )
+            ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.NATIVE_AFTER_INVOKE, payload)
+            val code = (payload["code"] as? Int) ?: result.first
+            val body = (payload["body"] as? String) ?: result.second
+            code to body
+        } else {
+            result
+        }
+        audit(ctx, method, path, params, cap, reason, finalResult, privAuditExtra(ctx, cap, privDecision))
+        return finalResult
     }
 
     /**

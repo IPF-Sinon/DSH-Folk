@@ -8,6 +8,7 @@ import android.os.StatFs
 import android.provider.DocumentsContract
 import android.util.Log
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import me.bmax.apatch.util.appString
 import me.bmax.apatch.util.PermissionUtils
 import org.json.JSONArray
@@ -207,6 +208,27 @@ object DshFsBridge {
                     DshBridgeGuard.audit(appCtx, endpoint, 429, 0L, true)
                     respondJson(s, 429, errorJson(str(R.string.dsh_fs_err_rate_limited), "rate_limited"))
                     return@runCatching
+                }
+
+                // 扩展拦截点：**所有桥端点的统一入口**，在真正分派之前。
+                //
+                // 为什么放在这里而不是各个 dispatchXxx 里：这里是唯一能一次覆盖
+                // /native、/cloud、/saf、/workflow、/fs 等全部路由的位置。放到分派之后
+                // 就会漏掉新加的路由前缀。
+                //
+                // 注意这不是权限判定（权限在各 dispatch 内部按能力分别做）；这一层是给扩展
+                // 的通用观察/改写口，例如按来源 IP、按端点前缀做自己的策略。
+                if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.BRIDGE_BEFORE_DISPATCH)) {
+                    val payload = mutableMapOf<String, Any?>(
+                        "method" to method,
+                        "path" to path,
+                        "params" to params,
+                    )
+                    if (!ExtensionHookRegistry.runAround(ExtensionHookRegistry.Point.BRIDGE_BEFORE_DISPATCH, payload)) {
+                        DshBridgeGuard.audit(appCtx, endpoint, 403, 0L, true)
+                        respondJson(s, 403, errorJson("请求被扩展拦下", "extension_blocked"))
+                        return@runCatching
+                    }
                 }
 
                 val result: Pair<Int, String>? = when {
