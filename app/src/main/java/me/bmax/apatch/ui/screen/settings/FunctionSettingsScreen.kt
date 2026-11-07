@@ -159,6 +159,9 @@ internal fun DshSettingsScreen(
     }
     // 画中画主开关（默认开）：关掉后悬浮菜单不显示按钮、也不自动进小窗
     var webuiPipMain by rememberSaveable { mutableStateOf(DshEnv.webuiPipMain(context)) }
+    // 浏览器模式：外链在应用内打开。rememberSaveable 而不是 remember ——
+    // 配置变更（旋屏、深色切换）后开关状态不该跳回磁盘上的旧值。
+    var browserMode by rememberSaveable { mutableStateOf(DshEnv.browserMode(context)) }
     // 离开应用时自动缩成画中画小窗（默认开）：只管「自动」这条路，手动按钮不受它影响。
     // 读的是**副开关自己的原始值**（不是 DshEnv.webuiPipAuto —— 那个已经把主开关乘进去了），
     // 否则主开关关着时这一行会显示成「本来就是关的」。
@@ -637,6 +640,13 @@ internal fun DshSettingsScreen(
                     onWebuiPipAutoChange = { on ->
                         webuiPipAuto = on
                         dshPrefs.edit().putBoolean(DshEnv.KEY_WEBUI_PIP_AUTO, on).apply()
+                    },
+                    browserMode = browserMode,
+                    onBrowserModeChange = { on ->
+                        browserMode = on
+                        // 写 prefs 就够了，不用强制重载 WebView：这个开关只影响**下一次**
+                        // 外链跳转的判断（见 shouldOverrideUrlLoading），当前页面无需刷新。
+                        DshEnv.setBrowserMode(context.applicationContext, on)
                     },
                     capsWithPermission = capsWithPermission,
                     allFilesGranted = allFilesGranted,

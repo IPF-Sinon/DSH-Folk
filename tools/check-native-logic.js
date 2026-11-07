@@ -1506,10 +1506,12 @@ console.log("── 限制模式页与弹窗 ──");
     "function_clean_storage", "function_docs_access", "function_gh_mirror", "function_lan",
     "function_port", "function_repair_plugins", "function_run_mode", "function_runtime",
     "function_verify_install", "function_webui_mode", "function_webui_pip",
+    // 浏览器模式：外链在应用内打开（新卡，与画中画并列）
+    "function_webui_browser_mode",
   ].sort();
   const inMap = blockKeys(settings, /internal val FUNCTION_GROUP_ITEMS/);
   ok(inMap !== null && JSON.stringify(inMap) === JSON.stringify(functional),
-    "分类→卡片映射正好覆盖 14 张功能卡（实际 " + (inMap ? inMap.length : 0) + " 张）");
+    "分类→卡片映射正好覆盖 15 张功能卡（实际 " + (inMap ? inMap.length : 0) + " 张）");
   const inTitle = blockKeys(settings, /private val FUNCTION_ITEM_TITLE/);
   ok(inTitle !== null && JSON.stringify(inTitle) === JSON.stringify(functional),
     "入口层搜索的卡片标题表与分类映射是同一批 key（实际 " + (inTitle ? inTitle.length : 0) + " 张）");
@@ -1560,15 +1562,16 @@ console.log("── 限制模式页与弹窗 ──");
   ok(/onOpenWorkflow: \(\) -> Unit = \{\}/.test(hubContent) && /navigator\.navigate\(WorkflowScreenDestination\)/.test(screenCode),
     "那一行真的会打开工作流页");
 
-  // 重排后 16 张卡（14 张功能卡 + 安全页那 2 张）一个不少、不重复、不改名
+  // 重排后 17 张卡（15 张功能卡 + 安全页那 2 张）一个不少、不重复、不改名
   const keys = [...settings.matchAll(/item\(key = "(function_[a-z_]+)"/g)].map((m) => m[1]);
   const wantKeys = functional.concat(["function_permission", "function_storage_mount"]).sort();
   const gotKeys = keys.slice().sort();
   const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
   const missing = wantKeys.filter((k) => !gotKeys.includes(k));
   const extra = gotKeys.filter((k) => !wantKeys.includes(k));
-  ok(keys.length === 16 && dup.length === 0 && missing.length === 0 && extra.length === 0,
-    `重排后 16 张卡一个不少、不重复、不改名（实际 ${keys.length}` +
+  // 数量与清单一起改：写死 16 而清单是 17 会让这条断言永远红（我刚踩过）。
+  ok(keys.length === wantKeys.length && dup.length === 0 && missing.length === 0 && extra.length === 0,
+    `重排后 17 张卡一个不少、不重复、不改名（实际 ${keys.length}` +
     `${dup.length ? "，重复 " + dup.join(",") : ""}${missing.length ? "，缺 " + missing.join(",") : ""}` +
     `${extra.length ? "，多 " + extra.join(",") : ""}）`);
   // 可见性交给层级（安全页一组 / 次级页一类），不再每张卡自己 visible

@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -170,7 +171,11 @@ internal val FUNCTION_GROUP_ITEMS: Map<FunctionGroup, List<String>> = mapOf(
         "function_auto_open_webui",
     ),
     FunctionGroup.NETWORK to listOf("function_port", "function_lan", "function_gh_mirror"),
-    FunctionGroup.WEBUI to listOf("function_webui_mode", "function_webui_pip"),
+    FunctionGroup.WEBUI to listOf(
+        "function_webui_mode",
+        "function_webui_pip",
+        "function_webui_browser_mode",
+    ),
     FunctionGroup.RUNTIME to listOf(
         "function_runtime",
         "function_repair_plugins",
@@ -193,6 +198,7 @@ private val FUNCTION_ITEM_TITLE: Map<String, Int> = mapOf(
     "function_gh_mirror" to R.string.dsh_race_title,
     "function_webui_mode" to R.string.dsh_webui_mode,
     "function_webui_pip" to R.string.dsh_webui_pip,
+    "function_webui_browser_mode" to R.string.dsh_webui_browser_mode,
     "function_runtime" to R.string.dsh_runtime_section,
     "function_repair_plugins" to R.string.dsh_plugin_repair,
     "function_verify_install" to R.string.dsh_verify_after_install,
@@ -383,6 +389,9 @@ fun FunctionSettingsContent(
     /** 画中画**主开关**（默认开）：关掉后悬浮菜单不显示画中画按钮，也不自动进小窗。 */
     webuiPipMain: Boolean,
     onWebuiPipMainChange: (Boolean) -> Unit,
+    /** 浏览器模式：外链在应用内打开（见 DshEnv.KEY_BROWSER_MODE）。 */
+    browserMode: Boolean,
+    onBrowserModeChange: (Boolean) -> Unit,
     /** 画中画副开关：离开应用时自动缩成小窗（默认开）。主开关关掉时置灰。 */
     webuiPipAuto: Boolean,
     onWebuiPipAutoChange: (Boolean) -> Unit,
@@ -1016,6 +1025,34 @@ fun FunctionSettingsContent(
                             }
                         }
                     }
+
+                    // ───────── 浏览器模式（独立一张卡）─────────
+                    // 开了之后：外链留在应用内、长按悬浮球唤出导航栏、用户脚本在外部网页也生效。
+                    // 代价也写在这：WebView 会加载第三方页面 —— 宿主在进外站前会摘掉
+                    // JavascriptInterface 桥（见 DshWebUiActivity.setBridgesFor），
+                    // 但「App 会去访问外部网站」这件事本身该由用户自己决定。
+                    item(key = "function_webui_browser_mode") {
+                        ExpressiveCard(flat = flat) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                                SectionHeader(
+                                    icon = { Icon(Icons.Outlined.Public, null, Modifier.size(20.dp)) },
+                                    title = stringResource(R.string.dsh_webui_browser_mode),
+                                    summary = stringResource(R.string.dsh_webui_browser_mode_summary),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                PipSwitchRow(
+                                    title = stringResource(R.string.dsh_webui_browser_mode_switch),
+                                    summary = stringResource(R.string.dsh_webui_browser_mode_switch_summary),
+                                    checked = browserMode,
+                                    // 只在内置 WebUI 模式下有意义：选「系统浏览器」时
+                                    // 外链根本不经过 WebView，这条开关点了不会有任何变化。
+                                    enabled = webuiMode == DshWebUi.MODE_IN_APP,
+                                    onCheckedChange = onBrowserModeChange,
+                                )
+                            }
+                        }
+                    }
+
                 }
 
                 FunctionGroup.RUNTIME -> {

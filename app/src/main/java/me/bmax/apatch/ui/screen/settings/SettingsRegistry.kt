@@ -146,6 +146,7 @@ object SettingsRegistry {
             add(SettingEntry("function_auto_open_webui", R.string.dsh_auto_open_webui, R.string.dsh_auto_open_webui_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_webui_pip", R.string.dsh_webui_pip_main, R.string.dsh_webui_pip_main_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_webui_pip_auto", R.string.dsh_webui_pip_auto, R.string.dsh_webui_pip_auto_summary, SettingCategory.FUNCTION))
+            add(SettingEntry("function_webui_browser_mode", R.string.dsh_webui_browser_mode_switch, R.string.dsh_webui_browser_mode_switch_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_port", R.string.dsh_port_title, R.string.dsh_port_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_lan", R.string.dsh_lan_title, R.string.dsh_lan_summary, SettingCategory.FUNCTION))
             add(SettingEntry("function_gh_mirror", R.string.dsh_race_title, R.string.dsh_race_summary, SettingCategory.FUNCTION))

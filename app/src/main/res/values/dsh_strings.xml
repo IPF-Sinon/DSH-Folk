@@ -1895,4 +1895,9 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <!-- Sponsors block on the About screen -->
     <string name="dsh_sponsors">Sponsors (%1$d)</string>
     <string name="dsh_sponsors_hint">Thanks to them this project keeps going.</string>
+    <!-- Browser mode -->
+    <string name="dsh_webui_browser_mode">Browser mode</string>
+    <string name="dsh_webui_browser_mode_summary">Keep web pages inside the app with a navigation bar; user scripts also run on external pages.</string>
+    <string name="dsh_webui_browser_mode_switch">Open external links in the app</string>
+    <string name="dsh_webui_browser_mode_switch_summary">When off, external links go to the system browser (default, safest). When on, the app visits third-party sites; the host detaches its web bridge before entering an external site.</string>
 </resources>
