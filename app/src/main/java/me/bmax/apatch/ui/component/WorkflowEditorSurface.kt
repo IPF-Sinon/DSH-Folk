@@ -92,6 +92,101 @@ private val EDITOR_NODE_CATALOG = listOf(
 )
 
 /**
+ * 抽屉的一级分类：用户先选「大类」，再选具体节点。
+ *
+ * ## 为什么改成两级
+ * 之前是一页平铺：7 个基础节点 + 23 个原生能力，每行两张卡，全部堆在同一个 Sheet 里。
+ * 三十张卡在手机上必然超出屏幕，只能靠 Sheet 撑满全屏来容纳 —— 打开抽屉就像跳进另一个页面，
+ * 而且没有层次：用户根本看不出「等待」和「发短信」不是一类东西。
+ *
+ * 二级结构是这类节点编辑器的通行做法（点击助手的动作库同样按类别收拢）：
+ * 一级只显示九个分类（每个带一句用途说明），点进去才看该类的节点。
+ *
+ * ## 分类按「用户想干什么」切，不按代码里的枚举切
+ * 基础节点在代码里是 EXECUTE / CONDITION / WAIT …，但用户找的是「让它跑一条命令」
+ * 还是「让它等一下」。所以「执行」与「控制流」分开，前者是"做什么"，
+ * 后者是"什么时候做、做几次"。
+ */
+private data class EditorCategory(
+    val titleRes: Int,
+    val hintRes: Int,
+    val accent: WorkflowNodeType,
+    val kinds: () -> List<EditorNodeKind>,
+)
+
+private val EDITOR_CATEGORIES: List<EditorCategory> = listOf(
+    EditorCategory(
+        titleRes = R.string.dsh_wf_cat_exec,
+        hintRes = R.string.dsh_wf_cat_exec_hint,
+        accent = WorkflowNodeType.EXECUTE,
+        kinds = { EDITOR_NODE_CATALOG.filter { it.type == WorkflowNodeType.EXECUTE } },
+    ),
+    EditorCategory(
+        titleRes = R.string.dsh_wf_cat_control,
+        hintRes = R.string.dsh_wf_cat_control_hint,
+        accent = WorkflowNodeType.CONDITION,
+        kinds = {
+            EDITOR_NODE_CATALOG.filter {
+                it.type == WorkflowNodeType.CONDITION ||
+                    it.type == WorkflowNodeType.WAIT ||
+                    it.type == WorkflowNodeType.LOGIC ||
+                    it.type == WorkflowNodeType.EXTRACT
+            }
+        },
+    ),
+    EditorCategory(
+        titleRes = R.string.dsh_wf_cat_alert,
+        hintRes = R.string.dsh_wf_cat_alert_hint,
+        accent = WorkflowNodeType.EXECUTE,
+        kinds = { capKindsOf(NativeCapCatalog.Group.ALERT) },
+    ),
+    EditorCategory(
+        titleRes = R.string.dsh_wf_cat_device,
+        hintRes = R.string.dsh_wf_cat_device_hint,
+        accent = WorkflowNodeType.EXECUTE,
+        kinds = { capKindsOf(NativeCapCatalog.Group.DEVICE) },
+    ),
+    EditorCategory(
+        titleRes = R.string.dsh_wf_cat_media,
+        hintRes = R.string.dsh_wf_cat_media_hint,
+        accent = WorkflowNodeType.EXECUTE,
+        kinds = { capKindsOf(NativeCapCatalog.Group.MEDIA) },
+    ),
+    EditorCategory(
+        titleRes = R.string.dsh_wf_cat_data,
+        hintRes = R.string.dsh_wf_cat_data_hint,
+        accent = WorkflowNodeType.EXECUTE,
+        kinds = { capKindsOf(NativeCapCatalog.Group.DATA) },
+    ),
+    EditorCategory(
+        titleRes = R.string.dsh_wf_cat_sense,
+        hintRes = R.string.dsh_wf_cat_sense_hint,
+        accent = WorkflowNodeType.EXECUTE,
+        kinds = { capKindsOf(NativeCapCatalog.Group.SENSE) },
+    ),
+    EditorCategory(
+        titleRes = R.string.dsh_wf_cat_screen,
+        hintRes = R.string.dsh_wf_cat_screen_hint,
+        accent = WorkflowNodeType.EXECUTE,
+        kinds = { capKindsOf(NativeCapCatalog.Group.SCREEN) },
+    ),
+    EditorCategory(
+        titleRes = R.string.dsh_wf_cat_privilege,
+        hintRes = R.string.dsh_wf_cat_privilege_hint,
+        accent = WorkflowNodeType.CONDITION,
+        kinds = { capKindsOf(NativeCapCatalog.Group.PRIVILEGE) },
+    ),
+)
+
+/** 取某个能力分组对应的编辑器节点（目录里没有的跳过，不让它出现在 UI 上）。 */
+private fun capKindsOf(group: NativeCapCatalog.Group): List<EditorNodeKind> =
+    NativeCapCatalog.byGroup()
+        .firstOrNull { it.first == group }
+        ?.second
+        ?.mapNotNull { cap -> EDITOR_CAP_NODE_CATALOG.firstOrNull { it.cap == cap } }
+        .orEmpty()
+
+/**
  * 原生能力节点：一项能力一张卡片，点选即生成一个已带命令的 shell 节点。
  *
  * 命令用 [NativeCapCatalog.CapItem.command] 的骨架（不含 --reason，那是执行时补的）。
@@ -160,6 +255,9 @@ internal fun WorkflowEditorSurface(
     // 拉线落在空白时的**松手窗口坐标**：菜单里选完类型，新节点就落在这里（不是默认网格位）。
     var addAfterAt by remember { mutableStateOf(Offset.Zero) }
     var sheetOpen by remember { mutableStateOf(false) }
+    // 抽屉当前停在一级分类（null = 显示分类列表）。用 saveable 没必要：
+    // 旋转后回到分类首页比「停在一个半开的二级页」更符合预期。
+    var sheetCategory by remember { mutableStateOf<EditorCategory?>(null) }
     var confirmDiscard by remember { mutableStateOf(false) }
     // 抽屉拖出：幽灵卡（null = 没在拖）、根容器与画布在窗口里的位置。
     var ghost by remember { mutableStateOf<Pair<String, Offset>?>(null) }
@@ -427,84 +525,84 @@ internal fun WorkflowEditorSurface(
                     color = MaterialTheme.colorScheme.surface,
                 ) {
                     Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
+                        // 头部：一级页显示标题，二级页显示「返回 + 分类名」。
+                        //
+                        // 用同一个头部而不是两个 Composable：返回键的位置必须稳定，
+                        // 否则用户点了一次分类之后，关闭按钮会跳到别处。
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            val cat = sheetCategory
+                            if (cat != null) {
+                                IconButton(onClick = { sheetCategory = null }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = stringResource(R.string.dsh_workflow_action_cancel),
+                                    )
+                                }
+                            }
                             Text(
-                                stringResource(R.string.dsh_workflow_editor_add_node),
+                                if (cat == null) stringResource(R.string.dsh_workflow_editor_add_node)
+                                else stringResource(cat.titleRes),
                                 style = MaterialTheme.typography.titleSmall,
                                 modifier = Modifier.weight(1f),
                             )
-                            IconButton(onClick = { sheetOpen = false }) {
+                            IconButton(onClick = {
+                                sheetOpen = false
+                                sheetCategory = null
+                            }) {
                                 Icon(
                                     Icons.Filled.Close,
                                     contentDescription = stringResource(R.string.dsh_workflow_action_cancel),
                                 )
                             }
                         }
+                        // 内容区**故意不是滚动容器**。
+                        //
+                        // 抽屉的核心交互是从卡片往外拖到画布上。一旦内容区可以纵向滚动，
+                        // 手指按住卡片往下拖时，滚动容器会先把手势吃掉 —— 用户以为在拖节点，
+                        // 实际在滚列表。这是 check-workflow 里专门有一条断言拦着的事
+                        // （#16j「抽屉的列表不能是滚动容器」）。
+                        //
+                        // 所以「不堆在一个页面」不能靠在抽屉里加滚动解决，只能靠**分级**：
+                        // 一级最多 9 个分类、二级最多 4 个节点，两级都一屏放得下，根本不需要滚。
                         Column(
                             Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            for (chunk in EDITOR_NODE_CATALOG.chunked(2)) {
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    for (kind in chunk) {
-                                        val kindLabel = stringResource(kind.labelRes)
-                                        SheetNodeCard(
-                                            label = kindLabel,
-                                            subtitle = kind.type.id,
-                                            accent = workflowNodeAccent(kind.type),
-                                            modifier = Modifier.weight(1f),
-                                            onTap = {
-                                                addNode(kind, null)
-                                                sheetOpen = false
-                                            },
-                                            onDragStart = { windowPos -> ghost = kindLabel to windowPos },
-                                            onDragMove = { windowPos -> ghost = kindLabel to windowPos },
-                                            onDragEnd = { windowPos ->
-                                                ghost = null
-                                                val inCanvas = windowPos.x >= canvasOrigin.x &&
-                                                    windowPos.x <= canvasOrigin.x + canvasSize.width &&
-                                                    windowPos.y >= canvasOrigin.y &&
-                                                    windowPos.y <= canvasOrigin.y + canvasSize.height
-                                                if (inCanvas) {
-                                                    val (xDp, yDp) = dropPointDp(windowPos)
-                                                    addNodeAt(kind, xDp, yDp)
-                                                }
-                                                sheetOpen = false
-                                            },
-                                        )
+                            val cat = sheetCategory
+                            if (cat == null) {
+                                // ── 一级：分类网格 ──
+                                // 两列排布而不是一行一项：9 个分类单列要 460dp 以上，
+                                // 会顶破抽屉高度上限；两列 5 行约 290dp，一屏放得下。
+                                //
+                                // 这里也**不能有滚动**（原因见上面的注释），所以只能靠排布压缩。
+                                for (chunk in EDITOR_CATEGORIES.filter { it.kinds().isNotEmpty() }.chunked(2)) {
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        for (c in chunk) {
+                                            SheetNodeCard(
+                                                label = stringResource(c.titleRes),
+                                                subtitle = stringResource(c.hintRes),
+                                                accent = workflowNodeAccent(c.accent),
+                                                modifier = Modifier.weight(1f),
+                                                onTap = { sheetCategory = c },
+                                                onDragStart = {},
+                                                onDragMove = {},
+                                                onDragEnd = {},
+                                            )
+                                        }
+                                        if (chunk.size == 1) Spacer(Modifier.weight(1f))
                                     }
-                                    if (chunk.size == 1) Spacer(Modifier.weight(1f))
                                 }
-                            }
-
-                            // ── 原生能力（来自 NativeCapCatalog）────────────────────
-                            // 与上面的基础节点分开列：基础是「控制流」（条件/等待/提取），
-                            // 这里是「具体能做什么」。7 + 23 个选项混成一片会看不出层次。
-                            //
-                            // 点选或拖拽生成的节点已带该能力的命令骨架（见 EDITOR_CAP_NODE_CATALOG），
-                            // 用户只需把示例参数改成自己要的，不必记 dsh-native 语法。
-                            Text(
-                                text = stringResource(R.string.dsh_cap_catalog_title),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
-                            )
-                            for ((group, items) in NativeCapCatalog.byGroup()) {
-                                Text(
-                                    text = stringResource(group.titleRes),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 4.dp),
-                                )
-                                for (chunk in items.map { cap ->
-                                    EDITOR_CAP_NODE_CATALOG.first { it.cap == cap }
-                                }.chunked(2)) {
+                                Spacer(Modifier.height(4.dp))
+                            } else {
+                                // ── 二级：该分类下的节点，每行两张 ──
+                                val kinds = cat.kinds()
+                                for (chunk in kinds.chunked(2)) {
                                     Row(
                                         Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -513,12 +611,13 @@ internal fun WorkflowEditorSurface(
                                             val kindLabel = stringResource(kind.labelRes)
                                             SheetNodeCard(
                                                 label = kindLabel,
-                                                subtitle = kind.cap?.argsHint.orEmpty(),
+                                                subtitle = kind.cap?.argsHint.orEmpty().ifBlank { kind.type.id },
                                                 accent = workflowNodeAccent(kind.type),
                                                 modifier = Modifier.weight(1f),
                                                 onTap = {
                                                     addNode(kind, null)
                                                     sheetOpen = false
+                                                    sheetCategory = null
                                                 },
                                                 onDragStart = { windowPos -> ghost = kindLabel to windowPos },
                                                 onDragMove = { windowPos -> ghost = kindLabel to windowPos },
@@ -526,21 +625,22 @@ internal fun WorkflowEditorSurface(
                                                     ghost = null
                                                     val inCanvas = windowPos.x >= canvasOrigin.x &&
                                                         windowPos.x <= canvasOrigin.x + canvasSize.width &&
-                                                        windowPos.y >= canvasOrigin.y &&
+                                                    windowPos.y >= canvasOrigin.y &&
                                                         windowPos.y <= canvasOrigin.y + canvasSize.height
                                                     if (inCanvas) {
                                                         val (xDp, yDp) = dropPointDp(windowPos)
                                                         addNodeAt(kind, xDp, yDp)
                                                     }
                                                     sheetOpen = false
+                                                    sheetCategory = null
                                                 },
                                             )
                                         }
                                         if (chunk.size == 1) Spacer(Modifier.weight(1f))
                                     }
                                 }
+                                Spacer(Modifier.height(4.dp))
                             }
-                            Spacer(Modifier.height(10.dp))
                         }
                     }
                 }

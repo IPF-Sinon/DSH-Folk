@@ -1958,4 +1958,24 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_cap_shell_desc">Run a command via the host channel.</string>
     <string name="dsh_cap_saf_title">File proxy</string>
     <string name="dsh_cap_saf_desc">Proxy file ops for providers.</string>
+
+    <!-- 工作流节点抽屉：一级分类 -->
+    <string name="dsh_wf_cat_exec">Run</string>
+    <string name="dsh_wf_cat_exec_hint">Actions</string>
+    <string name="dsh_wf_cat_control">Flow</string>
+    <string name="dsh_wf_cat_control_hint">Control</string>
+    <string name="dsh_wf_cat_alert">Alert</string>
+    <string name="dsh_wf_cat_alert_hint">Notify</string>
+    <string name="dsh_wf_cat_device">Device</string>
+    <string name="dsh_wf_cat_device_hint">Input</string>
+    <string name="dsh_wf_cat_media">Media</string>
+    <string name="dsh_wf_cat_media_hint">Media</string>
+    <string name="dsh_wf_cat_data">Data</string>
+    <string name="dsh_wf_cat_data_hint">Personal</string>
+    <string name="dsh_wf_cat_sense">Sense</string>
+    <string name="dsh_wf_cat_sense_hint">Sensors</string>
+    <string name="dsh_wf_cat_screen">Screen</string>
+    <string name="dsh_wf_cat_screen_hint">Display</string>
+    <string name="dsh_wf_cat_privilege">Root</string>
+    <string name="dsh_wf_cat_privilege_hint">Privilege</string>
 </resources>

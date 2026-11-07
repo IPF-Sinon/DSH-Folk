@@ -617,7 +617,14 @@ console.log("\u2500 #16j 抽屉的列表不能是滚动容器（否则纵向拖�
   const sheet = sheetStart >= 0 && sheetEnd > sheetStart ? e.slice(sheetStart, sheetEnd) : "";
   ok(sheet.length > 0, "能定位到抽屉这一段");
   ok(!/verticalScroll/.test(sheet), "抽屉里不能有滚动容器（纵向拖动会被它吃掉）");
-  ok(/EDITOR_NODE_CATALOG\.chunked\(2\)/.test(sheet), "抽屉按两列分块（7 个类型 4 行放得下）");
+  // 抽屉改成两级之后，两列分块的对象从「全部基础节点」变成了「当前分类下的节点」。
+  // 断言守的意图没变：**节点必须是每行两张排布**，不能一列到底。
+  ok(/kinds\.chunked\(2\)/.test(sheet), "抽屉二级页按两列分块");
+  // 一级页现在也是两列网格（9 个分类单列会顶破抽屉高度上限）。
+  ok(/in EDITOR_CATEGORIES\.filter \{ it\.kinds\(\)\.isNotEmpty\(\) \}\.chunked\(2\)/.test(sheet),
+    "抽屉一级页按分类两列排布");
+  ok(/if \(chunk\.size == 1\) Spacer\(Modifier\.weight\(1f\)\)/.test(sheet),
+    "抽屉奇数列留空（不把最后一张卡拉满整行）");
   ok(/modifier = Modifier\.weight\(1f\)/.test(sheet), "抽屉条目拿到 Row 的权重（两列等宽）");
 }
 
