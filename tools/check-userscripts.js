@@ -432,8 +432,17 @@ ok(/scriptsInstalled = installScripts\(this, url\)/.test(webui), "安装点存�
 }
 ok(/!scriptsInstalled && isLoopback\(u\)/.test(webui) && /injectScriptsNow\(view, u\)/.test(webui),
   "onPageStarted 的回落只在回环页面上做");
-ok(/val rules = loopbackOriginRules\(url\)[\s\S]{0,200}addDocumentStartJavaScript/.test(webui),
-  "origin 规则：内置与用户脚本都只改我们自己的页面");
+// 约束变了（浏览器模式）：默认仍钉死回环，**只有**浏览器模式下加载外部站点时才用那一页
+// 自己的 origin 规则。两条都要断言 —— 只断言「还有 loopback」会让「外站也用 loopback」
+// 这种退步悄悄通过（脚本在人家页面上静默不注入）。
+ok(/val rules = if \(browserMode && !loopback\)/.test(webui) &&
+  /originRuleFor\(url\)/.test(webui) &&
+  /loopbackOriginRules\(url\)[\s\S]{0,40}else\s*\{/.test(webui) ||
+  /else \{\s*loopbackOriginRules\(url\)/.test(webui),
+  "origin 规则：默认钉死回环；浏览器模式下的外站用该页自己的 origin");
+// 外站**不许**注入内置脚本（它们绑 dsh 自己的 DOM，跑在别人页面上只会报错或改坏人家页面）
+ok(/browserMode && !loopback\) \{[\s\S]{0,400}Userscripts\.injections\(this, url\)/.test(webui),
+  "外站只注入用户脚本，不注入内置脚本");
 
 // ── 内置清单：顺序 / 时机 / 开关映射 / 不受总开关 / 参数通道 ──
 {

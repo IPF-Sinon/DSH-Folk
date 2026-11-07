@@ -112,6 +112,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.A11yOwn
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.dsh.WebScripts
 import me.bmax.apatch.dsh.ext.ExtensionUiRegistry
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
@@ -290,6 +291,10 @@ private fun DshCompatShimDialog(
 class DshWebUiActivity : AppCompatActivity() {
 
     private var webView: WebView? = null
+
+    /** 桥当前是否挂着（回环页挂着、外站摘掉）。初值 true：WebView 创建时就挂上了。 */
+    @Volatile
+    private var bridgesAttached = true
     private var canGoBack = false
 
     /**
@@ -564,7 +569,24 @@ class DshWebUiActivity : AppCompatActivity() {
                                             if (!opened) suppressAutoPip = false
                                             return opened
                                         }
-                                        if (isLoopback(target.toString())) return false
+                                        // 回环页面本来就是我们的，留在 WebView 里
+                                        if (isLoopback(target.toString())) {
+                                            // 从外站返回 dsh：把桥挂回去（进外站时卸掉了，见 setBridgesFor）
+                                            if (DshEnv.browserMode(this@DshWebUiActivity)) {
+                                                setBridgesFor(view, loopback = true)
+                                            }
+                                            return false
+                                        }
+                                        // 浏览器模式：外链留在应用内。
+                                        // **关键安全动作**：进外站前先把 JavascriptInterface 桥摘掉 ——
+                                        // addJavascriptInterface 是挂在 WebView 实例上的、对所有页面可见，
+                                        // 不摘的话任意第三方站点都能调它往磁盘写文件。
+                                        // 用户脚本另有一条按 origin 分档的注入通道（见 installScripts），
+                                        // 外站只注入用户脚本、不注入内置脚本（内置脚本绑的是 dsh 自己的 DOM）。
+                                        if (DshEnv.browserMode(this@DshWebUiActivity)) {
+                                            setBridgesFor(view, loopback = false)
+                                            return false
+                                        }
                                         suppressAutoPip = true
                                         if (!DshWebUi.openExternal(this@DshWebUiActivity, target.toString())) {
                                             // 同上：没有浏览器时不能把旗留着
@@ -1164,7 +1186,20 @@ class DshWebUiActivity : AppCompatActivity() {
      * 的 frame 生效。
      */
     private fun installScripts(view: WebView, url: String): Boolean {
-        val scripts = WebScripts.injections(this, url, currentInsets())
+        // 按 origin 分档（浏览器模式下才可能走到非回环分支）：
+        //  - 回环（dsh 自己）→ 内置脚本 + 用户脚本，origin 规则钉在回环；
+        //  - 外部站点 → **只注入用户脚本**。内置脚本（compat / inset / composer / a11y-labels /
+        //    blob-download）每一项都绑在 dsh 自己的 DOM 结构与后端约定上，跑在别人的页面上
+        //    只会报错、甚至改坏人家页面；它们本来也不该有「在任意站点生效」的能力。
+        val browserMode = DshEnv.browserMode(this)
+        val loopback = isLoopback(url)
+        val scripts = if (browserMode && !loopback) {
+            // Userscripts.injections 本身只按每条的 @match/@include 过滤，不限定回环 ——
+            // 所以外部站点直接复用它即可，不需要另造一个「任意 origin」变体。
+            Userscripts.injections(this, url)
+        } else {
+            WebScripts.injections(this, url, currentInsets())
+        }
         if (scripts.isEmpty()) return true // 没什么要注入的：不用在 onPageStarted 里反复补
         val supported = runCatching {
             WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
@@ -1173,7 +1208,12 @@ class DshWebUiActivity : AppCompatActivity() {
             Log.i(TAG, "document-start script unsupported, scripts fall back to onPageStarted")
             return false
         }
-        val rules = loopbackOriginRules(url)
+        // 外站要的是「这一页」的规则，不是回环那三条 —— 否则脚本在外部网页上静默不注入。
+        val rules = if (browserMode && !loopback) {
+            originRuleFor(url)
+        } else {
+            loopbackOriginRules(url)
+        }
         return runCatching {
             scripts.forEach { WebViewCompat.addDocumentStartJavaScript(view, it, rules) }
             Log.i(TAG, "scripts injected at document-start: " + scripts.size)
@@ -1660,4 +1700,62 @@ private fun ExtensionWebUiOverlay() {
         }
     }
 }
+
+
+    /**
+     * 按当前页面的 origin 挂上或摘掉 JavascriptInterface 桥。
+     *
+     * ## 为什么必须动态管理
+     * `addJavascriptInterface` 是**挂在 WebView 实例上**的，一旦挂上，之后加载的所有页面
+     * 都能通过 `window.<名字>` 调到它 —— 它没有 origin 隔离。浏览器模式让 WebView 有机会
+     * 加载任意第三方站点，所以在进入非回环页面之前必须把它们摘掉，否则那个站点就能直接
+     * 调 `DshFolkDownload` 往磁盘写文件。
+     *
+     * 摘掉用 `removeJavascriptInterface`（API 11+），名字与挂上时一致。
+     *
+     * ## 为什么回到 dsh 时要挂回
+     * 进外站时摘掉是必须的，但摘掉之后如果不挂回，用户从外站导航回 dsh 首页时下载桥就没了 ——
+     * 「进过一次外站，dsh 的 blob 下载从此失效」是很难查的 bug。所以两个方向都要处理。
+     */
+    private fun setBridgesFor(view: WebView?, loopback: Boolean) {
+        val v = view ?: return
+        // 记录当前状态，避免同向重复调用（shouldOverrideUrlLoading 会被频繁触发）
+        if (bridgesAttached == loopback) return
+        runCatching {
+            if (loopback) {
+                v.addJavascriptInterface(BlobBridge(), BLOB_BRIDGE)
+                v.addJavascriptInterface(UserscriptBridge(), USERSCRIPT_BRIDGE)
+            } else {
+                v.removeJavascriptInterface(BLOB_BRIDGE)
+                v.removeJavascriptInterface(USERSCRIPT_BRIDGE)
+            }
+            bridgesAttached = loopback
+            Log.i(TAG, "bridges " + (if (loopback) "attached" else "removed") + " for origin switch")
+        }.onFailure {
+            // 摘桥失败比挂桥失败严重得多：留着一个可被第三方站点调用的写文件接口。
+            // 所以失败时按「已摘掉」记账并打警告 —— 下次进回环会重新挂上。
+            Log.w(TAG, "bridge toggle failed", it)
+            bridgesAttached = false
+        }
+    }
+
+
+    /**
+     * 外部站点的 document-start 注入规则：**这一页自己的 origin**。
+     *
+     * 与 [loopbackOriginRules] 的区别：后者把范围钉死在本机 dsh（内置脚本只该在那里跑）；
+     * 这里要的是具体某个站点的 scheme://host[:port]。
+     *
+     * 端口规则与 WebView 的 origin 规则一致：不写端口就默认 80/443，所以
+     * 只有当 URL 显式带端口时才拼上，否则会把 http://example.com:8080 这类页面挡在外面。
+     */
+    private fun originRuleFor(url: String): Set<String> {
+        val parsed = runCatching { Uri.parse(url) }.getOrNull() ?: return emptySet()
+        val scheme = parsed.scheme?.lowercase() ?: return emptySet()
+        val host = parsed.host ?: return emptySet()
+        val port = parsed.port.takeIf { it in 1..65535 }
+        // IPv6 字面量要方括号（WebView origin 规则的格式要求）
+        val hostPart = if (host.contains(':')) "[$host]" else host
+        return setOf(if (port != null) "$scheme://$hostPart:$port" else "$scheme://$hostPart")
+    }
 

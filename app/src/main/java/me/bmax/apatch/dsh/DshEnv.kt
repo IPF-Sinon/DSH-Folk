@@ -433,6 +433,26 @@ object DshEnv {
     }
 
     /**
+     * 浏览器模式：外链在应用内打开，而不是踢给系统浏览器（默认**关**）。
+     *
+     * 为什么默认关：它改变了 WebView 的安全边界 —— 从「永远只面对本机 dsh」变成
+     * 「会面对任意站点」。开与不开各有一个明确代价，该由用户自己选：
+     *  - 关：外链去系统浏览器，App 内的桥永远只面向回环地址（最安全）；
+     *  - 开：外链留在应用内，可以叠悬浮导航栏、让用户脚本在外部网页上也生效 ——
+     *    代价是 WebView 会加载第三方页面，所以进外站时必须卸掉 JavascriptInterface 桥
+     *    （见 DshWebUiActivity 里 setBridgesFor 的实现）。
+     */
+    const val KEY_BROWSER_MODE = "webui_browser_mode"
+
+    fun browserMode(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_BROWSER_MODE, false)
+
+    fun setBrowserMode(ctx: Context, on: Boolean) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_BROWSER_MODE, on).apply()
+    }
+
+    /**
      * 手机回车换行：把 WebUI 输入框里的裸回车从「发送」改成「换行」（默认开）。
      *
      * 上游把 Enter/Shift+Enter 注册成**只读**快捷键（发送 / 换行），而手机软键盘没有

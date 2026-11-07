@@ -658,9 +658,14 @@ console.log("\n── 沉浸内边距脚本：在假 DOM 里真跑 ──");
     const i = webui.indexOf("private fun installScripts(");
     const j = webui.indexOf("private fun ", i + 10);
     const body = j > i ? webui.slice(i, j) : webui.slice(i);
-    ok(/val rules = loopbackOriginRules\(url\)/.test(body) &&
+    // 浏览器模式下外站要用该页自己的 origin，所以改判「默认分支仍是 loopback、且外站分支存在」，
+    // 并额外要求外站不注入内置脚本（无障碍垫片就在内置那批里）。
+    ok(/val rules = if \(browserMode && !loopback\)/.test(body) &&
+      /loopbackOriginRules\(url\)/.test(body) &&
       /addDocumentStartJavaScript\(view, it, rules\)/.test(body),
-      "只改我们自己页面的无障碍语义（rules 来自 loopback，别处也叫这个名字）");
+      "默认仍钉死回环（无障碍垫片等内置脚本只改我们自己的页面）；浏览器模式下按 origin 分档");
+    ok(/browserMode && !loopback\) \{[\s\S]{0,400}Userscripts\.injections\(this, url\)/.test(body),
+      "外站不注入内置脚本（无障碍/inset/compat 都绑 dsh 自己的 DOM）");
   }
 }
 
