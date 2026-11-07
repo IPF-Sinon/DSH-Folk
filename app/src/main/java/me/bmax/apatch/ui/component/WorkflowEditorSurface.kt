@@ -372,6 +372,15 @@ internal fun WorkflowEditorSurface(
     }
 
     /**
+     * 动作的默认节点名（当前语言的动作标题）。取不到就退回动作 id。
+     *
+     * 必须写在 [withActionDefaults] **之前**：Kotlin 的局部函数只认声明点之前的名字，
+     * 反过来写是 Unresolved reference（不是警告，是编译错误）。
+     */
+    fun defaultNodeName(action: WorkflowActionCatalog.Action?): String =
+        action?.let { runCatching { appStringRaw(it.titleRes) }.getOrDefault(it.id) } ?: ""
+
+    /**
      * 动作卡建出来的节点：补上 `name`（卡片标题）与目录给的默认参数。
      *
      * 名字必须落进 `config["name"]` 而不是只写 node.name —— 参数编辑器改的是 config，
@@ -379,10 +388,6 @@ internal fun WorkflowEditorSurface(
      */
     fun withActionDefaults(kind: EditorNodeKind, action: WorkflowActionCatalog.Action): Map<String, String> =
         kind.defaults + ("name" to defaultNodeName(action))
-
-    /** 动作的默认节点名（当前语言的动作标题）。取不到就退回动作 id。 */
-    fun defaultNodeName(action: WorkflowActionCatalog.Action?): String =
-        action?.let { runCatching { appStringRaw(it.titleRes) }.getOrDefault(it.id) } ?: ""
 
     /**
      * 在指定 dp 位置新建节点（落点 = 松手位置，已吸附 12dp 网格）。
