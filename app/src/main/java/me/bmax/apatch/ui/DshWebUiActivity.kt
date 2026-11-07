@@ -43,6 +43,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -818,7 +819,17 @@ class DshWebUiActivity : AppCompatActivity() {
                     // 悬浮球在画中画里**也留着**：那是小窗里唯一的出口 —— 点画中画按钮 =
                     // 切回全屏（见 [enterPip]）。以前这里按 inPip 把它藏起来，用户在小窗里
                     // 就再也点不到这个按钮，只剩系统那几个手势可用（用户报的正是这个）。
+                    // 浏览器导航栏的显隐状态：由悬浮球**长按**切换（Via 式）。
+                    // 只有开关打开时才可能显示 —— 关着时外链根本进不来，这条栏没有意义。
+                    var browserBarVisible by remember { mutableStateOf(false) }
+
                     WebUiFloatingBall(
+                        // 长按切换导航栏。短按保持原来的环绕菜单不变。
+                        onToggleBrowserBar = {
+                            if (DshEnv.browserMode(this@DshWebUiActivity)) {
+                                browserBarVisible = !browserBarVisible
+                            }
+                        },
                         // 「退出」不再单给一个 ✕：下面这个返回键在页面退无可退时本来就会
                         // 退出 Activity（见 addCallback 那段），✕ 是同一个逻辑的第二个入口。
                         onBack = { onBackPressedDispatcher.onBackPressed() },
@@ -835,6 +846,31 @@ class DshWebUiActivity : AppCompatActivity() {
                         // 已经在画中画里时 enterPip 走的是「切回全屏」，不会走到这里弹引导。
                         onEnterPip = { if (!enterPip()) showPipGuide.value = true },
                     )
+
+                    // Via 式导航栏：长按悬浮球唤出，再长按收起。
+                    if (DshEnv.browserMode(this@DshWebUiActivity)) {
+                        WebUiBrowserBar(
+                            visible = browserBarVisible,
+                            currentUrl = webView?.url ?: url,
+                            canGoBack = webView?.canGoBack() == true,
+                            canGoForward = webView?.canGoForward() == true,
+                            onBack = { webView?.goBack() },
+                            onForward = { webView?.goForward() },
+                            onReload = { webView?.reload() },
+                            // 回 dsh 首页：这是浏览器模式下唯一的「回来」按钮。
+                            // 直接 loadUrl 而不是 goBack —— 用户可能已经漂了十几页，
+                            // 一层层退还可能被站点自己的 pushState 卡住。
+                            onGoHome = {
+                                webView?.loadUrl(DshRuntime.webUrl())
+                                browserBarVisible = false
+                            },
+                            onExitBrowserMode = {
+                                DshEnv.setBrowserMode(this@DshWebUiActivity, false)
+                                browserBarVisible = false
+                                webView?.loadUrl(DshRuntime.webUrl())
+                            },
+                        )
+                    }
 
                     if (showPipGuide.value) {
                         PipGuideDialog(
@@ -1394,6 +1430,8 @@ private fun WebUiFloatingBall(
     onOpenExternal: () -> Unit,
     onEnterPip: () -> Unit,
     showPip: Boolean = true,
+    /** 长按球：显示 / 隐藏浏览器导航栏（浏览器模式下的 Via 式交互）。 */
+    onToggleBrowserBar: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember {
@@ -1543,6 +1581,15 @@ private fun WebUiFloatingBall(
                 modifier = Modifier
                     .offset(x = x, y = y)
                     .size(BALL_SIZE)
+                    // 长按 = 切换浏览器导航栏；短按 = 原来的环绕菜单。
+                    // 两条手势放在**不同**的 pointerInput 里是安全的：detectTapGestures 遇到拖动
+                    // 会放弃识别，detectDragGestures 只在位移超过阈值才接管，两者不会同时触发。
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onLongPress = { onToggleBrowserBar() },
+                            onTap = { expanded = !expanded },
+                        )
+                    }
                     .pointerInput(maxW, maxH, yMin, yMax) {
                         detectDragGestures(
                             onDragStart = {
@@ -1577,7 +1624,9 @@ private fun WebUiFloatingBall(
                         }
                     },
             ) {
-                IconButton(onClick = { expanded = !expanded }) {
+                // onClick 置空：短按已由上面的 detectTapGestures 处理。
+                // 两处都留会一次点击切换两次（展开又立刻收起）。
+                IconButton(onClick = {}) {
                     Image(
                         painter = painterResource(LauncherIconUtils.currentIconForeground()),
                         contentDescription = stringResource(R.string.dsh_webui_ball),
