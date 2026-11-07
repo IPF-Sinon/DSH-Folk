@@ -114,13 +114,9 @@ internal fun WorkflowBlueprintCanvas(
                         .pointerInput(UNIT_VIEWPORT_GESTURE_KEY) {
                             // 空白处（卡片没有消费事件时才会到这里）拖 = 平移、双指 = 缩放。
                             // 与点击助手一致：范围 0.2–2.0，超出即夹住，不报错也不回弹。
-                            detectTransformGestures { _, panChange, zoomChange, _ ->
-                                val next = WorkflowViewport(
-                                    pan = pan + panChange,
-                                    scale = (scale * zoomChange)
-                                        .coerceIn(WorkflowViewport.MIN_SCALE, WorkflowViewport.MAX_SCALE),
-                                )
-                                viewportCb.value?.invoke(next)
+                            detectTransformGestures { centroid, panChange, zoomChange, _ ->
+                                // 围绕手势中心缩放，并叠上这帧的平移 —— 否则手指按住的那个点会跑。
+                                viewportCb.value?.invoke(zoomAround(centroid, zoomChange, panChange))
                             }
                         }
                         .pointerInput(Unit) {

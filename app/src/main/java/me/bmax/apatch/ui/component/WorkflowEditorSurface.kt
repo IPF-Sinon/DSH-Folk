@@ -46,7 +46,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.compose.LifecyclePauseEffect
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -329,9 +329,13 @@ internal fun WorkflowEditorSurface(
     }
 
     // 离开页面/切到后台时立刻 flush：防抖窗口里点返回，用户看到的"已保存"不能是假的。
-    LifecyclePauseEffect(Unit) {
-        if (autosave != null && def != savedDef) persistNow(def)
-        onPauseOrDispose { }
+    //
+    // 用 LifecycleStartEffect 的 onStopOrDispose：它同时覆盖「切到后台」与「这一页被销毁」，
+    // 比只在返回按钮上做一次保险得多（用户也可能直接锁屏或从最近任务划走）。
+    LifecycleStartEffect(Unit) {
+        onStopOrDispose {
+            if (autosave != null && def != savedDef) persistNow(def)
+        }
     }
 
     // 系统返回与「取消」同一条路：先问要不要放弃改动。

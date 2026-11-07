@@ -56,11 +56,32 @@ internal data class WorkflowViewport(
         )
     }
 
-    /** 拖动位移（屏幕像素）→ 世界 dp 增量。缩放后手指走 100px，节点只该走 100/(scale·density) dp。 */
+    /**
+     * 拖动位移（**内容层局部像素**）→ 世界 dp 增量。
+     *
+     * 这里**不除缩放**，原因是 Compose 的命中测试会先过 `graphicsLayer`：内容层带着
+     * scale/translation 时，子节点收到的指针坐标与拖动增量**已经**是反变换后的局部值
+     * （缩到 2 倍时点 (200,200) 得到的是 (100,100)）。再除一次 scale，缩放后拖动就会
+     * 只有一半跟手。真正需要逆变换的是**窗口坐标**（拉线落点、针脚矩形），见 [toWorldDp]。
+     */
     fun dragDeltaDp(dxPx: Float, dyPx: Float, density: Float): Offset {
         val safeDensity = if (density > 0f) density else 1f
-        val safeScale = if (scale > 0f) scale else 1f
-        return Offset(dxPx / safeScale / safeDensity, dyPx / safeScale / safeDensity)
+        return Offset(dxPx / safeDensity, dyPx / safeDensity)
+    }
+
+    /**
+     * 以 [centroid]（内容层局部像素）为中心缩放后的新 pan。
+     *
+     * 只改 scale 会把画面朝左上角「抽」，手指按住的那个点在缩放过程中会跑掉。围绕手势中心
+     * 缩放的判据是：那个点缩放前后都贴在手指下面 —— 解出来就是下面这个式子。
+     */
+    fun zoomAround(centroid: Offset, zoomChange: Float, panChange: Offset): WorkflowViewport {
+        val nextScale = (scale * zoomChange).coerceIn(MIN_SCALE, MAX_SCALE)
+        val ratio = if (scale > 0f) nextScale / scale else 1f
+        return WorkflowViewport(
+            pan = (pan - centroid) * ratio + centroid + panChange,
+            scale = nextScale,
+        )
     }
 
     companion object {
