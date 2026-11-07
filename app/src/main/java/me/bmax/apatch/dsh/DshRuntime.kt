@@ -2895,6 +2895,23 @@ object DshRuntime : DshRuntimeHost {
                         )
                     }.getOrNull().orEmpty().trim()
                     appendLog("[wait] 计数：" + probe.ifEmpty { "(探测失败)" })
+
+                    // 决定性探针：**单独**用当前运行时跑一条最简命令。
+                    //
+                    // 为什么要这一步：真机上 proroot 是「进程活着、90 秒端口不监听、node 从未出现」，
+                    // 但这有两种完全不同的可能，修法也完全不同：
+                    //   (a) proroot 自己起不来（连 echo 都跑不动）→ 换/降级运行时；
+                    //   (b) proroot 能跑，只是 dsh 加载慢到超过 90 秒 → 抬超时或预热。
+                    // 跑一条 echo 就能一次性分开这两者，比继续猜快得多。
+                    val smoke = runCatching {
+                        execRootfsForOutput("echo SMOKE_OK", 20_000L)
+                    }
+                    appendLog(
+                        "[wait] 冒烟（当前运行时跑 echo）：" +
+                            (smoke.getOrNull()?.trim()?.ifEmpty { "(空输出)" }
+                                ?: ("失败：" + (smoke.exceptionOrNull()?.message ?: "未知"))) +
+                            " · 耗时取不到（看这一行有没有出现即可）",
+                    )
                 }
             }
             if (isPortInUse(port()) && httpResponds(port())) {

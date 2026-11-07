@@ -825,9 +825,17 @@ class DshWebUiActivity : AppCompatActivity() {
 
                     WebUiFloatingBall(
                         // 长按切换导航栏。短按保持原来的环绕菜单不变。
+                        // 长按**总要给反馈**：以前只在浏览器模式开启时才切换导航栏，
+                        // 关着的时候长按就是静默无反应 —— 用户完全看不出「为什么按了没动静」
+                        // （真机报的正是这个）。现在关着时提示去设置里打开。
                         onToggleBrowserBar = {
                             if (DshEnv.browserMode(this@DshWebUiActivity)) {
                                 browserBarVisible = !browserBarVisible
+                            } else {
+                                showToast(
+                                    this@DshWebUiActivity,
+                                    getString(R.string.dsh_webui_browser_mode_off_hint),
+                                )
                             }
                         },
                         // 「退出」不再单给一个 ✕：下面这个返回键在页面退无可退时本来就会

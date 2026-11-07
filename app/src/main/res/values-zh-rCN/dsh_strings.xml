@@ -1873,5 +1873,6 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_webui_browser_mode">浏览器模式</string>
     <string name="dsh_webui_browser_mode_summary">让网页留在应用内打开，可叠一条导航栏；用户脚本在外部网页上也生效。</string>
     <string name="dsh_webui_browser_mode_switch">在应用内打开外部链接</string>
+    <string name="dsh_webui_browser_mode_off_hint">浏览器模式未开启：请到「设置 → 功能 → 浏览器模式」打开</string>
     <string name="dsh_webui_browser_mode_switch_summary">关闭时外部链接交给系统浏览器（默认，最安全）。开启后 App 会访问第三方网站，宿主会在进入外部站点前卸掉与网页通信的桥。</string>
 </resources>
