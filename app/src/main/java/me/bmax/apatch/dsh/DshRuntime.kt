@@ -2834,12 +2834,26 @@ object DshRuntime : DshRuntimeHost {
             if (nowBeat - lastBeat >= READY_HEARTBEAT_MS) {
                 lastBeat = nowBeat
                 val p = serverProcess
+                val waitedSec = (nowBeat - (deadline - READY_TIMEOUT_MS)) / 1000
                 appendLog(
                     "[wait] 运行中=" + (p?.isAlive == true) +
                         (if (p != null) " pid=" + runCatching { p.pid() }.getOrNull() else "") +
                         " · 端口=" + port() + " 已监听=" + isPortInUse(port()) +
-                        " · 已等=" + ((nowBeat - (deadline - READY_TIMEOUT_MS)) / 1000) + "s"
+                        " · 已等=" + waitedSec + "s"
                 )
+                // 第二次心跳（30s）之后还无所获，就主动去容器里看进程树。
+                // 为什么需要：proroot 卡住时日志里只有「等待」，看不出它到底走到哪一步 ——
+                // 是 loader 还没起来、还是 node 起来了但插件树卡住。这两者的修法完全不同。
+                // 只在 30s 后探一次，避免给每次正常启动都加一次容器调用。
+                if (waitedSec >= 30 && waitedSec < 45) {
+                    val tree = runCatching {
+                        execRootfsForOutput(
+                            "ps -eo pid,comm 2>/dev/null | grep -E 'node|proroot|proot|dsh' | head -20",
+                            10_000L,
+                        )
+                    }.getOrNull().orEmpty().trim()
+                    appendLog("[wait] 容器内相关进程：" + (tree.ifEmpty { "(无)" }))
+                }
             }
             if (isPortInUse(port()) && httpResponds(port())) {
                 awaitWebToken()
