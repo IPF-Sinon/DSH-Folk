@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
@@ -120,14 +121,20 @@ private fun capKindsOf(group: NativeCapCatalog.Group): List<EditorNodeKind> =
  * 为什么二级对基础节点也给一个分类：面板版式是「一级 chip + 二级 chip + 列表」，
  * 若某个一级分组只有一个二级分组，用户会看到一排只有一个按钮的空壳 —— 观感很差。
  */
-// 必须是 @Composable：workflowNodeAccent 取的是主题色，只有 Composable 上下文能读。
-@Composable
+// 这里**刻意不用 @Composable**，也不用 workflowNodeAccent。
+//
+// 教训：数据构建一旦依赖主题色，排队等着的是连锁的 @Composable 传染 ——
+// 外层函数要标、内层局部函数要标、包它的 remember 又不算 Composable 上下文。
+// 三处报错修完还会因为新加的局部函数再次红。
+//
+// 色点只是列表里 8dp 的辅助标记，不需要跟随主题语义色。
+// 用固定色即可：构建纯数据、可在任何上下文调用，也不会再被 remember 包坏。
 private fun editorPickerGroups(): List<NodePickerGroup> {
     fun entry(key: String, kind: EditorNodeKind): NodePickerEntry = NodePickerEntry(
         key = key,
         titleRes = kind.labelRes,
         descRes = 0,
-        accent = workflowNodeAccent(kind.type),
+        accent = editorPickerAccent(kind.type),
         // 搜索文本用资源名而不是 stringResource：构建分组不该再读一次当前语言，
         // 面板会用它自己的 locale 匹配。这里给的是稳定的、可搜的英文/中文键名。
         searchText = appStringRaw(kind.labelRes),
@@ -167,6 +174,19 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
     )
 }
 
+/**
+ * 列表色点用的固定色。
+ *
+ * 与 workflowNodeAccent 的区别：那个读主题角色色（@Composable）；
+ * 这个是一组常量，供数据构建用。两者视觉接近，但这里必须能脱离 Composable 上下文调用。
+ */
+private fun editorPickerAccent(type: WorkflowNodeType): Color = when (type) {
+    WorkflowNodeType.TRIGGER -> Color(0xFF7E57C2)
+    WorkflowNodeType.EXECUTE -> Color(0xFF3F7DE0)
+    WorkflowNodeType.CONDITION, WorkflowNodeType.LOGIC -> Color(0xFF2E9E6B)
+    WorkflowNodeType.EXTRACT -> Color(0xFF5C6BC0)
+    WorkflowNodeType.WAIT -> Color(0xFFE08A2E)
+}
 /** 取字符串资源在当前语言的文本（搜索用）。 */
 private fun appStringRaw(resId: Int): String = me.bmax.apatch.apApp.resources.getString(resId)
 
