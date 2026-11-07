@@ -242,7 +242,7 @@ internal object WorkflowBridge {
             workflowName = submitted.name,
             originalJson = submitted.toJson().toString(),
             summary = summary,
-            declaredCaps = submitted.declaredCaps,
+            declaredCaps = submitted.effectiveCaps,
             dangerous = dangerous,
             reason = reason,
             nodeCount = submitted.nodes.size,
@@ -311,10 +311,10 @@ internal object WorkflowBridge {
         // 于是「声明了桌面/无障碍能力、系统权限却没给」也能起来 —— 两条路行为不一致（外部审计 P1-2a）。
         // 缺哪几项由界面现算（[WorkflowPermissions.missing]），这里只负责弹窗 + 等结论。
         if (kind == WorkflowApprovals.Kind.RUN) {
-            if (WorkflowPermissions.missing(ctx, effective.declaredCaps).isNotEmpty()) {
+            if (WorkflowPermissions.missing(ctx, effective.effectiveCaps).isNotEmpty()) {
                 val gate = WorkflowPermissions.Gate.submit(
                     workflowName = effective.name,
-                    caps = effective.declaredCaps,
+                    caps = effective.effectiveCaps,
                     reason = effective.name,
                 ) ?: return 409 to err(str(ctx, R.string.dsh_workflow_err_busy), "approval_pending")
                 if (WorkflowPermissions.Gate.awaitDecision(gate.id) !=
@@ -398,9 +398,10 @@ internal object WorkflowBridge {
     /** 批准弹窗给用户看的那几行：他判断的不是「JSON 合不合法」，而是「它要做什么」。 */
     private fun summaryOf(ctx: Context, def: WorkflowDefinition, dangerous: Boolean): String = buildString {
         append(str(ctx, R.string.dsh_workflow_summary_nodes, def.nodes.size, def.edges.size))
-        if (def.declaredCaps.isNotEmpty()) {
+        val caps = def.effectiveCaps
+        if (caps.isNotEmpty()) {
             append("\n")
-            append(str(ctx, R.string.dsh_workflow_summary_caps, def.declaredCaps.joinToString("、")))
+            append(str(ctx, R.string.dsh_workflow_summary_caps, caps.joinToString("、")))
         }
         if (dangerous) {
             append("\n")

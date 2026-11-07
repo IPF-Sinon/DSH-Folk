@@ -132,7 +132,18 @@ internal enum class WorkflowActionType(val id: String) {
     DSH("dsh"),
 
     /** 发一条通知（长流程跑完/需要人时用；文案支持 `${var}`）。 */
-    NOTIFY("notify");
+    NOTIFY("notify"),
+
+    /**
+     * 调一个**原生能力端点**（见 [WorkflowActionCatalog]）。
+     *
+     * 为什么单列一类而不是让用户写 `dsh-native ...` 的 shell：shell 那条路只到得了容器里，
+     * 端点却要经过宿主桥（`DshNativeBridge.handle`）才有权限与能力门禁。写成 shell 的话，
+     * 用户以为拿到了能力、实际要么没权限、要么失败原因埋在几十行日志后面。
+     *
+     * config：`bridge` = 动作 id；`p_<参数名>` = 该动作的参数（见 catalog 的 Param）。
+     */
+    NATIVE("native");
 
     companion object {
         fun of(id: String?): WorkflowActionType? = entries.firstOrNull { it.id == id }
@@ -263,6 +274,21 @@ internal data class WorkflowEdge(
     val to: String,
     val whenExpr: String = "",
 )
+
+/**
+ * 这份定义**实际会用到的能力**。
+ *
+ * `declaredCaps` 是手工声明的那一份；NATIVE 节点还得按动作目录把 Cap 算进来 ——
+ * 否则会出现最糟的组合：界面上明明摆着「点一下屏幕」，批准弹窗却没列无障碍，
+ * 运行到那一步被门禁拦下（或者更糟：用户以为自己批准过这一项）。
+ *
+ * 两者取并集而不是只认目录：手工声明的能力还覆盖 shell / dsh 节点里直接调端点的写法。
+ */
+internal val WorkflowDefinition.effectiveCaps: List<String>
+    get() = (
+        declaredCaps +
+            nodes.mapNotNull { n -> WorkflowActionCatalog.byId(n.config("bridge"))?.cap?.id }
+        ).distinct()
 
 /** 运行级变量：`extract` 节点写入，命令/通知文案里用 `${name}` 读。 */
 internal data class WorkflowDefinition(

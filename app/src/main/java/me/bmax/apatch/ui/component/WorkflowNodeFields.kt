@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.WorkflowActionCatalog
 import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
@@ -87,6 +88,31 @@ internal object WorkflowNodeFields {
                 add(bool("autostartDsh", R.string.dsh_wf_field_autostart_dsh))
             }
             WorkflowNodeType.EXECUTE -> when (node.actionType) {
+                // 原生动作：**参数字段完全来自动作目录**，界面不认识任何具体键名。
+                // 目录里的 required/choices 直接决定这里出现哪些控件 —— 于是"卡片点了、
+                // 参数却没处填"这种缺口不可能再出现。
+                WorkflowActionType.NATIVE -> {
+                    val spec = WorkflowActionCatalog.byId(node.config("bridge"))
+                    if (spec == null) {
+                        add(text("bridge", R.string.dsh_wf_field_bridge))
+                    } else {
+                        for (p in spec.params) {
+                            add(
+                                Field(
+                                    key = spec.configKey(p),
+                                    labelRes = p.labelRes,
+                                    kind = when (p.kind) {
+                                        WorkflowActionCatalog.ParamKind.NUMBER -> Kind.NUMBER
+                                        WorkflowActionCatalog.ParamKind.CHOICE -> Kind.CHOICE
+                                        WorkflowActionCatalog.ParamKind.BOOL -> Kind.BOOL
+                                        WorkflowActionCatalog.ParamKind.TEXT -> Kind.TEXT
+                                    },
+                                    choices = p.choices,
+                                ),
+                            )
+                        }
+                    }
+                }
                 WorkflowActionType.NOTIFY -> {
                     add(text("title", R.string.dsh_wf_field_notify_title))
                     add(multiline("text", R.string.dsh_wf_field_notify_text))
@@ -249,7 +275,7 @@ internal fun dataInputKeys(node: WorkflowNode): List<String> =
         .filter { key ->
             // 只有真正落进 config 的键才算数据入口；name/description/onError/timeoutMs 是
             // 节点自身的元数据，不是"上游可以喂一个值进来"的参数。
-            key !in setOf("name", "description", "onError", "timeoutMs")
+            key !in setOf("name", "description", "onError", "timeoutMs", "bridge", "action")
         }
 
 /** 造一个带正确默认值的空节点（目录点选后直接用）。 */
@@ -257,6 +283,7 @@ internal fun defaultConfigFor(type: WorkflowNodeType, action: WorkflowActionType
     when (type) {
         WorkflowNodeType.TRIGGER -> mapOf("requireDsh" to "0", "autostartDsh" to "1")
         WorkflowNodeType.EXECUTE -> when (action) {
+            WorkflowActionType.NATIVE -> mapOf("action" to "native")
             WorkflowActionType.NOTIFY -> mapOf("action" to "notify", "title" to "", "text" to "")
             WorkflowActionType.DSH -> mapOf("action" to "dsh", "cmd" to "dsh --version")
             else -> mapOf("action" to "shell", "cmd" to "echo hello")

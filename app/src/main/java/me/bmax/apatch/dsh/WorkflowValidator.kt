@@ -155,7 +155,10 @@ internal object WorkflowValidator {
         }
 
         // ── 能力声明 ──
-        for (cap in def.declaredCaps) {
+        //
+        // 查的是**实际会用到的**能力（手工声明 + 动作目录推出来的），不是只查手工那一份：
+        // 只查前者的话，一个只用界面上那些卡片的流程可以一项都不声明，而它明明要用无障碍。
+        for (cap in def.effectiveCaps) {
             if (cap !in allowedCaps) errors += "声明的能力不认识或不可用：$cap"
         }
 
@@ -190,6 +193,33 @@ internal object WorkflowValidator {
                 if (action == null) {
                     out += "节点 ${n.id} 的 action 不是 shell / dsh / notify（收到「${n.config("action")}」）"
                 } else when (action) {
+                    WorkflowActionType.NATIVE -> {
+                        // 动作必须**在目录里**：bridge 是执行期唯一的入口，写错了就是运行时
+                        // 才发现「这个节点什么都不做」。必填参数同样在这里点出来 ——
+                        // 等到运行时才报 400，用户看到的是日志里一行 http_400。
+                        val spec = WorkflowActionCatalog.byId(n.config("bridge"))
+                        if (spec == null) {
+                            out += "节点 ${n.id} 的 bridge 动作不存在：${n.config("bridge")}"
+                        } else {
+                            for (p in spec.params) {
+                                val v = n.config(spec.configKey(p))
+                                if (p.required && v.isBlank()) {
+                                    out += "节点 ${n.id} 缺少动作「${spec.id}」的参数 ${p.key}"
+                                }
+                                if (p.kind == WorkflowActionCatalog.ParamKind.CHOICE &&
+                                    v.isNotBlank() && p.choices.isNotEmpty() && v !in p.choices
+                                ) {
+                                    out += "节点 ${n.id} 的参数 ${p.key} 只能是 ${p.choices.joinToString(" / ")}"
+                                }
+                                if (p.kind == WorkflowActionCatalog.ParamKind.NUMBER && v.isNotBlank() &&
+                                    v.toLongOrNull() == null
+                                ) {
+                                    out += "节点 ${n.id} 的参数 ${p.key} 不是数字：$v"
+                                }
+                            }
+                        }
+                    }
+
                     WorkflowActionType.SHELL, WorkflowActionType.DSH -> {
                         need("cmd")
                         bounded("cmd", WorkflowSchema.MAX_CMD_CHARS)

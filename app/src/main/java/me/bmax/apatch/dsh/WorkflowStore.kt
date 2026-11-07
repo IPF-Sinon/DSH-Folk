@@ -188,7 +188,7 @@ internal object WorkflowStore {
         .put("revision", def.revision)
         .put("nodeCount", def.nodes.size)
         .put("edgeCount", def.edges.size)
-        .put("declaredCaps", JSONArray(def.declaredCaps))
+        .put("declaredCaps", JSONArray(def.effectiveCaps))
         .put("declaresDangerous", def.declaresDangerous)
         .put("updatedAtMs", def.updatedAtMs)
 }

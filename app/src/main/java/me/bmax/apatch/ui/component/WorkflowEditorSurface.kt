@@ -65,7 +65,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshNativeBridge
-import me.bmax.apatch.dsh.NativeCapCatalog
+import me.bmax.apatch.dsh.WorkflowActionCatalog
 import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.WorkflowDefinition
 import me.bmax.apatch.dsh.WorkflowEdge
@@ -90,13 +90,13 @@ private data class EditorNodeKind(
     val labelRes: Int,
     val defaults: Map<String, String>,
     /**
-     * 这个节点来自「原生能力目录」的哪一项（非空时它带命令骨架，见 [NativeCapCatalog]）。
+     * 这个节点来自「动作目录」的哪一条（非空 = 建出来就是一个 NATIVE 节点）。
      *
-     * 为什么要在节点类型里带上它：抽屉里既要显示能力名（「通知」「剪贴板」…），
-     * 又要让新建出来的节点**直接带上该能力的命令**，而不是先建一个空 shell 节点再手抄命令。
-     * 存 CapItem 而不是把它拆成几个字段，是为了「点选 → 生成」之间不丢参数提示。
+     * 与 [cap] 并存是过渡期的结果：文案目录那批卡片建的是 shell 骨架，动作目录这批建的是
+     * 真正的桥调用。两套只在**选择面板**里合并展示，落盘的节点完全不同（前者 config 里有
+     * cmd、后者有 bridge + p_*），所以不能压成一个字段。
      */
-    val cap: NativeCapCatalog.CapItem? = null,
+    val bridge: WorkflowActionCatalog.Action? = null,
 )
 
 private val EDITOR_NODE_CATALOG = listOf(
@@ -110,7 +110,7 @@ private val EDITOR_NODE_CATALOG = listOf(
 )
 
 /**
- * 节点目录：基础节点单独一组，原生能力由 [NativeCapCatalog] 提供。
+ * 节点目录：基础节点一组，原生能力由 [WorkflowActionCatalog] 提供。
  *
  * ## 为什么基础节点与原生能力分开存
  * 基础节点是「控制流/执行」的固定几项，原生能力是「具体能做什么」的二十多项。
@@ -121,12 +121,12 @@ private val EDITOR_NODE_CATALOG = listOf(
  * 还是「让它等一下」。所以「执行」与「控制流」分开，前者是"做什么"，
  * 后者是"什么时候做、做几次"。
  */
-/** 取某个能力分组对应的编辑器节点（目录里没有的跳过，不让它出现在 UI 上）。 */
-private fun capKindsOf(group: NativeCapCatalog.Group): List<EditorNodeKind> =
-    NativeCapCatalog.byGroup()
-        .firstOrNull { it.first == group }
+/** 取某一级分组（按标题资源）对应的动作节点。 */
+private fun actionKindsOf(groupTitleRes: Int): List<EditorNodeKind> =
+    WorkflowActionCatalog.byGroup()
+        .firstOrNull { it.first == groupTitleRes }
         ?.second
-        ?.mapNotNull { cap -> EDITOR_CAP_NODE_CATALOG.firstOrNull { it.cap == cap } }
+        ?.map { editorKindOf(it) }
         .orEmpty()
 
 /**
@@ -166,11 +166,13 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
             it.type == WorkflowNodeType.EXTRACT
     }
 
-    fun capSub(group: NativeCapCatalog.Group, titleRes: Int): NodePickerSubGroup =
+    fun actionSub(groupTitleRes: Int): NodePickerSubGroup =
         NodePickerSubGroup(
-            titleRes = titleRes,
-            entries = capKindsOf(group).map { kind ->
-                entry("cap_" + (kind.cap?.cap?.id ?: kind.labelRes.toString()), kind)
+            titleRes = groupTitleRes,
+            entries = actionKindsOf(groupTitleRes).map { kind ->
+                // key 用**动作 id**而不是下标：同一个面板里两类节点混排，
+                // 用 labels 或下标都会在两组有同名项时撞键，撞键的后果是选中项串位。
+                entry("act_" + (kind.bridge?.id ?: kind.labelRes.toString()), kind)
             },
         )
 
@@ -181,13 +183,14 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
         NodePickerGroup(R.string.dsh_wf_cat_control, listOf(
             NodePickerSubGroup(R.string.dsh_wf_cat_control, control.mapIndexed { i, k -> entry("ctl_" + i, k) }),
         )),
-        NodePickerGroup(R.string.dsh_wf_cat_alert, listOf(capSub(NativeCapCatalog.Group.ALERT, R.string.dsh_wf_cat_alert))),
-        NodePickerGroup(R.string.dsh_wf_cat_device, listOf(capSub(NativeCapCatalog.Group.DEVICE, R.string.dsh_wf_cat_device))),
-        NodePickerGroup(R.string.dsh_wf_cat_media, listOf(capSub(NativeCapCatalog.Group.MEDIA, R.string.dsh_wf_cat_media))),
-        NodePickerGroup(R.string.dsh_wf_cat_data, listOf(capSub(NativeCapCatalog.Group.DATA, R.string.dsh_wf_cat_data))),
-        NodePickerGroup(R.string.dsh_wf_cat_sense, listOf(capSub(NativeCapCatalog.Group.SENSE, R.string.dsh_wf_cat_sense))),
-        NodePickerGroup(R.string.dsh_wf_cat_screen, listOf(capSub(NativeCapCatalog.Group.SCREEN, R.string.dsh_wf_cat_screen))),
-        NodePickerGroup(R.string.dsh_wf_cat_privilege, listOf(capSub(NativeCapCatalog.Group.PRIVILEGE, R.string.dsh_wf_cat_privilege))),
+        NodePickerGroup(R.string.dsh_wf_grp_alert, listOf(actionSub(R.string.dsh_wf_grp_alert))),
+        NodePickerGroup(R.string.dsh_wf_grp_device, listOf(actionSub(R.string.dsh_wf_grp_device))),
+        NodePickerGroup(R.string.dsh_wf_grp_media, listOf(actionSub(R.string.dsh_wf_grp_media))),
+        NodePickerGroup(R.string.dsh_wf_grp_data, listOf(actionSub(R.string.dsh_wf_grp_data))),
+        NodePickerGroup(R.string.dsh_wf_grp_sense, listOf(actionSub(R.string.dsh_wf_grp_sense))),
+        NodePickerGroup(R.string.dsh_wf_grp_screen, listOf(actionSub(R.string.dsh_wf_grp_screen))),
+        // 特权（shell / SAF）不走动作目录：它们是"写一条命令"，不是"调一个端点"。
+        // 执行分组里已有 shell 节点，这里不再重复列一次。
     )
 }
 
@@ -210,18 +213,23 @@ private fun appStringRaw(resId: Int): String = me.bmax.apatch.apApp.resources.ge
 /**
  * 原生能力节点：一项能力一张卡片，点选即生成一个已带命令的 shell 节点。
  *
- * 命令用 [NativeCapCatalog.CapItem.command] 的骨架（不含 --reason，那是执行时补的）。
+ * 参数默认值取自 [WorkflowActionCatalog.Action.params]。
  * 这些节点与上面的「基础节点」分开列，是为了不在抽屉里把 7 个基础 + 23 个能力混成一片。
  */
-private val EDITOR_CAP_NODE_CATALOG: List<EditorNodeKind> =
-    NativeCapCatalog.ITEMS.map { cap ->
-        EditorNodeKind(
-            type = WorkflowNodeType.EXECUTE,
-            labelRes = cap.titleRes,
-            defaults = mapOf("action" to "shell", "cmd" to cap.command),
-            cap = cap,
-        )
-    }
+/**
+ * 动作目录里的一行 → 一个可建的节点。
+ *
+ * 建出来就是 **NATIVE** 节点：config 里 `bridge` 指向动作 id，参数取目录声明的默认值。
+ * 不建 shell 骨架 —— 骨架要靠用户在命令里手写路径与参数，写错了只有运行时才报，
+ * 而那些路径本来就有结构化端点。
+ */
+private fun editorKindOf(action: WorkflowActionCatalog.Action): EditorNodeKind = EditorNodeKind(
+    type = WorkflowNodeType.EXECUTE,
+    labelRes = action.titleRes,
+    defaults = mapOf("action" to "native", "bridge" to action.id) +
+        action.params.associate { action.configKey(it) to it.default },
+    bridge = action,
+)
 
 /**
  * 工作流编辑页的**内容本体**（页面与审批弹窗共用）。

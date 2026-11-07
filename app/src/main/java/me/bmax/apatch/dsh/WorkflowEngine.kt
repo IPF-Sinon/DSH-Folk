@@ -91,7 +91,7 @@ internal object WorkflowEngine {
             runId = runId,
             workflowId = def.id,
             workflowName = def.name,
-            caps = def.declaredCaps,
+            caps = def.effectiveCaps,
             dangerous = allowDangerous,
         )
         val run = WorkflowRun(
@@ -291,6 +291,8 @@ internal object WorkflowEngine {
 
                 WorkflowNodeType.EXECUTE -> {
                     val action = node.actionType
+                    // 原生动作的 id（仅 NATIVE 用）。取一次，分支里两处都要用。
+                    val exId = node.config("bridge")
                     var output = ""
                     var exitCode: Int? = null
                     var state = WorkflowStepState.OK
@@ -322,6 +324,33 @@ internal object WorkflowEngine {
                                 } else {
                                     state = WorkflowStepState.FAILED
                                     reason = "notify_failed"
+                                }
+                            }
+                        }
+
+                        WorkflowActionType.NATIVE -> {
+                            // 走宿主桥的真实端点（不是拼一条 shell 去"模拟"）：参数由动作目录
+                            // 声明，Cap 由目录绑定 —— 批准弹窗列出的能力与实际调用的是同一份。
+                            val spec = WorkflowActionCatalog.byId(exId)
+                            if (spec == null) {
+                                state = WorkflowStepState.FAILED
+                                reason = "bad_bridge_action"
+                            } else {
+                                val payload = buildMap<String, String> {
+                                    for (p in spec.params) {
+                                        val v = interpolate(node.config(spec.configKey(p)), varsSnapshot)
+                                        if (v.isNotBlank()) put(p.key, v)
+                                    }
+                                    put("reason", "workflow:${def.name} ($runId)")
+                                }
+                                val res = DshNativeBridge.handle(ctx, spec.method, spec.path, payload)
+                                output = res.second
+                                exitCode = if (res.first in 200..299) 0 else res.first
+                                if (res.first in 200..299) {
+                                    state = WorkflowStepState.OK
+                                } else {
+                                    state = WorkflowStepState.FAILED
+                                    reason = "http_${res.first}"
                                 }
                             }
                         }

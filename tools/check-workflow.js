@@ -289,7 +289,7 @@ ok(/if \(kept < MAX_STEP_OUTPUT_CHARS\)/.test(read("app/src/main/java/me/bmax/ap
 // 桥那条路（agent 调 workflow_run）过去**没有**权限预检：声明了能力、系统权限没给也能跑起来。
 // 审计 P1-2a：两条路必须同一套判据（缺失 → 弹窗 → 等结论 → 不给就 403）。
 const wfBridge = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowBridge.kt");
-ok(/WorkflowPermissions\.missing\(ctx, effective\.declaredCaps\)/.test(wfBridge),
+ok(/WorkflowPermissions\.missing\(ctx, effective\.effectiveCaps\)/.test(wfBridge),
   "桥的 RUN 分支没有做系统权限预检（与工作流页不一致）");
 ok(/kind == WorkflowApprovals\.Kind\.RUN/.test(wfBridge) &&
   /WorkflowPermissions\.Gate\.submit\(/.test(wfBridge) &&
@@ -1204,6 +1204,44 @@ async function checkCli() {
   if (typeof server.closeAllConnections === "function") server.closeAllConnections();
   for (const sock of conns) sock.destroy();
   server.close();
+}
+
+// ── 动作目录：每条动作都必须打到桥的真实端点 ──
+//
+// 这一组是这次改动最要害的断言。卡片上写着「点一下屏幕」、实际却调了别的路径（或者路径压根
+// 不存在），用户看到的是 A、设备上做的是 B，而批准弹窗按 A 渲染 —— 那是最坏的一类 bug，
+// 且只会在运行时暴露。所以：目录里每个 (method, path) 都必须在桥的 dispatch 里**逐字**出现。
+{
+  const catalog = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowActionCatalog.kt");
+  const bridge = read("app/src/main/java/me/bmax/apatch/dsh/DshNativeBridge.kt");
+  const pairs = [...catalog.matchAll(/"([A-Z]+)",\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]);
+  ok(pairs.length >= 30, "动作目录条目过少（" + pairs.length + " 条），卡片没铺满");
+  let missing = [];
+  for (const [method, path] of pairs) {
+    const needle = 'method == "' + method + '" && path == "' + path + '"';
+    if (!bridge.includes(needle)) missing.push(method + " " + path);
+  }
+  ok(missing.length === 0, "动作目录里有端点不存在：" + missing.join(", "));
+  // 反向：目录里声明的每个 Cap 都必须是真的 Cap id
+  const capsDecl = [...catalog.matchAll(/DshNativeBridge\.Cap\.([A-Z0-9_]+)/g)].map((m) => m[1]);
+  const missingCap = capsDecl.filter((c) => !new RegExp("\\n\\s*" + c + '\\(\\"').test(bridge));
+  ok(missingCap.length === 0, "动作目录引用了不存在的 Cap：" + missingCap.join(", "));
+  // 引擎必须真的把 NATIVE 走到桥，而不是当 shell 跑
+  const engine = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowEngine.kt");
+  ok(/WorkflowActionType\.NATIVE ->/.test(engine) && /DshNativeBridge\.handle\(ctx, spec\.method, spec\.path/.test(engine),
+    "引擎没有把原生动作真的走一遍桥（NATIVE 分支缺失或绕成 shell）");
+  // 校验器必须认 bridge 动作，否则写错的 id 会一直到运行时才报
+  const validator = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowValidator.kt");
+  ok(/WorkflowActionCatalog\.byId\(n\.config\("bridge"\)\)/.test(validator),
+    "校验器没有核对 bridge 动作 id");
+  // 能力必须自动算进来：只查手工声明的话，用卡片搭的流程可以一项都不声明
+  ok(/val WorkflowDefinition\.effectiveCaps/.test(read("app/src/main/java/me/bmax/apatch/dsh/WorkflowModels.kt")) &&
+    /def\.effectiveCaps/.test(validator) && /def\.effectiveCaps/.test(engine),
+    "原生动作用的能力没有被自动算进 declaredCaps（批准弹窗会漏项）");
+  // 参数编辑器的字段必须由目录生成，而不是又一串手写键名
+  const fields = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowNodeFields.kt");
+  ok(/for \(p in spec\.params\)/.test(fields) && /spec\.configKey\(p\)/.test(fields),
+    "原生动作的参数控件没有从动作目录生成（会漏字段）");
 }
 
 console.log("");
