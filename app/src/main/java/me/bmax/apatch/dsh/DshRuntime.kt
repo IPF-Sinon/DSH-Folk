@@ -2877,6 +2877,24 @@ object DshRuntime : DshRuntimeHost {
                         )
                     }.getOrNull().orEmpty().trim()
                     appendLog("[wait] 容器内相关进程：" + (tree.ifEmpty { "(无)" }))
+
+                    // 探针：容器内**是否已经拉起 node**，以及 l2s 目录规模。
+                    //
+                    // 为什么需要：真机日志显示「运行中=true、90 秒端口未监听、容器内只有 libproroot.so」——
+                    // 进程活着但 node 从没出来。若 l2s 目录在膨胀，就说明它卡在 --link2symlink 的
+                    // 「移动真身 + 建链接」上（本机硬链接不可用，每次 link() 都要搬文件，node 加载
+                    // 上千模块时开销被放大）。这些数字是唯一能验证这条假设的证据。
+                    //
+                    // 路径用 DshEnv 取而不是硬编码包名：装到别的包名（debug 变体）时硬编码会指向错误位置。
+                    val l2sPath = DshEnv.l2sDir(appContext).absolutePath
+                    val probe = runCatching {
+                        execRootfsForOutput(
+                            "echo NODE=\$(pgrep -c node 2>/dev/null || echo 0); " +
+                                "echo L2S=\$(ls -1 ' + l2sPath + ' 2>/dev/null | wc -l)",
+                            10_000L,
+                        )
+                    }.getOrNull().orEmpty().trim()
+                    appendLog("[wait] 计数：" + probe.ifEmpty { "(探测失败)" })
                 }
             }
             if (isPortInUse(port()) && httpResponds(port())) {
