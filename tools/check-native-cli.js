@@ -335,6 +335,34 @@ const server = http.createServer((req, res) => {
   }
 
 
+  // ── 原生能力目录与真实 Cap 的一致性 ──
+  // 目录是「给人看的说明书」，Cap 是「真正的权限与审计单位」。两者对不上时，
+  // 用户点了卡片却会被权限检查拦下 —— 那比没有卡片更糟。
+  {
+    const catalog = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/NativeCapCatalog.kt", "utf8");
+    const bridge = fs.readFileSync("app/src/main/java/me/bmax/apatch/dsh/DshNativeBridge.kt", "utf8");
+    // 用 \b 边界：否则 "Cap.ALERT" 这类（分组枚举）会被截成 "A" 混进来。
+    const used = new Set([...catalog.matchAll(/cap = DshNativeBridge\.Cap\.([A-Z_]+)\b/g)].map((m) => m[1]));
+    const declared = new Set(
+      [...bridge.matchAll(/^        ([A-Z_]+)\("/gm)].map((m) => m[1]),
+    );
+    const missing = [...used].filter((c) => !declared.has(c));
+    ok(missing.length === 0, "目录里的每个 Cap 都真实存在于枚举（缺：" + missing.join(",") + "）");
+    // 没进目录的 Cap 是有意为之：它们是**状态查询**而不是「可编排的步骤」
+    // （INTENT 拉起外部页面要 URL、PHONE 只是电话状态、INSTALL 只查侧载开关）。
+    // 断言这个名单不许意外扩大 —— 新增 Cap 时要么进目录，要么在这儿显式豁免。
+    const NOT_IN_CATALOG = new Set(["INTENT", "PHONE", "INSTALL", "CONTROL", "READ", "WRITE", "READ_WRITE", "OFF"]);
+    const extra = [...declared].filter((c) => !used.has(c) && !NOT_IN_CATALOG.has(c));
+    ok(extra.length === 0, "新增的 Cap 必须进能力目录或显式豁免（漏：" + extra.join(",") + "）");
+    // 每张卡片的命令必须真的是 dsh-native 调用。
+    // 用 cap 引用数作条目数：data class 里那个 command 参数声明也会被 "command =" 匹配到，
+    // 拿 used.size 比会错位（used 是 Set，重复 Cap 会被合并）。
+    const cmds = [...catalog.matchAll(/command = "([^"]+)"/g)].map((m) => m[1]);
+    const items = [...catalog.matchAll(/cap = DshNativeBridge\.Cap\./g)].length;
+    ok(cmds.length === items && cmds.every((c) => c.startsWith("dsh-native ")),
+      "每张卡片的命令都是 dsh-native 调用（" + cmds.length + " 条 / " + items + " 个条目）");
+  }
+
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log(fail === 0 ? "\n全部通过" : `\n${fail} 项失败`);
