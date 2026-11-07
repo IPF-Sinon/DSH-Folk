@@ -64,14 +64,21 @@ internal object WorkflowActionCatalog {
         fun configKey(param: Param): String = "p_" + param.key
     }
 
+    /**
+     * 参数构造。
+     *
+     * [choices] 收 `List` 而不是 vararg，是因为调用点都在**具名参数**位置写它
+     * （`p("action", R.string.x, ParamKind.CHOICE, choices = listOf(...))`）——
+     * Kotlin 不允许在具名位置传 vararg，写成 `vararg` 会直接编译不过。
+     */
     private fun p(
         key: String,
         labelRes: Int,
         kind: ParamKind = ParamKind.TEXT,
         required: Boolean = false,
         default: String = "",
-        vararg choices: String,
-    ) = Param(key, labelRes, kind, choices.toList(), required, default)
+        choices: List<String> = emptyList(),
+    ) = Param(key, labelRes, kind, choices, required, default)
 
     /**
      * 全部动作。
