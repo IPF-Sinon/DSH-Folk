@@ -1984,4 +1984,31 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_workflow_save_saved">已保存</string>
     <string name="dsh_workflow_save_failed">保存失败 —— 下次改动会再试</string>
     <string name="dsh_workflow_save_conflict">这份流程在别处被改过，本次编辑没有覆盖它</string>
+    <!-- 工作流：节点参数字段（WorkflowNodeFields） -->
+    <string name="dsh_wf_field_name">名称</string>
+    <string name="dsh_wf_field_description">说明</string>
+    <string name="dsh_wf_field_require_dsh">要求 DSH 已在运行</string>
+    <string name="dsh_wf_field_autostart_dsh">自动拉起 DSH</string>
+    <string name="dsh_wf_field_cmd">命令</string>
+    <string name="dsh_wf_field_notify_title">通知标题</string>
+    <string name="dsh_wf_field_notify_text">通知正文</string>
+    <string name="dsh_wf_field_cond_source">取值来源（exitCode / lastOutput / step:id / var:name）</string>
+    <string name="dsh_wf_field_cond_op">比较方式</string>
+    <string name="dsh_wf_field_cond_value">期望值</string>
+    <string name="dsh_wf_field_logic_op">组合方式</string>
+    <string name="dsh_wf_field_logic_sources">要组合的条件（逗号分隔）</string>
+    <string name="dsh_wf_field_extract_source">取值来源（lastOutput / step:id）</string>
+    <string name="dsh_wf_field_extract_mode">提取方式</string>
+    <string name="dsh_wf_field_extract_path">JSON 路径（a.b.0）</string>
+    <string name="dsh_wf_field_extract_pattern">正则表达式</string>
+    <string name="dsh_wf_field_extract_var">变量名</string>
+    <string name="dsh_wf_field_wait_ms">等待时长（毫秒）</string>
+    <string name="dsh_wf_field_wait_until">等到 DSH</string>
+    <string name="dsh_wf_field_on_error">失败时</string>
+    <string name="dsh_wf_field_timeout">超时（毫秒）</string>
+    <string name="dsh_wf_hint_cond_op">matches 里填正则；exists / empty 不需要期望值</string>
+    <string name="dsh_wf_hint_logic_sources">最多 8 个；not 只接受一个</string>
+    <string name="dsh_wf_param_title">这一步</string>
+    <string name="dsh_wf_param_delete">删除这一步</string>
+    <string name="dsh_wf_param_delete_trigger">入口步骤不能删除</string>
 </resources>

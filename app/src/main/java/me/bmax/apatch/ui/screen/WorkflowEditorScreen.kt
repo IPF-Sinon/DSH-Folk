@@ -1,6 +1,8 @@
 package me.bmax.apatch.ui.screen
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -11,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.ramcosta.composedestinations.annotation.Destination
@@ -122,13 +125,13 @@ internal fun WorkflowNameDialog(
                 label = { Text(stringResource(R.string.dsh_workflow_name_hint)) },
                 isError = error != 0,
                 singleLine = true,
-                modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
             )
             if (error != 0) {
                 Text(
                     text = ctx.getString(error),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
         },

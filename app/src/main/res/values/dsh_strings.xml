@@ -2010,4 +2010,31 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_workflow_save_saved">Saved</string>
     <string name="dsh_workflow_save_failed">Save failed — retrying on the next change</string>
     <string name="dsh_workflow_save_conflict">This workflow was changed elsewhere; the edit was not overwritten</string>
+    <!-- 工作流：节点参数字段（WorkflowNodeFields） -->
+    <string name="dsh_wf_field_name">Name</string>
+    <string name="dsh_wf_field_description">Description</string>
+    <string name="dsh_wf_field_require_dsh">Require DSH to be running</string>
+    <string name="dsh_wf_field_autostart_dsh">Start DSH automatically</string>
+    <string name="dsh_wf_field_cmd">Command</string>
+    <string name="dsh_wf_field_notify_title">Notification title</string>
+    <string name="dsh_wf_field_notify_text">Notification text</string>
+    <string name="dsh_wf_field_cond_source">Read from (exitCode / lastOutput / step:id / var:name)</string>
+    <string name="dsh_wf_field_cond_op">Comparison</string>
+    <string name="dsh_wf_field_cond_value">Expected value</string>
+    <string name="dsh_wf_field_logic_op">Combine with</string>
+    <string name="dsh_wf_field_logic_sources">Conditions to combine (comma separated)</string>
+    <string name="dsh_wf_field_extract_source">Read from (lastOutput / step:id)</string>
+    <string name="dsh_wf_field_extract_mode">Extract as</string>
+    <string name="dsh_wf_field_extract_path">JSON path (a.b.0)</string>
+    <string name="dsh_wf_field_extract_pattern">Regular expression</string>
+    <string name="dsh_wf_field_extract_var">Variable name</string>
+    <string name="dsh_wf_field_wait_ms">Wait (milliseconds)</string>
+    <string name="dsh_wf_field_wait_until">Wait until DSH is</string>
+    <string name="dsh_wf_field_on_error">On failure</string>
+    <string name="dsh_wf_field_timeout">Timeout (milliseconds)</string>
+    <string name="dsh_wf_hint_cond_op">matches takes a regular expression; exists / empty need no value</string>
+    <string name="dsh_wf_hint_logic_sources">At most 8; not takes exactly one</string>
+    <string name="dsh_wf_param_title">This step</string>
+    <string name="dsh_wf_param_delete">Delete this step</string>
+    <string name="dsh_wf_param_delete_trigger">The trigger step cannot be deleted</string>
 </resources>

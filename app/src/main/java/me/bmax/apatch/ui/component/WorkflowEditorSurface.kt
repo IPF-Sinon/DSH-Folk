@@ -35,15 +35,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.LifecyclePauseEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,6 +59,10 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.NativeCapCatalog
@@ -73,6 +80,10 @@ private enum class SaveState { IDLE, SAVING, SAVED, FAILED }
 
 /** 自动保存的防抖窗口：连续输入合并成一次写盘。 */
 private const val AUTOSAVE_DEBOUNCE_MS = 400L
+
+/** 目录里的默认 config：与参数编辑器的初值同源（见 [defaultConfigFor]）。 */
+private fun editorConfigForAction(action: WorkflowActionType): Map<String, String> =
+    defaultConfigFor(WorkflowNodeType.EXECUTE, action)
 
 private data class EditorNodeKind(
     val type: WorkflowNodeType,
@@ -212,21 +223,6 @@ private val EDITOR_CAP_NODE_CATALOG: List<EditorNodeKind> =
         )
     }
 
-private fun editorConfigForAction(action: WorkflowActionType): Map<String, String> = when (action) {
-    WorkflowActionType.SHELL -> mapOf("action" to "shell", "cmd" to "echo hello")
-    WorkflowActionType.DSH -> mapOf("action" to "dsh", "cmd" to "dsh --version")
-    WorkflowActionType.NOTIFY -> mapOf("action" to "notify", "text" to "流程完成")
-}
-
-private fun editorNodeKeyOf(node: WorkflowNode): String = when (node.type) {
-    WorkflowNodeType.EXECUTE -> if (node.actionType == WorkflowActionType.NOTIFY) "text" else "cmd"
-    WorkflowNodeType.CONDITION -> "value"
-    WorkflowNodeType.EXTRACT -> "var"
-    WorkflowNodeType.WAIT -> "ms"
-    WorkflowNodeType.LOGIC -> "sources"
-    WorkflowNodeType.TRIGGER -> ""
-}
-
 /**
  * 工作流编辑页的**内容本体**（页面与审批弹窗共用）。
  *
@@ -269,19 +265,19 @@ internal fun WorkflowEditorSurface(
     // 语义：每次模型变化排队一次落盘；连续输入用 400ms 防抖合并，离开页面/切后台立即 flush。
     // 落盘走 saveIfRevision（前置 revision），冲突时不覆盖 —— 保存状态原样摆在顶栏上，
     // 让用户自己看见"存了没有"，而不是关掉页面后才发现改动丢了。
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     var saveState by remember { mutableStateOf(SaveState.IDLE) }
     var savedRevision by remember { mutableIntStateOf(initial.revision) }
     var pending by remember { mutableStateOf(false) }
     // 最近一次真正落盘的定义：它的 revision 是下一轮保存的前置条件。
     var savedDef by remember { mutableStateOf(initial) }
     fun persistNow(current: WorkflowDefinition) {
-        val saver = autosave ?: return
+        val saver: (WorkflowDefinition) -> WorkflowDefinition? = autosave ?: return
         pending = false
         saveState = SaveState.SAVING
         scope.launch {
             // 写盘是 IO；放在 IO 派发器上，输入框打字不会被文件系统卡住。
-            val saved = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val saved: WorkflowDefinition? = withContext(Dispatchers.IO) {
                 saver(current.copy(revision = savedRevision))
             }
             if (saved != null) {
@@ -324,16 +320,16 @@ internal fun WorkflowEditorSurface(
     }
     // 防抖落盘：draft 每变一次就重置计时器，只有停下来 400ms 才真写。
     // 连续打字会一路重置 —— 逐字符写盘既费 IO，也会让 saveIfRevision 撞自己的 revision。
-    androidx.compose.runtime.LaunchedEffect(def) {
+    LaunchedEffect(def) {
         if (autosave == null || def == savedDef) return@LaunchedEffect
         pending = true
         saveState = SaveState.SAVING
-        kotlinx.coroutines.delay(AUTOSAVE_DEBOUNCE_MS)
+        delay(AUTOSAVE_DEBOUNCE_MS)
         persistNow(def)
     }
 
     // 离开页面/切到后台时立刻 flush：防抖窗口里点返回，用户看到的"已保存"不能是假的。
-    androidx.lifecycle.compose.LifecyclePauseEffect(Unit) {
+    LifecyclePauseEffect(Unit) {
         if (autosave != null && def != savedDef) persistNow(def)
         onPauseOrDispose { }
     }
@@ -535,7 +531,7 @@ internal fun WorkflowEditorSurface(
                     )
                     // 首次打开（以及画布尺寸终于确定时）把视口 fit 到内容：视口不落盘，
                     // 所以每次都从"整张图都看得见"开始，而不会对着空白角落。
-                    androidx.compose.runtime.LaunchedEffect(canvasSize, def.nodes.size) {
+                    LaunchedEffect(canvasSize, def.nodes.size) {
                         if (!viewportInit && canvasSize != IntSize.Zero && def.nodes.isNotEmpty()) {
                             val pts = editorLayoutFor(def).map { it.second to it.third }
                             viewport = WorkflowViewport.fitTo(
@@ -641,7 +637,24 @@ internal fun WorkflowEditorSurface(
                         NodeParamEditor(
                             node = sel,
                             onChange = { updated ->
-                                draft = def.copy(nodes = def.nodes.map { if (it.id == updated.id) updated else it })
+                                // name 是节点标题的唯一来源：字段表里改 name 也要同步 node.name，
+                                // 否则卡片/日志/批准弹窗显示的还是旧标题（两处存同一件事，必然走样）。
+                                val synced = if (updated.config("name") != sel.config("name")) {
+                                    updated.copy(name = updated.config("name"))
+                                } else {
+                                    updated
+                                }
+                                draft = def.copy(nodes = def.nodes.map { if (it.id == synced.id) synced else it })
+                            },
+                            // 入口节点不给删除按钮：删掉它整张图没有起点，定义立刻不合法。
+                            onDelete = if (sel.type == WorkflowNodeType.TRIGGER) null else {
+                                {
+                                    draft = def.copy(
+                                        nodes = def.nodes.filterNot { it.id == sel.id },
+                                        edges = def.edges.filterNot { e -> e.from == sel.id || e.to == sel.id },
+                                    )
+                                    selected = null
+                                }
                             },
                         )
                         val related = def.edges.filter { it.from == sel.id || it.to == sel.id }
@@ -672,13 +685,9 @@ internal fun WorkflowEditorSurface(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = {
-                        draft = def.copy(
-                            nodes = def.nodes.filterNot { it.id == sel.id },
-                            edges = def.edges.filterNot { e -> e.from == sel.id || e.to == sel.id },
-                        )
-                        selected = null
-                    }) { Text(stringResource(R.string.dsh_workflow_editor_delete_node)) }
+                    TextButton(onClick = { selected = null }) {
+                        Text(stringResource(R.string.dsh_workflow_action_cancel))
+                    }
                 },
             )
         }
@@ -734,16 +743,36 @@ internal fun WorkflowEditorSurface(
  * 拖动事件的坐标是**本卡局部坐标**，加上本卡的窗口位置才是窗口坐标 —— 落点判定统一在窗口坐标里做。
  */
 
-/** 节点参数编辑（点卡片弹出的窗里用）：按类型只显示这个类型认识的键。 */
+/**
+ * 节点参数编辑（点卡片弹出的窗里用）。
+ *
+ * 控件全部由 [WorkflowNodeFields.fieldsFor] 生成 —— 界面不认识具体键名，所以校验器要求的
+ * 每个键在这里必然有对应控件（枚举给 chip、布尔给开关、数值只收数字）。
+ *
+ * 允许删卡，但**入口（trigger）不能删**：删掉它整张图就没有起点，定义立刻不合法，
+ * 而用户此时已经看不到任何解释。所以这里直接不给那个按钮。
+ */
 @Composable
-private fun NodeParamEditor(node: WorkflowNode, onChange: (WorkflowNode) -> Unit) {
-    val key = editorNodeKeyOf(node)
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            node.type.id + (node.actionType?.let { " · " + it.id } ?: ""),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+private fun NodeParamEditor(
+    node: WorkflowNode,
+    onChange: (WorkflowNode) -> Unit,
+    onDelete: (() -> Unit)? = null,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = node.type.id + (node.actionType?.let { " · " + it.id } ?: ""),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            if (onDelete != null) {
+                TextButton(onClick = onDelete) {
+                    Text(stringResource(R.string.dsh_wf_param_delete))
+                }
+            }
+        }
+        // 动作类型：只对 execute 节点有意义；切换时整份替换 config（见 defaultConfigFor 的注释）。
         if (node.type == WorkflowNodeType.EXECUTE) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (action in WorkflowActionType.entries) {
@@ -752,7 +781,9 @@ private fun NodeParamEditor(node: WorkflowNode, onChange: (WorkflowNode) -> Unit
                     } else {
                         OutlinedButton(
                             onClick = {
-                                onChange(node.copy(config = editorConfigForAction(action) + mapOf("action" to action.id)))
+                                onChange(
+                                    node.copy(config = defaultConfigFor(node.type, action)),
+                                )
                             },
                             shape = RoundedCornerShape(50),
                         ) { Text(action.id) }
@@ -760,25 +791,8 @@ private fun NodeParamEditor(node: WorkflowNode, onChange: (WorkflowNode) -> Unit
                 }
             }
         }
-        if (key.isNotEmpty()) {
-            OutlinedTextField(
-                value = node.config(key),
-                onValueChange = { v -> onChange(node.copy(config = node.config + (key to v))) },
-                label = { Text(key) },
-                singleLine = node.type != WorkflowNodeType.CONDITION,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            )
-        }
-        if (node.type == WorkflowNodeType.CONDITION) {
-            OutlinedTextField(
-                value = node.config("op"),
-                onValueChange = { v -> onChange(node.copy(config = node.config + ("op" to v))) },
-                label = { Text("op") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            )
+        for (field in WorkflowNodeFields.fieldsFor(node)) {
+            NodeFieldRow(node = node, field = field, onChange = onChange)
         }
     }
 }

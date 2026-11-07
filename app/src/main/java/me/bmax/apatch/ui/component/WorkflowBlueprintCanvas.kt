@@ -151,6 +151,7 @@ internal fun WorkflowBlueprintCanvas(
                     pinRects = pinRects,
                     origin = origin,
                     pan = pan,
+                    scale = scale,
                     normal = edgeColor,
                     trueColor = trueColor,
                     falseColor = falseColor,
