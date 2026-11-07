@@ -92,6 +92,7 @@ import me.bmax.apatch.dsh.ext.ExtensionRecord
 import me.bmax.apatch.dsh.ext.ExtensionLayout
 import me.bmax.apatch.dsh.ext.ExtensionRegistry
 import me.bmax.apatch.dsh.ext.ExtensionSafetyGuard
+import me.bmax.apatch.dsh.ext.ExtensionUiRegistry
 import me.bmax.apatch.ui.component.AddMenuEntry
 import me.bmax.apatch.ui.component.ExtensionMarketSheet
 import me.bmax.apatch.ui.component.AddMenuFab
@@ -805,6 +806,14 @@ private fun ExtensionsPane(
     }
 
     Column(modifier.fillMaxSize()) {
+        // 扩展页顶部槽位。这是扩展系统里第一处真正被宿主渲染的槽位 ——
+        // 以前 slotEntries 只有注册、没有渲染点，所以「能插内容」这件事在代码层面并不成立。
+        // 渲染放在安全模式横幅之前：扩展内容属于「页面内容」，不该盖在熔断横幅上面
+        // （熔断时 slotEntries 本身也会返回空）。
+        ExtensionSlotHost(
+            slot = ExtensionUiRegistry.Slot.EXTENSIONS_PAGE_TOP,
+            modifier = Modifier.fillMaxWidth(),
+        )
         if (safeMode) {
             ExtensionSafeModeBanner(
                 reason = safeReason,
@@ -1501,4 +1510,60 @@ private fun DetailRow(label: String, value: String) {
     }
 }
 
+
+
+/**
+ * 把某个具名槽位里的扩展内容渲染出来。
+ *
+ * 语义按注册顺序依次施加：
+ *  - INSERT_BEFORE / INSERT_AFTER：在宿主内容前后各插一段；
+ *  - REPLACE：替换宿主内容（有它时宿主原本那块不画，取最后注册的那条）；
+ *  - WRAP：包住宿主内容；
+ *  - REMOVE：抑制宿主内容。
+ *
+ * 为什么做成通用组件而不是每处手写：槽位是宿主定义的固定位置，五条语义如果每处各写一遍，
+ * 「REPLACE 到底算不算 INSERT_AFTER」这类问题很快各页不一样。
+ *
+ * [hostContent] 为空表示这个位置本身没有宿主内容（扩展页顶部就是纯插入位），
+ * 此时 REPLACE / WRAP / REMOVE 无对象可作用，只处理 INSERT_*。
+ */
+@Composable
+private fun ExtensionSlotHost(
+    slot: String,
+    modifier: Modifier = Modifier,
+    hostContent: (@Composable (Modifier) -> Unit)? = null,
+) {
+    val entries = ExtensionUiRegistry.slotEntries(slot)
+    if (entries.isEmpty()) {
+        hostContent?.invoke(modifier)
+        return
+    }
+    val replace = entries.lastOrNull { it.op == ExtensionUiRegistry.SlotOp.REPLACE }
+    val remove = entries.any { it.op == ExtensionUiRegistry.SlotOp.REMOVE }
+    val before = entries.filter { it.op == ExtensionUiRegistry.SlotOp.INSERT_BEFORE }
+    val after = entries.filter { it.op == ExtensionUiRegistry.SlotOp.INSERT_AFTER }
+    val wrap = entries.filter { it.op == ExtensionUiRegistry.SlotOp.WRAP }
+
+    Column(modifier) {
+        for (e in before) e.content(Modifier.fillMaxWidth())
+        when {
+            replace != null -> replace.content(Modifier.fillMaxWidth())
+            remove -> Unit
+            wrap.isNotEmpty() && hostContent != null -> {
+                // 从后往前套，最后注册的在最外层。用局部 val 逐层闭包，
+                // 不能在 for 里直接捕获循环变量（Kotlin 的 e 是同一个引用，套完全变成最后一个）。
+                val layers = wrap.map { entry -> entry.content }
+                var current: @Composable (Modifier) -> Unit = { m -> hostContent(m) }
+                for (i in layers.indices.reversed()) {
+                    val outer = layers[i]
+                    val inner = current
+                    current = { m -> outer(m) }
+                }
+                current(Modifier.fillMaxWidth())
+            }
+            else -> hostContent?.invoke(Modifier.fillMaxWidth())
+        }
+        for (e in after) e.content(Modifier.fillMaxWidth())
+    }
+}
 

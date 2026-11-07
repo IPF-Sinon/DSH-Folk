@@ -12,6 +12,7 @@ import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.dynamicDarkColorScheme
+import me.bmax.apatch.dsh.ext.ExtensionUiRegistry
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -308,6 +309,12 @@ fun APatchTheme(
         )
     }
 
+    // 扩展可以拿到上面算好的色板，再返回一份改过的 —— 改完立刻全 App 生效。
+    // 放在最后一步、且在所有内置变换（amoled / 自定义背景透明度）之后：
+    // 扩展看到的是「宿主最终会给用户看的那个色板」，它只需要在此基础上再调。
+    // 没有扩展注册时原样返回，零开销（内部先做一次 getter 判空）。
+    val effectiveColorScheme = ExtensionUiRegistry.applyPalette(colorScheme)
+
     SystemBarStyle(
         darkMode = darkTheme
     )
@@ -321,7 +328,7 @@ fun APatchTheme(
     val typography = remember(fontFamily) { getTypography(fontFamily) }
 
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = effectiveColorScheme,
         typography = typography,
         content = {
             val rippleConfiguration = if (darkTheme) {
