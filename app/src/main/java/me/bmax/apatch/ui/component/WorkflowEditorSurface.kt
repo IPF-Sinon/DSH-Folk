@@ -72,6 +72,7 @@ import me.bmax.apatch.dsh.WorkflowEdge
 import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
 import me.bmax.apatch.dsh.WorkflowPatch
+import me.bmax.apatch.dsh.WorkflowPinKind
 import me.bmax.apatch.dsh.WorkflowValidator
 import me.bmax.apatch.dsh.workflowDiff
 
@@ -555,12 +556,20 @@ internal fun WorkflowEditorSurface(
                             dragAcc = Offset.Zero
                             dragPreview = null
                         },
-                        onWireDrop = { fromId, toId, pointer ->
+                        onWireDrop = { fromId, fromPin, toId, pointer ->
                             if (toId != null) {
                                 // 成环的边**不落盘**：环一旦进入定义，执行器的拓扑调度会死循环。
                                 // 判据只有 WorkflowValidator.addEdgeIfAcyclic 一处 —— 连边入口若
                                 // 以后增加，也必须走它，否则环会从新入口漏进来。
-                                val next = WorkflowValidator.addEdgeIfAcyclic(def, fromId, toId)
+                                // 「成立 / 不成立」两个出口拉出来的边要各自带上 when：
+                                // 两条都落成默认边的话，执行器在判断节点上只会选第一条，
+                                // 而画布上有两条线 —— 图与实际行为直接矛盾。
+                                val whenExpr = when (fromPin) {
+                                    WorkflowPinKind.EXEC_TRUE.name -> "true"
+                                    WorkflowPinKind.EXEC_FALSE.name -> "false"
+                                    else -> ""
+                                }
+                                val next = WorkflowValidator.addEdgeIfAcyclic(def, fromId, toId, whenExpr)
                                 if (next === def) {
                                     // 返回同一个实例 = 被拒（成环 / 自环 / 重复边）
                                     Toast.makeText(

@@ -67,7 +67,15 @@ internal fun WorkflowBlueprintCanvas(
      * 拉线松手：toId 非空 = 连到那张卡；为空 = 落在空白（调用方弹节点菜单）。
      * pointer 是松手时的**窗口坐标** —— 菜单里选了节点类型后，新节点要落在松手的位置。
      */
-    onWireDrop: ((fromId: String, toId: String?, pointerWindow: Offset) -> Unit)? = null,
+    /**
+     * 拉线松手。
+     *
+     * [fromPin] 是**拉出来的那个针脚的种类名**（[WorkflowPinKind] 的 name）：从「成立」口拉出去
+     * 和从「不成立」口拉出去，落盘的 whenExpr 不一样。之前这里只有 fromId，于是 condition 的
+     * 两条分支画出来全变成默认边 —— 判断节点在真实执行时永远只走其中一条，而用户看到的图
+     * 上有两条线。
+     */
+    onWireDrop: ((fromId: String, fromPin: String, toId: String?, pointerWindow: Offset) -> Unit)? = null,
     onBlankTap: (() -> Unit)? = null,
     /**
      * 视口（缩放 + 平移）。由**宿主**持有而不是画布内部：落点、吸附、新节点坐标都要用同一套
@@ -93,6 +101,8 @@ internal fun WorkflowBlueprintCanvas(
     val blankTapCb = rememberUpdatedState(onBlankTap)
     val wireDropCb = rememberUpdatedState(onWireDrop)
     var wireFrom by remember { mutableStateOf<String?>(null) }
+    // 拉线起点那个针脚的种类（"EXEC_TRUE" / "EXEC_FALSE" / …），决定落盘时带哪个 when。
+    var wireFromPin by remember { mutableStateOf("") }
     var wireAnchor by remember { mutableStateOf(Offset.Zero) }
     var wirePointer by remember { mutableStateOf(Offset.Zero) }
     // 针脚窗口矩形，键 "节点id:引脚类型名"：已连的线也从真针脚画出去，而不是卡片右上角。
@@ -166,17 +176,20 @@ internal fun WorkflowBlueprintCanvas(
                     onDragEnd = { onNodeDragEnd?.invoke(node.id) },
                     onBounds = { rect -> bounds = bounds + (node.id to rect) },
                     onPinBounds = { pinKind, rect -> pinRects = pinRects + ("${node.id}:$pinKind" to rect) },
-                    onPinDrag = { anchor, pointer ->
+                    onPinDrag = { pinKind, anchor, pointer ->
                         wireFrom = node.id
+                        wireFromPin = pinKind
                         wireAnchor = anchor
                         wirePointer = pointer
                     },
                     onPinDrop = { pointer ->
                         val from = wireFrom
+                        val fromPin = wireFromPin
                         wireFrom = null
+                        wireFromPin = ""
                         if (from != null) {
                             val target = bounds.entries.firstOrNull { it.key != from && it.value.contains(pointer) }?.key
-                            wireDropCb.value?.invoke(from, target, pointer)
+                            wireDropCb.value?.invoke(from, fromPin, target, pointer)
                         }
                     },
                 )

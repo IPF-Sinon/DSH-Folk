@@ -600,7 +600,7 @@ console.log("\u2500 #16h 坐标换算与手势结构（拖动 1:1 的契约）")
   ok(/pointerInput\(Unit\)/.test(SRC.card), "卡片手势 key 是 Unit（拖动中位置变化不会重启检测器）");
   ok(/wireAnchor/.test(SRC.canvas) && /wirePointer/.test(SRC.canvas),
     "拉线两端都用窗口坐标（不随平移的画布原点换算），所以线跟手");
-  ok(/onWireDrop/.test(SRC.canvas) && /onWireDrop = \{ fromId, toId, pointer ->/.test(SRC.editorSurface),
+  ok(/onWireDrop/.test(SRC.canvas) && /onWireDrop = \{ fromId, fromPin, toId, pointer ->/.test(SRC.editorSurface),
     "松手落在卡片上 = 连边（不是一律弹菜单）");
   // 卡片：不接手势，交给 focusable/semantics 与画布实测。
   ok(/focusable\(\)/.test(SRC.card) && /semantics \{ contentDescription/.test(SRC.card),
@@ -712,9 +712,14 @@ console.log("\u2500 #16m 拉线落空白：菜单选完按松手坐标建节点"
 {
   const e = SRC.editorSurface;
   const cv = SRC.canvas;
-  ok(/onWireDrop: \(\(fromId: String, toId: String\?, pointerWindow: Offset\) -> Unit\)\?/.test(cv) &&
-    /wireDropCb\.value\?\.invoke\(from, target, pointer\)/.test(cv),
-    "画布把松手坐标一起交给宿主");
+  ok(/onWireDrop: \(\(fromId: String, fromPin: String, toId: String\?, pointerWindow: Offset\)/ .test(cv) &&
+    /wireDropCb\.value\?\.invoke\(from, fromPin, target, pointer\)/.test(cv),
+    "画布把松手坐标与起点针脚一起交给宿主");
+  // 起针脚决定落盘的 when：成立/不成立两条出口必须各自带 when，
+  // 否则执行器在判断节点上只会走第一条，图与实际行为矛盾。
+  ok(/wireFromPin/.test(cv) && /WorkflowPinKind\.EXEC_TRUE\.name -> "true"/.test(e) &&
+    /WorkflowPinKind\.EXEC_FALSE\.name -> "false"/.test(e),
+    "从成立/不成立口拉出的边各自带上 when");
   ok(/addAfterAt = pointer/.test(e) && /dropPointDp\(addAfterAt\)/.test(e) &&
     /addNodeAt\(kind, x, y, after\)/.test(e),
     "菜单里选了类型后按松手坐标建节点，并连上源节点");
@@ -794,8 +799,8 @@ console.log("\u2500 #16q 连边即时防成环（任务 2）");
   ok(/fun addEdgeIfAcyclic\(/.test(v), '加边有唯一入口（不成环才落盘）');
   ok(/if \(fromId == toId\) return def/.test(v), '自环直接拒');
   ok(/return if \(cycleIn\(next\) != null\) def else next/.test(v), '成环则返回原定义（不落边）');
-  ok(/WorkflowValidator\.addEdgeIfAcyclic\(def, fromId, toId\)/.test(e),
-    '编辑页连边走这个入口');
+  ok(/WorkflowValidator\.addEdgeIfAcyclic\(def, fromId, toId, whenExpr\)/.test(e),
+    '编辑页连边走这个入口（并把 when 一起传下去）');
   ok(/dsh_workflow_cycle_rejected/.test(e), '被拒时给即时反馈');
   // 关键：**连接两张已有卡片**这条路径必须经判据。
   // 另外两处直接拼边在 addNodeAt/addNode 里，连的是本次刚创建的节点（新节点还没有出边，

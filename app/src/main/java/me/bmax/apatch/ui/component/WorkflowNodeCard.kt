@@ -82,7 +82,7 @@ internal fun WorkflowNodeCard(
     /** 把自己的窗口矩形报给画布：拉线落点判定只在窗口坐标里比。 */
     onBounds: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
     /** 从右侧输出口拉线：anchor 是线头（窗口坐标），pointer 是手指（窗口坐标）。 */
-    onPinDrag: ((anchorWindow: Offset, pointerWindow: Offset) -> Unit)? = null,
+    onPinDrag: ((pinKind: String, anchorWindow: Offset, pointerWindow: Offset) -> Unit)? = null,
     /** 拉线松手（窗口坐标）；连到哪由画布判定。 */
     onPinDrop: ((pointerWindow: Offset) -> Unit)? = null,
 ) {
@@ -230,7 +230,7 @@ private fun WorkflowPinRow(
     pin: WorkflowPinSpec,
     alignEnd: Boolean,
     onPinBounds: ((pinKind: String, rect: androidx.compose.ui.geometry.Rect) -> Unit)? = null,
-    onPinDrag: ((anchorWindow: Offset, pointerWindow: Offset) -> Unit)? = null,
+    onPinDrag: ((pinKind: String, anchorWindow: Offset, pointerWindow: Offset) -> Unit)? = null,
     onPinDrop: ((pointerWindow: Offset) -> Unit)? = null,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -274,7 +274,7 @@ private fun PinDot(pin: WorkflowPinSpec) {
 private fun LinkablePinDot(
     pin: WorkflowPinSpec,
     onPinBounds: ((pinKind: String, rect: androidx.compose.ui.geometry.Rect) -> Unit)?,
-    onPinDrag: ((anchorWindow: Offset, pointerWindow: Offset) -> Unit)?,
+    onPinDrag: ((pinKind: String, anchorWindow: Offset, pointerWindow: Offset) -> Unit)?,
     onPinDrop: ((pointerWindow: Offset) -> Unit)?,
 ) {
     var dotOrigin by remember { mutableStateOf(Offset.Zero) }
@@ -302,14 +302,14 @@ private fun LinkablePinDot(
                 detectDragGestures(
                     onDragStart = { start ->
                         pointer = originState.value + start
-                        pinDragCb.value?.invoke(anchorWindow(), pointer)
+                        pinDragCb.value?.invoke(pin.kind.name, anchorWindow(), pointer)
                     },
                     onDragEnd = { pinDropCb.value?.invoke(pointer) },
                     onDragCancel = { pinDropCb.value?.invoke(pointer) },
                 ) { change, amount ->
                     change.consume()
                     pointer += amount
-                    pinDragCb.value?.invoke(anchorWindow(), pointer)
+                    pinDragCb.value?.invoke(pin.kind.name, anchorWindow(), pointer)
                 }
             },
         contentAlignment = Alignment.Center,
