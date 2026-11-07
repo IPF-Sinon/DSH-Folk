@@ -8,7 +8,30 @@
 // 但每一条都是真判据；新漏的符号由 CI 的编译错误兜住（build.yml/beta.yml 已把编译错误
 // 以 ::error:: 注解报出来，不再需要翻日志）。
 const fs = require('fs');
-const FILES = process.argv.slice(2);
+// 默认扫**所有源码模块**，而不只是 app/src/main/java。
+//
+// 为什么：`ExtensionHookRegistry` 这类符号声明在 ext-api 模块里，只扫 app 的话
+// 「用了它但没 import」永远看不见 —— 我接 Hook 点时就因此漏了两处（Userscripts、
+// DshWebUiActivity），门禁还报了「齐全」。
+//
+// 显式传参时仍以参数为准（CI 与历史调用都是这么用的）。
+const SRC_DIRS = [
+  'app/src/main/java',
+  'ext-api/src/main/java',
+];
+function walkKt(dir, acc) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return acc; }
+  for (const e of entries) {
+    const p = dir + '/' + e.name;
+    if (e.isDirectory()) walkKt(p, acc);
+    else if (e.name.endsWith('.kt')) acc.push(p);
+  }
+  return acc;
+}
+const FILES = process.argv.length > 2
+  ? process.argv.slice(2)
+  : SRC_DIRS.reduce((acc, d) => walkKt(d, acc), []);
 const KNOWN = {
   // material3
   Checkbox: 'androidx.compose.material3.Checkbox',

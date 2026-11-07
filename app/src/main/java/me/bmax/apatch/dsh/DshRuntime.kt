@@ -748,6 +748,13 @@ object DshRuntime : DshRuntimeHost {
         env["LANG"] = "C.UTF-8"
         env["DEBIAN_FRONTEND"] = "noninteractive"
         env["TERM"] = "xterm-256color"
+        // 扩展拦截点：让扩展在**最后**改写容器环境（此时 proot/proroot/chroot 各自需要的那批
+        // 变量都已经设好）。放在最后而不是中间，是为了让扩展看到完整的环境再做决定；
+        // 代价是扩展改不到「已经设好之后又被下方覆盖」这种情况 —— 但下方没有覆盖。
+        if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.RUNTIME_APPLY_ENV)) {
+            val payload = mutableMapOf<String, Any?>("env" to env)
+            ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.RUNTIME_APPLY_ENV, payload)
+        }
     }
 
     /** 在 rootfs 内执行一条 bash 命令（stderr 合并进 stdout）。 */
@@ -921,7 +928,24 @@ object DshRuntime : DshRuntimeHost {
             // 流已关但进程还在（少见：子孙进程继承了 stdout 又提前关掉）
             p.destroyForcibly()
         }
-        synchronized(sb) { sb.toString() }
+        val output = synchronized(sb) { sb.toString() }
+        // 扩展拦截点：命令跑完之后给扩展一次观察/改写机会。
+        //
+        // 为什么放在这里而不是 execRootfs：execRootfs 返回的是 Process，输出还没读；
+        // 要拿到结果必须等到这里。**注意不能换成 after** —— after 是「事后通知」，
+        // 而这一条允许把输出改掉（例如给敏感内容打码），所以走 before 语义的 payload 改写：
+        // 扩展读 "output"，写回 "output" 就生效。
+        if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.SHELL_AFTER_EXEC)) {
+            val payload = mutableMapOf<String, Any?>(
+                "cmd" to bashCommand,
+                "output" to output,
+                "exitCode" to runCatching { p.exitValue() }.getOrNull(),
+            )
+            ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.SHELL_AFTER_EXEC, payload)
+            (payload["output"] as? String) ?: output
+        } else {
+            output
+        }
     }.getOrElse { "" }
 
     // ────────────────────────── 引导（下载 + 解压 + 启动）──────────────────────────
@@ -2233,8 +2257,28 @@ object DshRuntime : DshRuntimeHost {
             logInfo(R.string.dsh_log_lan_off)
         }
 
+        // 扩展拦截点：**启动容器进程之前的最后一道口子**。
+        //
+        // 放在这里而不是函数开头：此时补丁、CLI 刷新、音量/局域网判定都已经做完，
+        // 扩展看到的是「即将真的被执行的那条命令」。around 返回 false 可以让扩展拒绝启动
+        // （例如某扩展判定这台设备上的已知问题会触发崩溃）。
+        // cmd 可被改写：扩展能在这里调整启动参数而不必去碰 RUNTIME_BUILD_ARGV
+        // （后者改的是容器 argv，这里是容器内 bash 命令，层次不同）。
+        var startCmd = cmd
+        if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.RUNTIME_BEFORE_START)) {
+            val payload = mutableMapOf<String, Any?>("cmd" to cmd, "port" to port())
+            if (!ExtensionHookRegistry.runAround(ExtensionHookRegistry.Point.RUNTIME_BEFORE_START, payload)) {
+                val detail = "启动被扩展拦下"
+                appendLog("! $detail")
+                _state.update { it.copy(phase = DshPhase.ERROR, message = detail) }
+                return
+            }
+            ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.RUNTIME_BEFORE_START, payload)
+            (payload["cmd"] as? String)?.takeIf { it.isNotBlank() }?.let { startCmd = it }
+        }
+
         serverProcess = try {
-            execRootfs(cmd)
+            execRootfs(startCmd)
         } catch (e: Exception) {
             // 不能把上一轮已死的进程留在字段里：[awaitReady] 会把它读成
             // 「进程已退出」，盖掉真正的启动失败原因。
@@ -2914,7 +2958,25 @@ object DshRuntime : DshRuntimeHost {
                     )
                 }
             }
-            if (isPortInUse(port()) && httpResponds(port())) {
+            // 扩展拦截点：**判定「就绪」之前的最后一道口子**。
+            //
+            // around 返回 false = 扩展认为还不算就绪（例如它发现某个它关心的插件还没加载完），
+            // 于是这一轮跳过就绪判定、继续等下一轮心跳 —— 超时仍由 READY_TIMEOUT_MS 管，
+            // 不会因为扩展一直否决而永远等下去。
+            //
+            // 为什么值得给这个口子：真机上「端口通了但 dsh 插件树还没加载完」是一类真实状态，
+            // 宿主的判据只有端口 + HTTP，看不出这些；扩展比宿主更清楚自己关心什么。
+            val readyOk = if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.RUNTIME_PROBE_READY)) {
+                // 起始时刻由 deadline 反推（与上面 waitedSec 的算法一致，别再造一个变量）
+                val payload = mutableMapOf<String, Any?>(
+                    "port" to port(),
+                    "waitedMs" to (nowBeat - (deadline - READY_TIMEOUT_MS)),
+                )
+                ExtensionHookRegistry.runAround(ExtensionHookRegistry.Point.RUNTIME_PROBE_READY, payload)
+            } else {
+                true
+            }
+            if (readyOk && isPortInUse(port()) && httpResponds(port())) {
                 awaitWebToken()
                 _state.update {
                     it.copy(

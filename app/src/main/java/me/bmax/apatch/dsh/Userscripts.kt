@@ -1,5 +1,7 @@
 package me.bmax.apatch.dsh
 
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
+
 import android.content.Context
 import android.net.Uri
 import org.json.JSONObject
@@ -310,7 +312,7 @@ internal object Userscripts {
      */
     fun injections(ctx: Context, url: String): List<String> {
         // list() 已经把"在启用集合里"算成了每条的 enabled
-        return list(ctx)
+        val built = list(ctx)
             .filter { it.enabled }
             .mapNotNull { s ->
                 val text = runCatching { File(dir(ctx), "${s.id}.user.js").readText() }.getOrNull()
@@ -319,6 +321,22 @@ internal object Userscripts {
                 if (!applies(url, meta)) return@mapNotNull null
                 blob(s.id, text, meta)
             }
+        // 扩展拦截点：注入前让扩展**追加或替换**脚本。
+        //
+        // payload 里给的是 "url" 与本批已算好的 "scripts"（List<String>）。
+        // 扩展可以往 "scripts" 里 add 自己的段，也可以整体换成自己的 —— 换掉不会影响
+        // 用户脚本本身（那些已经读出来了，扩展改的是**这次注入的产物**）。
+        //
+        // 为什么值得给这个口子：用户脚本的能力被 @match 与 GM_* 受限，
+        // 而扩展可以直接用宿主 API；两者都需要「往这个页面注入一段 JS」这个动作。
+        if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.USERSCRIPTS_BUILD)) {
+            val payload = mutableMapOf<String, Any?>("url" to url, "scripts" to built.toMutableList())
+            ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.USERSCRIPTS_BUILD, payload)
+            @Suppress("UNCHECKED_CAST")
+            (payload["scripts"] as? List<String>)?.takeIf { it.isNotEmpty() } ?: built
+        } else {
+            built
+        }
     }
 
     /** 标题 + 正文哈希 → 文件名安全、可读、稳定。 */

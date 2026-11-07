@@ -115,6 +115,7 @@ import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.Userscripts
 import me.bmax.apatch.dsh.WebScripts
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import me.bmax.apatch.dsh.ext.ExtensionUiRegistry
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
 import me.bmax.apatch.ui.component.WorkflowDialogHosts
@@ -542,6 +543,18 @@ class DshWebUiActivity : AppCompatActivity() {
                                 addJavascriptInterface(BlobBridge(), BLOB_BRIDGE)
                                 // 用户脚本的 GM_notification 落到原生 Toast
                                 addJavascriptInterface(UserscriptBridge(), USERSCRIPT_BRIDGE)
+                                // 扩展拦截点：WebView 建好、宿主设置全部就位之后，给扩展一次调整机会。
+                                //
+                                // 为什么放在桥都挂完之后：扩展若想把某个桥换成自己的实现，需要先看到
+                                // 宿主已经挂了什么（payload 里的 "view" 就是它）。放在最末尾也让
+                                // 「宿主设置」与「扩展设置」的先后关系确定 —— 扩展永远能覆盖宿主。
+                                //
+                                // 注意：这里**不能**让扩展拿到 ctx 或 Activity 去做越界的事，
+                                // 但 API 层给的就是 WebView 本身，边界由扩展自己负责（它已经在应用进程内）。
+                                if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.WEBUI_CONFIGURE)) {
+                                    val payload = mutableMapOf<String, Any?>("view" to this)
+                                    ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.WEBUI_CONFIGURE, payload)
+                                }
                                 webViewClient = object : WebViewClient() {
                                     /**
                                      * 只让回环页面留在这个 WebView 里，其余交给系统浏览器。
