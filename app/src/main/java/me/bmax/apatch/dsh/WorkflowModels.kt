@@ -82,6 +82,20 @@ internal object WorkflowSchema {
                     WorkflowPinSpec("text", "通知", WorkflowPinKind.DATA_IN, defaultValue = node.config("text")),
                 )
 
+                // 原生动作的数据入口 = 目录声明的参数，与参数编辑器同一份来源。
+                // 两处各写一份的话，画布上会有"有针脚、编辑器里没这个键"的错位。
+                WorkflowActionType.NATIVE -> {
+                    val spec = WorkflowActionCatalog.byId(node.config("bridge"))
+                    spec?.params?.map { p ->
+                        WorkflowPinSpec(
+                            id = p.key,
+                            label = actionParamLabel(p),
+                            kind = WorkflowPinKind.DATA_IN,
+                            defaultValue = node.config(spec.configKey(p)),
+                        )
+                    }.orEmpty()
+                }
+
                 null -> emptyList()
             }
 
@@ -97,6 +111,15 @@ internal object WorkflowSchema {
         }
     }
 }
+
+/**
+ * 引脚标签：目录里的参数名，取当前语言。
+ *
+ * 这里不是 @Composable 上下文（引脚规格是纯数据），所以直接读应用资源；
+ * 读不到时退回参数键名 —— 引脚只是辅助标记，不该因为少一条翻译就让画布崩掉。
+ */
+private fun actionParamLabel(p: WorkflowActionCatalog.Param): String =
+    runCatching { me.bmax.apatch.apApp.resources.getString(p.labelRes) }.getOrDefault(p.key)
 
 /** 节点类型。`id` 是落盘值，不要改。 */
 internal enum class WorkflowNodeType(val id: String) {

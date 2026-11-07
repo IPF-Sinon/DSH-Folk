@@ -175,8 +175,8 @@ internal object WorkflowActionCatalog {
             "notify_full", R.string.dsh_wf_grp_alert, R.string.dsh_cap_fullscreens_title, R.string.dsh_wf_act_notify_full,
             DshNativeBridge.Cap.FULL_SCREEN_NOTIFY, "POST", "/native/notify/full-screen",
             listOf(
-                p("title", R.string.dsh_wf_param_title, required = true),
-                p("body", R.string.dsh_wf_param_body),
+                p("title", R.string.dsh_wf_param_notify_title, required = true),
+                p("body", R.string.dsh_wf_param_notify_body),
             ),
         ),
         // ── 设备 ──

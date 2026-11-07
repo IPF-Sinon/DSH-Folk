@@ -415,7 +415,12 @@ internal object WorkflowBridge {
                 WorkflowNodeType.EXTRACT -> str(ctx, R.string.dsh_workflow_kind_extract)
                 WorkflowNodeType.WAIT -> str(ctx, R.string.dsh_workflow_kind_wait)
                 WorkflowNodeType.EXECUTE -> when (n.actionType) {
-                    WorkflowActionType.NOTIFY -> str(ctx, R.string.dsh_workflow_kind_notify)
+                    WorkflowActionType.NATIVE -> {
+                val spec = WorkflowActionCatalog.byId(n.config("bridge"))
+                if (spec == null) "native: " + n.config("bridge")
+                else str(ctx, spec.titleRes)
+            }
+            WorkflowActionType.NOTIFY -> str(ctx, R.string.dsh_workflow_kind_notify)
                     WorkflowActionType.DSH -> "dsh: " + n.config("cmd").take(80)
                     else -> "$ " + n.config("cmd").take(80)
                 }

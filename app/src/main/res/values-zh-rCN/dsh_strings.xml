@@ -2056,7 +2056,6 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_wf_param_action">动作</string>
     <string name="dsh_wf_param_key">按键</string>
     <string name="dsh_wf_param_ms">毫秒</string>
-    <string name="dsh_wf_param_title">标题</string>
     <string name="dsh_wf_param_body">正文</string>
     <string name="dsh_wf_param_on">状态</string>
     <string name="dsh_wf_param_level">等级</string>
@@ -2070,4 +2069,6 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_wf_param_id">传感器 id</string>
     <string name="dsh_wf_param_days">天数</string>
     <string name="dsh_wf_field_bridge">原生动作</string>
+    <string name="dsh_wf_param_notify_title">标题</string>
+    <string name="dsh_wf_param_notify_body">正文</string>
 </resources>

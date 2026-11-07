@@ -33,6 +33,28 @@ const en = parse(EN);
 const zh = parse(ZH);
 let fail = 0;
 
+// ── 0a. 同一个键在同一个文件里只允许出现一次 ──
+//
+// 这一条不是洁癖：重复定义会让 aapt2 在 packageDebugResources 阶段直接失败
+// （"Found item String/xxx more than one time"），而这属于**合并期**错误 ——
+// 本地没有 Android SDK 时完全看不见，要等 CI 跑十几分钟。手工往两个语言文件里
+// 追加同样的键时最容易踩到，所以在这里用几毫秒挡掉。
+for (const [file, parsed] of [[EN, en], [ZH, zh]]) {
+  const names = [...parsed.raw.matchAll(/<string name="([^"]+)"/g)].map((m) => m[1]);
+  const seen = new Set();
+  const dups = new Set();
+  for (const n of names) {
+    if (seen.has(n)) dups.add(n);
+    seen.add(n);
+  }
+  if (dups.size) {
+    console.log(`✗ ${file}: 重复定义 ${[...dups].join(", ")}`);
+    fail++;
+  } else {
+    console.log(`✓ ${path.basename(path.dirname(file))}: 无重复键`);
+  }
+}
+
 // ── 0. 四个资源文件里的 xml 转义 ──
 //
 // 上面 parse() 只看 dsh_strings.xml 的 <string>；但 strings.xml 的 <string-array> 条目

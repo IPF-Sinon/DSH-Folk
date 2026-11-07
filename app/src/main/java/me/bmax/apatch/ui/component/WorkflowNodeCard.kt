@@ -353,7 +353,11 @@ private fun workflowNodeLabel(node: WorkflowNode): String = when (node.type) {
 private fun workflowNodeSubtitle(node: WorkflowNode): String = when (node.type) {
     WorkflowNodeType.EXECUTE -> {
         val what = when (node.actionType) {
-            WorkflowActionType.NOTIFY -> node.config("text")
+            WorkflowActionType.NATIVE -> run {
+            val spec = me.bmax.apatch.dsh.WorkflowActionCatalog.byId(node.config("bridge"))
+            spec?.let { me.bmax.apatch.apApp.resources.getString(it.titleRes) } ?: node.config("bridge")
+        }
+        WorkflowActionType.NOTIFY -> node.config("text")
             else -> node.config("cmd")
         }
         (node.actionType?.id ?: "execute") + if (what.isBlank()) "" else " · " + what.take(24)

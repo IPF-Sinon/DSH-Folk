@@ -577,6 +577,7 @@ private fun editableKeys(node: WorkflowNode): List<String> = when (node.type) {
     WorkflowNodeType.TRIGGER -> listOf("requireDsh", "autostartDsh")
     // action 由上面的选择器负责，这里只列「值」：把键暴露给自由文本输入等于让用户手打键名。
     WorkflowNodeType.EXECUTE -> when (node.actionType) {
+        WorkflowActionType.NATIVE -> emptyList()
         WorkflowActionType.NOTIFY -> listOf("title", "text")
         else -> listOf("cmd")
     }

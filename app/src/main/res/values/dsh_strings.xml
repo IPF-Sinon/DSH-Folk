@@ -2082,7 +2082,6 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_param_action">Action</string>
     <string name="dsh_wf_param_key">Key</string>
     <string name="dsh_wf_param_ms">Milliseconds</string>
-    <string name="dsh_wf_param_title">Title</string>
     <string name="dsh_wf_param_body">Body</string>
     <string name="dsh_wf_param_on">State</string>
     <string name="dsh_wf_param_level">Level</string>
@@ -2096,4 +2095,6 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_param_id">Sensor id</string>
     <string name="dsh_wf_param_days">Days</string>
     <string name="dsh_wf_field_bridge">Native action</string>
+    <string name="dsh_wf_param_notify_title">Title</string>
+    <string name="dsh_wf_param_notify_body">Body</string>
 </resources>
