@@ -120,12 +120,16 @@ private fun capKindsOf(group: NativeCapCatalog.Group): List<EditorNodeKind> =
  * 为什么二级对基础节点也给一个分类：面板版式是「一级 chip + 二级 chip + 列表」，
  * 若某个一级分组只有一个二级分组，用户会看到一排只有一个按钮的空壳 —— 观感很差。
  */
+// 必须是 @Composable：workflowNodeAccent 取的是主题色，只有 Composable 上下文能读。
+@Composable
 private fun editorPickerGroups(): List<NodePickerGroup> {
     fun entry(key: String, kind: EditorNodeKind): NodePickerEntry = NodePickerEntry(
         key = key,
         titleRes = kind.labelRes,
         descRes = 0,
         accent = workflowNodeAccent(kind.type),
+        // 搜索文本用资源名而不是 stringResource：构建分组不该再读一次当前语言，
+        // 面板会用它自己的 locale 匹配。这里给的是稳定的、可搜的英文/中文键名。
         searchText = appStringRaw(kind.labelRes),
         payload = kind,
     )
@@ -304,9 +308,7 @@ internal fun WorkflowEditorSurface(
 
     Surface(
         color = MaterialTheme.colorScheme.background,
-        modifier = Modifier
-            .fillMaxSize()
-            .onGloballyPositioned { rootOrigin = it.positionInWindow() },
+        modifier = Modifier.fillMaxSize(),
     ) {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
@@ -468,7 +470,10 @@ internal fun WorkflowEditorSurface(
             // 与「从输出口拉出」那个入口**共用同一个组件**：两处选项集必须一致。
             // 之前那边是一个只有 7 个基础节点的 AlertDialog，原生能力根本看不到。
             if (sheetOpen) {
-                val groups = remember { editorPickerGroups() }
+                // 不能包在 remember 里：remember 的 lambda 不是 Composable 上下文，
+                // 而 editorPickerGroups 要读主题色（workflowNodeAccent 是 @Composable）。
+                // 每次重组重建这点数据可忽略 —— 它是十来个小对象，不做 IO。
+                val groups = editorPickerGroups()
                 WorkflowNodePicker(
                     groups = groups,
                     onPick = { entry ->
@@ -541,7 +546,7 @@ internal fun WorkflowEditorSurface(
     //
     // 同一个面板，只是 onPick 的落点不同：这里要接在 after 之后。
     addAfter?.let { after ->
-        val groups = remember { editorPickerGroups() }
+        val groups = editorPickerGroups()
         WorkflowNodePicker(
             groups = groups,
             onPick = { entry ->

@@ -54,6 +54,12 @@ fun UpdateDialog(
     var phase by remember { mutableStateOf<AppUpdater.Phase>(AppUpdater.Phase.Idle) }
     var results by remember { mutableStateOf<List<DshSource.SpeedResult>>(emptyList()) }
     var chosen by remember { mutableStateOf<String?>(null) }
+    // 用户是否**自己点过**渠道。
+    //
+    // 这个标志存在的唯一理由：把「默认选中第一项」和「用户的选择」分开。
+    // 没点过 → 选中项跟住排序后的第一项（始终停在最上面，符合直觉）；
+    // 点过 → 任何自动重排都不许动它（否则用户刚选好的渠道会被测速结果挤走）。
+    var userPicked by remember { mutableStateOf(false) }
     var needPermission by remember { mutableStateOf(false) }
     // 测速是否在跑（与下载/校验分开）：测速期间只是「结果在陆续补」，
     // 不该把渠道选择与「开始下载」也一起锁死——用户拿到任一条可达结果就能选、能下。
@@ -166,7 +172,7 @@ fun UpdateDialog(
                         ) {
                             RadioButton(
                                 selected = chosen == r.source,
-                                onClick = { chosen = r.source },
+                                onClick = { chosen = r.source; userPicked = true },
                                 enabled = !busy && !unreachable,
                             )
                             Column(Modifier.weight(1f)) {
@@ -291,14 +297,25 @@ fun UpdateDialog(
                                 // 并把选择停在当前最快的可达渠道上——用户不必等全部测完，拿到任一条就能选、能下。
                                 speedJob = scope.launch {
                                     try {
+                                        // 列表继续按「估算耗时最快在前」排序 —— 用户等测速时就该先看到最快的那条。
+                                        //
+                                        // 但要区分「用户选过没有」：
+                                        //  - **没选过**：选中项跟住排序后的第一项。排序一变它就跟着变，
+                                        //    始终停在最上面那一行 —— 这正是用户期望的默认行为。
+                                        //  - **选过**：用户的选择优先，排序再怎么变也不动它。
+                                        //
+                                        // 之前没有这个区分：每次 partial 回调都重排，而 `chosen == null`
+                                        // 的判断又只对「一次都没选」成立 —— 一旦第一次回调把 chosen 填上，
+                                        // 后续重排就不再更新它，于是选中项停在某个**已经不在第一行**的位置，
+                                        // 视觉上就是「自动往下滚到已固定的那个」。
                                         val r = AppUpdater.speedTest { partial ->
                                             val ordered = partial.sortedBy { rankKey(it) }
                                             results = ordered
-                                            val best = ordered.firstOrNull { it.reachable }?.source
-                                            if (best != null && chosen == null) chosen = best
+                                            if (!userPicked) chosen = ordered.firstOrNull()?.source
                                         }
-                                        results = r.sortedBy { rankKey(it) }
-                                        if (chosen == null) chosen = results.firstOrNull { it.reachable }?.source
+                                        val orderedFinal = r.sortedBy { rankKey(it) }
+                                        results = orderedFinal
+                                        if (!userPicked) chosen = orderedFinal.firstOrNull()?.source
                                         phase = if (results.none { it.reachable }) {
                                             AppUpdater.Phase.Failed(
                                                 context.getString(R.string.update_all_channels_down)
