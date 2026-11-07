@@ -27,6 +27,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import me.bmax.apatch.util.LocaleCtx
 import me.bmax.apatch.util.UpdateChecker
 import me.bmax.apatch.util.appString
@@ -753,14 +754,36 @@ object DshRuntime : DshRuntimeHost {
     fun execRootfs(bashCommand: String): Process {
         ensureRuntimeFiles()
         val rt = runtime()
+        // 扩展拦截点（热路径！每次容器命令都会过这里）：
+        // 先判有没有人注册（一次 map 查空就返回，不分配对象），再跑 Hook。
+        // 拦截器可以改写 "cmd" 键；返回 false 则**拦下这条命令**，宿主按「拒绝执行」处理。
+        var command = bashCommand
+        if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.SHELL_BEFORE_EXEC)) {
+            val payload = mutableMapOf<String, Any?>("cmd" to bashCommand)
+            if (!ExtensionHookRegistry.runAround(ExtensionHookRegistry.Point.SHELL_BEFORE_EXEC, payload)) {
+                throw IllegalStateException("命令被扩展拦下：" + bashCommand)
+            }
+            ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.SHELL_BEFORE_EXEC, payload)
+            (payload["cmd"] as? String)?.takeIf { it.isNotBlank() }?.let { command = it }
+        }
         // chroot 这类运行时自己接管 argv（命令要写进脚本、经真 root 执行）；
         // 返回 null 就是 proot/proroot 的老路 —— 行为一个字节不变。
-        val guest = listOf("/bin/bash", "-c", bashCommand)
+        val guest = listOf("/bin/bash", "-c", command)
         // spawnArgv 返回 null = 这个运行时不接管 argv。注意**不能**简单回退 baseArgv()：
         // chroot 的 baseArgv 是空列表（它本来就不走宿主 argv），拼出来只有一个元素的非法命令。
         // 所以这里显式回退到 proot —— 与 PTY 那条路同一套策略。
         val argv = rt.spawnArgv(guest, guestEnv()) ?: (prootBaseArgv() + guest)
-        val pb = ProcessBuilder(argv).redirectErrorStream(true)
+        // RUNTIME_BUILD_ARGV：让扩展在**真正启动之前**改写 argv。
+        // 这里只做「改写」，不重复启动逻辑 —— 启动路径保持唯一，否则改一处漏一处。
+        val finalArgv = if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.RUNTIME_BUILD_ARGV)) {
+            val payload = mutableMapOf<String, Any?>("argv" to argv)
+            ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.RUNTIME_BUILD_ARGV, payload)
+            @Suppress("UNCHECKED_CAST")
+            (payload["argv"] as? List<String>)?.takeIf { it.isNotEmpty() } ?: argv
+        } else {
+            argv
+        }
+        val pb = ProcessBuilder(finalArgv).redirectErrorStream(true)
         pb.redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
         applyEnv(pb)
         return pb.start()
