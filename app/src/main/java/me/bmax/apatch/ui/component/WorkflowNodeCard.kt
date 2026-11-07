@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -179,7 +178,7 @@ internal fun WorkflowNodeCard(
         border = BorderStroke(if (thick) 2.dp else 1.dp, borderColor),
         tonalElevation = if (selected) 6.dp else 2.dp,
         // 无权限的卡整体压暗：这是"现在用不了"的第一眼信号，比任何徽标都直接。
-        modifier = if (granted) base else base.alpha(0.62f),
+        modifier = if (granted) base else base.alpha(0.6f),
     ) {
         Column {
             Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
@@ -211,23 +210,43 @@ internal fun WorkflowNodeCard(
                     Spacer(Modifier.height(6.dp))
                     for (row in rows) CardParamRow(row)
                 }
-                if (!granted && requiredCaps.isNotEmpty()) {
+                if (!granted) {
                     Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.dsh_wf_lock_need, requiredCaps.joinToString("、")),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
+                    // 缺能力不是「参数为空」，而是一种状态：用 error 的容器色一条说清缺什么，
+                    // 用户不用点开卡片才知道这张卡为什么跑不了。
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
                                 MaterialTheme.colorScheme.errorContainer,
                                 RoundedCornerShape(6.dp),
                             )
-                            .padding(horizontal = 6.dp, vertical = 3.dp),
-                    )
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.dsh_wf_lock),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                        )
+                        // 能力清单为空时只说「没权限」，不要输出一句「需要：」吊在那里。
+                        if (requiredCaps.isNotEmpty()) {
+                            Text(
+                                text = stringResource(
+                                    R.string.dsh_wf_lock_need,
+                                    requiredCaps.joinToString("、"),
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
                 }
                 if (inputs.isNotEmpty() || outputs.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
@@ -409,9 +428,8 @@ private fun workflowNodeSubtitle(node: WorkflowNode): String = when (node.type) 
 /**
  * 卡片上要展示的一行参数。
  *
- * 取值规则：先看字段表（[WorkflowNodeFields.fieldsFor]）里的**非空值**，
- * 一条都没有时退回该类型的"主参数"（cmd / text / 条件表达式 …）——
- * 新节点刚建出来时字段大多为空，只显示主参数能让卡片不至于空着。
+ * 取值规则：逐行取自字段表（[WorkflowNodeFields.fieldsFor]），空值也占一行（画空心椭圆）；
+ * 一个可显示字段都没有时，才退回该类型的"主参数"（cmd / text / 条件表达式 …）。
  *
  * 为什么按字段表来而不是写死键名：写死的话，动作目录里新加的参数在卡上永远看不见
  * （它只在弹窗里出现），而用户根本没理由点开弹窗。
@@ -425,23 +443,33 @@ private data class CardParamRowModel(
 
 @Composable
 private fun cardParamRows(node: WorkflowNode): List<CardParamRowModel> {
-    val out = mutableListOf<CardParamRowModel>()
+    // 先收集全部候选，再分「有值」与「空着」两批 —— 顺序不能边收边截断。
+    //
+    // 为什么必须先分两批：a11y_swipe 这类动作有 5 个参数，只有 durationMs 有默认值，
+    // 另外 4 个坐标是空的。边收边截断的话，前 4 个空行正好占满名额，**唯一有值的那个
+    // 反而被挤出去** —— 卡片上全是空心椭圆，用户看不出这一步到底配了什么。
+    //
+    // 空字段仍然保留（值的位置画空心椭圆，表示"这个参数在、但还没填"），
+    // 只是在名额不够时优先让位给有值的字段。
+    val filled = mutableListOf<CardParamRowModel>()
+    val empty = mutableListOf<CardParamRowModel>()
     for (field in WorkflowNodeFields.fieldsFor(node)) {
         // 元数据不算参数：name/description/onError/timeoutMs 是节点自身的属性，
         // 摆到卡上只会把真正要看的参数挤下去。
         if (field.key in setOf("name", "description", "onError", "timeoutMs")) continue
         if (!field.visible(node)) continue
         val raw = node.config(field.key)
-        if (raw.isBlank()) continue
-        out += CardParamRowModel(
+        val row = CardParamRowModel(
             key = field.key,
             label = stringResource(field.labelRes),
             value = raw,
             color = paramDotColor(field.kind),
         )
-        // 卡就这么宽，超过四行之后参数已经读不过来了；剩下的留给点开弹窗看。
-        if (out.size >= 4) break
+        if (raw.isBlank()) empty += row else filled += row
     }
+    // 卡就这么宽，超过四行之后参数已经读不过来了；剩下的留给点开弹窗看。
+    // 有值的排前面，空着的补在后面。
+    val out = (filled + empty).take(4).toMutableList()
     if (out.isEmpty()) {
         val primary = when (node.type) {
             WorkflowNodeType.EXECUTE -> node.config("cmd").ifBlank { node.config("text") }
@@ -462,18 +490,27 @@ private fun cardParamRows(node: WorkflowNode): List<CardParamRowModel> {
     return out
 }
 
-/** 字段种类的色点。一律取主题角色色 —— 硬编码在这里会让深色主题下几乎看不见。 */
+/**
+ * 字段种类的色点。一律取主题角色色 —— 硬编码在这里会让深色主题下几乎看不见。
+ *
+ * Kind 目前没有独立的图片种类：非结构化的长文本（含图片路径）都归 MULTILINE，
+ * 所以「图片类用 outline」这条落在 MULTILINE 上，让它与普通 TEXT 一眼可分。
+ */
 @Composable
 private fun paramDotColor(kind: WorkflowNodeFields.Kind): Color = when (kind) {
-    WorkflowNodeFields.Kind.TEXT, WorkflowNodeFields.Kind.MULTILINE -> MaterialTheme.colorScheme.primary
+    WorkflowNodeFields.Kind.TEXT -> MaterialTheme.colorScheme.primary
+    WorkflowNodeFields.Kind.MULTILINE -> MaterialTheme.colorScheme.outline
     WorkflowNodeFields.Kind.NUMBER -> MaterialTheme.colorScheme.tertiary
     WorkflowNodeFields.Kind.BOOL -> MaterialTheme.colorScheme.secondary
-    WorkflowNodeFields.Kind.CHOICE -> MaterialTheme.colorScheme.error
+    // 「error 的柔和版」取 errorContainer：与 error 同族、但为底色而生，深色主题下也读得出。
+    WorkflowNodeFields.Kind.CHOICE -> MaterialTheme.colorScheme.errorContainer
 }
 
-/** 一行参数：色点 + 标签 + 值胶囊。 */
+/** 一行参数：色点 + 标签 + 只读值胶囊 + 复制；值空时用空心椭圆占位。 */
 @Composable
 private fun CardParamRow(row: CardParamRowModel) {
+    // 行内唯一的动作就是复制：值本身只读，用户要把这段文本带走只有它。
+    val clipboard = LocalClipboardManager.current
     Row(
         Modifier.fillMaxWidth().padding(top = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -490,16 +527,38 @@ private fun CardParamRow(row: CardParamRowModel) {
             )
         }
         Spacer(Modifier.width(5.dp))
-        Text(
-            text = row.value,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        if (row.value.isBlank()) {
+            // 空值画一个空心椭圆：留白会让人以为这行没有内容，空心轮廓明确表示
+            // 「这个参数在，但还没填」。weight 只能在 Row 的 lambda 里取。
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(14.dp)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+            )
+        } else {
+            Text(
+                text = row.value,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+        Spacer(Modifier.width(5.dp))
+        Icon(
+            imageVector = Icons.Filled.ContentCopy,
+            contentDescription = stringResource(R.string.dsh_wf_float_copy),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            // 卡片只有 220dp 宽，用 IconButton 会把每行撑到 48dp（minimumInteractiveComponentSize）；
+            // 这里让命中区就是图标本身，换取参数行的高度可控。
             modifier = Modifier
-                .weight(1f)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-                .padding(horizontal = 6.dp, vertical = 2.dp),
+                .size(16.dp)
+                .clickable { if (row.value.isNotBlank()) clipboard.setText(AnnotatedString(row.value)) },
         )
     }
 }

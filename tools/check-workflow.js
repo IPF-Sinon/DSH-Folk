@@ -1302,6 +1302,38 @@ async function checkCli() {
     "extract 拉出的是变量（var:名字），其余是 step:id");
 }
 
+// ── 卡片内联参数（对齐点击助手）──
+//
+// 这一组守的是"卡片上到底显示了什么"。它属于**纯 UI 逻辑**，但有两个会静默错的判据：
+// 行顺序（有值的必须先占名额）与项目符号（无权限要看得见）。两者错了都不会报错，
+// 只会在真机上表现为"看不出这卡配了什么" / "不知道为什么跑不了"。
+{
+  const card = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowNodeCard.kt");
+  ok(/private fun cardParamRows\(node: WorkflowNode\)/.test(card),
+    "卡片参数行由字段表生成（不在卡上写死键名）");
+  // 有值优先：a11y_swipe 这类动作 5 个参数只有 1 个有默认值，边收边截断会把唯一
+  // 有值的那行挤出去，卡上全是空心椭圆。
+  ok(/val filled = mutableListOf<CardParamRowModel>\(\)/.test(card) &&
+    /val empty = mutableListOf<CardParamRowModel>\(\)/.test(card) &&
+    /\(filled \+ empty\)\.take\(4\)/.test(card),
+    "有值的参数排在空参数前面（否则空行会挤掉唯一有值的那个）");
+  ok(/private fun paramDotColor\(kind: WorkflowNodeFields\.Kind\)/.test(card),
+    "参数行有按种类着色的色点");
+  // 无权限必须能一眼看出来：整卡压暗 + 红条 + 说清缺什么。
+  ok(/if \(granted\) base else base\.alpha\(0\.6f\)/.test(card),
+    "无权限的卡整体压暗");
+  ok(/R\.string\.dsh_wf_lock\b/.test(card) && /R\.string\.dsh_wf_lock_need/.test(card),
+    "红条既说「没权限」也说「缺哪项」");
+  ok(/requiredCaps: List<String> = emptyList\(\)/.test(card) && /granted: Boolean = true/.test(card),
+    "新增的两个参数都有默认值（老调用点不受影响）");
+  // 空心椭圆：空值参数要有占位，不能留白（留白会被读成"这行没内容"）。
+  ok(/border\(1\.dp, MaterialTheme\.colorScheme\.outline, CircleShape\)/.test(card),
+    "空值参数画空心椭圆，而不是留白");
+  // 引脚上报是拉线的基础，改卡片时最容易被顺手删掉。
+  ok(/onPinBounds\?\.invoke\(pin\.kind\.name, coords\.boundsInWindow\(\)\)/.test(card),
+    "卡片仍然上报输出引脚的真实窗口矩形（拉线端点依赖它）");
+}
+
 console.log("");
 // #12 真跑插件 asset：工具表能建出正确 argv，且失败时**返回字符串而不是抛异常**
 (async () => {
