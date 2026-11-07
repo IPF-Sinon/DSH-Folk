@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Base64
 import android.util.Log
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import me.bmax.apatch.display.DisplayBinderContainer
 import me.bmax.apatch.display.IDisplayService
 import org.json.JSONArray
@@ -166,7 +167,31 @@ object DisplayServer {
      * `DshDisplay-*` 孤儿虚拟屏（旧的那些是进程被杀时泄漏的，只能重启设备清掉）。
      * 想换一个尺寸，直接按新尺寸调用即可，那会真的建新的一块。
      */
-    fun startSession(ctx: Context, width: Int, height: Int, dpi: Int, bitrateKbps: Int = 0): Result<Session> {
+    fun startSession(ctx: Context, width0: Int, height0: Int, dpi0: Int, bitrate0: Int = 0): Result<Session> {
+        // 扩展拦截点：**建虚拟屏之前**。
+        //
+        // around 返回 false = 扩展不允许开这块屏（例如它检测到当前前台不允许录屏）。
+        // 尺寸/DPI/码率可被改写 —— 不同机型对虚拟屏尺寸有各自的上限，
+        // 扩展比宿主更清楚自己那台设备该用多大，不必等用户抱怨花屏再改。
+        var width = width0
+        var height = height0
+        var dpi = dpi0
+        var bitrateKbps = bitrate0
+        if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.DISPLAY_START_SESSION)) {
+            val payload = mutableMapOf<String, Any?>(
+                "width" to width,
+                "height" to height,
+                "dpi" to dpi,
+                "bitrateKbps" to bitrateKbps,
+            )
+            if (!ExtensionHookRegistry.runAround(ExtensionHookRegistry.Point.DISPLAY_START_SESSION, payload)) {
+                return Result.failure(IllegalStateException("虚拟屏启动被扩展拦下"))
+            }
+            (payload["width"] as? Int)?.takeIf { it > 0 }?.let { width = it }
+            (payload["height"] as? Int)?.takeIf { it > 0 }?.let { height = it }
+            (payload["dpi"] as? Int)?.takeIf { it > 0 }?.let { dpi = it }
+            (payload["bitrateKbps"] as? Int)?.takeIf { it >= 0 }?.let { bitrateKbps = it }
+        }
         val svc = start(ctx).getOrElse { return Result.failure(it) }
         currentSession()
             ?.takeIf { it.width == width && it.height == height && it.dpi == dpi }

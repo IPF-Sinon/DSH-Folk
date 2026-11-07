@@ -1063,10 +1063,23 @@ object DshNativeBridge {
     private fun a11yExec(ctx: Context, action: String, params: Map<String, String>): Pair<Int, String> {
         val body = try {
             when (action) {
-                "tree" -> DshA11y.snapshot(
-                    maxDepth = params["depth"]?.toIntOrNull() ?: DshA11y.MAX_DEPTH,
-                    maxNodes = params["max"]?.toIntOrNull() ?: DshA11y.MAX_NODES,
-                )
+                "tree" -> {
+                    val raw = DshA11y.snapshot(
+                        maxDepth = params["depth"]?.toIntOrNull() ?: DshA11y.MAX_DEPTH,
+                        maxNodes = params["max"]?.toIntOrNull() ?: DshA11y.MAX_NODES,
+                    )
+                    // 扩展拦截点：无障碍树是**最贵的一份返回**（动辄上万字，全进模型上下文），
+                    // 而它的信息密度很低。给扩展一次裁剪/精简的机会，是这块最值得做的优化点。
+                    //
+                    // 扩展读 "tree"（原始 JSON），可以写回精简版。写回的内容就是模型看到的。
+                    if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.A11Y_DUMP_TREE)) {
+                        val payload = mutableMapOf<String, Any?>("tree" to raw, "depth" to params["depth"])
+                        ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.A11Y_DUMP_TREE, payload)
+                        (payload["tree"] as? String) ?: raw
+                    } else {
+                        raw
+                    }
+                }
                 "tap" -> {
                     val x = params["x"]?.toFloatOrNull()
                     val y = params["y"]?.toFloatOrNull()
