@@ -3,6 +3,7 @@ package me.bmax.apatch.dsh
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -1076,8 +1077,23 @@ object DshPluginRepo {
         fallbackTgz: String? = null,
     ): String = withContext(Dispatchers.IO) {
         if (pkg.isBlank()) return@withContext str(R.string.dsh_plug_log_no_pkg_install)
+        // 扩展拦截点：插件**安装/更新之前**的统一入口。
+        //
+        // around 返回 false = 扩展拒绝这次安装（例如企业场景下的插件白名单）。
+        // 规格可被改写：扩展能在不改进程的情况下把某个包名重定向到自己的源。
+        //
+        // 放在 resolveSpec **之前**：此时拿到的还是用户填的原始 pkg，扩展看到的是
+        // 「用户想装什么」，而不是「解析后要装什么」。这两者在镜像重定向场景下并不相同。
+        var pkgIn = pkg
+        if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.PLUGIN_UPDATE)) {
+            val payload = mutableMapOf<String, Any?>("pkg" to pkg, "version" to version)
+            if (!ExtensionHookRegistry.runAround(ExtensionHookRegistry.Point.PLUGIN_UPDATE, payload)) {
+                return@withContext str(R.string.dsh_plug_log_no_pkg_install)
+            }
+            (payload["pkg"] as? String)?.takeIf { it.isNotBlank() }?.let { pkgIn = it }
+        }
         if (allowBuilds.isNotEmpty()) DshRuntime.allowProfileBuilds(allowBuilds, onLine)
-        val resolved = resolveSpec(pkg, onLine)
+        val resolved = resolveSpec(pkgIn, onLine)
         val isGit = resolved.startsWith("github:") || resolved.startsWith("git+")
         val spec = if (isGit || version.isBlank()) resolved else "$resolved@$version"
         val out = if (isGit) {

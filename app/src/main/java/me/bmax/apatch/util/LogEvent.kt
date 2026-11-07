@@ -5,6 +5,7 @@ import android.os.Build
 import android.system.Os
 import com.topjohnwu.superuser.ShellUtils
 import me.bmax.apatch.apApp
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -119,8 +120,23 @@ private val SECRET_PATTERNS = listOf(
 )
 
 /** 把 [text] 里的凭据与设备标识替换成占位符。 */
-private fun redact(text: String): String =
-    SECRET_PATTERNS.fold(text) { acc, re -> re.replace(acc) { m -> m.groupValues[1] + "<redacted>" } }
+private fun redact(text: String): String {
+    val masked = SECRET_PATTERNS.fold(text) { acc, re ->
+        re.replace(acc) { m -> m.groupValues[1] + "<redacted>" }
+    }
+    // 扩展拦截点：宿主自带的规则跑完之后，再让扩展补自己的脱敏。
+    //
+    // 为什么必须有这个口子：诊断包会被贴到公开 issue 里，而宿主只认得通用模式
+    // （password / token / serialno 这类）。**扩展最清楚自己引入了哪些新秘密** ——
+    // 它新增的配置项、它连接的服务、它写进日志的自有字段，宿主一概不知。
+    //
+    // 方向是「只许更严」：扩展拿到已经脱敏的文本，只能再删，没有原文可还原 ——
+    // 即使扩展被写坏，也不会把宿主已遮掉的秘密漏出去。
+    if (!ExtensionHookRegistry.has(ExtensionHookRegistry.Point.DIAGNOSTICS_REDACT)) return masked
+    val payload = mutableMapOf<String, Any?>("text" to masked)
+    ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.DIAGNOSTICS_REDACT, payload)
+    return (payload["text"] as? String) ?: masked
+}
 
 /**
  * 原地脱敏：读回、替换、写回。失败只记一笔（[notes]），不致命。

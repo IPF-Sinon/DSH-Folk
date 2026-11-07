@@ -1072,10 +1072,13 @@ object DshNativeBridge {
                     // 而它的信息密度很低。给扩展一次裁剪/精简的机会，是这块最值得做的优化点。
                     //
                     // 扩展读 "tree"（原始 JSON），可以写回精简版。写回的内容就是模型看到的。
+                    //
+                    // 注意 snapshot 返回的是 **JSONObject**（不是字符串）：写回也必须是 JSONObject，
+                    // 因为下游 `a11yExec` 的返回值会被直接序列化进响应体，换成字符串会二次转义。
                     if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.A11Y_DUMP_TREE)) {
                         val payload = mutableMapOf<String, Any?>("tree" to raw, "depth" to params["depth"])
                         ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.A11Y_DUMP_TREE, payload)
-                        (payload["tree"] as? String) ?: raw
+                        (payload["tree"] as? JSONObject) ?: raw
                     } else {
                         raw
                     }

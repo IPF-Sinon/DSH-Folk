@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
 import me.bmax.apatch.BuildConfig
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -792,6 +793,20 @@ object DshFileAccess {
      */
     fun pathAllowed(ctx: Context, relative: String): Boolean {
         val rel = relative.trim().replace('\\', '/').trim('/')
+        // 扩展拦截点：路径策略判定的**最后一道**。
+        //
+        // 放在这里而不是 DshFsBridge.resolve 里头：`pathAllowed` 有两个调用点（resolve 与
+        // relativeOf），只改其中一个就会留下一条绕过钩子的路径 —— 那正是安全相关钩子最怕的事。
+        //
+        // 语义是「只许收紧，不许放宽」：下面的黑白名单判定**照常执行**，扩展只在宿主
+        // 已放行的路径上再做一次否决。宿主放行、扩展否决 → 拒；宿主已拒 → 直接拒，
+        // 不给扩展任何翻案机会（否则一个装了扩展的设备会比裸机更不安全）。
+        if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.STORAGE_CHECK_PATH)) {
+            val payload = mutableMapOf<String, Any?>("path" to rel)
+            if (!ExtensionHookRegistry.runAround(ExtensionHookRegistry.Point.STORAGE_CHECK_PATH, payload)) {
+                return false
+            }
+        }
         val deny = denyDirs(ctx)
         if (deny.any { isUnderOrEqual(rel, it) }) return false
         val allow = allowDirs(ctx)
