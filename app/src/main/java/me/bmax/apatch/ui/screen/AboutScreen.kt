@@ -81,6 +81,10 @@ private val SPONSORS = listOf(
         // 头像来自赞助者本人提供的那张（drawable-nodpi 下不做密度适配，原样显示）
         avatarRes = me.bmax.apatch.R.drawable.sponsor_daqiwancheng,
     ),
+    Sponsor(
+        name = "海棠错",
+        avatarRes = me.bmax.apatch.R.drawable.sponsor_haitangcuo,
+    ),
 )
 
 // 注意：下面这行 @Destination 必须**紧贴** AboutScreen。中间插任何声明都会让
