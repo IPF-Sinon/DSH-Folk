@@ -1190,7 +1190,7 @@ private fun FloatingEditorBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (hasSelection) {
-                    FloatBarIcon(Icons.Filled.ContentCopy, stringResource(R.string.dsh_wf_float_copy), onCopy)
+                    FloatBarIcon(Icons.Filled.ContentCopy, stringResource(R.string.dsh_wf_float_copy), onClick = onCopy)
                     // 入口卡不给删除按钮：删掉它整张图没有起点，定义立刻不合法。
                     if (canDelete) {
                         FloatBarIcon(
@@ -1205,7 +1205,7 @@ private fun FloatingEditorBar(
                         )
                     }
                 } else {
-                    FloatBarIcon(Icons.Filled.Visibility, stringResource(R.string.dsh_workflow_zoom_reset), onRecenter)
+                    FloatBarIcon(Icons.Filled.Visibility, stringResource(R.string.dsh_workflow_zoom_reset), onClick = onRecenter)
                     // 中间那颗是实心主色圆：它是这一栏的主操作（唤出节点列表）。
                     Surface(
                         shape = CircleShape,
@@ -1220,7 +1220,7 @@ private fun FloatingEditorBar(
                             )
                         }
                     }
-                    FloatBarIcon(Icons.Filled.Refresh, stringResource(R.string.dsh_workflow_editor_auto_layout), onReset)
+                    FloatBarIcon(Icons.Filled.Refresh, stringResource(R.string.dsh_workflow_editor_auto_layout), onClick = onReset)
                 }
             }
         }

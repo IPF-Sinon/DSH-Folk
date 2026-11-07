@@ -75,6 +75,7 @@ import me.bmax.apatch.dsh.WorkflowStore
 import me.bmax.apatch.dsh.WorkflowValidator
 import me.bmax.apatch.dsh.toJson
 import me.bmax.apatch.ui.component.WorkflowDefinitionEditor
+import me.bmax.apatch.ui.component.WorkflowDetailDialog
 import me.bmax.apatch.ui.component.WorkflowGraphPreview
 import org.json.JSONObject
 
