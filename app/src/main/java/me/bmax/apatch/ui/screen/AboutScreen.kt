@@ -325,6 +325,11 @@ fun AboutScreen(navigator: DestinationsNavigator) {
                     }
                 }
             }
+
+            // 与上一张卡片（赞助者）留出与其它卡片一致的间距：
+            // 少了这一行两张卡会「粘」在一起，看上去像一个区块里混了两种内容。
+            Spacer(modifier = Modifier.height(16.dp))
+
             // 致谢：这个 App 是站在这几个项目上做出来的，明确列出来
             ExpressiveCard(
                 modifier = Modifier.padding(horizontal = 16.dp),

@@ -2824,7 +2824,23 @@ object DshRuntime : DshRuntimeHost {
             return
         }
         val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
+        // 等待期间**定期把进程的存活与输出写进日志**。
+        // 为什么必须有：真机实测 proroot 卡住时，日志从 `[attach] WRITE_OK` 直接跳到 90 秒后的
+        // 「启动超时」——中间一片空白，既看不出进程还在不在，也看不到它最后说了什么。
+        // 于是「proroot 为什么起不来」这个问题只能靠猜。每隔十几秒打一行心跳，把这条链路补上。
+        var lastBeat = 0L
         while (System.currentTimeMillis() < deadline) {
+            val nowBeat = System.currentTimeMillis()
+            if (nowBeat - lastBeat >= READY_HEARTBEAT_MS) {
+                lastBeat = nowBeat
+                val p = serverProcess
+                appendLog(
+                    "[wait] 运行中=" + (p?.isAlive == true) +
+                        (if (p != null) " pid=" + runCatching { p.pid() }.getOrNull() else "") +
+                        " · 端口=" + port() + " 已监听=" + isPortInUse(port()) +
+                        " · 已等=" + ((nowBeat - (deadline - READY_TIMEOUT_MS)) / 1000) + "s"
+                )
+            }
             if (isPortInUse(port()) && httpResponds(port())) {
                 awaitWebToken()
                 _state.update {
@@ -2926,13 +2942,23 @@ object DshRuntime : DshRuntimeHost {
             // 父进程共享 cmdline，所以比对 PID 挡不住它）。做法是在命令里埋一个哨兵字符串，
             // 再按 /proc/<pid>/cmdline 把带哨兵的进程全部跳过 —— 否则 kill -KILL 会先把这条
             // 清理命令自己杀掉，真正的 dsh web 反而留着。
+            //
+            // **为什么先「查一遍」再决定要不要等**（真机实测：这段让每次点启动多等 2 秒以上）：
+            // 绝大多数启动根本没有残留进程（上次已干净退出），而原写法 `_kill -TERM; sleep 1;
+            // _kill -KILL` 无论有没有目标都**无条件睡满 1 秒**，之前还要扫两遍宿主全部进程
+            // （proot 模式下 /proc 里是整机进程，不是容器里的）。改成先用一次 pgrep 收集候选：
+            // 空就直接退出，有才走 TERM→等待→KILL。语义不变，只是不再为「没东西可杀」付固定开销。
             execRootfs(
                 ": DSHFOLK_STOP_SENTINEL; " +
-                "_kill() { for _p in " +
-                "\$(pgrep -f 'bin.js web' 2>/dev/null; pgrep -f 'dsh web' 2>/dev/null); do " +
+                "_pids() { pgrep -f 'bin.js web' 2>/dev/null; pgrep -f 'dsh web' 2>/dev/null; }; " +
+                "_alive() { for _p in \$(_pids); do " +
                 "grep -qa DSHFOLK_STOP_SENTINEL \"/proc/\$_p/cmdline\" 2>/dev/null && continue; " +
-                "kill \"\$1\" \"\$_p\" 2>/dev/null; done; }; " +
-                "_kill -TERM; sleep 1; _kill -KILL"
+                "echo \"\$_p\"; done; }; " +
+                "_targets=\$( _alive ); " +
+                "[ -z \"\$_targets\" ] && exit 0; " +
+                "kill -TERM \$_targets 2>/dev/null; sleep 1; " +
+                "_left=\$( _alive ); " +
+                "[ -n \"\$_left\" ] && kill -KILL \$_left 2>/dev/null; exit 0"
             ).waitFor(8, TimeUnit.SECONDS)
         }
         runCatching { serverProcess?.destroyForcibly() }

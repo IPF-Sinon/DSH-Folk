@@ -54,6 +54,15 @@ import org.json.JSONObject
 internal const val READY_TIMEOUT_MS = 90_000L
 
 /**
+ * 等待服务就绪期间，每隔多久往日志里打一行心跳。
+ *
+ * 为什么需要心跳：proroot 卡住时日志从「探测通过」直接跳到 90 秒后的「启动超时」，
+ * 中间没有任何信息 —— 进程还在不在、端口有没有监听、等了多久，全都看不见。
+ * 取 15 秒：一条启动最多 6 行，不会把日志刷爆，又足够定位是哪一段卡住。
+ */
+internal const val READY_HEARTBEAT_MS = 15_000L
+
+/**
  * 端口已响应后，再等认证 token 多久才按「没有 token」继续。
  *
  * web 服务器**激活即监听**（dsh-host-webserver：「Activation listens immediately」），
