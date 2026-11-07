@@ -27,6 +27,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import me.bmax.apatch.util.appString
 import me.bmax.apatch.ui.MainActivity
 import me.bmax.apatch.util.PermissionUtils
@@ -855,6 +856,26 @@ object DshNativeBridge {
         // 点了拒绝（或者干脆没给），这次调用什么也做不成；那种情况烧掉配额等于让他为同一件
         // 事回答两次。配额本身有三分钟寿命，所以留着也不会变成长期授权。
         spendOnce(ctx, cap, method, path, params)
+
+        // 扩展拦截点（调用前）：权限判定已全部通过，**即将真的执行**这一下。
+        //
+        // around 返回 false = 扩展拦下这次调用（例如它要替用户加一道自己的策略）。
+        // 拦下时返回 403 且**照常写审计** —— 审计里要能看出「是扩展拦的」而不是「宿主拒绝」，
+        // 否则事后查日志会误判成权限配置问题。
+        if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.NATIVE_BEFORE_INVOKE)) {
+            val payload = mutableMapOf<String, Any?>(
+                "cap" to cap?.id,
+                "method" to method,
+                "path" to path,
+                "params" to params,
+                "reason" to reason,
+            )
+            if (!ExtensionHookRegistry.runAround(ExtensionHookRegistry.Point.NATIVE_BEFORE_INVOKE, payload)) {
+                val result = 403 to err("调用被扩展拦下", "extension_blocked")
+                audit(ctx, method, path, params, cap, reason, result, privAuditExtra(ctx, cap, "extension_blocked"))
+                return result
+            }
+        }
 
         val result = runCatching {
             when {

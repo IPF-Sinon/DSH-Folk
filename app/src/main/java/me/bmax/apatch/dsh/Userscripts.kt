@@ -333,10 +333,10 @@ internal object Userscripts {
             val payload = mutableMapOf<String, Any?>("url" to url, "scripts" to built.toMutableList())
             ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.USERSCRIPTS_BUILD, payload)
             @Suppress("UNCHECKED_CAST")
-            (payload["scripts"] as? List<String>)?.takeIf { it.isNotEmpty() } ?: built
-        } else {
-            built
+            val replaced = (payload["scripts"] as? List<String>) ?: built
+            return replaced.ifEmpty { built }
         }
+        return built
     }
 
     /** 标题 + 正文哈希 → 文件名安全、可读、稳定。 */
