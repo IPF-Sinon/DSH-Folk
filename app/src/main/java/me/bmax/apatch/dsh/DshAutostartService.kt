@@ -45,6 +45,15 @@ class DshAutostartService : AccessibilityService() {
     /** 同上，无事可中断。 */
     override fun onInterrupt() = Unit
 
+    /**
+     * 系统解绑（用户关掉、或被 ROM 清掉）。这里只**报告**一次断开，是否恢复由
+     * [DshA11yRecovery] 按应用内部的期望设置决定 —— 那个对象也会检查总开关与限流。
+     */
+    override fun onUnbind(intent: android.content.Intent?): Boolean {
+        DshA11yRecovery.onServiceGone("autostart-unbind")
+        return super.onUnbind(intent)
+    }
+
     private companion object {
         const val TAG = "DSH-Folk-Autostart-A11y"
     }

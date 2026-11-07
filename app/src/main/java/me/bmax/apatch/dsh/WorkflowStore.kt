@@ -64,6 +64,40 @@ internal object WorkflowStore {
         return if (atomicWrite(file, saved.toJson().toString())) saved else null
     }
 
+    /**
+     * 带 revision 前置条件的保存（编辑页自动保存用）。
+     *
+     * 与 [save] 的差别只有一个：**磁盘上的 revision 必须等于调用方看到的那一份**，否则拒绝。
+     *
+     * 为什么需要：编辑页会在每次改动后排一次防抖写盘，而「同一份定义」可能同时被另一条路径
+     * 改过（AI 通过 bridge 改流程、另一个页面的审批编辑、用户之前没关的旧编辑页）。无条件
+     * 覆盖会让最后按下保存的人赢，而中间那些改动无声消失 —— 用户看到的是「我改的东西自己
+     * 变回去了」。冲突时如实返回 null，由界面提示，而不是替用户做选择。
+     *
+     * @param expectedRevision 调用方开始编辑时那份定义的 revision；新建流程传 0（磁盘上
+     *   还没有这份文件，也就没有被别人改过的可能）。
+     * @return 落盘后的定义；冲突或写失败时 null。
+     */
+    fun saveIfRevision(ctx: Context, def: WorkflowDefinition, expectedRevision: Int): WorkflowDefinition? {
+        val file = defFile(ctx, def.id) ?: return null
+        val existing = load(ctx, def.id)
+        val diskRevision = existing?.revision ?: 0
+        if (diskRevision != expectedRevision) return null
+        return save(ctx, def)
+    }
+
+    /**
+     * 流程名是否已被**别的**流程占用。
+     *
+     * 比较前 trim 并忽略大小写：用户看不出「日报」与「 日报 」的区别，允许两者并存只会
+     * 让列表里出现两条看起来一样的流程。排除 [excludeId] 是因为编辑时它自己就占着这个名字。
+     */
+    fun nameTaken(ctx: Context, name: String, excludeId: String? = null): Boolean {
+        val want = name.trim()
+        if (want.isEmpty()) return false
+        return list(ctx).any { it.id != excludeId && it.name.trim().equals(want, ignoreCase = true) }
+    }
+
     fun delete(ctx: Context, id: String): Boolean = defFile(ctx, id)?.delete() ?: false
 
     // ────────────────────────── 运行 ──────────────────────────

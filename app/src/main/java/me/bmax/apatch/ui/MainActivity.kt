@@ -316,6 +316,9 @@ class MainActivity : AppCompatActivity() {
         // 「别看本应用」档位落在窗口上（all 档才真的隐藏；见 A11yOwn）。
         // 放在 onResume：用户在设置里改完档位、回到这一页就是新档位，不必重启。
         A11yOwn.applyToWindow(window)
+        // 回到前台补一次无障碍恢复：进程活着但没收到 secure settings 变更时也能自愈。
+        // 是否真的动手由 [DshA11yRecovery.wanted] 按应用内开关决定，这里是尽力而为。
+        me.bmax.apatch.dsh.DshA11yRecovery.onForeground()
         showBiometricPromptIfNeeded()
     }
 

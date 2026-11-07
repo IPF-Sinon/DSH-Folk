@@ -68,6 +68,12 @@ import me.bmax.apatch.dsh.WorkflowPatch
 import me.bmax.apatch.dsh.WorkflowValidator
 import me.bmax.apatch.dsh.workflowDiff
 
+/** 自动保存的可见状态。 */
+private enum class SaveState { IDLE, SAVING, SAVED, FAILED }
+
+/** 自动保存的防抖窗口：连续输入合并成一次写盘。 */
+private const val AUTOSAVE_DEBOUNCE_MS = 400L
+
 private data class EditorNodeKind(
     val type: WorkflowNodeType,
     val labelRes: Int,
@@ -236,6 +242,10 @@ internal fun WorkflowEditorSurface(
     title: String,
     onSave: (WorkflowDefinition) -> Unit,
     onCancel: () -> Unit,
+    /** 自动保存（仅普通用户编辑页传入；审批弹窗传 null = 纯临时草稿）。 */
+    autosave: ((WorkflowDefinition) -> WorkflowDefinition?)? = null,
+    /** 新建时已收好的名字，进页面即写回流程名（为空表示沿用 initial）。 */
+    newName: String = "",
 ) {
     // 打开时的**基准**：模型里坐标全是 0（AI 生成 / 新建流程）时，先把自动布局算进模型 ——
     // 否则「显示的位置」来自自动布局、「模型的位置」还是 0，拖动一上手就会跳。
@@ -252,8 +262,37 @@ internal fun WorkflowEditorSurface(
             initial
         }
     }
-    var draft by remember { mutableStateOf(baseline) }
+    var draft by remember { mutableStateOf(if (newName.isBlank()) baseline else baseline.copy(name = newName)) }
     val def = draft
+    // ── 自动保存（只在普通编辑页；autosave==null 时全是空操作）──
+    //
+    // 语义：每次模型变化排队一次落盘；连续输入用 400ms 防抖合并，离开页面/切后台立即 flush。
+    // 落盘走 saveIfRevision（前置 revision），冲突时不覆盖 —— 保存状态原样摆在顶栏上，
+    // 让用户自己看见"存了没有"，而不是关掉页面后才发现改动丢了。
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var saveState by remember { mutableStateOf(SaveState.IDLE) }
+    var savedRevision by remember { mutableIntStateOf(initial.revision) }
+    var pending by remember { mutableStateOf(false) }
+    // 最近一次真正落盘的定义：它的 revision 是下一轮保存的前置条件。
+    var savedDef by remember { mutableStateOf(initial) }
+    fun persistNow(current: WorkflowDefinition) {
+        val saver = autosave ?: return
+        pending = false
+        saveState = SaveState.SAVING
+        scope.launch {
+            // 写盘是 IO；放在 IO 派发器上，输入框打字不会被文件系统卡住。
+            val saved = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                saver(current.copy(revision = savedRevision))
+            }
+            if (saved != null) {
+                savedDef = saved
+                savedRevision = saved.revision
+                saveState = SaveState.SAVED
+            } else {
+                saveState = SaveState.FAILED
+            }
+        }
+    }
     var selected by remember { mutableStateOf<String?>(null) }
     var addAfter by remember { mutableStateOf<String?>(null) }
     // 拉线落在空白时的**松手窗口坐标**：菜单里选完类型，新节点就落在这里（不是默认网格位）。
@@ -266,6 +305,10 @@ internal fun WorkflowEditorSurface(
     var ghost by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    // 视口（缩放+平移）：**只存在于本次编辑会话**，不落盘 —— 跨设备恢复旧视口没有意义。
+    // 落点/拖动全部经它的逆变换，见 [WorkflowViewport]。
+    var viewport by remember { mutableStateOf(WorkflowViewport()) }
+    var viewportInit by remember { mutableStateOf(false) }
     // 拖动卡片：起点 + **未吸附**的累加位移（每帧吸附会让小位移被吞掉 → 原地颤抖），
     // 松手时才吸附网格落盘。
     var dragFrom by remember { mutableStateOf<Triple<String, Float, Float>?>(null) }
@@ -279,6 +322,22 @@ internal fun WorkflowEditorSurface(
     val errors: List<String> = remember(def) {
         WorkflowValidator.validate(def, DshNativeBridge.Cap.entries.map { it.id }.toSet()).errors
     }
+    // 防抖落盘：draft 每变一次就重置计时器，只有停下来 400ms 才真写。
+    // 连续打字会一路重置 —— 逐字符写盘既费 IO，也会让 saveIfRevision 撞自己的 revision。
+    androidx.compose.runtime.LaunchedEffect(def) {
+        if (autosave == null || def == savedDef) return@LaunchedEffect
+        pending = true
+        saveState = SaveState.SAVING
+        kotlinx.coroutines.delay(AUTOSAVE_DEBOUNCE_MS)
+        persistNow(def)
+    }
+
+    // 离开页面/切到后台时立刻 flush：防抖窗口里点返回，用户看到的"已保存"不能是假的。
+    androidx.lifecycle.compose.LifecyclePauseEffect(Unit) {
+        if (autosave != null && def != savedDef) persistNow(def)
+        onPauseOrDispose { }
+    }
+
     // 系统返回与「取消」同一条路：先问要不要放弃改动。
     androidx.activity.compose.BackHandler {
         if (patchLines.isEmpty()) onCancel() else confirmDiscard = true
@@ -303,15 +362,19 @@ internal fun WorkflowEditorSurface(
         )
     }
 
-    /** 窗口坐标 → 画布 dp（吸附 12dp 网格）。拉线/抽屉拖出的落点都走这里。 */
-    fun dropPointDp(pointerWindow: Offset): Pair<Int, Int> = Pair(
-        WorkflowGeometry.snapToGridDp(
-            WorkflowGeometry.pxToDp(pointerWindow.x - canvasOrigin.x, density),
-        ).coerceAtLeast(0),
-        WorkflowGeometry.snapToGridDp(
-            WorkflowGeometry.pxToDp(pointerWindow.y - canvasOrigin.y, density),
-        ).coerceAtLeast(0),
-    )
+    /**
+     * 窗口坐标 → 世界 dp（吸附 12dp 网格）。拉线/新节点的落点都走这里。
+     *
+     * 必须经 [WorkflowViewport.toWorldDp]：只减 canvasOrigin 的那一版在缩小/放大之后会把
+     * 节点放到完全不相干的位置（那是"缩小时新节点跑到视野外"的直接成因）。
+     */
+    fun dropPointDp(pointerWindow: Offset): Pair<Int, Int> {
+        val world = viewport.toWorldDp(pointerWindow, canvasOrigin, density)
+        return Pair(
+            WorkflowGeometry.snapToGridDp(world.x).coerceAtLeast(0),
+            WorkflowGeometry.snapToGridDp(world.y).coerceAtLeast(0),
+        )
+    }
 
     /** 落在默认网格位新建；afterId 非空时顺手连一条出边。 */
     fun addNode(kind: EditorNodeKind, afterId: String?) {
@@ -360,7 +423,31 @@ internal fun WorkflowEditorSurface(
                         )
                     }
                     Spacer(Modifier.weight(1f))
-                    Button(onClick = { onSave(def) }, shape = RoundedCornerShape(50)) {
+                    // 保存状态：自动保存时必须让用户看见"存了没有"，否则返回时心里没底。
+                    if (autosave != null) {
+                        Text(
+                            text = stringResource(
+                                when (saveState) {
+                                    SaveState.IDLE -> R.string.dsh_workflow_save_saved
+                                    SaveState.SAVING -> R.string.dsh_workflow_save_saving
+                                    SaveState.SAVED -> R.string.dsh_workflow_save_saved
+                                    SaveState.FAILED -> R.string.dsh_workflow_save_failed
+                                },
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (saveState == SaveState.FAILED) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Button(onClick = {
+                        // 手动保存 = 立刻落盘（不等防抖）然后退出。
+                        persistNow(def)
+                        onSave(def)
+                    }, shape = RoundedCornerShape(50)) {
                         Text(stringResource(R.string.dsh_workflow_editor_save))
                     }
                 }
@@ -397,10 +484,8 @@ internal fun WorkflowEditorSurface(
                             val from = dragFrom
                             if (from != null && from.first == id) {
                                 // 累加**未吸附**位移：拖动过程中 1:1 跟手，松手时再吸附。
-                                dragAcc += Offset(
-                                    WorkflowGeometry.pxToDp(dxPx, density),
-                                    WorkflowGeometry.pxToDp(dyPx, density),
-                                )
+                                // 位移要经视口换算：缩放后手指走 100px，节点只能走 100/(scale·density) dp。
+                                dragAcc += viewport.dragDeltaDp(dxPx, dyPx, density)
                                 dragPreview = id to Offset(
                                     (from.second + dragAcc.x).coerceIn(0f, 2000f),
                                     (from.third + dragAcc.y).coerceIn(0f, 2000f),
@@ -444,8 +529,23 @@ internal fun WorkflowEditorSurface(
                             }
                         },
                         onBlankTap = { selected = null },
+                        viewport = viewport,
+                        onViewportChange = { viewport = it },
                         modifier = Modifier.fillMaxSize(),
                     )
+                    // 首次打开（以及画布尺寸终于确定时）把视口 fit 到内容：视口不落盘，
+                    // 所以每次都从"整张图都看得见"开始，而不会对着空白角落。
+                    androidx.compose.runtime.LaunchedEffect(canvasSize, def.nodes.size) {
+                        if (!viewportInit && canvasSize != IntSize.Zero && def.nodes.isNotEmpty()) {
+                            val pts = editorLayoutFor(def).map { it.second to it.third }
+                            viewport = WorkflowViewport.fitTo(
+                                pts,
+                                Offset(canvasSize.width.toFloat(), canvasSize.height.toFloat()),
+                                density,
+                            )
+                            viewportInit = true
+                        }
+                    }
                 }
 
                 // ── 底部小工具条 ──
@@ -466,6 +566,29 @@ internal fun WorkflowEditorSurface(
                         onClick = { draft = def.copy(nodes = def.nodes.map { it.copy(posX = 0, posY = 0) }) },
                         shape = RoundedCornerShape(50),
                     ) { Text(stringResource(R.string.dsh_workflow_editor_auto_layout)) }
+                    // 缩放控件：双指也能缩，但工具条给一条明确的路（与运行详情那套 +/- 一致）。
+                    TextButton(onClick = {
+                        viewport = viewport.copy(
+                            scale = (viewport.scale - 0.2f).coerceAtLeast(WorkflowViewport.MIN_SCALE),
+                        )
+                    }) { Text("−") }
+                    Text(
+                        text = (viewport.scale * 100).toInt().toString() + "%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = {
+                        viewport = viewport.copy(
+                            scale = (viewport.scale + 0.2f).coerceAtMost(WorkflowViewport.MAX_SCALE),
+                        )
+                    }) { Text("+") }
+                    TextButton(onClick = {
+                        viewport = WorkflowViewport.fitTo(
+                            editorLayoutFor(def).map { it.second to it.third },
+                            Offset(canvasSize.width.toFloat(), canvasSize.height.toFloat()),
+                            density,
+                        )
+                    }) { Text(stringResource(R.string.dsh_workflow_zoom_reset)) }
                     Spacer(Modifier.weight(1f))
                     if (errors.isNotEmpty()) {
                         Text(

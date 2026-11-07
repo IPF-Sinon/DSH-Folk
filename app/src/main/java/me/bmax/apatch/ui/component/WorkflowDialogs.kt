@@ -460,10 +460,26 @@ internal fun WorkflowDefinitionEditor(
     title: String,
     onSave: (WorkflowDefinition) -> Unit,
     onCancel: () -> Unit,
+    /**
+     * 普通用户编辑页的自动保存（写盘并回传落盘后的定义）；审批弹窗传 null。
+     *
+     * 为什么用回传定义而不是 Unit：落盘会 +1 revision，而下一轮自动保存要拿新 revision 做
+     * 前置条件 —— 不回传的话第二次保存就会被自己的第一次写入判成"冲突"。
+     */
+    autosave: ((WorkflowDefinition) -> WorkflowDefinition?)? = null,
+    /** 新建时由列表页收好的名字（为空表示不是新建）。 */
+    newName: String = "",
 ) {
     // 编辑页的全部实现在 WorkflowEditorSurface（页面与审批弹窗共用同一份内容）。
     // 这个函数只是审批路径的入口名，保持签名不变。
-    WorkflowEditorSurface(initial = initial, title = title, onSave = onSave, onCancel = onCancel)
+    WorkflowEditorSurface(
+        initial = initial,
+        title = title,
+        onSave = onSave,
+        onCancel = onCancel,
+        autosave = autosave,
+        newName = newName,
+    )
 }
 
 /** 单个节点的参数编辑：按类型只显示这个类型认识的键。 */

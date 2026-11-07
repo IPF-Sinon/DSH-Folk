@@ -1981,4 +1981,33 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_picker_search">Search</string>
     <string name="dsh_wf_picker_search_hint">Search node name</string>
     <string name="dsh_wf_picker_empty">No matching node</string>
+    <!-- 无障碍服务自动恢复（DshA11yRecovery） -->
+    <string name="dsh_a11y_fix_title">Accessibility stays on</string>
+    <string name="dsh_a11y_fix_summary">Restores the accessibility service when the system turns it off, but only while the matching switch inside this app is still on.</string>
+    <string name="dsh_a11y_fix_need_permission">Not granted yet. Android has no dialog for this permission — copy the command below and run it once over ADB or a terminal.</string>
+    <string name="dsh_a11y_fix_granted">Granted. The service is restored automatically when the system turns it off.</string>
+    <string name="dsh_a11y_fix_copy">Copy command</string>
+    <string name="dsh_a11y_fix_copied">Command copied</string>
+    <string name="dsh_a11y_fix_check">Check again</string>
+    <string name="dsh_a11y_fix_repair">Restore now</string>
+    <string name="dsh_a11y_fix_best_effort">Best effort: while this app\u2019s process is not running, nothing can restore it. Android gives ordinary apps no way to keep watching.</string>
+    <string name="dsh_a11y_fix_not_wanted">Nothing to restore: the matching switch inside this app is off.</string>
+    <string name="dsh_a11y_fix_no_permission">WRITE_SECURE_SETTINGS is not granted, so the service cannot be restored. Copy the command and grant it over ADB.</string>
+    <string name="dsh_a11y_fix_already">Both services are already enabled.</string>
+    <string name="dsh_a11y_fix_ok">Restored.</string>
+    <string name="dsh_a11y_fix_give_up">The system keeps turning it off. Stopped retrying for now — use \u201cRestore now\u201d if you want to try again.</string>
+    <string name="dsh_a11y_fix_write_failed">The system rejected the write. Some ROMs block this even with the permission granted.</string>
+    <string name="dsh_a11y_fix_rejected">Wrote the setting but the system changed it back immediately.</string>
+    <!-- 工作流：新建命名 / 自动保存（WorkflowEditorScreen） -->
+    <string name="dsh_workflow_name_title">Name this workflow</string>
+    <string name="dsh_workflow_name_hint">Workflow name</string>
+    <string name="dsh_workflow_name_empty">The name cannot be empty</string>
+    <string name="dsh_workflow_name_taken">Another workflow already uses this name</string>
+    <string name="dsh_workflow_name_too_long">Too long (at most %1$d characters)</string>
+    <string name="dsh_workflow_name_create">Create</string>
+    <string name="dsh_workflow_name_create_failed">Could not create the file; nothing was saved</string>
+    <string name="dsh_workflow_save_saving">Saving…</string>
+    <string name="dsh_workflow_save_saved">Saved</string>
+    <string name="dsh_workflow_save_failed">Save failed — retrying on the next change</string>
+    <string name="dsh_workflow_save_conflict">This workflow was changed elsewhere; the edit was not overwritten</string>
 </resources>

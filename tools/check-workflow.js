@@ -265,7 +265,7 @@ ok(/WorkflowBlueprintCanvas\(/.test(SRC.dialogs) && !/private fun NodeCard\(/.te
   "编辑页/预览用同一块画布，旧的自绘节点卡已删除（不是一列输入框）");
 // 编辑页的画布已换成 WorkflowBlueprintCanvas（与预览同一套）；拖动回调的手势量是像素，
 // 先在密度里换算成 dp 再吸附 12dp 网格，最后写回 posX/posY。
-ok(/onNodeDrag = \{ id, dxPx, dyPx ->[\s\S]{0,700}?dragAcc \+= Offset\(/.test(SRC.editorSurface) &&
+ok(/onNodeDrag = \{ id, dxPx, dyPx ->[\s\S]{0,700}?dragAcc \+= viewport\.dragDeltaDp\(/.test(SRC.editorSurface) &&
     /onNodeDragEnd = \{ id ->[\s\S]{0,700}?WorkflowGeometry\.snapToGridDp\(preview\.second\.x\)/.test(SRC.editorSurface) &&
     /it\.copy\(posX = nx, posY = ny\)/.test(SRC.editorSurface),
   "拖动把坐标写回定义（像素→dp→吸附网格，摆位不落盘下次打开就会自己跳）");
@@ -521,8 +521,8 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   ok(/MaterialTheme\.colorScheme\.error/.test(card) && /MaterialTheme\.colorScheme\.tertiary/.test(card),
     "运行态边框按状态取色（失败 error、成功 tertiary）");
   ok(/WorkflowSchema\.defaultPinsFor\(node\)/.test(card), "引脚行来自 defaultPinsFor（与模型同一份推导）");
-  ok(/cubicTo\(/.test(canvas) && /onWireDrop/.test(canvas) && /detectDragGestures/.test(canvas),
-  "画布：贝塞尔连线 + 空白处平移 + 拉线落点回调");
+  ok(/cubicTo\(/.test(canvas) && /onWireDrop/.test(canvas) && /detectTransformGestures/.test(canvas),
+  "画布：贝塞尔连线 + 空白处平移/双指缩放 + 拉线落点回调");
   ok(/drawBlueprintDots/.test(canvas) && /24\.dp/.test(canvas), "画布有点阵网格");
   ok(!/fun layoutNodes\(/.test(canvas), "画布不自带布局：坐标由调用方传入（预览与编辑器共用摆位）");
   const preview = SRC.dialogs.slice(SRC.dialogs.indexOf("internal fun WorkflowGraphPreview("));
@@ -558,9 +558,10 @@ console.log("\u2500 #16g 编辑页是次级页面（不是覆盖层）");
 {
   ok(/@Destination<RootGraph>/.test(SRC.editorScreen) && /fun WorkflowEditorScreen\(/.test(SRC.editorScreen),
     "编辑页是导航图里的一个目的地");
-  ok(/WorkflowEditorScreenDestination\(isNew = true\)/.test(SRC.screen) &&
+  ok(/WorkflowNameDialog\(/.test(SRC.screen) &&
+    /WorkflowEditorScreenDestination\(workflowId = id\)/.test(SRC.screen) &&
     /WorkflowEditorScreenDestination\(workflowId = def\.id\)/.test(SRC.screen),
-    "新建与编辑都导航到编辑页（不再在本页盖一层）");
+    "新建先收名字（WorkflowNameDialog）再按 id 导航，编辑按 id 导航（不再在本页盖一层）");
   ok(!/editing\?\.let/.test(SRC.screen) && !/WorkflowDefinitionEditor\(/.test(SRC.screen),
     "列表页不再内联渲染编辑器");
   ok(/WorkflowEditorDialog\(/.test(SRC.dialogs) && /WorkflowDefinitionEditor\(initial = initial/.test(SRC.dialogs),
@@ -586,8 +587,8 @@ console.log("\u2500 #16h 坐标换算与手势结构（拖动 1:1 的契约）")
   ok(Math.abs(pxToDp(110, 2.75) - 40) < 1e-6, "110px / 2.75 = 40dp（1:1 换算）");
   ok(snap(pxToDp(110, 2.75)) === 36, "40dp 吸附到 12dp 网格 = 36dp");
   // 宿主：写回只经几何对象，不再出现裸除密度。
-  ok(/WorkflowGeometry\.pxToDp\(dxPx, density\)/.test(SRC.editorSurface) &&
-    /WorkflowGeometry\.snapToGridDp\(/.test(SRC.editorSurface), "编辑页写回走 pxToDp + snapToGridDp");
+  ok(/viewport\.dragDeltaDp\(dxPx, dyPx, density\)/.test(SRC.editorSurface) &&
+    /WorkflowGeometry\.snapToGridDp\(/.test(SRC.editorSurface), "编辑页写回走视口逆变换 + snapToGridDp");
   ok(!/dxPx \/ density/.test(SRC.editorSurface), "编辑页不再裸除密度（截断/加速的来源）");
   // 手势新模型（对齐点击助手）：卡片各自 onTouchEvent，画布只接空白处。
   ok(/detectDragGestures/.test(SRC.card) && /clickable/.test(SRC.card),
@@ -648,8 +649,9 @@ console.log("\u2500 #16i 节点落点换算（拉线与新面板共用同一处�
   ok(/positionInWindow\(\)/.test(e) && /onGloballyPositioned/.test(e),
     "画布用窗口坐标做基准（否则局部坐标算不出落点）");
   ok(/fun dropPointDp\(pointerWindow: Offset\): Pair<Int, Int>/.test(e) &&
-    /WorkflowGeometry\.snapToGridDp\(\s*WorkflowGeometry\.pxToDp\(pointerWindow\.x - canvasOrigin\.x, density\)/.test(e),
-    "落点经 pxToDp + 12dp 吸附后落盘");
+    /viewport\.toWorldDp\(pointerWindow, canvasOrigin, density\)/.test(e) &&
+    /WorkflowGeometry\.snapToGridDp\(world\.x\)/.test(e),
+    "落点经视口逆变换 + 12dp 吸附后落盘（缩放/平移后落点仍然对）");
   // 面板是**点选即建**，不再有「按住卡片拖出来」这条路 ——
   // 上一版的幽灵卡、窗口坐标累加、inCanvas 判定都随之删除了。
   // 这里改为守住「新节点确实落在画布内」这一意图：坐标仍取画布内的换算结果。
@@ -663,7 +665,7 @@ console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回�
   const c = SRC.card;
   const cv = SRC.canvas;
   // ① 原地颤抖：拖动过程中每帧吸附会把小位移吞掉；现在累加未吸附位移，松手才吸附。
-  ok(/dragAcc \+= Offset\(/.test(e) && /dragPreview = id to Offset\(/.test(e) &&
+  ok(/dragAcc \+= viewport\.dragDeltaDp\(/.test(e) && /dragPreview = id to Offset\(/.test(e) &&
     /onNodeDragEnd = \{ id ->/.test(e) && /snapToGridDp\(preview\.second\.x\)/.test(e),
     "拖动过程中不吸附（累加未吸附位移），松手才吸附网格");
   ok(/dragPreview\?\.let \{ \(id, p\) -> this\[id\] = p \}/.test(e),
@@ -675,8 +677,8 @@ console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回�
     "手指与线头都在窗口坐标里算（粒子原点 + 局部坐标 / 粒子中心）");
   ok(/onPinBounds\?\.invoke\(pin\.kind\.name, coords\.boundsInWindow\(\)\)/.test(c),
     "针脚上报窗口矩形（含引脚类型），已连的线也从真针脚画出去");
-  ok(/val pinned = pinRects\[/.test(cv) && /pinned\.right - origin\.x - pan\.x/.test(cv),
-    "已连线优先从针脚矩形起画（窗口→内容层局部坐标）");
+  ok(/val pinned = pinRects\[/.test(cv) && /\(pinned\.right - origin\.x - pan\.x\) \/ safeScale/.test(cv),
+    "已连线优先从针脚矩形起画（窗口→内容层局部坐标，再除以缩放回到世界坐标）");
   // ③ 面板入口是「点选即建」：落点由 dropPointDp 统一换算，不再有跟随手指的幽灵胶囊。
   //
   // 上一版这里是「幽灵胶囊左上角 = 手指 = 节点左上角」。面板改成点选之后，
@@ -1086,7 +1088,8 @@ console.log("\u2500 #17 用户自己也能建/改流程");
     (SRC.editorScreen.match(/WorkflowDefinitionEditor\(/g) || []).length;
   ok(callers >= 3, "审批弹窗与编辑页共用同一个编辑器（共 " + callers + " 处，含定义本身与弹窗包装）");
   ok(/WorkflowApprovals\.stopEditing\(request\.id, edited\.toJson\(\)\.toString\(\)\)/.test(SRC.dialogs), "审批路径保存回待批状态");
-  ok(/WorkflowStore\.save\(ctx, edited\)/.test(SRC.editorScreen), "编辑页保存直接落盘");
+  ok(/WorkflowStore\.saveIfRevision\(ctx, edited, initial\.revision\)/.test(SRC.editorScreen),
+  "编辑页保存走带 revision 前置条件的落盘（不会静默覆盖别处的改动）");
   ok(/internal fun starter\(/.test(SRC.screen) && /WorkflowStore\.newId\(\)/.test(SRC.screen),
     "有「新建流程」的合法起点（不是空定义）");
   ok(/config = mapOf\("action" to "shell", "cmd" to "echo hello"\)/.test(SRC.screen),

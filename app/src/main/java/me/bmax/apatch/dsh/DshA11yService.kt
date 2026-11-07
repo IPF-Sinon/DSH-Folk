@@ -31,11 +31,13 @@ class DshA11yService : AccessibilityService() {
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         if (instance === this) instance = null
+        DshA11yRecovery.onServiceGone("a11y-unbind")
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        DshA11yRecovery.onServiceGone("a11y-destroy")
         super.onDestroy()
     }
 

@@ -181,6 +181,10 @@ class APApplication : Application(), Thread.UncaughtExceptionHandler, ImageLoade
         // 由首页在更新内容弹窗关掉之后弹一次说明（见 Home.kt）。
         me.bmax.apatch.dsh.PrivPolicy.migrateOnce(this)
 
+        // 无障碍服务被系统关掉后尽力恢复（见 [DshA11yRecovery]）：装上 secure settings 的
+        // 监听。只在主进程做 —— 子进程（:root）不跑 UI，也没有写 secure settings 的必要。
+        me.bmax.apatch.dsh.DshA11yRecovery.install(this)
+
         // 主题/音效/背景等配置必须在任何 Composable 读取之前同步载入
         MusicConfig.load(this)
         me.bmax.apatch.ui.theme.SoundEffectConfig.load(this)

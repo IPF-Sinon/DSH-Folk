@@ -113,7 +113,8 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
         listKey++
     }
     // 用户自己建/改流程：与审批时的编辑页是**同一个** [WorkflowDefinitionEditor]。
-    val newFlowName = stringResource(R.string.dsh_workflow_new_name)
+    // 新建要先在弹窗里收名字（重名/空名都不许建），建成功后才导航进编辑页。
+    var nameDialog by remember { mutableStateOf(false) }
 
     val workflows = remember(listKey, tick) { WorkflowStore.list(ctx) }
     val runs = remember(listKey, tick) { WorkflowStore.listRuns(ctx, limit = 12) }
@@ -212,7 +213,7 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { navigator.navigate(WorkflowEditorScreenDestination(isNew = true)) }, enabled = enabled) {
+                TextButton(onClick = { nameDialog = true }, enabled = enabled) {
                     Text(stringResource(R.string.dsh_workflow_new))
                 }
             }
@@ -348,6 +349,18 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                 TextButton(onClick = { restartOpen = false }) {
                     Text(stringResource(R.string.dsh_workflow_action_cancel))
                 }
+            },
+        )
+    }
+
+    // 新建流程：先填名字，创建成功才进编辑页（见 [WorkflowNameDialog]）。
+    if (nameDialog) {
+        WorkflowNameDialog(
+            onDismiss = { nameDialog = false },
+            onCreate = { id ->
+                nameDialog = false
+                listKey++
+                navigator.navigate(WorkflowEditorScreenDestination(workflowId = id))
             },
         )
     }

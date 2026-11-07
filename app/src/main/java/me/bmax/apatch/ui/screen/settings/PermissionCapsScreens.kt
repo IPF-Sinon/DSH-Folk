@@ -69,6 +69,7 @@ import me.bmax.apatch.dsh.DshHostPrompt
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshSafSources
 import me.bmax.apatch.dsh.PrivPolicy
+import me.bmax.apatch.ui.component.A11yRecoveryCard
 import me.bmax.apatch.dsh.DisplayMirror
 import me.bmax.apatch.util.PermissionUtils
 
@@ -463,6 +464,14 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
                         openSettingsPage(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true)
                     },
                 )
+            }
+            // 无障碍服务被系统关掉后的自动恢复（WRITE_SECURE_SETTINGS + 只增不减地写回）。
+            // 放在这一组的能力卡**之后**：它管的是"服务掉了能不能自动回来"，与上面那张
+            // 档位卡是两件事 —— 档位决定 agent 能不能用，这一张决定服务会不会消失。
+            if (group.caps.contains(DshNativeBridge.Cap.A11Y)) {
+                item {
+                    A11yRecoveryCard()
+                }
             }
             item { Spacer(Modifier.height(20.dp)) }
         }

@@ -1955,4 +1955,33 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_wf_picker_search">搜索</string>
     <string name="dsh_wf_picker_search_hint">搜索节点名</string>
     <string name="dsh_wf_picker_empty">没有匹配的节点</string>
+    <!-- 无障碍服务自动恢复（DshA11yRecovery） -->
+    <string name="dsh_a11y_fix_title">无障碍服务保持开启</string>
+    <string name="dsh_a11y_fix_summary">系统关掉无障碍服务时自动恢复，但只在应用内对应的开关仍然开启时才会这么做。</string>
+    <string name="dsh_a11y_fix_need_permission">尚未授权。Android 没有这项权限的弹窗 —— 复制下面的命令，用 ADB 或终端执行一次。</string>
+    <string name="dsh_a11y_fix_granted">已授权。系统关掉服务后会自动恢复。</string>
+    <string name="dsh_a11y_fix_copy">复制命令</string>
+    <string name="dsh_a11y_fix_copied">命令已复制</string>
+    <string name="dsh_a11y_fix_check">重新检查</string>
+    <string name="dsh_a11y_fix_repair">立即恢复</string>
+    <string name="dsh_a11y_fix_best_effort">尽力而为：本应用进程不在时无法恢复 —— Android 不允许普通应用常驻监控。</string>
+    <string name="dsh_a11y_fix_not_wanted">无需恢复：应用内对应的开关已关闭。</string>
+    <string name="dsh_a11y_fix_no_permission">未授予 WRITE_SECURE_SETTINGS，无法恢复服务。请复制命令并用 ADB 授权。</string>
+    <string name="dsh_a11y_fix_already">两个服务当前都已启用。</string>
+    <string name="dsh_a11y_fix_ok">已恢复。</string>
+    <string name="dsh_a11y_fix_give_up">系统反复把它关掉，已暂停重试 —— 需要再试请点「立即恢复」。</string>
+    <string name="dsh_a11y_fix_write_failed">系统拒绝了这次写入。部分 ROM 即使授予了权限也会拦截。</string>
+    <string name="dsh_a11y_fix_rejected">已写入，但系统立刻又改了回来。</string>
+    <!-- 工作流：新建命名 / 自动保存（WorkflowEditorScreen） -->
+    <string name="dsh_workflow_name_title">给这个流程起个名字</string>
+    <string name="dsh_workflow_name_hint">流程名称</string>
+    <string name="dsh_workflow_name_empty">名称不能为空</string>
+    <string name="dsh_workflow_name_taken">已有另一个流程用了这个名称</string>
+    <string name="dsh_workflow_name_too_long">名称过长（最多 %1$d 个字符）</string>
+    <string name="dsh_workflow_name_create">创建</string>
+    <string name="dsh_workflow_name_create_failed">创建文件失败，没有保存任何内容</string>
+    <string name="dsh_workflow_save_saving">保存中…</string>
+    <string name="dsh_workflow_save_saved">已保存</string>
+    <string name="dsh_workflow_save_failed">保存失败 —— 下次改动会再试</string>
+    <string name="dsh_workflow_save_conflict">这份流程在别处被改过，本次编辑没有覆盖它</string>
 </resources>

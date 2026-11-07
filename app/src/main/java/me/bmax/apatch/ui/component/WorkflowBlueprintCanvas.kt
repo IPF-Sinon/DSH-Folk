@@ -2,8 +2,8 @@ package me.bmax.apatch.ui.component
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -36,6 +37,9 @@ import kotlin.math.abs
 import kotlin.math.max
 
 private const val CARD_W_DP = 220f
+
+/** 视口手势块的稳定 key：只用于让 pointerInput 不随重组重启。 */
+private const val UNIT_VIEWPORT_GESTURE_KEY = "workflow-canvas-viewport"
 
 /**
  * 蓝图式画布：点阵 + 贝塞尔连线 + 节点卡。
@@ -65,6 +69,12 @@ internal fun WorkflowBlueprintCanvas(
      */
     onWireDrop: ((fromId: String, toId: String?, pointerWindow: Offset) -> Unit)? = null,
     onBlankTap: (() -> Unit)? = null,
+    /**
+     * 视口（缩放 + 平移）。由**宿主**持有而不是画布内部：落点、吸附、新节点坐标都要用同一套
+     * 逆变换（见 [WorkflowViewport]），两处各存一份就一定会算出两个不同的落点。
+     */
+    viewport: WorkflowViewport = WorkflowViewport(),
+    onViewportChange: ((WorkflowViewport) -> Unit)? = null,
 ) {
     val dotColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
     val edgeColor = MaterialTheme.colorScheme.outline
@@ -72,7 +82,9 @@ internal fun WorkflowBlueprintCanvas(
     val falseColor = MaterialTheme.colorScheme.error
     val wireColor = MaterialTheme.colorScheme.primary
 
-    var pan by remember { mutableStateOf(Offset.Zero) }
+    val pan = viewport.pan
+    val scale = viewport.scale
+    val viewportCb = rememberUpdatedState(onViewportChange)
     // 画布在窗口里的位置：连线端点要把窗口坐标换算回画布局部坐标。
     var origin by remember { mutableStateOf(Offset.Zero) }
     // 卡片窗口矩形（卡片自己报上来）：拉线落点只在这里比，坐标口径唯一。
@@ -99,11 +111,16 @@ internal fun WorkflowBlueprintCanvas(
                     }
                 } else {
                     Modifier
-                        .pointerInput(Unit) {
-                            // 空白处（卡片没有消费事件时才会到这里）拖动 = 平移画布。
-                            detectDragGestures { change, amount ->
-                                change.consume()
-                                pan += amount
+                        .pointerInput(UNIT_VIEWPORT_GESTURE_KEY) {
+                            // 空白处（卡片没有消费事件时才会到这里）拖 = 平移、双指 = 缩放。
+                            // 与点击助手一致：范围 0.2–2.0，超出即夹住，不报错也不回弹。
+                            detectTransformGestures { _, panChange, zoomChange, _ ->
+                                val next = WorkflowViewport(
+                                    pan = pan + panChange,
+                                    scale = (scale * zoomChange)
+                                        .coerceIn(WorkflowViewport.MIN_SCALE, WorkflowViewport.MAX_SCALE),
+                                )
+                                viewportCb.value?.invoke(next)
                             }
                         }
                         .pointerInput(Unit) {
@@ -117,6 +134,11 @@ internal fun WorkflowBlueprintCanvas(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    // 变换顺序 = 先按左上角缩放、再平移，于是「屏幕 = 世界 × scale + pan」。
+                    // 逆变换只有一处（[WorkflowViewport.toWorldDp]），落点/吸附都由它算。
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = scale
+                    scaleY = scale
                     translationX = pan.x
                     translationY = pan.y
                 },
@@ -203,6 +225,7 @@ private fun DrawScope.drawBlueprintEdges(
     pinRects: Map<String, Rect>,
     origin: Offset,
     pan: Offset,
+    scale: Float,
     normal: Color,
     trueColor: Color,
     falseColor: Color,
@@ -218,8 +241,19 @@ private fun DrawScope.drawBlueprintEdges(
             else -> "EXEC_OUT"
         }
         val pinned = pinRects["${edge.from}:$pinKind"]
-        val fromRight = if (pinned != null) pinned.right - origin.x - pan.x else (from.x * density) + CARD_W_DP * density
-        val startY = if (pinned != null) pinned.center.y - origin.y - pan.y else (from.y * density) + WorkflowNodeCardAnchorY * density
+        // 针脚报的是**窗口**矩形，而这一层画在已被 graphicsLayer 缩放+平移过的内容层里 ——
+        // 所以要先经逆变换回到世界坐标，否则一旦缩放，线头就会离针脚越来越远。
+        val safeScale = if (scale > 0f) scale else 1f
+        val fromRight = if (pinned != null) {
+            (pinned.right - origin.x - pan.x) / safeScale
+        } else {
+            (from.x * density) + CARD_W_DP * density
+        }
+        val startY = if (pinned != null) {
+            (pinned.center.y - origin.y - pan.y) / safeScale
+        } else {
+            (from.y * density) + WorkflowNodeCardAnchorY * density
+        }
         val endX = to.x * density
         val endY = (to.y * density) + WorkflowNodeCardAnchorY * density
         val ctrl = max(abs(endX - fromRight) * 0.5f, 60.dp.toPx())
