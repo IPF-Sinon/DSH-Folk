@@ -352,19 +352,49 @@ internal fun WorkflowEditorSurface(
     }
 
     /**
+     * 新节点 id。
+     *
+     * 不能再用 `"n" + (nodes.size + 1)`：删掉中间某个节点之后，size 会回落，下一个新节点就
+     * 会撞上已经存在的 id —— 撞 id 的后果是两条连线指向同一个节点，而画布只画得出一张卡。
+     * 这里在「序号」与「时间戳」之外再排一次重，保证任何时候都不会重复。
+     */
+    fun newEditorNodeId(current: WorkflowDefinition): String {
+        var seq = current.nodes.size + 1
+        while (true) {
+            val candidate = "n" + seq + "_" + (System.currentTimeMillis() % 1000)
+            if (current.nodes.none { it.id == candidate }) return candidate
+            seq++
+        }
+    }
+
+    /**
+     * 动作卡建出来的节点：补上 `name`（卡片标题）与目录给的默认参数。
+     *
+     * 名字必须落进 `config["name"]` 而不是只写 node.name —— 参数编辑器改的是 config，
+     * 两处各存一份的话，改完名字卡片上还是旧的。
+     */
+    fun withActionDefaults(kind: EditorNodeKind, action: WorkflowActionCatalog.Action): Map<String, String> =
+        kind.defaults + ("name" to defaultNodeName(action))
+
+    /** 动作的默认节点名（当前语言的动作标题）。取不到就退回动作 id。 */
+    fun defaultNodeName(action: WorkflowActionCatalog.Action?): String =
+        action?.let { runCatching { appStringRaw(it.titleRes) }.getOrDefault(it.id) } ?: ""
+
+    /**
      * 在指定 dp 位置新建节点（落点 = 松手位置，已吸附 12dp 网格）。
      * afterId 非空时顺手连一条出边（从针脚拉出来、却落在空白的情况）。
      */
     fun addNodeAt(kind: EditorNodeKind, xDp: Int, yDp: Int, afterId: String? = null) {
-        val id = "n" + (def.nodes.size + 1) + "_" + (System.currentTimeMillis() % 1000)
+        val id = newEditorNodeId(def)
+        val settled = if (kind.bridge != null) withActionDefaults(kind, kind.bridge) else kind.defaults
         draft = def.copy(
             nodes = def.nodes + WorkflowNode(
                 id = id,
                 type = kind.type,
-                name = "",
+                name = defaultNodeName(kind.bridge),
                 posX = xDp,
                 posY = yDp,
-                config = kind.defaults,
+                config = settled,
             ),
             edges = if (afterId != null) def.edges + WorkflowEdge(afterId, id, "") else def.edges,
         )
@@ -389,8 +419,16 @@ internal fun WorkflowEditorSurface(
         val index = def.nodes.size
         val x = 24 + (index % 3) * 232
         val y = 24 + (index / 3) * 128
-        val id = "n" + (index + 1) + "_" + (System.currentTimeMillis() % 1000)
-        val node = WorkflowNode(id = id, type = kind.type, name = "", posX = x, posY = y, config = kind.defaults)
+        val id = newEditorNodeId(def)
+        val settled = if (kind.bridge != null) withActionDefaults(kind, kind.bridge) else kind.defaults
+        val node = WorkflowNode(
+            id = id,
+            type = kind.type,
+            name = defaultNodeName(kind.bridge),
+            posX = x,
+            posY = y,
+            config = settled,
+        )
         draft = def.copy(
             nodes = def.nodes + node,
             edges = if (afterId != null) def.edges + WorkflowEdge(afterId, id, "") else def.edges,
