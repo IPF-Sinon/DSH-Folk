@@ -1,0 +1,129 @@
+name: Auto-build beta DSH runtime
+
+# 自动跟进上游 @deepseek-ai/dsh 的新版本，构建**测试版**运行时。
+#
+# 为什么需要它：运行时是把某个具体版本的 dsh 装进 rootfs 的结果。上游一发新版，
+# 存量用户要么手动去 Actions 点一次 runtime.yml，要么一直用旧运行时 —— 而新版 dsh 常常
+# 带着「启动变慢」这类需要重新打包才能消化的变化（2026-11-07 就遇到过：dsh 新版加载要 54 秒，
+# 旧运行时的 90 秒超时余量不够，被误判成 proroot 故障）。
+#
+# 边界：
+#  - 只发 **beta** 通道（runtime-beta-latest），稳定通道仍由人手动决定；
+#  - 同一个上游版本**不重复构建**：把已构建的版本记在 beta release 的 body 里，
+#    下轮读出来比对（不想为此引入额外的 state 分支或外部存储）；
+#  - 失败不重试不阻塞：这是后台保障，挂了下次定时还会再试。
+
+on:
+  schedule:
+    # 每 6 小时看一次。上游发版不会那么频繁，而更密的话只是在空转 Actions 分钟数。
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Ignore the recorded version and rebuild anyway"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - name: Read latest upstream version
+        id: upstream
+        run: |
+          set -euo pipefail
+          V=$(npm view @deepseek-ai/dsh version)
+          echo "upstream=$V"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Read last built version from the beta release body
+        id: last
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          # release 不存在时 gh 会非 0 退出；这里属于「从没构建过」，不是错误。
+          BODY=$(gh release view runtime-beta-latest --json body -q .body 2>/dev/null || echo "")
+          MARK=$(echo "$BODY" | sed -n "s/.*dsh-version:\([^ ]*\).*/\1/p" | head -1)
+          echo "last=${MARK:-none}"
+          echo "last=$MARK" >> "$GITHUB_OUTPUT"
+
+      - name: Decide
+        id: decide
+        run: |
+          set -euo pipefail
+          UP="${{ steps.upstream.outputs.version }}"
+          LAST="${{ steps.last.outputs.last }}"
+          FORCE="${{ inputs.force }}"
+          # 只有「上游版本变了」或「显式 force」才构建。
+          # 用这一条而不是比较时间戳：版本号才是唯一有意义的事实。
+          if [ "$FORCE" = "true" ] || [ "$UP" != "$LAST" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "决定构建：上游 $UP（上次 $LAST）"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "跳过：已是 $UP"
+          fi
+          echo "version=$UP" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize
+        run: |
+          {
+            echo "### 自动运行时检查"
+            echo
+            echo "- 上游最新：`${{ steps.upstream.outputs.version }}`"
+            echo "- 上次构建：`${{ steps.last.outputs.last }}`"
+            echo "- 是否构建：`${{ steps.decide.outputs.build }}`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  dispatch:
+    needs: probe
+    if: needs.probe.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger runtime build (beta channel)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.probe.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh workflow run runtime.yml \
+            -f dsh_version="$VERSION" \
+            -f channel=beta \
+            -f flavor=full \
+            -f arch=both \
+            -f publish=true
+          echo "已触发 runtime.yml：$VERSION（beta / full / both）"
+
+      # **最后**才记录版本 —— 顺序很重要。
+      #
+      # 如果先记录再触发，构建失败时版本已经被写死，下一轮 probe 会认为「已构建」而永远跳过它，
+      # 那个上游版本就再也没人管了。所以记录放在触发之后、且只在触发成功时执行。
+      # 代价是「触发了但构建失败」时下一轮会重试一次 —— 那正是我们想要的。
+      #
+      # 记录写在 release body 而不是提交进仓库：每 6 小时一次自动提交会把历史刷满，
+      # 也让「谁改了什么」难以追溯。
+      - name: Record the version into the beta release body
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.probe.outputs.version }}
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 20); do
+            if gh release view runtime-beta-latest --json body -q .body >/tmp/body 2>/dev/null; then
+              break
+            fi
+            sleep 15
+          done
+          grep -v "^dsh-version:" /tmp/body >/tmp/body2 || true
+          echo "dsh-version:${VERSION}" >> /tmp/body2
+          gh release edit runtime-beta-latest --body-file /tmp/body2
+          echo "已记录 dsh-version:${VERSION}"
