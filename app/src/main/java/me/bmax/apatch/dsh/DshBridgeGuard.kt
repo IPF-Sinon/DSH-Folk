@@ -2,6 +2,7 @@ package me.bmax.apatch.dsh
 
 import android.content.Context
 import android.util.Log
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import java.io.File
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -149,7 +150,15 @@ internal object DshBridgeGuard {
                 File(dir, "bridge.previous.jsonl").also { if (it.exists()) it.delete() }
                 file.renameTo(File(dir, "bridge.previous.jsonl"))
             }
-            val entry = JSONObject()
+            // 扩展拦截点：审计条目组装完成、写盘之前。
+            //
+            // 为什么给这个口子：审计是「桥被谁用了、用到什么程度」的唯一账本，
+            // 但宿主的判据很粗（只看状态码、路径关键词、是否限流）。扩展可以补自己的
+            // 维度（例如给每条记录打上「哪个扩展发起的」「属于哪个工作流运行」）。
+            //
+            // **不允许扩展补充敏感内容**：payload 里给的是已经组装好的 JSONObject，
+            // 扩展写回同名字段即可覆盖；写回新字段由扩展自己负责合规。
+            var entry = JSONObject()
                 .put("time", Instant.now().toString())
                 .put("endpoint", endpoint)
                 .put("status", status)
@@ -157,6 +166,11 @@ internal object DshBridgeGuard {
                 .put("limited", limited)
                 // 实际生效的阈值：事后才能判断「到底超了多少」，而不是只知道超了
                 .put("threshold", thresholdFor(endpoint))
+            if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.BRIDGE_AUDIT)) {
+                val payload = mutableMapOf<String, Any?>("entry" to entry)
+                ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.BRIDGE_AUDIT, payload)
+                (payload["entry"] as? JSONObject)?.let { entry = it }
+            }
             file.appendText(entry.toString() + "\n")
         }.onFailure { Log.w(TAG, "写桥审计失败: ${it.message}") }
     }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import androidx.core.content.edit
 import me.bmax.apatch.BuildConfig
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import me.bmax.apatch.util.PermissionUtils
 import org.json.JSONArray
 import org.json.JSONObject
@@ -157,6 +158,24 @@ object DshHostPrompt {
                 if (revOk && dst.isFile && dst.length() > 0L) continue
                 val body = ctx.assets.open(spec.asset).use {
                     it.readBytes().toString(StandardCharsets.UTF_8)
+                }.let { raw ->
+                    // 扩展拦截点：宿主提示词**落盘之前**。
+                    //
+                    // 这就是模型每轮都会读到的 systemPrompt 段（讲 dsh-native 怎么用、有哪些能力）。
+                    // 扩展可以增补自己的用法说明 —— 否则扩展提供的能力对模型等于不存在：
+                    // 工具能调，但模型不知道它存在、不知道语法，实际就不会去用。
+                    //
+                    // 只对**宿主提示词插件**生效，不对工作流插件生效：后者是注册工具的 mjs，
+                    // 改它的正文会让工具注册失败，那是另一类风险，不该被同一条钩子顺带覆盖。
+                    if (spec.asset == ASSET_NAME &&
+                        ExtensionHookRegistry.has(ExtensionHookRegistry.Point.PROMPT_RENDER)
+                    ) {
+                        val payload = mutableMapOf<String, Any?>("prompt" to raw)
+                        ExtensionHookRegistry.runBefore(ExtensionHookRegistry.Point.PROMPT_RENDER, payload)
+                        (payload["prompt"] as? String)?.takeIf { it.isNotBlank() } ?: raw
+                    } else {
+                        raw
+                    }
                 }
                 dst.parentFile?.mkdirs()
                 dst.writeText(body, StandardCharsets.UTF_8)

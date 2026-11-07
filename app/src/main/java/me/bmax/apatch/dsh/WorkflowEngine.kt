@@ -1,6 +1,7 @@
 package me.bmax.apatch.dsh
 
 import android.content.Context
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -228,6 +229,27 @@ internal object WorkflowEngine {
             val varsSnapshot = vars.toMap()
             val startedAtMs = System.currentTimeMillis()
             log("[${node.id}] ${node.type.id}${if (node.name.isNotBlank()) " (${node.name})" else ""} 开始")
+
+            // 扩展拦截点：**每个节点真正执行之前**。
+            //
+            // around 返回 false = 扩展替这个节点做了决定，宿主**跳过**该节点的默认实现。
+            // 这是工作流里的通用口：扩展可以插入自己的节点类型语义，而不必改宿主代码。
+            //
+            // 注意：跳过之后，扩展要自己保证 branches[node.id] 与 markStep 状态正确，
+            // 否则后续分支路由会拿到未定义的布尔值。这个责任由扩展承担（API 文档里写明）。
+            val extHandled = if (ExtensionHookRegistry.has(ExtensionHookRegistry.Point.WORKFLOW_EXECUTE_NODE)) {
+                val payload = mutableMapOf<String, Any?>("node" to node, "vars" to varsSnapshot)
+                val proceed = ExtensionHookRegistry.runAround(ExtensionHookRegistry.Point.WORKFLOW_EXECUTE_NODE, payload)
+                if (!proceed) {
+                    branches[node.id] = branches[node.id] ?: true
+                    markStep(node.id, WorkflowStepState.OK, null, node.type.id, "扩展处理")
+                    current = WorkflowValidator.nextNode(def, node.id, branches[node.id])
+                }
+                !proceed
+            } else {
+                false
+            }
+            if (extHandled) continue
 
             when (node.type) {
                 WorkflowNodeType.TRIGGER -> {
