@@ -1249,6 +1249,59 @@ async function checkCli() {
     "原生动作的参数控件没有从动作目录生成（会漏字段）");
 }
 
+// ── v2 schema：数据边 + v1→v2 迁移 ──
+//
+// 这一组的重点是**迁移不改行为**：一份 v1 的定义用 v2 的读法解析出来必须完全等价
+// （每条边都是控制流、引脚为空），而不是"升级后流程跑不通了"。
+{
+  const models = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowModels.kt");
+  ok(/const val SCHEMA_VERSION = 2/.test(models), "schema 版本已抬到 2");
+  ok(/const val MIN_SUPPORTED_VERSION = 1/.test(models), "认得 v1 定义（不因版本直接拒绝）");
+  ok(/internal fun migrateToCurrent\(raw: Int\): Int/.test(models), "有唯一的迁移入口");
+  ok(/schemaVersion = migrateToCurrent\(/.test(models), "解析定义时真的走了迁移");
+  // v1 的关键不变量：kind 缺省 = flow。缺了它，旧定义会被读成"没有边是控制流"。
+  ok(/val kind = WorkflowEdgeKind\.of\(o\.optString\("kind"\)\) \?: WorkflowEdgeKind\.FLOW/.test(models),
+    "kind 缺省即 control-flow（v1 的每条边都是控制流）");
+  // 控制流边不写 kind：这样 v1 JSON 与 v2 的控制流边逐字相同，迁移不需要改写文件。
+  ok(/if \(kind == WorkflowEdgeKind\.DATA\) \{/.test(models),
+    "只有数据边才写 kind/引脚（v1 文件因此逐字兼容）");
+  ok(/fun outgoing\(from: String\): List<WorkflowEdge> = edges\.filter \{ it\.from == from && it\.isFlow \}/.test(models),
+    "outgoing 只返回控制流边（否则 nextNode 会抓到数据边）");
+  ok(/fun dataInto\(nodeId: String\)/.test(models) && /fun dataFrom\(nodeId: String\)/.test(models),
+    "数据边有明确的入/出查询");
+  ok(/fun dataInputKeysOf\(node: WorkflowNode\)/.test(models),
+    "数据入口键有唯一权威定义（在 DSL 层，不是 UI 层）");
+
+  const engine = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowEngine.kt");
+  ok(/val node = applyDataEdges\(def, resolved, outputs, vars, branches\)/.test(engine),
+    "执行前把数据边接到 config 上");
+  ok(/private fun coerceValue\(raw: String, dataType: String\)/.test(engine),
+    "数据边按声明类型收敛（否则文字会喂进 number 参数）");
+
+  const validator = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowValidator.kt");
+  ok(/if \(e\.kind == WorkflowEdgeKind\.DATA\) \{/.test(validator),
+    "校验器把数据边与控制流边分开查");
+  ok(/数据边不能带 when/.test(validator), "数据边不允许带 when（它不决定走哪条路）");
+  ok(/private fun validateDataWiring\(/.test(validator), "数据边两端都查（来源存在、目标参数存在）");
+  ok(/fun addDataEdge\(/.test(validator), "加数据边有唯一入口（自我引用直接拒）");
+  ok(/WorkflowSchema\.dataInputKeysOf\(target\)/.test(validator),
+    "校验器用的参数键与执行器同一份");
+  // 版本判据必须放宽成区间：只写"必须等于 2"会让所有 v1 文件在迁移之后又被拦。
+  ok(/def\.schemaVersion < WorkflowSchema\.MIN_SUPPORTED_VERSION/.test(validator),
+    "校验器的版本判据是区间，不是精确相等");
+
+  const canvas = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowBlueprintCanvas.kt");
+  ok(/edge\.kind == WorkflowEdgeKind\.DATA/.test(canvas), "画布认得出数据边");
+  ok(/private fun dataPinKeyOf\(/.test(canvas), "数据边从**自己的**针脚出发（不是卡片右上角）");
+  ok(/val isData = edge\.kind == WorkflowEdgeKind\.DATA/.test(canvas),
+    "数据边与分支边画得不一样（否则用户会以为数据边也是分支");
+
+  const surface = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowEditorSurface.kt");
+  ok(/WorkflowValidator\.addDataEdge\(/.test(surface), "编辑页从数据针脚拉出的线落成数据边");
+  ok(/fun dataSourceFor\(/.test(surface) && /"var:\$varName"/.test(surface),
+    "extract 拉出的是变量（var:名字），其余是 step:id");
+}
+
 console.log("");
 // #12 真跑插件 asset：工具表能建出正确 argv，且失败时**返回字符串而不是抛异常**
 (async () => {

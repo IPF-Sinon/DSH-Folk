@@ -73,6 +73,7 @@ import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
 import me.bmax.apatch.dsh.WorkflowPatch
 import me.bmax.apatch.dsh.WorkflowPinKind
+import me.bmax.apatch.dsh.WorkflowSchema
 import me.bmax.apatch.dsh.WorkflowValidator
 import me.bmax.apatch.dsh.workflowDiff
 
@@ -372,6 +373,37 @@ internal fun WorkflowEditorSurface(
     }
 
     /**
+     * 从某个节点拉出数据边时的**来源标识**。
+     *
+     * extract 节点产出的是变量（`var:<名字>`），其余节点产出的是本步输出（`step:<id>`）。
+     * 写错这两者不会报错，只是永远取到空串 —— 所以只在这一处决定。
+     */
+    fun dataSourceFor(current: WorkflowDefinition, fromId: String): String {
+        val src = current.node(fromId) ?: return "step:$fromId"
+        val varName = src.config("var")
+        return if (src.type == WorkflowNodeType.EXTRACT && varName.isNotBlank()) {
+            "var:$varName"
+        } else {
+            "step:$fromId"
+        }
+    }
+
+    /**
+     * 数据边默认接到下游的**第一个**数据参数上。
+     *
+     * 拉完线之后可以在参数编辑器里改具体接到哪个键；直接在这里弹选择框会把"拉线"
+     * 变成两步，而绝大多数情况下第一个键就是想要的那个（shell 的 cmd、notify 的 title、
+     * 原生动作刚建出来的那个参数）。
+     */
+    fun defaultTargetPin(current: WorkflowDefinition, toId: String): String {
+        val target = current.node(toId) ?: return ""
+        return WorkflowSchema.dataInputKeysOf(target).firstOrNull().orEmpty()
+    }
+
+    /** 数据边的值类型。目前一律按字符串传，收敛交给执行器（它按声明类型处理）。 */
+    fun dataTypeFor(fromId: String): String = "string"
+
+    /**
      * 动作的默认节点名（当前语言的动作标题）。取不到就退回动作 id。
      *
      * 必须写在 [withActionDefaults] **之前**：Kotlin 的局部函数只认声明点之前的名字，
@@ -566,15 +598,27 @@ internal fun WorkflowEditorSurface(
                                 // 成环的边**不落盘**：环一旦进入定义，执行器的拓扑调度会死循环。
                                 // 判据只有 WorkflowValidator.addEdgeIfAcyclic 一处 —— 连边入口若
                                 // 以后增加，也必须走它，否则环会从新入口漏进来。
-                                // 「成立 / 不成立」两个出口拉出来的边要各自带上 when：
-                                // 两条都落成默认边的话，执行器在判断节点上只会选第一条，
-                                // 而画布上有两条线 —— 图与实际行为直接矛盾。
-                                val whenExpr = when (fromPin) {
-                                    WorkflowPinKind.EXEC_TRUE.name -> "true"
-                                    WorkflowPinKind.EXEC_FALSE.name -> "false"
-                                    else -> ""
+                                // 从**数据针脚**拉出来的线是数据边，不参与控制流；从执行针脚
+                                // 拉出来的才带 when（成立 / 不成立各自落成 true / false ——
+                                // 两条都落成默认边的话，执行器在判断节点上只会选第一条）。
+                                val isDataPin = fromPin == WorkflowPinKind.DATA_OUT.name
+                                val next = if (isDataPin) {
+                                    WorkflowValidator.addDataEdge(
+                                        def = def,
+                                        fromId = fromId,
+                                        fromPin = dataSourceFor(def, fromId),
+                                        toId = toId,
+                                        toPin = defaultTargetPin(def, toId),
+                                        dataType = dataTypeFor(fromId),
+                                    )
+                                } else {
+                                    val whenExpr = when (fromPin) {
+                                        WorkflowPinKind.EXEC_TRUE.name -> "true"
+                                        WorkflowPinKind.EXEC_FALSE.name -> "false"
+                                        else -> ""
+                                    }
+                                    WorkflowValidator.addEdgeIfAcyclic(def, fromId, toId, whenExpr)
                                 }
-                                val next = WorkflowValidator.addEdgeIfAcyclic(def, fromId, toId, whenExpr)
                                 if (next === def) {
                                     // 返回同一个实例 = 被拒（成环 / 自环 / 重复边）
                                     Toast.makeText(

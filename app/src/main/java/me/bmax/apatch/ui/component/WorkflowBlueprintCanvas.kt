@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.dsh.WorkflowDefinition
+import me.bmax.apatch.dsh.WorkflowEdgeKind
 import me.bmax.apatch.dsh.WorkflowStepState
 import kotlin.math.abs
 import kotlin.math.max
@@ -161,6 +162,7 @@ internal fun WorkflowBlueprintCanvas(
                     normal = edgeColor,
                     trueColor = trueColor,
                     falseColor = falseColor,
+                    dataColor = edgeColor,
                 )
             }
             for (node in definition.nodes) {
@@ -213,6 +215,18 @@ internal fun WorkflowBlueprintCanvas(
     }
 }
 
+/**
+ * 数据边引脚 → 画布内部用的针脚键。
+ *
+ * 数据边的 fromPin 有三种写法（`step:<id>` / `var:<name>` / 裸参数名）。
+ * 卡片上报针脚时用的是**节点自己的引脚种类名**，两者必须在这里对齐一次 ——
+ * 对齐错了的表现是"线从卡片右上角飞出去"，看起来像连错，实际只是键没对上。
+ */
+private fun dataPinKeyOf(fromPin: String): String = when {
+    fromPin.contains(':') -> fromPin.substringAfter(':')
+    else -> fromPin
+}
+
 /** 点阵网格（24dp）。 */
 private fun DrawScope.drawBlueprintDots(color: Color) {
     val step = 24.dp.toPx()
@@ -228,7 +242,10 @@ private fun DrawScope.drawBlueprintDots(color: Color) {
     }
 }
 
-/** 三次贝塞尔连线：真分支 tertiary、假分支 error 虚线、默认流 outline 实线。 */
+/**
+ * 三次贝塞尔连线：真分支 tertiary、假分支 error 虚线、默认流 outline 实线、
+ * **数据边 primary 细虚线**。
+ */
 private fun DrawScope.drawBlueprintEdges(
     definition: WorkflowDefinition,
     positions: Map<String, Offset>,
@@ -239,16 +256,25 @@ private fun DrawScope.drawBlueprintEdges(
     normal: Color,
     trueColor: Color,
     falseColor: Color,
+    dataColor: Color,
 ) {
     val density = this.density
     for (edge in definition.edges) {
         val from = positions[edge.from] ?: continue
         val to = positions[edge.to] ?: continue
         // 线的起点：优先用真针脚的窗口矩形（换算回内容层局部坐标），没有就退回卡片右上角。
-        val pinKind = when (edge.whenExpr) {
-            "true" -> "EXEC_TRUE"
-            "false" -> "EXEC_FALSE"
-            else -> "EXEC_OUT"
+        //
+        // 数据边从**哪个针脚**出去由 fromPin 决定（例如 extract 的 "var"）；
+        // 控制流边看 when。两种边的针脚键必须是同一套格式（"<节点id>:<引脚种类名>"），
+        // 否则会画出"从卡片右上角飞出去"的线 —— 而那看起来像连错了。
+        val pinKind = if (edge.kind == WorkflowEdgeKind.DATA) {
+            dataPinKeyOf(edge.fromPin)
+        } else {
+            when (edge.whenExpr) {
+                "true" -> "EXEC_TRUE"
+                "false" -> "EXEC_FALSE"
+                else -> "EXEC_OUT"
+            }
         }
         val pinned = pinRects["${edge.from}:$pinKind"]
         // 针脚报的是**窗口**矩形，而这一层画在已被 graphicsLayer 缩放+平移过的内容层里 ——
@@ -271,18 +297,22 @@ private fun DrawScope.drawBlueprintEdges(
             moveTo(fromRight, startY)
             cubicTo(fromRight + ctrl, startY, endX - ctrl, endY, endX, endY)
         }
-        val color = when (edge.whenExpr) {
-            "true" -> trueColor
-            "false" -> falseColor
+        // 数据边用虚线 + 细一点的线：它在执行期不决定"走哪条路"，只决定"参数从哪来"。
+        // 两者画成一模一样的话，用户会以为一条数据边也是分支。
+        val isData = edge.kind == WorkflowEdgeKind.DATA
+        val color = when {
+            isData -> dataColor
+            edge.whenExpr == "true" -> trueColor
+            edge.whenExpr == "false" -> falseColor
             else -> normal
         }
         drawPath(
             path = path,
             color = color,
             style = Stroke(
-                width = if (edge.whenExpr.isBlank()) 2.5.dp.toPx() else 2.dp.toPx(),
+                width = if (isData) 1.8.dp.toPx() else if (edge.whenExpr.isBlank()) 2.5.dp.toPx() else 2.dp.toPx(),
                 cap = StrokeCap.Round,
-                pathEffect = if (edge.whenExpr == "false") {
+                pathEffect = if (isData || edge.whenExpr == "false") {
                     PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))
                 } else {
                     null

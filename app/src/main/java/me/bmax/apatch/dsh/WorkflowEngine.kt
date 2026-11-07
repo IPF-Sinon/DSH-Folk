@@ -219,13 +219,23 @@ internal object WorkflowEngine {
                 failRun(ctx, runId, "too_many_steps")
                 return
             }
-            val node = def.node(current)
-            if (node == null) {
+            val resolved = def.node(current)
+            if (resolved == null) {
                 failRun(ctx, runId, "dangling_node:$current")
                 return
             }
-            run = run.copy(currentNodeId = node.id)
-            markStep(node.id, WorkflowStepState.RUNNING, null, "", "")
+            run = run.copy(currentNodeId = resolved.id)
+            markStep(resolved.id, WorkflowStepState.RUNNING, null, "", "")
+            // **数据边在这里落地**：把上游的值写进本节点的 config，再交给下面的执行逻辑。
+            //
+            // 为什么在"执行前"而不是在解析定义时替换：上游的值只有跑到那一步才知道，
+            // 而 config 是**每步现算**的（下面的 varsSnapshot 也是同一个道理）。这样
+            // 下游节点拿到的就是普通 config，不需要在任何执行分支里再插一次"取数据边"的逻辑。
+            //
+            // 注意：数据边只改 config，id/type/name/onError/timeoutMs 全部不变，所以这里
+            // 直接把 node 指到带数据的副本上，下面的 setContent 不用逐处替换（漏一处的
+            // 后果是某个分支读到旧 config，而那种 bug 只在"连了数据边"时才出现）。
+            val node = applyDataEdges(def, resolved, outputs, vars, branches)
             val varsSnapshot = vars.toMap()
             val startedAtMs = System.currentTimeMillis()
             log("[${node.id}] ${node.type.id}${if (node.name.isNotBlank()) " (${node.name})" else ""} 开始")
@@ -585,6 +595,57 @@ internal object WorkflowEngine {
             "matches" -> runCatching { Regex(expect).containsMatchIn(actual) }.getOrDefault(false)
             else -> false
         }
+    }
+
+    /**
+     * 把数据边接到本节点的 config 上。
+     *
+     * 判据：节点收到几条数据边，就有几个参数**由上游决定**（覆盖用户在界面上填的值）。
+     * 覆盖而不是"上游为空就保留原值"—— 上游跑出来是空串本身就是一个结果，
+     * 悄悄退回手填值会让"我明明把 A 的输出接过去了，怎么没生效"变成谜。
+     *
+     * 起点的三种写法（与 [WorkflowValidator] 认的一致）：
+     *  - `step:<id>` 或直接 `<id>`：取那个节点本次运行的完整输出；
+     *  - `var:<name>`：取运行变量（`extract` 写进去的那种）。
+     */
+    private fun applyDataEdges(
+        def: WorkflowDefinition,
+        node: WorkflowNode,
+        outputs: Map<String, String>,
+        vars: Map<String, String>,
+        branches: Map<String, Boolean>,
+    ): WorkflowNode {
+        val incoming = def.dataInto(node.id)
+        if (incoming.isEmpty()) return node
+        val patch = mutableMapOf<String, String>()
+        for (e in incoming) {
+            val raw = when {
+                e.fromPin.startsWith("var:") -> vars[e.fromPin.removePrefix("var:")].orEmpty()
+                e.fromPin.startsWith("branch:") -> branches[e.fromPin.removePrefix("branch:")]?.toString().orEmpty()
+                e.fromPin.startsWith("step:") -> outputs[e.fromPin.removePrefix("step:")].orEmpty()
+                else -> outputs[e.fromPin].orEmpty()
+            }
+            // 按声明的类型收敛一下：number 只留数字形态，bool 归一成 1/0。
+            // 不收敛的话，"上游输出了 3 行文字"喂进 number 参数，下游拿到的是那段文字，
+            // 而它会被 validator 判合法（validator 只查静态定义里写的东西）。
+            patch[e.toPin] = coerceValue(raw, e.dataType)
+        }
+        return node.copy(config = node.config + patch)
+    }
+
+    /** 数据边的类型收敛。认不出的类型一律当字符串原样传。 */
+    private fun coerceValue(raw: String, dataType: String): String = when (dataType) {
+        "number" -> raw.trim().let { t ->
+            t.toLongOrNull()?.toString()
+                ?: Regex("-?\\d+(\\.\\d+)?").find(t)?.value
+                ?: ""
+        }
+        "bool" -> when (raw.trim().lowercase()) {
+            "1", "true", "yes", "on" -> "1"
+            "0", "false", "no", "off" -> "0"
+            else -> ""
+        }
+        else -> raw
     }
 
     /** `logic`：把若干判断节点的结论 and/or/not 起来。 */

@@ -69,11 +69,53 @@ internal object WorkflowValidator {
         return if (cycleIn(next) != null) def else next
     }
 
+    /**
+     * 加一条数据边，**前提是它不会自我引用**。
+     *
+     * 与 [addEdgeIfAcyclic] 分开是因为判据不同：数据边不参与控制流，所以"成环"对它
+     * 不成立（它只从上游流向下游），真正会出问题的是**同一个节点把值喂给自己** ——
+     * 那一步里"上游的值"和"本节点的参数"是同一个东西，永远算不出来。
+     *
+     * 已有同名同引脚的数据边时直接返回原定义：重复连一条线在界面上看不出差别，
+     * 但校验器会报"重复的数据边"，用户却找不到是哪两条。
+     */
+    fun addDataEdge(
+        def: WorkflowDefinition,
+        fromId: String,
+        fromPin: String,
+        toId: String,
+        toPin: String,
+        dataType: String = "string",
+    ): WorkflowDefinition {
+        if (fromId == toId) return def
+        if (fromPin.isBlank() || toPin.isBlank()) return def
+        val dup = def.edges.any {
+            it.kind == WorkflowEdgeKind.DATA && it.from == fromId && it.to == toId &&
+                it.fromPin == fromPin && it.toPin == toPin
+        }
+        if (dup) return def
+        val edge = WorkflowEdge(
+            from = fromId,
+            to = toId,
+            whenExpr = "",
+            kind = WorkflowEdgeKind.DATA,
+            fromPin = fromPin,
+            toPin = toPin,
+            dataType = dataType,
+        )
+        return def.copy(edges = def.edges + edge)
+    }
+
     fun validate(def: WorkflowDefinition, allowedCaps: Set<String>): Result {
         val errors = mutableListOf<String>()
 
-        if (def.schemaVersion != WorkflowSchema.SCHEMA_VERSION) {
-            errors += "schemaVersion 只支持 ${WorkflowSchema.SCHEMA_VERSION}，收到 ${def.schemaVersion}"
+        // 版本：读路径已经把 v1 抬到 v2（见 migrateToCurrent），所以能走到这里的
+        // 旧版本只可能来自"用户/agent 手写了一份更老或更新的 JSON"。
+        if (def.schemaVersion < WorkflowSchema.MIN_SUPPORTED_VERSION ||
+            def.schemaVersion > WorkflowSchema.SCHEMA_VERSION
+        ) {
+            errors += "schemaVersion 支持 ${WorkflowSchema.MIN_SUPPORTED_VERSION}~" +
+                "${WorkflowSchema.SCHEMA_VERSION}，收到 ${def.schemaVersion}"
         }
         if (def.name.isBlank()) errors += "name 不能为空"
         if (def.name.length > WorkflowSchema.MAX_NAME_CHARS) {
@@ -110,22 +152,40 @@ internal object WorkflowValidator {
             errors += "除了 trigger 之外没有任何节点：这个工作流什么都不做"
         }
 
-        // ── 边 ──
+        // ── 边：控制流与数据边分开查 ──
+        //
+        // 两者要求完全不同，混在一个循环里会互相污染判据：数据边**不允许**带 when
+        // （它不决定走哪条路），而控制流边不看引脚。放在同一处的话，一条带 when 的数据边
+        // 会被当成"非判断节点却带分支"报错，而它其实只是想把值喂进去。
         val ids = def.nodes.map { it.id }.toSet()
-        val edges = mutableSetOf<String>()
+        val flowKeys = mutableSetOf<String>()
+        val dataKeys = mutableSetOf<String>()
         for (e in def.edges) {
             if (e.from !in ids) errors += "连线起点不存在：${e.from}"
             if (e.to !in ids) errors += "连线终点不存在：${e.to}"
             if (e.from == e.to) errors += "节点不能连到自己：${e.from}"
-            if (!edges.add("${e.from}->${e.to}")) errors += "重复连线：${e.from} -> ${e.to}"
-            val src = def.node(e.from)
-            val wantBranch = e.whenExpr.isNotBlank()
-            val branching = branchingNode(src)
-            if (wantBranch && !branching) {
-                errors += "只有 condition / logic（以及声明了 requireDsh 的 trigger）的出边能带 when，节点 ${e.from} 不行（值「${e.whenExpr}」）"
-            }
-            if (wantBranch && e.whenExpr != "true" && e.whenExpr != "false") {
-                errors += "when 只认 true / false，收到「${e.whenExpr}」（${e.from} -> ${e.to}）"
+            if (e.kind == WorkflowEdgeKind.DATA) {
+                if (e.whenExpr.isNotBlank()) {
+                    errors += "数据边不能带 when（${e.from} -> ${e.to}）"
+                }
+                if (e.fromPin.isBlank() || e.toPin.isBlank()) {
+                    errors += "数据边必须写明两端的引脚（${e.from} -> ${e.to}）"
+                }
+                if (!dataKeys.add("${e.from}:${e.fromPin}->${e.to}:${e.toPin}")) {
+                    errors += "重复的数据边：${e.from}:${e.fromPin} -> ${e.to}:${e.toPin}"
+                }
+                errors += validateDataWiring(def, e)
+            } else {
+                if (!flowKeys.add("${e.from}->${e.to}")) errors += "重复连线：${e.from} -> ${e.to}"
+                val src = def.node(e.from)
+                val wantBranch = e.whenExpr.isNotBlank()
+                val branching = branchingNode(src)
+                if (wantBranch && !branching) {
+                    errors += "只有 condition / logic（以及声明了 requireDsh 的 trigger）的出边能带 when，节点 ${e.from} 不行（值「${e.whenExpr}」）"
+                }
+                if (wantBranch && e.whenExpr != "true" && e.whenExpr != "false") {
+                    errors += "when 只认 true / false，收到「${e.whenExpr}」（${e.from} -> ${e.to}）"
+                }
             }
         }
         for (n in def.nodes) {
@@ -302,6 +362,44 @@ internal object WorkflowValidator {
                 if (until.isNotBlank() && until != "running" && until != "stopped") {
                     out += "节点 ${n.id} 的 untilDsh 只能是 running / stopped"
                 }
+            }
+        }
+        return out
+    }
+
+    /**
+     * 一条数据边的两端是否成立。
+     *
+     * 数据边的语义是「上游的某个值 → 下游的某个参数」，所以两端各有约束：
+     *
+     * - **起点**：`<nodeId>` 或 `step:<nodeId>` 两种写法都认（画布上从卡片拉出来时用的是
+     *   前者，手写定义更接近后者）。必须指向**当前定义里存在**的节点 —— 指向不存在的节点
+     *   在执行期只会得到空串，而空串是合法的参数值，于是这类错误会完全静默。
+     * - **终点**：`toPin` 必须是下游节点**真的有的那个参数键**（见 [dataInputKeys]）。
+     *   写错了同样是静默的：值被塞进一个谁也不读的键。
+     *
+     * 另外，数据边**不能成环**：A 的值喂给 B、B 的值再喂回 A，执行顺序上无法同时满足。
+     * 这一条用不着 DFS —— 数据边只连"上游 → 下游"，只要不出现自我引用就够了；
+     * 真正的环由控制流的 findCycle 负责。
+     */
+    private fun validateDataWiring(def: WorkflowDefinition, e: WorkflowEdge): List<String> {
+        val out = mutableListOf<String>()
+        val srcId = e.fromPin.removePrefix("step:").removePrefix("var:")
+        val known = e.fromPin.startsWith("var:") || e.fromPin.removePrefix("step:") in def.nodes.map { it.id }
+        if (!known) {
+            out += "数据边的起点「${e.fromPin}」不在定义里（应当是本流程的节点 id 或 var:<名字>）"
+        }
+        if (e.fromPin.removePrefix("step:") == e.to) {
+            out += "节点 ${e.to} 不能把自己的值喂给自己（${e.fromPin} -> ${e.toPin}）"
+        }
+        if (srcId.isNotBlank() && srcId == e.to) {
+            out += "数据边回到了自己：${e.to}"
+        }
+        val target = def.node(e.to)
+        if (target != null) {
+            val keys = WorkflowSchema.dataInputKeysOf(target)
+            if (e.toPin !in keys) {
+                out += "节点 ${e.to} 没有参数「${e.toPin}」（可用：${keys.joinToString(" / ").ifBlank { "无" }}）"
             }
         }
         return out

@@ -267,16 +267,15 @@ internal fun NodeFieldRow(
     }
 }
 
-/** 该类型的所有数据输入引脚（与 [WorkflowNodeFields.fieldsFor] 同源）。 */
+/**
+ * 该类型的数据输入键。
+ *
+ * **委托给 [WorkflowSchema.dataInputKeysOf]**：那一份是执行器的读取依据，校验器查数据边时
+ * 用的也是它。界面若在这里自己再筛一遍（比如把 name/description 剔掉），两份判据就会
+ * 慢慢分叉 —— 而分叉的后果是"画布上能连、校验器说没有这个参数"。
+ */
 internal fun dataInputKeys(node: WorkflowNode): List<String> =
-    WorkflowNodeFields.fieldsFor(node)
-        .filter { it.kind != WorkflowNodeFields.Kind.BOOL || it.key != "onError" }
-        .map { it.key }
-        .filter { key ->
-            // 只有真正落进 config 的键才算数据入口；name/description/onError/timeoutMs 是
-            // 节点自身的元数据，不是"上游可以喂一个值进来"的参数。
-            key !in setOf("name", "description", "onError", "timeoutMs", "bridge", "action")
-        }
+    WorkflowSchema.dataInputKeysOf(node)
 
 /** 造一个带正确默认值的空节点（目录点选后直接用）。 */
 internal fun defaultConfigFor(type: WorkflowNodeType, action: WorkflowActionType? = null): Map<String, String> =

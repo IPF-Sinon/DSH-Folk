@@ -25,8 +25,23 @@ import org.json.JSONObject
  * 一个节点比塞进 shell 里 `sleep` 更好 —— 前者可取消、可在状态查询里看见，后者只能干等。
  */
 internal object WorkflowSchema {
-    /** 定义格式版本。将来改结构时用它做迁移，而不是猜。 */
-    const val SCHEMA_VERSION = 1
+    /**
+     * 定义格式版本。改结构时用它做迁移，而不是猜。
+     *
+     * ## v1 → v2 变的是什么
+     *
+     * v2 给连线加了**种类**：`flow`（控制流，与原语义一致）与 `data`（数据边：把上游
+     * 某个输出的值喂给下游某个参数）。v1 的每条边在语义上都是控制流，所以迁移就是
+     * 「原样补上 `dataType = flow`」—— 没有任何一条 v1 定义的**行为**会改变。
+     *
+     * 为什么不把数据传递继续塞进 `config`（比如让下游写 `${step:x}` 自己引用）：
+     * 那需要用户在字符串里手写引用，写错了只有运行时才知道；数据边是**看得见的一条线**，
+     * 校验器也能在保存时就把「类型对不上 / 来源不存在」点出来。
+     */
+    const val SCHEMA_VERSION = 2
+
+    /** 认得的最老版本：比它更老的定义不猜，直接判不合法。 */
+    const val MIN_SUPPORTED_VERSION = 1
 
     /** 硬上限：AI 生成的定义有可能失控，这些数字是「比这更离谱的一律拒绝」的线。 */
     const val MAX_NODES = 64
@@ -49,6 +64,34 @@ internal object WorkflowSchema {
 
     /** 一个节点保留的输出尾部（状态查询里回给 AI 的那一段）。 */
     const val OUTPUT_TAIL_CHARS = 8_192
+
+    /**
+     * 这个节点**真的会被读取**的参数键。
+     *
+     * 这是校验器与画布共用的唯一一份：数据边只能把值喂进这些键，别的键写了没人读，
+     * 而"写了没人读"是静默失效 —— 用户看到一条线，运行时那个参数还是空的。
+     *
+     * 放在 DSL 层（而不是 UI 层）是因为**执行器**才是最终的读取方：
+     * 界面允许编辑的字段可以比它多（例如 name/description 这类元数据），
+     * 但数据边只能接到这些键上。
+     */
+    fun dataInputKeysOf(node: WorkflowNode): List<String> = when (node.type) {
+        WorkflowNodeType.TRIGGER -> listOf("requireDsh", "autostartDsh")
+        WorkflowNodeType.EXECUTE -> when (node.actionType) {
+            WorkflowActionType.NATIVE ->
+                WorkflowActionCatalog.byId(node.config("bridge"))
+                    ?.params
+                    ?.map { "p_" + it.key }
+                    .orEmpty()
+            WorkflowActionType.NOTIFY -> listOf("title", "text")
+            // null = action 写错了，校验器已经会报；这里给 shell 的键让它至少能接上。
+            else -> listOf("cmd")
+        }
+        WorkflowNodeType.CONDITION -> listOf("source", "op", "value")
+        WorkflowNodeType.LOGIC -> listOf("op", "sources")
+        WorkflowNodeType.EXTRACT -> listOf("source", "mode", "path", "pattern", "var")
+        WorkflowNodeType.WAIT -> listOf("ms", "untilDsh")
+    }
 
     /**
      * 按节点类型推导引脚表（画布 / 节点卡的渲染依据）。
@@ -296,7 +339,34 @@ internal data class WorkflowEdge(
     val from: String,
     val to: String,
     val whenExpr: String = "",
-)
+    /** 边的种类：[WorkflowEdgeKind.FLOW] 控制流 / [WorkflowEdgeKind.DATA] 传值。 */
+    val kind: WorkflowEdgeKind = WorkflowEdgeKind.FLOW,
+    /** 数据边的起点针脚（上游节点的一个 DATA_OUT，通常是 `step:<id>` 或 `var:<name>`）。 */
+    val fromPin: String = "",
+    /** 数据边的终点针脚（下游节点的一个 DATA_IN，即它 config 里的某个参数键）。 */
+    val toPin: String = "",
+    /** 数据边的值类型提示，只用于画布配色与校验提示，不参与求值。 */
+    val dataType: String = "string",
+) {
+    /** 控制流边：参与"下一步走谁"的判定。 */
+    val isFlow: Boolean get() = kind == WorkflowEdgeKind.FLOW
+}
+
+/**
+ * 连线种类。
+ *
+ * 分这两种是因为它们在执行期的作用**完全不同**：控制流决定"接下来跑谁"，
+ * 数据边只决定"某个参数从哪来"。混在一起的话，一个节点有两条出边时执行器无法判断
+ * 哪条是"往下走"、哪条只是"喂个值" —— 这正是 v1 表达不了数据传递的根因。
+ */
+internal enum class WorkflowEdgeKind(val id: String) {
+    FLOW("flow"),
+    DATA("data");
+
+    companion object {
+        fun of(id: String?): WorkflowEdgeKind? = entries.firstOrNull { it.id == id }
+    }
+}
 
 /**
  * 这份定义**实际会用到的能力**。
@@ -334,7 +404,20 @@ internal data class WorkflowDefinition(
     /** 入口节点（trigger）。校验器保证只有一个。 */
     val trigger: WorkflowNode? get() = nodes.firstOrNull { it.type == WorkflowNodeType.TRIGGER }
 
-    fun outgoing(from: String): List<WorkflowEdge> = edges.filter { it.from == from }
+    /**
+     * 控制流出边。**只返回 flow 边** —— 执行器的"下一步走谁"全靠它，
+     * 把数据边也算进来的话，一个节点会给同一批参数各连一条出边，
+     * 于是 `nextNode` 抓到的第一条可能根本不是用来走的。
+     */
+    fun outgoing(from: String): List<WorkflowEdge> = edges.filter { it.from == from && it.isFlow }
+
+    /** 数据边：喂给 [nodeId] 某个参数的所有来源。 */
+    fun dataInto(nodeId: String): List<WorkflowEdge> =
+        edges.filter { it.to == nodeId && it.kind == WorkflowEdgeKind.DATA }
+
+    /** 数据边：从 [nodeId] 出去的所有来源声明。 */
+    fun dataFrom(nodeId: String): List<WorkflowEdge> =
+        edges.filter { it.from == nodeId && it.kind == WorkflowEdgeKind.DATA }
 }
 
 /** 运行状态与逐节点结果（持久化，进程重启后仍可查）。 */
@@ -435,14 +518,43 @@ internal fun nodeFromJson(o: JSONObject): WorkflowNode? {
     )
 }
 
-internal fun WorkflowEdge.toJson(): JSONObject =
-    JSONObject().put("from", from).put("to", to).put("when", whenExpr)
+/**
+ * 落盘：**只有数据边才写 kind / 引脚 / 类型**。
+ *
+ * 控制流边是最常见的，也是 v1 就有的形态 —— 给它多写三个键只会让 dsh 的定义文件变啰嗦，
+ * 而 `kind` 缺省就是 flow，读回来一模一样。这也让 v1 的 JSON 与 v2 的控制流边**逐字相同**，
+ * 迁移因此不需要任何"改写旧文件"的动作。
+ */
+internal fun WorkflowEdge.toJson(): JSONObject = JSONObject()
+    .put("from", from)
+    .put("to", to)
+    .put("when", whenExpr)
+    .apply {
+        if (kind == WorkflowEdgeKind.DATA) {
+            put("kind", kind.id)
+            put("fromPin", fromPin)
+            put("toPin", toPin)
+            put("dataType", dataType)
+        }
+    }
 
 internal fun edgeFromJson(o: JSONObject): WorkflowEdge? {
     val from = o.optString("from").trim()
     val to = o.optString("to").trim()
     if (from.isEmpty() || to.isEmpty()) return null
-    return WorkflowEdge(from, to, o.optString("when"))
+    // kind 缺省 = flow：v1 的每条边都是控制流，v2 的控制流边也不写这个键。
+    // 认不出来的 kind（未来版本新增的）同样退回 flow —— 旧代码读到它至少还能当普通边跑，
+    // 而不是整份定义解析失败。
+    val kind = WorkflowEdgeKind.of(o.optString("kind")) ?: WorkflowEdgeKind.FLOW
+    return WorkflowEdge(
+        from = from,
+        to = to,
+        whenExpr = o.optString("when"),
+        kind = kind,
+        fromPin = o.optString("fromPin"),
+        toPin = o.optString("toPin"),
+        dataType = o.optString("dataType").ifBlank { "string" },
+    )
 }
 
 internal fun WorkflowDefinition.toJson(): JSONObject = JSONObject()
@@ -457,6 +569,28 @@ internal fun WorkflowDefinition.toJson(): JSONObject = JSONObject()
     .put("updatedAtMs", updatedAtMs)
     .put("nodes", JSONArray().apply { nodes.forEach { put(it.toJson()) } })
     .put("edges", JSONArray().apply { edges.forEach { put(it.toJson()) } })
+
+/**
+ * 把读到的版本号抬到当前版本。
+ *
+ * ## 为什么迁移改的是**版本号**而不是数据
+ *
+ * v1→v2 的差别是"边有种类了"，而 `kind` 缺省就是 `flow` —— 也就是说，一份 v1 的 JSON
+ * 用 v2 的读法解析出来，**已经**是正确的 v2 定义（每条边都是控制流，引脚字段为空）。
+ * 所以迁移的动作只有一件：把版本号改写成 2，让校验器不再以"版本不对"拒绝它。
+ *
+ * 反过来，如果某个字段确实需要重写（例如将来把 `config.cmd` 挪到别处），
+ * 就到这个函数里按版本分支做数据改写 —— 但**只在这一处**。散落在解析器里的迁移
+ * 会在半年后变成一张谁也说不清哪条先跑的网。
+ *
+ * 比 [WorkflowSchema.MIN_SUPPORTED_VERSION] 更老、或比当前版本更新的定义原样返回，
+ * 由校验器报"版本不支持"：我们不猜未来格式。
+ */
+internal fun migrateToCurrent(raw: Int): Int = when {
+    raw < WorkflowSchema.MIN_SUPPORTED_VERSION -> raw
+    raw > WorkflowSchema.SCHEMA_VERSION -> raw
+    else -> WorkflowSchema.SCHEMA_VERSION
+}
 
 /** 解析定义；结构不合法（缺字段/类型不认识）时返回 null，由调用方回 `invalid_definition`。 */
 internal fun definitionFromJson(raw: String): WorkflowDefinition? = runCatching {
@@ -492,7 +626,10 @@ internal fun definitionFromJson(o: JSONObject): WorkflowDefinition? {
         declaresDangerous = o.optBoolean("declaresDangerous"),
         nodes = nodes,
         edges = edges,
-        schemaVersion = o.optInt("schemaVersion", WorkflowSchema.SCHEMA_VERSION),
+        // 迁移在这里发生：读进来的旧版本先升到当前版本，再交给下游。
+        // 直接拒绝 v1 会让用户升级一次 App 就丢掉所有已有流程 —— 而 v1→v2 的语义
+        // 变化只有一个：边多了 kind，缺省即 flow，与 v1 行为完全相同。
+        schemaVersion = migrateToCurrent(o.optInt("schemaVersion", WorkflowSchema.SCHEMA_VERSION)),
         revision = o.optInt("revision", 1),
         createdAtMs = o.optLong("createdAtMs"),
         updatedAtMs = o.optLong("updatedAtMs"),
