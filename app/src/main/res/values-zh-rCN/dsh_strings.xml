@@ -2071,4 +2071,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_wf_field_bridge">原生动作</string>
     <string name="dsh_wf_param_notify_title">标题</string>
     <string name="dsh_wf_param_notify_body">正文</string>
+    <string name="dsh_wf_delete_title">删除这一步？</string>
+    <string name="dsh_wf_delete_body">「%1$s」以及它的 %2$d 条连线会一起删掉，且无法撤销。</string>
+    <string name="dsh_wf_delete_confirm">删除</string>
 </resources>

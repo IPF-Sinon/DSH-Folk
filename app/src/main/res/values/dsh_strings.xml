@@ -2097,4 +2097,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_field_bridge">Native action</string>
     <string name="dsh_wf_param_notify_title">Title</string>
     <string name="dsh_wf_param_notify_body">Body</string>
+    <string name="dsh_wf_delete_title">Delete this step?</string>
+    <string name="dsh_wf_delete_body">「%1$s」and its %2$d connections will be removed. This cannot be undone.</string>
+    <string name="dsh_wf_delete_confirm">Delete</string>
 </resources>

@@ -298,6 +298,9 @@ internal fun WorkflowEditorSurface(
         }
     }
     var selected by remember { mutableStateOf<String?>(null) }
+    // 待确认删除的节点 id。删卡不能"点一下就没了"：它还会带走连着这个节点的所有边，
+    // 而自动保存已经在后台写盘 —— 误删是不可撤销的。
+    var pendingDelete by remember { mutableStateOf<String?>(null) }
     var addAfter by remember { mutableStateOf<String?>(null) }
     // 拉线落在空白时的**松手窗口坐标**：菜单里选完类型，新节点就落在这里（不是默认网格位）。
     var addAfterAt by remember { mutableStateOf(Offset.Zero) }
@@ -698,13 +701,7 @@ internal fun WorkflowEditorSurface(
                             },
                             // 入口节点不给删除按钮：删掉它整张图没有起点，定义立刻不合法。
                             onDelete = if (sel.type == WorkflowNodeType.TRIGGER) null else {
-                                {
-                                    draft = def.copy(
-                                        nodes = def.nodes.filterNot { it.id == sel.id },
-                                        edges = def.edges.filterNot { e -> e.from == sel.id || e.to == sel.id },
-                                    )
-                                    selected = null
-                                }
+                                { pendingDelete = sel.id }
                             },
                         )
                         val related = def.edges.filter { it.from == sel.id || it.to == sel.id }
@@ -759,6 +756,43 @@ internal fun WorkflowEditorSurface(
                 addAfter = null
             },
             onDismiss = { addAfter = null },
+        )
+    }
+
+    // ── 删卡确认 ──
+    //
+    // 点删除只登记意图，真正的改动在用户确认后才发生。确认文案里带上"会一并删掉的连线数"，
+    // 因为那部分损失用户看不见（卡一没，线也没了）。
+    pendingDelete?.let { delId ->
+        val gone = def.node(delId)
+        val related = def.edges.count { it.from == delId || it.to == delId }
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.dsh_wf_delete_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.dsh_wf_delete_body,
+                        gone?.name?.ifBlank { delId } ?: delId,
+                        related,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    draft = def.copy(
+                        nodes = def.nodes.filterNot { it.id == delId },
+                        edges = def.edges.filterNot { e -> e.from == delId || e.to == delId },
+                    )
+                    pendingDelete = null
+                    selected = null
+                }) { Text(stringResource(R.string.dsh_wf_delete_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(R.string.dsh_workflow_action_cancel))
+                }
+            },
         )
     }
 
