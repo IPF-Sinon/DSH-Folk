@@ -221,6 +221,9 @@
     <!-- App Title Strings -->
     <string name="app_title_dsh" translatable="false">DSH-Folk</string>
     <string name="app_title_custom">Custom</string>
+    <!-- 两个社区简称：专有名词，不做翻译，两种语言同值 -->
+    <string name="app_title_deepdroid" translatable="false">DeepDroid</string>
+    <string name="app_title_dshd" translatable="false">DSHD</string>
 
     <string name="settings_app_dpi">App DPI</string>
     <string name="dpi_apply_settings">Apply</string>

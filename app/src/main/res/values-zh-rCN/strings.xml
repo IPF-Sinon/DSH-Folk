@@ -210,6 +210,9 @@
 
 <string name="settings_app_title">应用名称</string>
     <string name="app_title_custom">自定义</string>
+    <!-- 两个社区简称：专有名词，不做翻译，两种语言同值 -->
+    <string name="app_title_deepdroid" translatable="false">DeepDroid</string>
+    <string name="app_title_dshd" translatable="false">DSHD</string>
     <string name="settings_custom_app_title">设置应用名字</string>
     <string name="custom_app_title_dialog_title">自定义应用名称</string>
     <string name="custom_app_title_dialog_hint">请输入应用名称</string>

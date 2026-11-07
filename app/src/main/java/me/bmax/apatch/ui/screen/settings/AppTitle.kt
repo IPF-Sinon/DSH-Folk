@@ -23,8 +23,12 @@ object AppTitle {
 
     const val DEEPSEEK_HARNESS = "deepseek_harness"
 
+    /** 社区常见的两个简称。值是稳定的英文键，改名不影响已存的偏好。 */
+    const val DEEPDROID = "deepdroid"
+    const val DSHD = "dshd"
+
     /** 合法键集合。不在其中的（旧版本留下的 fpatch、kernelpatch…）一律按 [DEFAULT] 处理。 */
-    val KEYS = setOf(DEFAULT, CUSTOM, DEEPSEEK_HARNESS)
+    val KEYS = setOf(DEFAULT, CUSTOM, DEEPSEEK_HARNESS, DEEPDROID, DSHD)
 
     /** 把存下来的键折成合法值。 */
     fun normalize(stored: String?): String = if (stored != null && stored in KEYS) stored else DEFAULT
@@ -40,6 +44,8 @@ object AppTitle {
     fun labelRes(key: String): Int = when (normalize(key)) {
         CUSTOM -> R.string.app_title_custom
         DEEPSEEK_HARNESS -> R.string.dsh_app_title
+        DEEPDROID -> R.string.app_title_deepdroid
+        DSHD -> R.string.app_title_dshd
         else -> R.string.app_title_dsh
     }
 }
