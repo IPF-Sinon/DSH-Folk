@@ -117,6 +117,15 @@ object ExtensionUiRegistry {
     private val shells = CopyOnWriteArrayList<ShellOverride>()
     private val palette = CopyOnWriteArrayList<Pair<String, (ColorScheme) -> ColorScheme>>()
 
+    /**
+     * 宿主内置**整屏**（可被 overrideScreen 接管）。与槽位不同：槽位是往页面里插一段，
+     * 整屏是**替换掉整个页面** —— 扩展自己负责那一屏的全部内容。
+     */
+    object Screen {
+        /** dsh 的 WebUI 页（DshWebUiActivity）。 */
+        const val WEBUI = "screen.webui"
+    }
+
     /** 宿主内置槽位名（新增一个就是加一行常量，扩展侧用字符串引用）。 */
     object Slot {
         const val EXTENSIONS_PAGE_TOP = "extensions.page.top"

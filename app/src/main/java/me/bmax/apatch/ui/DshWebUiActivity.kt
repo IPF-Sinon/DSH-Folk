@@ -411,6 +411,20 @@ class DshWebUiActivity : AppCompatActivity() {
             // allowCustomBackground = false：WebUI 是别人的页面，
             // 背后垫一张自定义壁纸只会让内容看不清
             APatchTheme(allowCustomBackground = false) {
+                // 整屏接管：扩展可以替换掉整个 WebUI 页。
+                // 放在最外层判断 —— 接管方要为自己的整屏负责（包括它想渲染什么、怎么退出），
+                // 宿主这边只求一件事：没有注册时行为与原来一字不差。
+                //
+                // 注意：接管方拿到的是空画布，宿主的 WebView 不会同时存在。想「在页面上浮一层」
+                // 请用 WEBUI_OVERLAY 槽位（那条路径下页面照常存在）。
+                // 必须在最外层做 if/else 而不是「渲染完再 return」：APatchTheme 的 content
+                // 是普通 @Composable lambda（非 inline），return@APatchTheme 编译不过。
+                val screenOverride = remember { ExtensionUiRegistry.screenOverride(ExtensionUiRegistry.Screen.WEBUI) }
+                if (screenOverride != null) {
+                    Box(Modifier.fillMaxSize()) {
+                        screenOverride.content(Modifier.fillMaxSize())
+                    }
+                } else {
                 var progress by remember { mutableIntStateOf(0) }
 
                 // 提权申请弹窗：用户此刻正看着 WebUI，只挂在 MainActivity 上的话
@@ -810,6 +824,7 @@ class DshWebUiActivity : AppCompatActivity() {
                             },
                         )
                     }
+                }
                 }
             }
         }
