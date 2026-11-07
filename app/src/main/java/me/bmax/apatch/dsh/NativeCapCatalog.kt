@@ -1,5 +1,7 @@
 package me.bmax.apatch.dsh
 
+import me.bmax.apatch.R
+
 /**
  * 原生能力的**目录**：把 `dsh-native` 的每一项能力整理成「分类 → 卡片」两级，
  * 供工作流编辑页像「点击助手」那样点选，而不是让用户自己拼命令行。

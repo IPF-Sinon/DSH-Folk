@@ -223,5 +223,39 @@ if (INTERNAL_TYPES.size > 0) {
     }
   }
 }
+// ── R 引用检查 ───────────────────────────────────────────────────────────
+//
+// 为什么单列这一条：`R.string.xxx` 用了却没 import `me.bmax.apatch.R` 时，Kotlin 只会报
+// 「Unresolved reference 'R'」—— 而且是在**编译期**才报。本地只有词法门禁（查括号配平），
+// 抓不到它，于是每个新文件都可能重犯一次。这一轮已经踩过两次（ExtensionApi、NativeCapCatalog）。
+//
+// 判据要排除三种「不需要 import」的情形：
+//   1. 文件本来就在 me.bmax.apatch 包下（同包，R 可见）；
+//   2. 已经 import 了 me.bmax.apatch.R；
+//   3. 用的是全限定名 me.bmax.apatch.R.xxx。
+{
+  let rBad = 0;
+  for (const f of FILES) {
+    const src = fs.readFileSync(f, 'utf8');
+    // 去掉注释再判：注释里提到 R.string.foo 是常见的说明写法，不该算错
+    const code = src
+      .split('\n')
+      .map((l) => l.replace(/\/\/.*$/, ''))
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const pkgMatch = src.match(/^package\s+([\w.]+)/m);
+    const pkg = pkgMatch ? pkgMatch[1] : '';
+    const inRootPkg = pkg === 'me.bmax.apatch';
+    const imported = /^import\s+me\.bmax\.apatch\.R$/m.test(src);
+    const qualified = /me\.bmax\.apatch\.R\./.test(code);
+    const bareUse = /(?<![\w.])R\.(string|drawable|id|raw|plurals|array|color|xml|anim|style|layout)\b/.test(code);
+    if (bareUse && !inRootPkg && !imported && !qualified) {
+      console.log('导入: ' + f.split('/').pop() + ' 用了 R.xxx 但没 import me.bmax.apatch.R（编译期才会报 Unresolved reference）');
+      rBad++;
+    }
+  }
+  bad += rBad;
+}
+
 console.log(bad === 0 ? '导入/可见性齐全（' + FILES.length + ' 个文件）' : bad + ' 处问题');
 process.exit(bad === 0 ? 0 : 1);
