@@ -57,6 +57,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -697,19 +699,29 @@ internal fun WorkflowEditorSurface(
                         )
                     }) { Text(stringResource(R.string.dsh_workflow_zoom_reset)) }
                     Spacer(Modifier.weight(1f))
-                    if (errors.isNotEmpty()) {
-                        Text(
-                            text = stringResource(R.string.dsh_workflow_editor_errors) + " " + errors.size,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    } else {
-                        Text(
-                            text = stringResource(R.string.dsh_workflow_editor_edges) + " " + def.edges.size,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    // 这里的文字**必须限宽限行**。
+                    //
+                    // 之前它是裸 Text：错误文案是「这个定义还不合法（修好才能运行）：」这种长句，
+                    // 与左边的 +/−/百分比/整理/加节点挤在同一行时，Row 不肯压缩自己，于是
+                    // 这段文字被压到一列宽 —— 中文逐字竖排、撑满整屏高度，底栏看上去"奇大无比"
+                    // （真机截图就是这个形态）。weight + maxLines 让它变成两行省略号。
+                    Text(
+                        text = if (errors.isNotEmpty()) {
+                            stringResource(R.string.dsh_workflow_editor_errors) + " " + errors.size
+                        } else {
+                            stringResource(R.string.dsh_workflow_editor_edges) + " " + def.edges.size
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (errors.isNotEmpty()) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
                 }
             }
 

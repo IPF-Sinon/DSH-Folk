@@ -94,6 +94,13 @@ internal fun WorkflowBlueprintCanvas(
     val pan = viewport.pan
     val scale = viewport.scale
     val viewportCb = rememberUpdatedState(onViewportChange)
+    // 手势块里的 `viewport` **必须是这个**，不能直接读参数。
+    //
+    // pointerInput 的 key 是常量，块只会组合一次；它捕获的是**第一次组合时**的 viewport。
+    // 直接读参数的话，每一帧都拿初始 scale 去算 zoomAround，于是缩放永远停在第一帧算出来的
+    // 那个比例上、来回闪（真机表现就是「卡在 89% 闪烁」）。rememberUpdatedState 让块里
+    // 读到的是最新值。
+    val viewportState = rememberUpdatedState(viewport)
     // 画布在窗口里的位置：连线端点要把窗口坐标换算回画布局部坐标。
     var origin by remember { mutableStateOf(Offset.Zero) }
     // 卡片窗口矩形（卡片自己报上来）：拉线落点只在这里比，坐标口径唯一。
@@ -127,7 +134,9 @@ internal fun WorkflowBlueprintCanvas(
                             // 与点击助手一致：范围 0.2–2.0，超出即夹住，不报错也不回弹。
                             detectTransformGestures { centroid, panChange, zoomChange, _ ->
                                 // 围绕手势中心缩放，并叠上这帧的平移 —— 否则手指按住的那个点会跑。
-                                viewportCb.value?.invoke(viewport.zoomAround(centroid, zoomChange, panChange))
+                                viewportCb.value?.invoke(
+                                    viewportState.value.zoomAround(centroid, zoomChange, panChange),
+                                )
                             }
                         }
                         .pointerInput(Unit) {
