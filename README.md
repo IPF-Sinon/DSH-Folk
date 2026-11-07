@@ -195,9 +195,8 @@ DSH-Folk 的 UI 直接复用 FolkPatch，容器与运行时交付思路来自 DS
 
 ## 赞助与支持
 
-- [玥鸢 API](https://api.stct-cnfl.cn/sign-up?aff=YBoD) —— 免费为本项目提供 API 模型。
+- [玥鸢 API](https://api.stct-cnfl.cn/sign-up?aff=YBoD) —— 免费为本项目开发提供 API 模型。
   统一 API 网关，兼容 OpenAI / NewAPI 多协议，可直接在 DSH 里配置使用。
-  没有它，本项目的对话功能在开发与测试阶段无法长期维持。
 
 ## 友情链接
 
