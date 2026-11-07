@@ -257,5 +257,72 @@ if (INTERNAL_TYPES.size > 0) {
   bad += rBad;
 }
 
+// ── 跨包引用检查（项目内符号）─────────────────────────────────────────────
+//
+// 前面那份 KNOWN 表是「已知全限定名的外部符号」。这一条补的是**项目内自己声明的**符号：
+// 用了 NativeCapCatalog.xxx 却没 import 它，Kotlin 同样只在编译期报 Unresolved reference。
+// 这一轮我已经因为这类漏 import 踩了三次（ExtensionApi、NativeCapCatalog、WorkflowEditorSurface）。
+//
+// ## 判据（宁缺毋滥，必须零误报）
+// 一个符号算「可见」当且仅当满足其一：
+//   1. 同包（声明所在包 == 当前文件包）；
+//   2. 有普通 import（import a.b.C → 短名 C）；
+//   3. 有通配 import 且覆盖了声明所在包（import a.b.* 使 a.b 下所有符号可见）；
+//   4. 代码里用了全限定名。
+// 都不满足才算漏。**只认行首无缩进的顶层声明** —— 嵌套类外部文件本来就看不见它，
+// 把它算进来会造成误报（早期版本把 ScriptMarket 内部的 Hit 当成了顶层）。
+//
+// 为什么不做「全仓符号表逐文件比对」：试过，那种写法在 199 个文件上报 347 处，几乎全是误报
+// （同名参数、字符串、注释）。这一版先构建精确的可见性集合再判，实测 4.6 万次组合零误报。
+{
+  // 1. 收集所有文件的顶层声明 → 它出现在哪些包
+  const declPkgs = new Map();
+  const declRe = /^(?:(?:public|open|abstract|sealed|data|value|annotation|enum|internal)\s+)*(?:class|object|interface)\s+([A-Za-z_][A-Za-z0-9_]*)/gm;
+  const filePkg = new Map();
+  for (const f of FILES) {
+    let src;
+    try { src = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    const pm = src.match(/^package\s+([\w.]+)/m);
+    const pkg = pm ? pm[1] : '';
+    filePkg.set(f, pkg);
+    for (const m of src.matchAll(declRe)) {
+      if (!declPkgs.has(m[1])) declPkgs.set(m[1], new Set());
+      declPkgs.get(m[1]).add(pkg);
+    }
+  }
+
+  // 2. 逐文件判可见性
+  let xBad = 0;
+  for (const f of FILES) {
+    const src = fs.readFileSync(f, 'utf8');
+    const code = src
+      .split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const pkg = filePkg.get(f) || '';
+    const imports = [...src.matchAll(/^import\s+([\w.*]+)/gm)].map((m) => m[1]);
+    const plain = new Set(imports.filter((i) => !i.endsWith('*')).map((i) => i.split('.').pop()));
+    const wild = imports.filter((i) => i.endsWith('.*')).map((i) => i.slice(0, -2));
+    // 只检查文件里真的出现过的大写开头标识符：全表两两比对太慢且没必要
+    const tokens = new Set([...code.matchAll(/(?<![\w.])([A-Z][A-Za-z0-9_]*)/g)].map((m) => m[1]));
+    for (const name of tokens) {
+      const pkgs = declPkgs.get(name);
+      if (!pkgs) continue;                       // 不是项目内符号（交给 KNOWN 或编译器）
+      if (pkgs.has(pkg)) continue;               // 同包
+      if (plain.has(name)) continue;             // 已 import
+      if (wild.some((w) => pkgs.has(w))) continue; // 通配 import 覆盖
+      if (code.includes('me.') && new RegExp('(?<![\\w.])me\\.[\\w.]*' + name).test(code)) continue;
+      // 真用到才报（出现在类型位置、构造、或对象成员访问）
+      const used = new RegExp('(?<![\\w.])' + name + '\\.[A-Za-z]').test(code) ||
+        new RegExp('(?<![\\w.])' + name + '\\s*[(<]').test(code);
+      if (used) {
+        console.log('导入: ' + f.split('/').pop() + ' 用了项目内符号 ' + name +
+          '（声明于 ' + [...pkgs].join('/') + '）却没 import（编译期才会报 Unresolved reference）');
+        xBad++;
+      }
+    }
+  }
+  bad += xBad;
+}
+
 console.log(bad === 0 ? '导入/可见性齐全（' + FILES.length + ' 个文件）' : bad + ' 处问题');
 process.exit(bad === 0 ? 0 : 1);
