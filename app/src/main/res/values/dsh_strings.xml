@@ -1978,4 +1978,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_cat_screen_hint">Display</string>
     <string name="dsh_wf_cat_privilege">Root</string>
     <string name="dsh_wf_cat_privilege_hint">Privilege</string>
+    <string name="dsh_wf_picker_search">Search</string>
+    <string name="dsh_wf_picker_search_hint">Search node name</string>
+    <string name="dsh_wf_picker_empty">No matching node</string>
 </resources>

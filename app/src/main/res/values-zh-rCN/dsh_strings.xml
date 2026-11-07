@@ -1952,4 +1952,7 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_wf_cat_screen_hint">无障碍、虚拟屏</string>
     <string name="dsh_wf_cat_privilege">特权</string>
     <string name="dsh_wf_cat_privilege_hint">需要 root 的命令</string>
+    <string name="dsh_wf_picker_search">搜索</string>
+    <string name="dsh_wf_picker_search_hint">搜索节点名</string>
+    <string name="dsh_wf_picker_empty">没有匹配的节点</string>
 </resources>

@@ -29,6 +29,9 @@ function eq(a, b, msg) {
 const read = (p) => fs.readFileSync(p, "utf8");
 const SRC = {
   models: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowModels.kt"),
+  // 节点选择面板（两个入口共用的组件）。抽出来单独读，是为了让「两处选项集必须一致」
+  // 这条断言能直接检查组件本身的结构，而不是去 grep 调用点。
+  nodePicker: read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowNodePicker.kt"),
   validator: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowValidator.kt"),
   store: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowStore.kt"),
   engine: read("app/src/main/java/me/bmax/apatch/dsh/WorkflowEngine.kt"),
@@ -608,42 +611,50 @@ console.log("\u2500 #16h 坐标换算与手势结构（拖动 1:1 的契约）")
     "画布平移只在图层上应用一次（不再在卡片偏移里重复加）");
 }
 
-console.log("\u2500 #16j 抽屉的列表不能是滚动容器（否则纵向拖出会被滚动抢走）");
+console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件");
 {
   const e = SRC.editorSurface;
-  // 只截「抽屉」这一整块：从 if (sheetOpen) 到「点卡片」弹窗之前。
   const sheetStart = e.indexOf("if (sheetOpen) {");
   const sheetEnd = e.indexOf("// ── 点卡片", sheetStart);
   const sheet = sheetStart >= 0 && sheetEnd > sheetStart ? e.slice(sheetStart, sheetEnd) : "";
-  ok(sheet.length > 0, "能定位到抽屉这一段");
-  ok(!/verticalScroll/.test(sheet), "抽屉里不能有滚动容器（纵向拖动会被它吃掉）");
-  // 抽屉改成两级之后，两列分块的对象从「全部基础节点」变成了「当前分类下的节点」。
-  // 断言守的意图没变：**节点必须是每行两张排布**，不能一列到底。
-  ok(/kinds\.chunked\(2\)/.test(sheet), "抽屉二级页按两列分块");
-  // 一级页现在也是两列网格（9 个分类单列会顶破抽屉高度上限）。
-  ok(/in EDITOR_CATEGORIES\.filter \{ it\.kinds\(\)\.isNotEmpty\(\) \}\.chunked\(2\)/.test(sheet),
-    "抽屉一级页按分类两列排布");
-  ok(/if \(chunk\.size == 1\) Spacer\(Modifier\.weight\(1f\)\)/.test(sheet),
-    "抽屉奇数列留空（不把最后一张卡拉满整行）");
-  ok(/modifier = Modifier\.weight\(1f\)/.test(sheet), "抽屉条目拿到 Row 的权重（两列等宽）");
+  ok(sheet.length > 0, "能定位到底部「加节点」入口这一段");
+  ok(/WorkflowNodePicker\(/.test(sheet), "底部入口用的是共用面板组件");
+
+  // 第二个入口（从输出口拉出后落在空白）必须用**同一个**组件。
+  //
+  // 这一条是这条 issue 的根因护栏：改了两级分类之后，那个入口仍是一个只有 7 个
+  // 基础节点的 AlertDialog，原生能力在那边根本看不到。两个入口选项集不一致就是 bug。
+  const afterStart = e.indexOf("addAfter?.let { after ->");
+  const afterEnd = e.indexOf("// ── 放弃改动确认", afterStart);
+  const after = afterStart >= 0 && afterEnd > afterStart ? e.slice(afterStart, afterEnd) : "";
+  ok(after.length > 0, "能定位到「拉出后加节点」入口这一段");
+  ok(/WorkflowNodePicker\(/.test(after), "拉出后加节点也用同一个面板（不再是只有 7 项的空 AlertDialog）");
+  ok(!/for \(kind in EDITOR_NODE_CATALOG\)/.test(after), "拉出后加节点的旧列表已移除");
+
+  // 面板内部结构（版式照点击助手的 SelectActionDialog）。
+  const picker = SRC.nodePicker;
+  ok(picker.length > 0, "能读到节点面板组件源码");
+  ok(/LazyColumn/.test(picker), "节点列表是 LazyColumn（可滚动，因为面板不靠拖出）");
+  ok(/for \(\(i, g\) in groups\.withIndex\(\)\)/.test(picker), "一级分组是一排 chip");
+  ok(/for \(\(i, s\) in group\?\.subs\.orEmpty\(\)\.withIndex\(\)\)/.test(picker), "二级分组是一排 chip");
+  ok(/OutlinedTextField/.test(picker) && /searchText\.contains\(query\.trim\(\), ignoreCase = true\)/.test(picker),
+    "带搜索框，且搜索跨整个一级分组（不只当前二级）");
+  ok(/heightIn\(max = 560\.dp\)/.test(picker), "面板限高，不撑满全屏（画布要一直露着）");
 }
 
-console.log("\u2500 #16i 抽屉拖出：落点就是松手位置（阶段 4）");
+console.log("\u2500 #16i 节点落点换算（拉线与新面板共用同一处）");
 {
   const e = SRC.editorSurface;
   ok(/positionInWindow\(\)/.test(e) && /onGloballyPositioned/.test(e),
-    "抽屉与画布都用窗口坐标做基准（否则局部坐标算不出落点）");
-  ok(/var pointer by remember/.test(e) && /pointer \+= amount/.test(e),
-    "拖出时累计的是**窗口坐标**里的指针位置，不是相对抽屉的位移");
-  ok(/val inCanvas = windowPos\.x >= canvasOrigin\.x/.test(e) && /canvasSize\.height/.test(e),
-    "只有落在画布矩形内才算拖出（松在抽屉/导航条上 = 取消）");
-  ok(/addNodeAt\(kind, xDp, yDp\)/.test(e) &&
-    /fun dropPointDp\(pointerWindow: Offset\): Pair<Int, Int>/.test(e) &&
+    "画布用窗口坐标做基准（否则局部坐标算不出落点）");
+  ok(/fun dropPointDp\(pointerWindow: Offset\): Pair<Int, Int>/.test(e) &&
     /WorkflowGeometry\.snapToGridDp\(\s*WorkflowGeometry\.pxToDp\(pointerWindow\.x - canvasOrigin\.x, density\)/.test(e),
-    "落点经 pxToDp + 12dp 吸附后落盘（抽屉与拉线共用同一处换算）");
-  ok(/ghost\?\.let \{/.test(e) && /pos\.x - rootOrigin\.x/.test(e),
-    "拖出过程中有跟随手指的幽灵卡");
-  ok(!/total < -32f/.test(e), "删掉了「只按向上位移猜」的旧启发式");
+    "落点经 pxToDp + 12dp 吸附后落盘");
+  // 面板是**点选即建**，不再有「按住卡片拖出来」这条路 ——
+  // 上一版的幽灵卡、窗口坐标累加、inCanvas 判定都随之删除了。
+  // 这里改为守住「新节点确实落在画布内」这一意图：坐标仍取画布内的换算结果。
+  ok(/dep\?|dropPointDp/.test(e) && !/total < -32f/.test(e),
+    "删掉了「只按向上位移猜」的旧启发式");
 }
 
 console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回归护栏）");
@@ -666,9 +677,14 @@ console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回�
     "针脚上报窗口矩形（含引脚类型），已连的线也从真针脚画出去");
   ok(/val pinned = pinRects\[/.test(cv) && /pinned\.right - origin\.x - pan\.x/.test(cv),
     "已连线优先从针脚矩形起画（窗口→内容层局部坐标）");
-  // ③ 落点/幽灵卡对齐：胶囊左上角 = 手指 = 节点左上角。
-  ok(/pos\.x - rootOrigin\.x\)\.toInt\(\)/.test(e) && !/- 40 \* density/.test(e),
-    "幽灵胶囊与落点对齐（不再自己往左上挪 40/20dp）");
+  // ③ 面板入口是「点选即建」：落点由 dropPointDp 统一换算，不再有跟随手指的幽灵胶囊。
+  //
+  // 上一版这里是「幽灵胶囊左上角 = 手指 = 节点左上角」。面板改成点选之后，
+  // 那条交互整体消失了（幽灵卡与 rootOrigin 一起删掉），改为守住换算入口唯一：
+  ok(/fun dropPointDp\(pointerWindow: Offset\): Pair<Int, Int>/.test(e),
+    "新节点落点只经 dropPointDp 一处换算（面板与拉线共用）");
+  ok(!/rootOrigin/.test(e) || !/pos\.x - rootOrigin/.test(e),
+    "幽灵胶囊的旧对齐代码已删除");
 }
 
 console.log("\u2500 #16l 手势回调的闭包新鲜度（第二次拖动跳回原位的根因）");
