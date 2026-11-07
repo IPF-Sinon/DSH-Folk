@@ -50,6 +50,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.navigationBars
@@ -112,6 +113,7 @@ import me.bmax.apatch.dsh.A11yOwn
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshRuntime
 import me.bmax.apatch.dsh.WebScripts
+import me.bmax.apatch.dsh.ext.ExtensionUiRegistry
 import me.bmax.apatch.ui.component.ElevationRequestDialogHost
 import me.bmax.apatch.ui.component.WorkflowDialogHosts
 import me.bmax.apatch.ui.theme.APatchTheme
@@ -741,6 +743,9 @@ class DshWebUiActivity : AppCompatActivity() {
                             }
                         },
                     )
+
+                    // 扩展叠加层：同一 Box 内、WebView 之上。这是 WEBUI_OVERLAY 槽位的第一处真实渲染点。
+                    ExtensionWebUiOverlay()
 
                     // 运行时重启（proroot/chroot 回退、手动重启服务、崩溃自愈）会**换一个 token**，
                     // 而 WebView 只在创建时 loadUrl 过一次 —— 之后页面上的接口调用仍带着旧 token，
@@ -1613,3 +1618,31 @@ private fun PipGuideDialog(
         },
     )
 }
+
+/**
+ * WebUI 之上的扩展叠加层（`WEBUI_OVERLAY` 槽位）。
+ *
+ * 为什么放在 WebUI 这一页而不是主界面：悬浮按钮、快捷面板这类「浮在 dsh 页面上」的东西
+ * 需要和页面在同一坐标系里 —— 挂在别的 Activity 上就得自己算两个窗口的相对位置。
+ *
+ * 必要性：`slotEntries` 在此之前**没有任何渲染点**，扩展即使注册了 WEBUI_OVERLAY 也不会显示。
+ *
+ * 安全说明：叠加层只画扩展自己的内容，**不接管 WebView 的导航**。外链仍然走
+ * [DshWebUi.openExternal]，因为 BlobBridge 是 addJavascriptInterface 挂上去的 —— 一旦让
+ * 外部站点留在 WebView 里，那个站点就能直接往磁盘写文件。
+ */
+@Composable
+private fun ExtensionWebUiOverlay() {
+    val entries = ExtensionUiRegistry.slotEntries(ExtensionUiRegistry.Slot.WEBUI_OVERLAY)
+    if (entries.isEmpty()) return
+    Box(Modifier.fillMaxSize()) {
+        for (e in entries) {
+            // 叠加层自己不铺满：给扩展内容一个「想多大就多大」的容器，
+            // 铺满会导致它吃掉整页的点击。
+            Box(Modifier.wrapContentSize()) {
+                e.content(Modifier)
+            }
+        }
+    }
+}
+
