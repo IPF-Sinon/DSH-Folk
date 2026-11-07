@@ -1680,14 +1680,14 @@ private fun WebUiFloatingBall(
                                 yRatio = (yRatio + (delta.y.toDp() / span)).coerceIn(0f, 1f)
                             }
                         }
-                    },
+                    }
                     // 短按 / 长按放在拖动之后：拖动没开始时它不消费事件，tap 才能拿到完整手势。
                     .pointerInput(Unit) {
                         detectTapGestures(
                             onLongPress = { onToggleBrowserBar() },
                             onTap = { expanded = !expanded },
                         )
-                    }
+                    },
             ) {
                 // 用 Box 而不是 IconButton：IconButton 自己带一颗 clickable，会把点击吃掉，
                 // 上层的 detectTapGestures 就收不到 —— 短按/长按都会失效。
