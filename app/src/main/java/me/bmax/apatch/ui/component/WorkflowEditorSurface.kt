@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshNativeBridge
+import me.bmax.apatch.dsh.NativeCapCatalog
 import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.WorkflowDefinition
 import me.bmax.apatch.dsh.WorkflowEdge
@@ -66,7 +67,19 @@ import me.bmax.apatch.dsh.WorkflowPatch
 import me.bmax.apatch.dsh.WorkflowValidator
 import me.bmax.apatch.dsh.workflowDiff
 
-private data class EditorNodeKind(val type: WorkflowNodeType, val labelRes: Int, val defaults: Map<String, String>)
+private data class EditorNodeKind(
+    val type: WorkflowNodeType,
+    val labelRes: Int,
+    val defaults: Map<String, String>,
+    /**
+     * 这个节点来自「原生能力目录」的哪一项（非空时它带命令骨架，见 [NativeCapCatalog]）。
+     *
+     * 为什么要在节点类型里带上它：抽屉里既要显示能力名（「通知」「剪贴板」…），
+     * 又要让新建出来的节点**直接带上该能力的命令**，而不是先建一个空 shell 节点再手抄命令。
+     * 存 CapItem 而不是把它拆成几个字段，是为了「点选 → 生成」之间不丢参数提示。
+     */
+    val cap: NativeCapCatalog.CapItem? = null,
+)
 
 private val EDITOR_NODE_CATALOG = listOf(
     EditorNodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_shell, editorConfigForAction(WorkflowActionType.SHELL)),
@@ -77,6 +90,22 @@ private val EDITOR_NODE_CATALOG = listOf(
     EditorNodeKind(WorkflowNodeType.WAIT, R.string.dsh_workflow_kind_wait, mapOf("ms" to "1000")),
     EditorNodeKind(WorkflowNodeType.LOGIC, R.string.dsh_workflow_kind_logic, mapOf("op" to "and", "sources" to "")),
 )
+
+/**
+ * 原生能力节点：一项能力一张卡片，点选即生成一个已带命令的 shell 节点。
+ *
+ * 命令用 [NativeCapCatalog.CapItem.command] 的骨架（不含 --reason，那是执行时补的）。
+ * 这些节点与上面的「基础节点」分开列，是为了不在抽屉里把 7 个基础 + 23 个能力混成一片。
+ */
+private val EDITOR_CAP_NODE_CATALOG: List<EditorNodeKind> =
+    NativeCapCatalog.ITEMS.map { cap ->
+        EditorNodeKind(
+            type = WorkflowNodeType.EXECUTE,
+            labelRes = cap.titleRes,
+            defaults = mapOf("action" to "shell", "cmd" to cap.command),
+            cap = cap,
+        )
+    }
 
 private fun editorConfigForAction(action: WorkflowActionType): Map<String, String> = when (action) {
     WorkflowActionType.SHELL -> mapOf("action" to "shell", "cmd" to "echo hello")
@@ -451,6 +480,64 @@ internal fun WorkflowEditorSurface(
                                         )
                                     }
                                     if (chunk.size == 1) Spacer(Modifier.weight(1f))
+                                }
+                            }
+
+                            // ── 原生能力（来自 NativeCapCatalog）────────────────────
+                            // 与上面的基础节点分开列：基础是「控制流」（条件/等待/提取），
+                            // 这里是「具体能做什么」。7 + 23 个选项混成一片会看不出层次。
+                            //
+                            // 点选或拖拽生成的节点已带该能力的命令骨架（见 EDITOR_CAP_NODE_CATALOG），
+                            // 用户只需把示例参数改成自己要的，不必记 dsh-native 语法。
+                            Text(
+                                text = stringResource(R.string.dsh_cap_catalog_title),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+                            )
+                            for ((group, items) in NativeCapCatalog.byGroup()) {
+                                Text(
+                                    text = stringResource(group.titleRes),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
+                                for (chunk in items.map { cap ->
+                                    EDITOR_CAP_NODE_CATALOG.first { it.cap == cap }
+                                }.chunked(2)) {
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        for (kind in chunk) {
+                                            val kindLabel = stringResource(kind.labelRes)
+                                            SheetNodeCard(
+                                                label = kindLabel,
+                                                subtitle = kind.cap?.argsHint.orEmpty(),
+                                                accent = workflowNodeAccent(kind.type),
+                                                modifier = Modifier.weight(1f),
+                                                onTap = {
+                                                    addNode(kind, null)
+                                                    sheetOpen = false
+                                                },
+                                                onDragStart = { windowPos -> ghost = kindLabel to windowPos },
+                                                onDragMove = { windowPos -> ghost = kindLabel to windowPos },
+                                                onDragEnd = { windowPos ->
+                                                    ghost = null
+                                                    val inCanvas = windowPos.x >= canvasOrigin.x &&
+                                                        windowPos.x <= canvasOrigin.x + canvasSize.width &&
+                                                        windowPos.y >= canvasOrigin.y &&
+                                                        windowPos.y <= canvasOrigin.y + canvasSize.height
+                                                    if (inCanvas) {
+                                                        val (xDp, yDp) = dropPointDp(windowPos)
+                                                        addNodeAt(kind, xDp, yDp)
+                                                    }
+                                                    sheetOpen = false
+                                                },
+                                            )
+                                        }
+                                        if (chunk.size == 1) Spacer(Modifier.weight(1f))
+                                    }
                                 }
                             }
                             Spacer(Modifier.height(10.dp))

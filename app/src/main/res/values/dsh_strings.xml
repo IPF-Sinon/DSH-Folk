@@ -1902,6 +1902,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_webui_browser_mode_off_hint">Browser mode is off: enable it in Settings → Function → Browser mode</string>
     <string name="dsh_webui_browser_mode_switch_summary">When off, external links go to the system browser (default, safest). When on, the app visits third-party sites; the host detaches its web bridge before entering an external site.</string>
     <!-- Native capability catalog: used by workflow cards -->
+    <string name="dsh_cap_catalog_title">Native capabilities</string>
     <string name="dsh_cap_group_alert">Alerts</string>
     <string name="dsh_cap_group_device">Device &amp; input</string>
     <string name="dsh_cap_group_media">Media</string>
