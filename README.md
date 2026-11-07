@@ -171,7 +171,6 @@ DSH-Folk 的 UI 直接复用 FolkPatch，容器与运行时交付思路来自 DS
 - [DSHA](https://github.com/DSH-APP/DSHA) —— 无线 ADB 配对方案、容器运行逻辑参考
 - [DSHM](https://github.com/RochelimitDawn/DSHM) —— 运行时在线交付与镜像测速方案
 - [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) —— 被启动的本体
-- [玥鸢 API](https://api.stct-cnfl.cn/sign-up?aff=YBoD) —— **为本项目提供免费 API 模型额度**，开发者与测试者用它跑通对话链路
 - [proot](https://github.com/proot-me/proot) / [proroot](https://github.com/coderredlab/proroot) / [Termux](https://github.com/termux/termux-app) —— 容器执行与 PTY 终端
 - [Shizuku](https://github.com/RikkaApps/Shizuku) —— 免 root 特权通道
 - [KernelSU](https://github.com/tiann/KernelSU) / [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) —— 界面设计参考
@@ -192,11 +191,6 @@ DSH-Folk 的 UI 直接复用 FolkPatch，容器与运行时交付思路来自 DS
 
 [GNU General Public License v3.0](./LICENSE)。本项目派生自 GPL-3.0 的 FolkPatch，因此整体沿用 GPL-3.0：
 分发（含二次修改）必须同样以 GPLv3 开源并提供完整源码。
-
-## 赞助与支持
-
-- [玥鸢 API](https://api.stct-cnfl.cn/sign-up?aff=YBoD) —— 免费为本项目开发提供 API 模型。
-  统一 API 网关，兼容 OpenAI / NewAPI 多协议，可直接在 DSH 里配置使用。
 
 ## 友情链接
 

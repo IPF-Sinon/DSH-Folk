@@ -77,8 +77,12 @@ private data class Sponsor(
  */
 private val SPONSORS = listOf(
     Sponsor(
-        name = "大器晚成",
+        name = "花凬琴",
         // 头像来自赞助者本人提供的那张（drawable-nodpi 下不做密度适配，原样显示）
+        avatarRes = me.bmax.apatch.R.drawable.sponsor_huajueqin,
+    ),
+    Sponsor(
+        name = "大器晚成",
         avatarRes = me.bmax.apatch.R.drawable.sponsor_daqiwancheng,
     ),
     Sponsor(
