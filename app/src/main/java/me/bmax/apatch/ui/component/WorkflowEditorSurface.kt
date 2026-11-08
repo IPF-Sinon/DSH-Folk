@@ -596,11 +596,47 @@ internal fun WorkflowEditorSurface(
                         Text(stringResource(R.string.dsh_workflow_editor_save))
                     }
                     Spacer(Modifier.width(6.dp))
-                    Surface(shape = CircleShape, tonalElevation = 5.dp) {
-                        IconButton(onClick = { moreOpen = true }) {
-                            Icon(
-                                Icons.Filled.MoreVert,
-                                contentDescription = stringResource(R.string.dsh_wf_top_more),
+                    // 「更多」菜单必须**锚在这颗按钮上**。
+                    //
+                    // 上一版把 DropdownMenu 直接放在外层 Box 里：DropdownMenu 的锚点由
+                    // 它的父布局决定，外层 Box 是整屏，于是菜单弹到了左下角（真机截图就是这样）。
+                    // 放进包住按钮的 Box 里，它才会贴着按钮往下展开。
+                    Box {
+                        Surface(shape = CircleShape, tonalElevation = 5.dp) {
+                            IconButton(onClick = { moreOpen = true }) {
+                                Icon(
+                                    Icons.Filled.MoreVert,
+                                    contentDescription = stringResource(R.string.dsh_wf_top_more),
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = moreOpen,
+                            onDismissRequest = { moreOpen = false },
+                        ) {
+                            // 放的是"不常用但偶尔必须"的项：预览、自动布局、放弃改动。
+                            // 常用操作（加节点、保存、复制、删除）在别处，不塞进来。
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.dsh_wf_top_preview)) },
+                                onClick = { moreOpen = false; previewOpen = true },
+                            )
+                            // 选中某张卡时才有意义：配置在卡上直接改，这里只管连线与删除。
+                            if (selected != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.dsh_wf_top_node_detail)) },
+                                    onClick = { moreOpen = false; nodeSheetOpen = true },
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.dsh_workflow_editor_auto_layout)) },
+                                onClick = {
+                                    moreOpen = false
+                                    draft = def.copy(nodes = def.nodes.map { it.copy(posX = 0, posY = 0) })
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.dsh_workflow_editor_discard_title)) },
+                                onClick = { moreOpen = false; confirmDiscard = true },
                             )
                         }
                     }
@@ -625,11 +661,20 @@ internal fun WorkflowEditorSurface(
                         positions = placed,
                         readOnly = false,
                         selectedNodeId = selected,
-                        draggingNodeId = dragFrom?.first,
+                        // 框跟着**选中态**，不是跟着拖动：松手后仍要看见"当前选中的是哪张"，
+                        // 直到点别处（onBlankTap 清 selected）或选中另一张。
                         // 已授予的能力：目前按"定义里声明的 + 目录推出来的"整体放行。
                         // 真正逐项判定在运行前的 WorkflowPermissions 里做，这里只负责显示
                         // "这张卡的权限有没有到位"，所以取的是同一份 effectiveCaps 的子集关系。
                         grantedCaps = def.effectiveCaps.toSet(),
+                        // 卡上直接改参数：改完立刻写回 draft（走既有的自动保存）。
+                        onNodeParamChange = { nodeId, key, value ->
+                            draft = draft.copy(
+                                nodes = draft.nodes.map {
+                                    if (it.id == nodeId) it.withConfig(key, value) else it
+                                },
+                            )
+                        },
                         onNodeClick = { id -> selected = if (selected == id) null else id },
                         onNodeDragStart = { id ->
                             val node = def.nodes.firstOrNull { it.id == id }
@@ -818,33 +863,6 @@ internal fun WorkflowEditorSurface(
                 },
             )
 
-            // ── 顶栏「更多」菜单 ──
-            //
-            // 放的是"不常用但偶尔必须"的项：预览（只看不改）、自动布局、放弃改动。
-            // 常用操作（加节点、保存、复制、删除）都在别处，所以不塞进来。
-            if (moreOpen) {
-                DropdownMenu(
-                    expanded = true,
-                    onDismissRequest = { moreOpen = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.dsh_wf_top_preview)) },
-                        onClick = { moreOpen = false; previewOpen = true },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.dsh_workflow_editor_auto_layout)) },
-                        onClick = {
-                            moreOpen = false
-                            draft = def.copy(nodes = def.nodes.map { it.copy(posX = 0, posY = 0) })
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.dsh_workflow_editor_discard_title)) },
-                        onClick = { moreOpen = false; confirmDiscard = true },
-                    )
-                }
-            }
-
             // ── 预览（只读 + 可缩放，不占编辑手势）──
             if (previewOpen) {
                 Dialog(onDismissRequest = { previewOpen = false }) {
@@ -921,12 +939,18 @@ internal fun WorkflowEditorSurface(
         }
     }
 
-    // ── 点卡片 → 修改窗 ──
-    selected?.let { sid ->
+    // ── 节点详情窗：**不再由点卡片触发** ──
+    //
+    // 用户的原话：「怎么还是这种弹窗式配置？参数都是在卡片本身上的」。
+    // 现在参数确实在卡上（见 WorkflowNodeCard 的可编辑参数行），点卡片只负责**选中**。
+    // 这个窗还留着的唯一理由是它承载「连线管理」与「删这一步」—— 卡上放不下，
+    // 而这两件事又不能没有入口，于是收进顶栏「更多」里（nodeSheetOpen），
+    // 从"每次点卡都弹"降级成"偶尔要用才点开"。
+    if (nodeSheetOpen) selected?.let { sid ->
         val sel = def.node(sid)
         if (sel != null) {
             AlertDialog(
-                onDismissRequest = { selected = null },
+                onDismissRequest = { nodeSheetOpen = false },
                 title = { Text(sel.name.ifBlank { sel.id }) },
                 text = {
                     Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
@@ -970,12 +994,12 @@ internal fun WorkflowEditorSurface(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { selected = null }) {
+                    TextButton(onClick = { nodeSheetOpen = false }) {
                         Text(stringResource(R.string.dsh_workflow_editor_save))
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { selected = null }) {
+                    TextButton(onClick = { nodeSheetOpen = false }) {
                         Text(stringResource(R.string.dsh_workflow_action_cancel))
                     }
                 },
@@ -1171,10 +1195,14 @@ private fun FloatingEditorBar(
     onCopy: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    // 必须是 fillMaxSize + BottomCenter。
+    //
+    // 上一版写的是 fillMaxWidth（高度包内容）：外层 Box(fillMaxSize) 里，一个高度只包内容的
+    // 子节点默认落在**左上角**，BottomCenter 也就只在那一小条里生效 —— 真机上底栏跑到顶上去了。
     Box(
         Modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
+            .fillMaxSize()
+            // 底栏自身不接手势：否则它会把整个画布的拖动/缩放全吃掉（fillMaxSize 的命中区是整屏）。
             .padding(bottom = 12.dp),
         contentAlignment = Alignment.BottomCenter,
     ) {

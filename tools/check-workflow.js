@@ -616,7 +616,8 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
 {
   const e = SRC.editorSurface;
   const sheetStart = e.indexOf("if (sheetOpen) {");
-  const sheetEnd = e.indexOf("// ── 点卡片", sheetStart);
+  // 端点跟着实现的注释走：点卡片不再弹窗（参数在卡上），这段注释已改名。
+  const sheetEnd = e.indexOf("// ── 节点详情窗", sheetStart);
   const sheet = sheetStart >= 0 && sheetEnd > sheetStart ? e.slice(sheetStart, sheetEnd) : "";
   ok(sheet.length > 0, "能定位到底部「加节点」入口这一段");
   ok(/WorkflowNodePicker\(/.test(sheet), "底部入口用的是共用面板组件");
@@ -1332,6 +1333,49 @@ async function checkCli() {
   // 引脚上报是拉线的基础，改卡片时最容易被顺手删掉。
   ok(/onPinBounds\?\.invoke\(pin\.kind\.name, coords\.boundsInWindow\(\)\)/.test(card),
     "卡片仍然上报输出引脚的真实窗口矩形（拉线端点依赖它）");
+}
+
+console.log("\u2500 #16k 卡片可编辑 / 悬浮层定位 / 虚线框跟着选中态");
+{
+  const card = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowNodeCard.kt");
+  const e = SRC.editorSurface;
+  // 参数必须在卡上直接改 —— 用户的原话是「参数都是在卡片本身上的」。
+  ok(/BasicTextField\(/.test(card) && /onValueChange = \{ onEdit\?\.invoke\(row\.key, it\) \}/.test(card),
+    "卡片参数行是输入框（不是只读值胶囊 + 复制）");
+  ok(/onParamChange: \(\(key: String, value: String\) -> Unit\)\? = null/.test(card),
+    "卡片接受参数回写回调（预览/详情传 null 即只读）");
+  // 拖动必须收窄到标题区：整卡吃手势会把输入框的点击与光标全抢走。
+  ok(/标题区＝拖动把手/.test(card) && /detectDragGestures/.test(card),
+    "拖动只在标题区，参数区留给输入框");
+  // 计数式断言：detectDragGestures 在卡片文件里只能出现**一次**，且在标题区注释之后。
+  // 上一版写成"base 之后 400 字内没有它"，结果注入到别的位置就漏检了。
+  {
+    // 只数**卡片主体**里的手势：import 行、以及 LinkablePinDot 里拉线用掉的那处都不算。
+    // （引脚拉线是必需的，它不抢输入框 —— 命中的是那颗小圆点。）
+    const body = card.slice(0, card.indexOf("private fun PinDot("));
+    const uses = (body.match(/detectDragGestures\(/g) || []).length;
+    ok(uses === 1, "卡片主体只有一处拖动手势（标题区），实际 " + uses + " 处");
+    const head = body.indexOf("标题区＝拖动把手");
+    const drag = body.indexOf("detectDragGestures(");
+    ok(head >= 0 && drag > head, "拖动手势在标题区之内，不在整卡 base 上");
+    // base 链上不许挂拖动：那会连参数行一起吃掉。
+    const baseChain = body.slice(body.indexOf("val base = modifier"), body.indexOf("Surface("));
+    ok(!/detectDragGestures/.test(baseChain), "整卡 base 链上没有拖动手势");
+  }
+
+  // 悬浮底栏必须铺满再底部对齐：fillMaxWidth 会让它落在**左上角**（真机复现过）。
+  const bar = e.slice(e.indexOf("private fun FloatingEditorBar"), e.indexOf("private fun FloatBarIcon"));
+  ok(/fillMaxSize\(\)[\s\S]{0,200}contentAlignment = Alignment\.BottomCenter/.test(bar),
+    "底栏铺满整屏再底部居中（fillMaxWidth 会落到左上角）");
+
+  // 「更多」菜单必须锚在按钮上，否则 DropdownMenu 会弹到左下角。
+  ok(/Box \{\s*Surface\(shape = CircleShape, tonalElevation = 5\.dp\) \{\s*IconButton\(onClick = \{ moreOpen = true \}\)[\s\S]{0,600}DropdownMenu\(/.test(e),
+    "「更多」菜单锚在按钮所在的 Box 里（否则弹到左下角）");
+
+  // 虚线框用实测矩形，且跟着选中态而不是拖动。
+  ok(/val rect = bounds\[framed\]/.test(SRC.canvas), "虚线框用卡片实测矩形（不写死高度）");
+  ok(/val framed = selectedNodeId/.test(SRC.canvas), "虚线框跟选中态（松手后不消失）");
+  ok(!/draggingNodeId/.test(SRC.canvas), "不再有 draggingNodeId 这一路状态");
 }
 
 console.log("");

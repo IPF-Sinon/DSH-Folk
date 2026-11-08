@@ -327,6 +327,10 @@ internal data class WorkflowNode(
     val actionType: WorkflowActionType? get() = WorkflowActionType.of(config["action"])
 
     fun config(key: String): String = config[key].orEmpty()
+
+    /** 改一个参数并把改动写回 config。空串即删除该键 —— 校验器靠"键不存在"判定必填缺失。 */
+    fun withConfig(key: String, value: String): WorkflowNode =
+        copy(config = if (value.isEmpty()) config - key else config + (key to value))
 }
 
 /**

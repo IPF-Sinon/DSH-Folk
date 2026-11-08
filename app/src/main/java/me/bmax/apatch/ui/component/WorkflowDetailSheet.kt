@@ -24,6 +24,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.border
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
@@ -59,9 +62,17 @@ internal fun WorkflowDetailDialog(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    /** 改名字/描述后回给宿主落盘。弹窗不认识 Store，只负责收字。 */
+    onMetaChange: (name: String, description: String) -> Unit,
 ) {
     // 缩放只在本次弹窗内有效：关掉再开是"重新看一遍"，不是"接着上次的倍率"。
     var zoom by remember(def.id) { mutableStateOf(1f) }
+
+    // 标题与描述在这里**可编辑**：用户点进详情本来就想改名字/写点说明，
+    // 还要再跳一次编辑页才能改，是白白多一层。
+    // 改动通过 onMetaChange 回给宿主（宿主负责落盘，弹窗自己不认识 Store）。
+    var nameText by remember(def.id) { mutableStateOf(def.name) }
+    var descText by remember(def.id) { mutableStateOf(def.description) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -75,17 +86,28 @@ internal fun WorkflowDetailDialog(
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
             ) {
-                Text(
-                    text = def.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                OutlinedTextField(
+                    value = nameText,
+                    onValueChange = {
+                        nameText = it
+                        onMetaChange(it, descText)
+                    },
+                    textStyle = MaterialTheme.typography.titleLarge,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    text = def.description.ifBlank { stringResource(R.string.dsh_wf_detail_desc) },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                OutlinedTextField(
+                    value = descText,
+                    onValueChange = {
+                        descText = it
+                        onMetaChange(nameText, it)
+                    },
+                    label = { Text(stringResource(R.string.dsh_wf_detail_desc)) },
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    minLines = 2,
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -97,17 +119,30 @@ internal fun WorkflowDetailDialog(
 
                 Spacer(Modifier.height(10.dp))
                 // 预览区：固定高度 + 双指缩放。理由见函数头注释。
+                var panX by remember(def.id) { mutableStateOf(0f) }
+                var panY by remember(def.id) { mutableStateOf(0f) }
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .height(240.dp)
+                        // 边框要看得见：预览底色与弹窗底色太接近时，用户看不出预览区的边界在哪，
+                        // 拖动和缩放的"作用范围"也就无从判断。
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            shape = RoundedCornerShape(12.dp),
+                        )
                         .background(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
                             RoundedCornerShape(12.dp),
                         )
+                        .clip(RoundedCornerShape(12.dp))
                         .pointerInput(def.id) {
-                            detectTransformGestures { _, _, zoomChange, _ ->
+                            // 双指缩放 + 单指平移，与编辑器画布同一套手势语义。
+                            detectTransformGestures { _, panChange, zoomChange, _ ->
                                 zoom = (zoom * zoomChange).coerceIn(0.4f, 1.6f)
+                                panX += panChange.x
+                                panY += panChange.y
                             }
                         },
                 ) {
@@ -120,6 +155,8 @@ internal fun WorkflowDetailDialog(
                                 transformOrigin = TransformOrigin(0f, 0f)
                                 scaleX = zoom
                                 scaleY = zoom
+                                translationX = panX
+                                translationY = panY
                             },
                     ) {
                         WorkflowGraphPreview(def)

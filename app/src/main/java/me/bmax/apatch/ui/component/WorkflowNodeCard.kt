@@ -1,4 +1,57 @@
-package me.bmax.apatch.ui.component
+package me.bmax.apatch.ui.component/**
+ * 一行参数：色点 + 标签 + **可编辑的值**。
+ *
+ * 这里从"值胶囊 + 复制按钮"改成真正的输入框 —— 用户的原话是"参数都在卡片本身上的"。
+ * 复制按钮随之取消：能直接改的时候，复制一个只读字符串没有意义。
+ */
+@Composable
+private fun CardParamRow(
+    row: CardParamRowModel,
+    onEdit: ((key: String, value: String) -> Unit)?,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // 空值画空心椭圆、有值画实心：一眼看出"这个参数还空着"。
+        Box(
+            Modifier
+                .size(8.dp)
+                .then(
+                    if (row.value.isBlank()) {
+                        Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                    } else {
+                        Modifier.background(row.color, CircleShape)
+                    }
+                ),
+        )
+        if (row.label.isNotBlank()) {
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = row.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 84.dp),
+            )
+        }
+        Spacer(Modifier.width(5.dp))
+        BasicTextField(
+            value = row.value,
+            onValueChange = { onEdit?.invoke(row.key, it) },
+            textStyle = MaterialTheme.typography.labelSmall.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
+            singleLine = true,
+            enabled = onEdit != null,
+            modifier = Modifier
+                .weight(1f)
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+        )
+    }
+}
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -17,10 +70,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
@@ -42,10 +93,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
@@ -109,6 +158,13 @@ internal fun WorkflowNodeCard(
      * 只有编辑器在确认缺失时才显式传 false，卡片才会压暗并显示缺能力的提示条。
      */
     granted: Boolean = true,
+    /**
+     * 卡上直接改参数。
+     *
+     * 用户的原话是"参数都在卡片本身上的"—— 参考的点击助手就是卡上直接改，
+     * 不点开任何弹窗。所以这里把参数行做成输入框，改完立刻回给宿主落盘。
+     */
+    onParamChange: ((key: String, value: String) -> Unit)? = null,
 ) {
     val accent = workflowNodeAccent(node.type)
     val borderColor = when (status) {
@@ -154,23 +210,10 @@ internal fun WorkflowNodeCard(
         }
         .focusable()
         .semantics { contentDescription = node.name.ifBlank { workflowNodeLabel(node) } }
+        // 整卡不再接拖动手势：参数行是可编辑输入框，整卡吃手势会把输入框的点击/光标
+        // 全抢走（真机表现：点输入框没反应、想拖光标反而把卡拖走了）。
+        // 拖动收窄到**标题区**（见下面的 header），参数区留给输入框。
         .then(if (onTap != null) Modifier.clickable { tapCb.value?.invoke() } else Modifier)
-        .then(
-            if (onDrag != null) {
-                Modifier.pointerInput(node.id) {
-                    detectDragGestures(
-                        onDragStart = { dragStartCb.value?.invoke() },
-                        onDragEnd = { dragEndCb.value?.invoke() },
-                        onDragCancel = { dragEndCb.value?.invoke() },
-                    ) { change, amount ->
-                        change.consume()
-                        dragCb.value?.invoke(amount.x, amount.y)
-                    }
-                }
-            } else {
-                Modifier
-            }
-        )
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -183,19 +226,44 @@ internal fun WorkflowNodeCard(
         Column {
             Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                Text(
-                    text = node.name.ifBlank { workflowNodeLabel(node) },
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = workflowNodeSubtitle(node),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                // ── 标题区＝拖动把手 ──
+                //
+                // 只有这里接拖动：它没有输入控件，不会和别的交互打架。
+                // 这也是点击助手的做法 —— 卡上能编辑的地方不抢拖动。
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (onDrag != null) {
+                                Modifier.pointerInput(node.id) {
+                                    detectDragGestures(
+                                        onDragStart = { dragStartCb.value?.invoke() },
+                                        onDragEnd = { dragEndCb.value?.invoke() },
+                                        onDragCancel = { dragEndCb.value?.invoke() },
+                                    ) { change, amount ->
+                                        change.consume()
+                                        dragCb.value?.invoke(amount.x, amount.y)
+                                    }
+                                }
+                            } else {
+                                Modifier
+                            }
+                        ),
+                ) {
+                    Text(
+                        text = node.name.ifBlank { workflowNodeLabel(node) },
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = workflowNodeSubtitle(node),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 // ── 参数内联展开 ──
                 //
                 // 对齐点击助手：参数**直接摆在卡片上**，一行一个，不用点开任何弹窗就能读出
@@ -208,7 +276,7 @@ internal fun WorkflowNodeCard(
                 val rows = cardParamRows(node)
                 if (rows.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
-                    for (row in rows) CardParamRow(row)
+                    for (row in rows) CardParamRow(row, onEdit = onParamChange)
                 }
                 if (!granted) {
                     Spacer(Modifier.height(6.dp))
@@ -506,59 +574,3 @@ private fun paramDotColor(kind: WorkflowNodeFields.Kind): Color = when (kind) {
     WorkflowNodeFields.Kind.CHOICE -> MaterialTheme.colorScheme.errorContainer
 }
 
-/** 一行参数：色点 + 标签 + 只读值胶囊 + 复制；值空时用空心椭圆占位。 */
-@Composable
-private fun CardParamRow(row: CardParamRowModel) {
-    // 行内唯一的动作就是复制：值本身只读，用户要把这段文本带走只有它。
-    val clipboard = LocalClipboardManager.current
-    Row(
-        Modifier.fillMaxWidth().padding(top = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(8.dp).background(row.color, CircleShape))
-        if (row.label.isNotBlank()) {
-            Spacer(Modifier.width(5.dp))
-            Text(
-                text = row.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.width(5.dp))
-        if (row.value.isBlank()) {
-            // 空值画一个空心椭圆：留白会让人以为这行没有内容，空心轮廓明确表示
-            // 「这个参数在，但还没填」。weight 只能在 Row 的 lambda 里取。
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(14.dp)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-            )
-        } else {
-            Text(
-                text = row.value,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-        }
-        Spacer(Modifier.width(5.dp))
-        Icon(
-            imageVector = Icons.Filled.ContentCopy,
-            contentDescription = stringResource(R.string.dsh_wf_float_copy),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            // 卡片只有 220dp 宽，用 IconButton 会把每行撑到 48dp（minimumInteractiveComponentSize）；
-            // 这里让命中区就是图标本身，换取参数行的高度可控。
-            modifier = Modifier
-                .size(16.dp)
-                .clickable { if (row.value.isNotBlank()) clipboard.setText(AnnotatedString(row.value)) },
-        )
-    }
-}

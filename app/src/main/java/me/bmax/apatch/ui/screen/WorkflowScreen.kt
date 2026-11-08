@@ -275,6 +275,17 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                         WorkflowStore.delete(ctx, dd.id)
                         listKey++
                     },
+                    onMetaChange = { newName, newDesc ->
+                        val trimmed = newName.trim()
+                        // 空名不落盘：流程在列表里只显示名字，空名等于让它从列表上消失。
+                        if (trimmed.isNotEmpty() && !WorkflowStore.nameTaken(ctx, trimmed, dd.id)) {
+                            WorkflowStore.saveIfRevision(
+                                ctx,
+                                dd.copy(name = trimmed, description = newDesc),
+                                dd.revision,
+                            )
+                        }
+                    },
                 )
             }
 

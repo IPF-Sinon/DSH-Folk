@@ -2119,4 +2119,5 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_lock">No permission to use this card</string>
     <string name="dsh_wf_lock_need">Needs: %1$s</string>
     <string name="dsh_wf_badge_blocked">%1$d not usable</string>
+    <string name="dsh_wf_top_node_detail">Step connections</string>
 </resources>

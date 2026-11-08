@@ -62,8 +62,6 @@ internal fun WorkflowBlueprintCanvas(
     modifier: Modifier = Modifier,
     stepStates: Map<String, WorkflowStepState> = emptyMap(),
     selectedNodeId: String? = null,
-    /** 正在被拖动的那张卡：它周围要画一圈虚线选中框（对齐点击助手）。 */
-    draggingNodeId: String? = null,
     /**
      * 已授予的能力 id 集合。卡片据此把自己标成"不可用"。
      *
@@ -71,6 +69,8 @@ internal fun WorkflowBlueprintCanvas(
      * 而"哪些已授予"是全局事实 —— 把两者在画布入口合并一次，卡片就只管显示。
      */
     grantedCaps: Set<String> = emptySet(),
+    /** 卡上直接改参数：传 null 时卡片参数只读（预览、详情页）。 */
+    onNodeParamChange: ((nodeId: String, key: String, value: String) -> Unit)? = null,
     onNodeClick: ((String) -> Unit)? = null,
     onNodeDrag: ((id: String, dxPx: Float, dyPx: Float) -> Unit)? = null,
     onNodeDragStart: ((id: String) -> Unit)? = null,
@@ -190,18 +190,27 @@ internal fun WorkflowBlueprintCanvas(
             // 为什么要有它：拖动时卡片跟着手指走，但它**是不是被选中了**没有任何视觉反馈 ——
             // 松手之后才发现"我动的是另一张卡"是这类编辑器里最常见的误操作。虚线框用的是
             // 与卡片自身尺寸无关的固定 padding，所以缩放时框也跟着缩放（它画在内容层里）。
-            val framed = draggingNodeId ?: selectedNodeId
+            val framed = selectedNodeId
             if (framed != null) {
-                val p = positions[framed]
-                if (p != null) {
+                // 框必须用**卡片实测的窗口矩形**换算，不能用写死的高度。
+                //
+                // 上一版把高度写死成 96dp：卡片还只有"名称+一个主参数"时正好相等，于是肉眼看不出问题；
+                // 现在卡片带参数行、会变高，写死的框就比卡片小一截（真机截图里框只包住上半张卡）。
+                val rect = bounds[framed]
+                if (rect != null) {
                     Canvas(Modifier.fillMaxSize()) {
                         val pad = 8.dp.toPx()
-                        val w = CARD_W_DP * density
-                        val h = 96.dp.toPx()
+                        val left = (rect.left - origin.x - pan.x) / (if (scale > 0f) scale else 1f)
+                        val top = (rect.top - origin.y - pan.y) / (if (scale > 0f) scale else 1f)
+                        val right = (rect.right - origin.x - pan.x) / (if (scale > 0f) scale else 1f)
+                        val bottom = (rect.bottom - origin.y - pan.y) / (if (scale > 0f) scale else 1f)
                         drawRect(
                             color = wireColor,
-                            topLeft = Offset(p.x * density - pad, p.y * density - pad),
-                            size = androidx.compose.ui.geometry.Size(w + pad * 2, h + pad * 2),
+                            topLeft = Offset(left - pad, top - pad),
+                            size = androidx.compose.ui.geometry.Size(
+                                (right - left) + pad * 2,
+                                (bottom - top) + pad * 2,
+                            ),
                             style = Stroke(
                                 width = 2.dp.toPx(),
                                 pathEffect = PathEffect.dashPathEffect(
@@ -226,6 +235,8 @@ internal fun WorkflowBlueprintCanvas(
                     onDrag = { dx, dy -> onNodeDrag?.invoke(node.id, dx, dy) },
                     onDragStart = { onNodeDragStart?.invoke(node.id) },
                     onDragEnd = { onNodeDragEnd?.invoke(node.id) },
+                    // 卡上直接改参数：只在编辑态开放（预览/详情传 null，输入框自动 disabled）。
+                    onParamChange = onNodeParamChange?.let { cb -> { key, value -> cb(node.id, key, value) } },
                     onBounds = { rect -> bounds = bounds + (node.id to rect) },
                     onPinBounds = { pinKind, rect -> pinRects = pinRects + ("${node.id}:$pinKind" to rect) },
                     onPinDrag = { pinKind, anchor, pointer ->

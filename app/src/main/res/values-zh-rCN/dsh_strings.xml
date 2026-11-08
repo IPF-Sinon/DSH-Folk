@@ -2093,4 +2093,5 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_wf_lock">没有使用这张卡的权限</string>
     <string name="dsh_wf_lock_need">需要：%1$s</string>
     <string name="dsh_wf_badge_blocked">%1$d 张不可用</string>
+    <string name="dsh_wf_top_node_detail">这一步的连线</string>
 </resources>
