@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -70,6 +71,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.delay
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.WorkflowSchema
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.WorkflowApprovals
@@ -636,4 +638,110 @@ internal fun WorkflowEditorDialog(
     ) {
         WorkflowDefinitionEditor(initial = initial, title = title, onSave = onSave, onCancel = onCancel)
     }
+}
+
+
+/**
+ * 流程内变量编辑器。
+ *
+ * 变量的作用域是**整份流程**（不是某个节点）：在编辑页声明几个变量，
+ * 运行期就能在任何参数里用花括号占位符取到值。上一版这些变量只有存储层支持，
+ * 界面与校验都没有，等于写了不生效 —— 这里把它补齐。
+ *
+ * 为什么不做成画布上的一个节点：变量是定义期的东西，不是运行期的一步。
+ * 做成节点会让人以为它会在流程里被执行，还得为它排顺序。
+ */
+@Composable
+internal fun WorkflowVariablesDialog(
+    variables: Map<String, String>,
+    onDismiss: () -> Unit,
+    onCommit: (Map<String, String>) -> Unit,
+) {
+    // 本地草稿：编辑期间不往 definition 里写，点确定才落盘。
+    // 否则边打字边改定义，撤销点和保存脏标记都会乱。
+    var rows by remember { mutableStateOf(variables.entries.map { it.key to it.value }.sortedBy { it.first }) }
+    val dupNames = rows.groupBy { it.first }.filterValues { it.size > 1 }.keys
+    val badNames = rows.map { it.first }.filter { n ->
+        n.isNotBlank() && (!n.matches(Regex("[A-Za-z_][A-Za-z0-9_]*")) || n in WorkflowSchema.SYSTEM_VARIABLES)
+    }.toSet()
+    val okToSave = dupNames.isEmpty() && badNames.isEmpty() && rows.none { it.first.isBlank() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dsh_wf_top_vars)) },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Text(
+                    stringResource(R.string.dsh_wf_vars_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                for ((idx, row) in rows.withIndex()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = row.first,
+                            onValueChange = { v ->
+                                rows = rows.toMutableList().also { it[idx] = v to row.second }
+                            },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            isError = row.first in badNames || row.first in dupNames,
+                            label = { Text(stringResource(R.string.dsh_wf_vars_name)) },
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        OutlinedTextField(
+                            value = row.second,
+                            onValueChange = { v ->
+                                rows = rows.toMutableList().also { it[idx] = row.first to v }
+                            },
+                            modifier = Modifier.weight(1.4f),
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.dsh_wf_vars_value)) },
+                        )
+                        IconButton(onClick = {
+                            rows = rows.toMutableList().also { it.removeAt(idx) }
+                        }) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = stringResource(R.string.dsh_workflow_action_delete),
+                            )
+                        }
+                    }
+                }
+                if (rows.any { it.first in badNames }) {
+                    Text(
+                        stringResource(R.string.dsh_wf_vars_bad),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (dupNames.isNotEmpty()) {
+                    Text(
+                        stringResource(R.string.dsh_wf_vars_dup),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                TextButton(onClick = { rows = rows + ("" to "") }) {
+                    Text(stringResource(R.string.dsh_wf_vars_add))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = okToSave,
+                onClick = {
+                    onCommit(rows.filter { it.first.isNotBlank() }.toMap())
+                    onDismiss()
+                },
+            ) { Text(stringResource(R.string.dsh_workflow_action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dsh_workflow_action_cancel)) }
+        },
+    )
 }

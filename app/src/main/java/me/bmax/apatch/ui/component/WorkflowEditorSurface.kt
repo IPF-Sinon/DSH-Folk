@@ -334,6 +334,8 @@ internal fun WorkflowEditorSurface(
     var previewOpen by remember { mutableStateOf(false) }
     // 悬浮底栏的删除按钮：第一次点只变红，第二次才真删。
     var deleteArmed by remember { mutableStateOf(false) }
+    // 流程内变量编辑器（见「更多」菜单）。变量属于整份流程，不属于某个节点。
+    var varsOpen by remember { mutableStateOf(false) }
     /** 节点详情窗（连线管理 / 删这一步）。**不由点卡片触发**，只从顶栏「更多」进。 */
     var nodeSheetOpen by remember { mutableStateOf(false) }
     // 选中态一变，就撤销"变红"状态 —— 否则换一张卡时按钮会莫名其妙已经是红的。
@@ -630,6 +632,11 @@ internal fun WorkflowEditorSurface(
                                     onClick = { moreOpen = false; nodeSheetOpen = true },
                                 )
                             }
+                            // 流程内变量：不是每个流程都要，但需要时非有不可，放这里不占常驻位置。
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.dsh_wf_top_vars)) },
+                                onClick = { moreOpen = false; varsOpen = true },
+                            )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.dsh_workflow_editor_auto_layout)) },
                                 onClick = {
@@ -843,6 +850,14 @@ internal fun WorkflowEditorSurface(
             //  - 选中一张卡：复制 / 删除。删除要点第二下才真删 —— 第一下把它变红。
             //    为什么不用确认弹窗：底栏是高频操作，弹窗会打断节奏；而"变红"既拦住了误触，
             //    也保住了节奏。真正不可逆的删卡仍然有确认（点卡片弹窗里那条路）。
+            if (varsOpen) {
+                WorkflowVariablesDialog(
+                    variables = draft.variables,
+                    onDismiss = { varsOpen = false },
+                    onCommit = { vars -> draft = draft.copy(variables = vars) },
+                )
+            }
+
             FloatingEditorBar(
                 hasSelection = selected != null,
                 selectionLocked = selected?.let { def.node(it)?.locked } == true,

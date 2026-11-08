@@ -45,6 +45,15 @@ internal object WorkflowSchema {
      * 2 及更早的定义一律判为旧格式并作废（用户明确"不必兼容旧流程，只要提醒已失效"）：
      * 它们没有针脚类型、没有 result 出口，读写规则也不一样，硬迁会把语义悄悄改掉。
      */
+    /** 每个运行都现算、不允许用户遮蔽的变量名。 */
+    val SYSTEM_VARIABLES = setOf(
+        "run_id", "workflow_id", "workflow_name",
+        "dsh_port", "dsh_url", "dsh_state",
+    )
+
+    /** 流程内变量个数上限（防一份定义塞几百个）。 */
+    const val MAX_VARIABLES = 64
+
     const val SCHEMA_VERSION = 3
 
     /** 认得的最老版本：比它更老的定义不猜，直接判不合法。 */

@@ -552,14 +552,26 @@ internal object WorkflowEngine {
     }
 
     /** 运行期注入的变量：工作流的命令里可以直接用，不必自己拼。 */
-    private fun seedVariables(def: WorkflowDefinition, runId: String): Map<String, String> = mapOf(
-        "run_id" to runId,
-        "workflow_id" to def.id,
-        "workflow_name" to def.name,
-        "dsh_port" to DshRuntime.state.value.port.toString(),
-        "dsh_url" to "http://127.0.0.1:${DshRuntime.state.value.port}",
-        "dsh_state" to DshRuntime.state.value.phase.name.lowercase(),
-    )
+    /**
+     * 开跑时的变量初值 = **流程内声明的变量** + 每次运行现算的系统变量。
+     *
+     * 为什么要把 def.variables 真正种进来：上一版它只被存盘和回读，
+     * 从来没有进入运行期的 vars —— 也就是说，用户/agent 在定义里写了
+     * "默认值"，运行时候却取不到（${name} 原样留在命令里）。这类"写了不生效"
+     * 的问题最难查，因为它看起来完全配好了。
+     *
+     * 顺序：先声明的，后者覆盖前者 —— 系统变量（run_id / dsh_port 之类）必须赢，
+     * 否则用户声明一个 dsh_port 就能把真实端口遮住。
+     */
+    private fun seedVariables(def: WorkflowDefinition, runId: String): Map<String, String> =
+        def.variables + mapOf(
+            "run_id" to runId,
+            "workflow_id" to def.id,
+            "workflow_name" to def.name,
+            "dsh_port" to DshRuntime.state.value.port.toString(),
+            "dsh_url" to "http://127.0.0.1:${DshRuntime.state.value.port}",
+            "dsh_state" to DshRuntime.state.value.phase.name.lowercase(),
+        )
 
     private fun flag(raw: String, default: Boolean): Boolean = when (raw.trim().lowercase()) {
         "" -> default

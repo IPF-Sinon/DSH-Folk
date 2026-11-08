@@ -2124,4 +2124,11 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_card_lock">Lock step</string>
     <string name="dsh_wf_stale_title">Old format — disabled</string>
     <string name="dsh_wf_stale_body">This workflow was created with the old parameter model and can no longer run. The file is kept; export it if you need a copy.</string>
+    <string name="dsh_wf_top_vars">Workflow variables</string>
+    <string name="dsh_wf_vars_hint">Declared once, usable in any parameter as a placeholder. They live with this workflow only.</string>
+    <string name="dsh_wf_vars_name">Name</string>
+    <string name="dsh_wf_vars_value">Value</string>
+    <string name="dsh_wf_vars_add">Add variable</string>
+    <string name="dsh_wf_vars_bad">Names must be letters/digits/underscore and must not shadow built-in variables.</string>
+    <string name="dsh_wf_vars_dup">Two variables share a name.</string>
 </resources>

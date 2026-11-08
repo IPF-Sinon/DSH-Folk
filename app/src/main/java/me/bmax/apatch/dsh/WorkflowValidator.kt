@@ -148,6 +148,22 @@ internal object WorkflowValidator {
             errors += "schemaVersion 比当前版本更新（收到 ${def.schemaVersion}，" +
                 "当前 ${WorkflowSchema.SCHEMA_VERSION}），本版本无法执行"
         }
+        // 流程内变量：名字必须是合法的 ${...} 键，且不能遮蔽系统变量。
+        //
+        // 遮蔽是最坑的一种：用户声明一个 dsh_port，运行期 seedVariables 里系统值会赢，
+        // 于是"我明明填了却没生效"，校验器不报就没人知道原因。
+        val declaredVars = def.variables.keys
+        for (v in declaredVars) {
+            if (!v.matches(Regex("[A-Za-z_][A-Za-z0-9_]*"))) {
+                errors += "变量名「$v」不合法（字母/数字/下划线，且不以数字开头）"
+            }
+            if (v in WorkflowSchema.SYSTEM_VARIABLES) {
+                errors += "变量名「$v」与系统变量同名，运行期会被系统值覆盖（换个名字）"
+            }
+        }
+        if (declaredVars.size > WorkflowSchema.MAX_VARIABLES) {
+            errors += "变量过多（${declaredVars.size} > ${WorkflowSchema.MAX_VARIABLES}）"
+        }
         if (def.name.isBlank()) errors += "name 不能为空"
         if (def.name.length > WorkflowSchema.MAX_NAME_CHARS) {
             errors += "name 过长（> ${WorkflowSchema.MAX_NAME_CHARS}）"

@@ -2098,4 +2098,11 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_wf_card_lock">锁定这一步</string>
     <string name="dsh_wf_stale_title">旧格式 · 已失效</string>
     <string name="dsh_wf_stale_body">这个流程用的是旧的参数模型，已不能运行。文件仍在，需要的话可以导出备份。</string>
+    <string name="dsh_wf_top_vars">流程内变量</string>
+    <string name="dsh_wf_vars_hint">在这里声明一次，流程里任何参数都能用占位符取到；只属于这份流程。</string>
+    <string name="dsh_wf_vars_name">名字</string>
+    <string name="dsh_wf_vars_value">值</string>
+    <string name="dsh_wf_vars_add">加一个变量</string>
+    <string name="dsh_wf_vars_bad">名字只能用字母/数字/下划线，且不能与内置变量重名。</string>
+    <string name="dsh_wf_vars_dup">有两个变量重名了。</string>
 </resources>
