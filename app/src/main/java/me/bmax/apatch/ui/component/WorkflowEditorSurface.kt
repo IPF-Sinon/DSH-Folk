@@ -333,6 +333,8 @@ internal fun WorkflowEditorSurface(
     var previewOpen by remember { mutableStateOf(false) }
     // 悬浮底栏的删除按钮：第一次点只变红，第二次才真删。
     var deleteArmed by remember { mutableStateOf(false) }
+    /** 节点详情窗（连线管理 / 删这一步）。**不由点卡片触发**，只从顶栏「更多」进。 */
+    var nodeSheetOpen by remember { mutableStateOf(false) }
     // 选中态一变，就撤销"变红"状态 —— 否则换一张卡时按钮会莫名其妙已经是红的。
     LaunchedEffect(selected) { deleteArmed = false }
     // 抽屉当前停在一级分类（null = 显示分类列表）。用 saveable 没必要：

@@ -1,57 +1,4 @@
-package me.bmax.apatch.ui.component/**
- * 一行参数：色点 + 标签 + **可编辑的值**。
- *
- * 这里从"值胶囊 + 复制按钮"改成真正的输入框 —— 用户的原话是"参数都在卡片本身上的"。
- * 复制按钮随之取消：能直接改的时候，复制一个只读字符串没有意义。
- */
-@Composable
-private fun CardParamRow(
-    row: CardParamRowModel,
-    onEdit: ((key: String, value: String) -> Unit)?,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // 空值画空心椭圆、有值画实心：一眼看出"这个参数还空着"。
-        Box(
-            Modifier
-                .size(8.dp)
-                .then(
-                    if (row.value.isBlank()) {
-                        Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                    } else {
-                        Modifier.background(row.color, CircleShape)
-                    }
-                ),
-        )
-        if (row.label.isNotBlank()) {
-            Spacer(Modifier.width(5.dp))
-            Text(
-                text = row.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 84.dp),
-            )
-        }
-        Spacer(Modifier.width(5.dp))
-        BasicTextField(
-            value = row.value,
-            onValueChange = { onEdit?.invoke(row.key, it) },
-            textStyle = MaterialTheme.typography.labelSmall.copy(
-                color = MaterialTheme.colorScheme.onSurface,
-            ),
-            singleLine = true,
-            enabled = onEdit != null,
-            modifier = Modifier
-                .weight(1f)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-                .padding(horizontal = 6.dp, vertical = 3.dp),
-        )
-    }
-}
+package me.bmax.apatch.ui.component
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -72,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
@@ -161,8 +109,8 @@ internal fun WorkflowNodeCard(
     /**
      * 卡上直接改参数。
      *
-     * 用户的原话是"参数都在卡片本身上的"—— 参考的点击助手就是卡上直接改，
-     * 不点开任何弹窗。所以这里把参数行做成输入框，改完立刻回给宿主落盘。
+     * 用户的原话是"参数都在卡片本身上的" —— 参考的点击助手就是卡上直接改，
+     * 不点开任何弹窗。所以参数行做成输入框，改完立刻回给宿主落盘。
      */
     onParamChange: ((key: String, value: String) -> Unit)? = null,
 ) {
@@ -210,7 +158,7 @@ internal fun WorkflowNodeCard(
         }
         .focusable()
         .semantics { contentDescription = node.name.ifBlank { workflowNodeLabel(node) } }
-        // 整卡不再接拖动手势：参数行是可编辑输入框，整卡吃手势会把输入框的点击/光标
+        // 整卡不再接拖动手势：参数行是可编辑输入框，整卡吃手势会把输入框的点击与光标
         // 全抢走（真机表现：点输入框没反应、想拖光标反而把卡拖走了）。
         // 拖动收窄到**标题区**（见下面的 header），参数区留给输入框。
         .then(if (onTap != null) Modifier.clickable { tapCb.value?.invoke() } else Modifier)
@@ -228,7 +176,7 @@ internal fun WorkflowNodeCard(
             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                 // ── 标题区＝拖动把手 ──
                 //
-                // 只有这里接拖动：它没有输入控件，不会和别的交互打架。
+                // 只有这里接拖动：它没有输入控件，不会和别的操作打架。
                 // 这也是点击助手的做法 —— 卡上能编辑的地方不抢拖动。
                 Column(
                     Modifier
@@ -574,3 +522,57 @@ private fun paramDotColor(kind: WorkflowNodeFields.Kind): Color = when (kind) {
     WorkflowNodeFields.Kind.CHOICE -> MaterialTheme.colorScheme.errorContainer
 }
 
+/**
+ * 一行参数：色点 + 标签 + **可编辑的值**。
+ *
+ * 从"只读值胶囊 + 复制按钮"改成真正的输入框 —— 用户的原话是"参数都在卡片本身上的"。
+ * 复制按钮随之取消：能直接改的时候，复制一段只读字符串没有意义。
+ */
+@Composable
+private fun CardParamRow(
+    row: CardParamRowModel,
+    onEdit: ((key: String, value: String) -> Unit)?,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // 空值画空心椭圆、有值画实心：一眼看出"这个参数还空着"。
+        Box(
+            Modifier
+                .size(8.dp)
+                .then(
+                    if (row.value.isBlank()) {
+                        Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                    } else {
+                        Modifier.background(row.color, CircleShape)
+                    }
+                ),
+        )
+        if (row.label.isNotBlank()) {
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = row.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 84.dp),
+            )
+        }
+        Spacer(Modifier.width(5.dp))
+        BasicTextField(
+            value = row.value,
+            onValueChange = { onEdit?.invoke(row.key, it) },
+            textStyle = MaterialTheme.typography.labelSmall.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
+            singleLine = true,
+            enabled = onEdit != null,
+            modifier = Modifier
+                .weight(1f)
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+        )
+    }
+}
