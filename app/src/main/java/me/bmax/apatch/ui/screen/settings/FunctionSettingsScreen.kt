@@ -665,7 +665,9 @@ internal fun DshSettingsScreen(
                     appUpdateRequired = runtimeState.appUpdateRequired,
                     requiredAppVersion = runtimeState.requiredAppVersion,
                     onGoUpdateApp = {
-                        navigator.navigate(GeneralSettingsScreenDestination("general_check_update"))
+                        navigator.navigate(GeneralSettingsScreenDestination("general_check_update")) {
+                            launchSingleTop = true
+                        }
                     },
                     onUpdateRuntime = { preserve ->
                         // 更新 = 按通道候选取最新（测试通道会取到更新的正式版）；重装仍装回已装那份

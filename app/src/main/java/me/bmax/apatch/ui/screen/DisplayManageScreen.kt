@@ -188,7 +188,9 @@ fun DisplayManageScreen(navigator: DestinationsNavigator) {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             TextButton(
                                 onClick = {
-                                    navigator.navigate(DisplayPreviewScreenDestination(info.id))
+                                    navigator.navigate(DisplayPreviewScreenDestination(info.id)) {
+                                        launchSingleTop = true
+                                    }
                                 },
                             ) {
                                 Text(stringResource(R.string.dsh_display_manage_preview))

@@ -271,7 +271,9 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
                     onDismiss = { detailDef = null },
                     onEdit = {
                         detailDef = null
-                        navigator.navigate(WorkflowEditorScreenDestination(workflowId = dd.id))
+                        navigator.navigate(WorkflowEditorScreenDestination(workflowId = dd.id)) {
+                            launchSingleTop = true
+                        }
                     },
                     onDelete = {
                         detailDef = null
@@ -386,7 +388,9 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
             onCreate = { id ->
                 nameDialog = false
                 listKey++
-                navigator.navigate(WorkflowEditorScreenDestination(workflowId = id))
+                navigator.navigate(WorkflowEditorScreenDestination(workflowId = id)) {
+                    launchSingleTop = true
+                }
             },
         )
     }

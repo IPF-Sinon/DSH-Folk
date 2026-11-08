@@ -283,7 +283,9 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                     // 这个 destination 带参数，生成的 Destination 对象必须**调用**之后才是 Direction
                     // （无参 destination 才能直接当 Direction 用 —— 权限记录页就是那种）。
                     onDshImport = {
-                        navigator.navigate(RestoreWizardScreenDestination(stagedPath = null))
+                        navigator.navigate(RestoreWizardScreenDestination(stagedPath = null)) {
+                            launchSingleTop = true
+                        }
                     },
                     dshBackups = dshRemote,
                     dshBackupBusy = dshBackupBusy,
