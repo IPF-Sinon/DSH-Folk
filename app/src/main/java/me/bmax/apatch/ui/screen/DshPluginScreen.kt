@@ -617,8 +617,11 @@ private fun DshPluginList(
         DshPluginDetailSheet(
             plugin = p,
             onDismiss = { detailId = null; pendingUninstall = null },
-            onInstall = { viewModel.install(p.pkg) },
-            onUpdate = { viewModel.update(p.pkg) },
+            // 用 addSpec 而不是 pkg：目录里 23 条没有 npm 包名的条目，pkg 是空串，
+            // 走 addSpec 才会取到 github:owner/name。商店页一直用的是 addSpec，
+            // 详情页这里漏了 —— 同一份数据在两个入口给出不同结果，正是要避免的。
+            onInstall = { viewModel.install(p.addSpec, fallbackTgz = p.tarball) },
+            onUpdate = { viewModel.update(p.pkg.ifEmpty { p.addSpec }) },
             onUninstall = { viewModel.uninstall(p.pkg) },
             onToggle = { viewModel.setDisabled(p.pkg, !p.disabled) },
             onOpenRepo = { openPluginRepo(context, p) { msg -> scope.launch { snackBarHost.showSnackbar(msg) } } },

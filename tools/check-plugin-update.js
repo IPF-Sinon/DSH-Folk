@@ -146,6 +146,22 @@ must(/stopped = viewModel\.installStopped && !viewModel\.installing/.test(screen
 must(/viewModel\.installing && viewModel\.progressHidden/.test(screen),
   "隐藏后没有「显示进度」入口");
 must(/R\.string\.dsh_plugin_show_progress/.test(screen), "「显示进度」没有走字符串资源");
+// ── 目录里「没有 npm 包名、只有仓库」的条目必须可安装 ──
+//
+// dsh-market 的 manifest 有 106 条，其中 23 条只登记 repo、没有 npm 字段。
+// 这些条目同样能装，安装规格是 `github:owner/name`，由 DshPlugin.installSpec 承载。
+//
+// 之前 fetchMarket 只填 pkg ⇒ 这 23 条 installable=false 且点安装会传空串；
+// 详情页还写死 p.pkg（商店页用的是 addSpec），同一个插件在两个入口结果不同。
+must(/installSpec = if \(npmPkg\.isEmpty\(\) && repoPath\.isNotEmpty\(\)\)/.test(repo),
+  "fetchMarket 必须给没有 npm 的条目填 installSpec（github:owner/name），否则那 23 条点不动");
+must(/optString\("npm"\)\.trim\(\)/.test(repo),
+  "npm 字段要 trim：空白 npm 会被当成有效包名");
+const screenSrc = read("app/src/main/java/me/bmax/apatch/ui/screen/DshPluginScreen.kt");
+must(!/viewModel\.install\(p\.pkg/.test(screenSrc),
+  "插件详情页安装要用 p.addSpec，不能写死 p.pkg（没有 npm 的条目 pkg 是空串）");
+must(/viewModel\.install\(p\.addSpec/.test(screenSrc) && /viewModel\.install\(plugin\.addSpec/.test(read("app/src/main/java/me/bmax/apatch/ui/screen/DshPluginStoreScreen.kt")),
+  "商店页与详情页都要走 addSpec（两个入口不能给出不同结果）");
 if (errors.length) {
   console.error('check-plugin-update FAILED:');
   for (const e of errors) console.error('  ✗ ' + e);

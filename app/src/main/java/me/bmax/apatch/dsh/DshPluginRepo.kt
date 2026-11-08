@@ -467,15 +467,30 @@ object DshPluginRepo {
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
             val id = o.optString("id").ifEmpty { o.optString("npm") }
             if (id.isEmpty()) return@mapNotNull null
+            val npmPkg = o.optString("npm").trim()
+            val repoPath = normalizeRepo(o.optString("repo"))
+            // 目录里有 23 条只登记了仓库、没有 npm 包名（约占 106 条的 22%）。
+            // 它们同样是可安装的插件，安装规格是 `github:owner/name`。
+            //
+            // 之前这里只填 pkg，于是这些条目：installable=false（点不动）、
+            // 点安装还会把空串传给 pnpm。DshPlugin.installSpec 存在的意义就是
+            // 承载这种非 npm 规格（见该字段的注释），这里把它填上。
             DshPlugin(
                 id = id,
-                pkg = o.optString("npm"),
+                pkg = npmPkg,
                 name = o.optString("name").ifEmpty { id },
                 description = o.optString("description").ifEmpty { o.optString("descriptionEn") },
                 author = o.optString("author"),
-                repo = normalizeRepo(o.optString("repo")),
+                repo = repoPath,
                 homepage = o.optString("repo"),
                 category = o.optString("category"),
+                // normalizeRepo 已经把 "github.com/" 剥掉、只留 "owner/name"，
+                // 所以这里直接拼 github: 前缀即可（这正是 [resolveSpec] 认得的写法）。
+                installSpec = if (npmPkg.isEmpty() && repoPath.isNotEmpty()) {
+                    "github:" + repoPath
+                } else {
+                    ""
+                },
             )
         }
     }.getOrElse {
