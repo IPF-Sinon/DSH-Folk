@@ -170,6 +170,7 @@ DSH-Folk 的 UI 直接复用 FolkPatch，容器与运行时交付思路来自 DS
 - [APatch](https://github.com/bmax121/APatch) —— FolkPatch 的上游
 - [DSHA](https://github.com/DSH-APP/DSHA) —— 无线 ADB 配对方案、容器运行逻辑参考
 - [DSHM](https://github.com/RochelimitDawn/DSHM) —— 运行时在线交付与镜像测速方案
+- [dsh-market](https://github.com/dsh-market/dsh-market) —— 插件商店的目录与统计接口（`manifest/plugins.json`、`/api/stats`、`/api/npm-downloads`），点赞数、周下载量与 4000+ 条目录都来自它，MIT
 - [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) —— 被启动的本体
 - [proot](https://github.com/proot-me/proot) / [proroot](https://github.com/coderredlab/proroot) / [Termux](https://github.com/termux/termux-app) —— 容器执行与 PTY 终端
 - [Shizuku](https://github.com/RikkaApps/Shizuku) —— 免 root 特权通道

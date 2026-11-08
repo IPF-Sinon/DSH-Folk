@@ -145,6 +145,7 @@ DSH-Folk's UI reuses FolkPatch directly; the container and runtime-delivery idea
 - [APatch](https://github.com/bmax121/APatch) — the upstream of FolkPatch
 - [DSHA](https://github.com/DSH-APP/DSHA) — wireless ADB pairing scheme, container-run logic reference
 - [DSHM](https://github.com/RochelimitDawn/DSHM) — online runtime delivery and mirror speed-testing scheme
+- [dsh-market](https://github.com/dsh-market/dsh-market) — the plugin store's catalog and stats APIs (`manifest/plugins.json`, `/api/stats`, `/api/npm-downloads`); likes, weekly downloads and the 4,000+ entry catalog all come from it, MIT
 - [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) — the thing being launched
 - [proot](https://github.com/proot-me/proot) / [proroot](https://github.com/coderredlab/proroot) / [Termux](https://github.com/termux/termux-app) — container execution and PTY terminal
 - [Shizuku](https://github.com/RikkaApps/Shizuku) — root-free privileged channel
