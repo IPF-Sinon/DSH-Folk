@@ -97,8 +97,16 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator, displayId: Int? = nul
 
     // 缺提权通道时的引导弹窗（见 DisplayChannelGuideDialog）：进这一页先判一次 —— 服务端
     // 是 app_process 起的独立进程，没有通道时后面的每一步都只会得到"启动失败"。
-    // 现算而不是 remember：用户可能刚在系统里授完 Shizuku 再回到这一页。
-    var guide by remember { mutableStateOf(!displayChannelReady(context)) }
+    //
+    // 探测必须放 IO。displayChannelReady → PrivilegedShell.reach → PermissionManager.refresh
+    // 全程是跨进程的（detectSu 真跑 su、Shizuku.pingBinder / checkSelfPermission / getUid），
+    // 写在组合里就等于每次重组都在主线程做一遍。原先这里是 remember { ... } 直接求值 ——
+    // remember 只挡住"重组时重算"，但首次求值仍然发生在主线程，且阻塞首帧。
+    // 改成先给个初值 false（不弹窗），IO 探测回来再决定。
+    var guide by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!withContext(Dispatchers.IO) { displayChannelReady(context) }) guide = true
+    }
 
     // 起服务端 + 拿到要看的虚拟屏。两步都是阻塞的特权操作，放 IO 上，别卡住首帧。
     LaunchedEffect(Unit) {
