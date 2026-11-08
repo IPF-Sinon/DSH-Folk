@@ -641,7 +641,13 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
   ok(/for \(\(i, s\) in group\?\.subs\.orEmpty\(\)\.withIndex\(\)\)/.test(picker), "二级分组是一排 chip");
   ok(/OutlinedTextField/.test(picker) && /searchText\.contains\(query\.trim\(\), ignoreCase = true\)/.test(picker),
     "带搜索框，且搜索跨整个一级分组（不只当前二级）");
-  ok(/heightIn\(max = 560\.dp\)/.test(picker), "面板限高，不撑满全屏（画布要一直露着）");
+  // 限高方式换了：现在是 ModalBottomSheet + fillMaxHeight(0.75f)，
+  // 高度对齐参考实现的 decorView*0.75（SelectActionDialog 实测值），
+  // 而不是自绘 Surface 的 heightIn(max=560.dp)。要求是"不撑满全屏"，不是某个具体数值。
+  ok(/ModalBottomSheet/.test(picker) && /fillMaxHeight\(0\.75f\)/.test(picker),
+    "面板用底部弹出层且限高 75%（画布要一直露着）");
+  ok(!/fillMaxSize\(\).*background\(MaterialTheme\.colorScheme\.scrim/.test(picker),
+    "不再自绘全屏遮罩层（那层没有弹出动画）");
 }
 
 console.log("\u2500 #16i 节点落点换算（拉线与新面板共用同一处）");
