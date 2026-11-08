@@ -521,8 +521,10 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   ok(/MaterialTheme\.colorScheme\.error/.test(card) && /MaterialTheme\.colorScheme\.tertiary/.test(card),
     "运行态边框按状态取色（失败 error、成功 tertiary）");
   ok(/WorkflowSchema\.defaultPinsFor\(node\)/.test(card), "引脚行来自 defaultPinsFor（与模型同一份推导）");
-  ok(/cubicTo\(/.test(canvas) && /onWireDrop/.test(canvas) && /detectTransformGestures/.test(canvas),
-  "画布：贝塞尔连线 + 空白处平移/双指缩放 + 拉线落点回调");
+  // 连线是**正交折线**（照抄 TouchTool 的 CardLayoutHelper.calculateLinkPath），不是贝塞尔。
+  // 上一版用 cubicTo 画曲线，观感像两根飘带，看不出走向与分流；折线才读得出"值从哪来"。
+  ok(/orthogonalLinkPath/.test(canvas) && !/cubicTo/.test(canvas) && /onWireDrop/.test(canvas) && /detectTransformGestures/.test(canvas),
+  "画布：正交折线连线 + 空白处平移/双指缩放 + 拉线落点回调");
   ok(/drawBlueprintDots/.test(canvas) && /24\.dp/.test(canvas), "画布有点阵网格");
   ok(!/fun layoutNodes\(/.test(canvas), "画布不自带布局：坐标由调用方传入（预览与编辑器共用摆位）");
   const preview = SRC.dialogs.slice(SRC.dialogs.indexOf("internal fun WorkflowGraphPreview("));
@@ -637,8 +639,11 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
   const picker = SRC.nodePicker;
   ok(picker.length > 0, "能读到节点面板组件源码");
   ok(/LazyColumn/.test(picker), "节点列表是 LazyColumn（可滚动，因为面板不靠拖出）");
-  ok(/for \(\(i, g\) in groups\.withIndex\(\)\)/.test(picker), "一级分组是一排 chip");
-  ok(/for \(\(i, s\) in group\?\.subs\.orEmpty\(\)\.withIndex\(\)\)/.test(picker), "二级分组是一排 chip");
+  // 一级分组是一排**连体**按钮（对齐 MaterialButtonToggleGroup.Connected），
+  // 二级分组是**左侧竖排**（参考实现 subGroup 就是 width=80dp 的竖向按钮组）。
+  // 上一版把二级分组也做成横向 chip，于是「执行」下只有一个「执行」时会重复出现一个孤零零的「执行」。
+  ok(/LazyRow/.test(picker) && /GroupButton\(/.test(picker), "一级分组是连体按钮条");
+  ok(/subs\.size > 1/.test(picker) && /SubGroupButton\(/.test(picker), "二级分组是左侧竖排，且只有一个时不画（消除重复的「执行」）");
   ok(/OutlinedTextField/.test(picker) && /searchText\.contains\(query\.trim\(\), ignoreCase = true\)/.test(picker),
     "带搜索框，且搜索跨整个一级分组（不只当前二级）");
   // 限高方式换了：现在是 ModalBottomSheet + fillMaxHeight(0.75f)，

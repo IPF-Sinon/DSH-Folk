@@ -278,11 +278,9 @@ internal fun WorkflowBlueprintCanvas(
             Canvas(Modifier.fillMaxSize()) {
                 val a = wireAnchor - origin
                 val b = wirePointer - origin
-                val ctrl = max(abs(b.x - a.x) * 0.5f, 60.dp.toPx())
-                val path = Path().apply {
-                    moveTo(a.x, a.y)
-                    cubicTo(a.x + ctrl, a.y, b.x - ctrl, b.y, b.x, b.y)
-                }
+                // 拉线中的预览线也画成折线：松手之后会变成折线，预览若是曲线，
+                // 松手那一下的"变形"会让人以为连错了对象。
+                val path = orthogonalLinkPath(a, b, corridor = 24.dp.toPx())
                 drawPath(path, wireColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
                 drawCircle(wireColor, radius = 5.dp.toPx(), center = b)
             }
@@ -379,11 +377,12 @@ private fun DrawScope.drawBlueprintEdges(
         }
         val endX = to.x * density
         val endY = (to.y * density) + WorkflowNodeCardAnchorY * density
-        val ctrl = max(abs(endX - fromRight) * 0.5f, 60.dp.toPx())
-        val path = Path().apply {
-            moveTo(fromRight, startY)
-            cubicTo(fromRight + ctrl, startY, endX - ctrl, endY, endX, endY)
-        }
+        // 折线（不是贝塞尔）：见 WorkflowLinkPath 的说明。
+        val path = orthogonalLinkPath(
+            start = Offset(fromRight, startY),
+            end = Offset(endX, endY),
+            corridor = 24.dp.toPx(),
+        )
         // 数据边用虚线 + 细一点的线：它在执行期不决定"走哪条路"，只决定"参数从哪来"。
         // 两者画成一模一样的话，用户会以为一条数据边也是分支。
         val isData = edge.kind == WorkflowEdgeKind.DATA

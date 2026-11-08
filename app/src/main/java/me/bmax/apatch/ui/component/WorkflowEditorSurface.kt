@@ -56,6 +56,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.CallSplit
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.DataObject
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -174,6 +181,7 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
         key = key,
         titleRes = kind.labelRes,
         descRes = 0,
+        icon = nodeTypeIcon(kind.type),
         accent = editorPickerAccent(kind.type),
         // 搜索文本用资源名而不是 stringResource：构建分组不该再读一次当前语言，
         // 面板会用它自己的 locale 匹配。这里给的是稳定的、可搜的英文/中文键名。
@@ -556,27 +564,31 @@ internal fun WorkflowEditorSurface(
                                 style = MaterialTheme.typography.titleSmall,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+                                // 名字后面要给小圆点留位置，所以右边距收窄。
+                                modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                             )
+                            // 保存状态圆点跟在**名字后面**，而不是挤在右侧图标区。
+                            //
+                            // 理由：它描述的是"这个名字所指的定义"的状态，属于标题的一部分。
+                            // 放在右侧一排图标中间时，用户会以为它是某个按钮的状态灯，
+                            // 而且要跨越大半个屏幕才能把"我刚改了什么"和"是否保存了"对上。
+                            if (autosave != null && saveState != SaveState.SAVED) {
+                                Box(
+                                    Modifier
+                                        .padding(end = 12.dp)
+                                        .size(8.dp)
+                                        .background(
+                                            color = when (saveState) {
+                                                SaveState.FAILED -> MaterialTheme.colorScheme.error
+                                                else -> MaterialTheme.colorScheme.tertiary
+                                            },
+                                            shape = CircleShape,
+                                        ),
+                                )
+                            }
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    // 保存状态用一个小圆点 + 文字，放在按钮左边；失败时是红点。
-                    if (autosave != null) {
-                        Box(
-                            Modifier
-                                .size(8.dp)
-                                .background(
-                                    color = when (saveState) {
-                                        SaveState.FAILED -> MaterialTheme.colorScheme.error
-                                        SaveState.SAVING -> MaterialTheme.colorScheme.tertiary
-                                        else -> MaterialTheme.colorScheme.primary
-                                    },
-                                    shape = CircleShape,
-                                ),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                    }
                     Surface(shape = CircleShape, tonalElevation = 5.dp) {
                         IconButton(onClick = { searchOpen = !searchOpen }) {
                             Icon(
@@ -1311,4 +1323,25 @@ private fun FloatBarIcon(
     IconButton(onClick = onClick) {
         Icon(icon, contentDescription = label, tint = tint ?: MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/**
+ * 节点类型 → 面板里那颗大图标。
+ *
+ * 只用于**选择面板**：参考实现的每个条目都带一个图标，用户靠形状先认出类别，
+ * 再看文字确认。上一版只有色点，色点不承载任何含义。
+ *
+ * 为什么不做成 `EditorNodeKind` 的字段：那个 data class 是**纯数据**，
+ * 一旦塞进 `ImageVector` 就会把它变成 Compose 依赖，construction 又要在
+ * `remember` 之外跑（这正是上一轮踩过的坑，见 editorPickerGroups 上方的注释）。
+ * 用查表函数把图标留在展示层，数据层保持干净。
+ */
+private fun nodeTypeIcon(type: WorkflowNodeType) = when (type) {
+    WorkflowNodeType.EXECUTE -> Icons.Filled.PlayArrow
+    WorkflowNodeType.CONDITION -> Icons.Filled.CallSplit
+    WorkflowNodeType.WAIT -> Icons.Filled.HourglassEmpty
+    WorkflowNodeType.LOGIC -> Icons.Filled.AccountTree
+    WorkflowNodeType.EXTRACT -> Icons.Filled.DataObject
+    WorkflowNodeType.LOG -> Icons.Filled.Article
+    WorkflowNodeType.TRIGGER -> Icons.Filled.Bolt
 }
