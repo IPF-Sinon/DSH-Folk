@@ -27,10 +27,21 @@ object AppData {
         private val _pluginCount = MutableStateFlow(0)
         private val _updatableCount = MutableStateFlow(0)
 
+        /**
+         * 已安装插件里**被停用**的数量。
+         *
+         * 首页那张饼图要的是「启用 / 停用 / 可更新」三块，前两者之和必须等于总数。
+         * 原先首页为了拿这三个数，自己去建了一个 DshPluginViewModel 并拉整份插件列表 ——
+         * 而这里在刷新角标计数时**本来就已经**读到了完整列表，顺手算出来即可，
+         * 不必为同一份数据再拉起一次容器进程。
+         */
+        private val _disabledCount = MutableStateFlow(0)
+
         private var lastRefreshAt = 0L
 
         val pluginCount: StateFlow<Int> = _pluginCount.asStateFlow()
         val updatableCount: StateFlow<Int> = _updatableCount.asStateFlow()
+        val disabledCount: StateFlow<Int> = _disabledCount.asStateFlow()
 
         /**
          * 刷新插件角标计数。
@@ -53,12 +64,14 @@ object AppData {
             if (!DshRuntime.state.value.installed) {
                 _pluginCount.value = 0
                 _updatableCount.value = 0
+                _disabledCount.value = 0
                 return@withContext
             }
 
             try {
                 val installed = DshPluginRepo.listInstalled()
                 _pluginCount.value = installed.size
+                _disabledCount.value = installed.count { !it.enabled }
 
                 // 可更新数直接对「已安装列表」补齐远端版本，而不是数商店目录里可更新的条目：
                 // dsh-market 只收录了一部分插件（dsh-config-manager 就不在目录里），

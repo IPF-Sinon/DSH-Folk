@@ -6,9 +6,16 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import me.bmax.apatch.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import me.bmax.apatch.dsh.PrivilegedShell
 
 /**
@@ -49,7 +56,20 @@ fun DisplayChannelGuideDialog(
 ) {
     if (!visible) return
     val context = LocalContext.current
-    val reason = PrivilegedShell.reach(context)?.reason
+    // 探测**不能**在组合里直接做。
+    //
+    // 上面那句「不该在每帧重组里做」原本只是个注释约定，但这行代码恰恰违反了它：
+    // PrivilegedShell.reach 内部是 PermissionManager.refresh，会 detectSu()（跑 su）、
+    // detectRootProvider()、Shizuku.pingBinder()、checkSelfPermission()、getUid() ——
+    // 全是跨进程调用。写成 val reason = reach(...) 就等于每次重组都在主线程上做一遍，
+    // 页面上任何一次无关的状态变化（滚动、弹窗、返回）都会再付一次。
+    //
+    // 改成 remember(visible) + LaunchedEffect 里的 IO 探测：进这一页探一次，
+    // 结果落到 state，重组只读 state。
+    var reason by remember(visible) { mutableStateOf<String?>(null) }
+    LaunchedEffect(visible) {
+        reason = withContext(Dispatchers.IO) { PrivilegedShell.reach(context)?.reason }
+    }
     val bodyRes = when (reason) {
         PrivilegedShell.REASON_ROOT_UNVERIFIED -> R.string.dsh_display_guide_root
         PrivilegedShell.REASON_SHIZUKU_UNAUTHORIZED -> R.string.dsh_display_guide_shizuku

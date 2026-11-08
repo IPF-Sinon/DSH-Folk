@@ -136,6 +136,17 @@ fun HomeScreenDsh(
             onOpenWeb = { uiState.openWeb() },
         )
 
+        // 实际运行时：**直接读已经算好的 state**，不再现算。
+        //
+        // effectiveRuntimeId() 内部是 runtime() → Chroot.available() → PrivilegedShell.reach()
+        // → PermissionManager.refresh，里面有 detectSu()（跑 su）、Shizuku.pingBinder() 等
+        // 跨进程调用。原来这行写在组合里，等于每次重组都在主线程上重探一遍权限，
+        // 而且 value 与 subtitle 各调一次 —— 同一张卡片一次重组付双份。
+        //
+        // state.runtimeId 由 ProvideDshHomeState 在 remember(runtime, perm) 里算好，
+        // 那两样变化时才会重算，语义完全等价（这里要的就是"实际在跑的那个"）。
+        val runModeId = state.runtimeId
+
         Row(
             // 等高：两张卡的副标题在窄屏/大字号下换行行数不一样（一台设备 1 行、另一台 2 行），
             // 不定高就会出现「一张高一张低」—— 用户报的「部分竖屏设备上这两张卡不对齐」就是这个。
@@ -147,9 +158,9 @@ fun HomeScreenDsh(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 icon = Icons.Outlined.Layers,
                 title = stringResource(R.string.dsh_run_mode),
-                value = if (DshRuntime.effectiveRuntimeId() == "proroot") "proroot" else "proot",
+                value = runModeId,
                 subtitle = stringResource(
-                    if (DshRuntime.effectiveRuntimeId() == "proroot") R.string.dsh_mode_proroot_desc
+                    if (runModeId == "proroot") R.string.dsh_mode_proroot_desc
                     else R.string.dsh_mode_proot_desc
                 ),
                 onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },

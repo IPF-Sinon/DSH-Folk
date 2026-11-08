@@ -53,7 +53,9 @@ data class TimeSeriesData(
 /** DSH 插件计数（原内核/APM/超级用户三项计数的替代）。 */
 data class PluginStatsState(
     val pluginCount: Int = 0,
-    val updatableCount: Int = 0
+    val updatableCount: Int = 0,
+    /** 已安装里被停用的数量；[pluginCount] - [disabledCount] = 启用数。 */
+    val disabledCount: Int = 0
 )
 
 /** 管理器自身与系统信息（原 PatchStatusState 去掉内核补丁状态后的残余）。 */
@@ -143,6 +145,17 @@ class DashboardViewModel : ViewModel() {
                 )
             }
             .catch { e -> Log.e(TAG, "Error collecting updatableCount", e) }
+            .launchIn(viewModelScope)
+
+        // 停用数来自同一份已安装列表（同一轮 refresh 里已经读到），首页不必为它再拉一遍。
+        AppData.DataRefreshManager.disabledCount
+            .onEach { count ->
+                val current = _dashboardUiState.value
+                _dashboardUiState.value = current.copy(
+                    pluginStats = current.pluginStats.copy(disabledCount = count)
+                )
+            }
+            .catch { e -> Log.e(TAG, "Error collecting disabledCount", e) }
             .launchIn(viewModelScope)
     }
 

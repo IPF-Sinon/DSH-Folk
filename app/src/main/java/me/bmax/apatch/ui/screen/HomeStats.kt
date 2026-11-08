@@ -30,9 +30,10 @@ import me.bmax.apatch.ui.component.chart.SystemLineChart
 import me.bmax.apatch.ui.component.chart.rememberPieSliceDataFromCounts
 import me.bmax.apatch.ui.theme.BackgroundConfig
 import me.bmax.apatch.ui.viewmodel.DashboardViewModel
-import me.bmax.apatch.ui.viewmodel.DshPluginViewModel
+import me.bmax.apatch.ui.viewmodel.PluginStatsState
 import me.bmax.apatch.ui.viewmodel.SystemMonitorState
 import me.bmax.apatch.ui.viewmodel.TimeSeriesData
+import me.bmax.apatch.util.AppData
 import me.bmax.apatch.util.ui.HomeBottomSpacer
 
 /**
@@ -51,9 +52,19 @@ fun HomeScreenStats(
     val uiState by viewModel.dashboardUiState.collectAsStateWithLifecycle()
     val timeSeries by viewModel.timeSeriesData.collectAsStateWithLifecycle()
 
-    val pluginViewModel: DshPluginViewModel = viewModel()
-    LaunchedEffect(Unit) {
-        if (pluginViewModel.plugins.isEmpty()) pluginViewModel.refresh()
+    // 首页**不再**自己建一个 DshPluginViewModel 去拉整份插件列表。
+    //
+    // 那张饼图只要三个数：启用、停用、可更新。原先为了它们新建一个导航作用域的 VM 并
+    // 调用 refresh() —— 而 refresh 的第一步 DshPluginRepo.listInstalled() 会**拉起一个
+    // proot 容器进程**跑 node 读 profile 的 package.json，接着还要走一轮网络拉目录。
+    // 更糟的是首页的 viewModel() 是导航作用域：离开首页就销毁、回来又新建，
+    // "plugins.isEmpty() 才刷新"这个条件恒为真，于是**每次切回首页都要重跑一遍**。
+    //
+    // 这三个数本来就在别处算好了：DataRefreshManager 刷新角标计数时，同一份已安装列表
+    // 顺手就能得出总数/停用数/可更新数，它自己还带 30 秒节流与"运行时没装就不 exec"的
+    // 保护。DashboardViewModel 已经把这三个数收进 uiState.pluginStats，直接读即可。
+    LaunchedEffect(isReady) {
+        if (isReady) AppData.DataRefreshManager.ensureCountsLoaded()
     }
 
     val state = LocalDshHomeState.current
@@ -99,7 +110,7 @@ fun HomeScreenStats(
                 HomeBottomSpacer()
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                PluginStatisticsSection(pluginViewModel)
+                PluginStatisticsSection(uiState.pluginStats)
                 InfoCardCircle()
                 HomeBottomSpacer()
             }
@@ -121,7 +132,7 @@ fun HomeScreenStats(
             if (isReady) {
                 SystemMonitoringSection(uiState.systemMonitor, timeSeries)
             }
-            PluginStatisticsSection(pluginViewModel)
+            PluginStatisticsSection(uiState.pluginStats)
             InfoCardCircle()
             DshLogCard()
             HomeBottomSpacer()
@@ -430,13 +441,15 @@ private fun SystemMonitoringSection(
 
 @Composable
 private fun PluginStatisticsSection(
-    viewModel: DshPluginViewModel,
+    pluginStats: PluginStatsState,
     modifier: Modifier = Modifier
 ) {
-    val plugins = viewModel.plugins
-    val enabledCount = plugins.count { it.enabled }
-    val disabledCount = plugins.size - enabledCount
-    val updatableCount = viewModel.updatableCount
+    // 三个数都来自 DataRefreshManager 的同一次读盘（见 HomeScreenStats 里的说明），
+    // 首页不再为它们单独拉一次插件列表。
+    val pluginCount = pluginStats.pluginCount
+    val disabledCount = pluginStats.disabledCount
+    val enabledCount = (pluginCount - disabledCount).coerceAtLeast(0)
+    val updatableCount = pluginStats.updatableCount
 
     TonalCard(modifier = modifier) {
         Row(
@@ -454,7 +467,7 @@ private fun PluginStatisticsSection(
                     apmLabel = stringResource(R.string.dsh_stats_disabled),
                     suLabel = stringResource(R.string.dsh_stats_updatable),
                 ),
-                centerLabel = if (plugins.isNotEmpty()) plugins.size.toString() else "--",
+                centerLabel = if (pluginCount > 0) pluginCount.toString() else "--",
                 modifier = Modifier.size(140.dp)
             )
 
