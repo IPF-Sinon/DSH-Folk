@@ -237,13 +237,12 @@ internal fun WorkflowNodeCard(
                 // "这一步到底怎么配的"。上一版只显示一个"主参数"，其余全藏在弹窗里，
                 // 于是一屏卡片看下来只能看出节点类型，看不出它们各在做什么。
                 //
-                // 只读展示（不可在卡上编辑）：编辑仍然走点卡片 → 参数窗。
-                // 卡上直接编辑会让每张卡的命中区互相打架（拖卡 vs 输入框抢手势），
-                // 而画布上最需要的是拖动流畅。
+                // 参数行是**可编辑**的（见 CardParamRow）：拖动只挂在标题区，
+                // 所以卡上直接改参数不会和拖动抢手势。
                 // 三档展开：过滤在**这里**做，而不是让每个 CardParamRow 自己判断 ——
                 // 一处过滤，可见性规则只有一份。
                 val allRows = cardParamRows(node, linkedParamKeys)
-                val rows = allRows.filter { rowVisible(row, node) }
+                val rows = allRows.filter { candidate -> rowVisible(candidate, node) }
                 if (rows.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     for (row in rows) CardParamRow(row, onEdit = onParamChange)
