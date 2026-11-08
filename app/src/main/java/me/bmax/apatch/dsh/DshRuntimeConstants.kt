@@ -133,9 +133,9 @@ internal val SEED_SPECS = mapOf("dsh-folk-cloud" to "github:IPF-Sinon/dsh-folk-c
 
 internal val SEED_MIN_VERSIONS = mapOf(
 "dsh-folk-cloud" to "0.6.0",
-"dsh-config-manager" to "0.1.64",
-"dshmarket" to "1.66.8",
-"dsh-web-mobile" to "3.0.3",
+"dsh-config-manager" to "0.4.3",
+"dshmarket" to "1.73.15",
+"dsh-web-mobile" to "3.3.0",
 )
 
 /**

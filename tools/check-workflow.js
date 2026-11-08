@@ -525,6 +525,24 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   // 上一版用 cubicTo 画曲线，观感像两根飘带，看不出走向与分流；折线才读得出"值从哪来"。
   ok(/orthogonalLinkPath/.test(canvas) && !/cubicTo/.test(canvas) && /onWireDrop/.test(canvas) && /detectTransformGestures/.test(canvas),
   "画布：正交折线连线 + 空白处平移/双指缩放 + 拉线落点回调");
+  // nodeTypeIcon 的 when 必须**覆盖真实枚举**，且不能带 else。
+  //
+  // 这条是补的：上一版我写了 `WorkflowNodeType.LOG`，而枚举里根本没有 LOG ——
+  // 44 个本地门禁一个都没报，靠 CI 编译才发现（Unresolved reference 'LOG'）。
+  // 门禁读不到枚举定义就不要猜，直接拿 models 里的真实值逐条比对。
+  const models = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowModels.kt");
+  const enumBody = models.slice(models.indexOf("enum class WorkflowNodeType"));
+  const realTypes = [...enumBody.slice(0, enumBody.indexOf("companion object"))
+    .matchAll(/([A-Z_]+)\("([a-z]+)"\)/g)].map((m) => m[1]);
+  ok(realTypes.length === 6, "WorkflowNodeType 有 6 个取值（" + realTypes.join("/") + "）");
+  const iconFn = canvas + read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowEditorSurface.kt");
+  const iconBody = iconFn.slice(iconFn.indexOf("private fun nodeTypeIcon"));
+  const iconSrc = iconBody.slice(0, iconBody.indexOf("\n}"));
+  for (const t of realTypes) {
+    ok(new RegExp("WorkflowNodeType\\." + t + " ->").test(iconSrc), "nodeTypeIcon 覆盖了 " + t);
+  }
+  ok(!/WorkflowNodeType\.LOG\b/.test(iconSrc), "nodeTypeIcon 不引用枚举里不存在的 LOG（CI 就是这么炸的）");
+  ok(!/else ->/.test(iconSrc), "nodeTypeIcon 不带 else 兜底（这样新增枚举值时编译器会报错提醒）");
   ok(/drawBlueprintDots/.test(canvas) && /24\.dp/.test(canvas), "画布有点阵网格");
   ok(!/fun layoutNodes\(/.test(canvas), "画布不自带布局：坐标由调用方传入（预览与编辑器共用摆位）");
   const preview = SRC.dialogs.slice(SRC.dialogs.indexOf("internal fun WorkflowGraphPreview("));

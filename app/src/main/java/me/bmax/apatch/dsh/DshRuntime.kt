@@ -1255,8 +1255,37 @@ object DshRuntime : DshRuntimeHost {
      * 首装仍由 missing 循环负责。重装失败不影响已装旧版本（install 失败不卸载），只落一行日志；
      * 仍低于要求时下次启动会再试（这正是「需要时才更新」的期望行为）。
      */
+    /**
+     * 某个预装插件的新版本，能否装进**当前这个运行时**。
+     *
+     * 预装插件的 peer 依赖是冲着 dsh 主包版本写的。插件升到新版时，它可能已经要求一个
+     * 比手上运行时更新的 dsh —— 这时代替用户"升级"，结果是插件树直接起不来，
+     * 连原来能用的旧版本也没了。宁可停在旧版本，等 App 把运行时一起换掉。
+     *
+     * 目前只有 dsh-web-mobile 有这条硬要求（3.3.0 起 peer 是 dsh-client-* >=0.2.2-rc.1）。
+     * 其它包（dshmarket / dsh-config-manager）的 peer 是宽区间，任意较新运行时都满足，
+     * 所以不设门槛 —— 门槛写多了会变成"永远不升级"的另一种 bug。
+     *
+     * @param runtimeVersion 容器里已装的运行时版本（metadata 的 dsh 字段，如 "0.2.2-rc.1"）。
+     *   空 = 还没装或读不到，按"不满足"处理：此时装什么上去都没法保证能起来。
+     */
+    private fun seedUpgradeAllowed(pkg: String, runtimeVersion: String): Boolean {
+        if (pkg != "dsh-web-mobile") return true
+        val need = "0.2.2-rc.1"
+        if (runtimeVersion.isBlank()) return false
+        return compareVersions(runtimeVersion, need) >= 0
+    }
+
     private suspend fun applySeedVersionUpgrade(shadowed: Set<String>) {
-        val wanted = SEED_MIN_VERSIONS.filterKeys { it !in shadowed }
+        // 有些预装插件的**新版本**反过来要求更新的运行时（dsh-web-mobile 3.3.0 起要求
+        // dsh-client-* >= 0.2.2-rc.1）。运行时是随 release 一起发的，插件装进旧运行时后
+        // 会因 peer 不满足而起不来，反而把本来能用的旧版本弄坏。
+        // 所以：运行时版本够不上这个插件的要求时，**跳过升级**、保留旧版本继续用。
+        // 判据是容器里记录的 runtimeVersion（metadata 的 dsh 字段），不是 App 版本。
+        val rtVer = runtimeVersion.orEmpty()
+        val wanted = SEED_MIN_VERSIONS.filterKeys { pkg ->
+            pkg !in shadowed && seedUpgradeAllowed(pkg, rtVer)
+        }
         if (wanted.isEmpty()) return
         val byPkg = runCatching { DshPluginRepo.listInstalled() }.getOrNull()
             ?.associateBy { it.pkg } ?: return

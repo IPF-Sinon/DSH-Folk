@@ -61,7 +61,6 @@ import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.DataObject
-import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.DropdownMenu
@@ -1342,6 +1341,5 @@ private fun nodeTypeIcon(type: WorkflowNodeType) = when (type) {
     WorkflowNodeType.WAIT -> Icons.Filled.HourglassEmpty
     WorkflowNodeType.LOGIC -> Icons.Filled.AccountTree
     WorkflowNodeType.EXTRACT -> Icons.Filled.DataObject
-    WorkflowNodeType.LOG -> Icons.Filled.Article
     WorkflowNodeType.TRIGGER -> Icons.Filled.Bolt
 }

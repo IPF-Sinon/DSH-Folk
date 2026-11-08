@@ -796,11 +796,22 @@ ok(/fun seedFallbackTgz\(pkg[^\n]*\)/.test(runtime) &&
 // 否则已装 0.5.0 的机器判定「已达标」而永远不升级。
 ok(/"dsh-folk-cloud" to "0\.6\.0"/.test(runtime),
   "dsh-folk-cloud 种子最低版本抬到 0.6.0（否则已装 0.5.0 的机器不会升级，云备份继续不可用）");
-// 种子最低版本只能抬到**同时兼容 0.1.x 与 0.2.x** 的版本：App 同时挂着 stable(0.1.7) 与
-// beta(0.2.0)，抬到只认 0.2.0 的版本会把 stable 用户升级成反被跳过的包。
-// dshmarket 1.66.8 的范围含 `^0.1.0-rc.7` 与 `^0.2.0-rc.1`，是双兼容的。
-ok(/"dshmarket" to "1\.66\.8"/.test(runtime),
-  "dshmarket 种子最低版本抬到 1.66.8（1.65.1 在 0.2.0 上会被兼容闸门跳过）");
+// 种子最低版本与「运行时够不够得上」是两个独立的事，不能只靠抬版本号。
+//
+// dshmarket 的 peer 是宽区间（`^0.1.0-rc.7 || ... || ^0.2.1-rc.1`），任意较新运行时都满足，
+// 所以它可以放心抬到 1.73.15。
+//
+// 但 dsh-web-mobile 3.3.0 起 peer 变成 `dsh-client-* >=0.2.2-rc.1`，**stable 通道的运行时
+// 还停在 0.2.1-rc.3**。若无脑抬版本号，stable 用户会被升级成一个起不来的插件树。
+// 所以 upgrade 路径必须再过一道 seedUpgradeAllowed：运行时够不上就跳过升级、保留旧版。
+ok(/"dshmarket" to "1\.73\.15"/.test(runtime),
+  "dshmarket 种子最低版本抬到 1.73.15");
+ok(/"dsh-web-mobile" to "3\.3\.0"/.test(runtime),
+  "dsh-web-mobile 种子最低版本抬到 3.3.0");
+ok(/seedUpgradeAllowed\(pkg, rtVer\)/.test(runtime),
+  "升级预装插件前要过运行时版本闸门（dsh-web-mobile 3.3.0 要求 dsh-client-* >=0.2.2-rc.1，stable 还是 0.2.1-rc.3）");
+ok(/compareVersions\(runtimeVersion, need\) >= 0/.test(runtime),
+  "闸门用运行时版本比对，且空版本按不满足处理（读不到就别冒险装）");
 // dsh 0.2.0 的 `dsh web` 默认会去拉系统浏览器。真正的开关是 --no-open（0.1.7 起就有）；
 // `export BROWSER=true` 从来拦不住它 —— dsh web 用 npm 的 `open` 包（Linux 走 xdg-open），
 // 不读 BROWSER，只因容器里没有 xdg-open 尝试后静默失败才看不出区别。
