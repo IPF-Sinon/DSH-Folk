@@ -280,6 +280,50 @@ if (INTERNAL_TYPES.size > 0) {
   bad += rBad;
 }
 
+// ── Compose 修饰符/扩展函数的最小表（补 KNOWN 之外的盲区）──────────────
+//
+// 这一条的由来：2026-11-08 我连续两次在 CI 上因 `widthIn` 没有 import 而炸，
+// 而本地 43 条门禁全绿 —— `check-imports.js` 当时只查一张手写的 KNOWN 表，
+// layout 那一大票修饰符（widthIn / heightIn / size / padding / offset …）一个都不在表里。
+// 它们全是**扩展函数**，忘 import 就是 Unresolved reference，只在编译期才看得见。
+//
+// 判据保守：只查「确定来自 layout/ui 包」且**短名唯一**的那些。
+// weight 之类有多个来源的（RowScope/ColumnScope 扩展）不列入，宁可不查也不能误报。
+const MODIFIER_SYMBOLS = {
+  // androidx.compose.foundation.layout
+  widthIn: 'androidx.compose.foundation.layout.widthIn',
+  heightIn: 'androidx.compose.foundation.layout.heightIn',
+  fillMaxWidth: 'androidx.compose.foundation.layout.fillMaxWidth',
+  fillMaxSize: 'androidx.compose.foundation.layout.fillMaxSize',
+  fillMaxHeight: 'androidx.compose.foundation.layout.fillMaxHeight',
+  wrapContentWidth: 'androidx.compose.foundation.layout.wrapContentWidth',
+  wrapContentHeight: 'androidx.compose.foundation.layout.wrapContentHeight',
+  wrapContentSize: 'androidx.compose.foundation.layout.wrapContentSize',
+  defaultMinSize: 'androidx.compose.foundation.layout.defaultMinSize',
+  windowInsetsPadding: 'androidx.compose.foundation.layout.windowInsetsPadding',
+  // 注意：alpha / clip / shadow **不能**进这张表。它们同时是 Color.copy(alpha=) 的具名参数、
+  // 以及很多函数自己的参数名，短名不唯一 —— 加进来实测 46 处全是误报。
+};
+let mBad = 0;
+for (const f of FILES) {
+  const src = fs.readFileSync(f, 'utf8');
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').map((l) => l.replace(/(^|\s)\/\/.*$/, '')).join('\n');
+  const wildPkgs = new Set();
+  for (const m of code.matchAll(/^import\s+([\w.]+)\.\*\s*$/gm)) wildPkgs.add(m[1]);
+  for (const sym of Object.keys(MODIFIER_SYMBOLS)) {
+    const fqcn = MODIFIER_SYMBOLS[sym];
+    const useRe = new RegExp('(^|[^\\w])' + sym + '\\s*[(=]', 'm');
+    if (!useRe.test(code)) continue;
+    if (code.includes('import ' + fqcn)) continue;
+    const pkg = fqcn.substring(0, fqcn.lastIndexOf('.'));
+    if (wildPkgs.has(pkg)) continue;
+    console.log('导入: ' + f.split('/').pop() + ' 用了 ' + sym + ' 但没 import ' + fqcn + '（只在编译期报）');
+    mBad++;
+  }
+}
+bad += mBad;
 // ── 跨包引用检查（项目内符号）─────────────────────────────────────────────
 //
 // 前面那份 KNOWN 表是「已知全限定名的外部符号」。这一条补的是**项目内自己声明的**符号：
