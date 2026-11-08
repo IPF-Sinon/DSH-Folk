@@ -606,6 +606,25 @@ object DshSource {
     }
 
     /**
+     * 测速取消令牌（见 [cancelSpeedTest]）。
+     *
+     * 为什么需要它：**协程 cancel 打不断这里**。探测是同步阻塞的 socket 读
+     * （[probeLatency] / [probeSpeed]），线程已经在 `input.read()` 上等着，
+     * Job.cancel() 只是给协程打标记，那个线程仍会跑完当前探测，然后照常回调
+     * onProgress —— 于是界面在已经开始下载之后，还在被测速结果覆盖、列表继续重排。
+     *
+     * 这里用"代数"(generation) 而不是布尔量：取消一次就把代数 +1，
+     * 每一轮测速进来时记住当前代数，之后只要代数变了就自认作废。
+     * 布尔量做不到这点 —— 取消后立刻开始新一轮测速，旧线程会看到"未取消"。
+     */
+    private val raceGeneration = java.util.concurrent.atomic.AtomicLong(0L)
+
+    /** 取消**当前**这一轮测速。缓存与下一轮不受影响。 */
+    fun cancelSpeedTest() {
+        raceGeneration.incrementAndGet()
+    }
+
+    /**
      * 所有候选源测一遍（延迟 + 吞吐）。同步阻塞，调用方放 IO 线程。
      *
      * @param probeAll 是否给**每条可达线路**都测吞吐。
@@ -621,6 +640,9 @@ object DshSource {
         probeAll: Boolean = false,
         onProgress: ((List<SpeedResult>) -> Unit)? = null,
     ): List<SpeedResult> {
+        val gen = raceGeneration.get()
+        // 本轮是否已作废：一旦有人 cancelSpeedTest()，代数就不是进来时那个了。
+        fun aborted() = raceGeneration.get() != gen
         val meta = metaUrl()
         val probe = speedProbeUrl()
         // 候选＝每条镜像线路 + 直连 github（垫底）。清单从 MIRRORS 派生，加线路只改一处。
@@ -639,11 +661,16 @@ object DshSource {
         if (probeAll) {
             // 先把「只有延迟」的结果交出去，界面立刻满屏有数，不用干等吞吐
             var acc = latency
+            if (aborted()) return latency
             lastResults = acc
             lastResultsAt = System.currentTimeMillis()
             onProgress?.invoke(acc)
             for (r in reachable) {
+                // 每条吞吐探测之前都查一次：用户一旦点了下载，剩下的线路不该再占用
+                // 带宽/时间，更不该继续改写界面上的顺序。
+                if (aborted()) return acc
                 val speed = probeSpeed(proxyPrefix(r.source) + probe)
+                if (aborted()) return acc
                 acc = acc.map { if (it.source == r.source) it.copy(speedKBps = speed) else it }
                 lastResults = acc
                 lastResultsAt = System.currentTimeMillis()
@@ -653,7 +680,8 @@ object DshSource {
         }
         val top = reachable.take(2).map { it.source }.toSet()
         val results = latency.map { r ->
-            if (r.source !in top) r else r.copy(speedKBps = probeSpeed(proxyPrefix(r.source) + probe))
+            if (r.source !in top || aborted()) r
+            else r.copy(speedKBps = probeSpeed(proxyPrefix(r.source) + probe))
         }
         lastResults = results
         lastResultsAt = System.currentTimeMillis()

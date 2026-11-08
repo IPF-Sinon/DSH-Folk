@@ -53,6 +53,8 @@ fun UpdateDialog(
 
     var phase by remember { mutableStateOf<AppUpdater.Phase>(AppUpdater.Phase.Idle) }
     var results by remember { mutableStateOf<List<DshSource.SpeedResult>>(emptyList()) }
+                // 下载一旦开始：测速立即作废、列表顺序冻结（见 DshSource.cancelSpeedTest）
+                var downloadStarted by remember { mutableStateOf(false) }
     var chosen by remember { mutableStateOf<String?>(null) }
     // 用户是否**自己点过**渠道。
     //
@@ -309,19 +311,27 @@ fun UpdateDialog(
                                         // 后续重排就不再更新它，于是选中项停在某个**已经不在第一行**的位置，
                                         // 视觉上就是「自动往下滚到已固定的那个」。
                                         val r = AppUpdater.speedTest { partial ->
-                                            val ordered = partial.sortedBy { rankKey(it) }
-                                            results = ordered
-                                            if (!userPicked) chosen = ordered.firstOrNull()?.source
+                                            // 下载态下不再覆盖：用户点过下载之后，这张表就是
+                                            // "当时选定的结论"，后续回调（哪怕线程还在跑）一律丢弃，
+                                            // 否则顺序会当着用户的面跳。
+                                            if (!downloadStarted) {
+                                                val ordered = partial.sortedBy { rankKey(it) }
+                                                results = ordered
+                                                if (!userPicked) chosen = ordered.firstOrNull()?.source
+                                            }
                                         }
-                                        val orderedFinal = r.sortedBy { rankKey(it) }
-                                        results = orderedFinal
-                                        if (!userPicked) chosen = orderedFinal.firstOrNull()?.source
-                                        phase = if (results.none { it.reachable }) {
-                                            AppUpdater.Phase.Failed(
-                                                context.getString(R.string.update_all_channels_down)
-                                            )
-                                        } else {
-                                            AppUpdater.Phase.Idle
+                                        // 同上：终态也不覆盖已冻结的结论。
+                                        if (!downloadStarted) {
+                                            val orderedFinal = r.sortedBy { rankKey(it) }
+                                            results = orderedFinal
+                                            if (!userPicked) chosen = orderedFinal.firstOrNull()?.source
+                                            phase = if (results.none { it.reachable }) {
+                                                AppUpdater.Phase.Failed(
+                                                    context.getString(R.string.update_all_channels_down)
+                                                )
+                                            } else {
+                                                AppUpdater.Phase.Idle
+                                            }
                                         }
                                     } finally {
                                         testing = false
@@ -343,6 +353,12 @@ fun UpdateDialog(
                         status?.canInstallInApp == true -> Button(
                             onClick = {
                                 val src = chosen ?: return@Button
+                                // 两件事都要做，缺一不可：
+                                //  1) cancelSpeedTest()：让**已经在阻塞读 socket** 的探测线程
+                                //     在下一处检查点自行放弃（Job.cancel 打不断它）；
+                                //  2) downloadStarted：界面不再接受任何后续回调，顺序就此冻结。
+                                downloadStarted = true
+                                DshSource.cancelSpeedTest()
                                 speedJob?.cancel()
                                 testing = false
                                 scope.launch {
