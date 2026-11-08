@@ -525,6 +525,23 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   // 上一版用 cubicTo 画曲线，观感像两根飘带，看不出走向与分流；折线才读得出"值从哪来"。
   ok(/orthogonalLinkPath/.test(canvas) && !/cubicTo/.test(canvas) && /onWireDrop/.test(canvas) && /detectTransformGestures/.test(canvas),
   "画布：正交折线连线 + 空白处平移/双指缩放 + 拉线落点回调");
+  // ── 连线走廊**不能**等于画布网格步长 ──
+  //
+  // 参考实现（CardLayoutHelper/CardLayoutView）里 gridSize 是同一个量同时充当
+  // 「网格步长」和「走廊宽度」，所以照抄时极易把我们的网格步长（24dp）当走廊传进去。
+  // 那样 gridOffset = 4×24 = 96dp，相对 220dp 宽的卡片接近半个卡宽，绕行会把卡片
+  // 包成一个套索 —— 真机截图就是这个。
+  // 这条断言钉的是"两个量是两个名字"：走廊必须来自 LINK_CORRIDOR_DP，
+  // 画布上不得再出现硬编码 24dp 当作 corridor。
+  const linkPath = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowLinkPath.kt");
+  ok(/LINK_CORRIDOR_DP/.test(linkPath) && /LINK_CORRIDOR_DP\.dp\.toPx\(\)/.test(canvas),
+    "画布：连线走廊来自 LINK_CORRIDOR_DP（不是画布网格步长）");
+  ok(!/corridor\s*=\s*24\.dp/.test(canvas),
+    "画布：没有把 24dp（网格步长）再当作走廊用");
+  // 圆角半径不能是"走廊 × 1.0"——我们的走廊是 12dp（≠网格 24dp），
+  // 照抄参考的 1.0 会得到 24dp 圆角，是参考的两倍。
+  ok(/CORNER_ROUND\s*=\s*0\.5f/.test(linkPath),
+    "折线圆角半径是走廊的 0.5（等效参考的「半径 = 一个网格」）");
   // nodeTypeIcon 的 when 必须**覆盖真实枚举**，且不能带 else。
   //
   // 这条是补的：上一版我写了 `WorkflowNodeType.LOG`，而枚举里根本没有 LOG ——
@@ -689,6 +706,20 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
   const pickerCode = picker.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
   ok(!/fillMaxHeight\(0\.75f\)/.test(pickerCode),
     "不能用 fillMaxHeight(0.75f)：那是强制占满 75%，内容少时下面会空一大片");
+  // ── 主体高度必须**被限住**，否则由左栏决定 ──
+  //
+  // 左栏是固定八项（执行/控制流/提醒/设备/媒体/数据/感知/屏幕），右栏卡片数随分类变
+  // （执行 3 张、屏幕 12 张）。Row 取较高者，于是选"执行"时右栏下方必然空出
+  // "左栏高度 − 卡片高度"那一片 —— 这就是用户连着两轮说的"还是太高"。
+  // 前两版都在调 sheet 的上限，方向错了：上限只决定"最多多高"，而实际高度是被左栏**撑**出来的。
+  ok(/heightIn\(max = bodyMaxHeight\)/.test(picker) && /bodyMaxHeight/.test(picker),
+    "主体被 heightIn(max) 限住（否则高度由左栏项数决定，右栏下方必然空白）");
+  ok(/verticalScroll\(rememberScrollState\(\)\)/.test(picker) &&
+    /width\(84\.dp\)/.test(picker),
+    "左栏独立滚动：八项超过上限时自己滚，不把整块面板撑高");
+  // 分类项内边距：每项多 8dp 就是 64dp，直接决定可见高度。分类不该比卡片还占地方。
+  ok(/padding\(horizontal = 10\.dp, vertical = 8\.dp\)/.test(picker),
+    "分类项内边距是 vertical = 8dp（12dp 会让八项多占 64dp）");
   ok(!/fillMaxSize\(\).*background\(MaterialTheme\.colorScheme\.scrim/.test(picker),
     "不再自绘全屏遮罩层（那层没有弹出动画）");
 }

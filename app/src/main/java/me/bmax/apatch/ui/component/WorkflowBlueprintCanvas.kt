@@ -280,7 +280,9 @@ internal fun WorkflowBlueprintCanvas(
                 val b = wirePointer - origin
                 // 拉线中的预览线也画成折线：松手之后会变成折线，预览若是曲线，
                 // 松手那一下的"变形"会让人以为连错了对象。
-                val path = orthogonalLinkPath(a, b, corridor = 24.dp.toPx())
+                // 走廊取 LINK_CORRIDOR_DP（12dp），**不是**画布网格步长（24dp）。
+                // 见 WorkflowLinkPath 的说明：把网格步长当走廊会让绕行半径翻倍、把卡片包住。
+                val path = orthogonalLinkPath(a, b, corridor = LINK_CORRIDOR_DP.dp.toPx())
                 drawPath(path, wireColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
                 drawCircle(wireColor, radius = 5.dp.toPx(), center = b)
             }
@@ -381,7 +383,7 @@ private fun DrawScope.drawBlueprintEdges(
         val path = orthogonalLinkPath(
             start = Offset(fromRight, startY),
             end = Offset(endX, endY),
-            corridor = 24.dp.toPx(),
+            corridor = LINK_CORRIDOR_DP.dp.toPx(),
         )
         // 数据边用虚线 + 细一点的线：它在执行期不决定"走哪条路"，只决定"参数从哪来"。
         // 两者画成一模一样的话，用户会以为一条数据边也是分支。

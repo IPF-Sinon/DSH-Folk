@@ -34,8 +34,32 @@ import kotlin.math.round
  */
 private const val CORNER_GRID_COUNT = 2f
 
-/** 折线在拐角处的圆角半径（以 [corridor] 为单位）。参考实现用 grid 本身，这里取同样的量级。 */
-private const val CORNER_ROUND = 1.0f
+/**
+ * 连线走廊宽度（dp）。
+ *
+ * ## 为什么不直接用画布网格步长
+ *
+ * 这里最容易犯的错：参考实现里 `gridSize` 是**同一个量**同时充当「网格步长」和「走廊宽度」，
+ * 所以照抄时很容易把我们的网格步长（24dp）直接当走廊传进去。那样做的后果是
+ * `gridOffset = gridSize * (2 + CORNER_GRID_COUNT) = 4 × 24 = 96dp` ——
+ * 相对 220dp 宽的卡片，单侧偏移接近半个卡宽，绕行时会把整张卡包住成一个套索。
+ *
+ * 参考实现之所以能用 12dp：它的网格就是 12dp，`gridOffset` 只有 48dp，约等于卡片
+ * 的四分之一，绕行只是贴边绕一下。我们要的是**同样的绝对观感**，所以走廊要独立取值，
+ * 不能跟着网格走。
+ */
+internal const val LINK_CORRIDOR_DP = 12f
+
+/**
+ * 折线在拐角处的圆角半径（以 [corridor] 为单位）。
+ *
+ * 参考实现是 `CornerPathEffect(gridSize * CORNER_GRID_COUNT / 2)` —— 即半径 = 一个网格。
+ * 那里 `gridSize` 同时充当走廊，所以「半径 = 走廊 × 1.0」。**我们不行**：
+ * 画布网格是 24dp，走廊另取 12dp（见 [LINK_CORRIDOR_DP]），若照抄 1.0 就会得到
+ * 24dp 的圆角，是参考的两倍，拐角会过分外扩、把线甩得离卡片更远。
+ * 取 0.5 才是「半径 = 12dp」这一等效值。
+ */
+private const val CORNER_ROUND = 0.5f
 
 /** 融合阈值：两个相邻拐点距离小于它就算同一个（参考实现 `FUSION_THRESHOLD = 5`）。 */
 private const val FUSION_THRESHOLD = 5f

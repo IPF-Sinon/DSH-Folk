@@ -184,6 +184,7 @@ import me.bmax.apatch.ui.navigation.NavigationRailBar
 import me.bmax.apatch.ui.navigation.LocalScrollState
 import me.bmax.apatch.ui.navigation.LocalBottomBarVisible
 import me.bmax.apatch.ui.navigation.LocalIsFloatingNavMode
+import me.bmax.apatch.ui.navigation.rememberTabBackHandler
 import me.bmax.apatch.ui.navigation.ScrollState
 import me.bmax.apatch.ui.navigation.rememberScrollConnection
 import me.bmax.apatch.ui.navigation.createNavTransitions
@@ -1004,14 +1005,14 @@ class MainActivity : AppCompatActivity() {
                                 LocalBottomBarVisible provides bottomBarVisibleState,
                                 LocalIsFloatingNavMode provides isFloatingMode
                             ) {
-                                // 返回键语义与宿主一致：在非首页返回首页，首页交回系统
-                                BackHandler(enabled = currentRoute in bottomBarRoutes && currentRoute != homeRoute) {
-                                    navController.navigate(homeRoute) {
-                                        popUpTo(NavGraphs.root.route) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
+                                // 返回键语义与宿主一致：在非首页返回首页，首页交回系统。
+                                // 防抖与栈底保护在 rememberTabBackHandler 里（连按返回会把首页一起退掉）。
+                                rememberTabBackHandler(
+                                    navController = navController,
+                                    currentRoute = currentRoute,
+                                    homeRoute = homeRoute,
+                                    bottomBarRoutes = bottomBarRoutes,
+                                )
                                 activeShell.content(shellHost) { inner ->
                                     navHostSlot(inner.then(baseContentModifier))
                                 }
@@ -1029,13 +1030,12 @@ class MainActivity : AppCompatActivity() {
                                     LocalBottomBarVisible provides bottomBarVisibleState,
                                     LocalIsFloatingNavMode provides isFloatingMode
                                 ) {
-                                    BackHandler(enabled = currentRoute in bottomBarRoutes && currentRoute != homeRoute) {
-                                        navController.navigate(homeRoute) {
-                                            popUpTo(NavGraphs.root.route) { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    }
+                                    rememberTabBackHandler(
+                                        navController = navController,
+                                        currentRoute = currentRoute,
+                                        homeRoute = homeRoute,
+                                        bottomBarRoutes = bottomBarRoutes,
+                                    )
                                     navHostSlot(Modifier.weight(1f).then(baseContentModifier))
                                 }
                             }
@@ -1059,14 +1059,13 @@ class MainActivity : AppCompatActivity() {
                                 // Back press on a non-home tab returns to the home tab
                                 // with the floating bar reset; back on the home tab keeps
                                 // the system default (predictive back) behavior
-                                BackHandler(enabled = currentRoute in bottomBarRoutes && currentRoute != homeRoute) {
-                                    resetBottomBarFully()
-                                    navController.navigate(homeRoute) {
-                                        popUpTo(NavGraphs.root.route) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
+                                rememberTabBackHandler(
+                                    navController = navController,
+                                    currentRoute = currentRoute,
+                                    homeRoute = homeRoute,
+                                    bottomBarRoutes = bottomBarRoutes,
+                                    onBeforeBack = { resetBottomBarFully() },
+                                )
                                 AnimatedVisibility(
                                     visible = showBottomBar,
                                     modifier = Modifier.align(Alignment.BottomCenter),

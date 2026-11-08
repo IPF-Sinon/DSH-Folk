@@ -162,17 +162,36 @@ fun WorkflowNodePicker(
             //
             // 现在：分类在左栏竖排（数量无上限、扫读快），卡片两列并排、每张都带说明。
             //
-            // 整块一个 verticalScroll：sheet 高度按内容长（heightIn），此处不给确定高度，
-            // 所以两栏各自滚动没有意义 —— 无界高度下滚动本来也不会触发。一个分类下
-            // 最多十余个节点、两列排开只有几行，实际极少需要滚动。
+            // ## 高度：不能由「左栏有几项」决定
+            //
+            // 左栏是**固定八项**（执行/控制流/提醒/设备/媒体/数据/感知/屏幕），右栏的卡片数
+            // 随分类变化（执行只有 3 张，屏幕有 12 张）。Row 的高度取较高的那一栏，
+            // 于是无论选哪个分类，右栏下方都空着「左栏高度 − 卡片高度」那一片 ——
+            // 选「执行」时右栏只有两行卡，下面空出半屏，这就是"还是太高"的真正来源。
+            //
+            // 之前两版都在调 sheet 的高度上限，方向错了：上限只影响"最多多高"，
+            // 而这里的实际高度是被左栏**撑**出来的，跟上限无关。
+            //
+            // 解法：给主体一个**确定上限**（屏高 52%），左栏在超限时自己滚动，
+            // 不再把 Row 撑开。这样面板高度由"卡片内容"和"上限"两者中较小的决定。
+            // 用与 sheet 上限同一个系数（0.75），减去标题行/搜索框/内边距占掉的部分。
+            // 之所以不写成另一个"魔法系数"：两个不同的数字放一起，下一次改高度就会
+            // 只改其中一个，面板要么溢出 sheet、要么留一条缝。
+            val bodyMaxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.75f - 96.dp
+
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .heightIn(max = bodyMaxHeight)
                     .padding(horizontal = 12.dp),
             ) {
                 Column(
-                    Modifier.width(84.dp).padding(end = 10.dp),
+                    Modifier
+                        .width(84.dp)
+                        .padding(end = 10.dp)
+                        // 左栏独立滚动：它会轻易超过上限（八项 × 约 36dp = 288dp），
+                        // 限住之后就不会再把整块面板撑高。
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
                     for ((i, g) in groups.withIndex()) {
@@ -203,8 +222,11 @@ fun WorkflowNodePicker(
                         )
                     }
                 } else {
-                    // 手动切成两列：不用 LazyVerticalGrid —— 它在无界高度约束下
-                    // 必须有确定高度才能测量，而这里的高度恰恰是按内容长的。
+                    // 手动切成两列并按列滚动：不用 LazyVerticalGrid —— 它要求高度确定，
+                    // 而这里的高度是「内容与上限取较小」，用非懒加载的 Column 最直接。
+                    //
+                    // 两列各自滚动而不是整块滚动：左右列的行数可能差一行（分类内条目是奇数时），
+                    // 各自滚动时每列都能独立到达自己的末尾，不会出现「左列能滚、右列跟着动」。
                     val leftCol = visible.filterIndexed { i, _ -> i % 2 == 0 }
                     val rightCol = visible.filterIndexed { i, _ -> i % 2 == 1 }
                     Row(
@@ -212,7 +234,9 @@ fun WorkflowNodePicker(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Column(
-                            Modifier.weight(1f),
+                            Modifier
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             for (entry in leftCol) {
@@ -221,7 +245,9 @@ fun WorkflowNodePicker(
                             Spacer(Modifier.height(12.dp))
                         }
                         Column(
-                            Modifier.weight(1f),
+                            Modifier
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             for (entry in rightCol) {
@@ -271,7 +297,9 @@ private fun CategoryButton(
             color = fg,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+            // 上下 8dp（原 12dp）：左栏有固定八项，每项多 8dp 就是 64dp，
+            // 直接决定面板的可见高度 —— 分类项不该比卡片还占地方。
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
         )
     }
 }
