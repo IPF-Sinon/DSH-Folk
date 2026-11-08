@@ -265,3 +265,23 @@ private fun PickerRow(entry: NodePickerEntry, onClick: () -> Unit) {
         }
     }
 }
+
+/** 面板里的一个可选节点。 */
+data class NodePickerEntry(
+    /** 稳定 key：列表用。 */
+    val key: String,
+    val titleRes: Int,
+    /** 说明；0 = 不显示。 */
+    val descRes: Int,
+    val accent: Color,
+    /** 搜索匹配用的文本（名称 + 说明）。 */
+    val searchText: String,
+    /** 具体要建哪种节点 —— 由调用方解释，面板不关心。 */
+    val payload: Any,
+)
+
+/** 二级分组：一个分类下的若干节点。 */
+data class NodePickerSubGroup(val titleRes: Int, val entries: List<NodePickerEntry>)
+
+/** 一级分组。 */
+data class NodePickerGroup(val titleRes: Int, val subs: List<NodePickerSubGroup>)
