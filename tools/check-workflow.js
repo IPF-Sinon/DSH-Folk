@@ -1098,8 +1098,16 @@ console.log("\u2500 #17 用户自己也能建/改流程");
   "编辑页保存走带 revision 前置条件的落盘（不会静默覆盖别处的改动）");
   ok(/internal fun starter\(/.test(SRC.screen) && /WorkflowStore\.newId\(\)/.test(SRC.screen),
     "有「新建流程」的合法起点（不是空定义）");
-  ok(/config = mapOf\("action" to "shell", "cmd" to "echo hello"\)/.test(SRC.screen),
-    "起点自带一条可跑的命令（空 cmd 一建出来就是错的）");
+  // 起点必须**走字段表的默认值**，不能手写一份 config。
+  //
+  // 这条原先断言的是"写死了 mapOf(\"action\" to \"shell\", \"cmd\" to \"echo hello\")"，
+  // 但那正是预设卡片与加节点卡片长得不一样的根因：两条路径各写一份默认值，
+  // 手写的那份缺 autostartDsh / 缺 name。断言改为要求"两边同源"。
+  ok(/defaultConfigFor\(WorkflowNodeType\.TRIGGER, null\)/.test(SRC.screen) &&
+    /defaultConfigFor\(WorkflowNodeType\.EXECUTE, WorkflowActionType\.SHELL\)/.test(SRC.screen),
+    "起点与加节点共用字段表默认值（不再手写 config，否则预设卡片缺参数）");
+  ok(!/mapOf\("action" to "shell"/.test(SRC.screen),
+    "起点里不再有手写的 action/cmd（手写就等于第二份默认值）");
   ok(/WorkflowValidator\.validate\(def, DshNativeBridge\.Cap\.entries/.test(SRC.screen), "列表就地校验");
   ok(/enabled = enabled && valid/.test(SRC.screen), "不合法时运行按钮点不动");
   ok(/dsh_workflow_invalid_run/.test(SRC.screen) && /dsh_workflow_editor_errors/.test(SRC.editorSurface),
@@ -1310,7 +1318,9 @@ async function checkCli() {
 // 只会在真机上表现为"看不出这卡配了什么" / "不知道为什么跑不了"。
 {
   const card = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowNodeCard.kt");
-  ok(/private fun cardParamRows\(node: WorkflowNode\)/.test(card),
+  // 签名多了一个 linkedKeys 参数（三档展开的 NONE 档要知道哪些参数接了线），
+  // 断言只要求「函数存在且以 node 为第一参数」，不再苛求单参数形式。
+  ok(/private fun cardParamRows\(\s*\n?\s*node: WorkflowNode/.test(card),
     "卡片参数行由字段表生成（不在卡上写死键名）");
   // 有值优先：a11y_swipe 这类动作 5 个参数只有 1 个有默认值，边收边截断会把唯一
   // 有值的那行挤出去，卡上全是空心椭圆。
@@ -1376,6 +1386,45 @@ console.log("\u2500 #16k 卡片可编辑 / 悬浮层定位 / 虚线框跟着选�
   ok(/val rect = bounds\[framed\]/.test(SRC.canvas), "虚线框用卡片实测矩形（不写死高度）");
   ok(/val framed = selectedNodeId/.test(SRC.canvas), "虚线框跟选中态（松手后不消失）");
   ok(!/draggingNodeId/.test(SRC.canvas), "不再有 draggingNodeId 这一路状态");
+}
+
+console.log("\u2500 #16l 展开三档 / 锁定（对齐 TouchTool ActionCard + PinView.expand）");
+{
+  const card = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowNodeCard.kt");
+  const models = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowModels.kt");
+  const canvas = SRC.canvas;
+
+  // 三档循环必须完整：NONE → HALF → FULL → NONE。少了任一档，用户就出不来。
+  ok(/WorkflowExpandType\.NONE -> WorkflowExpandType\.HALF/.test(SRC.editorSurface) &&
+    /WorkflowExpandType\.HALF -> WorkflowExpandType\.FULL/.test(SRC.editorSurface) &&
+    /WorkflowExpandType\.FULL -> WorkflowExpandType\.NONE/.test(SRC.editorSurface),
+    "展开档位是完整三档循环（NONE→HALF→FULL→NONE）");
+
+  // NONE 档只留已连线的行 —— 这条是照抄参考实现时的关键细节（PinView.expand 里
+  // `if (pin.getLinks().isEmpty())` 才考虑隐藏），漏了会让用户以为接线丢了。
+  ok(/WorkflowExpandType\.NONE -> row\.linked/.test(card),
+    "NONE 档仍显示已接线的参数行（否则用户以为线丢了）");
+  ok(/WorkflowExpandType\.FULL, WorkflowExpandType\.HALF -> true/.test(card),
+    "HALF/FULL 档显示全部参数行");
+
+  // 三个 UI 元素都要有：卡上展开按钮、卡上锁按钮、底栏锁。
+  ok(/onToggleExpand: \(\(\) -> Unit\)\? = null/.test(card), "卡片上有展开按钮");
+  ok(/onToggleLock: \(\(\) -> Unit\)\? = null/.test(card), "卡片上有锁定按钮");
+  ok(/selectionLocked/.test(SRC.editorSurface), "选中后底栏也知道锁定状态");
+  ok(/if \(canDelete && !selectionLocked\)/.test(SRC.editorSurface),
+    "锁定的卡在底栏不能删除");
+
+  // 锁定三处语义：不能拖动、不能被选中、不能删除。
+  ok(/onDrag = if \(node\.locked\) null else/.test(canvas), "锁定的卡不接拖动");
+  ok(/onTap = \{ if \(!node\.locked\) onNodeClick\?\.invoke\(node\.id\) \}/.test(canvas),
+    "锁定的卡点不选中");
+
+  // 两个新字段必须落盘，否则关掉重开就丢。
+  ok(/\.put\(\"expandType\", expandType\.id\)/.test(models), "展开档位会存盘");
+  ok(/if \(locked\) put\(\"locked\", true\)/.test(models), "锁定状态会存盘");
+  ok(/expandType = WorkflowExpandType\.of\(o\.optString\(\"expandType\"\)\)/.test(models),
+    "读盘时还原展开档位");
+  ok(/locked = o\.optBoolean\(\"locked\"\)/.test(models), "读盘时还原锁定");
 }
 
 console.log("");

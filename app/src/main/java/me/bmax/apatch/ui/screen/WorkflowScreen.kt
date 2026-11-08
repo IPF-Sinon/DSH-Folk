@@ -61,6 +61,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshEnv
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.DshRuntime
+import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.WorkflowApprovals
 import me.bmax.apatch.dsh.WorkflowDefinition
 import me.bmax.apatch.dsh.WorkflowEdge
@@ -77,6 +78,7 @@ import me.bmax.apatch.dsh.toJson
 import me.bmax.apatch.ui.component.WorkflowDefinitionEditor
 import me.bmax.apatch.ui.component.WorkflowDetailDialog
 import me.bmax.apatch.ui.component.WorkflowGraphPreview
+import me.bmax.apatch.ui.component.defaultConfigFor
 import org.json.JSONObject
 
 /**
@@ -395,11 +397,20 @@ fun WorkflowScreen(navigator: DestinationsNavigator) {
 /**
  * 用户自建流程的起点：入口 + 一条 shell 命令，已经是**合法**定义（能直接跑）。
  *
- * 为什么默认给一条 echo 而不是空命令：空 cmd 会被校验器判为不合法，用户点完「新建」第一件
- * 事就是撞见红色错误 —— 从一个能跑的最小流程开始改，才符合「自己建」的心理模型。
+ * ## 为什么不能再在这里手写 config
+ *
+ * 上一版这里直接手写了两份 config（action/cmd 与 requireDsh），而「加节点」走的是
+ * [defaultConfigFor] 那条路径 ——
+ * 两条路径各写一份默认值，于是**预设卡片和加出来的卡片不一样**：
+ * 预设缺 `autostartDsh`、缺 `name`，卡片上就少几行参数、标题也不同。
+ *
+ * 现在两个节点都从**同一张字段表**取初值（[defaultConfigFor]），预设与加节点
+ * 只差"摆在哪、连给谁"，不再差"里面有什么"。加新参数时也只需要改字段表一处。
  */
 internal fun starter(name: String): WorkflowDefinition =
     run {
+        val triggerConfig = defaultConfigFor(WorkflowNodeType.TRIGGER, null)
+        val stepConfig = defaultConfigFor(WorkflowNodeType.EXECUTE, WorkflowActionType.SHELL)
         WorkflowDefinition(
             id = WorkflowStore.newId(),
             name = name,
@@ -414,7 +425,7 @@ internal fun starter(name: String): WorkflowDefinition =
                     posY = 16,
                     timeoutMs = 60_000L,
                     onError = WorkflowOnError.STOP,
-                    config = mapOf("requireDsh" to "0"),
+                    config = triggerConfig,
                 ),
                 WorkflowNode(
                     id = "step1",
@@ -423,7 +434,7 @@ internal fun starter(name: String): WorkflowDefinition =
                     posX = 16,
                     posY = 72,
                     onError = WorkflowOnError.STOP,
-                    config = mapOf("action" to "shell", "cmd" to "echo hello"),
+                    config = stepConfig + ("name" to "step1"),
                 ),
             ),
             edges = listOf(WorkflowEdge("trigger", "step1", "")),

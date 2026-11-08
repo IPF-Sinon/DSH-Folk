@@ -311,6 +311,28 @@ internal data class WorkflowPinSpec(
  * 用 map 而不是给每种节点建一个 data class：落盘/回读只走一条路径，AI 生成的定义也不会
  * 因为多一个未知字段而整份作废 —— 未知键在校验期被点名，而不是在解析期炸掉。
  */
+/**
+ * 卡片展开档位。语义逐条对齐 TouchTool 的 `Action.ExpandType` + `PinView.expand`：
+ *
+ * - [NONE]：只显示**已连线**的参数行；没连线的全隐藏。
+ * - [HALF]：显示所有非 `hide` 的参数行（未连线的也显示）。
+ * - [FULL]：全部显示。
+ *
+ * 关键细节（照抄，不能省）：**连了线的参数行在任何档位都可见**。
+ * 否则用户切到 NONE 会以为接线丢了 —— 参考实现里那句
+ * `if (pin.getLinks().isEmpty())` 就是为这个存在的。
+ */
+internal enum class WorkflowExpandType(val id: String) {
+    NONE("none"),
+    HALF("half"),
+    FULL("full");
+
+    companion object {
+        fun of(raw: String): WorkflowExpandType =
+            entries.firstOrNull { it.id == raw } ?: HALF
+    }
+}
+
 internal data class WorkflowNode(
     val id: String,
     val type: WorkflowNodeType,
@@ -321,6 +343,19 @@ internal data class WorkflowNode(
     val posY: Int = 0,
     val timeoutMs: Long = 120_000L,
     val onError: WorkflowOnError = WorkflowOnError.STOP,
+    /**
+     * 卡片展开档位。默认 HALF —— 与参考实现一致（读不到存盘值时也用 HALF）。
+     * 语义见 [WorkflowExpandType]。
+     */
+    val expandType: WorkflowExpandType = WorkflowExpandType.HALF,
+    /**
+     * 锁定 = **不能拖动、不能被选中、不能删除**。
+     *
+     * 参考实现的 isLocked() 恰好就作用在这三处（CardLayoutHelper 拖动落位、
+     * CardLayoutView 命中检测、BlueprintView 删除），这里照同样的三处生效，
+     * 免得出现"锁了还能拖走"这种半锁状态。
+     */
+    val locked: Boolean = false,
     val config: Map<String, String> = emptyMap(),
 ) {
     /** 动作类型（只有 execute 节点有）。 */
@@ -500,6 +535,8 @@ internal fun WorkflowNode.toJson(): JSONObject = JSONObject()
     .put("posY", posY)
     .put("timeoutMs", timeoutMs)
     .put("onError", onError.id)
+    .put("expandType", expandType.id)
+    .apply { if (locked) put("locked", true) }
     .put("config", JSONObject(config as Map<*, *>))
 
 internal fun nodeFromJson(o: JSONObject): WorkflowNode? {
@@ -518,6 +555,8 @@ internal fun nodeFromJson(o: JSONObject): WorkflowNode? {
         posY = o.optInt("posY"),
         timeoutMs = o.optLong("timeoutMs", 120_000L),
         onError = WorkflowOnError.of(o.optString("onError")) ?: WorkflowOnError.STOP,
+        expandType = WorkflowExpandType.of(o.optString("expandType")),
+        locked = o.optBoolean("locked"),
         config = config,
     )
 }

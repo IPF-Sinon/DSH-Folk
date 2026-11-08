@@ -71,6 +71,10 @@ internal fun WorkflowBlueprintCanvas(
     grantedCaps: Set<String> = emptySet(),
     /** 卡上直接改参数：传 null 时卡片参数只读（预览、详情页）。 */
     onNodeParamChange: ((nodeId: String, key: String, value: String) -> Unit)? = null,
+    /** 卡上「展开」按钮：在 NONE → HALF → FULL 之间循环。 */
+    onNodeToggleExpand: ((nodeId: String) -> Unit)? = null,
+    /** 卡上「锁」按钮：冻结这张卡（不能拖/不能选/不能删）。 */
+    onNodeToggleLock: ((nodeId: String) -> Unit)? = null,
     onNodeClick: ((String) -> Unit)? = null,
     onNodeDrag: ((id: String, dxPx: Float, dyPx: Float) -> Unit)? = null,
     onNodeDragStart: ((id: String) -> Unit)? = null,
@@ -221,6 +225,12 @@ internal fun WorkflowBlueprintCanvas(
                     }
                 }
             }
+            // 每张卡里"已接线的参数键"：NONE 档据此决定显示哪些行。
+            // 由数据边（toPin / fromPin 的 to 端）算出，卡片自己不认识边表。
+            val dataLinkedKeys: Map<String, Set<String>> = definition.edges
+                .filter { it.kind == WorkflowEdgeKind.DATA }
+                .groupBy { it.to }
+                .mapValues { (_, es) -> es.map { it.toPin }.toSet() }
             for (node in definition.nodes) {
                 val pos = positions[node.id] ?: continue
                 WorkflowNodeCard(
@@ -231,12 +241,16 @@ internal fun WorkflowBlueprintCanvas(
                     granted = requiredCapsOf(node).all { it in grantedCaps },
                     selected = selectedNodeId == node.id,
                     modifier = Modifier.offset(x = pos.x.dp, y = pos.y.dp),
-                    onTap = { onNodeClick?.invoke(node.id) },
-                    onDrag = { dx, dy -> onNodeDrag?.invoke(node.id, dx, dy) },
-                    onDragStart = { onNodeDragStart?.invoke(node.id) },
-                    onDragEnd = { onNodeDragEnd?.invoke(node.id) },
+                    onTap = { if (!node.locked) onNodeClick?.invoke(node.id) },
+                    // 锁定的卡不接拖动（锁定 = 不能拖动，见 WorkflowNode.locked）。
+                    onDrag = if (node.locked) null else { dx, dy -> onNodeDrag?.invoke(node.id, dx, dy) },
+                    onDragStart = if (node.locked) null else { onNodeDragStart?.invoke(node.id) },
+                    onDragEnd = if (node.locked) null else { onNodeDragEnd?.invoke(node.id) },
                     // 卡上直接改参数：只在编辑态开放（预览/详情传 null，输入框自动 disabled）。
                     onParamChange = onNodeParamChange?.let { cb -> { key, value -> cb(node.id, key, value) } },
+                    onToggleExpand = onNodeToggleExpand?.let { { it(node.id) } },
+                    onToggleLock = onNodeToggleLock?.let { { it(node.id) } },
+                    linkedParamKeys = dataLinkedKeys[node.id].orEmpty(),
                     onBounds = { rect -> bounds = bounds + (node.id to rect) },
                     onPinBounds = { pinKind, rect -> pinRects = pinRects + ("${node.id}:$pinKind" to rect) },
                     onPinDrag = { pinKind, anchor, pointer ->

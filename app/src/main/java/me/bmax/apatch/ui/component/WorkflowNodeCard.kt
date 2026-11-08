@@ -1,5 +1,12 @@
 package me.bmax.apatch.ui.component
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.RemoveRedEye
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import me.bmax.apatch.dsh.WorkflowExpandType
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -114,6 +121,12 @@ internal fun WorkflowNodeCard(
      * 不点开任何弹窗。所以参数行做成输入框，改完立刻回给宿主落盘。
      */
     onParamChange: ((key: String, value: String) -> Unit)? = null,
+    /** 切换展开档位（卡上按钮）。null = 不显示该按钮（预览、详情）。 */
+    onToggleExpand: (() -> Unit)? = null,
+    /** 切换锁定（卡上按钮）。锁定 = 不能拖动/选中/删除，见 [WorkflowNode.locked]。 */
+    onToggleLock: (() -> Unit)? = null,
+    /** 这张卡里哪些参数已经接上了线（决定 NONE 档显示什么）。 */
+    linkedParamKeys: Set<String> = emptySet(),
 ) {
     val accent = workflowNodeAccent(node.type)
     val borderColor = when (status) {
@@ -150,6 +163,11 @@ internal fun WorkflowNodeCard(
     val pinDragCb = rememberUpdatedState(onPinDrag)
     val pinDropCb = rememberUpdatedState(onPinDrop)
 
+    // 卡片尾部动作条：锁定 / 展开 / 复制 / 删除。
+    //
+    // 参考实现的这四个按钮都长在卡片上（ActionCard.initLock/initExpand/initCopy/initDelete），
+    // 不是浮在画布上。长在卡上的好处是「操作对象」与「操作入口」在一起 ——
+    // 用户不必先选中、再抬头去底栏找按钮。
     val base = modifier
         .width(WorkflowNodeCardWidth)
         .onGloballyPositioned { coords ->
@@ -222,7 +240,10 @@ internal fun WorkflowNodeCard(
                 // 只读展示（不可在卡上编辑）：编辑仍然走点卡片 → 参数窗。
                 // 卡上直接编辑会让每张卡的命中区互相打架（拖卡 vs 输入框抢手势），
                 // 而画布上最需要的是拖动流畅。
-                val rows = cardParamRows(node)
+                // 三档展开：过滤在**这里**做，而不是让每个 CardParamRow 自己判断 ——
+                // 一处过滤，可见性规则只有一份。
+                val allRows = cardParamRows(node, linkedParamKeys)
+                val rows = allRows.filter { rowVisible(row, node) }
                 if (rows.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     for (row in rows) CardParamRow(row, onEdit = onParamChange)
@@ -261,6 +282,40 @@ internal fun WorkflowNodeCard(
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
+                // ── 卡片尾部动作条 ──
+                //
+                // 四个按钮都长在卡片上（对齐参考实现的 ActionCard.initLock /
+                // initExpand / initCopy / initDelete）。锁定时整条底色变化，是"这张卡被冻住了"
+                // 的第一眼信号；展开按钮的图标随档位变化，三档各一个形状。
+                if (onToggleLock != null || onToggleExpand != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (onToggleExpand != null) {
+                            CardActionIcon(
+                               icon = when (node.expandType) {
+                                    WorkflowExpandType.NONE -> Icons.Filled.VisibilityOff
+                                    WorkflowExpandType.HALF -> Icons.Filled.Visibility
+                                    WorkflowExpandType.FULL -> Icons.Filled.RemoveRedEye
+                                },
+                                desc = stringResource(R.string.dsh_wf_card_expand),
+                                active = node.expandType == WorkflowExpandType.FULL,
+                                onClick = onToggleExpand,
+                            )
+                        }
+                        if (onToggleLock != null) {
+                            CardActionIcon(
+                                icon = if (node.locked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                                desc = stringResource(R.string.dsh_wf_card_lock),
+                                active = node.locked,
+                                onClick = onToggleLock,
                             )
                         }
                     }
@@ -456,10 +511,16 @@ private data class CardParamRowModel(
     val label: String,
     val value: String,
     val color: Color,
+    /** 这个参数是否已接上线（NONE 档据此决定是否显示）。 */
+    val linked: Boolean = false,
 )
 
 @Composable
-private fun cardParamRows(node: WorkflowNode): List<CardParamRowModel> {
+private fun cardParamRows(
+    node: WorkflowNode,
+    /** 已接线的参数键集合（由宿主从边表算出）。见 [rowVisible] 的 NONE 档规则。 */
+    linkedKeys: Set<String> = emptySet(),
+): List<CardParamRowModel> {
     // 先收集全部候选，再分「有值」与「空着」两批 —— 顺序不能边收边截断。
     //
     // 为什么必须先分两批：a11y_swipe 这类动作有 5 个参数，只有 durationMs 有默认值，
@@ -481,6 +542,7 @@ private fun cardParamRows(node: WorkflowNode): List<CardParamRowModel> {
             label = stringResource(field.labelRes),
             value = raw,
             color = paramDotColor(field.kind),
+            linked = field.key in linkedKeys,
         )
         if (raw.isBlank()) empty += row else filled += row
     }
@@ -576,4 +638,45 @@ private fun CardParamRow(
                 .padding(horizontal = 6.dp, vertical = 3.dp),
         )
     }
+}
+
+
+/**
+ * 参数行是否可见 —— 三档展开规则，逐条对齐 `PinView.expand`。
+ *
+ * ```
+ * FULL  全部显示
+ * HALF  显示非 hide 的（这里没有 hide 字段，等价于全部）
+ * NONE  只显示"已连线"的行
+ * ```
+ *
+ * **已连线的行在任何档位都可见**，这一条是照抄参考实现时必须保留的：
+ * 它显式写了 `if (pin.getLinks().isEmpty())` 才考虑隐藏，否则用户切到 NONE
+ * 会以为接线丢了。
+ */
+private fun rowVisible(row: CardParamRowModel, node: WorkflowNode): Boolean = when (node.expandType) {
+    WorkflowExpandType.FULL, WorkflowExpandType.HALF -> true
+    // NONE：只留已连线的参数行（接线是用户显式建立的关系，隐藏它等于骗人）。
+    WorkflowExpandType.NONE -> row.linked
+}
+
+/** 卡片尾部的小图标按钮。激活态（已锁 / 全展开）用主色，其余用描边色。 */
+@Composable
+private fun CardActionIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    desc: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    Icon(
+        imageVector = icon,
+        contentDescription = desc,
+        tint = if (active) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            // 卡片只有 220dp 宽，IconButton 会把每个图标撑到 48dp（minimumInteractiveComponentSize），
+            // 四个按钮就占满一整行。这里命中区就是图标本身，换行高可控。
+            .size(20.dp)
+            .clickable(onClick = onClick),
+    )
 }

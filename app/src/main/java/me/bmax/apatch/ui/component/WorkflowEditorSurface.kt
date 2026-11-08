@@ -87,6 +87,7 @@ import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.WorkflowActionCatalog
 import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.effectiveCaps
+import me.bmax.apatch.dsh.WorkflowExpandType
 import me.bmax.apatch.dsh.WorkflowDefinition
 import me.bmax.apatch.dsh.WorkflowEdge
 import me.bmax.apatch.dsh.WorkflowNode
@@ -670,6 +671,29 @@ internal fun WorkflowEditorSurface(
                         // "这张卡的权限有没有到位"，所以取的是同一份 effectiveCaps 的子集关系。
                         grantedCaps = def.effectiveCaps.toSet(),
                         // 卡上直接改参数：改完立刻写回 draft（走既有的自动保存）。
+                        onNodeToggleExpand = { nodeId ->
+                            draft = draft.copy(
+                                nodes = draft.nodes.map {
+                                    if (it.id != nodeId) it else it.copy(
+                                        expandType = when (it.expandType) {
+                                            WorkflowExpandType.NONE -> WorkflowExpandType.HALF
+                                            WorkflowExpandType.HALF -> WorkflowExpandType.FULL
+                                            WorkflowExpandType.FULL -> WorkflowExpandType.NONE
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                        onNodeToggleLock = { nodeId ->
+                            draft = draft.copy(
+                                nodes = draft.nodes.map {
+                                    if (it.id == nodeId) it.copy(locked = !it.locked) else it
+                                },
+                            )
+                            // 锁上就把选中取消：锁定 = 不能被选中（参考实现 CardLayoutView 的命中检测
+                            // 直接跳过锁定卡）。选中态留着会让人以为"还能对它做点什么"。
+                            if (draft.node(nodeId)?.locked == true) selected = null
+                        },
                         onNodeParamChange = { nodeId, key, value ->
                             draft = draft.copy(
                                 nodes = draft.nodes.map {
@@ -821,6 +845,7 @@ internal fun WorkflowEditorSurface(
             //    也保住了节奏。真正不可逆的删卡仍然有确认（点卡片弹窗里那条路）。
             FloatingEditorBar(
                 hasSelection = selected != null,
+                selectionLocked = selected?.let { def.node(it)?.locked } == true,
                 canDelete = def.node(selected.orEmpty())?.type != WorkflowNodeType.TRIGGER,
                 deleteArmed = deleteArmed,
                 onRecenter = {
@@ -1190,6 +1215,8 @@ private fun editorLayoutFor(def: WorkflowDefinition): List<Triple<String, Float,
 private fun FloatingEditorBar(
     hasSelection: Boolean,
     canDelete: Boolean,
+    /// 选中卡已锁定：删除与复制都要禁掉（锁定 = 不能删除）。
+    selectionLocked: Boolean = false,
     deleteArmed: Boolean,
     onRecenter: () -> Unit,
     onAdd: () -> Unit,
@@ -1222,7 +1249,8 @@ private fun FloatingEditorBar(
                 if (hasSelection) {
                     FloatBarIcon(Icons.Filled.ContentCopy, stringResource(R.string.dsh_wf_float_copy), onClick = onCopy)
                     // 入口卡不给删除按钮：删掉它整张图没有起点，定义立刻不合法。
-                    if (canDelete) {
+                    // 锁定 = 不能删除（与卡上锁按钮同一状态源）。入口卡本来就不给删除。
+                    if (canDelete && !selectionLocked) {
                         FloatBarIcon(
                             icon = if (deleteArmed) Icons.Filled.Warning else Icons.Filled.Delete,
                             label = if (deleteArmed) {
