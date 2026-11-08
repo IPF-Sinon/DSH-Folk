@@ -63,18 +63,42 @@ fun rememberTabBackHandler(
             // 连按的后续几下直接吞掉：导航已经在路上，再发一次就是重复弹栈。
             return@back
         }
-
-        // 栈里只剩首页（没有可退的上一页）时不要再 navigate —— 那会造出一个
-        // 只剩首页却又"导航到首页"的循环，最终把首页自己弹掉。
-        // 交给系统：这一步就是退出应用，符合用户在首页按返回的预期。
-        if (navController.previousBackStackEntry == null) return@back
-
         lastBackAt = now
-        onBeforeBack()
-        navController.navigate(homeRoute) {
-            popUpTo(homeRoute) { inclusive = false; saveState = true }
-            launchSingleTop = true
-            restoreState = true
+
+        // ── 只在"首页确实在同一张栈里"时才弹回，绝不 navigate ──
+        //
+        // 上一版这里是 `navigate(homeRoute) { popUpTo(homeRoute) { inclusive = false } }`，
+        // 那个写法有两个漏洞，都会导致「连按返回把首页也退掉」：
+        //
+        //  1. `popUpTo(homeRoute)` 只在 homeRoute **真的在栈里**时才有作用。而底栏切标签
+        //     用的是 `popUpTo(NavGraphs.root) { saveState = true }` —— 那个弹出会把
+        //     homeRoute 一起弹掉（root 是图根，home 是它的第一个目的地的子层）。
+        //     于是 homeRoute 不在栈里时，`popUpTo` 等于没写，只剩下一次纯 `navigate`，
+        //     每按一下就往栈里**多加**一个 home —— 越按越深，最后连根一起退掉。
+        //  2. `navigate` + `launchSingleTop` 只挡"栈顶已经是 home"，挡不住"home 在栈中段"。
+        //
+        // `popBackStack(homeRoute, inclusive = false)` 的语义正好相反：它在栈里找到 home
+        // 就弹回那里；**找不到就返回 false 什么都不做**。这正是我们要的 ——
+        // 宁可这一下没反应，也不许凭空造出一层新的首页。
+        val popped = navController.popBackStack(homeRoute, inclusive = false)
+        if (popped) {
+            onBeforeBack()
+            return@back
         }
+
+        // 走到这里说明 home 已经不在栈里（典型：用户在 A 标签里，又切到了 B 标签）。
+        // 这一下**什么都不做**，交回系统。
+        //
+        // 为什么不 navigate 过去：任何形式的 navigate 都是在栈顶再叠一层。
+        // 叠出来的那层会让下一次返回把栈底（图根）也带走，这正是
+        // 「疯狂按返回，首页也没了」那条链。宁可这一下没反应，
+        // 也不许凭自己的判断去改栈的形状 —— 用户还在标签页里，
+        // 系统的默认返回（退出应用）本来就不是他想要的，但他按的是返回，
+        // 我们不该替他造一个"首页"出来。
+        //
+        // 代价：这一下返回没有视觉反馈。可接受 —— 它只在
+        // "home 已被底栏切换弹掉"这个窄条件下发生，而那个状态下
+        // 页面本来就已经是能停住的地方。
+        return@back
     }
 }

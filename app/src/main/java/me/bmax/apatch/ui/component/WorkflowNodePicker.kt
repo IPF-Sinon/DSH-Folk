@@ -7,11 +7,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -179,18 +181,30 @@ fun WorkflowNodePicker(
             // 只改其中一个，面板要么溢出 sheet、要么留一条缝。
             val bodyMaxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.75f - 96.dp
 
+            // ## 为什么用 IntrinsicSize.Min
+            //
+            // 上一版给 Row 加 heightIn(max)，以为限住上限就能压矮 —— **没用**。
+            // heightIn 只是上限：左栏八项约 288dp、右栏选「执行」时约 150dp，
+            // 上限是 500dp，288 远没到，于是 Row 照样取左栏高度，右栏下方照样空白。
+            // （这就是用户在 beta.262 里看到的"还是太高"。）
+            //
+            // 真正要做的是让左栏**不参与撑高**。IntrinsicSize.Min 会把 Row 的高度
+            // 压成"各子项最小固有高度的最大值"再与上限取小，而左栏一旦加了
+            // verticalScroll，它的最小固有高度就退化成"一屏能滚多少算多少"，
+            // 不再等于"八项总和"。
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
                     .heightIn(max = bodyMaxHeight)
                     .padding(horizontal = 12.dp),
             ) {
                 Column(
                     Modifier
                         .width(84.dp)
+                        .fillMaxHeight()
                         .padding(end = 10.dp)
-                        // 左栏独立滚动：它会轻易超过上限（八项 × 约 36dp = 288dp），
-                        // 限住之后就不会再把整块面板撑高。
+                        // 左栏独立滚动：高度由右栏决定，八项放不下时自己滚。
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
@@ -230,7 +244,7 @@ fun WorkflowNodePicker(
                     val leftCol = visible.filterIndexed { i, _ -> i % 2 == 0 }
                     val rightCol = visible.filterIndexed { i, _ -> i % 2 == 1 }
                     Row(
-                        Modifier.weight(1f),
+                        Modifier.weight(1f).fillMaxHeight(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Column(

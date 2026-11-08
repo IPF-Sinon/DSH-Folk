@@ -190,9 +190,19 @@ internal fun WorkflowNodeCard(
         // 无权限的卡整体压暗：这是"现在用不了"的第一眼信号，比任何徽标都直接。
         modifier = if (granted) base else base.alpha(0.6f),
     ) {
-        Column {
-            Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
-            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+        // 卡片内容 + 一枚**居中的半透明类型水印**（参考实现 card_normal.xml 的 icon：
+        // `layout_gravity="center_horizontal"`、`alpha=0.1`、尺寸 = minTouchTargetSize）。
+        //
+        // 为什么需要它：一屏卡片全是"标题 + 参数行"，光看文字很难在两秒内分出
+        // 「这是执行、还是判断」。那枚淡图标不占版面、不抢阅读，但把类型编码进形状，
+        // 扫一眼就能分类 —— 这正是参考实现把它印在卡片上的理由。
+        //
+        // 用 Box 叠一层而不是塞进 Column：它必须**不参与布局高度**，
+        // 否则卡片会被这枚图标撑高，而它本来只是个背景装饰。
+        Box {
+            Column {
+                Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
+                Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                 // ── 标题区＝拖动把手 ──
                 //
                 // 只有这里接拖动：它没有输入控件，不会和别的操作打架。
@@ -346,6 +356,17 @@ internal fun WorkflowNodeCard(
                     }
                 }
             }
+            }
+            // 水印图标：居中、半透明、不参与点击（卡片自身的点击由外层 clickable 处理）。
+            Icon(
+                imageVector = nodeTypeIcon(node.type),
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(56.dp)
+                    .alpha(0.10f),
+            )
         }
     }
 }

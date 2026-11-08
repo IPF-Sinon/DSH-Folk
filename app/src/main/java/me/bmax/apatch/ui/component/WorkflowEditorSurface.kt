@@ -1335,7 +1335,9 @@ private fun FloatBarIcon(
  * `remember` 之外跑（这正是上一轮踩过的坑，见 editorPickerGroups 上方的注释）。
  * 用查表函数把图标留在展示层，数据层保持干净。
  */
-private fun nodeTypeIcon(type: WorkflowNodeType) = when (type) {
+// internal：卡片也要用它画那枚半透明的类型水印（参考实现的 card_normal.xml
+// 顶部有一枚 center_horizontal 的 ShapeableImageView，alpha 0.1）。
+internal fun nodeTypeIcon(type: WorkflowNodeType) = when (type) {
     WorkflowNodeType.EXECUTE -> Icons.Filled.PlayArrow
     WorkflowNodeType.CONDITION -> Icons.Filled.CallSplit
     WorkflowNodeType.WAIT -> Icons.Filled.HourglassEmpty

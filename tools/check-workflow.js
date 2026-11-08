@@ -553,7 +553,11 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
     .matchAll(/([A-Z_]+)\("([a-z]+)"\)/g)].map((m) => m[1]);
   ok(realTypes.length === 6, "WorkflowNodeType 有 6 个取值（" + realTypes.join("/") + "）");
   const iconFn = canvas + read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowEditorSurface.kt");
-  const iconBody = iconFn.slice(iconFn.indexOf("private fun nodeTypeIcon"));
+  // 不绑定可见性修饰符：这个函数后来从 private 提成 internal（卡片要拿它画水印），
+  // 断言按 "private fun" 找就整个失效了 —— 而函数体本身没变。门禁要钉的是
+  // "每个枚举值都有分支"，不是"它是不是 private"。
+  const iconAt = iconFn.search(/fun nodeTypeIcon\(/);
+  const iconBody = iconFn.slice(iconAt);
   const iconSrc = iconBody.slice(0, iconBody.indexOf("\n}"));
   for (const t of realTypes) {
     ok(new RegExp("WorkflowNodeType\\." + t + " ->").test(iconSrc), "nodeTypeIcon 覆盖了 " + t);
@@ -720,6 +724,28 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
   // 分类项内边距：每项多 8dp 就是 64dp，直接决定可见高度。分类不该比卡片还占地方。
   ok(/padding\(horizontal = 10\.dp, vertical = 8\.dp\)/.test(picker),
     "分类项内边距是 vertical = 8dp（12dp 会让八项多占 64dp）");
+  // ── 面板高度：左栏不得参与撑高 ──
+  //
+  // 用户连着三轮说"还是太高"。前两次我都在改 sheet 的 heightIn(max)，
+  // 而 heightIn 只是**上限**：左栏八项约 288dp、右栏 3 张卡约 150dp，
+  // 上限 500dp 远没到，Row 照样取左栏高度，右栏下方照样空白。
+  // 真正让它变矮的唯一手段是让左栏**不参与撑高**：IntrinsicSize.Min + 左栏 fillMaxHeight。
+  ok(/height\(IntrinsicSize\.Min\)/.test(picker),
+    "面板主体用 IntrinsicSize.Min 取右栏高度（heightIn 只是上限，压不矮）");
+  ok(/fillMaxHeight\(\)[\s\S]{0,200}verticalScroll/.test(picker),
+    "左栏 fillMaxHeight + verticalScroll：高度跟右栏走，八项放不下时自己滚");
+
+  // ── 卡片类型水印 ──
+  //
+  // 参考实现 card_normal.xml 顶部有一枚 center_horizontal、alpha 0.1 的
+  // ShapeableImageView，把节点类型编码进形状，扫一眼就能分卡。
+  // 我们之前完全没有它，一屏卡片全是"标题 + 参数行"，读起来要靠逐行文字。
+  const card = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowNodeCard.kt");
+  ok(/nodeTypeIcon\(node\.type\)/.test(card) && /alpha\(0\.10f\)/.test(card),
+    "卡片有半透明的类型水印图标（对齐参考实现的 card_normal icon）");
+  // 水印是背景装饰，绝不能参与布局 —— 否则每张卡都会凭空高一截。
+  ok(/Box\s*\{[\s\S]{0,80}Column\s*\{/.test(card),
+    "水印叠在 Box 里、不塞进内容 Column（否则会把卡片撑高）");
   ok(!/fillMaxSize\(\).*background\(MaterialTheme\.colorScheme\.scrim/.test(picker),
     "不再自绘全屏遮罩层（那层没有弹出动画）");
 }
