@@ -533,6 +533,17 @@ internal data class WorkflowDefinition(
     val declaresDangerous: Boolean = false,
     val nodes: List<WorkflowNode> = emptyList(),
     val edges: List<WorkflowEdge> = emptyList(),
+    /**
+     * 流程内变量：**定义期**就固定下来的名字与初值。
+     *
+     * 与 [WorkflowRun.variables] 的分工：
+     *  - 这里是"声明"，属于定义，跟着流程存盘，用户/agent 在编辑页填；
+     *  - 那边是"这一次运行的取值"，开跑时由这里种进去，运行期可以被 extract 节点改写。
+     *
+     * 分成两份而不是一份，是因为它们的生命周期完全不同：改一个变量初值不该
+     * 影响已经跑过的那几次记录，反过来读历史运行也不该看到"后来才加的变量"。
+     */
+    val variables: Map<String, String> = emptyMap(),
     val schemaVersion: Int = WorkflowSchema.SCHEMA_VERSION,
     val revision: Int = 1,
     val createdAtMs: Long = 0L,
@@ -710,6 +721,7 @@ internal fun WorkflowDefinition.toJson(): JSONObject = JSONObject()
     .put("revision", revision)
     .put("createdAtMs", createdAtMs)
     .put("updatedAtMs", updatedAtMs)
+    .apply { if (variables.isNotEmpty()) put("variables", JSONObject(variables as Map<*, *>)) }
     .put("nodes", JSONArray().apply { nodes.forEach { put(it.toJson()) } })
     .put("edges", JSONArray().apply { edges.forEach { put(it.toJson()) } })
 
@@ -755,6 +767,8 @@ internal fun definitionFromJson(o: JSONObject): WorkflowDefinition? {
         nodes += n
     }
     val edges = mutableListOf<WorkflowEdge>()
+    val dVars = mutableMapOf<String, String>()
+    o.optJSONObject("variables")?.let { v -> for (k in v.keys()) dVars[k] = v.optString(k) }
     o.optJSONArray("edges")?.let { e ->
         for (i in 0 until e.length()) {
             val edge = e.optJSONObject(i)?.let { edgeFromJson(it) } ?: return null
@@ -773,6 +787,7 @@ internal fun definitionFromJson(o: JSONObject): WorkflowDefinition? {
         declaresDangerous = o.optBoolean("declaresDangerous"),
         nodes = nodes,
         edges = edges,
+        variables = dVars,
         // 迁移在这里发生：读进来的旧版本先升到当前版本，再交给下游。
         // 直接拒绝 v1 会让用户升级一次 App 就丢掉所有已有流程 —— 而 v1→v2 的语义
         // 变化只有一个：边多了 kind，缺省即 flow，与 v1 行为完全相同。
