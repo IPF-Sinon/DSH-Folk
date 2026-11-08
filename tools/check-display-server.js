@@ -1180,8 +1180,18 @@ if (jarArgAt >= 0) {
   must(/import me\.bmax\.apatch\.ui\.component\.DisplayChannelGuideDialog/.test(preview) &&
     /DisplayChannelGuideDialog\(\s*\n\s*visible = guide,/.test(preview),
     '预览页真的挂了那个弹窗（不是写了个没人用的组件）');
-  must(/var guide by remember \{ mutableStateOf\(!displayChannelReady\(context\)\) \}/.test(preview),
-    '进这一页先判一次通道（没有通道时后面每一步都只会"启动失败"）');
+  // 进这一页要判一次通道（没有通道时后面每一步都只会"启动失败"）。
+  //
+  // 这条断言原先钉的是具体写法 remember { mutableStateOf(!displayChannelReady(context)) }，
+  // 而那正是**阻塞首帧**的写法：displayChannelReady → PrivilegedShell.reach →
+  // PermissionManager.refresh 全程跨进程。remember 只挡住"重组时重算"，首次求值仍在主线程。
+  // 所以断言改成钉**行为**：进页时探测一次、探测放 IO、结果决定要不要弹窗。
+  // 不能钉成"必须同步求值" —— 那是把缺陷当契约。
+  must(/LaunchedEffect\(Unit\) \{[\s\S]{0,160}?withContext\(Dispatchers\.IO\) \{ displayChannelReady\(context\) \}/.test(preview) &&
+    /if \(!withContext\(Dispatchers\.IO\) \{ displayChannelReady\(context\) \}\) guide = true/.test(preview),
+    '进这一页先判一次通道，且探测在 IO 上（没有通道时后面每一步都只会"启动失败"）');
+  must(/var guide by remember \{ mutableStateOf\(false\) \}/.test(preview),
+    '弹窗初值是不弹（探测回来才决定，避免首帧同步阻塞）');
   must(/onFailure \{ e ->[\s\S]{0,300}?if \(!displayChannelReady\(context\)\) guide = true/.test(preview),
     '启动失败时再判一次并弹引导（失败原因里通道不可用最常见）');
   must(/onOpenChannel = \{[\s\S]{0,120}?navigator\.navigate\(PrivilegedChannelScreenDestination\)/.test(preview),
