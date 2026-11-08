@@ -44,18 +44,49 @@ jobs:
           echo "upstream=$V"
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
-      - name: Read last built version from the beta release body
+      - name: Read the actually-built version from the published metadata
         id: last
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # **必须有 GH_REPO**：本 job 没有 checkout，gh 无法从 .git 推断要操作哪个仓库，
+          # 会直接以 `fatal: not a git repository` 退出。这个 env 是它的唯一依据。
+          GH_REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
-          # release 不存在时 gh 会非 0 退出；这里属于「从没构建过」，不是错误。
-          BODY=$(gh release view runtime-beta-latest --json body -q .body 2>/dev/null || echo "")
-          MARK=$(echo "$BODY" | sed -n "s/.*dsh-version:\([^ ]*\).*/\1/p" | head -1)
+          # 版本从**已发布的 metadata.json** 里读（"dsh" 字段），而不是在 release body 里
+          # 自己维护一个标记。差别是根本性的：
+          #
+          #  - metadata 是**构建产物自己写的**，它存在就代表那个版本真的构建成功了；
+          #  - body 里的标记是 CI **在派发之后**写下的，它只代表"我点过按钮"。
+          #
+          # 上一版用 body 标记，于是构建失败时标记照样写进去，下一轮就判定"已构建"，
+          # 那个上游版本从此再没人管 —— 而且不会有任何报错，只会静默落后。
+          #
+          # 顺带修掉一个更隐蔽的病：这个 job 没有 checkout，gh 无法推断仓库，
+          # 而原来那句 `|| echo ""` 把 `fatal: not a git repository` 吞成了空 body，
+          # 于是 last 永远是 none → 每 6 小时都判定"需要构建"→ 次次空转。
+          #
+          # 「还没有 release / 还没有 metadata」= 从没构建过，不是错误；
+          # 其它任何失败都**要炸出来**，不能再被当成"从没构建过"。
+          got=0
+          for i in $(seq 1 10); do
+            if gh release download runtime-beta-latest --pattern metadata.json --dir /tmp/rbmeta --clobber 2>/tmp/err; then
+              got=1; break
+            fi
+            sleep 6
+          done
+          MARK=""
+          if [ "$got" = "1" ] && [ -f /tmp/rbmeta/metadata.json ]; then
+            MARK=$(node -e "try{console.log(JSON.parse(require(\"fs\").readFileSync(\"/tmp/rbmeta/metadata.json\",\"utf8\")).dsh||\"\")}catch(e){console.log(\"\")}")
+          elif grep -qiE "not found|no assets|release not found" /tmp/err 2>/dev/null; then
+            MARK=""
+          else
+            echo "读取 runtime-beta-latest 的 metadata 失败（原因不是 not found，本轮不猜）：" >&2
+            cat /tmp/err >&2 || true
+            exit 1
+          fi
           echo "last=${MARK:-none}"
           echo "last=$MARK" >> "$GITHUB_OUTPUT"
-
       - name: Decide
         id: decide
         run: |
@@ -92,10 +123,12 @@ jobs:
       - name: Trigger runtime build (beta channel)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 与 probe 同理：没有 checkout 就必须显式给仓库，否则 gh 报 not a git repository。
+          GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.probe.outputs.version }}
         run: |
           set -euo pipefail
-          gh workflow run runtime.yml \
+          gh workflow run runtime.yml --ref "${{ github.ref_name }}" \
             -f dsh_version="$VERSION" \
             -f channel=beta \
             -f flavor=full \
@@ -103,27 +136,13 @@ jobs:
             -f publish=true
           echo "已触发 runtime.yml：$VERSION（beta / full / both）"
 
-      # **最后**才记录版本 —— 顺序很重要。
+      # 到这里就结束了 —— **不再在 release body 里写版本标记**。
       #
-      # 如果先记录再触发，构建失败时版本已经被写死，下一轮 probe 会认为「已构建」而永远跳过它，
-      # 那个上游版本就再也没人管了。所以记录放在触发之后、且只在触发成功时执行。
-      # 代价是「触发了但构建失败」时下一轮会重试一次 —— 那正是我们想要的。
+      # 上一版这么做，两个毛病都出在它身上：
+      #  1. 标记是"我派发过"的记录，不是"构建成功了"的记录。构建失败照样写进去，
+      #     下一轮就判定"已构建"并永久跳过该版本，且不报任何错。
+      #  2. 它还会改坏 release 说明：body 拿不到时用空文件 grep，结果只写进一行标记。
       #
-      # 记录写在 release body 而不是提交进仓库：每 6 小时一次自动提交会把历史刷满，
-      # 也让「谁改了什么」难以追溯。
-      - name: Record the version into the beta release body
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.probe.outputs.version }}
-        run: |
-          set -uo pipefail
-          for i in $(seq 1 20); do
-            if gh release view runtime-beta-latest --json body -q .body >/tmp/body 2>/dev/null; then
-              break
-            fi
-            sleep 15
-          done
-          grep -v "^dsh-version:" /tmp/body >/tmp/body2 || true
-          echo "dsh-version:${VERSION}" >> /tmp/body2
-          gh release edit runtime-beta-latest --body-file /tmp/body2
-          echo "已记录 dsh-version:${VERSION}"
+      # 现在**唯一的事实来源**是发布出来的 metadata.json（probe 每次去读）。
+      # 构建失败 → metadata 还是旧的 → 下一轮自动重试。这才是想要的语义，
+      # 而且不需要任何额外状态。
