@@ -143,6 +143,9 @@ jobs:
           node tools/check-runtime-card.js
           node tools/check-launcher-icon.js
           node tools/check-workflow.js
+          # gh 调用必须有仓库上下文（没有 checkout 的 job 要显式 GH_REPO）。
+          # 2026-11-08 的 runtime-auto 就是栽在这里，且连续失败三次都没人发现。
+          node tools/check-ci-gh.js
           node tools/check-java-syntax.js
           node tools/check-web-upload.js
           node tools/check-session-store.js
