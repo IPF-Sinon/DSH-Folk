@@ -1282,7 +1282,10 @@ object DshRuntime : DshRuntimeHost {
         // 会因 peer 不满足而起不来，反而把本来能用的旧版本弄坏。
         // 所以：运行时版本够不上这个插件的要求时，**跳过升级**、保留旧版本继续用。
         // 判据是容器里记录的 runtimeVersion（metadata 的 dsh 字段），不是 App 版本。
-        val rtVer = runtimeVersion.orEmpty()
+        // 与 state 里那个 runtimeVersion 同源（都是 prefs 的 KEY_RUNTIME_VERSION）：
+        // 这里是 suspend 上下文、拿不到 _state 的最新值，但 prefs 写入是在装完运行时
+        // 之后才发生的，两者在这一点上等价。
+        val rtVer = prefs().getString(DshEnv.KEY_RUNTIME_VERSION, null).orEmpty()
         val wanted = SEED_MIN_VERSIONS.filterKeys { pkg ->
             pkg !in shadowed && seedUpgradeAllowed(pkg, rtVer)
         }
