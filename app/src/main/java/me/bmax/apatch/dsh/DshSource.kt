@@ -214,7 +214,7 @@ object DshSource {
     private const val KEY_AUTO_SOURCE_AT = "auto_source_at"
 
     private const val RELEASE_DOWNLOAD_BASE =
-        "https://github.com/IPF-Sinon/DSH-Folk/releases/download/"
+        "https://github.com/DSH-Folk/DSH-Folk/releases/download/"
 
     /**
      * 四个滚动发布位置 = **通道 × 口味**，互不复用 metadata / rootfs。

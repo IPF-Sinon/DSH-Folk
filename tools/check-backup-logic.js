@@ -781,7 +781,7 @@ ok(/BackupScope\.BOTH_VAULT \|\| scope == BackupScope\.DSH_VAULT/.test(archive),
   "DSH_VAULT 也算含 vault（强制加密）");
 // 预装清单加入 dsh-folk-cloud，且用 github 规格安装（不发 npm）
 ok(/"dsh-folk-cloud"/.test(runtime) &&
-  /SEED_SPECS = mapOf\("dsh-folk-cloud" to "github:IPF-Sinon\/dsh-folk-cloud"\)/.test(runtime),
+  /SEED_SPECS = mapOf\("dsh-folk-cloud" to "github:DSH-Folk\/dsh-folk-cloud"\)/.test(runtime),
   "SEED_PLUGINS 含 dsh-folk-cloud，用 github 规格安装");
 ok(/DshPluginRepo\.install\(\s*\n?\s*seedSpec\(pkg\)/.test(runtime),
   "预装用 seedSpec(pkg) 取安装规格（账本仍按包名记）");

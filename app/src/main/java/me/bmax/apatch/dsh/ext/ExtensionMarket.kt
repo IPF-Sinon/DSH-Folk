@@ -77,7 +77,7 @@ object ExtensionMarket {
      * 放在这里而不是资源/配置：目录地址是**协议的一部分**（后台按这个路径生成），只有改了
      * 仓库结构才需要动它；做成参数是为了让镜像/内测目录能复用同一个实现。
      */
-    const val DEFAULT_INDEX_URL = "https://raw.githubusercontent.com/IPF-Sinon/dsh-folk-plugins/main/index.json"
+    const val DEFAULT_INDEX_URL = "https://raw.githubusercontent.com/DSH-Folk/dsh-folk-plugins/main/index.json"
 
     /** 连接超时：市场页面不该等一个连不上的域名太久。 */
     private const val CONNECT_TIMEOUT_MS = 10_000

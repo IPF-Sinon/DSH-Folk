@@ -1905,7 +1905,7 @@ object DshRuntime : DshRuntimeHost {
      * [listRuntimeVersions] 退回两个通道。
      */
     private suspend fun fetchRuntimeReleases(): List<Pair<String, String>> {
-        val body = UpdateChecker.fetchApiJson("/repos/IPF-Sinon/DSH-Folk/releases?per_page=100")
+        val body = UpdateChecker.fetchApiJson("/repos/DSH-Folk/DSH-Folk/releases?per_page=100")
             ?: return emptyList()
         val out = ArrayList<Pair<String, String>>()
         runCatching {

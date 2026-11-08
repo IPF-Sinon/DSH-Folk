@@ -160,7 +160,7 @@
     <string name="dsh_plugin_install_action">Install</string>
 
     <!-- 关于 / 致谢 -->
-    <string name="dsh_about_repo" translatable="false">https://github.com/IPF-Sinon/DSH-Folk</string>
+    <string name="dsh_about_repo" translatable="false">https://github.com/DSH-Folk/DSH-Folk</string>
     <string name="dsh_acknowledgements">Acknowledgements</string>
     <string name="dsh_qq_group">QQ group</string>
     <string name="dsh_qq_group_id" translatable="false">1109060326</string>

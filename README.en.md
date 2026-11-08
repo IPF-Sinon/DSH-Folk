@@ -7,8 +7,8 @@
 **A launcher for running DeepSeek Harness on Android**
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg?logo=gnu)](./LICENSE)
-[![Build](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml/badge.svg)](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml)
-[![Release](https://img.shields.io/github/v/release/IPF-Sinon/DSH-Folk?logo=github)](https://github.com/IPF-Sinon/DSH-Folk/releases/latest)
+[![Build](https://github.com/DSH-Folk/DSH-Folk/actions/workflows/build.yml/badge.svg)](https://github.com/DSH-Folk/DSH-Folk/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/DSH-Folk/DSH-Folk?logo=github)](https://github.com/DSH-Folk/DSH-Folk/releases/latest)
 
 </div>
 
@@ -75,14 +75,14 @@ Once a channel is picked, both the App itself (hardware monitoring, bugreport dm
 
 ## Installation
 
-Download the APK for **your architecture** from [Releases](https://github.com/IPF-Sinon/DSH-Folk/releases/latest); the `.sha256` in the same directory can be used for verification:
+Download the APK for **your architecture** from [Releases](https://github.com/DSH-Folk/DSH-Folk/releases/latest); the `.sha256` in the same directory can be used for verification:
 
 - `DSH-Folk-<version>-arm64-v8a.apk` — most phones and tablets
 - `DSH-Folk-<version>-x86_64.apk` — Android emulators, Android-x86, ChromeOS
 
 Both packages are functionally identical, differing only in the bundled native binaries and the downloaded container rootfs. Installing the wrong architecture shows “Unsupported architecture” at startup and exits. When unsure: pick arm64-v8a for a phone.
 
-You can also grab development builds from [Actions](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml): pick a successful run and download the `dsh-folk-debug-*` or `dsh-folk-release-*` artifact.
+You can also grab development builds from [Actions](https://github.com/DSH-Folk/DSH-Folk/actions/workflows/build.yml): pick a successful run and download the `dsh-folk-debug-*` or `dsh-folk-release-*` artifact.
 
 **Beta channel**: the app beta only shows prereleases after you enable **Settings → General → Accept beta updates** (off by default); the container runtime beta is a separate switch (**Settings → Features → Runtime → Accept beta runtime updates**), and the two are independent. How betas / releases are published and why (release variant, versionCode convention, not using Actions artifacts, etc.) is in [Build & Release Internals](docs/dev-notes.en.md).
 
@@ -162,4 +162,4 @@ LINUX DO open-source community | [linux.do](https://linux.do)
 ## Community
 
 - QQ group: [1109060326](https://qm.qq.com/q/t7HDoR5ACk)
-- Issues: https://github.com/IPF-Sinon/DSH-Folk/issues
+- Issues: https://github.com/DSH-Folk/DSH-Folk/issues

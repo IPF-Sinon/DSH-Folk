@@ -267,7 +267,7 @@ ExtLog.log(msg)    // 同上，用于故障
 
 ## 6. 编译与发布
 
-扩展是**独立编译的 DEX**，由你自己的仓库构建。官方仓库 [dsh-folk-plugins](https://github.com/IPF-Sinon/dsh-folk-plugins)
+扩展是**独立编译的 DEX**，由你自己的仓库构建。官方仓库 [dsh-folk-plugins](https://github.com/DSH-Folk/dsh-folk-plugins)
 用的是 Gradle composite build：
 
 ```kotlin

@@ -268,7 +268,7 @@ const market = read(EXT + "ExtensionMarket.kt");
 // 否则运行期是 NoSuchMethodError，而它出现在扩展的调用栈里，看起来像宿主崩了。
 must(/DshRuntime\.appSatisfies\(required\)/.test(market),
   "市场安装没有校验 minAppVersion：用户要等重启后才发现扩展根本没加载");
-must(/const val DEFAULT_INDEX_URL = "https:\/\/raw\.githubusercontent\.com\/IPF-Sinon\/dsh-folk-plugins\/main\/index\.json"/.test(market),
+must(/const val DEFAULT_INDEX_URL = "https:\/\/raw\.githubusercontent\.com\/DSH-Folk\/dsh-folk-plugins\/main\/index\.json"/.test(market),
   "市场目录默认地址必须指向 dsh-folk-plugins 仓库的 index.json");
 must(/MessageDigest\.getInstance\("SHA-256"\)/.test(market),
   "市场安装没有校验 sha256：下载下来的 dex 会被直接安装");

@@ -129,7 +129,7 @@ listOf("dsh-web-mobile", "dshmarket", "dsh-config-manager", "dsh-folk-cloud")
  * `config-manager` 这个 loader id 被声明两次而整棵插件树起不来。两者都在本清单里、
  * 各自独立安装到 profile 顶层，互为并列。
  */
-internal val SEED_SPECS = mapOf("dsh-folk-cloud" to "github:IPF-Sinon/dsh-folk-cloud")
+internal val SEED_SPECS = mapOf("dsh-folk-cloud" to "github:DSH-Folk/dsh-folk-cloud")
 
 internal val SEED_MIN_VERSIONS = mapOf(
 "dsh-folk-cloud" to "0.6.0",
@@ -148,7 +148,7 @@ internal val SEED_MIN_VERSIONS = mapOf(
  */
 internal val SEED_FALLBACK_TGZ = mapOf(
 "dsh-folk-cloud" to
-    "https://github.com/IPF-Sinon/dsh-folk-cloud/releases/download/v0.6.0/dsh-folk-cloud-0.6.0.tgz",
+    "https://github.com/DSH-Folk/dsh-folk-cloud/releases/download/v0.6.0/dsh-folk-cloud-0.6.0.tgz",
 )
 
 /**

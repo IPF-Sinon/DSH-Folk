@@ -35,7 +35,7 @@ import org.json.JSONObject
  */
 object UpdateChecker {
     private const val TAG = "UpdateChecker"
-    private const val LATEST_PATH = "/repos/IPF-Sinon/DSH-Folk/releases/latest"
+    private const val LATEST_PATH = "/repos/DSH-Folk/DSH-Folk/releases/latest"
     /**
      * 列表路径。
      *
@@ -44,9 +44,9 @@ object UpdateChecker {
      * （`releases/latest` 本身会跳过 prerelease，所以正式版通道主要靠它；这一条是它
      * 拿不到时的退路，退路也必须管用。）
      */
-    private const val LIST_PATH = "/repos/IPF-Sinon/DSH-Folk/releases?per_page=30"
+    private const val LIST_PATH = "/repos/DSH-Folk/DSH-Folk/releases?per_page=30"
     private const val API_BASE = "https://api.github.com"
-    private const val RELEASES_URL = "https://github.com/IPF-Sinon/DSH-Folk/releases"
+    private const val RELEASES_URL = "https://github.com/DSH-Folk/DSH-Folk/releases"
 
     /**
      * 直连之外的备用入口。

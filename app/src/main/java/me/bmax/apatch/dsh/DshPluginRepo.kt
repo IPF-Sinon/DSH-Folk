@@ -1146,7 +1146,7 @@ object DshPluginRepo {
         // 装一个 npm 规格，pnpm 也会**重新解析整个 profile 的依赖树**：只要里面有一条 git
         // 规格（预装的 dsh-folk-cloud 就是），它就会现场 `git ls-remote` 一次 —— 于是
         // 「装 npm 包」被一条 git 依赖整死（实测日志：更新 dshmarket 时撞
-        // git+ssh://git@github.com/IPF-Sinon/dsh-folk-cloud.git · Host key verification failed）。
+        // git+ssh://git@github.com/DSH-Folk/dsh-folk-cloud.git · Host key verification failed）。
         // 按最快线路配一层 git 重写（与 [installGitSpec] 同一套规则），装完清掉。
         applyGitRewrite(racePrefixes().firstOrNull { it.isNotEmpty() } ?: "")
         try {

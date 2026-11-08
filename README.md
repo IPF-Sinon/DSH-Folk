@@ -7,8 +7,8 @@
 **在 Android 上跑 DeepSeek Harness 的启动器**
 
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg?logo=gnu)](./LICENSE)
-[![Build](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml/badge.svg)](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml)
-[![Release](https://img.shields.io/github/v/release/IPF-Sinon/DSH-Folk?logo=github)](https://github.com/IPF-Sinon/DSH-Folk/releases/latest)
+[![Build](https://github.com/DSH-Folk/DSH-Folk/actions/workflows/build.yml/badge.svg)](https://github.com/DSH-Folk/DSH-Folk/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/DSH-Folk/DSH-Folk?logo=github)](https://github.com/DSH-Folk/DSH-Folk/releases/latest)
 
 </div>
 
@@ -94,7 +94,7 @@ root / Shizuku / 无线 ADB 都是**可选**的，并且**默认不启用**。DS
 
 ## 安装
 
-到 [Releases](https://github.com/IPF-Sinon/DSH-Folk/releases/latest) 下载**对应架构**的 APK，同目录的 `.sha256` 可用于校验：
+到 [Releases](https://github.com/DSH-Folk/DSH-Folk/releases/latest) 下载**对应架构**的 APK，同目录的 `.sha256` 可用于校验：
 
 - `DSH-Folk-<版本>-arm64-v8a.apk` —— 绝大多数手机、平板
 - `DSH-Folk-<版本>-x86_64.apk` —— Android 模拟器、Android-x86、ChromeOS
@@ -102,7 +102,7 @@ root / Shizuku / 无线 ADB 都是**可选**的，并且**默认不启用**。DS
 两个包功能相同，区别只在打包的原生二进制与下载的容器 rootfs。装错架构会在启动时提示
 「Unsupported architecture」并退出。不确定的话：手机选 arm64-v8a。
 
-也可以到 [Actions](https://github.com/IPF-Sinon/DSH-Folk/actions/workflows/build.yml) 取开发构建：
+也可以到 [Actions](https://github.com/DSH-Folk/DSH-Folk/actions/workflows/build.yml) 取开发构建：
 选一次成功的运行，下载 `dsh-folk-debug-*` 或 `dsh-folk-release-*` 工件。
 
 **测试版通道**：应用测试版在 **设置 → 常规 → 接受测试版更新** 打开后才会连预发布版一起看（默认关闭）；
@@ -200,4 +200,4 @@ LINUX DO 开源社区 | [linux.do](https://linux.do)
 ## 交流
 
 - QQ 群：[1109060326](https://qm.qq.com/q/t7HDoR5ACk)
-- Issues：https://github.com/IPF-Sinon/DSH-Folk/issues
+- Issues：https://github.com/DSH-Folk/DSH-Folk/issues
