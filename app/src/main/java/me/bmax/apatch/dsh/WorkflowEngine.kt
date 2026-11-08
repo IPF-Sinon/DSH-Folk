@@ -585,6 +585,7 @@ internal object WorkflowEngine {
             source.startsWith("var:") -> vars[source.removePrefix("var:")].orEmpty()
             source.startsWith("branch:") -> branches[source.removePrefix("branch:")]?.toString().orEmpty()
             source.startsWith("step:") -> outputs[source.removePrefix("step:")].orEmpty()
+            source == "result" -> outputs[node.id].orEmpty()
             else -> ""
         }
         return when (op) {
@@ -623,6 +624,10 @@ internal object WorkflowEngine {
                 e.fromPin.startsWith("var:") -> vars[e.fromPin.removePrefix("var:")].orEmpty()
                 e.fromPin.startsWith("branch:") -> branches[e.fromPin.removePrefix("branch:")]?.toString().orEmpty()
                 e.fromPin.startsWith("step:") -> outputs[e.fromPin.removePrefix("step:")].orEmpty()
+                // 「结果」出口：源头节点自己的整体输出。这是"把这一步拿到的值接到别处"
+                // 的主路径 —— 每个节点都有 result 针脚，所以任何一步的输出都能被接走，
+                // 不用为了传一个值专门插一个 extract 节点。
+                e.fromPin == "result" -> outputs[e.from].orEmpty()
                 else -> outputs[e.fromPin].orEmpty()
             }
             // 按声明的类型收敛一下：number 只留数字形态，bool 归一成 1/0。

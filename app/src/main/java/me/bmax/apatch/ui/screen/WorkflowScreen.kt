@@ -74,6 +74,7 @@ import me.bmax.apatch.dsh.WorkflowRun
 import me.bmax.apatch.dsh.WorkflowRunState
 import me.bmax.apatch.dsh.WorkflowStore
 import me.bmax.apatch.dsh.WorkflowValidator
+import me.bmax.apatch.dsh.isStaleFormat
 import me.bmax.apatch.dsh.toJson
 import me.bmax.apatch.ui.component.WorkflowDefinitionEditor
 import me.bmax.apatch.ui.component.WorkflowDetailDialog
@@ -476,6 +477,20 @@ private fun WorkflowRow(
                 )
             }
             Button(onClick = onRun, enabled = enabled && valid) { Text(stringResource(R.string.dsh_workflow_action_run)) }
+        }
+        // 旧格式单独给一条明确的横幅：这不是"参数没填对"，而是整份定义作废了。
+        // 两者的补救办法完全不同（前者改参数，后者只能重建），混在一起说会误导。
+        if (def.isStaleFormat()) {
+            Text(
+                stringResource(R.string.dsh_wf_stale_title),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text(
+                stringResource(R.string.dsh_wf_stale_body),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         // 不合法时把原因摆在行下面：运行按钮是灰的，不说为什么等同于坏的。
         if (!valid) {

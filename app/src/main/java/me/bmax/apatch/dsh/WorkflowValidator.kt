@@ -79,6 +79,19 @@ internal object WorkflowValidator {
      * 已有同名同引脚的数据边时直接返回原定义：重复连一条线在界面上看不出差别，
      * 但校验器会报"重复的数据边"，用户却找不到是哪两条。
      */
+    /**
+     * 接一根数据线。**输入端是单线**：新线接上就把同一目标针脚上的旧线顶掉。
+     *
+     * 对齐参考实现 `Pin.addLink` 里的 `if (isSingleLink()) clearLinks(task)` ——
+     * 它接新线前先把自己这个针脚上所有旧线清干净。
+     *
+     * 为什么必须清：一个参数同时被两根线喂，取值就成了"谁最后到算谁的"，
+     * 用户看到的接线图和实际跑出来的结果会是两回事。
+     *
+     * 另外这里**拒掉类型不匹配**的接线（[WorkflowPinType.accepts]）。参考实现的
+     * linkAble 在拖动结束前就判掉了，接不上根本不会建立连接；这里在数据层再判一次，
+     * 因为 AI 也能直接改 JSON 提交定义。
+     */
     fun addDataEdge(
         def: WorkflowDefinition,
         fromId: String,
@@ -89,11 +102,23 @@ internal object WorkflowValidator {
     ): WorkflowDefinition {
         if (fromId == toId) return def
         if (fromPin.isBlank() || toPin.isBlank()) return def
+
+        val fromSpec = WorkflowSchema.pinsOf(def, fromId).firstOrNull { it.id == fromPin }
+        val toSpec = WorkflowSchema.pinsOf(def, toId).firstOrNull { it.id == toPin }
+        // 认不出针脚的两端不连线：宁可什么都不做，也不建立一条运行期解不开的线。
+        if (fromSpec != null && toSpec != null && !toSpec.canLinkFrom(fromSpec)) return def
+
         val dup = def.edges.any {
             it.kind == WorkflowEdgeKind.DATA && it.from == fromId && it.to == toId &&
                 it.fromPin == fromPin && it.toPin == toPin
         }
         if (dup) return def
+
+        // 输入端单线：清掉同一目标针脚上的旧线（控制流线不动）。
+        val withoutOld = def.edges.filterNot {
+            it.kind == WorkflowEdgeKind.DATA && it.to == toId && it.toPin == toPin
+        }
+
         val edge = WorkflowEdge(
             from = fromId,
             to = toId,
@@ -103,19 +128,25 @@ internal object WorkflowValidator {
             toPin = toPin,
             dataType = dataType,
         )
-        return def.copy(edges = def.edges + edge)
+        return def.copy(edges = withoutOld + edge)
     }
+
 
     fun validate(def: WorkflowDefinition, allowedCaps: Set<String>): Result {
         val errors = mutableListOf<String>()
 
-        // 版本：读路径已经把 v1 抬到 v2（见 migrateToCurrent），所以能走到这里的
-        // 旧版本只可能来自"用户/agent 手写了一份更老或更新的 JSON"。
-        if (def.schemaVersion < WorkflowSchema.MIN_SUPPORTED_VERSION ||
-            def.schemaVersion > WorkflowSchema.SCHEMA_VERSION
-        ) {
-            errors += "schemaVersion 支持 ${WorkflowSchema.MIN_SUPPORTED_VERSION}~" +
-                "${WorkflowSchema.SCHEMA_VERSION}，收到 ${def.schemaVersion}"
+        // 版本：v3 起 MIN_SUPPORTED == SCHEMA_VERSION（接线模型重写，旧流程不兼容），
+        // 所以"更老的版本"不再被 migrateToCurrent 抬上来，而是走到这里被判失效。
+        //
+        // 措辞要**说出人话**：用户看到的不是"版本号不对"，而是"这是旧格式，已失效"，
+        // 并且知道文件没被删。AI 侧同样需要这句，否则它会以为只是参数写错了。
+        if (def.schemaVersion < WorkflowSchema.MIN_SUPPORTED_VERSION) {
+            errors += "流程定义是旧格式（v${def.schemaVersion}），已失效，不能再运行或编辑；" +
+                "文件仍保留，可导出备份。当前只支持 v${WorkflowSchema.SCHEMA_VERSION} " +
+                "（参数已改为可接线的针脚模型）。"
+        } else if (def.schemaVersion > WorkflowSchema.SCHEMA_VERSION) {
+            errors += "schemaVersion 比当前版本更新（收到 ${def.schemaVersion}，" +
+                "当前 ${WorkflowSchema.SCHEMA_VERSION}），本版本无法执行"
         }
         if (def.name.isBlank()) errors += "name 不能为空"
         if (def.name.length > WorkflowSchema.MAX_NAME_CHARS) {

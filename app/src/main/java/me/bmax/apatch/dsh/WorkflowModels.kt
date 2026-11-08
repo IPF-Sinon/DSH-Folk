@@ -38,10 +38,23 @@ internal object WorkflowSchema {
      * 那需要用户在字符串里手写引用，写错了只有运行时才知道；数据边是**看得见的一条线**，
      * 校验器也能在保存时就把「类型对不上 / 来源不存在」点出来。
      */
-    const val SCHEMA_VERSION = 2
+    /**
+     * 当前定义格式版本。
+     *
+     * **3 = 接线模型重写**（参数从"节点上的一袋字符串"变成"带类型、可接线的针脚"）。
+     * 2 及更早的定义一律判为旧格式并作废（用户明确"不必兼容旧流程，只要提醒已失效"）：
+     * 它们没有针脚类型、没有 result 出口，读写规则也不一样，硬迁会把语义悄悄改掉。
+     */
+    const val SCHEMA_VERSION = 3
 
     /** 认得的最老版本：比它更老的定义不猜，直接判不合法。 */
-    const val MIN_SUPPORTED_VERSION = 1
+    /**
+     * 最低可执行版本。**抬到 3**：只有当前格式能跑。
+     *
+     * 旧流程的文件**不删**，只是标为失效 —— 用户还能看到它、导出它，
+     * 但运行按钮点不动，AI 侧也会收到"该流程已失效"的明确结论。
+     */
+    const val MIN_SUPPORTED_VERSION = 3
 
     /** 硬上限：AI 生成的定义有可能失控，这些数字是「比这更离谱的一律拒绝」的线。 */
     const val MAX_NODES = 64
@@ -104,9 +117,19 @@ internal object WorkflowSchema {
      *  - extract：入口 + 出口 + 变量输出。
      *  - wait：入口 + 出口。
      */
+    /** 按节点 id 取它的针脚表（找不到节点返回空）。 */
+    fun pinsOf(def: WorkflowDefinition, nodeId: String): List<WorkflowPinSpec> =
+        def.node(nodeId)?.let { defaultPinsFor(it) }.orEmpty()
+
     fun defaultPinsFor(node: WorkflowNode): List<WorkflowPinSpec> {
         val execIn = WorkflowPinSpec("in", "", WorkflowPinKind.EXEC_IN)
         val execOut = WorkflowPinSpec("out", "", WorkflowPinKind.EXEC_OUT)
+        // 每个节点都有「这一步的结果」出口 —— 这是"把获取到的参数接到别处"的入口。
+        //
+        // 参考实现里每个 Action 的每个输出参数天然都能拉线，所以上一版只有 extract
+        // 能往外给值，等于逼用户为了传一个值专门插一个 extract 节点。
+        // 这里给每个节点一个统一的 result 出口（类型 ANY：任何下游都能接）。
+        val resultPin = listOf(WorkflowPinSpec("result", "结果", WorkflowPinKind.DATA_OUT, dataType = WorkflowPinType.ANY.id))
         val yes = WorkflowPinSpec("out_true", "成立", WorkflowPinKind.EXEC_TRUE)
         val no = WorkflowPinSpec("out_false", "不成立", WorkflowPinKind.EXEC_FALSE)
         return when (node.type) {
@@ -116,7 +139,7 @@ internal object WorkflowSchema {
                     WorkflowPinSpec("out_false", "未就绪", WorkflowPinKind.EXEC_FALSE),
                 ) else listOf(execOut)
 
-            WorkflowNodeType.EXECUTE -> listOf(execIn, execOut) + when (node.actionType) {
+            WorkflowNodeType.EXECUTE -> listOf(execIn, execOut) + resultPin + when (node.actionType) {
                 WorkflowActionType.SHELL, WorkflowActionType.DSH -> listOf(
                     WorkflowPinSpec("cmd", "命令", WorkflowPinKind.DATA_IN, defaultValue = node.config("cmd")),
                 )
@@ -142,15 +165,15 @@ internal object WorkflowSchema {
                 null -> emptyList()
             }
 
-            WorkflowNodeType.CONDITION, WorkflowNodeType.LOGIC -> listOf(execIn, yes, no)
+            WorkflowNodeType.CONDITION, WorkflowNodeType.LOGIC -> listOf(execIn, yes, no) + resultPin
 
             WorkflowNodeType.EXTRACT -> listOf(
                 execIn,
                 execOut,
                 WorkflowPinSpec("var", "变量", WorkflowPinKind.DATA_OUT, defaultValue = node.config("var")),
-            )
+            ) + resultPin
 
-            WorkflowNodeType.WAIT -> listOf(execIn, execOut)
+            WorkflowNodeType.WAIT -> listOf(execIn, execOut) + resultPin
         }
     }
 }
@@ -275,6 +298,40 @@ internal enum class WorkflowStepState(val id: String) {
  * 为什么放在模型里而不是画布文件里：预览、编辑器、节点卡三处都要按类型推导同一张引脚表，
  * 各画各的就会漂移（预览与编辑器已经因为坐标推导分家漂过一次）。
  */
+/**
+ * 针脚的数据类型。**接线合法性只看这一张表**（对齐 TouchTool 的 PinBase.linkToAble /
+ * linkFromAble：同类才能接）。
+ *
+ * 参考实现用的是"按实现类 instance 判断"，等价于"类型相同"。这里换成显式类型表，
+ * 因为它能表达参考实现表达不了的一件事：**[ANY] 接受一切**。
+ * 参考实现靠 PinAny 这种特殊针脚来做同样的事。
+ */
+internal enum class WorkflowPinType(val id: String) {
+    TEXT("text"),
+    NUMBER("number"),
+    BOOL("bool"),
+    CHOICE("choice"),
+    /** 接受一切：用于"把这个节点的整体输出接走"这类场景。 */
+    ANY("any");
+
+    /**
+     * 我能不能接上对方的针脚（我是**输出端**，[other] 是输入端）。
+     *
+     * 照抄参考实现的三条：
+     *  1. 同类可以接；
+     *  2. 任一端是 ANY 可以接（ANY 是"什么都接受/什么都能给"）；
+     *  3. 其余一律不行 —— **不做隐式转换**。文本喂数字看起来能用，但运行期会静默变成
+     *     一段文字，validator 还判合法，那是更难查的 bug。
+     */
+    fun accepts(other: WorkflowPinType): Boolean =
+        this == other || this == ANY || other == ANY
+
+    companion object {
+        fun of(raw: String): WorkflowPinType =
+            entries.firstOrNull { it.id == raw } ?: TEXT
+    }
+}
+
 internal enum class WorkflowPinKind {
     /** 控制流入口：谁把控制流交给我。 */
     EXEC_IN,
@@ -302,7 +359,41 @@ internal data class WorkflowPinSpec(
     val kind: WorkflowPinKind,
     val dataType: String = "string",
     val defaultValue: String = "",
-)
+) {
+    /** 类型化的声明。字符串字段是为存盘稳定，判定一律走这里。 */
+    val type: WorkflowPinType get() = WorkflowPinType.of(dataType)
+
+    /** 这个针脚是"出去"的一侧吗（数据出口 / 控制流出口）。 */
+    val isOut: Boolean
+        get() = kind == WorkflowPinKind.DATA_OUT ||
+            kind == WorkflowPinKind.EXEC_OUT ||
+            kind == WorkflowPinKind.EXEC_TRUE ||
+            kind == WorkflowPinKind.EXEC_FALSE
+
+    /**
+     * 输入端是单线：接一根新的就把旧的顶掉。
+     *
+     * 对齐参考实现 `Pin.isSingleLink()` —— 它的实现是 `isVertical() ? out : !out`，
+     * 也就是说**纵向布局下输出端单线，横向布局下输入端单线**。这里画布是纵向的
+     * （数据从上往下流），所以输入端单线。
+     *
+     * 为什么必须是单线：一个参数同时被两根线喂，取值就成了"谁最后到算谁的"，
+     * 用户看到的和实际跑的会是两回事。输出端可以分叉（一个结果喂给多个下游），
+     * 输入端不行。
+     */
+    val singleLink: Boolean get() = !isOut
+
+    /** 能不能从 [source] 接到我身上（我是输入端）。 */
+    fun canLinkFrom(source: WorkflowPinSpec): Boolean {
+        if (isOut) return false
+        if (kind == WorkflowPinKind.EXEC_IN) return source.isOut && !source.isDataSide
+        return source.isDataSide && type.accepts(source.type)
+    }
+
+    /** 这个针脚属数据侧吗（区别于控制流）。 */
+    val isDataSide: Boolean
+        get() = kind == WorkflowPinKind.DATA_IN || kind == WorkflowPinKind.DATA_OUT
+}
 
 /**
  * 一个节点。
@@ -614,26 +705,30 @@ internal fun WorkflowDefinition.toJson(): JSONObject = JSONObject()
     .put("edges", JSONArray().apply { edges.forEach { put(it.toJson()) } })
 
 /**
- * 把读到的版本号抬到当前版本。
+ * 把读到的版本号抬到当前版本 —— **只在仍然兼容的情况下**，否则原样返回，由校验器判失效。
  *
- * ## 为什么迁移改的是**版本号**而不是数据
+ * ## 版本史
  *
- * v1→v2 的差别是"边有种类了"，而 `kind` 缺省就是 `flow` —— 也就是说，一份 v1 的 JSON
- * 用 v2 的读法解析出来，**已经**是正确的 v2 定义（每条边都是控制流，引脚字段为空）。
- * 所以迁移的动作只有一件：把版本号改写成 2，让校验器不再以"版本不对"拒绝它。
+ * - v1→v2：边的种类（`kind` 缺省即 `flow`），一份 v1 的 JSON 用 v2 读法解析出来本来就是对的，
+ *   所以那次"迁移"只是抬版本号。
+ * - v2→v3：**接线模型重写**（参数变成带类型、可接线的针脚），这次**不能靠抬版本号蒙混**：
+ *   旧定义没有针脚类型、没有 result 出口，接线规则也不同。用户已明确「不必兼容旧流程，
+ *   只要提醒该流程检测为旧格式、已失效」。
  *
- * 反过来，如果某个字段确实需要重写（例如将来把 `config.cmd` 挪到别处），
- * 就到这个函数里按版本分支做数据改写 —— 但**只在这一处**。散落在解析器里的迁移
- * 会在半年后变成一张谁也说不清哪条先跑的网。
- *
- * 比 [WorkflowSchema.MIN_SUPPORTED_VERSION] 更老、或比当前版本更新的定义原样返回，
- * 由校验器报"版本不支持"：我们不猜未来格式。
+ * 所以 v3 起，[WorkflowSchema.MIN_SUPPORTED_VERSION] == [WorkflowSchema.SCHEMA_VERSION]：
+ * 「抬版本」这条路自动关闭 —— 更老的定义原样返回旧版本号，校验器据此报失效。
+ * 将来若再出现**向后兼容**的格式变化（只加字段、不改语义），把 MIN_SUPPORTED 往下放一格，
+ * 这里就会重新开始抬版本号。**能不能迁，由这两条常量决定，不在这里写特例。**
  */
 internal fun migrateToCurrent(raw: Int): Int = when {
     raw < WorkflowSchema.MIN_SUPPORTED_VERSION -> raw
     raw > WorkflowSchema.SCHEMA_VERSION -> raw
     else -> WorkflowSchema.SCHEMA_VERSION
 }
+
+/** 定义是否为旧格式（已失效，不能跑但也不删）。 */
+internal fun WorkflowDefinition.isStaleFormat(): Boolean =
+    schemaVersion < WorkflowSchema.MIN_SUPPORTED_VERSION
 
 /** 解析定义；结构不合法（缺字段/类型不认识）时返回 null，由调用方回 `invalid_definition`。 */
 internal fun definitionFromJson(raw: String): WorkflowDefinition? = runCatching {

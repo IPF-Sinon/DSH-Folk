@@ -1270,9 +1270,19 @@ async function checkCli() {
 // （每条边都是控制流、引脚为空），而不是"升级后流程跑不通了"。
 {
   const models = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowModels.kt");
-  ok(/const val SCHEMA_VERSION = 2/.test(models), "schema 版本已抬到 2");
-  ok(/const val MIN_SUPPORTED_VERSION = 1/.test(models), "认得 v1 定义（不因版本直接拒绝）");
-  ok(/internal fun migrateToCurrent\(raw: Int\): Int/.test(models), "有唯一的迁移入口");
+  // 版本 3 = 接线模型重写（参数变成带类型、可接线的针脚）。
+  // 用户已明确「不必兼容旧流程，只要提醒该流程检测为旧格式、已失效」
+  ok(/const val SCHEMA_VERSION = 3/.test(models), "schema 版本已抬到 3（接线模型重写）");
+  ok(/const val MIN_SUPPORTED_VERSION = 3/.test(models),
+    "旧版本不再被抬上来（v3 起只支持当前格式）");
+  ok(/fun WorkflowDefinition\.isStaleFormat\(\)/.test(models), "有旧格式判定入口");
+  ok(/旧格式/.test(SRC.validator) && /已失效/.test(SRC.validator),
+    "校验器说的是「旧格式、已失效」，不是干巴巴的版本号");
+  ok(/文件仍保留/.test(SRC.validator), "明确告诉用户文件没被删（可导出备份）");
+  // 旧格式不再被"认得"：v3 起旧定义判失效（这是用户明确的选择）。
+  // 但仍然**能读进来**（不抛异常、不丢文件），只是不能跑。
+  ok(/raw < WorkflowSchema\.MIN_SUPPORTED_VERSION -> raw/.test(models),
+    "旧版本原样返回版本号，不静默抬版本（否则会假装能用）");
   ok(/schemaVersion = migrateToCurrent\(/.test(models), "解析定义时真的走了迁移");
   // v1 的关键不变量：kind 缺省 = flow。缺了它，旧定义会被读成"没有边是控制流"。
   ok(/val kind = WorkflowEdgeKind\.of\(o\.optString\("kind"\)\) \?: WorkflowEdgeKind\.FLOW/.test(models),
@@ -1431,6 +1441,36 @@ console.log("\u2500 #16l 展开三档 / 锁定（对齐 TouchTool ActionCard + P
   ok(/expandType = WorkflowExpandType\.of\(o\.optString\(\"expandType\"\)\)/.test(models),
     "读盘时还原展开档位");
   ok(/locked = o\.optBoolean\(\"locked\"\)/.test(models), "读盘时还原锁定");
+}
+
+console.log("\u2500 #16m 接线模型：类型表 / 输入端单线 / 结果出口");
+{
+  const models = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowModels.kt");
+  const validator = SRC.validator;
+
+  // 类型表：同类可接、ANY 万能、其余不接（不做隐式转换）。
+  ok(/enum class WorkflowPinType/.test(models), "有针脚类型表");
+  ok(/this == other \|\| this == ANY \|\| other == ANY/.test(models),
+    "类型相兼容才接线（ANY 万能；不做隐式转换）");
+  ok(/fun canLinkFrom\(source: WorkflowPinSpec\)/.test(models), "有接线合法性判定");
+
+  // 输入端单线 —— 参考实现 Pin.addLink 里的 clearLinks。
+  ok(/val singleLink: Boolean get\(\) = !isOut/.test(models),
+    "输入端是单线（纵向画布下，对齐参考实现 isSingleLink）");
+  ok(/it\.kind == WorkflowEdgeKind\.DATA && it\.to == toId && it\.toPin == toPin/.test(validator),
+    "接新线前清掉同一目标针脚的旧线（否则一个参数被两根线喂）");
+  ok(/\.filterNot \{/.test(validator), "旧线是被替换掉而不是被忽略");
+  ok(/canLinkFrom\(fromSpec\)/.test(validator), "接线时真的校验类型（AI 手写 JSON 也拦得住）");
+
+  // 结果出口：任何节点都能把输出接走 —— 这是「参数接到别处」的主路径。
+  ok(/val resultPin = listOf\(WorkflowPinSpec\(\"result\"/.test(models), "每个节点都有「结果」出口针脚");
+  ok(/dataType = WorkflowPinType\.ANY\.id/.test(models), "结果出口是 ANY 类型（任何下游都能接）");
+  ok(/e\.fromPin == \"result\" -> outputs\[e\.from\]/.test(SRC.engine),
+    "引擎能解析 result 出口（取源头节点自己的输出）");
+
+  // 没有为了传值而必须插入 extract 节点。
+  ok(/WorkflowNodeType\.EXECUTE -> listOf\(execIn, execOut\) \+ resultPin/.test(models),
+    "执行节点自己就能把结果接出去（不必插 extract）");
 }
 
 console.log("");

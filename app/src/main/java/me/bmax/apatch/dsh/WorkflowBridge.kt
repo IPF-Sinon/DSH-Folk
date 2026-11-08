@@ -311,6 +311,25 @@ internal object WorkflowBridge {
         // 于是「声明了桌面/无障碍能力、系统权限却没给」也能起来 —— 两条路行为不一致（外部审计 P1-2a）。
         // 缺哪几项由界面现算（[WorkflowPermissions.missing]），这里只负责弹窗 + 等结论。
         if (kind == WorkflowApprovals.Kind.RUN) {
+            // 旧格式先拦在这里：不是"权限没给"，也不是"参数写错" —— 整份定义作废了。
+            //
+            // 必须给 AI 一个**能照着改动作**的结论：它拿到的如果是 permission_denied 或
+            // invalid_definition，只会去补权限/改参数，而真正该做的是照当前格式重建一份。
+            if (effective.isStaleFormat()) {
+                return 409 to JSONObject()
+                    .put("ok", false)
+                    .put("error", "stale_definition")
+                    .put("stale", true)
+                    .put("schemaVersion", effective.schemaVersion)
+                    .put("supportedVersion", WorkflowSchema.SCHEMA_VERSION)
+                    .put(
+                        "message",
+                        "这个流程是旧格式（v${effective.schemaVersion}），已失效，不能运行。" +
+                            "参数模型已改为「带类型、可接线的针脚」，旧定义无法迁移。" +
+                            "请新建一个流程并按当前格式重建；旧文件仍在，不要试图复用它的 config。",
+                    )
+                    .toString()
+            }
             if (WorkflowPermissions.missing(ctx, effective.effectiveCaps).isNotEmpty()) {
                 val gate = WorkflowPermissions.Gate.submit(
                     workflowName = effective.name,

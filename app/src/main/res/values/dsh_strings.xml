@@ -2122,4 +2122,6 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_top_node_detail">Step connections</string>
     <string name="dsh_wf_card_expand">Step expand level</string>
     <string name="dsh_wf_card_lock">Lock step</string>
+    <string name="dsh_wf_stale_title">Old format — disabled</string>
+    <string name="dsh_wf_stale_body">This workflow was created with the old parameter model and can no longer run. The file is kept; export it if you need a copy.</string>
 </resources>
