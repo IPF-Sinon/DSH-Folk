@@ -1473,6 +1473,34 @@ console.log("\u2500 #16m 接线模型：类型表 / 输入端单线 / 结果出�
     "执行节点自己就能把结果接出去（不必插 extract）");
 }
 
+console.log("\u2500 #16n 流程内变量（定义期声明 → 运行期种入）");
+{
+  const models = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowModels.kt");
+
+  // 变量分两层：定义里是「声明」，运行记录里是「这一次的取值」。
+  // 合在一起会让「改变量初值」污染历史运行记录。
+  ok(/internal data class WorkflowDefinition\([\s\S]{0,900}?val variables: Map<String, String>/.test(models),
+    "定义层有 variables（声明，跟流程一起存盘）");
+  ok(/\.apply \{ if \(variables\.isNotEmpty\(\)\) put\(\"variables\"/.test(models),
+    "变量会写进定义 JSON");
+  ok(/o\.optJSONObject\(\"variables\"\)\?\.let \{ v -> for \(k in v\.keys\(\)\) dVars\[k\]/.test(models),
+    "读盘时还原定义的变量");
+
+  // 关键：定义的变量必须真正进入运行期 —— 上一版只有存储，写了不生效。
+  ok(/def\.variables \+ mapOf\(/.test(SRC.engine),
+    "开跑时把定义的变量种进运行变量（不是只存不算）");
+  ok(/\"run_id\" to runId/.test(SRC.engine), "系统变量仍在（且顺序上覆盖用户声明）");
+
+  // 校验：非法名 / 遮蔽系统变量 / 数量上限。
+  ok(/变量名「\$v」不合法/.test(SRC.validator), "校验器拦非法变量名");
+  ok(/与系统变量同名/.test(SRC.validator), "校验器拦遮蔽系统变量（那会变成填了不生效）");
+  ok(/MAX_VARIABLES/.test(models) && /MAX_VARIABLES/.test(SRC.validator), "变量数量有上限");
+
+  // 编辑器入口：放在「更多」里，不占常驻位置。
+  ok(/WorkflowVariablesDialog\(/.test(SRC.editorSurface), "编辑页能打开变量编辑器");
+  ok(/varsOpen/.test(SRC.editorSurface), "变量编辑器有独立开关");
+}
+
 console.log("");
 // #12 真跑插件 asset：工具表能建出正确 argv，且失败时**返回字符串而不是抛异常**
 (async () => {
