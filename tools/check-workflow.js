@@ -664,11 +664,17 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
   ok(/subs\.size > 1/.test(picker) && /SubGroupButton\(/.test(picker), "二级分组是左侧竖排，且只有一个时不画（消除重复的「执行」）");
   ok(/OutlinedTextField/.test(picker) && /searchText\.contains\(query\.trim\(\), ignoreCase = true\)/.test(picker),
     "带搜索框，且搜索跨整个一级分组（不只当前二级）");
-  // 限高方式换了：现在是 ModalBottomSheet + fillMaxHeight(0.75f)，
-  // 高度对齐参考实现的 decorView*0.75（SelectActionDialog 实测值），
-  // 而不是自绘 Surface 的 heightIn(max=560.dp)。要求是"不撑满全屏"，不是某个具体数值。
-  ok(/ModalBottomSheet/.test(picker) && /fillMaxHeight\(0\.75f\)/.test(picker),
-    "面板用底部弹出层且限高 75%（画布要一直露着）");
+  // 高度：**上限** 75%，但不强制撑满。
+  //
+  // fillMaxHeight(0.75f) 是「必须占满 75%」—— 分类下只有 3 个节点时也拉到 0.75 屏，
+  // 下面一大片空白（用户真机反馈的就是这个）。要的是跟着内容长：内容少就矮，
+  // 内容多才长到上限、上限之内滚动。所以必须是 heightIn(max=...) 而不是 fillMaxHeight。
+  ok(/ModalBottomSheet/.test(picker) && /heightIn\(/.test(picker) && /\.75f/.test(picker),
+    "面板高度随内容收缩、上限 75%（内容少时不留空白，多时上限内滚动）");
+  // 只在**代码**里找，注释里为了说明原因保留了这个名字 —— 直接对全文匹配会误判。
+  const pickerCode = picker.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+  ok(!/fillMaxHeight\(0\.75f\)/.test(pickerCode),
+    "不能用 fillMaxHeight(0.75f)：那是强制占满 75%，内容少时下面会空一大片");
   ok(!/fillMaxSize\(\).*background\(MaterialTheme\.colorScheme\.scrim/.test(picker),
     "不再自绘全屏遮罩层（那层没有弹出动画）");
 }

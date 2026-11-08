@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -107,8 +108,17 @@ fun WorkflowNodePicker(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        // 高度对齐参考实现：decorView 高度的 0.75。
-        modifier = Modifier.fillMaxHeight(0.75f),
+        // 高度上限 75%（对齐参考实现 decorView*0.75），但**不强制撑到 75%**。
+        //
+        // 上一版写的是 fillMaxHeight(0.75f)，那是"必须占满 75% 高度"的意思：
+        // 一个分类下只有 3 个节点时，面板照样拉到 0.75 屏，下面留一大片空白。
+        // 用户的原话是"应该只弹出成半屏，这样就不会出现下面空的情况了"——
+        // 要的是**跟着内容长**，而不是给内容一个固定的大外框。
+        //
+        // 改成 heightIn(max = ...)：内容少就矮、内容多才长到上限，上限之内可滚动。
+        modifier = Modifier.heightIn(
+            max = LocalConfiguration.current.screenHeightDp.dp * 0.75f,
+        ),
     ) {
         Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
             // ── 标题行：标题 + 搜索开关 + 关闭 ──
@@ -190,7 +200,7 @@ fun WorkflowNodePicker(
             // 上一版把二级分类做成**又一行横向 chip**，于是当一级分类下只有一个二级分类时,
             // 就出现「执行」下孤零零重复一个「执行」的怪状 —— 截图里那个就是它。
             val subs = group?.subs.orEmpty()
-            Row(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                 if (subs.size > 1) {
                     Column(
                         Modifier
