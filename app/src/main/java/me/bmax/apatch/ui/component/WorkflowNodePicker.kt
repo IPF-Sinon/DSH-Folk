@@ -1,6 +1,5 @@
 package me.bmax.apatch.ui.component
 
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -10,11 +9,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -23,9 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -87,41 +81,32 @@ fun WorkflowNodePicker(
     initialSearchOpen: Boolean = false,
 ) {
     var groupIndex by rememberSaveable { mutableStateOf(0) }
-    var subIndex by rememberSaveable { mutableStateOf(0) }
     var searchOpen by rememberSaveable { mutableStateOf(initialSearchOpen) }
     var query by rememberSaveable { mutableStateOf("") }
 
     val group = groups.getOrNull(groupIndex)
-    val sub = group?.subs?.getOrNull(subIndex)
-    // 搜索优先于分类：一旦输入关键词，就在**整个一级分组**里找，而不是只在当前二级分类里。
+    // 搜索优先于分类：输入关键词就在**全部分类**里找，而不是只在当前分类里。
     val visible = if (query.isBlank()) {
-        sub?.entries.orEmpty()
+        group?.entries.orEmpty()
     } else {
-        group?.subs.orEmpty().flatMap { it.entries }.filter { e ->
+        groups.flatMap { it.entries }.filter { e ->
             e.searchText.contains(query.trim(), ignoreCase = true)
         }
     }
 
-    // 底部弹出层用 ModalBottomSheet：动画由系统提供（上滑入场、下滑退场），
-    // 与参考实现（BottomSheetDialog + BottomSheetBehavior）是同一套行为。
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        // 高度上限 75%（对齐参考实现 decorView*0.75），但**不强制撑到 75%**。
-        //
-        // 上一版写的是 fillMaxHeight(0.75f)，那是"必须占满 75% 高度"的意思：
-        // 一个分类下只有 3 个节点时，面板照样拉到 0.75 屏，下面留一大片空白。
-        // 用户的原话是"应该只弹出成半屏，这样就不会出现下面空的情况了"——
-        // 要的是**跟着内容长**，而不是给内容一个固定的大外框。
-        //
-        // 改成 heightIn(max = ...)：内容少就矮、内容多才长到上限，上限之内可滚动。
+        // 高度上限 75%，但**不强制撑满**：heightIn(max=...) 让内容少时长得矮、
+        // 内容多时才逼近上限。fillMaxHeight(0.75f) 是上一版的写法，那会让只有
+        // 三个节点的分类也拉满 0.75 屏，下面留一大片空白。
         modifier = Modifier.heightIn(
             max = LocalConfiguration.current.screenHeightDp.dp * 0.75f,
         ),
     ) {
         Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
-            // ── 标题行：标题 + 搜索开关 + 关闭 ──
+            // ── 标题行 ──
             Row(
                 Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -148,10 +133,7 @@ fun WorkflowNodePicker(
                 }
             }
 
-            // ── 搜索框（折叠，点放大镜才展开）──
-            //
-            // 参考实现在这里是 TextInputLayout + startIconDrawable(搜索) + clear_text，
-            // 视觉上就是一个「左放大镜、右清除」的输入框，这里用等价的 leading/trailing icon。
+            // ── 搜索框（折叠）──
             if (searchOpen) {
                 OutlinedTextField(
                     value = query,
@@ -171,58 +153,49 @@ fun WorkflowNodePicker(
                 )
             }
 
-            // ── 一级分类：一排连体按钮 ──
+            // ── 主体：左栏分类竖排 + 右栏两列卡片 ──
             //
-            // 用 Connected 风格的按钮组（参考实现是 MaterialButtonToggleGroup.Connected）：
-            // 相邻按钮共用边框、只有一个「被选中」的那颗是实心。上一版是一排独立圆角胶囊,
-            // 选中态只是换个底色，看上去像六个互不相干的标签。
-            LazyRow(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(0.dp),
+            // 上一版是「顶部一条横向 chip + 单列宽行 + 右侧大三角」，与参考实现差得很远：
+            //  - 八个分类横向排一行必然溢出，第 8 个「感知」被直接裁掉；
+            //  - 单列宽行每张卡只有一个名字，没有说明，用户只能靠猜节点干什么；
+            //  - 大三角是「从这里拖出去」时代的残留，现在是点选即建，它不表示任何操作。
+            //
+            // 现在：分类在左栏竖排（数量无上限、扫读快），卡片两列并排、每张都带说明。
+            //
+            // 整块一个 verticalScroll：sheet 高度按内容长（heightIn），此处不给确定高度，
+            // 所以两栏各自滚动没有意义 —— 无界高度下滚动本来也不会触发。一个分类下
+            // 最多十余个节点、两列排开只有几行，实际极少需要滚动。
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp),
             ) {
-                items(groups.size) { i ->
-                    GroupButton(
-                        label = stringResource(groups[i].titleRes),
-                        selected = i == groupIndex,
-                        first = i == 0,
-                        last = i == groups.size - 1,
-                        onClick = {
-                            groupIndex = i
-                            subIndex = 0
-                        },
-                    )
-                }
-            }
-
-            // ── 主体：左边二级分类竖排 + 右边节点列表 ──
-            //
-            // 这是参考实现的布局：subGroup 是 width=80dp 的竖向按钮组，右侧 RecyclerView 占满。
-            // 上一版把二级分类做成**又一行横向 chip**，于是当一级分类下只有一个二级分类时,
-            // 就出现「执行」下孤零零重复一个「执行」的怪状 —— 截图里那个就是它。
-            val subs = group?.subs.orEmpty()
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                if (subs.size > 1) {
-                    Column(
-                        Modifier
-                            .width(84.dp)
-                            .padding(end = 8.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(0.dp),
-                    ) {
-                        for ((i, sg) in subs.withIndex()) {
-                            SubGroupButton(
-                                label = stringResource(sg.titleRes),
-                                selected = i == subIndex,
-                                first = i == 0,
-                                last = i == subs.size - 1,
-                                onClick = { subIndex = i },
-                            )
-                        }
+                Column(
+                    Modifier.width(84.dp).padding(end = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
+                ) {
+                    for ((i, g) in groups.withIndex()) {
+                        CategoryButton(
+                            label = stringResource(g.titleRes),
+                            selected = i == groupIndex,
+                            first = i == 0,
+                            last = i == groups.size - 1,
+                            // 点分类顺带清空搜索词：否则点了分类、右栏仍按关键词过滤，
+                            // 用户会以为「这个分类是空的」。
+                            onClick = {
+                                groupIndex = i
+                                query = ""
+                            },
+                        )
                     }
                 }
 
                 if (visible.isEmpty()) {
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.weight(1f).height(120.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Text(
                             stringResource(R.string.dsh_wf_picker_empty),
                             style = MaterialTheme.typography.bodySmall,
@@ -230,13 +203,31 @@ fun WorkflowNodePicker(
                         )
                     }
                 } else {
-                    LazyColumn(
+                    // 手动切成两列：不用 LazyVerticalGrid —— 它在无界高度约束下
+                    // 必须有确定高度才能测量，而这里的高度恰恰是按内容长的。
+                    val leftCol = visible.filterIndexed { i, _ -> i % 2 == 0 }
+                    val rightCol = visible.filterIndexed { i, _ -> i % 2 == 1 }
+                    Row(
                         Modifier.weight(1f),
-                        contentPadding = PaddingValues(bottom = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(visible, key = { it.key }) { entry ->
-                            PickerRow(entry = entry, onClick = { onPick(entry) })
+                        Column(
+                            Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            for (entry in leftCol) {
+                                PickerCard(entry = entry, onClick = { onPick(entry) })
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        Column(
+                            Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            for (entry in rightCol) {
+                                PickerCard(entry = entry, onClick = { onPick(entry) })
+                            }
+                            Spacer(Modifier.height(12.dp))
                         }
                     }
                 }
@@ -244,59 +235,16 @@ fun WorkflowNodePicker(
         }
     }
 }
-/**
- * 一级分类的一个按钮。**连体**：相邻按钮共享边框，只有选中的那颗是实心。
- *
- * 对齐参考实现的 `MaterialButtonToggleGroup.Connected` —— `selectionRequired` +
- * `singleSelection`，视觉上是一整条被切开的按钮条，而不是几个独立的胶囊标签。
- *
- * 「连体」的做法：自己不带左右圆角，只有整条的头尾补圆角。上一版每颗都是独立胶囊，
- * 六个标签看上去像六件不相干的事，而它们其实是一个维度的选项。
- */
-@Composable
-private fun GroupButton(
-    label: String,
-    selected: Boolean,
-    first: Boolean,
-    last: Boolean,
-    onClick: () -> Unit,
-) {
-    val bg = if (selected) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary
-    else MaterialTheme.colorScheme.onSurface
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(
-            topStart = if (first) 20.dp else 0.dp,
-            bottomStart = if (first) 20.dp else 0.dp,
-            topEnd = if (last) 20.dp else 0.dp,
-            bottomEnd = if (last) 20.dp else 0.dp,
-        ),
-        color = bg,
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge,
-            color = fg,
-            maxLines = 1,
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
-        )
-    }
-}
 
 /**
- * 二级分类：**左侧竖排**按钮。
+ * 左栏的一个分类按钮。
  *
- * 这是参考实现的形态（subGroup 是 width=80dp 的竖向 MaterialButtonToggleGroup）。
- * 上一版把它做成又一行横向 chip，于是「执行」下只有一个二级分类「执行」时，
- * 屏幕上就出现一个孤零零重复的「执行」—— 那正是真机截图里的怪状。
- *
- * 现在由调用方决定：二级分类**只有一个时不画这一列**（`subs.size > 1` 才显示），
- * 所以那种重复再也不会出现。
+ * 形态对齐参考实现（点击助手）的 `subGroup` —— 那一列 `width=80dp` 的竖向按钮组。
+ * 未选中是透明底 + 次级文字色，选中是 secondaryContainer 实心；头尾各补一次圆角，
+ * 中间相邻处不补，看上去是一条被切开的竖条而不是一堆独立胶囊。
  */
 @Composable
-private fun SubGroupButton(
+private fun CategoryButton(
     label: String,
     selected: Boolean,
     first: Boolean,
@@ -329,16 +277,19 @@ private fun SubGroupButton(
 }
 
 /**
- * 列表里的一行：卡片 + 左侧标题/说明 + 右侧大幅淡色图标。
+ * 一张卡片：标题 + 一句说明 + 右下角淡色图标。
  *
- * 对齐参考实现的 `dialog_select_action_normal_item`：那个布局是 MaterialCardView，
- * `icon` 用大尺寸、`alpha=0.1`、靠右；文字区在左（标题 + 描述、描述 alpha 0.75）。
+ * 对齐参考实现的 `dialog_select_action_normal_item`：MaterialCardView 承载，
+ * 图标大尺寸、alpha≈0.1、靠右下；文字区在左（标题 BodyMedium，描述 BodySmall 半透明）。
  *
- * 上一版只有「一个小色点 + 一行字」：色点几乎不传达信息（用户看不出蓝点是什么意思），
- * 也没有说明文字，于是列表变成一堆光秃秃的名字，只能靠猜。
+ * 上一版是「单列宽行 + 右侧一个大三角」：
+ *  - 大三角是"从这里拖出去"时代的残留，现在是点选即建，它不表示任何操作；
+ *  - 单列宽行让每张卡只有一个名字，没有说明，用户只能靠猜这个节点干什么。
+ *
+ * 现在两列栅格里每张卡都自带说明，扫一眼就知道建出来的是什么。
  */
 @Composable
-private fun PickerRow(entry: NodePickerEntry, onClick: () -> Unit) {
+private fun PickerCard(entry: NodePickerEntry, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
@@ -351,11 +302,11 @@ private fun PickerRow(entry: NodePickerEntry, onClick: () -> Unit) {
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f),
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 10.dp)
-                    .size(46.dp),
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 6.dp, bottom = 6.dp)
+                    .size(38.dp),
             )
-            Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                 Text(
                     stringResource(entry.titleRes),
                     style = MaterialTheme.typography.bodyMedium,
@@ -363,17 +314,18 @@ private fun PickerRow(entry: NodePickerEntry, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(end = 44.dp),
+                    // 给右下角图标让出位置：两列栅格本来就窄，不留白会撞字
+                    modifier = Modifier.padding(end = 30.dp),
                 )
                 if (entry.descRes != 0) {
                     Spacer(Modifier.height(3.dp))
                     Text(
                         stringResource(entry.descRes),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(end = 44.dp),
+                        modifier = Modifier.padding(end = 6.dp),
                     )
                 }
             }
@@ -397,8 +349,18 @@ data class NodePickerEntry(
     val payload: Any,
 )
 
-/** 二级分组：一个分类下的若干节点。 */
-data class NodePickerSubGroup(val titleRes: Int, val entries: List<NodePickerEntry>)
-
-/** 一级分组。 */
-data class NodePickerGroup(val titleRes: Int, val subs: List<NodePickerSubGroup>)
+/**
+ * 一个分类：左栏的一个按钮 + 右栏这一个分类下的卡片。
+ *
+ * ## 为什么砍掉原来的三层
+ *
+ * 上一版照参考实现（点击助手）抄了**三层**：一级 chip / 二级 chip / 列表。
+ * 但我们的数据只有两层——八个分类，每个分类下直接就是节点。于是每个分类都塞了一个
+ * 和它**同名**的二级分组，然后：
+ *  - 一级 chip 变成八颗横向排一行，第 8 颗「感知」被裁掉（真机截图就是这个）；
+ *  - 二级 chip 因为恒为 1 个，被 `subs.size > 1` 永久隐藏，永远不出现。
+ * 照抄结构却不看数据的层数，就会得到这种「两层数据套三层壳」的错位。
+ *
+ * 参考实现的真实形态其实是「左栏分类竖排 + 右栏卡片栅格」，我们的数据正好对得上。
+ */
+data class NodePickerGroup(val titleRes: Int, val entries: List<NodePickerEntry>)

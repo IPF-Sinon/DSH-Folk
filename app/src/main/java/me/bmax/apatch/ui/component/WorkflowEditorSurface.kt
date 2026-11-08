@@ -179,11 +179,13 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
     fun entry(key: String, kind: EditorNodeKind): NodePickerEntry = NodePickerEntry(
         key = key,
         titleRes = kind.labelRes,
-        descRes = 0,
+        // 描述来自动作目录（基础节点没有，就是 0 = 不显示）。
+        //
+        // 上一版这里恒为 0：卡片上只剩一个名字，用户看不出这个节点干什么。
+        // 参考实现的每张卡都有说明，靠的就是动作定义里那句 desc。
+        descRes = kind.bridge?.descRes ?: 0,
         icon = nodeTypeIcon(kind.type),
         accent = editorPickerAccent(kind.type),
-        // 搜索文本用资源名而不是 stringResource：构建分组不该再读一次当前语言，
-        // 面板会用它自己的 locale 匹配。这里给的是稳定的、可搜的英文/中文键名。
         searchText = appStringRaw(kind.labelRes),
         payload = kind,
     )
@@ -196,31 +198,29 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
             it.type == WorkflowNodeType.EXTRACT
     }
 
-    fun actionSub(groupTitleRes: Int): NodePickerSubGroup =
-        NodePickerSubGroup(
-            titleRes = groupTitleRes,
-            entries = actionKindsOf(groupTitleRes).map { kind ->
-                // key 用**动作 id**而不是下标：同一个面板里两类节点混排，
-                // 用 labels 或下标都会在两组有同名项时撞键，撞键的后果是选中项串位。
-                entry("act_" + (kind.bridge?.id ?: kind.labelRes.toString()), kind)
-            },
-        )
+    fun actionEntries(groupTitleRes: Int): List<NodePickerEntry> =
+        actionKindsOf(groupTitleRes).map { kind ->
+            // key 用**动作 id**而不是下标：同一个面板里两类节点混排，
+            // 用 labels 或下标都会在两组有同名项时撞键，撞键的后果是选中项串位。
+            entry("act_" + (kind.bridge?.id ?: kind.labelRes.toString()), kind)
+        }
 
+    // 每个分组**直接**就是「左栏一个分类 + 右栏一屏卡片」，不再套一层同名子分类。
     return listOf(
-        NodePickerGroup(R.string.dsh_wf_cat_exec, listOf(
-            NodePickerSubGroup(R.string.dsh_wf_cat_exec, exec.mapIndexed { i, k -> entry("exec_" + i, k) }),
-        )),
-        NodePickerGroup(R.string.dsh_wf_cat_control, listOf(
-            NodePickerSubGroup(R.string.dsh_wf_cat_control, control.mapIndexed { i, k -> entry("ctl_" + i, k) }),
-        )),
-        NodePickerGroup(R.string.dsh_wf_grp_alert, listOf(actionSub(R.string.dsh_wf_grp_alert))),
-        NodePickerGroup(R.string.dsh_wf_grp_device, listOf(actionSub(R.string.dsh_wf_grp_device))),
-        NodePickerGroup(R.string.dsh_wf_grp_media, listOf(actionSub(R.string.dsh_wf_grp_media))),
-        NodePickerGroup(R.string.dsh_wf_grp_data, listOf(actionSub(R.string.dsh_wf_grp_data))),
-        NodePickerGroup(R.string.dsh_wf_grp_sense, listOf(actionSub(R.string.dsh_wf_grp_sense))),
-        NodePickerGroup(R.string.dsh_wf_grp_screen, listOf(actionSub(R.string.dsh_wf_grp_screen))),
-        // 特权（shell / SAF）不走动作目录：它们是"写一条命令"，不是"调一个端点"。
-        // 执行分组里已有 shell 节点，这里不再重复列一次。
+        NodePickerGroup(
+            R.string.dsh_wf_cat_exec,
+            exec.mapIndexed { i, k -> entry("exec_" + i, k) },
+        ),
+        NodePickerGroup(
+            R.string.dsh_wf_cat_control,
+            control.mapIndexed { i, k -> entry("ctl_" + i, k) },
+        ),
+        NodePickerGroup(R.string.dsh_wf_grp_alert, actionEntries(R.string.dsh_wf_grp_alert)),
+        NodePickerGroup(R.string.dsh_wf_grp_device, actionEntries(R.string.dsh_wf_grp_device)),
+        NodePickerGroup(R.string.dsh_wf_grp_media, actionEntries(R.string.dsh_wf_grp_media)),
+        NodePickerGroup(R.string.dsh_wf_grp_data, actionEntries(R.string.dsh_wf_grp_data)),
+        NodePickerGroup(R.string.dsh_wf_grp_sense, actionEntries(R.string.dsh_wf_grp_sense)),
+        NodePickerGroup(R.string.dsh_wf_grp_screen, actionEntries(R.string.dsh_wf_grp_screen)),
     )
 }
 

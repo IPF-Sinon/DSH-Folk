@@ -656,12 +656,26 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
   // 面板内部结构（版式照点击助手的 SelectActionDialog）。
   const picker = SRC.nodePicker;
   ok(picker.length > 0, "能读到节点面板组件源码");
-  ok(/LazyColumn/.test(picker), "节点列表是 LazyColumn（可滚动，因为面板不靠拖出）");
-  // 一级分组是一排**连体**按钮（对齐 MaterialButtonToggleGroup.Connected），
-  // 二级分组是**左侧竖排**（参考实现 subGroup 就是 width=80dp 的竖向按钮组）。
-  // 上一版把二级分组也做成横向 chip，于是「执行」下只有一个「执行」时会重复出现一个孤零零的「执行」。
-  ok(/LazyRow/.test(picker) && /GroupButton\(/.test(picker), "一级分组是连体按钮条");
-  ok(/subs\.size > 1/.test(picker) && /SubGroupButton\(/.test(picker), "二级分组是左侧竖排，且只有一个时不画（消除重复的「执行」）");
+  // ── 面板版式：左侧分类竖排 + 右侧两列卡片栅格 ──
+  //
+  // 这三条断言原先钉的是「LazyRow 一级连体按钮 + 二级左侧竖排」那套**三层**结构。
+  // 但我们的数据只有两层（八个分类，每个分类下直接是节点），照抄三层的结果是：
+  // 八个一级分组横排一行溢出、第 8 个「感知」被裁掉，而二级栏因恒为 1 个被永久隐藏。
+  // 断言应当钉「分类在哪、卡片怎么排、能不能滚」，而不是钉某一种已被证明错位的结构。
+  // 两列布局：参考实现的列表就是两列卡片。
+  //
+  // 钉的是"切成两列"这个行为（leftCol/rightCol 各占一半并排），不是某个具体控件——
+  // 这里刻意没用 LazyVerticalGrid：整个 sheet 高度是 heightIn(max) 跟着内容长，
+  // Row 拿到无界高度约束，而 LazyVerticalGrid 必须有确定高度才能测量（无界会抛
+  // "infinity maximum height"）。断言钉控件名会把这种约束下的必然选择打成缺陷。
+  ok(/leftCol/.test(picker) && /rightCol/.test(picker) && /filterIndexed\s*\{\s*i,\s*_\s*->\s*i % 2 == 0/.test(picker),
+    "节点卡片是两列并排（参考实现的列表就是两列卡片）");
+  ok(/verticalScroll\(rememberScrollState\(\)\)/.test(picker) && /CategoryButton\(/.test(picker),
+    "分类在左侧竖排且可滚动（横向排一排会溢出、裁掉后面的分类）");
+  ok(!/LazyRow/.test(picker),
+    "分类栏**不再**是横向 chip（八颗横排必然溢出）");
+  ok(/descRes = kind\.bridge\?\.descRes \?: 0/.test(SRC.editorSurface),
+    "卡片带说明文字（只有名字的卡片让用户只能靠猜）");
   ok(/OutlinedTextField/.test(picker) && /searchText\.contains\(query\.trim\(\), ignoreCase = true\)/.test(picker),
     "带搜索框，且搜索跨整个一级分组（不只当前二级）");
   // 高度：**上限** 75%，但不强制撑满。
