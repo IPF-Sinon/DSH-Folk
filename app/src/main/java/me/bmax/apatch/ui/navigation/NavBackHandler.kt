@@ -47,7 +47,10 @@ fun rememberTabBackHandler(
     navController: NavHostController,
     currentRoute: String?,
     homeRoute: String,
-    bottomBarRoutes: List<String>,
+    // 用 Set 而不是 List：调用方的 `bottomBarRoutes` 本来就是 Set<String>，
+    // 这里若坚持 List 就要求调用处多做一次 toList() 转换（每次重组都新建一个 List）。
+    // 而且这个参数只用于 `in` 判断，Set 的语义正是"成员资格"。
+    bottomBarRoutes: Set<String>,
     onBeforeBack: () -> Unit = {},
 ) {
     // 上一次"真的执行了返回"的时刻。用 remember 而不是 CompositionLocal：
