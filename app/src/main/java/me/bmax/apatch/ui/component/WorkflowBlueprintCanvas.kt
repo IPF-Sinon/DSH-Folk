@@ -243,9 +243,9 @@ internal fun WorkflowBlueprintCanvas(
                     modifier = Modifier.offset(x = pos.x.dp, y = pos.y.dp),
                     onTap = { if (!node.locked) onNodeClick?.invoke(node.id) },
                     // 锁定的卡不接拖动（锁定 = 不能拖动，见 WorkflowNode.locked）。
-                    onDrag = if (node.locked) null else { dx, dy -> onNodeDrag?.invoke(node.id, dx, dy) },
-                    onDragStart = if (node.locked) null else { onNodeDragStart?.invoke(node.id) },
-                    onDragEnd = if (node.locked) null else { onNodeDragEnd?.invoke(node.id) },
+                    onDrag = if (node.locked) null else ({ dx: Float, dy: Float -> onNodeDrag?.invoke(node.id, dx, dy) }),
+                    onDragStart = if (node.locked) null else ({ onNodeDragStart?.invoke(node.id) }),
+                    onDragEnd = if (node.locked) null else ({ onNodeDragEnd?.invoke(node.id) }),
                     // 卡上直接改参数：只在编辑态开放（预览/详情传 null，输入框自动 disabled）。
                     onParamChange = onNodeParamChange?.let { cb -> { key, value -> cb(node.id, key, value) } },
                     onToggleExpand = onNodeToggleExpand?.let { { it(node.id) } },
