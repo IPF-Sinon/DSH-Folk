@@ -145,7 +145,7 @@ fun HomeScreenDsh(
         //
         // state.runtimeId 由 ProvideDshHomeState 在 remember(runtime, perm) 里算好，
         // 那两样变化时才会重算，语义完全等价（这里要的就是"实际在跑的那个"）。
-        val runModeId = state.runtimeId
+        val runModeId = uiState.runtimeId
 
         Row(
             // 等高：两张卡的副标题在窄屏/大字号下换行行数不一样（一台设备 1 行、另一台 2 行），

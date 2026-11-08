@@ -63,13 +63,14 @@ fun HomeScreenStats(
     // 这三个数本来就在别处算好了：DataRefreshManager 刷新角标计数时，同一份已安装列表
     // 顺手就能得出总数/停用数/可更新数，它自己还带 30 秒节流与"运行时没装就不 exec"的
     // 保护。DashboardViewModel 已经把这三个数收进 uiState.pluginStats，直接读即可。
-    LaunchedEffect(isReady) {
-        if (isReady) AppData.DataRefreshManager.ensureCountsLoaded()
-    }
-
     val state = LocalDshHomeState.current
     // 图表与统计只在运行时已装好后才有意义，未安装时不启动轮询
     val isReady = state.installed
+
+    // 统计数字的加载排在 isReady 之后 —— 它就是这个条件的一部分（放在前面会 Unresolved）。
+    LaunchedEffect(isReady) {
+        if (isReady) AppData.DataRefreshManager.ensureCountsLoaded()
+    }
 
     val statsTopLayout = APApplication.sharedPreferences.getString("stats_top_layout", "list") ?: "list"
     val useGridTop = statsTopLayout == "grid"
