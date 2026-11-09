@@ -385,7 +385,7 @@ console.log("\u2500 #4 深度清理：长按入口 + 搜索 + 删除纪律");
     /onLongClick = onOpenDeepClean/.test(cleanCard) &&
     /onClick = \{ showCleanStorageDialog\.value = true \}/.test(cleanCard),
     "深度清理的入口是清理卡的长按（combinedClickable：点=浅清理、长按=深度清理）");
-  ok(/onOpenDeepClean = \{ navigator\.navigate\(DshDeepCleanScreenDestination\) \}/.test(fnScreen),
+  ok(/onOpenDeepClean = \{ navigator\.navigate\(DshDeepCleanScreenDestination\)( \{ launchSingleTop = true \})? \}/.test(fnScreen),
     "长按回调接到 DshDeepCleanScreenDestination（不是只声明一个没人用的参数）");
 
   // ② 设置搜索里有它，且搜索结果真的会开页

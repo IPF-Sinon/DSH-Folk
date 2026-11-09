@@ -163,7 +163,7 @@ fun HomeScreenDsh(
                     if (runModeId == "proroot") R.string.dsh_mode_proroot_desc
                     else R.string.dsh_mode_proot_desc
                 ),
-                onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },
+                onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) { launchSingleTop = true } },
             )
             DshSmallCard(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -171,7 +171,7 @@ fun HomeScreenDsh(
                 title = stringResource(R.string.dsh_permission),
                 value = perm.label(context),
                 subtitle = permHint(perm),
-                onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) },
+                onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) { launchSingleTop = true } },
             )
         }
 

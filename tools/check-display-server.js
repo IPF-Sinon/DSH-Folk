@@ -1144,7 +1144,7 @@ if (jarArgAt >= 0) {
     '既有的"打开预览"入口显式传 null（本仓对可选导航参数的既有写法）');
 
   const capsSrc = read('app/src/main/java/me/bmax/apatch/ui/screen/settings/PermissionCapsScreens.kt');
-  must(/onOpenDisplayManage = \{ navigator\.navigate\(DisplayManageScreenDestination\) \}/.test(capsSrc),
+  must(/onOpenDisplayManage = \{ navigator\.navigate\(DisplayManageScreenDestination\)( \{ launchSingleTop = true \})? \}/.test(capsSrc),
     '虚拟屏卡片上有管理页入口，并真的接上导航');
   must(/TextButton\(onClick = onOpenDisplayManage\)/.test(capsSrc),
     '那个入口是一个真的按钮，不是只传进来的参数');

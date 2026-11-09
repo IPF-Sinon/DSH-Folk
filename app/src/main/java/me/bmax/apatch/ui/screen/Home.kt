@@ -537,7 +537,7 @@ private fun TopBar(
                     WallpaperAwareDropdownMenuItem(
                         text = { Text(stringResource(R.string.home_more_menu_about)) },
                         onClick = {
-                            navigator.navigate(AboutScreenDestination)
+                            navigator.navigate(AboutScreenDestination) { launchSingleTop = true }
                             showDropdownMoreOptions = false
                         }
                     )

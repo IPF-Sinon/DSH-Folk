@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
+import com.ramcosta.composedestinations.generated.NavGraphs
 
 /**
  * 底栏标签页的返回键语义：**返回首页，首页交回系统**。
@@ -65,40 +66,31 @@ fun rememberTabBackHandler(
         }
         lastBackAt = now
 
-        // ── 只在"首页确实在同一张栈里"时才弹回，绝不 navigate ──
+        // ── 回到首页：能弹就弹，弹不了就"清到图根再放首页" ──
         //
-        // 上一版这里是 `navigate(homeRoute) { popUpTo(homeRoute) { inclusive = false } }`，
-        // 那个写法有两个漏洞，都会导致「连按返回把首页也退掉」：
+        // 第一选择是 `popBackStack(homeRoute, inclusive = false)`：在栈里找到首页就弹回
+        // 那里，**找不到返回 false 且不动栈**。
         //
-        //  1. `popUpTo(homeRoute)` 只在 homeRoute **真的在栈里**时才有作用。而底栏切标签
-        //     用的是 `popUpTo(NavGraphs.root) { saveState = true }` —— 那个弹出会把
-        //     homeRoute 一起弹掉（root 是图根，home 是它的第一个目的地的子层）。
-        //     于是 homeRoute 不在栈里时，`popUpTo` 等于没写，只剩下一次纯 `navigate`，
-        //     每按一下就往栈里**多加**一个 home —— 越按越深，最后连根一起退掉。
-        //  2. `navigate` + `launchSingleTop` 只挡"栈顶已经是 home"，挡不住"home 在栈中段"。
+        // 但"找不到"是常态：底栏切标签用的是 `popUpTo(NavGraphs.root) { saveState = true }`，
+        // 那一下会把首页一起弹进 saved state（root 是图根，首页是它的第一个目的地）。
+        // 于是用户在「终端」页按返回时，首页其实**不在**栈里。
         //
-        // `popBackStack(homeRoute, inclusive = false)` 的语义正好相反：它在栈里找到 home
-        // 就弹回那里；**找不到就返回 false 什么都不做**。这正是我们要的 ——
-        // 宁可这一下没反应，也不许凭空造出一层新的首页。
+        // 旧版在这里什么都不做，把这一下交回系统 —— 而系统默认返回就是 finish()，
+        // 于是"点几下标签再按返回"直接退回桌面。用户的原话正是"快速点击还是能退掉首页"。
+        //
+        // 现在补上第二条路：先把栈清到图根（一次干净的收尾，不累加），再
+        // `launchSingleTop + restoreState` 把首页放回去。结果是栈形 `[首页]`，
+        // 与"本来就在首页按返回"完全同一个状态；而不是每按一次就往栈顶叠一层。
         val popped = navController.popBackStack(homeRoute, inclusive = false)
-        if (popped) {
-            onBeforeBack()
-            return@back
+        if (!popped) {
+            navController.navigate(homeRoute) {
+                popUpTo(NavGraphs.root.route) { inclusive = false }
+                launchSingleTop = true
+                restoreState = true
+            }
         }
-
-        // 走到这里说明 home 已经不在栈里（典型：用户在 A 标签里，又切到了 B 标签）。
-        // 这一下**什么都不做**，交回系统。
-        //
-        // 为什么不 navigate 过去：任何形式的 navigate 都是在栈顶再叠一层。
-        // 叠出来的那层会让下一次返回把栈底（图根）也带走，这正是
-        // 「疯狂按返回，首页也没了」那条链。宁可这一下没反应，
-        // 也不许凭自己的判断去改栈的形状 —— 用户还在标签页里，
-        // 系统的默认返回（退出应用）本来就不是他想要的，但他按的是返回，
-        // 我们不该替他造一个"首页"出来。
-        //
-        // 代价：这一下返回没有视觉反馈。可接受 —— 它只在
-        // "home 已被底栏切换弹掉"这个窄条件下发生，而那个状态下
-        // 页面本来就已经是能停住的地方。
+        // 底栏复位之类的收尾放在成功/回填之后：两条路都真的动了导航，都该复位。
+        onBeforeBack()
         return@back
     }
 }

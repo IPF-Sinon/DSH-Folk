@@ -186,7 +186,7 @@ fun DisplayPreviewScreen(navigator: DestinationsNavigator, displayId: Int? = nul
         onDismiss = { guide = false },
         onOpenChannel = {
             guide = false
-            navigator.navigate(PrivilegedChannelScreenDestination)
+            navigator.navigate(PrivilegedChannelScreenDestination) { launchSingleTop = true }
         },
         // 「重新检测」：通道这会儿就绪了就照常往下走，还没就绪就继续留着弹窗 ——
         // 别让用户以为点了个没反应的按钮。

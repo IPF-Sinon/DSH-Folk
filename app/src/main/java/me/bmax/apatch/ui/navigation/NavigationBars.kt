@@ -294,7 +294,6 @@ fun BottomBar(
             ) {
                 visibleDestinations.forEachIndexed { index, destination ->
                     key(destination) {
-                        val isCurrentDestOnBackStack by navController.isRouteOnBackStackAsState(destination.direction)
                         val isSelected = index == effectiveSelectedIndex
 
                         NavigationBarItem(
@@ -307,15 +306,20 @@ fun BottomBar(
                                 if (me.bmax.apatch.ui.theme.VibrationConfig.scope == me.bmax.apatch.ui.theme.VibrationConfig.SCOPE_BOTTOM_BAR) {
                                     me.bmax.apatch.util.VibrationManager.vibrate(context)
                                 }
-                                if (isCurrentDestOnBackStack) {
-                                    navigator.popBackStack(destination.direction, false)
-                                }
-                                navigator.navigate(destination.direction) {
-                                    popUpTo(NavGraphs.root) {
-                                        saveState = true
+                                // 已经在当前标签上：什么都不做。
+                                //
+                                // 上一版是「先 popBackStack(自己) 再 navigate(自己)」。点**当前**
+                                // 这个标签时，这对操作会把栈弹空一帧再推回去 —— 就在这一帧里按返回，
+                                // 栈上没有首页可退，系统直接退出应用。连点标签更容易撞上那个空档。
+                                // 点别的标签本来也不需要先弹自己，那一句同样多余。
+                                if (destination.direction.route != currentRoute) {
+                                    navigator.navigate(destination.direction) {
+                                        popUpTo(NavGraphs.root) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
                             },
                             icon = {
@@ -622,7 +626,6 @@ fun NavigationRailBar(navController: NavHostController) {
 
             visibleDestinations.forEachIndexed { index, destination ->
                 key(destination) {
-                    val isCurrentDestOnBackStack by navController.isRouteOnBackStackAsState(destination.direction)
                     val isSelected = index == selectedIndex
 
                     NavigationRailItem(
@@ -634,15 +637,15 @@ fun NavigationRailBar(navController: NavHostController) {
                             if (me.bmax.apatch.ui.theme.VibrationConfig.scope == me.bmax.apatch.ui.theme.VibrationConfig.SCOPE_BOTTOM_BAR) {
                                 me.bmax.apatch.util.VibrationManager.vibrate(context)
                             }
-                            if (isCurrentDestOnBackStack) {
-                                navigator.popBackStack(destination.direction, false)
-                            }
-                            navigator.navigate(destination.direction) {
-                                popUpTo(NavGraphs.root) {
-                                    saveState = true
+                            // 同 NavigationBar：当前标签点了不做任何事，绝不先弹再推。
+                            if (destination.direction.route != currentRoute) {
+                                navigator.navigate(destination.direction) {
+                                    popUpTo(NavGraphs.root) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
                         },
                         icon = {

@@ -159,7 +159,7 @@ fun GeneralSettingsContent(
     SplicedColumnGroup(flat = flat, highlightKey = highlightKey) {
 
         item(key = "general_language") {
-            ExpressiveCard(flat = flat, onClick = { navigator.navigate(LanguagePickerScreenDestination) }) {
+            ExpressiveCard(flat = flat, onClick = { navigator.navigate(LanguagePickerScreenDestination) { launchSingleTop = true } }) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically

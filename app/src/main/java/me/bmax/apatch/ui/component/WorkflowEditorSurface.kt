@@ -339,14 +339,20 @@ internal fun WorkflowEditorSurface(
     var searchOpen by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
     var previewOpen by remember { mutableStateOf(false) }
-    // 悬浮底栏的删除按钮：第一次点只变红，第二次才真删。
-    var deleteArmed by remember { mutableStateOf(false) }
     // 流程内变量编辑器（见「更多」菜单）。变量属于整份流程，不属于某个节点。
     var varsOpen by remember { mutableStateOf(false) }
     /** 节点详情窗（连线管理 / 删这一步）。**不由点卡片触发**，只从顶栏「更多」进。 */
     var nodeSheetOpen by remember { mutableStateOf(false) }
-    // 选中态一变，就撤销"变红"状态 —— 否则换一张卡时按钮会莫名其妙已经是红的。
-    LaunchedEffect(selected) { deleteArmed = false }
+    // 「已武装」记住的是**哪一张卡**，不是"选了哪张"。
+    //
+    // 只用一个布尔会有两种错法：换卡时忘了清（新卡的删除按钮一进来就是红的），
+    // 或者第一下顺手改了选中、把武装状态自己清掉（第二下永远点不到）。
+    // 所以状态记 id；卡上按钮与底栏按钮共用同一处，红就得一起红。
+    var deleteArmedId by remember { mutableStateOf<String?>(null) }
+    val deleteArmed = deleteArmedId != null && deleteArmedId == selected
+    LaunchedEffect(selected) {
+        if (deleteArmedId != selected) deleteArmedId = null
+    }
     // 抽屉当前停在一级分类（null = 显示分类列表）。用 saveable 没必要：
     // 旋转后回到分类首页比「停在一个半开的二级页」更符合预期。
     var confirmDiscard by remember { mutableStateOf(false) }
@@ -754,7 +760,7 @@ internal fun WorkflowEditorSurface(
                             dragAcc = Offset.Zero
                             dragPreview = null
                         },
-                        onWireDrop = { fromId, fromPin, toId, pointer ->
+                        onWireDrop = { fromId, fromPin, toId, pointer, targetPin ->
                             if (toId != null) {
                                 // 成环的边**不落盘**：环一旦进入定义，执行器的拓扑调度会死循环。
                                 // 判据只有 WorkflowValidator.addEdgeIfAcyclic 一处 —— 连边入口若
@@ -769,7 +775,9 @@ internal fun WorkflowEditorSurface(
                                         fromId = fromId,
                                         fromPin = dataSourceFor(def, fromId),
                                         toId = toId,
-                                        toPin = defaultTargetPin(def, toId),
+                                        // 落点压中了具体参数就用它，没压中才退回第一个参数。
+                                        // 否则用户落在第二个参数上、线却永远接到第一个。
+                                        toPin = targetPin ?: defaultTargetPin(def, toId),
                                         dataType = dataTypeFor(fromId),
                                     )
                                 } else {
@@ -796,6 +804,48 @@ internal fun WorkflowEditorSurface(
                                 addAfter = fromId
                             }
                         },
+                        // ── 卡上的复制 / 删除 / 编辑（对齐参考实现：这些按钮就长在卡上）──
+                        //
+                        // 与底栏那几个按钮是**同一套语义**：复制不带边、删除要两下、入口卡不能删。
+                        // 两边都留是因为卡上顺手，而卡被别的卡挡住时底栏还能用。
+                        onNodeCopy = { id ->
+                            val src = def.node(id)
+                            if (src != null) {
+                                val newId = newEditorNodeId(def)
+                                draft = def.copy(
+                                    nodes = def.nodes + src.copy(
+                                        id = newId,
+                                        posX = WorkflowGeometry.snapToGridDp(src.posX.toFloat() + 32f),
+                                        posY = WorkflowGeometry.snapToGridDp(src.posY.toFloat() + 32f),
+                                    ),
+                                )
+                                selected = newId
+                                deleteArmedId = null
+                            }
+                        },
+                        onNodeDelete = { id ->
+                            val target = def.node(id)
+                            if (target != null && target.type != WorkflowNodeType.TRIGGER) {
+                                if (deleteArmedId == id) {
+                                    draft = def.copy(
+                                        nodes = def.nodes.filterNot { it.id == id },
+                                        edges = def.edges.filterNot { e -> e.from == id || e.to == id },
+                                    )
+                                    if (selected == id) selected = null
+                                    deleteArmedId = null
+                                } else {
+                                    // 第一下只武装：卡上删除图标变成红色警告，再点一下才真删。
+                                    // 这里**不动选中** —— 动了选中，上面那个 LaunchedEffect 会
+                                    // 立刻把武装状态清掉，第二下就永远点不到。
+                                    deleteArmedId = id
+                                }
+                            }
+                        },
+                        onNodeEdit = { id ->
+                            selected = id
+                            nodeSheetOpen = true
+                        },
+                        deleteArmedNodeId = deleteArmedId,
                         onBlankTap = { selected = null },
                         viewport = viewport,
                         onViewportChange = { viewport = it },
@@ -900,18 +950,17 @@ internal fun WorkflowEditorSurface(
                     }
                 },
                 onDelete = {
-                    if (deleteArmed) {
-                        val delId = selected
-                        if (delId != null) {
-                            draft = def.copy(
-                                nodes = def.nodes.filterNot { it.id == delId },
-                                edges = def.edges.filterNot { e -> e.from == delId || e.to == delId },
-                            )
-                            selected = null
-                        }
-                        deleteArmed = false
-                    } else {
-                        deleteArmed = true
+                    val delId = selected
+                    if (deleteArmed && delId != null) {
+                        draft = def.copy(
+                            nodes = def.nodes.filterNot { it.id == delId },
+                            edges = def.edges.filterNot { e -> e.from == delId || e.to == delId },
+                        )
+                        selected = null
+                        deleteArmedId = null
+                    } else if (delId != null) {
+                        // 只是"武装这张卡"：底栏与卡上按钮共用同一处状态，才不会一边红一边不红。
+                        deleteArmedId = delId
                     }
                 },
             )

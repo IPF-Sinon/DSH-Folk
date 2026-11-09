@@ -362,7 +362,7 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                     // DSH 没跑：拉起服务（与页内其它「重启」同一入口）。启动后 dshRunning 会自动翻篇。
                     onStartDsh = { DshRuntime.restart() },
                     // 插件没装：去插件商店（与 DSH 配置卡片同一去向）。
-                    onGoInstallCloudPlugin = { navigator.navigate(DshPluginStoreScreenDestination) },
+                    onGoInstallCloudPlugin = { navigator.navigate(DshPluginStoreScreenDestination) { launchSingleTop = true } },
                     // 插件被停用：启用它再重启 DSH 服务让插件树重载（启用只改注册表，需重启才生效）。
                     onEnableCloudPlugin = {
                         cloudBusy = true
@@ -425,9 +425,9 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                         }
                     },
                     onRecheckPlugin = { pluginProbe++ },
-                    onGoInstallPlugin = { navigator.navigate(DshPluginStoreScreenDestination) },
+                    onGoInstallPlugin = { navigator.navigate(DshPluginStoreScreenDestination) { launchSingleTop = true } },
                     onInstallRescueCli = { pluginViewModel.installRescueCli() },
-                    onOpenTerminal = { navigator.navigate(DshTerminalScreenDestination) },
+                    onOpenTerminal = { navigator.navigate(DshTerminalScreenDestination) { launchSingleTop = true } },
                     flat = flat,
                     highlightKey = highlightKey,
                 )
@@ -464,7 +464,9 @@ fun BackupSettingsScreen(navigator: DestinationsNavigator, highlightKey: String?
                                         stagedPath = fetched.absolutePath,
                                         stagedEncrypted = encrypted,
                                     ),
-                                )
+                                ) {
+                                    launchSingleTop = true
+                                }
                             }
                         }
                     }

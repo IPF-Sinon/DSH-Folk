@@ -98,7 +98,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                     )
                 },
                 actions = {
-                    IconButton(onClick = dropUnlessResumed { navigator.navigate(SettingsSearchScreenDestination) }) {
+                    IconButton(onClick = dropUnlessResumed { navigator.navigate(SettingsSearchScreenDestination) { launchSingleTop = true } }) {
                         Icon(Icons.Filled.Search, contentDescription = "Search")
                     }
                     IconButton(onClick = { showDevDialog = true }) {
@@ -123,7 +123,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             icon = Icons.Filled.Settings,
                             title = stringResource(R.string.settings_category_general),
                             summary = stringResource(R.string.settings_category_general_summary),
-                            onClick = { navigator.navigate(GeneralSettingsScreenDestination(null)) },
+                            onClick = { navigator.navigate(GeneralSettingsScreenDestination(null)) { launchSingleTop = true } },
                         )
                     }
                     item {
@@ -131,7 +131,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             icon = Icons.Filled.Palette,
                             title = stringResource(R.string.settings_category_appearance),
                             summary = stringResource(R.string.settings_category_appearance_summary),
-                            onClick = { navigator.navigate(AppearanceSettingsScreenDestination(null)) },
+                            onClick = { navigator.navigate(AppearanceSettingsScreenDestination(null)) { launchSingleTop = true } },
                         )
                     }
                     item {
@@ -139,7 +139,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             icon = Icons.Filled.Visibility,
                             title = stringResource(R.string.settings_category_behavior),
                             summary = stringResource(R.string.settings_category_behavior_summary),
-                            onClick = { navigator.navigate(BehaviorSettingsScreenDestination(null)) },
+                            onClick = { navigator.navigate(BehaviorSettingsScreenDestination(null)) { launchSingleTop = true } },
                         )
                     }
                     item {
@@ -147,7 +147,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             icon = Icons.Filled.Tune,
                             title = stringResource(R.string.settings_category_function),
                             summary = stringResource(R.string.settings_category_function_summary),
-                            onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) },
+                            onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) { launchSingleTop = true } },
                         )
                     }
                     item {
@@ -155,7 +155,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             icon = Icons.Filled.Security,
                             title = stringResource(R.string.settings_category_security),
                             summary = stringResource(R.string.settings_category_security_summary),
-                            onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) },
+                            onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) { launchSingleTop = true } },
                         )
                     }
                     item {
@@ -163,7 +163,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             icon = Icons.Filled.Cloud,
                             title = stringResource(R.string.settings_category_backup),
                             summary = stringResource(R.string.settings_category_backup_summary),
-                            onClick = { navigator.navigate(BackupSettingsScreenDestination(null)) },
+                            onClick = { navigator.navigate(BackupSettingsScreenDestination(null)) { launchSingleTop = true } },
                         )
                     }
                     item {
@@ -171,7 +171,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             icon = Icons.Filled.Extension,
                             title = stringResource(R.string.dsh_plugins),
                             summary = stringResource(R.string.dsh_plugin_settings_summary),
-                            onClick = { navigator.navigate(ModuleSettingsScreenDestination(null)) },
+                            onClick = { navigator.navigate(ModuleSettingsScreenDestination(null)) { launchSingleTop = true } },
                         )
                     }
                     item {
@@ -179,7 +179,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
                             icon = Icons.Filled.MusicNote,
                             title = stringResource(R.string.settings_category_multimedia),
                             summary = stringResource(R.string.settings_category_multimedia_summary),
-                            onClick = { navigator.navigate(MultimediaSettingsScreenDestination(null)) },
+                            onClick = { navigator.navigate(MultimediaSettingsScreenDestination(null)) { launchSingleTop = true } },
                         )
                     }
                 }

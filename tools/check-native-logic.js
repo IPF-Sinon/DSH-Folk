@@ -1186,7 +1186,7 @@ const capsSrc = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/sett
     "能力档位不再内联在安全页上（搬进了权限管理的次级页）");
   ok(/item\(key = "function_permission"[\s\S]{0,400}onOpenPermissionHub/.test(settingsSrc),
     "安全页上只剩一个「权限管理」入口");
-  ok(/onOpenPermissionHub = \{ navigator\.navigate\(PermissionHubScreenDestination\) \}/.test(screenSrc),
+  ok(/onOpenPermissionHub = \{ navigator\.navigate\(PermissionHubScreenDestination\)( \{ launchSingleTop = true \})? \}/.test(screenSrc),
     "入口真的接到权限管理页（否则用户根本到不了）");
 
   // 总开关曾经和列表画在同一张卡片里，整块搬走时最容易把它一起搬丢 —— 而它丢了，
@@ -1386,7 +1386,7 @@ console.log("── 限制模式页与弹窗 ──");
     // 定位靠这一行自己的特征（图标），不靠字符串：那个串在 searchHits 里也有一份。
     const loopAt = hub.indexOf("for (group in CapGroup.entries) {");
     const iconAt = hub.indexOf("icon = Icons.Filled.VerifiedUser");
-    const navAt = hub.indexOf("onClick = { navigator.navigate(RestrictModeScreenDestination) }");
+    const navAt = hub.search(/onClick = \{ navigator\.navigate\(RestrictModeScreenDestination\)( \{ launchSingleTop = true \})? \}/);
     ok(loopAt >= 0 && iconAt > loopAt,
       "入口在权限总页的分类列表**最下面**（循环之后，而不是混在分类之间）");
     ok(navAt > iconAt && navAt - iconAt < 900,

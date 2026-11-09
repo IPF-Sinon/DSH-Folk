@@ -240,7 +240,7 @@ fun ThemeStoreScreen(
                 downloadCompletedTheme = null
             },
             onGoToMyThemes = {
-                navigator.navigate(MyThemesScreenDestination)
+                navigator.navigate(MyThemesScreenDestination) { launchSingleTop = true }
                 downloadCompletedTheme = null
             },
             onDismiss = {
@@ -443,7 +443,7 @@ fun ThemeStoreScreen(
                     }
                     // "我的主题"按钮 — hidden in compat mode
                     if (!isCompatMode) {
-                        IconButton(onClick = { navigator.navigate(MyThemesScreenDestination) }) {
+                        IconButton(onClick = { navigator.navigate(MyThemesScreenDestination) { launchSingleTop = true } }) {
                             Icon(Icons.Filled.ColorLens, contentDescription = "My Themes")
                         }
                     }

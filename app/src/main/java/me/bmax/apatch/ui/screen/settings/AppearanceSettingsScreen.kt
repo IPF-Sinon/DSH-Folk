@@ -59,7 +59,7 @@ fun AppearanceSettingsScreen(navigator: DestinationsNavigator, highlightKey: Str
                     }
                 },
                 actions = {
-                    IconButton(onClick = { navigator.navigate(ThemeStoreScreenDestination) }) {
+                    IconButton(onClick = { navigator.navigate(ThemeStoreScreenDestination) { launchSingleTop = true } }) {
                         Icon(
                             Icons.Filled.Store,
                             contentDescription = stringResource(R.string.theme_store_title),
@@ -78,7 +78,7 @@ fun AppearanceSettingsScreen(navigator: DestinationsNavigator, highlightKey: Str
             item {
                 AppearanceSettingsContent(
                     snackBarHost = snackBarHost,
-                    onNavigateToApiMarketplace = { navigator.navigate(ApiMarketplaceScreenDestination) },
+                    onNavigateToApiMarketplace = { navigator.navigate(ApiMarketplaceScreenDestination) { launchSingleTop = true } },
                     flat = flat,
                     highlightKey = highlightKey,
                     themeStoreMode = themeMode,

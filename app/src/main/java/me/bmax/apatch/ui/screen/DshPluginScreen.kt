@@ -327,7 +327,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                     if (runtimeInstalled) {
                         UserscriptAddFab(
                             installRequest = scriptInstall,
-                            onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) },
+                            onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) { launchSingleTop = true } },
                         )
                     }
                 }
@@ -364,7 +364,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                         AddMenuEntry(
                             icon = Icons.Outlined.Storefront,
                             labelRes = R.string.dsh_plugin_store,
-                            onClick = { navigator.navigate(DshPluginStoreScreenDestination) },
+                            onClick = { navigator.navigate(DshPluginStoreScreenDestination) { launchSingleTop = true } },
                         ),
                     )
                 )
@@ -391,7 +391,7 @@ fun DshPluginScreen(navigator: DestinationsNavigator) {
                         hideBuiltins = hideBuiltins,
                         installRequest = scriptInstall,
                         // 没记来源的那条：更新去市场按名字找一遍
-                        onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },
+                        onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) { launchSingleTop = true } },
                     )
                     // 扩展页：真实列表 + 安全模式横幅（见 [ExtensionsPane]）。
                     GROUP_EXTENSIONS -> ExtensionsPane(

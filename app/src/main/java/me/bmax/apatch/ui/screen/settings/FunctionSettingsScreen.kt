@@ -368,7 +368,9 @@ internal fun DshSettingsScreen(
                 autoOpened = true
                 navigator.navigate(
                     FunctionSettingsScreenDestination(highlightKey = highlightKey, group = g.key)
-                )
+                ) {
+                    launchSingleTop = true
+                }
             }
         }
     }
@@ -410,7 +412,7 @@ internal fun DshSettingsScreen(
                     },
                     actions = {
                         if (permissionOnly) {
-                            IconButton(onClick = { navigator.navigate(PermissionLogScreenDestination) }) {
+                            IconButton(onClick = { navigator.navigate(PermissionLogScreenDestination) { launchSingleTop = true } }) {
                                 Icon(Icons.Outlined.ReceiptLong, contentDescription = stringResource(R.string.dsh_permission_log_title))
                             }
                         }
@@ -435,10 +437,12 @@ internal fun DshSettingsScreen(
                 onOpen = { group, itemKey ->
                     navigator.navigate(
                         FunctionSettingsScreenDestination(highlightKey = itemKey, group = group.key)
-                    )
+                    ) {
+                        launchSingleTop = true
+                    }
                 },
                 modifier = Modifier.padding(paddingValues),
-                onOpenWorkflow = { navigator.navigate(WorkflowScreenDestination) },
+                onOpenWorkflow = { navigator.navigate(WorkflowScreenDestination) { launchSingleTop = true } },
             )
             return@Scaffold
         }
@@ -651,9 +655,9 @@ internal fun DshSettingsScreen(
                     capsWithPermission = capsWithPermission,
                     allFilesGranted = allFilesGranted,
                     onOpenAllFilesSettings = { openAllFilesSettings() },
-                    onOpenFileAccess = { navigator.navigate(FileAccessScreenDestination) },
-                    onOpenDeepClean = { navigator.navigate(DshDeepCleanScreenDestination) },
-                    onOpenPermissionHub = { navigator.navigate(PermissionHubScreenDestination) },
+                    onOpenFileAccess = { navigator.navigate(FileAccessScreenDestination) { launchSingleTop = true } },
+                    onOpenDeepClean = { navigator.navigate(DshDeepCleanScreenDestination) { launchSingleTop = true } },
+                    onOpenPermissionHub = { navigator.navigate(PermissionHubScreenDestination) { launchSingleTop = true } },
                     mountEnabled = storageMount,
                     onSetMount = { on ->
                         storageMount = on

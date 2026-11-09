@@ -35,6 +35,9 @@ import me.bmax.apatch.dsh.WorkflowActionCatalog
 import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowDefinition
 import me.bmax.apatch.dsh.WorkflowEdgeKind
+import me.bmax.apatch.dsh.WorkflowNodeType
+import me.bmax.apatch.dsh.WorkflowPinKind
+import me.bmax.apatch.dsh.WorkflowSchema
 import me.bmax.apatch.dsh.WorkflowStepState
 import kotlin.math.abs
 import kotlin.math.max
@@ -79,6 +82,14 @@ internal fun WorkflowBlueprintCanvas(
     onNodeDrag: ((id: String, dxPx: Float, dyPx: Float) -> Unit)? = null,
     onNodeDragStart: ((id: String) -> Unit)? = null,
     onNodeDragEnd: ((id: String) -> Unit)? = null,
+    /** 卡上「复制」按钮（对齐参考实现 ActionCard.initCopy）。 */
+    onNodeCopy: ((id: String) -> Unit)? = null,
+    /** 卡上「删除」按钮（第一下武装、第二下真删，见 deleteArmedNodeId）。 */
+    onNodeDelete: ((id: String) -> Unit)? = null,
+    /** 卡上铅笔（打开这一步的详细配置）。 */
+    onNodeEdit: ((id: String) -> Unit)? = null,
+    /** 哪张卡的删除按钮正处于「已武装」（第一下点过）状态。 */
+    deleteArmedNodeId: String? = null,
     /**
      * 拉线松手：toId 非空 = 连到那张卡；为空 = 落在空白（调用方弹节点菜单）。
      * pointer 是松手时的**窗口坐标** —— 菜单里选了节点类型后，新节点要落在松手的位置。
@@ -91,7 +102,14 @@ internal fun WorkflowBlueprintCanvas(
      * 两条分支画出来全变成默认边 —— 判断节点在真实执行时永远只走其中一条，而用户看到的图
      * 上有两条线。
      */
-    onWireDrop: ((fromId: String, fromPin: String, toId: String?, pointerWindow: Offset) -> Unit)? = null,
+    onWireDrop: ((
+        fromId: String,
+        fromPin: String,
+        toId: String?,
+        pointerWindow: Offset,
+        /** 松手压中的**具体数据入口针脚 id**（`p_x` / `cmd` / `title` …）；压在卡片空白处时为 null。 */
+        targetPin: String?,
+    ) -> Unit)? = null,
     onBlankTap: (() -> Unit)? = null,
     /**
      * 视口（缩放 + 平移）。由**宿主**持有而不是画布内部：落点、吸附、新节点坐标都要用同一套
@@ -128,7 +146,11 @@ internal fun WorkflowBlueprintCanvas(
     var wireFromPin by remember { mutableStateOf("") }
     var wireAnchor by remember { mutableStateOf(Offset.Zero) }
     var wirePointer by remember { mutableStateOf(Offset.Zero) }
-    // 针脚窗口矩形，键 "节点id:引脚类型名"：已连的线也从真针脚画出去，而不是卡片右上角。
+    // 针脚窗口矩形，两套键同时登记（见卡片的 onPinBounds / onPinIdBounds）：
+    //  - "<节点id>:<引脚种类名>"（EXEC_IN / DATA_OUT …）—— 控制流边与按种类的调用点用；
+    //  - "<节点id>:<引脚id>"（p_x / cmd / result / var）—— 数据边与数据落点用。
+    // 一张卡上常有好几个同种类的数据针脚，只按种类建索引会互相覆盖，
+    // 于是"线从哪颗点出去"和"落在哪个参数上"都只能靠猜。
     var pinRects by remember { mutableStateOf<Map<String, Rect>>(emptyMap()) }
 
     Box(
@@ -250,9 +272,19 @@ internal fun WorkflowBlueprintCanvas(
                     onParamChange = onNodeParamChange?.let { cb -> { key, value -> cb(node.id, key, value) } },
                     onToggleExpand = onNodeToggleExpand?.let { { it(node.id) } },
                     onToggleLock = onNodeToggleLock?.let { { it(node.id) } },
+                    onCopy = onNodeCopy?.let { cb -> { cb(node.id) } },
+                    onDelete = onNodeDelete?.let { cb -> { cb(node.id) } },
+                    onEdit = onNodeEdit?.let { cb -> { cb(node.id) } },
+                    deleteArmed = deleteArmedNodeId == node.id,
+                    // 入口节点不能删：删掉它整张图没有起点，定义立刻不合法（校验器也会报）。
+                    canDelete = node.type != WorkflowNodeType.TRIGGER,
                     linkedParamKeys = dataLinkedKeys[node.id].orEmpty(),
                     onBounds = { rect -> bounds = bounds + (node.id to rect) },
                     onPinBounds = { pinKind, rect -> pinRects = pinRects + ("${node.id}:$pinKind" to rect) },
+                    // 同时按引脚 id 登记：数据边与落点判定要精确到"哪一颗"。
+                    onPinIdBounds = { pinId, pinKind, rect ->
+                        pinRects = pinRects + ("${node.id}:$pinId" to rect) + ("${node.id}:$pinKind" to rect)
+                    },
                     onPinDrag = { pinKind, anchor, pointer ->
                         wireFrom = node.id
                         wireFromPin = pinKind
@@ -265,8 +297,32 @@ internal fun WorkflowBlueprintCanvas(
                         wireFrom = null
                         wireFromPin = ""
                         if (from != null) {
-                            val target = bounds.entries.firstOrNull { it.key != from && it.value.contains(pointer) }?.key
-                            wireDropCb.value?.invoke(from, fromPin, target, pointer)
+                            // 落点先找**具体针脚**：松手压在某颗数据入口上，就把线接到那个参数。
+                            //
+                            // 上一版只比卡片矩形，于是所有数据线一律接到下游的第一个参数 ——
+                            // 用户明明落在第二个参数上，线却跑到第一个去了。
+                            // 只认**数据入口**针脚：索引里还登记着引脚种类名与出口针脚，
+                            // 不筛的话，松手压到自己那颗出口点、或者压在种类名那种粗索引上，
+                            // 都会被当成"连到下游某个参数"。
+                            val hitNodeId = pinRects.entries.firstOrNull { (key, rect) ->
+                                val owner = key.substringBefore(':')
+                                val pinId = key.substringAfter(':')
+                                val ownerNode = definition.nodes.firstOrNull { it.id == owner }
+                                owner != from && ownerNode != null &&
+                                    pinId in WorkflowSchema.dataInputKeysOf(ownerNode) &&
+                                    rect.contains(pointer)
+                            }?.key?.substringBefore(':')
+                            val targetPin = hitNodeId?.let { owner ->
+                                pinRects.entries.firstOrNull { (key, rect) ->
+                                    key.substringBefore(':') == owner &&
+                                        key.substringAfter(':') in WorkflowSchema.dataInputKeysOf(
+                                            definition.nodes.first { it.id == owner },
+                                        ) && rect.contains(pointer)
+                                }?.key?.substringAfter(':')
+                            }
+                            val target = hitNodeId
+                                ?: bounds.entries.firstOrNull { (id, rect) -> id != from && rect.contains(pointer) }?.key
+                            wireDropCb.value?.invoke(from, fromPin, target, pointer, targetPin)
                         }
                     },
                 )
@@ -291,15 +347,28 @@ internal fun WorkflowBlueprintCanvas(
 }
 
 /**
- * 数据边引脚 → 画布内部用的针脚键。
+ * 数据边的 fromPin → 起点节点的**引脚 id**（画布内部索引键的后半段）。
  *
- * 数据边的 fromPin 有三种写法（`step:<id>` / `var:<name>` / 裸参数名）。
- * 卡片上报针脚时用的是**节点自己的引脚种类名**，两者必须在这里对齐一次 ——
- * 对齐错了的表现是"线从卡片右上角飞出去"，看起来像连错，实际只是键没对上。
+ * 落盘的 fromPin 有三种写法，都源自编辑页的 `dataSourceFor`：
+ *  - `var:<名字>`  → extract 产出的是变量，出口针脚 id 就是 `var`；
+ *  - `step:<id>`   → 本步整体输出，出口针脚 id 是 `result`（每个节点都有这条出口）；
+ *  - 其余（裸针脚名）→ 原样用（兼容手写/旧文件）。
+ *
+ * 上一版是对 `:` 切一刀取后半段，于是 `step:n3_123` 被当成一个叫 `n3_123` 的针脚 ——
+ * 永远找不到，线因此退回"卡片右上角"的估算法，看起来像连错了。
  */
-private fun dataPinKeyOf(fromPin: String): String = when {
+private fun dataPinIdOf(
+    definition: WorkflowDefinition,
+    fromNodeId: String,
+    fromPin: String,
+): String = when {
+    fromPin.startsWith("var:") -> "var"
+    fromPin.startsWith("step:") -> "result"
     fromPin.contains(':') -> fromPin.substringAfter(':')
-    else -> fromPin
+    fromPin.isNotBlank() -> fromPin
+    // 什么都没写：按节点类型给最合适的出口（extract 给变量，其余给结果）。
+    definition.node(fromNodeId)?.type == WorkflowNodeType.EXTRACT -> "var"
+    else -> "result"
 }
 
 /**
@@ -349,45 +418,55 @@ private fun DrawScope.drawBlueprintEdges(
     for (edge in definition.edges) {
         val from = positions[edge.from] ?: continue
         val to = positions[edge.to] ?: continue
-        // 线的起点：优先用真针脚的窗口矩形（换算回内容层局部坐标），没有就退回卡片右上角。
-        //
-        // 数据边从**哪个针脚**出去由 fromPin 决定（例如 extract 的 "var"）；
-        // 控制流边看 when。两种边的针脚键必须是同一套格式（"<节点id>:<引脚种类名>"），
-        // 否则会画出"从卡片右上角飞出去"的线 —— 而那看起来像连错了。
-        val pinKind = if (edge.kind == WorkflowEdgeKind.DATA) {
-            dataPinKeyOf(edge.fromPin)
+        val isData = edge.kind == WorkflowEdgeKind.DATA
+        // 线头的针脚键：控制流用引脚种类名，数据边用引脚 id（见 [dataPinIdOf]）。
+        // 两者共用 "<节点id>:<引脚键>" 这一套索引，卡片在 onPinBounds / onPinIdBounds 里都登记。
+        val pinKey = if (isData) {
+            dataPinIdOf(definition, edge.from, edge.fromPin)
         } else {
             when (edge.whenExpr) {
-                "true" -> "EXEC_TRUE"
-                "false" -> "EXEC_FALSE"
-                else -> "EXEC_OUT"
+                "true" -> WorkflowPinKind.EXEC_TRUE.name
+                "false" -> WorkflowPinKind.EXEC_FALSE.name
+                else -> WorkflowPinKind.EXEC_OUT.name
             }
         }
-        val pinned = pinRects["${edge.from}:$pinKind"]
         // 针脚报的是**窗口**矩形，而这一层画在已被 graphicsLayer 缩放+平移过的内容层里 ——
         // 所以要先经逆变换回到世界坐标，否则一旦缩放，线头就会离针脚越来越远。
         val safeScale = if (scale > 0f) scale else 1f
-        val fromRight = if (pinned != null) {
-            (pinned.right - origin.x - pan.x) / safeScale
+        fun worldX(x: Float) = (x - origin.x - pan.x) / safeScale
+        fun worldY(y: Float) = (y - origin.y - pan.y) / safeScale
+        val pinned = pinRects["${edge.from}:$pinKey"]
+        // 起点在卡片的哪一侧：数据**入口**在左缘，其余出口在右缘。
+        //
+        // 上一版一律取 pinned.right，数据线于是从参数行左缘那颗点上"往右"弹出去再绕回来，
+        // 画出来像卡在卡片里。参考实现的 PinLeftView / PinRightView 正是按方向分开的。
+        val startX = if (pinned != null) {
+            worldX(if (isData) pinned.left else pinned.right)
         } else {
-            (from.x * density) + CARD_W_DP * density
+            (from.x * density) + (if (isData) 0f else CARD_W_DP * density)
         }
         val startY = if (pinned != null) {
-            (pinned.center.y - origin.y - pan.y) / safeScale
+            worldY(pinned.center.y)
         } else {
             (from.y * density) + WorkflowNodeCardAnchorY * density
         }
-        val endX = to.x * density
-        val endY = (to.y * density) + WorkflowNodeCardAnchorY * density
+        // 终点：数据边落在目标**参数那颗点**上，控制流边落在卡片的执行入口上。
+        // 取不到真针脚才退回卡片锚点的估算法（旧文件 / 未知键仍画得出线）。
+        val toPinned = pinRects["${edge.to}:${if (isData) edge.toPin else WorkflowPinKind.EXEC_IN.name}"]
+        val endX = if (toPinned != null) worldX(toPinned.center.x) else to.x * density
+        val endY = if (toPinned != null) {
+            worldY(toPinned.center.y)
+        } else {
+            (to.y * density) + WorkflowNodeCardAnchorY * density
+        }
         // 折线（不是贝塞尔）：见 WorkflowLinkPath 的说明。
         val path = orthogonalLinkPath(
-            start = Offset(fromRight, startY),
+            start = Offset(startX, startY),
             end = Offset(endX, endY),
             corridor = LINK_CORRIDOR_DP.dp.toPx(),
         )
         // 数据边用虚线 + 细一点的线：它在执行期不决定"走哪条路"，只决定"参数从哪来"。
         // 两者画成一模一样的话，用户会以为一条数据边也是分支。
-        val isData = edge.kind == WorkflowEdgeKind.DATA
         val color = when {
             isData -> dataColor
             edge.whenExpr == "true" -> trueColor

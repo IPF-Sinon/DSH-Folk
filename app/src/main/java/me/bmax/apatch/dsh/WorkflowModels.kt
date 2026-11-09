@@ -159,13 +159,24 @@ internal object WorkflowSchema {
 
                 // 原生动作的数据入口 = 目录声明的参数，与参数编辑器同一份来源。
                 // 两处各写一份的话，画布上会有"有针脚、编辑器里没这个键"的错位。
+                // 针脚 id **必须**是 configKey，不是目录里的裸参数键。
+                //
+                // 这里曾经写裸键 p.key，而三处相邻代码用的是 spec.configKey(p)：
+                //   - WorkflowSchema.dataInputKeysOf  → "p_" + p.key（数据边唯一合法目标）
+                //   - 字段表                          → configKey（界面读写的键）
+                //   - 引擎 applyDataEdges             → patch[e.toPin]（真正写回的键）
+                // 三处都带前缀、只有针脚表不带，后果是**静默**的：
+                // validator 用 toPin 去 pinsOf 里找 toSpec，找不到就跳过类型校验；
+                // 画布用 pin id 建 pinRects 索引，边上来找也找不到，线退回估算锚点。
+                // 于是"接一根数据线"看起来成功了，运行期却写进一个没人读的键。
                 WorkflowActionType.NATIVE -> {
                     val spec = WorkflowActionCatalog.byId(node.config("bridge"))
                     spec?.params?.map { p ->
                         WorkflowPinSpec(
-                            id = p.key,
+                            id = spec.configKey(p),
                             label = actionParamLabel(p),
                             kind = WorkflowPinKind.DATA_IN,
+                            dataType = pinTypeOf(p.kind).id,
                             defaultValue = node.config(spec.configKey(p)),
                         )
                     }.orEmpty()
@@ -195,6 +206,20 @@ internal object WorkflowSchema {
  */
 private fun actionParamLabel(p: WorkflowActionCatalog.Param): String =
     runCatching { me.bmax.apatch.apApp.resources.getString(p.labelRes) }.getOrDefault(p.key)
+
+/**
+ * 目录里的参数种类 → 针脚类型。
+ *
+ * 两套枚举必须显式映射（而不是靠名字相同就去 parse）：[WorkflowActionCatalog.ParamKind]
+ * 少一个 ANY，[WorkflowPinType] 多一个 ANY；写成 PinType.of(p.kind.name) 会在
+ * BOOL/CHOICE 上碰巧对上、在新增种类上静默退回 TEXT。
+ */
+private fun pinTypeOf(kind: WorkflowActionCatalog.ParamKind): WorkflowPinType = when (kind) {
+    WorkflowActionCatalog.ParamKind.TEXT -> WorkflowPinType.TEXT
+    WorkflowActionCatalog.ParamKind.NUMBER -> WorkflowPinType.NUMBER
+    WorkflowActionCatalog.ParamKind.CHOICE -> WorkflowPinType.CHOICE
+    WorkflowActionCatalog.ParamKind.BOOL -> WorkflowPinType.BOOL
+}
 
 /** 节点类型。`id` 是落盘值，不要改。 */
 internal enum class WorkflowNodeType(val id: String) {

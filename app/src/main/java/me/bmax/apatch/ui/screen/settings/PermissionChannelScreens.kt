@@ -423,7 +423,7 @@ fun PrivilegedChannelScreen(navigator: DestinationsNavigator) {
                         }
                         ExpressiveSwitch(checked = restrictMode, onCheckedChange = onRestrictModeChange)
                     }
-                    TextButton(onClick = { navigator.navigate(RestrictModeScreenDestination) }) {
+                    TextButton(onClick = { navigator.navigate(RestrictModeScreenDestination) { launchSingleTop = true } }) {
                         Text(stringResource(R.string.dsh_priv_restrict_manage))
                     }
 
@@ -498,13 +498,13 @@ private fun ChannelGuideDialog(
                     R.string.dsh_chguide_adb_title,
                     R.string.dsh_chguide_adb_body,
                     R.string.dsh_chguide_adb_go_pair,
-                ) { navigator.navigate(WirelessAdbScreenDestination) }
+                ) { navigator.navigate(WirelessAdbScreenDestination) { launchSingleTop = true } }
             } else {
                 ChannelGuideSpec(
                     R.string.dsh_chguide_adb_runtime_title,
                     R.string.dsh_chguide_adb_runtime_body,
                     R.string.dsh_chguide_adb_go_runtime,
-                ) { navigator.navigate(FunctionSettingsScreenDestination("function_runtime")) }
+                ) { navigator.navigate(FunctionSettingsScreenDestination("function_runtime")) { launchSingleTop = true } }
             }
 
         ChannelReadiness.SHIZUKU_UNGRANTED -> ChannelGuideSpec(

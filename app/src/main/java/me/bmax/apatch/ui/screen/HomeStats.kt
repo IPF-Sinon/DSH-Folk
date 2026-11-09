@@ -653,7 +653,7 @@ private fun StatsGridTopSection(navigator: DestinationsNavigator) {
                 title = stringResource(R.string.dsh_run_mode),
                 value = state.runtimeLabel,
                 icon = Icons.Outlined.Speed,
-                onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) }
+                onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) { launchSingleTop = true } }
             )
 
             SmallInfoCard(
@@ -661,7 +661,7 @@ private fun StatsGridTopSection(navigator: DestinationsNavigator) {
                 title = stringResource(R.string.dsh_permission),
                 value = state.permLabel,
                 icon = Icons.Outlined.Security,
-                onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) }
+                onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) { launchSingleTop = true } }
             )
         }
     }

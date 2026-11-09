@@ -591,7 +591,9 @@ class MainActivity : AppCompatActivity() {
                                 stagedPath = staged.absolutePath,
                                 stagedEncrypted = encrypted,
                             )
-                        )
+                        ) {
+                            launchSingleTop = true
+                        }
                     }
                 }
 

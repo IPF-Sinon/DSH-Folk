@@ -195,7 +195,7 @@ private fun PermissionCard(
         actionText = stringResource(R.string.settings),
         showAction = true,
         isWallpaperMode = isWallpaperMode,
-        onActionClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) },
+        onActionClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) { launchSingleTop = true } },
         modifier = modifier,
         cardId = BackgroundConfig.FOCUS_CARD_APP
     ) {

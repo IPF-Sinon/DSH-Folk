@@ -223,7 +223,7 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
      */
     fun openMirrorPage(url: String) {
         if (url.isBlank()) return
-        navigator.navigate(DshWebViewScreenDestination(url = url))
+        navigator.navigate(DshWebViewScreenDestination(url = url)) { launchSingleTop = true }
     }
 
     /**
@@ -236,7 +236,7 @@ fun ScriptMarketScreen(navigator: DestinationsNavigator, initialQuery: String = 
      */
     fun openScriptPage(url: String) {
         if (url.isBlank()) return
-        navigator.navigate(DshWebViewScreenDestination(url = url))
+        navigator.navigate(DshWebViewScreenDestination(url = url)) { launchSingleTop = true }
     }
 
     val failText: String? = fail?.let { f ->

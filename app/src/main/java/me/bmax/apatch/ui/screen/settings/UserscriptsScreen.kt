@@ -145,7 +145,7 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
             // 这里只传「商店往哪开」，真正的安装动作仍由 [UserscriptsContent] 执行。
             UserscriptAddFab(
                 installRequest = installRequest,
-                onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) },
+                onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = "")) { launchSingleTop = true } },
             )
         },
     ) { padding ->
@@ -154,7 +154,7 @@ fun UserscriptsScreen(navigator: DestinationsNavigator) {
             hideBuiltins = hideBuiltins,
             installRequest = installRequest,
             // 没记来源的那条：更新只能去市场按名字找一遍（市场页支持带一个初始查询进来）
-            onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) },
+            onOpenMarket = { navigator.navigate(ScriptMarketScreenDestination(initialQuery = it)) { launchSingleTop = true } },
         )
     }
 }

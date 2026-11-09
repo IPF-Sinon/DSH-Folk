@@ -607,7 +607,7 @@ ok(addWrap.length > 0 && /AddMenuFab\(/.test(addWrap) &&
   /requestLink\(\)/.test(addWrap) && /requestLocal\(\)/.test(addWrap) && /onOpenMarket/.test(addWrap),
   "用户脚本页的 ＋ 仍是链接/文件/商店三颗（交给共用的 AddMenuFab）");
 ok(/UserscriptAddFab\(/.test(pluginHome) && /AddMenuFab\(/.test(pluginHome) &&
-  /onOpenMarket = \{ navigator\.navigate\(ScriptMarketScreenDestination\(initialQuery = ""\)\) \}/.test(pluginHome),
+  /onOpenMarket = \{ navigator\.navigate\(ScriptMarketScreenDestination\(initialQuery = ""\)\)( \{ launchSingleTop = true \})? \}/.test(pluginHome),
   "插件首页两组都用同一个 ＋（脚本组三颗、插件组两颗）");
 const marketScreen = fs.readFileSync("app/src/main/java/me/bmax/apatch/ui/screen/ScriptMarketScreen.kt", "utf8");
 ok(/@Destination<RootGraph>/.test(marketScreen) && /ScriptMarket\./.test(marketScreen) &&

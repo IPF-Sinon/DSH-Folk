@@ -453,8 +453,8 @@ private fun NativeCapsPage(navigator: DestinationsNavigator, group: CapGroup) {
                         }
                     },
                     onRequestPermission = { requestCapPermission(cap) },
-                    onOpenDisplayPreview = { navigator.navigate(DisplayPreviewScreenDestination(null)) },
-                    onOpenDisplayManage = { navigator.navigate(DisplayManageScreenDestination) },
+                    onOpenDisplayPreview = { navigator.navigate(DisplayPreviewScreenDestination(null)) { launchSingleTop = true } },
+                    onOpenDisplayManage = { navigator.navigate(DisplayManageScreenDestination) { launchSingleTop = true } },
                     displayFloatOn = displayFloatOn,
                     overlayAllowed = overlayAllowed,
                     onToggleDisplayFloat = toggleDisplayFloat,

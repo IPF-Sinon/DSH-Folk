@@ -138,22 +138,22 @@ fun SettingsSearchScreen(navigator: DestinationsNavigator) {
                             when (resolved.entry.directTarget) {
                                 // 不在分类页上的设置项：直接开它真正所在的页面
                                 SettingsTarget.THEME_STORE ->
-                                    navigator.navigate(ThemeStoreScreenDestination)
+                                    navigator.navigate(ThemeStoreScreenDestination) { launchSingleTop = true }
                                 SettingsTarget.USERSCRIPTS ->
-                                    navigator.navigate(UserscriptsScreenDestination)
+                                    navigator.navigate(UserscriptsScreenDestination) { launchSingleTop = true }
                                 // 深度清理也不在分类页上（它挂在功能页那张卡的长按里），
                                 // 搜索结果直接开它
                                 SettingsTarget.DEEP_CLEAN ->
-                                    navigator.navigate(DshDeepCleanScreenDestination)
+                                    navigator.navigate(DshDeepCleanScreenDestination) { launchSingleTop = true }
                                 null -> when (category) {
-                                    SettingCategory.GENERAL -> navigator.navigate(GeneralSettingsScreenDestination(highlightKey))
-                                    SettingCategory.APPEARANCE -> navigator.navigate(AppearanceSettingsScreenDestination(highlightKey))
-                                    SettingCategory.BEHAVIOR -> navigator.navigate(BehaviorSettingsScreenDestination(highlightKey))
-                                    SettingCategory.SECURITY -> navigator.navigate(SecuritySettingsScreenDestination(highlightKey))
-                                    SettingCategory.BACKUP -> navigator.navigate(BackupSettingsScreenDestination(highlightKey))
-                                    SettingCategory.MODULE -> navigator.navigate(ModuleSettingsScreenDestination(highlightKey))
-                                    SettingCategory.MULTIMEDIA -> navigator.navigate(MultimediaSettingsScreenDestination(highlightKey))
-                                    SettingCategory.FUNCTION -> navigator.navigate(FunctionSettingsScreenDestination(highlightKey))
+                                    SettingCategory.GENERAL -> navigator.navigate(GeneralSettingsScreenDestination(highlightKey)) { launchSingleTop = true }
+                                    SettingCategory.APPEARANCE -> navigator.navigate(AppearanceSettingsScreenDestination(highlightKey)) { launchSingleTop = true }
+                                    SettingCategory.BEHAVIOR -> navigator.navigate(BehaviorSettingsScreenDestination(highlightKey)) { launchSingleTop = true }
+                                    SettingCategory.SECURITY -> navigator.navigate(SecuritySettingsScreenDestination(highlightKey)) { launchSingleTop = true }
+                                    SettingCategory.BACKUP -> navigator.navigate(BackupSettingsScreenDestination(highlightKey)) { launchSingleTop = true }
+                                    SettingCategory.MODULE -> navigator.navigate(ModuleSettingsScreenDestination(highlightKey)) { launchSingleTop = true }
+                                    SettingCategory.MULTIMEDIA -> navigator.navigate(MultimediaSettingsScreenDestination(highlightKey)) { launchSingleTop = true }
+                                    SettingCategory.FUNCTION -> navigator.navigate(FunctionSettingsScreenDestination(highlightKey)) { launchSingleTop = true }
                                 }
                             }
                         },

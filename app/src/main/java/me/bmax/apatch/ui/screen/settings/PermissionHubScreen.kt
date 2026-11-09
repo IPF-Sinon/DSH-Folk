@@ -204,7 +204,7 @@ internal fun PermissionEntriesSection(
                 icon = Icons.Filled.Security,
                 title = stringResource(R.string.dsh_perm_cat_privileged),
                 summary = stringResource(R.string.dsh_perm_cat_privileged_summary, channelLabel),
-                onClick = { navigator.navigate(PrivilegedChannelScreenDestination) },
+                onClick = { navigator.navigate(PrivilegedChannelScreenDestination) { launchSingleTop = true } },
             )
             // 共享存储：一个开关管两件事（容器 bind 挂载 + dsh-fs 桥）。原先它是安全页上
             // 一张大卡、说明一大段；现在挪进权限正文，只留标题 + 一行副标题 —— 这一页是
@@ -217,7 +217,7 @@ internal fun PermissionEntriesSection(
                     // 提示词里写着「哪些能力开着」，开关一变就得让容器侧看到新事实
                     DshHostPrompt.writeFacts(context)
                 },
-                onOpenScope = { navigator.navigate(FileAccessScreenDestination) },
+                onOpenScope = { navigator.navigate(FileAccessScreenDestination) { launchSingleTop = true } },
             )
             // 无线 ADB 只在「特权通道选的就是无线 ADB」时出现：它是那条通道的细项，
             // 不是一件独立功能；常显会让没有 root/Shizuku 的人也以为它是个开关。
@@ -229,7 +229,7 @@ internal fun PermissionEntriesSection(
                         if (perm.adbPaired) R.string.dsh_adb_paired
                         else R.string.dsh_perm_state_adb_unconfigured
                     ) + " · " + stringResource(R.string.dsh_adb_summary),
-                    onClick = { navigator.navigate(WirelessAdbScreenDestination) },
+                    onClick = { navigator.navigate(WirelessAdbScreenDestination) { launchSingleTop = true } },
                 )
             }
         }
@@ -308,7 +308,7 @@ internal fun PermissionEntriesSection(
                     ),
                     PrivPolicy.restrictedCaps(context).size,
                 ),
-                onClick = { navigator.navigate(RestrictModeScreenDestination) },
+                onClick = { navigator.navigate(RestrictModeScreenDestination) { launchSingleTop = true } },
             )
         }
         if (bridgeEnabled) {
@@ -367,12 +367,12 @@ private fun StorageMountRow(
 
 private fun navigateToGroup(navigator: DestinationsNavigator, group: CapGroup) {
     when (group) {
-        CapGroup.INTERACT -> navigator.navigate(NativeCapsInteractScreenDestination)
-        CapGroup.SENSE -> navigator.navigate(NativeCapsSenseScreenDestination)
-        CapGroup.PERSONAL -> navigator.navigate(NativeCapsPersonalScreenDestination)
-        CapGroup.CAPTURE -> navigator.navigate(NativeCapsCaptureScreenDestination)
-        CapGroup.SCREEN -> navigator.navigate(NativeCapsScreenAccessScreenDestination)
-        CapGroup.CONTROL -> navigator.navigate(NativeCapsControlScreenDestination)
+        CapGroup.INTERACT -> navigator.navigate(NativeCapsInteractScreenDestination) { launchSingleTop = true }
+        CapGroup.SENSE -> navigator.navigate(NativeCapsSenseScreenDestination) { launchSingleTop = true }
+        CapGroup.PERSONAL -> navigator.navigate(NativeCapsPersonalScreenDestination) { launchSingleTop = true }
+        CapGroup.CAPTURE -> navigator.navigate(NativeCapsCaptureScreenDestination) { launchSingleTop = true }
+        CapGroup.SCREEN -> navigator.navigate(NativeCapsScreenAccessScreenDestination) { launchSingleTop = true }
+        CapGroup.CONTROL -> navigator.navigate(NativeCapsControlScreenDestination) { launchSingleTop = true }
     }
 }
 
@@ -394,9 +394,9 @@ private fun groupIcon(group: CapGroup): ImageVector = when (group) {
 private fun navigateTo(navigator: DestinationsNavigator, target: HubTarget) {
     when (target) {
         is HubTarget.Group -> navigateToGroup(navigator, target.group)
-        HubTarget.Channel -> navigator.navigate(PrivilegedChannelScreenDestination)
-        HubTarget.WirelessAdb -> navigator.navigate(WirelessAdbScreenDestination)
-        HubTarget.Restrict -> navigator.navigate(RestrictModeScreenDestination)
+        HubTarget.Channel -> navigator.navigate(PrivilegedChannelScreenDestination) { launchSingleTop = true }
+        HubTarget.WirelessAdb -> navigator.navigate(WirelessAdbScreenDestination) { launchSingleTop = true }
+        HubTarget.Restrict -> navigator.navigate(RestrictModeScreenDestination) { launchSingleTop = true }
     }
 }
 

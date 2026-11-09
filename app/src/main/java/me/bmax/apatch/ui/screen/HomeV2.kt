@@ -121,7 +121,7 @@ fun HomeScreenV2(
                     title = stringResource(R.string.dsh_run_mode),
                     value = state.runtimeLabel,
                     icon = Icons.Outlined.Speed,
-                    onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) }
+                    onClick = { navigator.navigate(FunctionSettingsScreenDestination(null)) { launchSingleTop = true } }
                 )
 
                 // 权限通道：Root / Shizuku / 无线 ADB / 未获取
@@ -130,7 +130,7 @@ fun HomeScreenV2(
                     title = stringResource(R.string.dsh_permission),
                     value = state.permLabel,
                     icon = Icons.Outlined.Security,
-                    onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) }
+                    onClick = { navigator.navigate(SecuritySettingsScreenDestination(null)) { launchSingleTop = true } }
                 )
             }
         }

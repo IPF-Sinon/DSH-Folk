@@ -677,7 +677,7 @@ private fun DshSystemInfoCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { navigator.navigate(FunctionSettingsScreenDestination(null)) }
+                    .clickable { navigator.navigate(FunctionSettingsScreenDestination(null)) { launchSingleTop = true } }
                     .padding(bottom = 12.dp)
             ) {
                 Icon(

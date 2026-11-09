@@ -258,7 +258,7 @@ ok(/WorkflowGraphPreview\(definition\)/.test(SRC.dialogs), "批准弹窗里有�
 ok(/posX/.test(SRC.dialogs) && /detectDragGestures/.test(SRC.dialogs), "编辑页节点可拖动且位置写回定义");
 ok(/dsh_workflow_title/.test(SRC.settings) && /onOpenWorkflow: \(\) -> Unit = \{\}/.test(SRC.settings),
   "功能页入口层有工作流一行（不是塞在某个分类里）");
-ok(/onOpenWorkflow = \{ navigator\.navigate\(WorkflowScreenDestination\) \}/.test(SRC.settingsScreen),
+ok(/onOpenWorkflow = \{ navigator\.navigate\(WorkflowScreenDestination\)( \{ launchSingleTop = true \})? \}/.test(SRC.settingsScreen),
   "那一行真的会打开工作流页（不是只声明一个没人用的参数）");
 // 阶段 2.4b：旧的画布/节点卡自绘已删除，画布与卡片只剩新组件这一份实现。
 ok(/WorkflowBlueprintCanvas\(/.test(SRC.dialogs) && !/private fun NodeCard\(/.test(SRC.dialogs),
@@ -641,7 +641,7 @@ console.log("\u2500 #16h 坐标换算与手势结构（拖动 1:1 的契约）")
   ok(/pointerInput\(Unit\)/.test(SRC.card), "卡片手势 key 是 Unit（拖动中位置变化不会重启检测器）");
   ok(/wireAnchor/.test(SRC.canvas) && /wirePointer/.test(SRC.canvas),
     "拉线两端都用窗口坐标（不随平移的画布原点换算），所以线跟手");
-  ok(/onWireDrop/.test(SRC.canvas) && /onWireDrop = \{ fromId, fromPin, toId, pointer ->/.test(SRC.editorSurface),
+  ok(/onWireDrop/.test(SRC.canvas) && /onWireDrop = \{ fromId, fromPin, toId, pointer(, targetPin)? ->/.test(SRC.editorSurface),
     "松手落在卡片上 = 连边（不是一律弹菜单）");
   // 卡片：不接手势，交给 focusable/semantics 与画布实测。
   ok(/focusable\(\)/.test(SRC.card) && /semantics \{ contentDescription/.test(SRC.card),
@@ -744,7 +744,12 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
   ok(/nodeTypeIcon\(node\.type\)/.test(card) && /alpha\(0\.10f\)/.test(card),
     "卡片有半透明的类型水印图标（对齐参考实现的 card_normal icon）");
   // 水印是背景装饰，绝不能参与布局 —— 否则每张卡都会凭空高一截。
-  ok(/Box\s*\{[\s\S]{0,80}Column\s*\{/.test(card),
+  // 断言的是**结构意图**：水印是 Box 的子项（align 到 TopCenter），而不是内容 Column 的孩子。
+  // 旧写法是 "Box 后面 80 字内出现 Column"，那只是当时那版代码的巧合顺序 ——
+  // 顺序一变就误报，而"水印是否参与布局"根本没被断言到。
+  const wmAt = card.indexOf("workflowNodeWatermark(node)");
+  const innerColAt = card.indexOf("Column(Modifier.padding(horizontal = 8.dp");
+  ok(wmAt > 0 && innerColAt > wmAt && /\.align\(Alignment\.TopCenter\)/.test(card),
     "水印叠在 Box 里、不塞进内容 Column（否则会把卡片撑高）");
   ok(!/fillMaxSize\(\).*background\(MaterialTheme\.colorScheme\.scrim/.test(picker),
     "不再自绘全屏遮罩层（那层没有弹出动画）");
@@ -784,7 +789,11 @@ console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回�
     "手指与线头都在窗口坐标里算（粒子原点 + 局部坐标 / 粒子中心）");
   ok(/onPinBounds\?\.invoke\(pin\.kind\.name, coords\.boundsInWindow\(\)\)/.test(c),
     "针脚上报窗口矩形（含引脚类型），已连的线也从真针脚画出去");
-  ok(/val pinned = pinRects\[/.test(cv) && /\(pinned\.right - origin\.x - pan\.x\) \/ safeScale/.test(cv),
+  // 从针脚矩形起画，且**先逆变换回世界坐标**（窗口→内容层局部，再除以缩放）。
+  // 数据入口在左缘、其余出口在右缘：写死 pinned.right 会让数据线从参数点往右弹出去再绕回来。
+  ok(/val pinned = pinRects\[/.test(cv) &&
+    /worldX\(if \(isData\) pinned\.left else pinned\.right\)/.test(cv) &&
+    /\(x - origin\.x - pan\.x\) \/ safeScale/.test(cv),
     "已连线优先从针脚矩形起画（窗口→内容层局部坐标，再除以缩放回到世界坐标）");
   // ③ 面板入口是「点选即建」：落点由 dropPointDp 统一换算，不再有跟随手指的幽灵胶囊。
   //
@@ -819,8 +828,8 @@ console.log("\u2500 #16m 拉线落空白：菜单选完按松手坐标建节点"
 {
   const e = SRC.editorSurface;
   const cv = SRC.canvas;
-  ok(/onWireDrop: \(\(fromId: String, fromPin: String, toId: String\?, pointerWindow: Offset\)/ .test(cv) &&
-    /wireDropCb\.value\?\.invoke\(from, fromPin, target, pointer\)/.test(cv),
+  ok(/onWireDrop: \(\([\s\S]{0,220}pointerWindow: Offset/.test(cv) &&
+    /wireDropCb\.value\?\.invoke\(from, fromPin, target, pointer, targetPin\)/.test(cv),
     "画布把松手坐标与起点针脚一起交给宿主");
   // 起针脚决定落盘的 when：成立/不成立两条出口必须各自带 when，
   // 否则执行器在判断节点上只会走第一条，图与实际行为矛盾。
@@ -1417,7 +1426,8 @@ async function checkCli() {
 
   const canvas = read("app/src/main/java/me/bmax/apatch/ui/component/WorkflowBlueprintCanvas.kt");
   ok(/edge\.kind == WorkflowEdgeKind\.DATA/.test(canvas), "画布认得出数据边");
-  ok(/private fun dataPinKeyOf\(/.test(canvas), "数据边从**自己的**针脚出发（不是卡片右上角）");
+  ok(/private fun dataPinIdOf\(/.test(canvas) && /fromPin\.startsWith\("var:"\) -> "var"/.test(canvas),
+    "数据边从**自己的**针脚出发（不是卡片右上角）");
   ok(/val isData = edge\.kind == WorkflowEdgeKind\.DATA/.test(canvas),
     "数据边与分支边画得不一样（否则用户会以为数据边也是分支");
 
