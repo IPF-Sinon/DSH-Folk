@@ -1427,6 +1427,7 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_runtime_channel_beta">Beta</string>
     <string name="dsh_runtime_channel_slim_beta">Slim beta</string>
     <string name="dsh_runtime_channel_archive">Archived</string>
+    <string name="dsh_runtime_tag_rootfs">r%1$d</string>
     <string name="dsh_runtime_channel_stable_short">Stable</string>
     <string name="dsh_runtime_channel_beta_short">Beta</string>
     <string name="dsh_runtime_flavor_full">Full</string>

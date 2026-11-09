@@ -134,6 +134,19 @@ console.log("\n── 列表：按滑块筛选 + 当前版本钉在最上面 ─
      /item\(key = "current-pinned"\)/.test(dialog),
     "当前已装被筛掉时钉在最上面（否则滑到别的组合就够不着重装了）");
   ok(/R\.string\.dsh_runtime_menu_filter_note/.test(dialog), "菜单里说清列表跟着滑块走");
+  // 2026-11：整串 35 字符塞进等宽单行必然被省略号截断，而截掉的正好是滑块筛出来的
+  // 那半段（口味/通道）。主行改成只放 dsh 段，套件与 r 号变成标签。
+  ok(/text = parts\.dsh,/.test(row),
+    "版本主行只放 dsh 段（整串留给下面的标签，不靠省略号交代口味/通道）");
+  ok(/val parts = RuntimeVersion\.parts\(entry\.version\)/.test(row),
+    "那一行由 RuntimeVersion.parts 拆（解析与展示分开，测试能单独覆盖）");
+  ok(/text = parts\.suite,/.test(row) && /dsh_runtime_tag_rootfs/.test(row),
+    "套件与 rootfs 修订号各有一个标签（同一个 dsh、不同 r 号看得出区别）");
+  // 命名改过一版（ubuntunoble → ubuntu-noble）。列表现已是新名、prefs 里还是旧名时，
+  // 逐字比会让「当前」标记消失、并把已装版本算成不可见而多钉一行。
+  ok(/RuntimeVersion\.sameVersion\(it\.version, currentVersion\)/.test(dialog) &&
+     /current = RuntimeVersion\.sameVersion\(entry\.version, currentVersion\)/.test(dialog),
+    "「当前版本」判定走 sameVersion（命名迁移期间不误判）");
   ok(/R\.string\.dsh_runtime_versions_warning/.test(dialog),
     "保留「老版本可能缺修复」的提醒（降级不是无代价的）");
   const filter = RUNTIME.slice(RUNTIME.indexOf("fun matchesFilter("), RUNTIME.indexOf("fun channelRank("));
@@ -157,8 +170,12 @@ console.log("\n── flavor 一路从 metadata 到模型 ──");
     "DshMeta 与 RuntimeVersion 各有一个 flavor 字段（少一个就断在中间某一层）");
   ok(/flavor = json\.optString\("flavor", ""\)/.test(RUNTIME),
     "metadata 解析读 \"flavor\"（构建脚本一直在写这一项）");
-  ok((RUNTIME.match(/flavor = meta\.flavor,/g) || []).length === 2,
-    "两处 RuntimeVersion 构造（API 列表 + 通道兜底）都带上 flavor");
+  // 2026-11：两处构造收成一个 entryOf()，所以「带上 flavor」只剩一处，但两条路径
+  // （API 列表 + 滚动通道补拉）都必须经过它。
+  ok((RUNTIME.match(/flavor = meta\.flavor,/g) || []).length === 1 &&
+     /fun entryOf\(tag: String, published: String, meta: DshMeta\)/.test(RUNTIME) &&
+     (RUNTIME.match(/keep\(entryOf\(/g) || []).length === 2,
+    "两条路径（API 列表 + 滚动通道补拉）都经同一个构造，flavor 不会漏");
   ok(/flavor = flavorOf\(this\),/.test(RUNTIME),
     "toMeta() 带上算好的 flavor（否则切版本又退回按 tag 猜）");
 }

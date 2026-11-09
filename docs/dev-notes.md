@@ -266,6 +266,38 @@ APK 只由 GitHub Actions 构建，不提供本地打包的产物。想自己出
 x86_64 是 `rootfs-x86_64.tar.gz` + `metadata-x86_64.json`（arm64 沿用无后缀的旧名以兼容存量版本）。
 应用按本机架构读取对应的 `metadata*.json` 决定下载什么。
 
+## 运行时版本串的命名与排序（2026-11）
+
+版本串的段序是 `dsh 版本 / 发行版-套件 / rootfs 修订号 / 口味 / 通道`，例如
+`0.2.2-rc.1-ubuntu-noble-r6-slim-beta`。两个改动的来由：
+
+**一、`ubuntunoble` 连写改成 `ubuntu-noble`。** 原来是 `ubuntu${UBUNTU_RELEASE}`，
+拼出来是 `ubuntunoble` —— 词和词之间没有分隔，从串上看不出哪一段是发行版、哪一段是
+套件代号。别名 `noble` 本来也只有 Ubuntu 圈子里的人才认得，写在 `ubuntu` 后面才有上下文。
+
+改名的代价不是零：`checkRuntimeUpdate` 的判据是「版本串不相等 = 有更新」，而改一个分隔符
+就会让每个存量用户的 prefs（`…-ubuntunoble-r6`）与远端（`…-ubuntu-noble-r6`）对不上，
+从而被推一次 150MB 重装，内容一个字节没变。所以 `RuntimeVersion.sameVersion` 先把老命名
+折叠成新命名再比，`checkRuntimeUpdate` 与界面的「当前版本」标记都走它。
+**这条不能删**：`tests/check-runtime-naming.js` 有一条断言专门钉它。
+
+同时 metadata 直接给出 `ubuntuSuite` 与 `rootfsRev` 两个字段，新 App 不必再从串里正则抠；
+老 metadata 没有这两项，读出来是空/0，回落到 `RuntimeVersion.parts` 从串里切。
+
+**二、版本列表的顺序曾经是错的。** 原来是「先按 `publishedAt`，并列再按字符串字典序」，
+于是同一批补发的 release（时间戳只差几十秒）完全按发布时间排，用户在版本菜单里看到的是
+`0.2.1-rc.5 → 0.2.2-alpha.2 → 0.2.2-alpha.3 → 0.2.2-rc.1`：最新的排第四。
+并列那一层也是错的 —— 那是字典序，`rc.9` 比 `rc.10` 大。
+
+现在的排序键是「通道分组（正式→精简→测试→精简测试→历史）→ `compareRuntimeVersion` 语义降序」，
+`publishedAt` 只在语义相等时兜底。语义比较按 dsh 版本 → rootfs 修订号 → 变体权重三段走，
+其中 dsh 段用 `dshOf` 从 `-ubuntu` 处切开 —— 不能用「第一个 `-` 之前」，那会把 `0.2.2-rc.1`
+砍成 `0.2.2`，rc 与正式版就分不开了。
+
+顺带修掉的一件事：Releases API 只拉一页（100 条），而仓库里已经 270 多个 release，
+四个滚动 tag 掉在第 3 页 —— 版本列表里既没有正式版也没有精简版，滑到精简那一档是空的。
+现在翻页（最多 3 页），并且四个滚动 tag **无条件**再补拉一遍，不依赖 API 的分页结果。
+
 这个工作流还有一个 `release_tag` 输入（留空则按通道推导）：版本列表里那两个只在历史里存在的老 tag
 （`runtime-beta`、`runtime-0.1.1-rc.2`）就是用它**原地重发**的 —— 同一个 tag 换内容对已装用户不可检测，
 但「列表里点进去装出来的是当年那个坏掉的运行时」显然比什么都不做更糟。重发后版本串的 r 号会变，

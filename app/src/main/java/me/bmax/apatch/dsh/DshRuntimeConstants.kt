@@ -80,6 +80,16 @@ internal const val READY_HEARTBEAT_MS = 15_000L
  */
 internal const val TOKEN_WAIT_MS = 30_000L
 
+/**
+ * Releases API 的分页参数。
+ *
+ * 一页 100 条是 GitHub 允许的上限；仓库里的 release 总数已经 270 多（App 自己的发布
+ * 也在这个列表里），所以版本列表**必须翻页**才看得到四个滚动 tag —— 它们按发布时间
+ * 排在第三页。三条上限（300 条）对当下的规模有近一倍余量，同时把「仓库里 release
+ * 涨到几千条」这种情况挡在 3 次请求以内。
+ */
+internal const val RELEASES_PER_PAGE = 100
+internal const val MAX_RELEASE_PAGES = 3
 /** 等 token 时的轮询间隔：这行通常在 1s 内到，密一点能让「已就绪」尽快翻过来。 */
 internal const val TOKEN_POLL_MS = 200L
 

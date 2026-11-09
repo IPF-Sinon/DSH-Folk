@@ -302,6 +302,40 @@ and its artifacts are published to the rolling tag `runtime-latest`: arm64 uses 
 while x86_64 uses `rootfs-x86_64.tar.gz` + `metadata-x86_64.json` (arm64 retains the legacy unsuffixed names for compatibility with existing versions).
 The app reads the corresponding `metadata*.json` for the local architecture to decide what to download.
 
+## Runtime version strings: naming and ordering (2026-11)
+
+A version string is `dsh version / distro-suite / rootfs revision / flavor / channel`, for example
+`0.2.2-rc.1-ubuntu-noble-r6-slim-beta`. Two changes, and why:
+
+**1. `ubuntunoble` became `ubuntu-noble`.** The template was `ubuntu${UBUNTU_RELEASE}`, which
+concatenates into `ubuntunoble` — no separator, so nothing in the string says where the distro ends
+and the suite codename begins. The alias `noble` only means something to people already inside
+Ubuntu, so it needs the `ubuntu` prefix for context.
+
+The rename is not free: `checkRuntimeUpdate` decides "newer" by **string inequality**, so changing one
+separator makes every existing user's stored value (`…-ubuntunoble-r6`) differ from the remote
+(`…-ubuntu-noble-r6`) and pushes a 150 MB reinstall whose content is byte-identical. `RuntimeVersion.sameVersion`
+therefore folds the old naming into the new one before comparing, and both `checkRuntimeUpdate` and the
+UI's "current" marker go through it. **Do not remove it**: `tools/check-runtime-naming.js` pins it.
+
+The metadata now also carries `ubuntuSuite` and `rootfsRev` directly, so the app no longer has to scrape
+them out of the string. Older metadata lacks both: they read as empty/0 and fall back to
+`RuntimeVersion.parts`, which parses the string.
+
+**2. The version list used to be ordered wrong.** It sorted by `publishedAt`, then by plain string.
+Releases minted in one batch differ by tens of seconds, so `publishedAt` alone decided, and users saw
+`0.2.1-rc.5 → 0.2.2-alpha.2 → 0.2.2-alpha.3 → 0.2.2-rc.1` — newest fourth. The tiebreak was wrong too:
+plain string compare puts `rc.9` above `rc.10`.
+
+The key is now "channel group (stable → slim → beta → slim-beta → archive), then `compareRuntimeVersion`
+descending", with `publishedAt` only breaking exact ties. The semantic comparison walks dsh version →
+rootfs revision → variant weight, and the dsh part is cut at `-ubuntu` by `dshOf` — not at the first `-`,
+which would truncate `0.2.2-rc.1` to `0.2.2` and make a prerelease indistinguishable from a release.
+
+Fixed along the way: the Releases API request fetched a single page of 100, while the repository already
+has 270+ releases, so the four rolling tags sat on page 3 — the version list contained neither the stable
+nor the slim channel, and the slim filter showed nothing. It now paginates (up to 3 pages) and additionally
+fetches the four rolling tags unconditionally, independent of pagination.
 The workflow also takes a `release_tag` input (empty derives it from the channel). The two historical tags that only
 exist in the version list (`runtime-beta`, `runtime-0.1.1-rc.2`) were **republished in place** with it: replacing the
 content of a tag is undetectable for installed users, but 「the list offers a runtime that turns out to be the broken

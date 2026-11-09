@@ -1971,7 +1971,7 @@ private fun RuntimeVersionDialog(
                     }
                     else -> {
                         val visible = list.filter { RuntimeVersion.matchesFilter(it, slim, beta) }
-                        val currentVisible = visible.any { it.version == currentVersion }
+                        val currentVisible = visible.any { RuntimeVersion.sameVersion(it.version, currentVersion) }
                         Text(
                             text = stringResource(R.string.dsh_runtime_versions_warning),
                             style = MaterialTheme.typography.bodySmall,
@@ -2003,7 +2003,7 @@ private fun RuntimeVersionDialog(
                             items(visible, key = { it.tag + "|" + it.version }) { entry ->
                                 RuntimeVersionRow(
                                     entry = entry,
-                                    current = entry.version == currentVersion,
+                                    current = RuntimeVersion.sameVersion(entry.version, currentVersion),
                                     onInstall = { onInstall(entry) },
                                     onReinstall = onReinstallCurrent,
                                     onGoUpdateApp = onGoUpdateApp,
@@ -2129,7 +2129,7 @@ private fun RuntimeCurrentVersionRow(version: String, onReinstall: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = version,
+                text = RuntimeVersion.parts(version).dsh,
                 style = MaterialTheme.typography.bodyMedium,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1,
@@ -2159,6 +2159,7 @@ private fun RuntimeVersionRow(
     // 这份运行时要求比当前 App 更高的版本：装上也起不来，点它只能去更新应用
     val tooOld = entry.minAppVersion.isNotEmpty() &&
         compareVersions(entry.minAppVersion, BuildConfig.VERSION_NAME) > 0
+    val parts = RuntimeVersion.parts(entry.version)
     val container =
         if (current) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -2179,11 +2180,13 @@ private fun RuntimeVersionRow(
             )
             .padding(10.dp),
     ) {
-        // 版本号单独占一行：`0.1.5-rc.1-ubuntunoble-r3-beta` 这种串在等宽字体下
-        // 已经接近对话框宽度，再和两个标签挤一行就会被压成两行断字
+        // 版本号单独占一行，但只放 dsh 那一段（`0.2.2-rc.1`）：整串
+        // `0.2.2-rc.1-ubuntu-noble-r6-slim-beta` 有 35 个字符，等宽字体下必然被省略号
+        // 截断，而截掉的正好是滑块筛出来的那半段（口味 / 通道）。发行版套件与 rootfs
+        // 修订号挪到下面那排标签里，谁也压不着谁。
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = entry.version,
+                text = parts.dsh,
                 style = MaterialTheme.typography.bodyMedium,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1,
@@ -2209,6 +2212,22 @@ private fun RuntimeVersionRow(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
             )
+            // 发行版套件与 rootfs 修订号：以前挤在版本号那一行里，靠 `-ubuntunoble-r6`
+            // 这种连写辨认；现在分段显示，也顺带让「同一个 dsh、不同 r 号」看得出区别。
+            if (parts.suite.isNotEmpty()) {
+                ModuleLabel(
+                    text = parts.suite,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (parts.rev > 0) {
+                ModuleLabel(
+                    text = stringResource(R.string.dsh_runtime_tag_rootfs, parts.rev),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (current) {
                 ModuleLabel(
                     text = stringResource(R.string.dsh_runtime_current),

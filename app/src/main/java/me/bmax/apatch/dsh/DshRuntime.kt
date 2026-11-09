@@ -1860,6 +1860,10 @@ object DshRuntime : DshRuntimeHost {
                 // 只是以前不解析 —— 版本列表要按「精简/完整」筛选就得靠它：历史 release 的
                 // tag 里没有 flavor，光看 tag 分不出来。
                 flavor = json.optString("flavor", ""),
+                // 2026-11 起构建脚本直接写这两项。老 metadata 没有，读出来是空/0，
+                // 由调用方回退到从版本串里切（RuntimeVersion.parts）。
+                ubuntuSuite = json.optString("ubuntuSuite", ""),
+                rootfsRev = json.optInt("rootfsRev", 0),
             )
         }.getOrNull()
     }
@@ -1899,35 +1903,49 @@ object DshRuntime : DshRuntimeHost {
     }
 
     /**
-     * 仓库里所有 runtime release 的 (tag, 发布时间)，按发布时间倒序。
+     * 仓库里的 runtime release（tag + 发布时间），按发布时间倒序。
      *
-     * 用 API 而不是通道地址：只有 API 能一次列出历史版本。拿不到就返回空表，由
-     * [listRuntimeVersions] 退回两个通道。
+     * 用 API 而不是通道地址：只有 API 能列出历史版本。**必须翻页** —— 一页 100 条，
+     * 仓库里已经有 270 多个 release（App 自己的也占位），四个滚动 tag 早就掉到第 3 页去了。
+     * 只拉第一页时版本列表里既没有正式版也没有精简版，滑到精简那一档是空列表。
+     *
+     * 拿不到就返回空表，由 [listRuntimeVersions] 退回通道兜底。
      */
     private suspend fun fetchRuntimeReleases(): List<Pair<String, String>> {
-        val body = UpdateChecker.fetchApiJson("/repos/DSH-Folk/DSH-Folk/releases?per_page=100")
-            ?: return emptyList()
         val out = ArrayList<Pair<String, String>>()
-        runCatching {
-            val arr = JSONArray(body)
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                if (o.optBoolean("draft")) continue
-                val tag = o.optString("tag_name").trim()
-                // 仓库里还有 App 自己的 release（v1.8.4…）：只认运行时那批 tag
-                if (!tag.startsWith("runtime")) continue
-                out.add(tag to o.optString("published_at").trim())
-            }
-        }.onFailure { logWarn(R.string.dsh_log_version_list_failed) }
+        for (page in 1..MAX_RELEASE_PAGES) {
+            val body = UpdateChecker.fetchApiJson(
+                "/repos/DSH-Folk/DSH-Folk/releases?per_page=$RELEASES_PER_PAGE&page=$page",
+            ) ?: break
+            var got = 0
+            runCatching {
+                val arr = JSONArray(body)
+                got = arr.length()
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    if (o.optBoolean("draft")) continue
+                    val tag = o.optString("tag_name").trim()
+                    // 仓库里还有 App 自己的 release（v1.8.4…）：只认运行时那批 tag
+                    if (!tag.startsWith("runtime")) continue
+                    out.add(tag to o.optString("published_at").trim())
+                }
+            }.onFailure { logWarn(R.string.dsh_log_version_list_failed) }
+            // 这一页没给满 = 到头了；拉空了也停，别让网络异常变成 6 次重试
+            if (got < RELEASES_PER_PAGE) break
+        }
         return out.sortedByDescending { it.second }
     }
 
     /**
      * 有没有更新的运行时可用。
      *
-     * 判据是版本串**不相等**，不是语义比较：`0.1.1-rc.2-ubuntunoble-r2` 里混了
+     * 判据是版本串**不相等**，不是语义比较：`0.1.1-rc.2-ubuntu-noble-r2` 里混了
      * dsh 版本、ubuntu 代号和 rootfs 修订号，semver 比较对它没有意义；而任何一段
      * 变了都值得重装。r2 就是这么来的 —— 内容修了但 dsh 版本没动。
+     *
+     * 「不相等」走 [RuntimeVersion.sameVersion] 而不是 `==`：命名格式改过一版
+     * （`ubuntunoble` → `ubuntu-noble`），逐字比会把这一个分隔符算成新运行时，
+     * 给全体存量用户推一次 150MB 重装。
      *
      * @return 远端有不同版本时带 [RuntimeCheckResult.version]；若那份新运行时还要求
      * 更高的 App 版本，[RuntimeCheckResult.minAppVersion] 一并带上（UI 据此改提示
@@ -1940,7 +1958,7 @@ object DshRuntime : DshRuntimeHost {
         // 本地版本未知（早期版本装的，没记过）时不谎报有更新：重装要重下 150MB，
         // 不能靠猜就让用户付这个代价；也没法说「已是最新」——那同样是猜的
         if (local.isEmpty()) return@withContext RuntimeCheckResult(failure = true)
-        if (meta.version == local) RuntimeCheckResult()
+        if (RuntimeVersion.sameVersion(meta.version, local)) RuntimeCheckResult()
         else RuntimeCheckResult(
             version = meta.version,
             minAppVersion = if (appSatisfies(meta.minAppVersion)) "" else meta.minAppVersion,
@@ -1958,21 +1976,50 @@ object DshRuntime : DshRuntimeHost {
      * 数据来源是 Releases API（列 tag + 发布时间）加上每个 release 的 metadata
      * （版本、dsh、node、体积、sha256、最低 App 版本都在里面）。API 走
      * [UpdateChecker.fetchApiJson]，复用那里已经验证过的一批入口：直连被限流时
-     * gh-proxy 能代理 api.github.com。API 整个不可达时退回两个通道各一份，至少让
-     * 用户在正式版与测试版之间切换。
+     * gh-proxy 能代理 api.github.com。
      *
-     * 结果按「正式通道 → 测试通道 → 历史版本」排，同组内新的在前。
+     * 四个滚动 tag **无条件**再质疑一遍：API 里它们按发布时间排在很后面（甚至翻页
+     * 之外），而它们才是四个通道当下在用的内容，漏掉就是「列表里没有当前版本」。
+     *
+     * 排序：先按通道分组（[RuntimeVersion.channelRank]），组内按 [compareRuntimeVersion]
+     * 语义降序 —— 不是 `publishedAt`，也不是字符串字典序：那两样都会把
+     * `0.2.2-rc.1` 排到 `0.2.1-rc.5` 后面（同一批补发的 release 时间戳只差几十秒，
+     * 而字典序下 `rc.9` 比 `rc.10` 大）。
      */
     suspend fun listRuntimeVersions(): List<RuntimeVersion> = withContext(Dispatchers.IO) {
         val want = DshSource.runtimeArch()
         val suffix = if (want == "arm64-v8a") "" else "-x86_64"
-        // version 去重：正式通道与测试通道可能装着同一个版本串，先到的那份通道权重更高
+        // version 去重：同一个版本串可能同时挂在滚动 tag 与历史 tag 上，保留通道权重高的那份
         val found = LinkedHashMap<String, RuntimeVersion>()
+        fun keep(entry: RuntimeVersion) {
+            val prev = found[entry.version]
+            if (prev == null ||
+                RuntimeVersion.channelRank(entry.channel) < RuntimeVersion.channelRank(prev.channel)
+            ) {
+                found[entry.version] = entry
+            }
+        }
+        fun entryOf(tag: String, published: String, meta: DshMeta) = RuntimeVersion(
+            version = meta.version,
+            tag = tag,
+            channel = RuntimeVersion.channelOf(tag),
+            dsh = meta.dsh,
+            nodeVersion = meta.nodeVersion,
+            builtAt = meta.builtAt,
+            minAppVersion = meta.minAppVersion,
+            sha256 = meta.sha256,
+            sizeBytes = meta.sizeBytes,
+            arch = meta.arch,
+            url = meta.url,
+            mirrors = meta.mirrors,
+            publishedAt = published,
+            flavor = meta.flavor,
+        )
 
         val releases = fetchRuntimeReleases()
         if (releases.isNotEmpty()) {
             logInfo(R.string.dsh_log_version_list_api, releases.size)
-            // 并发拉各 release 的 metadata：串行的话 6 个版本在慢网络上要等十几秒
+            // 并发拉各 release 的 metadata：串行的话二十几个版本在慢网络上要等半分钟
             val metas = coroutineScope {
                 releases.map { (tag, published) ->
                     async { fetchMetaOfTag(tag, suffix)?.let { Triple(tag, published, it) } }
@@ -1980,60 +2027,27 @@ object DshRuntime : DshRuntimeHost {
             }
             for ((tag, published, meta) in metas) {
                 if (meta.arch.isNotEmpty() && meta.arch != want) continue
-                found.putIfAbsent(
-                    meta.version,
-                    RuntimeVersion(
-                        version = meta.version,
-                        tag = tag,
-                        channel = RuntimeVersion.channelOf(tag),
-                        dsh = meta.dsh,
-                        nodeVersion = meta.nodeVersion,
-                        builtAt = meta.builtAt,
-                        minAppVersion = meta.minAppVersion,
-                        sha256 = meta.sha256,
-                        sizeBytes = meta.sizeBytes,
-                        arch = meta.arch,
-                        url = meta.url,
-                        mirrors = meta.mirrors,
-                        publishedAt = published,
-                        flavor = meta.flavor,
-                    ),
-                )
+                keep(entryOf(tag, published, meta))
             }
         }
 
-        // 通道兜底：API 不可达 / 限流烧完时，至少给人看当前四个通道
-        if (found.isEmpty()) {
-            logWarn(R.string.dsh_log_version_list_fallback)
-            for (tag in listOf(
-                "runtime-latest",
-                "runtime-slim-latest",
-                "runtime-beta-latest",
-                "runtime-slim-beta-latest",
-            )) {
-                val meta = fetchMetaFrom(DshSource.releaseBase(tag) + "metadata$suffix.json") ?: continue
-                found[meta.version] = RuntimeVersion(
-                    version = meta.version,
-                    tag = tag,
-                    channel = RuntimeVersion.channelOf(tag),
-                    dsh = meta.dsh,
-                    nodeVersion = meta.nodeVersion,
-                    builtAt = meta.builtAt,
-                    minAppVersion = meta.minAppVersion,
-                    sha256 = meta.sha256,
-                    sizeBytes = meta.sizeBytes,
-                    arch = meta.arch,
-                    url = meta.url,
-                    mirrors = meta.mirrors,
-                    flavor = meta.flavor,
-                )
-            }
+        // 四个滚动 tag 无条件补一遍。API 全挂 / 限流烧完时这就是**唯一**内容，
+        // 所以它不是优化，是保底：精简通道的那两行只能从这里来。
+        if (found.isEmpty()) logWarn(R.string.dsh_log_version_list_fallback)
+        val rolling = coroutineScope {
+            RuntimeVersion.ROLLING_TAGS.map { tag ->
+                async { fetchMetaOfTag(tag, suffix)?.let { tag to it } }
+            }.mapNotNull { it.await() }
+        }
+        for ((tag, meta) in rolling) {
+            if (meta.arch.isNotEmpty() && meta.arch != want) continue
+            keep(entryOf(tag, "", meta))
         }
 
         found.values.sortedWith(
             compareBy<RuntimeVersion> { RuntimeVersion.channelRank(it.channel) }
+                .thenComparator { x, y -> RuntimeVersion.compareRuntimeVersion(y.version, x.version) }
                 .thenByDescending { it.publishedAt }
-                .thenByDescending { it.version }
         )
     }
 

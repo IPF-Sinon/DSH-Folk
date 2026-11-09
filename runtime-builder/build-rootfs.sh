@@ -46,6 +46,11 @@ RUNTIME_FLAVOR="${RUNTIME_FLAVOR:-full}"           # full | slim
 #   r4 = 关掉 pnpm 的升级提示（update-notifier=false 写进 rootfs 的 npmrc）：
 #        原来容器里会打印 "Update available! 10.34.5 → 12.3.4"，指向一个装了
 #        就坏的版本，用户照着做会把 pnpm 弄挂。r3 之后的通道都带着这个坑。
+#
+#   注：**r5 从未发布**（r4 之后直接是 r6，中间那一版试过要合的东西最终并进 r6 了）。
+#   修订号只用于排序与「内容变了没有」的判定（见 App 侧 RuntimeVersion.rootfsRevOf），
+#   不要求连号，所以这个空档保留原样、不要为了好看把 r6 重编成 r5 —— 那会让已经装在
+#   r6 上的用户被判成「有更新」，白下一次 150MB 换回同内容。
 #   r6 = 补齐常用命令行工具（curl/wget/unzip/xz/less/file/jq/nano/openssl/ssh 及
 #        其依赖闭包，共 20 个包），并把动态库闭包检查的入口从「git-core + perl +
 #        python 子目录」扩大到整个 usr/bin 与 usr/sbin —— 覆盖面从「我们显式盯着
@@ -73,10 +78,10 @@ MIN_APP_VERSION="${MIN_APP_VERSION:-}"
 #
 # 后缀顺序是「口味在前、通道在后」，好处是 **`-beta` 永远留在末尾**：今天任何按
 # 「串尾是不是 -beta」判断测试通道的东西，对四个变体都仍然成立。
-#   stable/full → 0.2.0-rc.2-ubuntunoble-r6
-#   beta/full   → 0.2.0-rc.2-ubuntunoble-r6-beta
-#   stable/slim → 0.2.0-rc.2-ubuntunoble-r6-slim
-#   beta/slim   → 0.2.0-rc.2-ubuntunoble-r6-slim-beta
+#   stable/full → 0.2.0-rc.2-ubuntu-noble-r6
+#   beta/full   → 0.2.0-rc.2-ubuntu-noble-r6-beta
+#   stable/slim → 0.2.0-rc.2-ubuntu-noble-r6-slim
+#   beta/slim   → 0.2.0-rc.2-ubuntu-noble-r6-slim-beta
 case "$RELEASE_CHANNEL/$RUNTIME_FLAVOR" in
   stable/full)
     VERSION_CHANNEL_SUFFIX=""; FLAVOR_SUFFIX=""
@@ -616,7 +621,7 @@ else
 fi
 cat > "$OUT/metadata${ASSET_SUFFIX}.json" <<EOF
 {
-  "version": "${DSH_REAL_VERSION}-ubuntu${UBUNTU_RELEASE}-r${ROOTFS_REV}${FLAVOR_SUFFIX}${VERSION_CHANNEL_SUFFIX}",
+  "version": "${DSH_REAL_VERSION}-ubuntu-${UBUNTU_RELEASE}-r${ROOTFS_REV}${FLAVOR_SUFFIX}${VERSION_CHANNEL_SUFFIX}",
   "url": "${ASSET}",
   "sha256": "${SHA}",
   "sizeBytes": ${SIZE},
@@ -629,6 +634,8 @@ cat > "$OUT/metadata${ASSET_SUFFIX}.json" <<EOF
   ],
   "arch": "${ANDROID_ABI}",
   "flavor": "${RUNTIME_FLAVOR}",
+  "ubuntuSuite": "${UBUNTU_RELEASE}",
+  "rootfsRev": ${ROOTFS_REV},
   "dsh": "${DSH_REAL_VERSION}",
   "nodeVersion": "${NODE_VER}",${MIN_APP_LINE}
   "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

@@ -105,6 +105,13 @@ data class DshMeta(
      * 空 = 老 metadata 没这一项，那时只能按 tag 猜（见 [RuntimeVersion.flavorOf]）。
      */
     val flavor: String = "",
+    /**
+     * Ubuntu 套件代号（`noble`）。老 metadata 没有这一项 —— 那时只能从版本串里切
+     * （见 [RuntimeVersion.parts]），切不出来就是空串。
+     */
+    val ubuntuSuite: String = "",
+    /** rootfs 修订号（6）；老 metadata 没有，取不到 = 0（同样回退到从版本串切）。 */
+    val rootfsRev: Int = 0,
 )
 
 /**
@@ -122,6 +129,21 @@ data class RuntimeCheckResult(
     val failure: Boolean = false,
 )
 
+/**
+ * 版本串拆出来的几段，给界面分行显示用。
+ *
+ * 存在的理由：整串 `0.2.2-rc.1-ubuntu-noble-r6-slim-beta` 有 35 个字符，塞进对话框的
+ * 等宽单行必然被省略号截断，而截掉的正好是被筛选滑块选中的那半段（口味 / 通道）。
+ * 拆开之后版本号自己占一行，剩下的做成标签，谁也压不着谁。
+ */
+data class RuntimeVersionParts(
+    /** `0.2.2-rc.1` —— 拆不出来时是整串。 */
+    val dsh: String,
+    /** `noble`；拆不出来（外部源给了别的串）= 空串。 */
+    val suite: String,
+    /** rootfs 修订号；拆不出来 = 0。 */
+    val rev: Int,
+)
 /**
  * 版本列表里的一项：某个 runtime release 的 metadata（本机架构那一份）。
  *
@@ -161,6 +183,9 @@ data class RuntimeVersion(
         builtAt = builtAt,
         minAppVersion = minAppVersion,
         flavor = flavorOf(this),
+        // 这份 RuntimeVersion 可能是老 metadata 建的（两个字段都没有），就地拆一遍版本串补上
+        ubuntuSuite = parts(version).suite,
+        rootfsRev = parts(version).rev,
     )
 
     companion object {
@@ -234,6 +259,94 @@ data class RuntimeVersion(
             tag.startsWith("runtime-slim") -> CHANNEL_SLIM
             tag.startsWith("runtime-beta") -> CHANNEL_BETA
             else -> CHANNEL_ARCHIVE
+        }
+
+        /**
+         * 四个滚动 tag —— 通道的**当前**内容。历史 release 再多也不该把它们挤出列表：
+         * Releases API 一页 100 条，仓库里已经 270 多个 release，滚动 tag 早就不在前排。
+         * 版本列表、`fetchNewestMeta`、构建脚本与 CI 工作流都认这四个名字（由
+         * `tools/check-runtime-naming.js` 交叉断言）。
+         */
+        val ROLLING_TAGS = listOf("runtime-latest", "runtime-slim-latest", "runtime-beta-latest", "runtime-slim-beta-latest")
+
+        /**
+         * 从版本串里切出 dsh 那一段：`0.2.2-rc.1-ubuntu-noble-r6-beta` → `0.2.2-rc.1`。
+         *
+         * 不能像 [compareVersions] 那样取「第一个 - 之前」—— 版本串的 `-` 有三层含义
+         * （预发布 / 发行版 / 修订号），切错就把 `0.2.2-rc.1` 砍成 `0.2.2`，rc 与正式版
+         * 就分不开了。切点认 `-ubuntu`（新旧命名都命中：`-ubuntu-noble` 与老的
+         * `-ubuntunoble`）。找不到（自定义源给了别的串）就原样返回，交给
+         * [compareVersions] 整串比 —— 与这次改动之前的行为一致。
+         */
+        fun dshOf(version: String): String {
+            val i = version.indexOf("-ubuntu")
+            return if (i > 0) version.substring(0, i) else version
+        }
+
+        /** rootfs 修订号；取不到 = 0（老版本串或外部源）。 */
+        fun rootfsRevOf(version: String): Int =
+            Regex("-r(\\d+)").find(version)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+
+        /**
+         * 运行时的**语义**比较：dsh 版本 → rootfs 修订号 → 变体（口味/通道）。
+         *
+         * 返回值越大越新。列表排序用它，**不要**用字符串字典序：
+         * 字典序下 `rc.9` 排在 `rc.10` 前面、`0.2.1-rc.5` 排在 `0.2.2-rc.1` 前面。
+         */
+        fun compareRuntimeVersion(a: String, b: String): Int {
+            val c = compareVersions(dshOf(a), dshOf(b))
+            if (c != 0) return c
+            val ra = rootfsRevOf(a)
+            val rb = rootfsRevOf(b)
+            if (ra != rb) return ra.compareTo(rb)
+            // 同一份内容的两个变体（完整/精简、正式/测试）：变体权重小的排前面。
+            // 与列表首层的 channelRank 同向 —— 正式完整 > 精简 > 测试 > 精简测试。
+            return variantRank(b).compareTo(variantRank(a))
+        }
+
+        /** 版本串的变体权重：越小越「正式」。口味在前、通道在后，与 channelRank 同向。 */
+        fun variantRank(version: String): Int {
+            val slim = versionFlavorOf(version) == FLAVOR_SLIM
+            val beta = version.endsWith("-beta")
+            return when {
+                !slim && !beta -> 0
+                slim && !beta -> 1
+                !slim && beta -> 2
+                else -> 3
+            }
+        }
+
+        /** 版本串自己的口味（`-slim` 结尾那段）；与 [flavorOf] 不同，这里只看串。 */
+        fun versionFlavorOf(version: String): String =
+            if (version.contains("-slim")) FLAVOR_SLIM else FLAVOR_FULL
+
+        /**
+         * 把 2026-11 之前的老命名折叠成新命名：`ubuntunoble` → `ubuntu-noble`。
+         *
+         * 只用来比「是不是同一份」，不参与展示。
+         */
+        fun normalizeVersion(version: String): String = version.replace("ubuntunoble", "ubuntu-noble")
+
+        /**
+         * 两份版本串是不是**同一份运行时**。
+         *
+         * [checkRuntimeUpdate] 的判据是「串不相等 = 有更新」，而 rootfs 内容变了版本串就得变，
+         * 所以那里不能换成语义比较。但**改命名本身**不该触发重装：存量用户 prefs 里记的是
+         * `…-ubuntunoble-r6`，远端已经是 `…-ubuntu-noble-r6`，逐字比就会让所有人白下 150MB。
+         * 改名那一版必须走这里。
+         */
+        fun sameVersion(a: String, b: String): Boolean =
+            a == b || (a.isNotEmpty() && b.isNotEmpty() && normalizeVersion(a) == normalizeVersion(b))
+
+        /** 把版本串拆成 [RuntimeVersionParts]（只解析，不判断）。 */
+        fun parts(version: String): RuntimeVersionParts {
+            // 先折叠老命名，`-ubuntunoble-` 与 `-ubuntu-noble-` 就只走一条分支
+            val rest = normalizeVersion(version).substringAfter("-ubuntu-", "")
+            return RuntimeVersionParts(
+                dsh = dshOf(version),
+                suite = if (rest.isEmpty()) "" else rest.substringBefore("-r"),
+                rev = rootfsRevOf(version),
+            )
         }
     }
 }

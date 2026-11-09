@@ -198,6 +198,7 @@ jobs:
           node tools/check-mic-session.js
           node tools/check-a11y-own.js
           node tools/check-runtime-card.js
+          node tools/check-runtime-naming.js
           node tools/check-launcher-icon.js
           node tools/check-workflow.js
           # gh 调用必须有仓库上下文（没有 checkout 的 job 要显式 GH_REPO）。
