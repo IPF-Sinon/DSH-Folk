@@ -3,26 +3,24 @@ package me.bmax.apatch.ui.component
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -32,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,8 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,11 +58,14 @@ import me.bmax.apatch.R
  *
  * ## 版式照点击助手的 SelectActionDialog
  * 参考实现（mr-bogey/TouchTool，GPL-3.0）的结构：
- *  - BottomSheet，高度约 75% 屏幕，可滚动列表；
- *  - 顶部一排**一级分组 chip**（预设 / 任务 / 变量）；
- *  - 下面一排**二级分组 chip**（该组下的分类）；
- *  - 主体是列表，每项带色点 + 名称 + 一句说明；
- *  - 右上角有**搜索**，可折叠。
+ *  - BottomSheet 近全屏展开，顶部保留标题；
+ *  - 左侧约 80dp 的纵向可滚分类栏，右侧两列可滚动作卡片；
+ *  - 卡片是圆角主题色 Material 卡，标题 BodyMedium、说明 BodySmall 半透明，
+ *    右下角叠一枚低透明度大图标；
+ *  - 右下角小型搜索 FAB 展开折叠搜索框。
+ *
+ * DSH 目前只有「分类 → 节点」两层数据；参考实现中的任务/变量一级页签在这里不存在，
+ * 因此不凭空添加空页签或假数据。
  *
  * ## 关键差异：这里**不靠拖出**，所以列表可以滚
  * 上一版我把「从卡片往外拖到画布」当成核心交互，于是被「抽屉内容区不能滚动」
@@ -97,180 +99,153 @@ fun WorkflowNodePicker(
     }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // 参考 dialog_select_action 是 match_parent；用内容下限避免小分类缩成浅片，
+    // 用屏高上限避免长分类越过标题/系统栏。两端都按当前屏高计算。
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val bodyMinHeight = (screenHeight * 0.82f - 64.dp).coerceAtLeast(200.dp)
+    val bodyMaxHeight = (screenHeight * 0.88f - 64.dp).coerceAtLeast(bodyMinHeight)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        // 高度上限 75%，但**不强制撑满**：heightIn(max=...) 让内容少时长得矮、
-        // 内容多时才逼近上限。fillMaxHeight(0.75f) 是上一版的写法，那会让只有
-        // 三个节点的分类也拉满 0.75 屏，下面留一大片空白。
-        modifier = Modifier.heightIn(
-            max = LocalConfiguration.current.screenHeightDp.dp * 0.75f,
-        ),
+        modifier = Modifier.heightIn(max = screenHeight * 0.94f),
     ) {
-        Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
-            // ── 标题行 ──
-            Row(
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.dsh_workflow_editor_add_node),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars),
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                // ── 标题行 ──
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.dsh_workflow_editor_add_node),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.dsh_workflow_action_cancel),
+                        )
+                    }
+                }
+
+                // ── 搜索框（折叠；入口移到右下角 FAB）──
+                if (searchOpen) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        singleLine = true,
+                        shape = RoundedCornerShape(20.dp),
+                        placeholder = { Text(stringResource(R.string.dsh_wf_picker_search_hint)) },
+                        leadingIcon = { Icon(Icons.Filled.Search, null) },
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { query = "" }) {
+                                    Icon(Icons.Filled.Close, stringResource(R.string.dsh_wf_picker_clear))
+                                }
+                            }
+                        },
+                    )
+                }
+
+                // 任务/变量一级 tab 不在 DSH 的节点模型里，因此只保留真实存在的分类；
+                // 它们按参考 dialog_select_action 的 80dp 左侧竖排组显示。
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min)
+                        .heightIn(max = bodyMaxHeight)
+                        .heightIn(min = bodyMinHeight)
+                        .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                ) {
+                    Column(
+                        Modifier
+                            .width(84.dp)
+                            .fillMaxHeight()
+                            .padding(end = 4.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
+                    ) {
+                        for ((i, g) in groups.withIndex()) {
+                            CategoryButton(
+                                label = stringResource(g.titleRes),
+                                selected = i == groupIndex,
+                                first = i == 0,
+                                last = i == groups.size - 1,
+                                // 分类切换保持原有语义：选分类后清除跨类搜索词。
+                                onClick = {
+                                    groupIndex = i
+                                    query = ""
+                                },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+
+                    if (visible.isEmpty()) {
+                        Box(
+                            Modifier.weight(1f).fillMaxHeight(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                stringResource(R.string.dsh_wf_picker_empty),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        // 参考 RecyclerView 的两列 StaggeredGrid：各列独立滚动，奇数条目时
+                        // 最后一张仍能完整滚到视口内。底部留出 FAB 安全区，不遮挡可点卡片。
+                        val leftCol = visible.filterIndexed { i, _ -> i % 2 == 0 }
+                        val rightCol = visible.filterIndexed { i, _ -> i % 2 == 1 }
+                        Row(
+                            Modifier.weight(1f).fillMaxHeight(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Column(
+                                Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                for (entry in leftCol) {
+                                    PickerCard(entry = entry, onClick = { onPick(entry) })
+                                }
+                                Spacer(Modifier.height(80.dp))
+                            }
+                            Column(
+                                Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                for (entry in rightCol) {
+                                    PickerCard(entry = entry, onClick = { onPick(entry) })
+                                }
+                                Spacer(Modifier.height(80.dp))
+                            }
+                        }
+                    }
+                }
+            }
+            // 搜索浮动入口：与参考实现右下角的小 FAB 同一位置；打开后转成关闭图标，
+            // 继续保留原有「打开/收起搜索并清空关键词」行为。
+            SmallFloatingActionButton(
+                onClick = {
                     searchOpen = !searchOpen
                     if (!searchOpen) query = ""
-                }) {
-                    Icon(
-                        Icons.Filled.Search,
-                        contentDescription = stringResource(R.string.dsh_wf_picker_search),
-                    )
-                }
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.dsh_workflow_action_cancel),
-                    )
-                }
-            }
-
-            // ── 搜索框（折叠）──
-            if (searchOpen) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                    singleLine = true,
-                    shape = RoundedCornerShape(20.dp),
-                    placeholder = { Text(stringResource(R.string.dsh_wf_picker_search_hint)) },
-                    leadingIcon = { Icon(Icons.Filled.Search, null) },
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(Icons.Filled.Close, stringResource(R.string.dsh_wf_picker_clear))
-                            }
-                        }
+                },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 20.dp),
+            ) {
+                Icon(
+                    imageVector = if (searchOpen) Icons.Filled.Close else Icons.Filled.Search,
+                    contentDescription = if (searchOpen) {
+                        stringResource(R.string.dsh_workflow_action_cancel)
+                    } else {
+                        stringResource(R.string.dsh_wf_picker_search)
                     },
                 )
-            }
-
-            // ── 主体：左栏分类竖排 + 右栏两列卡片 ──
-            //
-            // 上一版是「顶部一条横向 chip + 单列宽行 + 右侧大三角」，与参考实现差得很远：
-            //  - 八个分类横向排一行必然溢出，第 8 个「感知」被直接裁掉；
-            //  - 单列宽行每张卡只有一个名字，没有说明，用户只能靠猜节点干什么；
-            //  - 大三角是「从这里拖出去」时代的残留，现在是点选即建，它不表示任何操作。
-            //
-            // 现在：分类在左栏竖排（数量无上限、扫读快），卡片两列并排、每张都带说明。
-            //
-            // ## 高度：不能由「左栏有几项」决定
-            //
-            // 左栏是**固定八项**（执行/控制流/提醒/设备/媒体/数据/感知/屏幕），右栏的卡片数
-            // 随分类变化（执行只有 3 张，屏幕有 12 张）。Row 的高度取较高的那一栏，
-            // 于是无论选哪个分类，右栏下方都空着「左栏高度 − 卡片高度」那一片 ——
-            // 选「执行」时右栏只有两行卡，下面空出半屏，这就是"还是太高"的真正来源。
-            //
-            // 之前两版都在调 sheet 的高度上限，方向错了：上限只影响"最多多高"，
-            // 而这里的实际高度是被左栏**撑**出来的，跟上限无关。
-            //
-            // 解法：给主体一个**确定上限**（屏高 52%），左栏在超限时自己滚动，
-            // 不再把 Row 撑开。这样面板高度由"卡片内容"和"上限"两者中较小的决定。
-            // 用与 sheet 上限同一个系数（0.75），减去标题行/搜索框/内边距占掉的部分。
-            // 之所以不写成另一个"魔法系数"：两个不同的数字放一起，下一次改高度就会
-            // 只改其中一个，面板要么溢出 sheet、要么留一条缝。
-            val bodyMaxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.75f - 96.dp
-
-            // ## 为什么用 IntrinsicSize.Min
-            //
-            // 上一版给 Row 加 heightIn(max)，以为限住上限就能压矮 —— **没用**。
-            // heightIn 只是上限：左栏八项约 288dp、右栏选「执行」时约 150dp，
-            // 上限是 500dp，288 远没到，于是 Row 照样取左栏高度，右栏下方照样空白。
-            // （这就是用户在 beta.262 里看到的"还是太高"。）
-            //
-            // 真正要做的是让左栏**不参与撑高**。IntrinsicSize.Min 会把 Row 的高度
-            // 压成"各子项最小固有高度的最大值"再与上限取小，而左栏一旦加了
-            // verticalScroll，它的最小固有高度就退化成"一屏能滚多少算多少"，
-            // 不再等于"八项总和"。
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
-                    .heightIn(max = bodyMaxHeight)
-                    .padding(horizontal = 12.dp),
-            ) {
-                Column(
-                    Modifier
-                        .width(84.dp)
-                        .fillMaxHeight()
-                        .padding(end = 10.dp)
-                        // 左栏独立滚动：高度由右栏决定，八项放不下时自己滚。
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(0.dp),
-                ) {
-                    for ((i, g) in groups.withIndex()) {
-                        CategoryButton(
-                            label = stringResource(g.titleRes),
-                            selected = i == groupIndex,
-                            first = i == 0,
-                            last = i == groups.size - 1,
-                            // 点分类顺带清空搜索词：否则点了分类、右栏仍按关键词过滤，
-                            // 用户会以为「这个分类是空的」。
-                            onClick = {
-                                groupIndex = i
-                                query = ""
-                            },
-                        )
-                    }
-                }
-
-                if (visible.isEmpty()) {
-                    Box(
-                        Modifier.weight(1f).height(120.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            stringResource(R.string.dsh_wf_picker_empty),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    // 手动切成两列并按列滚动：不用 LazyVerticalGrid —— 它要求高度确定，
-                    // 而这里的高度是「内容与上限取较小」，用非懒加载的 Column 最直接。
-                    //
-                    // 两列各自滚动而不是整块滚动：左右列的行数可能差一行（分类内条目是奇数时），
-                    // 各自滚动时每列都能独立到达自己的末尾，不会出现「左列能滚、右列跟着动」。
-                    val leftCol = visible.filterIndexed { i, _ -> i % 2 == 0 }
-                    val rightCol = visible.filterIndexed { i, _ -> i % 2 == 1 }
-                    Row(
-                        Modifier.weight(1f).fillMaxHeight(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Column(
-                            Modifier
-                                .weight(1f)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            for (entry in leftCol) {
-                                PickerCard(entry = entry, onClick = { onPick(entry) })
-                            }
-                            Spacer(Modifier.height(12.dp))
-                        }
-                        Column(
-                            Modifier
-                                .weight(1f)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            for (entry in rightCol) {
-                                PickerCard(entry = entry, onClick = { onPick(entry) })
-                            }
-                            Spacer(Modifier.height(12.dp))
-                        }
-                    }
-                }
             }
         }
     }
@@ -334,21 +309,23 @@ private fun CategoryButton(
 private fun PickerCard(entry: NodePickerEntry, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        shape = RoundedCornerShape(20.dp),
+        // materialCardViewFilledStyle 的色面跟随当前 MaterialScheme，兼顾明暗主题。
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 1.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Box(Modifier.fillMaxWidth()) {
             Icon(
                 imageVector = entry.icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 6.dp, bottom = 6.dp)
-                    .size(38.dp),
+                    .padding(end = 8.dp, bottom = 8.dp)
+                    .size(48.dp),
             )
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
                 Text(
                     stringResource(entry.titleRes),
                     style = MaterialTheme.typography.bodyMedium,
@@ -367,7 +344,8 @@ private fun PickerCard(entry: NodePickerEntry, onClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(end = 6.dp),
+                        // 图标 48dp 叠在右下；说明也留同一侧安全边距，窄卡里才不会压字。
+                        modifier = Modifier.padding(end = 30.dp),
                     )
                 }
             }

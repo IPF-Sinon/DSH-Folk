@@ -772,7 +772,7 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
 
   // 参考实现的 des 是一条**满宽主题色横条**（background=colorPrimary、textColor=onPrimary），
   // 不是一行浅色小字 —— 它是用户自己写的一句话，视觉权重该高于参数标签。
-  ok(/background\(MaterialTheme\.colorScheme\.primary, RoundedCornerShape\(4\.dp\)\)/.test(card) &&
+  ok(/\.height\(24\.dp\)\.background\(MaterialTheme\.colorScheme\.primary\)/.test(card) &&
     /color = MaterialTheme\.colorScheme\.onPrimary/.test(card),
     "描述条是参考实现那样的主题色横条（主色底 + onPrimary 字）");
 
@@ -1499,12 +1499,12 @@ async function checkCli() {
   // 断言只要求「函数存在且以 node 为第一参数」，不再苛求单参数形式。
   ok(/private fun cardParamRows\(\s*\n?\s*node: WorkflowNode/.test(card),
     "卡片参数行由字段表生成（不在卡上写死键名）");
-  // 有值优先：a11y_swipe 这类动作 5 个参数只有 1 个有默认值，边收边截断会把唯一
-  // 有值的那行挤出去，卡上全是空心椭圆。
+  // 行来源逐项来自字段表；顺序与 DATA_IN 对应，且不截断后续输入口。
   ok(/val filled = mutableListOf<CardParamRowModel>\(\)/.test(card) &&
     /val empty = mutableListOf<CardParamRowModel>\(\)/.test(card) &&
-    /\(filled \+ empty\)\.take\(4\)/.test(card),
-    "有值的参数排在空参数前面（否则空行会挤掉唯一有值的那个）");
+    /sortedBy \{ row -> WorkflowNodeFields\.fieldsFor\(node\)\.indexOfFirst \{ it\.key == row\.key \} \}/.test(card) &&
+    !/take\(4\)/.test(card),
+    "所有参数行依字段表顺序显示，不截断 DATA_IN 针脚");
   ok(/private fun paramDotColor\(kind: WorkflowNodeFields\.Kind\)/.test(card),
     "参数行有按种类着色的色点");
   // 无权限必须能一眼看出来：整卡压暗 + 红条 + 说清缺什么。
@@ -1515,7 +1515,7 @@ async function checkCli() {
   ok(/requiredCaps: List<String> = emptyList\(\)/.test(card) && /granted: Boolean = true/.test(card),
     "新增的两个参数都有默认值（老调用点不受影响）");
   // 空心椭圆：空值参数要有占位，不能留白（留白会被读成"这行没内容"）。
-  ok(/border\(1\.dp, MaterialTheme\.colorScheme\.outline, CircleShape\)/.test(card),
+  ok(/border\(1\.dp, row\.color, CircleShape\)/.test(card),
     "空值参数画空心椭圆，而不是留白");
   // 引脚上报是拉线的基础，改卡片时最容易被顺手删掉。
   ok(/onPinBounds\?\.invoke\(pin\.kind\.name, coords\.boundsInWindow\(\)\)/.test(card),
@@ -1529,6 +1529,10 @@ console.log("\u2500 #16k 卡片可编辑 / 悬浮层定位 / 虚线框跟着选�
   // 参数必须在卡上直接改 —— 用户的原话是「参数都是在卡片本身上的」。
   ok(/BasicTextField\(/.test(card) && /onValueChange = \{ onEdit\?\.invoke\(row\.key, it\) \}/.test(card),
     "卡片参数行是输入框（不是只读值胶囊 + 复制）");
+  ok(/WorkflowNodeFields\.Kind\.BOOL/.test(card) && /WorkflowNodeFields\.Kind\.CHOICE/.test(card),
+    "BOOL / CHOICE 参数使用对应的开关和枚举控件");
+  ok(/copiedValue\?\.first == row\.kind/.test(card) && /onCopyValue\(row\.kind, row\.value\)/.test(card),
+    "参数针脚提供同类型复制/粘贴（对齐 PinView.copyButton）");
   ok(/onParamChange: \(\(key: String, value: String\) -> Unit\)\? = null/.test(card),
     "卡片接受参数回写回调（预览/详情传 null 即只读）");
   // 拖动必须收窄到标题区：整卡吃手势会把输入框的点击与光标全抢走。

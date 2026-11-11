@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,6 +51,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -86,7 +89,10 @@ import me.bmax.apatch.dsh.WorkflowPinType
 import me.bmax.apatch.dsh.WorkflowSchema
 import me.bmax.apatch.dsh.WorkflowStepState
 /** 卡片宽度：画布、自动布局、落点换算共用这一个值。 */
-internal val WorkflowNodeCardWidth = 220.dp
+internal val WorkflowNodeCardWidth = 280.dp
+
+/** 与参考 PinView.copyValue 同语义：已复制的数据针脚值，可粘贴到其他卡片的同类型针脚。 */
+private val copiedCardPinValue = mutableStateOf<Pair<WorkflowNodeFields.Kind, String>?>(null)
 
 /** 连线端点从卡片左边进、右边出时的纵向锚点（dp）。 */
 internal val WorkflowNodeCardAnchorY = 26f
@@ -94,7 +100,7 @@ internal val WorkflowNodeCardAnchorY = 26f
 /**
  * 一个节点的卡片（预览、详情、画布共用）。
  *
- * 版面按**参考实现的卡片**（card_normal.xml + ActionCard）逐块重排：
+ * 版面按**参考实现的卡片**（card_normal.xml + ActionCard）逐块对齐；宽度由共享卡片几何值确定：
  *
  * ```
  *  ┌─────────────────────────────┐
@@ -189,9 +195,8 @@ internal fun WorkflowNodeCard(
         WorkflowStepState.OK -> MaterialTheme.colorScheme.tertiary
         WorkflowStepState.FAILED, WorkflowStepState.TIMEOUT -> MaterialTheme.colorScheme.error
         WorkflowStepState.SKIPPED, WorkflowStepState.CANCELED -> MaterialTheme.colorScheme.outline
-        else -> if (selected) accent else MaterialTheme.colorScheme.outlineVariant
+        else -> if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     }
-    val thick = status != null || selected
     // 引脚表与执行器/校验器同一份推导（WorkflowSchema.defaultPinsFor），不在卡上另写一份。
     val pins = WorkflowSchema.defaultPinsFor(node)
     val execIn = pins.firstOrNull { it.kind == WorkflowPinKind.EXEC_IN }
@@ -201,10 +206,10 @@ internal fun WorkflowNodeCard(
     }
     val dataIns = pins.filter { it.kind == WorkflowPinKind.DATA_IN }
     val dataOuts = pins.filter { it.kind == WorkflowPinKind.DATA_OUT }
-
+    val rows = cardParamRows(node, linkedParamKeys).filter { rowVisible(it, node) }
+    val copiedPinValue by copiedCardPinValue
     // 卡片**自己**接手势（点击助手的 View 也是各自 onTouchEvent）：
     // 命中不需要算 —— 手指按在这张卡上，事件就到这张卡，不存在「坐标系比错」的可能。
-    val density = androidx.compose.ui.platform.LocalDensity.current.density
     var windowOrigin by remember { mutableStateOf(Offset.Zero) }
     var cardSize by remember { mutableStateOf(IntSize.Zero) }
     val originState = rememberUpdatedState(windowOrigin)
@@ -235,13 +240,11 @@ internal fun WorkflowNodeCard(
 
     Surface(
         shape = RoundedCornerShape(12.dp),
-        // 底色照参考实现 ActionCard（colorSurfaceVariant）：卡片要从画布上"浮起一层"，
-        // 而参数输入框再亮回 surface，两层底色才有纵深。全部用 surface 的话，
-        // 输入框和卡面同色，看起来像一整块。
+        // ActionCard 未选中用 colorSurfaceVariant，选中改 colorSecondaryContainer；均跟随主题。
         color = if (selected) MaterialTheme.colorScheme.secondaryContainer
         else MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(if (thick) 2.dp else 1.dp, borderColor),
-        tonalElevation = if (selected) 8.dp else 4.dp,
+        border = BorderStroke(1.dp, borderColor),
+        tonalElevation = 8.dp,
         // 无权限的卡整体压暗：这是"现在用不了"的第一眼信号，比任何徽标都直接。
         modifier = if (granted) base else base.alpha(0.6f),
     ) {
@@ -257,11 +260,11 @@ internal fun WorkflowNodeCard(
             Icon(
                 imageVector = workflowNodeWatermark(node),
                 contentDescription = null,
-                tint = accent,
+                tint = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 4.dp)
-                    .size(40.dp)
+                    .size(48.dp)
                     .alpha(0.10f),
             )
             // 坐标水印：参考实现 card_normal.xml 的 `position`（bottom|end、alpha 0.1、
@@ -274,7 +277,7 @@ internal fun WorkflowNodeCard(
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(4.dp)
+                    .padding(8.dp)
                     .alpha(0.10f),
             )
             Column {
@@ -286,13 +289,15 @@ internal fun WorkflowNodeCard(
                     // 参考实现把 EXEC_IN 放在 topBox（top|center）。控制流从上面进来，
                     // 位置本身就说明了"上一步 → 这一步"。
                     if (execIn != null) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
+                        // 对齐 pin_top.xml：标题在上，固定槽位里的执行针脚在下。
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                execIn.label.ifBlank { "执行" },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
                             LinkablePinDot(execIn, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
-                            if (execIn.label.isNotBlank()) PinLabel(execIn)
                         }
                     }
                     // ── 标题区＝拖动把手 ──
@@ -334,17 +339,16 @@ internal fun WorkflowNodeCard(
                             // 铅笔就是那扇门 —— 否则用户找不到"把这步改名"的入口。
                             if (onEdit != null) {
                                 // 参考实现这枚是 ?attr/iconButton（整块 40dp 命中区）。卡只有
-                                // 220dp 宽，取 28dp：图标仍 16dp 视觉不变，但手指点得中 ——
-                                // 上一版命中区就是 16dp 的图标本身，实测经常点空。
+                                // 参考实现的 iconButtonSize = 36dp，图标 24dp。
                                 Box(
-                                    Modifier.size(28.dp).clickable(onClick = onEdit),
+                                    Modifier.size(36.dp).clickable(onClick = onEdit),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Edit,
                                         contentDescription = stringResource(R.string.dsh_wf_top_node_detail),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp),
+                                        modifier = Modifier.size(24.dp),
                                     )
                                 }
                             }
@@ -361,19 +365,20 @@ internal fun WorkflowNodeCard(
                     // 空描述整条不出现：空横条会把参数行挤下去，而参数才是要读的内容。
                     val desc = node.config("description")
                     if (desc.isNotBlank()) {
-                        Text(
-                            text = desc,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 2.dp)
-                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 3.dp),
-                        )
+                        Box(
+                            Modifier.fillMaxWidth().height(24.dp).background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = desc,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                            )
+                        }
                     }
                     // ── 动作条：展开（左） + 锁定/复制/删除（右）──
                     //
@@ -442,23 +447,17 @@ internal fun WorkflowNodeCard(
                     // 而出口针脚离它对应的那一列数据很远 —— 拉线时要在两片空白之间找点。
                     // 三档展开的过滤在**这里**做，而不是让每个 CardParamRow 自己判断 ——
                     // 一处过滤，可见性规则只有一份。
-                    val rows = cardParamRows(node, linkedParamKeys).filter { rowVisible(it, node) }
                     if (rows.isNotEmpty() || dataOuts.isNotEmpty()) {
                         Spacer(Modifier.height(3.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.Top,
-                        ) {
-                            Column(
-                                Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(3.dp),
-                            ) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                            // 左列参数行自带 DATA_IN 针脚、标签、编辑控件和 copy，避免重复点。
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 for (row in rows) {
                                     CardParamRow(
                                         row = row,
-                                        // 这一行的数据入口针脚（按 id 对上）：对上就把那颗点挂到行左缘，
-                                        // 对不上（例如主参数兜底行）就只画一颗纯装饰的种类色点。
                                         pin = dataIns.firstOrNull { it.id == row.key },
+                                        copiedValue = copiedPinValue,
+                                        onCopyValue = { kind, value -> copiedCardPinValue.value = value?.let { kind to it } },
                                         onEdit = onParamChange,
                                         onPinBounds = onPinBounds,
                                         onPinIdBounds = onPinIdBounds,
@@ -467,18 +466,12 @@ internal fun WorkflowNodeCard(
                                     )
                                 }
                             }
-                            // 左列不设最小间隙：卡片只有 220dp 宽，硬留 8dp 会让命令输入框
-                            // 在带出口的卡上窄到看不见值。
                             if (dataOuts.isNotEmpty()) {
                                 Spacer(Modifier.width(4.dp))
-                                Column(
-                                    horizontalAlignment = Alignment.End,
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
+                                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                     for (pin in dataOuts) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
                                             PinLabel(pin)
-                                            Spacer(Modifier.width(2.dp))
                                             LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
                                         }
                                     }
@@ -536,9 +529,15 @@ internal fun WorkflowNodeCard(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             for (pin in execOuts) {
-                                PinLabel(pin)
-                                if (pin.label.isNotBlank()) Spacer(Modifier.width(2.dp))
-                                LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        pin.label.ifBlank { "执行" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                    )
+                                    LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
+                                }
                             }
                         }
                     }
@@ -557,16 +556,13 @@ internal fun WorkflowNodeCard(
 @Composable
 private fun PinDot(pin: WorkflowPinSpec) {
     val exec = pin.kind != WorkflowPinKind.DATA_IN && pin.kind != WorkflowPinKind.DATA_OUT
+    val color = if (exec) MaterialTheme.colorScheme.outline else pinColorOf(WorkflowPinType.of(pin.dataType))
     Box(
         Modifier
-            .size(if (exec) 7.dp else 9.dp)
-            .background(
-                color = if (exec) {
-                    MaterialTheme.colorScheme.outline
-                } else {
-                    pinColorOf(WorkflowPinType.of(pin.dataType))
-                },
-                shape = CircleShape,
+            .size(if (exec) 12.dp else 18.dp)
+            .then(
+                if (exec) Modifier.background(color, RoundedCornerShape(3.dp))
+                else Modifier.border(1.5.dp, color, CircleShape)
             ),
     )
 }
@@ -652,6 +648,7 @@ private fun PinLabel(pin: WorkflowPinSpec) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.widthIn(max = 48.dp),
     )
 }
 
@@ -730,6 +727,8 @@ private data class CardParamRowModel(
     val label: String,
     val value: String,
     val color: Color,
+    val kind: WorkflowNodeFields.Kind,
+    val choices: List<String> = emptyList(),
     /** 这个参数是否已接上线（NONE 档据此决定是否显示）。 */
     val linked: Boolean = false,
 )
@@ -740,14 +739,7 @@ private fun cardParamRows(
     /** 已接线的参数键集合（由宿主从边表算出）。见 [rowVisible] 的 NONE 档规则。 */
     linkedKeys: Set<String> = emptySet(),
 ): List<CardParamRowModel> {
-    // 先收集全部候选，再分「有值」与「空着」两批 —— 顺序不能边收边截断。
-    //
-    // 为什么必须先分两批：a11y_swipe 这类动作有 5 个参数，只有 durationMs 有默认值，
-    // 另外 4 个坐标是空的。边收边截断的话，前 4 个空行正好占满名额，**唯一有值的那个
-    // 反而被挤出去** —— 卡片上全是空心椭圆，用户看不出这一步到底配了什么。
-    //
-    // 空字段仍然保留（值的位置画空心椭圆，表示"这个参数在、但还没填"），
-    // 只是在名额不够时优先让位给有值的字段。
+    // 空字段保留为可编辑占位；填写状态不改变显示顺序，DATA_IN 与字段表一一对应。
     val filled = mutableListOf<CardParamRowModel>()
     val empty = mutableListOf<CardParamRowModel>()
     for (field in WorkflowNodeFields.fieldsFor(node)) {
@@ -761,13 +753,14 @@ private fun cardParamRows(
             label = stringResource(field.labelRes),
             value = raw,
             color = paramDotColor(field.kind),
+            kind = field.kind,
+            choices = field.choices,
             linked = field.key in linkedKeys,
         )
         if (raw.isBlank()) empty += row else filled += row
     }
-    // 卡就这么宽，超过四行之后参数已经读不过来了；剩下的留给点开弹窗看。
-    // 有值的排前面，空着的补在后面。
-    val out = (filled + empty).take(4).toMutableList()
+    // DATA_IN 次序跟 fieldsFor 一致：保留原始字段顺序和全部行，不能因空值而重排或截断。
+    val out = (filled + empty).sortedBy { row -> WorkflowNodeFields.fieldsFor(node).indexOfFirst { it.key == row.key } }.toMutableList()
     if (out.isEmpty()) {
         val primary = when (node.type) {
             WorkflowNodeType.EXECUTE -> node.config("cmd").ifBlank { node.config("text") }
@@ -782,6 +775,7 @@ private fun cardParamRows(
                 label = "",
                 value = primary,
                 color = MaterialTheme.colorScheme.outline,
+                kind = WorkflowNodeFields.Kind.TEXT,
             )
         }
     }
@@ -820,60 +814,92 @@ private fun paramDotColor(kind: WorkflowNodeFields.Kind): Color = when (kind) {
 private fun CardParamRow(
     row: CardParamRowModel,
     pin: WorkflowPinSpec?,
+    copiedValue: Pair<WorkflowNodeFields.Kind, String>?,
+    onCopyValue: (WorkflowNodeFields.Kind, String?) -> Unit,
     onEdit: ((key: String, value: String) -> Unit)?,
     onPinBounds: ((pinKind: String, rect: androidx.compose.ui.geometry.Rect) -> Unit)?,
     onPinIdBounds: ((pinId: String, pinKind: String, rect: androidx.compose.ui.geometry.Rect) -> Unit)?,
     onPinDrag: ((pinKind: String, anchorWindow: Offset, pointerWindow: Offset) -> Unit)?,
     onPinDrop: ((pointerWindow: Offset) -> Unit)?,
 ) {
+    var choiceOpen by remember(row.key) { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().heightIn(min = 40.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (pin != null) LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
+        else Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(12.dp).border(1.dp, row.color, CircleShape))
+        }
         if (pin != null) {
-            LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
-        } else {
-            // 没有对应针脚的行也要占住同样的横向位置，否则带针脚与不带针脚的行会差半格。
-            Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .then(
-                            if (row.value.isBlank()) {
-                                Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            } else {
-                                Modifier.background(row.color, CircleShape)
-                            },
-                        ),
+            PinLabel(pin)
+            Spacer(Modifier.width(4.dp))
+        } else if (row.label.isNotBlank()) {
+            Text(row.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 66.dp))
+            Spacer(Modifier.width(4.dp))
+        }
+        when (row.kind) {
+            WorkflowNodeFields.Kind.BOOL -> {
+                androidx.compose.material3.Switch(
+                    checked = row.value == "1" || row.value.equals("true", ignoreCase = true),
+                    onCheckedChange = { onEdit?.invoke(row.key, if (it) "1" else "0") },
+                    enabled = onEdit != null,
+                    modifier = Modifier.width(48.dp).height(32.dp),
+                )
+            }
+            WorkflowNodeFields.Kind.CHOICE -> {
+                Box {
+                    Surface(
+                        onClick = { if (onEdit != null) choiceOpen = true },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.weight(1f).widthIn(min = 56.dp, max = 92.dp),
+                    ) {
+                        Text(row.value.ifBlank { "选择" } + "  ▾", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp))
+                    }
+                    DropdownMenu(expanded = choiceOpen, onDismissRequest = { choiceOpen = false }) {
+                        for (choice in row.choices) DropdownMenuItem(text = { Text(choice) }, onClick = { onEdit?.invoke(row.key, choice); choiceOpen = false })
+                    }
+                }
+            }
+            WorkflowNodeFields.Kind.TEXT, WorkflowNodeFields.Kind.NUMBER, WorkflowNodeFields.Kind.MULTILINE -> {
+                BasicTextField(
+                    value = row.value,
+                    onValueChange = { onEdit?.invoke(row.key, it) },
+                    textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
+                    singleLine = true,
+                    enabled = onEdit != null,
+                    modifier = Modifier.weight(1f).heightIn(min = 32.dp)
+                        .background(MaterialTheme.colorScheme.surface, CircleShape)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
                 )
             }
         }
-        if (row.label.isNotBlank()) {
-            Text(
-                text = row.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 66.dp),
-            )
-            Spacer(Modifier.width(4.dp))
+        if (!row.linked) {
+            val paste = copiedValue?.first == row.kind && onEdit != null
+            Box(
+                Modifier.size(36.dp).clickable(enabled = paste || row.value.isNotEmpty()) {
+                    if (paste) {
+                        onEdit?.invoke(row.key, copiedValue!!.second)
+                        onCopyValue(row.kind, null)
+                    } else {
+                        onCopyValue(row.kind, row.value)
+                    }
+                },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.ContentCopy,
+                    contentDescription = stringResource(R.string.dsh_wf_float_copy),
+                    tint = if (paste) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        } else {
+            Spacer(Modifier.width(36.dp))
         }
-        BasicTextField(
-            value = row.value,
-            onValueChange = { onEdit?.invoke(row.key, it) },
-            textStyle = MaterialTheme.typography.labelSmall.copy(
-                color = MaterialTheme.colorScheme.onSurface,
-            ),
-            singleLine = true,
-            enabled = onEdit != null,
-            modifier = Modifier
-                .weight(1f)
-                // 输入框底色必须是 surface：卡面已经改成 surfaceVariant（参考实现的
-                // colorSurfaceVariant），两者同色的话输入框会整块消失，只剩光标在飘。
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp))
-                .padding(horizontal = 6.dp, vertical = 3.dp),
-        )
     }
 }
 
@@ -907,7 +933,7 @@ private fun CardActionIcon(
 ) {
     Box(
         modifier = Modifier
-            .size(28.dp)
+            .size(36.dp)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -916,7 +942,7 @@ private fun CardActionIcon(
             contentDescription = desc,
             tint = tint ?: if (active) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(24.dp),
         )
     }
 }
