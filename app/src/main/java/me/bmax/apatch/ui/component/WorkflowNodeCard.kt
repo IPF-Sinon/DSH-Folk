@@ -854,7 +854,7 @@ private fun CardParamRow(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surface,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        modifier = Modifier.weight(1f).widthIn(min = 56.dp, max = 92.dp),
+                        modifier = Modifier.widthIn(min = 56.dp, max = 92.dp),
                     ) {
                         Text(row.value.ifBlank { "选择" } + "  ▾", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp))
                     }
