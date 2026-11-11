@@ -77,8 +77,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
-import me.bmax.apatch.dsh.WorkflowActionCatalog
-import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.WorkflowExpandType
 import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
@@ -237,9 +235,13 @@ internal fun WorkflowNodeCard(
 
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
+        // 底色照参考实现 ActionCard（colorSurfaceVariant）：卡片要从画布上"浮起一层"，
+        // 而参数输入框再亮回 surface，两层底色才有纵深。全部用 surface 的话，
+        // 输入框和卡面同色，看起来像一整块。
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant,
         border = BorderStroke(if (thick) 2.dp else 1.dp, borderColor),
-        tonalElevation = if (selected) 6.dp else 2.dp,
+        tonalElevation = if (selected) 8.dp else 4.dp,
         // 无权限的卡整体压暗：这是"现在用不了"的第一眼信号，比任何徽标都直接。
         modifier = if (granted) base else base.alpha(0.6f),
     ) {
@@ -259,12 +261,25 @@ internal fun WorkflowNodeCard(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 4.dp)
-                    .size(44.dp)
+                    .size(40.dp)
+                    .alpha(0.10f),
+            )
+            // 坐标水印：参考实现 card_normal.xml 的 `position`（bottom|end、alpha 0.1、
+            // BodyLarge、colorSecondary）。挂在同一个 Box 的第二层，**不进内容 Column** ——
+            // 它不占高度，也不能把卡撑宽。只读节点已有的 posX/posY，不改任何数据。
+            Text(
+                text = "${node.posX},${node.posY}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.secondary,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(4.dp)
                     .alpha(0.10f),
             )
             Column {
-                // 顶部色带按节点类型着色：不是整卡着色，否则画布变成调色板、读不出层级。
-                Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
+                // 参考实现 card_normal.xml 没有顶部色带：类型信息已经由**水印**和**选中描边**
+                // 两处承担，再加一条 4dp 实色带只会让卡片顶部凭空多一截，且与描边撞色。
                 Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
                     // ── 顶部：控制流入口 ──
                     //
@@ -307,7 +322,9 @@ internal fun WorkflowNodeCard(
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = node.name.ifBlank { workflowNodeLabel(node) },
-                                style = MaterialTheme.typography.bodyMedium,
+                                // 参考实现标题是 TextAppearance.Material3.BodyLarge ——
+                                // 卡上唯一该用 bodyLarge 的就是标题，参数一律 labelSmall。
+                                style = MaterialTheme.typography.bodyLarge,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
@@ -316,73 +333,156 @@ internal fun WorkflowNodeCard(
                             // 卡片上只改**参数**，改名/描述/连线/删除这些重操作仍收在详情窗里，
                             // 铅笔就是那扇门 —— 否则用户找不到"把这步改名"的入口。
                             if (onEdit != null) {
-                                Icon(
-                                    imageVector = Icons.Filled.Edit,
-                                    contentDescription = stringResource(R.string.dsh_wf_top_node_detail),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clickable(onClick = onEdit),
-                                )
+                                // 参考实现这枚是 ?attr/iconButton（整块 40dp 命中区）。卡只有
+                                // 220dp 宽，取 28dp：图标仍 16dp 视觉不变，但手指点得中 ——
+                                // 上一版命中区就是 16dp 的图标本身，实测经常点空。
+                                Box(
+                                    Modifier.size(28.dp).clickable(onClick = onEdit),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = stringResource(R.string.dsh_wf_top_node_detail),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
                             }
                         }
-                        Text(
-                            text = workflowNodeSubtitle(node),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        // 参考实现的标题下面**没有**副标题：动作摘要那条（shell · echo hello）
+                        // 和下方的参数行说的是同一件事，两处都写等于把唯一宝贵的横向空间
+                        // 花在重复信息上，还把参数行往下挤了一整行。
                     }
                     // ── 描述条（参考实现的 `des`）──
                     //
-                    // 只在填了东西时出现：空描述占一行会把参数行挤下去，而参数才是要读的内容。
+                    // 参考实现把它做成满宽的一条**主题色横条**（des：background=colorPrimary、
+                    // gravity=center、textColor=onPrimary），而不是一行浅色小字 —— 它是用户
+                    // 自己写的一句话，视觉权重应当高于参数标签。
+                    // 空描述整条不出现：空横条会把参数行挤下去，而参数才是要读的内容。
                     val desc = node.config("description")
                     if (desc.isNotBlank()) {
                         Text(
                             text = desc,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 2.dp)
+                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 3.dp),
                         )
                     }
-                    // ── 参数行：数据入口就在行的左缘 ──
+                    // ── 动作条：展开（左） + 锁定/复制/删除（右）──
                     //
-                    // 三档展开的过滤在**这里**做，而不是让每个 CardParamRow 自己判断 ——
-                    // 一处过滤，可见性规则只有一份。
-                    val rows = cardParamRows(node, linkedParamKeys).filter { rowVisible(it, node) }
-                    if (rows.isNotEmpty()) {
-                        Spacer(Modifier.height(4.dp))
-                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            for (row in rows) {
-                                CardParamRow(
-                                    row = row,
-                                    // 这一行的数据入口针脚（按 id 对上）：对上就把那颗点挂到行左缘，
-                                    // 对不上（例如主参数兜底行）就只画一颗纯装饰的种类色点。
-                                    pin = dataIns.firstOrNull { it.id == row.key },
-                                    onEdit = onParamChange,
-                                    onPinBounds = onPinBounds,
-                                    onPinIdBounds = onPinIdBounds,
-                                    onPinDrag = onPinDrag,
-                                    onPinDrop = onPinDrop,
+                    // 参考实现 card_normal.xml 的这一行是：expandButton 在左，中间一个
+                    // Space(weight=1)，右侧 MaterialButtonGroup 装 lock/copy/remove。
+                    // 上一版四个按钮全挤在尾部，于是「展开」和「删除」只隔 20dp —— 想切展开
+                    // 却点到删除，而删除是两下才真删，第一下就已经把卡变成红色警戒态。
+                    if (onToggleExpand != null || onToggleLock != null || onCopy != null || onDelete != null) {
+                        Spacer(Modifier.height(2.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // 左：展开三档（参考实现 initExpand）
+                            if (onToggleExpand != null) {
+                                CardActionIcon(
+                                    icon = when (node.expandType) {
+                                        WorkflowExpandType.NONE -> Icons.Filled.VisibilityOff
+                                        WorkflowExpandType.HALF -> Icons.Filled.Visibility
+                                        WorkflowExpandType.FULL -> Icons.Filled.RemoveRedEye
+                                    },
+                                    desc = stringResource(R.string.dsh_wf_card_expand),
+                                    active = node.expandType == WorkflowExpandType.FULL,
+                                    onClick = onToggleExpand,
+                                )
+                            }
+                            Spacer(Modifier.weight(1f))
+                            // 右：锁定 / 复制 / 删除（参考实现 initLock / initCopy / initDelete）
+                            if (onToggleLock != null) {
+                                CardActionIcon(
+                                    icon = if (node.locked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                                    desc = stringResource(R.string.dsh_wf_card_lock),
+                                    active = node.locked,
+                                    onClick = onToggleLock,
+                                )
+                            }
+                            if (onCopy != null) {
+                                CardActionIcon(
+                                    icon = Icons.Filled.ContentCopy,
+                                    desc = stringResource(R.string.dsh_wf_float_copy),
+                                    active = false,
+                                    onClick = onCopy,
+                                )
+                            }
+                            if (onDelete != null && canDelete) {
+                                CardActionIcon(
+                                    icon = if (deleteArmed) Icons.Filled.Warning else Icons.Filled.Delete,
+                                    desc = if (deleteArmed) {
+                                        stringResource(R.string.dsh_wf_float_delete_confirm)
+                                    } else {
+                                        stringResource(R.string.dsh_wf_float_delete)
+                                    },
+                                    active = deleteArmed,
+                                    tint = if (deleteArmed) MaterialTheme.colorScheme.error else null,
+                                    onClick = onDelete,
                                 )
                             }
                         }
                     }
-                    // ── 数据出口：贴右下（参考实现的 outBox 在 pinBox 的右侧）──
-                    if (dataOuts.isNotEmpty()) {
+                    // ── 针脚区（参考实现的 pinBox：inBox 左、Space、outBox 右）──
+                    //
+                    // 参数行**就是**数据入口那一行（ValuePin = 点 + 标签 + 输入框），
+                    // 所以左列直接放参数行；右列只放数据出口的标签与针脚。
+                    //
+                    // 上一版把出口单独摆在所有参数下方一整行，于是卡片右侧有半张卡宽的空白，
+                    // 而出口针脚离它对应的那一列数据很远 —— 拉线时要在两片空白之间找点。
+                    // 三档展开的过滤在**这里**做，而不是让每个 CardParamRow 自己判断 ——
+                    // 一处过滤，可见性规则只有一份。
+                    val rows = cardParamRows(node, linkedParamKeys).filter { rowVisible(it, node) }
+                    if (rows.isNotEmpty() || dataOuts.isNotEmpty()) {
                         Spacer(Modifier.height(3.dp))
                         Row(
                             Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalAlignment = Alignment.Top,
                         ) {
-                            for (pin in dataOuts) {
-                                PinLabel(pin)
-                                Spacer(Modifier.width(2.dp))
-                                LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
+                            Column(
+                                Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                for (row in rows) {
+                                    CardParamRow(
+                                        row = row,
+                                        // 这一行的数据入口针脚（按 id 对上）：对上就把那颗点挂到行左缘，
+                                        // 对不上（例如主参数兜底行）就只画一颗纯装饰的种类色点。
+                                        pin = dataIns.firstOrNull { it.id == row.key },
+                                        onEdit = onParamChange,
+                                        onPinBounds = onPinBounds,
+                                        onPinIdBounds = onPinIdBounds,
+                                        onPinDrag = onPinDrag,
+                                        onPinDrop = onPinDrop,
+                                    )
+                                }
+                            }
+                            // 左列不设最小间隙：卡片只有 220dp 宽，硬留 8dp 会让命令输入框
+                            // 在带出口的卡上窄到看不见值。
+                            if (dataOuts.isNotEmpty()) {
+                                Spacer(Modifier.width(4.dp))
+                                Column(
+                                    horizontalAlignment = Alignment.End,
+                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                ) {
+                                    for (pin in dataOuts) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            PinLabel(pin)
+                                            Spacer(Modifier.width(2.dp))
+                                            LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -424,66 +524,12 @@ internal fun WorkflowNodeCard(
                             }
                         }
                     }
-                    // ── 动作条：展开 / 锁定 / 复制 / 删除 ──
-                    //
-                    // 四个按钮长在卡片上（对齐参考实现了 ActionCard.initLock / initExpand /
-                    // initCopy / initDelete），不是浮在画布上。长在卡上的好处是「操作对象」与
-                    // 「操作入口」在一起 —— 用户不必先选中、再抬头去底栏找按钮。
-                    if (onToggleExpand != null || onToggleLock != null || onCopy != null || onDelete != null) {
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (onToggleExpand != null) {
-                                CardActionIcon(
-                                    icon = when (node.expandType) {
-                                        WorkflowExpandType.NONE -> Icons.Filled.VisibilityOff
-                                        WorkflowExpandType.HALF -> Icons.Filled.Visibility
-                                        WorkflowExpandType.FULL -> Icons.Filled.RemoveRedEye
-                                    },
-                                    desc = stringResource(R.string.dsh_wf_card_expand),
-                                    active = node.expandType == WorkflowExpandType.FULL,
-                                    onClick = onToggleExpand,
-                                )
-                            }
-                            if (onToggleLock != null) {
-                                CardActionIcon(
-                                    icon = if (node.locked) Icons.Filled.Lock else Icons.Filled.LockOpen,
-                                    desc = stringResource(R.string.dsh_wf_card_lock),
-                                    active = node.locked,
-                                    onClick = onToggleLock,
-                                )
-                            }
-                            if (onCopy != null) {
-                                CardActionIcon(
-                                    icon = Icons.Filled.ContentCopy,
-                                    desc = stringResource(R.string.dsh_wf_float_copy),
-                                    active = false,
-                                    onClick = onCopy,
-                                )
-                            }
-                            if (onDelete != null && canDelete) {
-                                CardActionIcon(
-                                    icon = if (deleteArmed) Icons.Filled.Warning else Icons.Filled.Delete,
-                                    desc = if (deleteArmed) {
-                                        stringResource(R.string.dsh_wf_float_delete_confirm)
-                                    } else {
-                                        stringResource(R.string.dsh_wf_float_delete)
-                                    },
-                                    active = deleteArmed,
-                                    tint = if (deleteArmed) MaterialTheme.colorScheme.error else null,
-                                    onClick = onDelete,
-                                )
-                            }
-                        }
-                    }
                     // ── 底部：控制流出口 ──
                     //
                     // 参考实现把 EXEC_OUT / 真假分支放在 bottomBox（bottom|center）。
                     // 三条并排居中：出口是「下一步去哪」，贴着卡片下缘才读得出方向。
                     if (execOuts.isNotEmpty()) {
+                        Spacer(Modifier.height(2.dp))
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center,
@@ -501,6 +547,7 @@ internal fun WorkflowNodeCard(
         }
     }
 }
+
 /**
  * 针脚圆点。
  *
@@ -627,27 +674,6 @@ private fun workflowNodeLabel(node: WorkflowNode): String = when (node.type) {
     WorkflowNodeType.WAIT -> "等待"
 }
 
-private fun workflowNodeSubtitle(node: WorkflowNode): String = when (node.type) {
-    WorkflowNodeType.EXECUTE -> {
-        val what = when (node.actionType) {
-            WorkflowActionType.NATIVE -> {
-                // 标题资源要读当前语言的字符串；读不到（目录里没这个 id）就退回原始 id，
-                // 不能让卡片因为少一条翻译就崩。
-                val spec = WorkflowActionCatalog.byId(node.config("bridge"))
-                runCatching { me.bmax.apatch.apApp.resources.getString(spec!!.titleRes) }
-                    .getOrElse { node.config("bridge") }
-            }
-            WorkflowActionType.NOTIFY -> node.config("text")
-            else -> node.config("cmd")
-        }
-        (node.actionType?.id ?: "execute") + if (what.isBlank()) "" else " · " + what.take(24)
-    }
-    WorkflowNodeType.CONDITION -> "条件 · " + node.config("op") + " " + node.config("value").take(12)
-    WorkflowNodeType.EXTRACT -> "取值 · " + node.config("var")
-    WorkflowNodeType.WAIT -> "等待 · " + node.config("ms").ifBlank { node.config("untilDsh") }
-    WorkflowNodeType.TRIGGER -> if (node.config("requireDsh") == "1") "触发 · 需要 DSH" else "触发"
-    WorkflowNodeType.LOGIC -> "逻辑 · " + node.config("op")
-}
 
 /**
  * 卡片水印：**这一步做什么**的图标。
@@ -843,7 +869,9 @@ private fun CardParamRow(
             enabled = onEdit != null,
             modifier = Modifier
                 .weight(1f)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
+                // 输入框底色必须是 surface：卡面已经改成 surfaceVariant（参考实现的
+                // colorSurfaceVariant），两者同色的话输入框会整块消失，只剩光标在飘。
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp))
                 .padding(horizontal = 6.dp, vertical = 3.dp),
         )
     }
@@ -868,7 +896,7 @@ private fun rowVisible(row: CardParamRowModel, node: WorkflowNode): Boolean = wh
     WorkflowExpandType.NONE -> row.linked
 }
 
-/** 卡片尾部的小图标按钮。激活态（已锁 / 全展开 / 删除已武装）用主色或 error。 */
+/** 卡片动作条上的小图标按钮。激活态（已锁 / 全展开 / 删除已武装）用主色或 error。 */
 @Composable
 private fun CardActionIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -877,15 +905,19 @@ private fun CardActionIcon(
     onClick: () -> Unit,
     tint: Color? = null,
 ) {
-    Icon(
-        imageVector = icon,
-        contentDescription = desc,
-        tint = tint ?: if (active) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.onSurfaceVariant,
+    Box(
         modifier = Modifier
-            // 卡片只有 220dp 宽，IconButton 会把每个图标撑到 48dp（minimumInteractiveComponentSize），
-            // 四个按钮就占满一整行。这里命中区就是图标本身，换行可控。
-            .size(20.dp)
+            .size(28.dp)
             .clickable(onClick = onClick),
-    )
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = desc,
+            tint = tint ?: if (active) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+    }
 }
+

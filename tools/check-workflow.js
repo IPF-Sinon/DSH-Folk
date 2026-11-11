@@ -753,6 +753,57 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
     "水印叠在 Box 里、不塞进内容 Column（否则会把卡片撑高）");
   ok(!/fillMaxSize\(\).*background\(MaterialTheme\.colorScheme\.scrim/.test(picker),
     "不再自绘全屏遮罩层（那层没有弹出动画）");
+
+  // ── 卡片结构与参考实现逐条对齐 ──
+  //
+  // 这一组守的是"卡片长什么样"。参考实现是 card_normal.xml + ActionCard，
+  // 每一条都对应它里面一个具体的控件/属性，不是随手定的口味。
+  // 断言的共同点是：错了都不报错，只会在真机上表现为"看着不像"或"点不中"。
+
+  // 参考卡片没有顶部色带：类型信息由水印 + 选中描边承担。
+  // 多一条 4dp 实色带会让卡片顶部凭空多一截，并与 1dp 描边撞色。
+  ok(!/height\(4\.dp\)\s*\.background\(accent\)/.test(card),
+    "卡片没有顶部类型色带（参考实现的 card_normal 里没有这一层）");
+
+  // 参考卡片的标题下面没有副标题：动作摘要与下方的参数行是同一件事，
+  // 两处都写既浪费横向空间，又把参数行往下挤一整行。
+  ok(!/workflowNodeSubtitle/.test(card),
+    "标题下没有重复的动作摘要行（命令值只在参数行出现一次）");
+
+  // 参考实现的 des 是一条**满宽主题色横条**（background=colorPrimary、textColor=onPrimary），
+  // 不是一行浅色小字 —— 它是用户自己写的一句话，视觉权重该高于参数标签。
+  ok(/background\(MaterialTheme\.colorScheme\.primary, RoundedCornerShape\(4\.dp\)\)/.test(card) &&
+    /color = MaterialTheme\.colorScheme\.onPrimary/.test(card),
+    "描述条是参考实现那样的主题色横条（主色底 + onPrimary 字）");
+
+  // 参考实现是 expandButton 在左、Space(weight=1)、右侧 ButtonGroup(lock/copy/remove)。
+  // 上一版四个按钮全挤在尾部，展开与删除只隔 20dp —— 想切展开会点到删除，
+  // 而删除两下才真删，第一下已经把卡变成红色警戒态。
+  {
+    const barAt = card.indexOf("动作条：展开（左）");
+    const spacerAt = card.indexOf("Spacer(Modifier.weight(1f))", barAt);
+    const lockAt = card.indexOf("if (onToggleLock != null) {", barAt);
+    ok(barAt > 0 && spacerAt > barAt && lockAt > spacerAt,
+      "动作条左右分置：展开在左、锁定/复制/删除在右（中间 weight 撑开）");
+  }
+
+  // 参考实现的 pinBox 是 Row：inBox 在左、outBox 在右，两者**同一水平带**。
+  // 上一版把出口单独摆在所有参数下方一整行，右侧留半张卡宽的空白，出口针脚离
+  // 它对应的那列数据很远 —— 拉线时要在两片空白之间找点。
+  {
+    const pinBoxAt = card.indexOf("针脚区（参考实现的 pinBox");
+    const leftColAt = card.indexOf("Modifier.weight(1f)", pinBoxAt);
+    const outAt = card.indexOf("if (dataOuts.isNotEmpty())", pinBoxAt);
+    ok(pinBoxAt > 0 && leftColAt > pinBoxAt && outAt > leftColAt,
+      "数据入口与数据出口同处一个水平针脚区（inBox 左 / outBox 右）");
+  }
+
+  // 参考实现的 position：bottom|end、alpha 0.1、colorSecondary。
+  // 它必须挂在 Box 上而不是内容 Column 里 —— 否则每张卡都会被这行字撑高一截。
+  // 坐标只读已有的 posX/posY，不参与任何持久化写入。
+  ok(/\$\{node\.posX\},\$\{node\.posY\}/.test(card) &&
+    /\.align\(Alignment\.BottomEnd\)[\s\S]{0,80}\.alpha\(0\.10f\)/.test(card),
+    "右下角有低透明度坐标水印（参考实现的 position）");
 }
 
 console.log("\u2500 #16i 节点落点换算（拉线与新面板共用同一处）");
