@@ -519,7 +519,15 @@ private fun DrawScope.drawBlueprintEdges(
             val toSpec = WorkflowSchema.pinsOf(definition, edge.to).firstOrNull { it.id == edge.toPin }
             pinColors[(toSpec?.type ?: WorkflowPinType.ANY).id] ?: dataColor
         } else {
-            execColor
+            // 控制流没有"数据类型"，三类出口各自的语义色沿用画布原有的一套：
+            // 成立=tertiary、不成立=error（它同时画虚线）、默认流=outline。
+            // 这三色是**同一颗针脚**的颜色在画布上的延伸 —— 卡片上它们都是 outline，
+            // 但画布必须区分真假，否则一条分支线看不出走的是哪一边。
+            when (edge.whenExpr) {
+                "true" -> trueColor
+                "false" -> falseColor
+                else -> normal
+            }
         }
         // 选中卡片的连线加粗并置顶：参考实现把"选中卡片相关的线"用更粗的笔单独再画一遍。
         // 置顶靠第二趟绘制实现（见下方 selected 分支），这里只决定线宽。
