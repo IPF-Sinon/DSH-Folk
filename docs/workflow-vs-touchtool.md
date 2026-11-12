@@ -131,7 +131,37 @@ new ActionInfo(ActionType.MANUAL_START, ManualStartAction.class,
 | 枚举针脚 | 可接线 | 已实现 | 已对齐 |
 | 多来源 | `PinAdd` 动态针脚 | 逗号列表追加 | **实现方式不同，表达能力等价** |
 
-## 6. 后续工作索引
+## 6. 本轮已实现（beta.270 起）
+
+| 项 | 做法 | 断言 |
+|---|---|---|
+| 拉线弹窗按针脚筛候选 | `addAfterPin` 记录源针脚 → 面板 `filterPin` → 复用 `canLinkFrom` 过滤 | check-workflow 632 项 |
+| 落点高亮 + 震动 | `wireHoverPin` 实时判定；命中针脚放大到 22dp 换 primary；命中变化才震 | 637 项 |
+| 基础节点描述 | `EditorNodeKind.descRes`，七张基础卡各一句 | 638 项 |
+| 图标去重 | 31 个动作互不重复的图标（防回退断言） | 640 项 |
+| 数据线绕大弯 | `vertical = !isData`（数据走水平走法） | 642 项 |
+
+### 实现时踩到的坑（记录以免重犯）
+
+1. **`Canvas` 的 draw lambda 不是 `@Composable`** —— 在里面读 `MaterialTheme` 编译不过。
+   颜色必须在组合期算好再传入。已踩过两次（`workflowPinColor`、`wireRejectColor`）。
+2. **public 组件不能暴露 internal 类型当类型参数** —— `acceptsPin: ((WorkflowPinKind) -> Boolean)?`
+   报 `exposes its internal parameter type argument`。改传字符串名，合法性由宿主保证。
+3. **子组件不能摸父组件局部状态** —— `PresetTab` 里用 `query` 报 Unresolved reference，改为传参。
+4. **顶层函数调不到 Composable 内的局部函数** —— `editorPickerGroups` 是顶层 private，调不到
+   `WorkflowEditorSurface` 内部的 `withActionDefaults`，必须自己拼 config。
+5. **Material 图标按名解析** —— 写一个本工程没用过的图标名 = Unresolved reference，本地无编译器
+   只能靠 CI 炸。补图标时优先取 `grep -rhoE 'Icons\.(Filled|Outlined)\.[A-Za-z]+'` 现得的名字。
+
+## 7. 后续工作索引
 
 - `docs/workflow-pin-filtering.md` — 按针脚筛选候选面板的实现要点
-- `docs/workflow-action-catalog.md` — 动作目录扩充清单与端点对照
+- `docs/workflow-action-catalog.md` — 动作目录扩充清单与端点对照（**P5 未做**）
+
+### 仍待做
+
+- **P5 动作目录扩充**：31 → 更多。批次 A（纯计算，无端点）需要新增 `WorkflowActionType.COMPUTE`
+  并在引擎里本地求值；批次 B/C 见 `workflow-action-catalog.md`。
+- **列表/字典序列化格式**：`Map<String,String>` 只能存字符串，需定 JSON 数组/对象字符串，
+  并评估 `WorkflowPinType` 是否加 `LIST`/`MAP`（会动 `accepts` 的互通规则，影响面大）。
+- **运行时验证**：以上外观类改动（高亮、图标、连线走法）只过了编译，未经真机确认。
