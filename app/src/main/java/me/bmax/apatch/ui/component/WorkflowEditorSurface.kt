@@ -100,6 +100,7 @@ import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
 import me.bmax.apatch.dsh.WorkflowPatch
 import me.bmax.apatch.dsh.WorkflowPinKind
+import me.bmax.apatch.dsh.WorkflowPinSpec
 import me.bmax.apatch.dsh.WorkflowSchema
 import me.bmax.apatch.dsh.WorkflowValidator
 import me.bmax.apatch.dsh.workflowDiff
@@ -176,6 +177,32 @@ private fun actionKindsOf(groupTitleRes: Int): List<EditorNodeKind> =
 // 色点只是列表里 8dp 的辅助标记，不需要跟随主题语义色。
 // 用固定色即可：构建纯数据、可在任何上下文调用，也不会再被 remember 包坏。
 private fun editorPickerGroups(): List<NodePickerGroup> {
+    // ── 「这个节点能不能接上那颗源针脚」──
+    //
+    // 参考实现是在候选 Action 实例上调 `action.findConnectToAblePin(touchedPin)`：
+    // 逐个动作造出真实对象、取出它的针脚表、看有没有一颗能接。
+    // 这里做的是同一件事 —— 用该 kind 的默认 config 造一个**临时节点**，
+    // 取它的针脚表，再看有没有任一针脚 canLinkFrom 那颗源针脚。
+    //
+    // 为什么必须造节点而不是只看类型：针脚表本身依赖 config ——
+    // trigger 的 requireDsh 决定它给一条还是两条出口，原生动作的 bridge 决定它有哪些 p_* 参数。
+    // 不看 config 就只能给出一张"大致如此"的针脚表，筛选结果会与真实针脚对不上。
+    // `withActionDefaults` 是 WorkflowEditorSurface **内部**的局部函数，这个顶层函数调不到它，
+    // 所以这里自己拼 config：默认参数 + 名字。名字不影响针脚表（针脚只看参数键），
+    // 但它必须存在，否则原生动作的 `p_*` 参数会用空默认值，针脚 id 仍然一致。
+    fun accepts(kind: EditorNodeKind): (WorkflowPinKind) -> Boolean = { sourceKind ->
+        val probe = WorkflowNode(
+            id = "probe",
+            type = kind.type,
+            name = "",
+            posX = 0,
+            posY = 0,
+            config = kind.defaults,
+        )
+        val source = WorkflowPinSpec("probe", "", sourceKind)
+        WorkflowSchema.defaultPinsFor(probe).any { target -> target.canLinkFrom(source) }
+    }
+
     fun entry(key: String, kind: EditorNodeKind): NodePickerEntry = NodePickerEntry(
         key = key,
         titleRes = kind.labelRes,
@@ -188,6 +215,7 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
         accent = editorPickerAccent(kind.type),
         searchText = appStringRaw(kind.labelRes),
         payload = kind,
+        acceptsPin = accepts(kind),
     )
 
     val exec = EDITOR_NODE_CATALOG.filter { it.type == WorkflowNodeType.EXECUTE }
@@ -332,6 +360,12 @@ internal fun WorkflowEditorSurface(
     // 而自动保存已经在后台写盘 —— 误删是不可撤销的。
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     var addAfter by remember { mutableStateOf<String?>(null) }
+    // 拉线落在空白时的**源针脚**。
+    //
+    // 面板要按它筛候选：从执行出口松开就该只看到有执行入口的节点，从数据出口松开就只看到
+    // 有同类型数据入口的节点（参考实现 SelectActionByPinDialog 就是这么筛的）。
+    // 只记 addAfter（源节点 id）不够 —— 同一个节点上有好几颗针脚，类型只有针脚自己知道。
+    var addAfterPin by remember { mutableStateOf("") }
     // 拉线落在空白时的**松手窗口坐标**：菜单里选完类型，新节点就落在这里（不是默认网格位）。
     var addAfterAt by remember { mutableStateOf(Offset.Zero) }
     var sheetOpen by remember { mutableStateOf(false) }
@@ -842,9 +876,11 @@ internal fun WorkflowEditorSurface(
                                     draft = next
                                 }
                             } else {
-                                // 落在空白：记住松手坐标，菜单选完类型后按它建节点。
+                                // 落在空白：记住松手坐标与**源针脚**，菜单选完类型后按它建节点。
+                                // 源针脚一并记下来，面板据此只列「能接上这颗针脚」的节点。
                                 addAfterAt = pointer
                                 addAfter = fromId
+                                addAfterPin = fromPin
                             }
                         },
                         // ── 卡上的复制 / 删除 / 编辑（对齐参考实现：这些按钮就长在卡上）──
@@ -1082,6 +1118,8 @@ internal fun WorkflowEditorSurface(
                     variables = draft.variables,
                     // 变量页底部那颗按钮复用已有的「流程内变量」窗 —— 同一件事不另造一个入口。
                     onEditVariables = { varsOpen = true },
+                    // 底部这个入口是「我要加个节点」，不是「我要接上某颗针脚」—— 不过滤。
+                    filterPin = null,
                     onDismiss = { sheetOpen = false },
                 )
             }
@@ -1170,10 +1208,17 @@ internal fun WorkflowEditorSurface(
                     addNodeAt(kind, x, y, after)
                 }
                 addAfter = null
+                // 源针脚也要清：留着的话，下次从别处拉线落在空白时会用上一次的类型去筛。
+                addAfterPin = ""
             },
             variables = draft.variables,
             onEditVariables = { varsOpen = true },
-            onDismiss = { addAfter = null },
+            // 这个入口是「从这颗针脚拉出来，要接个节点」—— 按源针脚筛候选。
+            filterPin = addAfterPin.takeIf { it.isNotBlank() },
+            onDismiss = {
+                addAfter = null
+                addAfterPin = ""
+            },
         )
     }
 

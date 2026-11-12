@@ -770,6 +770,29 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
   // 标题行必须**删掉**：参考实现没有它，三段标签本身就是身份，关闭靠拖柄/返回键。
   ok(!/dsh_workflow_editor_add_node/.test(picker),
     "面板顶部不再有「加节点」标题行");
+  // ── 按源针脚筛候选（对齐 SelectActionByPinDialog）──
+  //
+  // 参考实现从某颗针脚拖出、松手落空白时，弹的窗只保留 `findConnectToAblePin` 认的动作。
+  // 我们原来落空白只记 addAfter（源节点 id），针脚类型丢了，面板只能列全量。
+  ok(/var addAfterPin by remember \{ mutableStateOf\(""\) \}/.test(e) &&
+    /addAfterPin = fromPin/.test(e),
+    "拉线落空白时记录源针脚（否则面板无法按针脚筛选）");
+  ok(/filterPin = null,/.test(e) && /filterPin = addAfterPin\.takeIf \{ it\.isNotBlank\(\) \}/.test(e),
+    "底部「加节点」不过滤，拉线入口按源针脚过滤");
+  ok(/addAfterPin = ""/.test(e),
+    "选完或取消后清空源针脚（残留会让下次拉线用错的类型筛）");
+  ok(/filterPin: String\? = null/.test(picker) && /\.filter \{ entry -> acceptFilter\?\.invoke\(entry\) \?: true \}/.test(picker),
+    "面板接受 filterPin 并对分类与搜索两条分支同时过滤");
+  // 判定必须复用 canLinkFrom，不能在面板里另写一套——参考实现的 linkAble 只有一处。
+  ok(/target\.canLinkFrom\(source\)/.test(e),
+    "可接性判定复用 WorkflowPinSpec.canLinkFrom（不另写规则）");
+  // 造临时节点探测针脚表：针脚本身就依赖 config（trigger 的 requireDsh、原生动作的 bridge）。
+  ok(/val probe = WorkflowNode\(/.test(e) && /WorkflowSchema\.defaultPinsFor\(probe\)/.test(e),
+    "用该 kind 的默认 config 造临时节点取针脚表（否则筛选与真实针脚对不上）");
+  ok(/dsh_wf_picker_no_compatible/.test(picker) &&
+    /dsh_wf_picker_no_compatible/.test(read("app/src/main/res/values-zh-rCN/dsh_strings.xml")) &&
+    /dsh_wf_picker_no_compatible/.test(read("app/src/main/res/values/dsh_strings.xml")),
+    "过滤为空时有专门提示，中英成对（与「没搜到」分开说）");
   ok(/verticalScroll\(rememberScrollState\(\)\)/.test(picker) &&
     /width\(84\.dp\)/.test(picker),
     "左栏独立滚动（八项放不下时自己滚，不把整块面板撑变形）");

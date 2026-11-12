@@ -2141,4 +2141,5 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_picker_var_empty">This workflow has no variables yet. Add one with the button below.</string>
     <string name="dsh_wf_picker_var_desc">Store the step output into this variable</string>
     <string name="dsh_wf_picker_var_edit">Manage workflow variables</string>
+    <string name="dsh_wf_picker_no_compatible">No node has a port that can connect to this one</string>
 </resources>

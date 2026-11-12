@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.WorkflowNodeType
+import me.bmax.apatch.dsh.WorkflowPinKind
 import me.bmax.apatch.dsh.WorkflowStore
 
 /** 面板顶部的三段标签：预设 / 任务 / 变量（对齐参考实现 SelectActionDialog 的 GroupType）。 */
@@ -107,6 +108,16 @@ fun WorkflowNodePicker(
     variables: Map<String, String> = emptyMap(),
     /** 打开「流程内变量」编辑窗（宿主侧已有这个对话框）。null = 不提供该入口。 */
     onEditVariables: (() -> Unit)? = null,
+    /**
+     * 源针脚种类名（`EXEC_OUT` / `DATA_OUT` …）。非空 = **只显示能接上这颗针脚的节点**。
+     *
+     * 对齐参考实现的 `SelectActionByPinDialog`：它是从某颗针脚拖出来、松手落在空白时弹的，
+     * 所以候选集天生就经过 `action.findConnectToAblePin(touchedPin)` 过滤 —— 用户不会看到
+     * 一堆接不上的节点。
+     *
+     * null 表示「我不是从针脚来的」（底部「加节点」入口），此时列全量，行为与以前一致。
+     */
+    filterPin: String? = null,
 ) {
     var tab by rememberSaveable { mutableStateOf(PICKER_TAB_PRESET) }
     var groupIndex by rememberSaveable { mutableStateOf(0) }
@@ -127,15 +138,33 @@ fun WorkflowNodePicker(
         }
     }
 
+    // ── 按源针脚筛候选 ──
+    //
+    // 只做一次判定的**闭包**，然后让分类视图与搜索结果共用它 —— 否则两处各写一遍过滤，
+    // 迟早出现「分类里看不到、搜索却搜得到」这种自相矛盾（参考实现里没有这种分叉，
+    // 因为它是先过滤出 types 再喂给唯一的列表）。
+    //
+    // 判定复用 WorkflowPinSpec.canLinkFrom：那正是参考实现 Pin.linkAble 的等价物
+    // （输入端单线、控制流只接控制流、数据只看类型互通）。这里**不重写**一份规则。
+    val acceptFilter: ((NodePickerEntry) -> Boolean)? = filterPin?.let { pinKindName ->
+        val sourceKind = WorkflowPinKind.entries.firstOrNull { it.name == pinKindName }
+        if (sourceKind == null) {
+            null
+        } else {
+            { entry -> entry.acceptsPin?.invoke(sourceKind) ?: true }
+        }
+    }
+
     val group = groups.getOrNull(groupIndex)
     // 搜索优先于分类：输入关键词就在**全部分类**里找，而不是只在当前分类里。
-    val visible = if (query.isBlank()) {
+    // 两条分支都要过 acceptFilter（见上）。
+    val visible = (if (query.isBlank()) {
         group?.entries.orEmpty()
     } else {
         groups.flatMap { it.entries }.filter { e ->
             e.searchText.contains(query.trim(), ignoreCase = true)
         }
-    }
+    }).filter { entry -> acceptFilter?.invoke(entry) ?: true }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -303,7 +332,15 @@ private fun ColumnScope.PresetTab(
         }
         Spacer(Modifier.width(8.dp))
         if (visible.isEmpty()) {
-            PickerEmpty(stringResource(R.string.dsh_wf_picker_empty), Modifier.weight(1f))
+            // 空态的两种原因要分开说：过滤后为空是「这颗针脚没有能接的节点」，
+            // 搜索后为空是「没搜到」。混成一句会把用户引到错误的动作上（去改搜索词）。
+            PickerEmpty(
+                stringResource(
+                    if (query.isNotBlank()) R.string.dsh_wf_picker_empty
+                    else R.string.dsh_wf_picker_no_compatible
+                ),
+                Modifier.weight(1f),
+            )
         } else {
             TwoColumnCards(visible, onPick)
         }
@@ -581,6 +618,13 @@ data class NodePickerEntry(
     val searchText: String,
     /** 具体要建哪种节点 —— 由调用方解释，面板不关心。 */
     val payload: Any,
+    /**
+     * 这个条目的节点**能否接上**给定的源针脚。null = 恒可接（不过滤）。
+     *
+     * 判定本身放在宿主侧（见 `editorPickerGroups`）：面板不认识节点模型，也不该认识 ——
+     * 它只负责"拿这个闭包筛"。这样针脚规则仍然只有 `WorkflowPinSpec.canLinkFrom` 一处。
+     */
+    val acceptsPin: ((sourceKind: WorkflowPinKind) -> Boolean)? = null,
     /** 动态标题（任务页/变量页）；非空时优先于 [titleRes]。 */
     val title: String? = null,
     /** 动态说明；非空时优先于 [descRes]。 */
