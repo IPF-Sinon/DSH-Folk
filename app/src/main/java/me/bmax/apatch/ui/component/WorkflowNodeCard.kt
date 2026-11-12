@@ -575,7 +575,7 @@ private fun PinDot(pin: WorkflowPinSpec) {
     val shape = remember(density) {
         val r = with(density) { topCorner.toPx() }
         val c = with(density) { cutCorner.toPx() }
-        GenericShape { size ->
+        GenericShape { size, _ ->
             // 用实际尺寸而不是常量：针脚被放进不同的父容器时也能保持同样的比例。
             val sw = size.width
             val sh = size.height
