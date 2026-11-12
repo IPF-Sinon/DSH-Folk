@@ -222,43 +222,63 @@ internal object WorkflowSchema {
                 null -> emptyList()
             }
 
-            // condition：待比较的 `source` 与比较值 `value` 都能接线 —— 它们本来就是
-            // "拿别处的值来跟这个值比"，不能接线就只能手打常量。
-            // `op` 不给：它是枚举，接一根线进来等于让上游决定比较方式，那不是连线是污染。
-            // result 用 bool：condition 的产出就是判断结论，标成 ANY 会让下游看不出它只给真假。
+            // condition：待比较的 `source`、比较值 `value`、比较方式 `op` 都能接线。
+            //
+            // 按点击助手的规矩：`ChoiceExecuteAction` 这类动作连枚举都是普通 Pin（PinSingleSelect
+            // 继承 PinString，没被包进 NotLinkAblePin），所以枚举照样能拉线。
+            // 之前这里把 op 排除在外，理由是"让上游决定比较方式没意义"——那是我替用户做的判断，
+            // 而参考实现根本没这个限制；用户要按点击助手来，那就给。
+            // 枚举是 CHOICE 类型，且只与 CHOICE/ANY 互接（accepts 不做隐式转换），
+            // 所以"文本喂进 op"这种接线会被拦掉，不会静默变成一句废话。
+            // result 用 bool：condition 的产出就是判断结论。
             WorkflowNodeType.CONDITION -> listOf(
                 execIn,
                 yes,
                 no,
                 WorkflowPinSpec("source", "来源", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.ANY.id, defaultValue = node.config("source")),
+                WorkflowPinSpec("op", "判断", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.CHOICE.id, defaultValue = node.config("op")),
                 WorkflowPinSpec("value", "比较值", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.ANY.id, defaultValue = node.config("value")),
                 WorkflowPinSpec("result", "结论", WorkflowPinKind.DATA_OUT, dataType = WorkflowPinType.BOOL.id),
             )
 
-            // logic：`sources` 是参与运算的多个来源，天然该能接线；`op` 同上不给。
+            // logic：`sources` 与 `op` 都能接线（同上，按点击助手的规矩）。
+            //
+            // `sources` 是**多来源**：一个 logic 要把若干判断结论 and/or 起来。参考实现用
+            // `PinAdd` 动态增删针脚来表达这件事（SequenceExecuteAction / ChoiceExecuteAction
+            // 里的 addPin）。这里给的是**一个** sources 入口，接线时把来源 id 追加到逗号列表里
+            // 而不是覆盖 —— 详见 WorkflowValidator.addDataEdge 的 appendIfMulti 分支。
+            // 之所以不照搬 PinAdd 那套动态针脚：动态针脚要落进定义文件（针脚表目前是纯推导、
+            // 不落盘），那会变成第二套模型。用"追加到列表"达到同样的表达能力，且不改变存盘格式。
             WorkflowNodeType.LOGIC -> listOf(
                 execIn,
                 yes,
                 no,
+                WorkflowPinSpec("op", "运算", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.CHOICE.id, defaultValue = node.config("op")),
                 WorkflowPinSpec("sources", "来源", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.ANY.id, defaultValue = node.config("sources")),
                 WorkflowPinSpec("result", "结论", WorkflowPinKind.DATA_OUT, dataType = WorkflowPinType.BOOL.id),
             )
 
-            // extract：`source` 能接线（要从上一步取值就该能连），`var` 是写出端。
-            // `mode` / `path` / `pattern` 是"怎么提取"，让上游决定用正则还是按 json 取毫无意义，
-            // 所以它们只出现在参数行里，不做针脚。
+            // extract：`source`、`mode`、`path`、`pattern` 都能接线，`var` 是写出端。
+            //
+            // 上一版把 mode/path/pattern 排除在外（"怎么提取不该由上游决定"），那是我的判断，
+            // 不是参考实现的行为 —— 它那里这几个都是普通 Pin，都能连。按点击助手来就都给。
+            // `var` 用 TEXT（变量名是文本，不是任意值）。
             WorkflowNodeType.EXTRACT -> listOf(
                 execIn,
                 execOut,
                 WorkflowPinSpec("source", "来源", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.ANY.id, defaultValue = node.config("source")),
-                WorkflowPinSpec("var", "变量", WorkflowPinKind.DATA_OUT, defaultValue = node.config("var")),
+                WorkflowPinSpec("mode", "方式", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.CHOICE.id, defaultValue = node.config("mode")),
+                WorkflowPinSpec("path", "路径", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.TEXT.id, defaultValue = node.config("path")),
+                WorkflowPinSpec("pattern", "正则", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.TEXT.id, defaultValue = node.config("pattern")),
+                WorkflowPinSpec("var", "变量", WorkflowPinKind.DATA_OUT, dataType = WorkflowPinType.TEXT.id, defaultValue = node.config("var")),
             ) + resultPin
 
-            // wait：`ms` 能接线（等多久经常要算出来）。`untilDsh` 是枚举，不给。
+            // wait：`ms` 与 `untilDsh` 都能接线（枚举按点击助手的规矩也给）。
             WorkflowNodeType.WAIT -> listOf(
                 execIn,
                 execOut,
                 WorkflowPinSpec("ms", "时长", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.NUMBER.id, defaultValue = node.config("ms")),
+                WorkflowPinSpec("untilDsh", "等到", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.CHOICE.id, defaultValue = node.config("untilDsh")),
             ) + resultPin
         }
     }

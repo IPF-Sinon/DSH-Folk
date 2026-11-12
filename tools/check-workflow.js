@@ -502,11 +502,37 @@ console.log("\u2500 #16b 引脚展示模型（阶段 1：纯加法，不改落�
     "trigger 要求 DSH 时也有「未就绪」出口（它本来就走假分支）");
   ok(/WorkflowActionType\.SHELL, WorkflowActionType\.DSH -> listOf\([\s\S]{0,160}?"cmd"/.test(pins),
     "shell/dsh 节点的参数引脚是 cmd");
-  ok(/WorkflowNodeType\.EXTRACT -> listOf\([\s\S]{0,400}?WorkflowPinSpec\("var"[\s\S]{0,80}?DATA_OUT/.test(pins),
+  ok(/WorkflowNodeType\.EXTRACT -> listOf\([\s\S]{0,900}?WorkflowPinSpec\("var"[\s\S]{0,120}?DATA_OUT/.test(pins),
     "extract 节点有变量输出引脚");
   // extract 的 source 也必须能接线：上一版它只做参数行，等于逼用户手打来源。
   ok(/WorkflowNodeType\.EXTRACT -> listOf\([\s\S]{0,400}?WorkflowPinSpec\("source"/.test(pins),
     "extract 的 source 是可接线的数据入口");
+  // ── 枚举针脚按点击助手的规矩也给 ──
+  //
+  // 参考实现里枚举（PinSingleSelect，继承 PinString）是普通 Pin，不是 NotLinkAblePin，
+  // 所以照样能拉线。我曾以「让上游决定比较方式没意义」为由把 op/mode/untilDsh 排除，
+  // 那是替用户做的判断，不是参考行为。用户明确要求按点击助手来。
+  // 安全性由类型系统兜住：枚举是 CHOICE，只与 CHOICE/ANY 互接（不做隐式转换），
+  // 文本喂进 op 会被 addDataEdge 拦掉，不会静默生效。
+  ok(/WorkflowNodeType\.CONDITION -> listOf\([\s\S]{0,600}?WorkflowPinSpec\("op"/.test(pins) &&
+    /dataType = WorkflowPinType\.CHOICE\.id/.test(pins),
+    "condition 的 op 是 CHOICE 类型针脚（枚举也能接线，同点击助手）");
+  ok(/WorkflowNodeType\.EXTRACT -> listOf\([\s\S]{0,700}?WorkflowPinSpec\("mode"/.test(pins) &&
+    /WorkflowNodeType\.EXTRACT -> listOf\([\s\S]{0,800}?WorkflowPinSpec\("pattern"/.test(pins),
+    "extract 的 mode / pattern 也是针脚");
+  ok(/WorkflowNodeType\.WAIT -> listOf\([\s\S]{0,400}?WorkflowPinSpec\("untilDsh"/.test(pins),
+    "wait 的 untilDsh 是针脚");
+  // ── 多来源参数：接多根线要保留，不是互相覆盖 ──
+  //
+  // logic.sources 的语义是「若干判断结论 and/or 起来」，引擎 evaluateLogic 按逗号切成 id 列表。
+  // 如果接新线时把同一 toPin 的旧线清掉（普通参数的单线语义），用户永远只能接一个来源。
+  ok(/private val MULTI_SOURCE_PINS = setOf\("sources"\)/.test(SRC.validator) &&
+    /private val MULTI_SOURCE_PINS = setOf\("sources"\)/.test(SRC.engine),
+    "校验器与引擎用同一个多来源参数集（两处不一致会静默丢掉来源）");
+  ok(/val withoutOld = if \(multiSource\) def\.edges else/.test(SRC.validator),
+    "接数据线时多来源参数不清旧线（否则只能接一个来源）");
+  ok(/val multi = e\.toPin in MULTI_SOURCE_PINS/.test(SRC.engine),
+    "写回 config 时多来源参数走追加分支，不是覆盖");
   // 「只是展示」的反向证据：引脚不进 JSON 编解码。
   ok(!/pin/i.test(SRC.models.slice(SRC.models.indexOf("fun toJson"), SRC.models.indexOf("fun toJson") + 4000)),
     "引脚不写进 toJson（落盘格式没变）");

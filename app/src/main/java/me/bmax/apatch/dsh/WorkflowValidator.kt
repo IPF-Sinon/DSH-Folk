@@ -92,6 +92,14 @@ internal object WorkflowValidator {
      * linkAble 在拖动结束前就判掉了，接不上根本不会建立连接；这里在数据层再判一次，
      * 因为 AI 也能直接改 JSON 提交定义。
      */
+    /**
+     * 语义是「多个来源串起来」的参数键（与 WorkflowEngine.MULTI_SOURCE_PINS 同一套）。
+     *
+     * 两处必须一致：这里决定"接新线时清不清旧线"，引擎那边决定"写回时覆盖还是追加"。
+     * 只改一边的后果是静默的 —— 界面上线还在，跑起来却只有一个来源参与运算。
+     */
+    private val MULTI_SOURCE_PINS = setOf("sources")
+
     fun addDataEdge(
         def: WorkflowDefinition,
         fromId: String,
@@ -115,7 +123,12 @@ internal object WorkflowValidator {
         if (dup) return def
 
         // 输入端单线：清掉同一目标针脚上的旧线（控制流线不动）。
-        val withoutOld = def.edges.filterNot {
+        //
+        // **例外：多来源参数不清**。`logic.sources` 的语义就是"多个来源串起来"，
+        // 接到它上面的每根线都要保留；照单线清掉的话，接第二根时第一根消失，
+        // 用户永远只能接一个来源。与引擎侧 applyDataEdges 的追加分支是同一套规则。
+        val multiSource = toPin in MULTI_SOURCE_PINS
+        val withoutOld = if (multiSource) def.edges else def.edges.filterNot {
             it.kind == WorkflowEdgeKind.DATA && it.to == toId && it.toPin == toPin
         }
 

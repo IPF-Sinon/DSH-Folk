@@ -645,7 +645,26 @@ internal object WorkflowEngine {
             // 按声明的类型收敛一下：number 只留数字形态，bool 归一成 1/0。
             // 不收敛的话，"上游输出了 3 行文字"喂进 number 参数，下游拿到的是那段文字，
             // 而它会被 validator 判合法（validator 只查静态定义里写的东西）。
-            patch[e.toPin] = coerceValue(raw, e.dataType)
+            val value = coerceValue(raw, e.dataType)
+            // ── 多来源参数：追加，不是覆盖 ──
+            //
+            // `logic.sources` 的语义是"把若干判断节点的结论 and/or 起来"（见 evaluateLogic：
+            // 它把 sources 按逗号切开当节点 id 列表用）。所以接到它上面的每一根线都要**保留**，
+            // 直接 patch[toPin] = value 会让最后接的那根把前面全部顶掉 —— 用户接三根线，
+            // 实际只有一个来源参与运算，而且看不出为什么。
+            //
+            // 参考实现用 PinAdd 动态增删针脚来表达"可多个"；这里用一个入口 + 逗号列表，
+            // 表达能力等价，且不必给针脚表引入落盘状态。
+            val multi = e.toPin in MULTI_SOURCE_PINS
+            patch[e.toPin] = if (multi) {
+                // 存的是**来源节点 id**（evaluateLogic 拿它查 branches），不是上游的输出值。
+                val srcId = e.from
+                val kept = (patch[e.toPin] ?: node.config(e.toPin))
+                    .split(',').map { it.trim() }.filter { it.isNotEmpty() && it != srcId }
+                (kept + srcId).joinToString(",")
+            } else {
+                value
+            }
         }
         return node.copy(config = node.config + patch)
     }
@@ -664,6 +683,14 @@ internal object WorkflowEngine {
         }
         else -> raw
     }
+
+    /**
+     * 语义是「多个来源串起来」的参数键。接到这些键上的数据边要**追加**而不是覆盖。
+     *
+     * 目前只有 `logic.sources`：它按逗号切成节点 id 列表（见 [evaluateLogic]）。
+     * 其余参数都是单值，保持覆盖语义 —— 那是"这个参数的值由上游决定"的正确含义。
+     */
+    private val MULTI_SOURCE_PINS = setOf("sources")
 
     /** `logic`：把若干判断节点的结论 and/or/not 起来。 */
     private fun evaluateLogic(node: WorkflowNode, branches: Map<String, Boolean>): Boolean {
