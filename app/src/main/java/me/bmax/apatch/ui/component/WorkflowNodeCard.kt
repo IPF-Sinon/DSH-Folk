@@ -189,6 +189,16 @@ internal fun WorkflowNodeCard(
     canDelete: Boolean = true,
     /** 这张卡里哪些参数已经接上了线（决定 NONE 档显示什么）。 */
     linkedParamKeys: Set<String> = emptySet(),
+    /**
+     * 拖线时**指针下这颗针脚**的 id（`p_x` / `cmd` / `result` …）；null = 没有针脚被悬停。
+     *
+     * 只影响外观：被悬停且可接的针脚会放大并加描边。
+     *
+     * 为什么需要它：拉线过程中，用户唯一的疑问是「松手会落在哪」。
+     * 参考实现用 dragOnPin + 震动回答这个问题；光有预览线不够 ——
+     * 线是连续的一根，指不出"具体是哪一颗针脚"。
+     */
+    hoveredPinId: String? = null,
 ) {
     val accent = workflowNodeAccent(node.type)
     val borderColor = when (status) {
@@ -298,7 +308,7 @@ internal fun WorkflowNodeCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                             )
-                            LinkablePinDot(execIn, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
+                            LinkablePinDot(execIn, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop, hovered = hoveredPinId == execIn.id)
                         }
                     }
                     // ── 标题区＝拖动把手 ──
@@ -464,6 +474,7 @@ internal fun WorkflowNodeCard(
                                         onPinIdBounds = onPinIdBounds,
                                         onPinDrag = onPinDrag,
                                         onPinDrop = onPinDrop,
+                                        hoveredPinId = hoveredPinId,
                                     )
                                 }
                             }
@@ -473,7 +484,7 @@ internal fun WorkflowNodeCard(
                                     for (pin in dataOuts) {
                                         Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
                                             PinLabel(pin)
-                                            LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
+                                            LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop, hovered = hoveredPinId == pin.id)
                                         }
                                     }
                                 }
@@ -537,7 +548,7 @@ internal fun WorkflowNodeCard(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                     )
-                                    LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
+                                    LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop, hovered = hoveredPinId == pin.id)
                                 }
                             }
                         }
@@ -561,7 +572,7 @@ internal fun WorkflowNodeCard(
  * 数据针脚按**类型**着色（[workflowPinColor]），于是"这口吃数字还是吃文本"不用读标签。
  */
 @Composable
-private fun PinDot(pin: WorkflowPinSpec) {
+private fun PinDot(pin: WorkflowPinSpec, hovered: Boolean = false) {
     val exec = pin.kind != WorkflowPinKind.DATA_IN && pin.kind != WorkflowPinKind.DATA_OUT
     val color = if (exec) MaterialTheme.colorScheme.outline else workflowPinColor(WorkflowPinType.of(pin.dataType))
     if (!exec) {
@@ -600,9 +611,14 @@ private fun PinDot(pin: WorkflowPinSpec) {
     }
     Box(
         Modifier
-            .size(18.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant, shape)
-            .border(1.dp, color, shape),
+            // 命中时放大一圈并换成 primary 描边：拉线过程中用户唯一要知道的就是「松手落哪」，
+            // 而预览线是连续的一根，指不出具体是哪颗针脚 —— 只有针脚自己变才能回答。
+            .size(if (hovered) 22.dp else 18.dp)
+            .background(
+                if (hovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                shape,
+            )
+            .border(if (hovered) 2.dp else 1.dp, if (hovered) MaterialTheme.colorScheme.primary else color, shape),
     )
 }
 
@@ -619,6 +635,8 @@ private fun LinkablePinDot(
     onPinIdBounds: ((pinId: String, pinKind: String, rect: androidx.compose.ui.geometry.Rect) -> Unit)?,
     onPinDrag: ((pinKind: String, anchorWindow: Offset, pointerWindow: Offset) -> Unit)?,
     onPinDrop: ((pointerWindow: Offset) -> Unit)?,
+    /** 这颗针脚此刻是否被拉线悬停（命中可接）。只影响外观。 */
+    hovered: Boolean = false,
 ) {
     var dotOrigin by remember { mutableStateOf(Offset.Zero) }
     var dotSize by remember { mutableStateOf(IntSize.Zero) }
@@ -658,7 +676,7 @@ private fun LinkablePinDot(
             },
         contentAlignment = Alignment.Center,
     ) {
-        PinDot(pin)
+        PinDot(pin, hovered = hovered)
     }
 }
 
@@ -865,13 +883,15 @@ private fun CardParamRow(
     onPinIdBounds: ((pinId: String, pinKind: String, rect: androidx.compose.ui.geometry.Rect) -> Unit)?,
     onPinDrag: ((pinKind: String, anchorWindow: Offset, pointerWindow: Offset) -> Unit)?,
     onPinDrop: ((pointerWindow: Offset) -> Unit)?,
+    /** 拉线时被悬停的针脚 id（见 [WorkflowNodeCard] 的 hoveredPinId）。 */
+    hoveredPinId: String? = null,
 ) {
     var choiceOpen by remember(row.key) { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().heightIn(min = 40.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (pin != null) LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop)
+        if (pin != null) LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop, hovered = hoveredPinId == pin.id)
         else Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
             Box(Modifier.size(12.dp).border(1.dp, row.color, CircleShape))
         }

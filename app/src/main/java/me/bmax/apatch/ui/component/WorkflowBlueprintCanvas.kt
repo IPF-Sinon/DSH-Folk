@@ -124,6 +124,9 @@ internal fun WorkflowBlueprintCanvas(
     val trueColor = MaterialTheme.colorScheme.tertiary
     val falseColor = MaterialTheme.colorScheme.error
     val wireColor = MaterialTheme.colorScheme.primary
+    // 拉线压在卡片上但接不上时用的颜色。在**组合期**取值：Canvas 的 draw lambda 不是
+    // @Composable，在里面读 MaterialTheme 编译不过（同一个坑上一轮已经踩过一次）。
+    val wireRejectColor = MaterialTheme.colorScheme.error.copy(alpha = 0.55f)
     // 数据针脚类型 → 颜色，在组合期算一次给绘制层查表（见 drawBlueprintEdges 的 pinColors）。
     // 只有 5 种类型，重建这点映射可忽略；好处是绘制期不必读主题。
     val pinColors = WorkflowPinType.entries.associate { it.id to workflowPinColor(it) }
@@ -150,6 +153,12 @@ internal fun WorkflowBlueprintCanvas(
     var wireFromPin by remember { mutableStateOf("") }
     var wireAnchor by remember { mutableStateOf(Offset.Zero) }
     var wirePointer by remember { mutableStateOf(Offset.Zero) }
+    // 拖拽中，指针下的**可接针脚**（key 形如 "<nodeId>:<pinKey>"）。null = 当前没有可接目标。
+    //
+    // 参考实现用 dragOnPin 做同一件事，并在命中变化时震一下 —— 那是"这里能接"的唯一即时
+    // 反馈。没有它，用户只能靠松手之后线断没断来猜，试错成本很高。
+    var wireHoverPin by remember { mutableStateOf<String?>(null) }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     // 针脚窗口矩形，两套键同时登记（见卡片的 onPinBounds / onPinIdBounds）：
     //  - "<节点id>:<引脚种类名>"（EXEC_IN / DATA_OUT …）—— 控制流边与按种类的调用点用；
     //  - "<节点id>:<引脚id>"（p_x / cmd / result / var）—— 数据边与数据落点用。
@@ -285,6 +294,10 @@ internal fun WorkflowBlueprintCanvas(
                     // 入口节点不能删：删掉它整张图没有起点，定义立刻不合法（校验器也会报）。
                     canDelete = node.type != WorkflowNodeType.TRIGGER,
                     linkedParamKeys = dataLinkedKeys[node.id].orEmpty(),
+                    // 拖线悬停在哪颗针脚上（key 是 "<nodeId>:<pinId>"，这里只取属于本卡的那部分）。
+                    hoveredPinId = wireHoverPin
+                        ?.takeIf { it.substringBefore(':') == node.id }
+                        ?.substringAfter(':'),
                     onBounds = { rect -> bounds = bounds + (node.id to rect) },
                     onPinBounds = { pinKind, rect -> pinRects = pinRects + ("${node.id}:$pinKind" to rect) },
                     // 同时按引脚 id 登记：数据边与落点判定要精确到"哪一颗"。
@@ -296,12 +309,39 @@ internal fun WorkflowBlueprintCanvas(
                         wireFromPin = pinKind
                         wireAnchor = anchor
                         wirePointer = pointer
+                        // ── 拖拽中实时判「这里能不能接」──
+                        //
+                        // 参考实现：dragOnPin 记录落点处可接的针脚，命中变化时
+                        // performHapticFeedback(LONG_PRESS)。震动是"就落这儿"的唯一即时反馈，
+                        // 而且只在**变化时**震一次 —— 每一帧都震的话手会麻。
+                        //
+                        // 判定用 WorkflowPinSpec.canLinkFrom（参考实现 Pin.linkAble 的等价物）：
+                        // 控制流只接控制流、数据只看类型互通，规则仍然只有那一处。
+                        val hit = hitPinAt(pointer, node.id, definition, pinRects)
+                        val targetSpec = hit?.let { h ->
+                            WorkflowSchema.pinsOf(definition, h.nodeId).firstOrNull { it.id == h.pinId }
+                        }
+                        val sourceKind = WorkflowPinKind.entries.firstOrNull { it.name == pinKind }
+                        val sourceSpec = WorkflowSchema.pinsOf(definition, node.id)
+                            .firstOrNull { it.kind == sourceKind }
+                        val linkable = targetSpec != null && sourceSpec != null &&
+                            targetSpec.canLinkFrom(sourceSpec)
+                        val next = if (linkable) hit?.let { h -> "${'$'}{h.nodeId}:${'$'}{h.pinId}" } else null
+                        if (next != wireHoverPin) {
+                            wireHoverPin = next
+                            if (next != null) {
+                                haptic.performHapticFeedback(
+                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                                )
+                            }
+                        }
                     },
                     onPinDrop = { pointer ->
                         val from = wireFrom
                         val fromPin = wireFromPin
                         wireFrom = null
                         wireFromPin = ""
+                        wireHoverPin = null
                         if (from != null) {
                             // 落点先找**具体针脚**：松手压在某颗数据入口上，就把线接到那个参数。
                             //
@@ -310,23 +350,11 @@ internal fun WorkflowBlueprintCanvas(
                             // 只认**数据入口**针脚：索引里还登记着引脚种类名与出口针脚，
                             // 不筛的话，松手压到自己那颗出口点、或者压在种类名那种粗索引上，
                             // 都会被当成"连到下游某个参数"。
-                            val hitNodeId = pinRects.entries.firstOrNull { (key, rect) ->
-                                val owner = key.substringBefore(':')
-                                val pinId = key.substringAfter(':')
-                                val ownerNode = definition.nodes.firstOrNull { it.id == owner }
-                                owner != from && ownerNode != null &&
-                                    pinId in WorkflowSchema.dataInputKeysOf(ownerNode) &&
-                                    rect.contains(pointer)
-                            }?.key?.substringBefore(':')
-                            val targetPin = hitNodeId?.let { owner ->
-                                pinRects.entries.firstOrNull { (key, rect) ->
-                                    key.substringBefore(':') == owner &&
-                                        key.substringAfter(':') in WorkflowSchema.dataInputKeysOf(
-                                            definition.nodes.first { it.id == owner },
-                                        ) && rect.contains(pointer)
-                                }?.key?.substringAfter(':')
-                            }
-                            val target = hitNodeId
+                            // 命中判定与拖拽中的高亮**共用同一个函数**：两处各写一遍的话，
+                            // 会出现「高亮说能接、松手却接不上」——那比没有高亮更让人困惑。
+                            val hit = hitPinAt(pointer, from, definition, pinRects)
+                            val targetPin = hit?.pinId
+                            val target = hit?.nodeId
                                 ?: bounds.entries.firstOrNull { (id, rect) -> id != from && rect.contains(pointer) }?.key
                             wireDropCb.value?.invoke(from, fromPin, target, pointer, targetPin)
                         }
@@ -345,12 +373,54 @@ internal fun WorkflowBlueprintCanvas(
                 // 走廊取 LINK_CORRIDOR_DP（12dp），**不是**画布网格步长（24dp）。
                 // 见 WorkflowLinkPath 的说明：把网格步长当走廊会让绕行半径翻倍、把卡片包住。
                 val path = orthogonalLinkPath(a, b, corridor = LINK_CORRIDOR_DP.dp.toPx())
-                drawPath(path, wireColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
-                drawCircle(wireColor, radius = 5.dp.toPx(), center = b)
+                // 预览线的颜色说明此刻"松手会怎样"：
+                //  - 命中可接针脚：primary（与落点高亮同色，读作"就落这儿"）；
+                //  - 压在卡片上但接不上：error 的低饱和版（明确但不用告警红，那不是错误操作）；
+                //  - 悬在空白：保持 wireColor（松手会弹节点面板，见 showActionSelector 的对应行为）。
+                val hoveringCardButNotLinkable = wireHoverPin == null && bounds.entries.any { (id, rect) ->
+                    id != wireFrom && rect.contains(wirePointer)
+                }
+                val preview = when {
+                    wireHoverPin != null -> wireColor
+                    hoveringCardButNotLinkable -> wireRejectColor
+                    else -> wireColor
+                }
+                drawPath(path, preview, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+                drawCircle(preview, radius = 5.dp.toPx(), center = b)
             }
         }
     }
 }
+
+/**
+ * 松手/拖拽位置压在**哪一颗数据入口针脚**上。命中返回节点 id 与针脚 id，否则 null。
+ *
+ * 只认**数据入口**针脚：索引里还登记着引脚种类名与出口针脚，不筛的话，
+ * 压到自己那颗出口点、或者压在种类名那种粗索引上，都会被当成"连到下游某个参数"。
+ *
+ * 抽成独立函数是因为它有两个调用点 —— 拖拽中的高亮与松手时的落点。
+ * 两处各写一遍必然漂移，而漂移的表现是「高亮说能接、松手接不上」，极难查。
+ */
+private fun hitPinAt(
+    pointer: Offset,
+    fromNodeId: String,
+    definition: WorkflowDefinition,
+    pinRects: Map<String, Rect>,
+): PinHit? {
+    for ((key, rect) in pinRects) {
+        if (!rect.contains(pointer)) continue
+        val owner = key.substringBefore(':')
+        if (owner == fromNodeId) continue
+        val pinId = key.substringAfter(':')
+        val ownerNode = definition.nodes.firstOrNull { it.id == owner } ?: continue
+        if (pinId !in WorkflowSchema.dataInputKeysOf(ownerNode)) continue
+        return PinHit(owner, pinId)
+    }
+    return null
+}
+
+/** 一次针脚命中的结果（画布内部用）。 */
+private data class PinHit(val nodeId: String, val pinId: String)
 
 /**
  * 数据边的 fromPin → 起点节点的**引脚 id**（画布内部索引键的后半段）。

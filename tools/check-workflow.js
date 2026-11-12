@@ -786,6 +786,26 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
   // 判定必须复用 canLinkFrom，不能在面板里另写一套——参考实现的 linkAble 只有一处。
   ok(/target\.canLinkFrom\(source\)/.test(e),
     "可接性判定复用 WorkflowPinSpec.canLinkFrom（不另写规则）");
+  // ── 拉线中的落点高亮（对齐 dragOnPin + 震动）──
+  //
+  // 参考实现拖拽时把"落点处可接的针脚"记进 dragOnPin，命中变化时 performHapticFeedback。
+  // 光有预览线不够：线是连续的一根，指不出"具体是哪颗针脚"。
+  const cvSrc = SRC.canvas;
+  ok(/var wireHoverPin by remember \{ mutableStateOf<String\?>\(null\) \}/.test(cvSrc) &&
+    /haptic\.performHapticFeedback\(/.test(cvSrc),
+    "拖拽中记录可接针脚，命中时震动反馈");
+  ok(/if \(next != wireHoverPin\)/.test(cvSrc),
+    "只在命中**变化**时震动（每帧都震手会麻）");
+  ok(/hovered = hoveredPinId == pin\.id/.test(SRC.card) &&
+    /hoveredPinId: String\? = null,/.test(SRC.card),
+    "被悬停的针脚本身有视觉强调（不只是线）");
+  // 落点判定必须是**同一个**函数：两处各写一遍会出现「高亮说能接、松手接不上」。
+  ok(/private fun hitPinAt\(/.test(cvSrc) &&
+    (cvSrc.match(/hitPinAt\(/g) || []).length >= 3,
+    "落点命中判定抽成 hitPinAt，被拖拽高亮与松手落点共用");
+  ok(/wireRejectColor/.test(cvSrc) &&
+    /val wireRejectColor = MaterialTheme\.colorScheme\.error\.copy/.test(cvSrc),
+    "接不上时的提示色在组合期取值（Canvas 的 draw lambda 不是 @Composable）");
   // 造临时节点探测针脚表：针脚本身就依赖 config（trigger 的 requireDsh、原生动作的 bridge）。
   ok(/val probe = WorkflowNode\(/.test(e) && /WorkflowSchema\.defaultPinsFor\(probe\)/.test(e),
     "用该 kind 的默认 config 造临时节点取针脚表（否则筛选与真实针脚对不上）");
@@ -1628,10 +1648,12 @@ async function checkCli() {
     "控制流针脚用 GenericShape 画（圆角用二次曲线，不是把圆角方块一圆了事）");
   ok(/cutCorner = 8\.5\.dp/.test(card) && /topCorner = 4\.dp/.test(card),
     "五边形几何照抄 ExecutePinSlotView：上圆角 4dp、下切角 8.5dp");
-  ok(/border\(1\.dp, color, shape\)/.test(card),
-    "五边形描边 1dp（对齐 pin_slot_normal.xml 的 app:strokeWidth=\"1dp\"）");
-  ok(/surfaceVariant, shape/.test(card),
-    "未连线时填 surfaceVariant（对齐 setLinked(false) 的 colorSurfaceVariant）");
+  // 悬停时描边加粗到 2dp 并换 primary（拉线落点提示），未悬停仍是参考实现的 1dp。
+  ok(/border\(if \(hovered\) 2\.dp else 1\.dp/.test(card) &&
+    /else color, shape\)/.test(card),
+    "五边形描边默认 1dp（悬停才加粗，对齐 pin_slot_normal.xml 的 strokeWidth=1dp）");
+  ok(/if \(hovered\) MaterialTheme\.colorScheme\.primary else MaterialTheme\.colorScheme\.surfaceVariant/.test(card),
+    "未连线时填 surfaceVariant（对齐 setLinked(false)），悬停才换 primary");
   // 数据针脚仍是圆环：参考实现的 NormalPinSlotView 不改 shape，沿用默认。
   ok(/border\(1\.5\.dp, color, CircleShape\)/.test(card),
     "数据针脚保持圆环（NormalPinSlotView 不改 shape）");
