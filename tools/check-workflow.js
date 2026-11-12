@@ -699,39 +699,51 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
     "卡片带说明文字（只有名字的卡片让用户只能靠猜）");
   ok(/OutlinedTextField/.test(picker) && /searchText\.contains\(query\.trim\(\), ignoreCase = true\)/.test(picker),
     "带搜索框，且搜索跨整个一级分组（不只当前二级）");
-  // 高度：**上限** 75%，但不强制撑满。
+  // ── 面板必须是**整页贴边贴底**，不是居中的浮窗 ──
   //
-  // fillMaxHeight(0.75f) 是「必须占满 75%」—— 分类下只有 3 个节点时也拉到 0.75 屏，
-  // 下面一大片空白（用户真机反馈的就是这个）。要的是跟着内容长：内容少就矮，
-  // 内容多才长到上限、上限之内滚动。所以必须是 heightIn(max=...) 而不是 fillMaxHeight。
-  ok(/ModalBottomSheet/.test(picker) && /heightIn\(/.test(picker) && /\.75f/.test(picker),
-    "面板高度随内容收缩、上限 75%（内容少时不留空白，多时上限内滚动）");
-  // 只在**代码**里找，注释里为了说明原因保留了这个名字 —— 直接对全文匹配会误判。
-  const pickerCode = picker.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
-  ok(!/fillMaxHeight\(0\.75f\)/.test(pickerCode),
-    "不能用 fillMaxHeight(0.75f)：那是强制占满 75%，内容少时下面会空一大片");
-  // ── 主体高度必须**被限住**，否则由左栏决定 ──
+  // 用户连着两轮说"飘起来了"。真机截图（654x372）逐像素量过：面板亮色区起于 x=125、
+  // 止于画布右缘，左侧留一条背景、底部也不到底 —— 就是一块居中的浮窗。
   //
-  // 左栏是固定八项（执行/控制流/提醒/设备/媒体/数据/感知/屏幕），右栏卡片数随分类变
-  // （执行 3 张、屏幕 12 张）。Row 取较高者，于是选"执行"时右栏下方必然空出
-  // "左栏高度 − 卡片高度"那一片 —— 这就是用户连着两轮说的"还是太高"。
-  // 前两版都在调 sheet 的上限，方向错了：上限只决定"最多多高"，而实际高度是被左栏**撑**出来的。
-  ok(/heightIn\(max = bodyMaxHeight\)/.test(picker) && /bodyMaxHeight/.test(picker),
-    "主体被 heightIn(max) 限住（否则高度由左栏项数决定，右栏下方必然空白）");
+  // 根因不在高度，在**宽度**：M3 的 ModalBottomSheet 有 sheetMaxWidth 默认值
+  // （BottomSheetDefaults.SheetMaxWidth = 640dp）并且居中。屏宽小于 640dp 时看不出来，
+  // 平板/横屏/折叠屏展开就会缩成居中小窗。官方文档对 Dp.Unspecified 的原话是
+  // "a sheet that spans the entire screen width"，所以这条断言钉的就是它。
+  // 之前几轮一直在调 heightIn 的小数，方向错了：宽度被限死时，高度怎么调都还是浮窗。
+  ok(/ModalBottomSheet/.test(picker) && /sheetMaxWidth = Dp\.Unspecified/.test(picker),
+    "面板宽度占满整屏（sheetMaxWidth = Dp.Unspecified；默认 640dp 居中就是\"飘\"的根因）");
+  // 贴底：内容必须撑满可用高度，而不是跟着条目数缩。
+  ok(/fillMaxHeight\(\)/.test(picker),
+    "面板主体撑满可用高度（贴到底，不再随条目数缩成一条）");
+  // ── 三段标签：预设 / 任务 / 变量 ──
+  //
+  // 参考实现 SelectActionDialog 的 MaterialButtonToggleGroup 是 GroupType.PRESET/TASK/VARIABLE。
+  // 之前这里**没有**这三个页签，注释里写的是"DSH 没有任务/变量一级页签，所以不凭空添加"。
+  // 但两条数据链其实是现成的：任务 = WorkflowStore.list()（已落盘的流程），
+  // 变量 = draft.variables（这份流程自己声明的）。现在它们各自有页签，且都只列真实数据。
+  ok(/PICKER_TABS/.test(picker) && /dsh_wf_picker_tab_preset/.test(picker) &&
+    /dsh_wf_picker_tab_task/.test(picker) && /dsh_wf_picker_tab_var/.test(picker),
+    "顶部有「预设 / 任务 / 变量」三段标签（对齐参考实现的 GroupType）");
+  // 任务页必须读真实流程清单，不能是写死的假条目。
+  ok(/WorkflowStore\.list\(/.test(picker),
+    "任务页列的是已保存的流程（WorkflowStore.list），不是假数据");
+  // 变量页必须来自这份流程自己声明的变量。
+  ok(/variables: Map<String, String> = emptyMap\(\)/.test(picker) && /draft\.variables/.test(e),
+    "变量页列的是这份流程的 variables（宿主把 draft.variables 传进来）");
+  // 标题行必须**删掉**：参考实现没有它，三段标签本身就是身份，关闭靠拖柄/返回键。
+  ok(!/dsh_workflow_editor_add_node/.test(picker),
+    "面板顶部不再有「加节点」标题行");
   ok(/verticalScroll\(rememberScrollState\(\)\)/.test(picker) &&
     /width\(84\.dp\)/.test(picker),
-    "左栏独立滚动：八项超过上限时自己滚，不把整块面板撑高");
+    "左栏独立滚动（八项放不下时自己滚，不把整块面板撑变形）");
   // 分类项内边距：每项多 8dp 就是 64dp，直接决定可见高度。分类不该比卡片还占地方。
   ok(/padding\(horizontal = 10\.dp, vertical = 8\.dp\)/.test(picker),
     "分类项内边距是 vertical = 8dp（12dp 会让八项多占 64dp）");
-  // ── 面板高度：左栏不得参与撑高 ──
+  // ── 主体高度不再由左栏项数决定 ──
   //
-  // 用户连着三轮说"还是太高"。前两次我都在改 sheet 的 heightIn(max)，
-  // 而 heightIn 只是**上限**：左栏八项约 288dp、右栏 3 张卡约 150dp，
-  // 上限 500dp 远没到，Row 照样取左栏高度，右栏下方照样空白。
-  // 真正让它变矮的唯一手段是让左栏**不参与撑高**：IntrinsicSize.Min + 左栏 fillMaxHeight。
-  ok(/height\(IntrinsicSize\.Min\)/.test(picker),
-    "面板主体用 IntrinsicSize.Min 取右栏高度（heightIn 只是上限，压不矮）");
+  // 旧版靠 IntrinsicSize.Min 让主体"取右栏高度"，那是 heightIn 上限时代的手法：
+  // heightIn 只是上限，左栏八项照样把 Row 撑高，右栏下方留白。
+  // 现在是整页面板，主体直接 fillMaxHeight 吃掉剩余高度，两栏各自内部滚动，
+  // 谁也不再撑高谁 —— 所以 IntrinsicSize.Min 这条断言随实现一起作废。
   ok(/fillMaxHeight\(\)[\s\S]{0,200}verticalScroll/.test(picker),
     "左栏 fillMaxHeight + verticalScroll：高度跟右栏走，八项放不下时自己滚");
 
@@ -1520,6 +1532,34 @@ async function checkCli() {
   // 引脚上报是拉线的基础，改卡片时最容易被顺手删掉。
   ok(/onPinBounds\?\.invoke\(pin\.kind\.name, coords\.boundsInWindow\(\)\)/.test(card),
     "卡片仍然上报输出引脚的真实窗口矩形（拉线端点依赖它）");
+
+  // ── 控制流针脚是**五边形**（上圆角 4dp / 下切角 8.5dp）──
+  //
+  // 参考实现 ExecutePinSlotView 用 ShapeAppearanceModel 把两个上角设成 ROUNDED 4dp、
+  // 两个下角设成 CUT 8.5dp，尺寸取 ?attr/halfIconButtonSize = 18dp，描边 1dp。
+  // 这个"上圆下尖"不是装饰：尖角朝下表示"往下一步走"，朝上表示"从上一步进来"，
+  // 圆形/圆角方块表达不了方向 —— 用户说卡片不像参考实现，针脚形状是其中一条。
+  ok(/GenericShape/.test(card) && /quadraticTo\(/.test(card),
+    "控制流针脚用 GenericShape 画（圆角用二次曲线，不是把圆角方块一圆了事）");
+  ok(/cutCorner = 8\.5\.dp/.test(card) && /topCorner = 4\.dp/.test(card),
+    "五边形几何照抄 ExecutePinSlotView：上圆角 4dp、下切角 8.5dp");
+  ok(/border\(1\.dp, color, shape\)/.test(card),
+    "五边形描边 1dp（对齐 pin_slot_normal.xml 的 app:strokeWidth=\"1dp\"）");
+  ok(/surfaceVariant, shape/.test(card),
+    "未连线时填 surfaceVariant（对齐 setLinked(false) 的 colorSurfaceVariant）");
+  // 数据针脚仍是圆环：参考实现的 NormalPinSlotView 不改 shape，沿用默认。
+  ok(/border\(1\.5\.dp, color, CircleShape\)/.test(card),
+    "数据针脚保持圆环（NormalPinSlotView 不改 shape）");
+  // 尺寸 18dp = 参考实现的 ?attr/halfIconButtonSize。
+  ok(/\.size\(18\.dp\)/.test(card),
+    "针脚 18dp（参考实现 halfIconButtonSize = 18dp）");
+
+  // ── 面板载荷分两类：预设给 EditorNodeKind，任务/变量给已配好的 PickerInsert ──
+  ok(/data class PickerInsert\(/.test(SRC.nodePicker),
+    "面板有 PickerInsert 载荷（任务页/变量页建的是已配好的节点）");
+  ok(/is EditorNodeKind -> build\(payload\)/.test(SRC.editorSurface) &&
+    /is PickerInsert -> addInsertedNode\(payload\)/.test(SRC.editorSurface),
+    "调用点按载荷类型分派，面板本身不认识编辑器内部类型");
 }
 
 console.log("\u2500 #16k 卡片可编辑 / 悬浮层定位 / 虚线框跟着选中态");

@@ -2133,4 +2133,12 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_vars_bad">Names must be letters/digits/underscore and must not shadow built-in variables.</string>
     <string name="dsh_wf_vars_dup">Two variables share a name.</string>
     <string name="dsh_wf_picker_clear">Clear</string>
+    <string name="dsh_wf_picker_tab_preset">Presets</string>
+    <string name="dsh_wf_picker_tab_task">Tasks</string>
+    <string name="dsh_wf_picker_tab_var">Variables</string>
+    <string name="dsh_wf_picker_task_empty">No other workflows to call yet. Create one in the workflow list and it will show up here.</string>
+    <string name="dsh_wf_picker_task_desc">Make this step run another workflow</string>
+    <string name="dsh_wf_picker_var_empty">This workflow has no variables yet. Add one with the button below.</string>
+    <string name="dsh_wf_picker_var_desc">Store the step output into this variable</string>
+    <string name="dsh_wf_picker_var_edit">Manage workflow variables</string>
 </resources>

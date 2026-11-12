@@ -68,6 +68,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.GenericShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -548,22 +549,60 @@ internal fun WorkflowNodeCard(
 }
 
 /**
- * 针脚圆点。
+ * 针脚：控制流用**五边形**，数据用**圆环**。
  *
- * 控制流（执行入口/出口/真假）画小一号、用描边色：它是"路"，不该跟数据抢注意力。
+ * 五边形的几何照抄参考实现 `ExecutePinSlotView`：上边两角圆角 4dp、下边两角切角 8.5dp、描边 1dp，
+ * 尺寸 `?attr/halfIconButtonSize` = 18dp。所以它不是"圆角方块"——上圆下尖这个朝向本身就是方向：
+ * 尖角朝下＝往下一步走，尖角在上＝从上一步进来。圆形表达不了这层含义，这也是之前卡片
+ * 看着不像参考实现的直接原因。
+ *
+ * 未连线时填 `surfaceVariant`、描边仍用针脚色（参考实现 setLinked(false) 的行为），
+ * 于是"空针脚"是一枚空心模子而不是一个实心点：连线状态在颜色上一眼可辨。
  * 数据针脚按**类型**着色（[pinColorOf]），于是"这口吃数字还是吃文本"不用读标签。
  */
 @Composable
 private fun PinDot(pin: WorkflowPinSpec) {
     val exec = pin.kind != WorkflowPinKind.DATA_IN && pin.kind != WorkflowPinKind.DATA_OUT
     val color = if (exec) MaterialTheme.colorScheme.outline else pinColorOf(WorkflowPinType.of(pin.dataType))
+    if (!exec) {
+        Box(Modifier.size(18.dp).border(1.5.dp, color, CircleShape))
+        return
+    }
+    // 圆角 4dp / 切角 8.5dp：8.5 不是整数，dp 换算成 px 后带小数，这里统一走 dp→px。
+    val topCorner = 4.dp
+    val cutCorner = 8.5.dp
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val shape = remember(density) {
+        val r = with(density) { topCorner.toPx() }
+        val c = with(density) { cutCorner.toPx() }
+        GenericShape { size, _ ->
+            // 用实际尺寸而不是常量：针脚被放进不同的父容器时也能保持同样的比例。
+            val sw = size.width
+            val sh = size.height
+            reset()
+            // 左上圆角 → 上边 → 右上圆角
+            moveTo(r, 0f)
+            lineTo(sw - r, 0f)
+            quadraticTo(sw, 0f, sw, r)
+            // 右边竖直下来，到右下切角起点
+            lineTo(sw, sh - c)
+            // 右下切角：一条直线到 (sw - c, sh)，这就是"尖"
+            lineTo(sw - c, sh)
+            // 底边到左下切角
+            lineTo(c, sh)
+            // 左下切角上来
+            lineTo(0f, sh - c)
+            // 左边回到左上圆角起点
+            lineTo(0f, r)
+            quadraticTo(0f, 0f, r, 0f)
+            close()
+        }
+    }
     Box(
         Modifier
-            .size(if (exec) 12.dp else 18.dp)
-            .then(
-                if (exec) Modifier.background(color, RoundedCornerShape(3.dp))
-                else Modifier.border(1.5.dp, color, CircleShape)
-            ),
+            .size(18.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant, shape)
+            .border(1.dp, color, shape),
     )
 }
 

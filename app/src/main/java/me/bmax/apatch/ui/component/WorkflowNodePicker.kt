@@ -1,80 +1,95 @@
 package me.bmax.apatch.ui.component
 
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
+import me.bmax.apatch.dsh.WorkflowNodeType
+import me.bmax.apatch.dsh.WorkflowStore
+
+/** 面板顶部的三段标签：预设 / 任务 / 变量（对齐参考实现 SelectActionDialog 的 GroupType）。 */
+private val PICKER_TABS = listOf(
+    R.string.dsh_wf_picker_tab_preset,
+    R.string.dsh_wf_picker_tab_task,
+    R.string.dsh_wf_picker_tab_var,
+)
+
+private const val PICKER_TAB_PRESET = 0
+private const val PICKER_TAB_TASK = 1
+private const val PICKER_TAB_VAR = 2
 
 /**
- * 节点选择面板：**工作流编辑器里所有「挑一个节点」的地方共用这一个组件**。
+ * 节点选择面板：工作流编辑器里所有「挑一个节点」的地方共用这一个组件。
  *
  * ## 为什么抽成共用组件
- * 之前有两个入口各写各的：
- *  - 底部「加节点」→ 抽屉（本轮先改成了分类网格）；
- *  - 从输出口拉出落在空白 → 一个 AlertDialog，只有 7 个基础节点，连原生能力都没有。
- * 两个入口的选项集不一致，用户从哪进能看到的东西就不一样 —— 这是 bug，不是风格差异。
+ * 之前有两个入口各写各的：底部「加节点」→ 抽屉；从输出口拉出落在空白 → 一个只有 7 个
+ * 基础节点的 AlertDialog。两个入口的选项集不一致，用户从哪进能看到的东西就不一样。
  *
  * ## 版式照点击助手的 SelectActionDialog
- * 参考实现（mr-bogey/TouchTool，GPL-3.0）的结构：
- *  - BottomSheet 近全屏展开，顶部保留标题；
- *  - 左侧约 80dp 的纵向可滚分类栏，右侧两列可滚动作卡片；
- *  - 卡片是圆角主题色 Material 卡，标题 BodyMedium、说明 BodySmall 半透明，
- *    右下角叠一枚低透明度大图标；
- *  - 右下角小型搜索 FAB 展开折叠搜索框。
+ * 参考实现（mr-bogey/TouchTool，GPL-3.0）是**整页贴边贴底**的：顶部三段标签
+ * （预设 / 任务 / 变量）、左侧约 80dp 的分类竖排、右侧两列可滚动作卡片、右下角搜索小 FAB。
  *
- * DSH 目前只有「分类 → 节点」两层数据；参考实现中的任务/变量一级页签在这里不存在，
- * 因此不凭空添加空页签或假数据。
+ * ## 为什么这一版必须换掉 ModalBottomSheet 的默认宽度
+ * M3 的 `ModalBottomSheet` 有一个 `sheetMaxWidth` 默认值（BottomSheetDefaults.SheetMaxWidth，
+ * 640dp）并且**居中**。手机竖屏时屏幕比它窄，看不出问题；一旦屏宽超过 640dp（平板、横屏、
+ * 折叠屏展开），面板就缩成居中的一小块浮窗，左侧留一条背景 —— 用户连着两轮说的「飘起来了」
+ * 就是这个。调 `heightIn` 的小数没有用：高度的锅是另一回事，宽度被限死时它永远是浮窗。
+ * 传 `Dp.Unspecified` 才会「占满整个屏幕宽度」（官方文档该参数的原话）。
  *
- * ## 关键差异：这里**不靠拖出**，所以列表可以滚
- * 上一版我把「从卡片往外拖到画布」当成核心交互，于是被「抽屉内容区不能滚动」
- * 那条约束绑死，只能用分类网格摊平，结果节点越藏越深。
+ * 同理，上一版用 `height(IntrinsicSize.Min) + heightIn(max = ...)` 让面板跟着内容长，
+ * 是因为 sheet 高度由内容撑；现在面板是整页的，主体直接 `weight(1f)` 吃掉剩余高度即可。
  *
- * 点击助手是**点选即建**。照它之后列表可以滚动，节点按分类一层层铺开也不会溢出，
- * 这才是「不堆在一个页面」的正确解法：分组 + 可滚动列表。
- *
- * @Composable 参数见下。onPick 由调用方决定「新建在画布中央」还是「接在某节点之后」。
+ * ## 关于标题
+ * 上一版顶部有一行「加节点」标题和关闭按钮。参考实现没有这行字：三段标签本身就是面板的
+ * 身份，而关闭靠拖柄下滑与返回键。多一行标题只会把内容往下挤，所以这里删掉了。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,10 +98,34 @@ fun WorkflowNodePicker(
     onPick: (NodePickerEntry) -> Unit,
     onDismiss: () -> Unit,
     initialSearchOpen: Boolean = false,
+    /**
+     * 当前流程已声明的变量。
+     *
+     * 变量页不能凭空造条目：它列的必须是这份流程真实拥有的变量（来自 `draft.variables`），
+     * 否则用户点一下会建出一个指向不存在变量的取值节点。
+     */
+    variables: Map<String, String> = emptyMap(),
+    /** 打开「流程内变量」编辑窗（宿主侧已有这个对话框）。null = 不提供该入口。 */
+    onEditVariables: (() -> Unit)? = null,
 ) {
+    var tab by rememberSaveable { mutableStateOf(PICKER_TAB_PRESET) }
     var groupIndex by rememberSaveable { mutableStateOf(0) }
     var searchOpen by rememberSaveable { mutableStateOf(initialSearchOpen) }
     var query by rememberSaveable { mutableStateOf("") }
+
+    val context = LocalContext.current
+    // 任务页读的是**真实落盘**的流程清单。
+    //
+    // 在 LaunchedEffect 里读而不是在 remember 里直接读：list() 要读目录里每个 JSON，
+    // 放在组合阶段就是主线程磁盘 IO。切到任务页时读一次即可，切走不重读。
+    var savedWorkflows by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    LaunchedEffect(tab) {
+        if (tab == PICKER_TAB_TASK) {
+            savedWorkflows = runCatching {
+                WorkflowStore.list(context).map { it.id to it.name }
+            }.getOrDefault(emptyList())
+        }
+    }
 
     val group = groups.getOrNull(groupIndex)
     // 搜索优先于分类：输入关键词就在**全部分类**里找，而不是只在当前分类里。
@@ -99,46 +138,44 @@ fun WorkflowNodePicker(
     }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    // 参考 dialog_select_action 是 match_parent；用内容下限避免小分类缩成浅片，
-    // 用屏高上限避免长分类越过标题/系统栏。两端都按当前屏高计算。
-    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    val bodyMinHeight = (screenHeight * 0.82f - 64.dp).coerceAtLeast(200.dp)
-    val bodyMaxHeight = (screenHeight * 0.88f - 64.dp).coerceAtLeast(bodyMinHeight)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        modifier = Modifier.heightIn(max = screenHeight * 0.94f),
+        // Dp.Unspecified = 占满整个屏幕宽度。见文件头的说明：默认值 640dp 居中就是「飘」的成因。
+        sheetMaxWidth = Dp.Unspecified,
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
+                .fillMaxHeight(0.92f)
                 .windowInsetsPadding(WindowInsets.navigationBars),
         ) {
-            Column(Modifier.fillMaxWidth()) {
-                // ── 标题行 ──
+            Column(Modifier.fillMaxWidth().fillMaxHeight()) {
+                // ── 三段标签 ──
                 Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        stringResource(R.string.dsh_workflow_editor_add_node),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.dsh_workflow_action_cancel),
+                    for ((i, labelRes) in PICKER_TABS.withIndex()) {
+                        PickerTab(
+                            label = stringResource(labelRes),
+                            selected = i == tab,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                tab = i
+                                // 切页签清掉关键词：搜索词是按当前页的条目匹配的，留着会串页。
+                                query = ""
+                            },
                         )
                     }
                 }
 
-                // ── 搜索框（折叠；入口移到右下角 FAB）──
+                // ── 搜索框（折叠；入口是右下角 FAB）──
                 if (searchOpen) {
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                         singleLine = true,
                         shape = RoundedCornerShape(20.dp),
                         placeholder = { Text(stringResource(R.string.dsh_wf_picker_search_hint)) },
@@ -153,84 +190,33 @@ fun WorkflowNodePicker(
                     )
                 }
 
-                // 任务/变量一级 tab 不在 DSH 的节点模型里，因此只保留真实存在的分类；
-                // 它们按参考 dialog_select_action 的 80dp 左侧竖排组显示。
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min)
-                        .heightIn(max = bodyMaxHeight)
-                        .heightIn(min = bodyMinHeight)
-                        .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-                ) {
-                    Column(
-                        Modifier
-                            .width(84.dp)
-                            .fillMaxHeight()
-                            .padding(end = 4.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(0.dp),
-                    ) {
-                        for ((i, g) in groups.withIndex()) {
-                            CategoryButton(
-                                label = stringResource(g.titleRes),
-                                selected = i == groupIndex,
-                                first = i == 0,
-                                last = i == groups.size - 1,
-                                // 分类切换保持原有语义：选分类后清除跨类搜索词。
-                                onClick = {
-                                    groupIndex = i
-                                    query = ""
-                                },
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-
-                    if (visible.isEmpty()) {
-                        Box(
-                            Modifier.weight(1f).fillMaxHeight(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                stringResource(R.string.dsh_wf_picker_empty),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    } else {
-                        // 参考 RecyclerView 的两列 StaggeredGrid：各列独立滚动，奇数条目时
-                        // 最后一张仍能完整滚到视口内。底部留出 FAB 安全区，不遮挡可点卡片。
-                        val leftCol = visible.filterIndexed { i, _ -> i % 2 == 0 }
-                        val rightCol = visible.filterIndexed { i, _ -> i % 2 == 1 }
-                        Row(
-                            Modifier.weight(1f).fillMaxHeight(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Column(
-                                Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                for (entry in leftCol) {
-                                    PickerCard(entry = entry, onClick = { onPick(entry) })
-                                }
-                                Spacer(Modifier.height(80.dp))
-                            }
-                            Column(
-                                Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                for (entry in rightCol) {
-                                    PickerCard(entry = entry, onClick = { onPick(entry) })
-                                }
-                                Spacer(Modifier.height(80.dp))
-                            }
-                        }
-                    }
+                when (tab) {
+                    PICKER_TAB_TASK -> TaskTab(
+                        workflows = savedWorkflows.filter { (_, name) ->
+                            query.isBlank() || name.contains(query.trim(), ignoreCase = true)
+                        },
+                        onPick = onPick,
+                    )
+                    PICKER_TAB_VAR -> VariableTab(
+                        variables = variables.filterKeys { name ->
+                            query.isBlank() || name.contains(query.trim(), ignoreCase = true)
+                        },
+                        onPick = onPick,
+                        onEditVariables = onEditVariables,
+                    )
+                    else -> PresetTab(
+                        groups = groups,
+                        groupIndex = groupIndex,
+                        visible = visible,
+                        onSelectGroup = { i ->
+                            groupIndex = i
+                            query = ""
+                        },
+                        onPick = onPick,
+                    )
                 }
             }
-            // 搜索浮动入口：与参考实现右下角的小 FAB 同一位置；打开后转成关闭图标，
-            // 继续保留原有「打开/收起搜索并清空关键词」行为。
+            // 搜索浮动入口：与参考实现右下角的小 FAB 同一位置。
             SmallFloatingActionButton(
                 onClick = {
                     searchOpen = !searchOpen
@@ -248,6 +234,238 @@ fun WorkflowNodePicker(
                 )
             }
         }
+    }
+}
+
+/** 一个页签：等宽胶囊，选中用 primary 实心（参考实现的 MaterialButtonToggleGroup 单选）。 */
+@Composable
+private fun PickerTab(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = modifier,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        )
+    }
+}
+
+/**
+ * 预设页：左侧分类竖排 + 右侧两列卡片。
+ *
+ * 两列不是随手定的：参考实现的 RecyclerView 就是 `spanCount=2` 的 StaggeredGrid。
+ * 这里刻意不用 LazyVerticalGrid —— 面板主体在 Row 里拿到的是无界高度，Lazy 网格必须有
+ * 确定高度才能测量，无界会直接抛 infinity maximum height。
+ */
+@Composable
+private fun PresetTab(
+    groups: List<NodePickerGroup>,
+    groupIndex: Int,
+    visible: List<NodePickerEntry>,
+    onSelectGroup: (Int) -> Unit,
+    onPick: (NodePickerEntry) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().fillMaxHeight().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
+    ) {
+        Column(
+            Modifier
+                .width(84.dp)
+                .fillMaxHeight()
+                .padding(end = 4.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            for ((i, g) in groups.withIndex()) {
+                CategoryButton(
+                    label = stringResource(g.titleRes),
+                    selected = i == groupIndex,
+                    first = i == 0,
+                    last = i == groups.size - 1,
+                    onClick = { onSelectGroup(i) },
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        if (visible.isEmpty()) {
+            PickerEmpty(stringResource(R.string.dsh_wf_picker_empty), Modifier.weight(1f))
+        } else {
+            TwoColumnCards(visible, onPick)
+        }
+    }
+}
+
+/**
+ * 任务页：列出已保存的流程，点一下插入一个「跑那个流程」的 shell 节点。
+ *
+ * 这不是装饰：`WorkflowEngine` 的 SHELL 分支走 `DshRuntime.execRootfs(cmd)`，在容器里执行，
+ * 而容器里就有 `dsh-workflow` CLI（`run --workflow <id>` 会经 `/workflow/run` 桥路由，
+ * 需要非空 reason 并弹出审批）。所以这条命令是真能跑通的。
+ *
+ * 为什么不做成「直接运行」按钮：这里是在**编辑流程**，用户要的是「让这一步去跑另一个流程」，
+ * 而不是现在就执行一次。运行入口在流程列表页，那里才有审批语义。
+ */
+@Composable
+private fun ColumnScope.TaskTab(
+    workflows: List<Pair<String, String>>,
+    onPick: (NodePickerEntry) -> Unit,
+) {
+    if (workflows.isEmpty()) {
+        PickerEmpty(stringResource(R.string.dsh_wf_picker_task_empty))
+        return
+    }
+    val entries = workflows.map { (id, name) ->
+        // reason 里的引号必须去掉：它会原样进 shell 命令，留一个双引号就把命令截断了。
+        val safeName = name.replace("\"", "")
+        NodePickerEntry(
+            key = "wf_" + id,
+            titleRes = 0,
+            descRes = R.string.dsh_wf_picker_task_desc,
+            icon = Icons.Filled.PlayArrow,
+            accent = MaterialTheme.colorScheme.primary,
+            searchText = name,
+            title = name,
+            payload = PickerInsert(
+                type = WorkflowNodeType.EXECUTE,
+                name = name,
+                config = mapOf(
+                    "action" to "shell",
+                    "name" to name,
+                    "cmd" to "dsh-workflow run --workflow " + id + " --reason \"workflow:" + safeName + "\"",
+                ),
+            ),
+        )
+    }
+    Row(
+        Modifier.fillMaxWidth().fillMaxHeight().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
+    ) {
+        TwoColumnCards(entries, onPick)
+    }
+}
+
+/**
+ * 变量页：列出**这份流程**已声明的变量，点一下插入一个取值节点。
+ *
+ * 为什么变量页不是一张表而是可点的卡片：编辑器里的变量页和「加节点」是同一个动作的两半 ——
+ * 用户翻到变量页，多半是想让某一步把某个变量取出来用。只显示名字不能落地成一步，
+ * 所以这里点一下就建一个 EXTRACT 节点，`var` 预填这个变量名。
+ */
+@Composable
+private fun ColumnScope.VariableTab(
+    variables: Map<String, String>,
+    onPick: (NodePickerEntry) -> Unit,
+    onEditVariables: (() -> Unit)?,
+) {
+    Column(
+        Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 12.dp, vertical = 4.dp),
+    ) {
+        if (variables.isEmpty()) {
+            PickerEmpty(stringResource(R.string.dsh_wf_picker_var_empty))
+        } else {
+            Column(
+                Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for ((name, value) in variables) {
+                    val entry = NodePickerEntry(
+                        key = "var_" + name,
+                        titleRes = 0,
+                        descRes = R.string.dsh_wf_picker_var_desc,
+                        icon = Icons.Filled.PlayArrow,
+                        accent = MaterialTheme.colorScheme.tertiary,
+                        searchText = name,
+                        title = name,
+                        desc = if (value.isBlank()) null else value,
+                        payload = PickerInsert(
+                            type = WorkflowNodeType.EXTRACT,
+                            name = name,
+                            config = mapOf(
+                                "source" to "lastOutput",
+                                "mode" to "text",
+                                "var" to name,
+                            ),
+                        ),
+                    )
+                    PickerCard(entry = entry, onClick = { onPick(entry) })
+                }
+            }
+        }
+        if (onEditVariables != null) {
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                onClick = onEditVariables,
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    stringResource(R.string.dsh_wf_picker_var_edit),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                )
+            }
+            Spacer(Modifier.height(72.dp))
+        }
+    }
+}
+
+/** 两列卡片栅格（各列独立滚动，奇数条目时最后一张也能完整滚进视口）。 */
+@Composable
+private fun RowScope.TwoColumnCards(
+    entries: List<NodePickerEntry>,
+    onPick: (NodePickerEntry) -> Unit,
+) {
+    val leftCol = entries.filterIndexed { i, _ -> i % 2 == 0 }
+    val rightCol = entries.filterIndexed { i, _ -> i % 2 == 1 }
+    Row(
+        Modifier.weight(1f).fillMaxHeight(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (col in listOf(leftCol, rightCol)) {
+            Column(
+                Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                for (entry in col) {
+                    PickerCard(entry = entry, onClick = { onPick(entry) })
+                }
+                // 底部留出 FAB 安全区，不让最后一张卡被搜索按钮盖住。
+                Spacer(Modifier.height(80.dp))
+            }
+        }
+    }
+}
+
+/**
+ * 空状态：一行灰字居中。
+ *
+ * 必须能收 modifier：在 Row 里时由调用方给 weight(1f)，否则 fillMaxWidth 会去抢整行宽度，
+ * 把左边的分类栏挤变形。
+ */
+@Composable
+private fun PickerEmpty(text: String, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().fillMaxHeight(), contentAlignment = Alignment.Center) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -286,8 +504,7 @@ private fun CategoryButton(
             color = fg,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            // 上下 8dp（原 12dp）：左栏有固定八项，每项多 8dp 就是 64dp，
-            // 直接决定面板的可见高度 —— 分类项不该比卡片还占地方。
+            // 上下 8dp：左栏固定八项，每项多 8dp 就是 64dp，直接决定面板的可见高度。
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
         )
     }
@@ -297,13 +514,7 @@ private fun CategoryButton(
  * 一张卡片：标题 + 一句说明 + 右下角淡色图标。
  *
  * 对齐参考实现的 `dialog_select_action_normal_item`：MaterialCardView 承载，
- * 图标大尺寸、alpha≈0.1、靠右下；文字区在左（标题 BodyMedium，描述 BodySmall 半透明）。
- *
- * 上一版是「单列宽行 + 右侧一个大三角」：
- *  - 大三角是"从这里拖出去"时代的残留，现在是点选即建，它不表示任何操作；
- *  - 单列宽行让每张卡只有一个名字，没有说明，用户只能靠猜这个节点干什么。
- *
- * 现在两列栅格里每张卡都自带说明，扫一眼就知道建出来的是什么。
+ * 图标大尺寸、alpha 约 0.1、靠右下；文字区在左（标题 BodyMedium，描述 BodySmall 半透明）。
  */
 @Composable
 private fun PickerCard(entry: NodePickerEntry, onClick: () -> Unit) {
@@ -327,24 +538,25 @@ private fun PickerCard(entry: NodePickerEntry, onClick: () -> Unit) {
             )
             Column(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
                 Text(
-                    stringResource(entry.titleRes),
+                    // 任务页/变量页的标题是动态文本，没有对应字符串资源，标题就取 entry.title。
+                    entry.title ?: stringResource(entry.titleRes),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    // 给右下角图标让出位置：两列栅格本来就窄，不留白会撞字
+                    // 给右下角图标让出位置：两列栅格本来就窄，不留白会撞字。
                     modifier = Modifier.padding(end = 30.dp),
                 )
-                if (entry.descRes != 0) {
+                val desc = entry.desc ?: if (entry.descRes != 0) stringResource(entry.descRes) else null
+                if (desc != null) {
                     Spacer(Modifier.height(3.dp))
                     Text(
-                        stringResource(entry.descRes),
+                        desc,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        // 图标 48dp 叠在右下；说明也留同一侧安全边距，窄卡里才不会压字。
                         modifier = Modifier.padding(end = 30.dp),
                     )
                 }
@@ -361,26 +573,35 @@ data class NodePickerEntry(
     /** 说明；0 = 不显示。 */
     val descRes: Int,
     /** 列表右侧的大图标（参考实现每项都有图标）。 */
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val icon: ImageVector,
     val accent: Color,
     /** 搜索匹配用的文本（名称 + 说明）。 */
     val searchText: String,
     /** 具体要建哪种节点 —— 由调用方解释，面板不关心。 */
     val payload: Any,
+    /** 动态标题（任务页/变量页）；非空时优先于 [titleRes]。 */
+    val title: String? = null,
+    /** 动态说明；非空时优先于 [descRes]。 */
+    val desc: String? = null,
+)
+
+/**
+ * 「按给定 config 建一个节点」的载荷。
+ *
+ * 预设页的载荷是 `EditorNodeKind`（编辑器内部类型，面板看不到），任务页与变量页需要的却是
+ * 「一个已经配好的节点」。把两者压成同一个类型会逼面板去认识编辑器内部结构，所以这里只描述
+ * 结果（类型 + 名字 + config），由调用方翻译成一次 addNode。
+ */
+data class PickerInsert(
+    val type: WorkflowNodeType,
+    val name: String,
+    val config: Map<String, String>,
 )
 
 /**
  * 一个分类：左栏的一个按钮 + 右栏这一个分类下的卡片。
  *
- * ## 为什么砍掉原来的三层
- *
- * 上一版照参考实现（点击助手）抄了**三层**：一级 chip / 二级 chip / 列表。
- * 但我们的数据只有两层——八个分类，每个分类下直接就是节点。于是每个分类都塞了一个
- * 和它**同名**的二级分组，然后：
- *  - 一级 chip 变成八颗横向排一行，第 8 颗「感知」被裁掉（真机截图就是这个）；
- *  - 二级 chip 因为恒为 1 个，被 `subs.size > 1` 永久隐藏，永远不出现。
- * 照抄结构却不看数据的层数，就会得到这种「两层数据套三层壳」的错位。
- *
- * 参考实现的真实形态其实是「左栏分类竖排 + 右栏卡片栅格」，我们的数据正好对得上。
+ * 参考实现的真实形态是「左栏分类竖排 + 右栏卡片栅格」，我们的数据正好对得上，
+ * 所以不再套一层同名二级分组（那会让每个分类都塞一个和它同名的空壳）。
  */
 data class NodePickerGroup(val titleRes: Int, val entries: List<NodePickerEntry>)

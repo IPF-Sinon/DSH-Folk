@@ -468,6 +468,47 @@ internal fun WorkflowEditorSurface(
         kind.defaults + ("name" to defaultNodeName(action))
 
     /**
+     * 面板选中一项后怎么落节点。
+     *
+     * 面板里有两类载荷：预设页给的是 [EditorNodeKind]（要建哪种节点），任务页/变量页给的是
+     * [PickerInsert]（已经配好的节点：类型 + 名字 + config）。把两类在**调用点**分开，
+     * 面板就不用认识编辑器内部类型 —— 否则面板会和 EDITOR_NODE_CATALOG 焊死。
+     */
+    fun pickEntry(entry: NodePickerEntry, build: (EditorNodeKind) -> Unit) {
+        when (val payload = entry.payload) {
+            is EditorNodeKind -> build(payload)
+            is PickerInsert -> addInsertedNode(payload)
+        }
+    }
+
+    /**
+     * 建一个「已经配好」的节点（任务页的跑流程 shell、变量页的取值 EXTRACT）。
+     *
+     * 落点和普通新节点一致：视野中心。名字进 config["name"]，与 [withActionDefaults] 同一约定 ——
+     * 参数编辑器改的是 config，两处各存一份的话改完名字卡片上还是旧的。
+     */
+    fun addInsertedNode(insert: PickerInsert) {
+        val centerWindow = Offset(
+            canvasOrigin.x + canvasSize.width / 2f,
+            canvasOrigin.y + canvasSize.height / 2f,
+        )
+        val center = viewport.toWorldDp(centerWindow, canvasOrigin, density)
+        val x = WorkflowGeometry.snapToGridDp(center.x - WorkflowNodeCardWidth.value / 2f)
+            .coerceAtLeast(0)
+        val y = WorkflowGeometry.snapToGridDp(center.y - 40f).coerceAtLeast(0)
+        draft = def.copy(
+            nodes = def.nodes + WorkflowNode(
+                id = newEditorNodeId(def),
+                type = insert.type,
+                name = insert.name,
+                posX = x,
+                posY = y,
+                config = insert.config,
+            ),
+        )
+    }
+
+    /**
      * 在指定 dp 位置新建节点（落点 = 松手位置，已吸附 12dp 网格）。
      * afterId 非空时顺手连一条出边（从针脚拉出来、却落在空白的情况）。
      */
@@ -1029,12 +1070,16 @@ internal fun WorkflowEditorSurface(
                 WorkflowNodePicker(
                     groups = groups,
                     onPick = { entry ->
-                        (entry.payload as? EditorNodeKind)?.let { kind -> addNode(kind, null) }
+                        pickEntry(entry) { kind -> addNode(kind, null) }
                         sheetOpen = false
                     },
                     // 顶栏那个放大镜直接把面板切到搜索态：用户点搜索就是"我要找某个节点"，
                     // 不必再进面板里点一次放大镜。
                     initialSearchOpen = searchOpen,
+                    // 变量页列的是**这份流程**真实拥有的变量：读 draft，不是读全局配置。
+                    variables = draft.variables,
+                    // 变量页底部那颗按钮复用已有的「流程内变量」窗 —— 同一件事不另造一个入口。
+                    onEditVariables = { varsOpen = true },
                     onDismiss = { sheetOpen = false },
                 )
             }
@@ -1118,12 +1163,14 @@ internal fun WorkflowEditorSurface(
         WorkflowNodePicker(
             groups = groups,
             onPick = { entry ->
-                (entry.payload as? EditorNodeKind)?.let { kind ->
+                pickEntry(entry) { kind ->
                     val (x, y) = dropPointDp(addAfterAt)
                     addNodeAt(kind, x, y, after)
                 }
                 addAfter = null
             },
+            variables = draft.variables,
+            onEditVariables = { varsOpen = true },
             onDismiss = { addAfter = null },
         )
     }

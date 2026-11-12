@@ -2107,4 +2107,12 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_wf_vars_bad">名字只能用字母/数字/下划线，且不能与内置变量重名。</string>
     <string name="dsh_wf_vars_dup">有两个变量重名了。</string>
     <string name="dsh_wf_picker_clear">清除</string>
+    <string name="dsh_wf_picker_tab_preset">预设</string>
+    <string name="dsh_wf_picker_tab_task">任务</string>
+    <string name="dsh_wf_picker_tab_var">变量</string>
+    <string name="dsh_wf_picker_task_empty">还没有别的流程可以调用。先去流程列表建一个，它就会出现在这里。</string>
+    <string name="dsh_wf_picker_task_desc">让这一步去跑另一个流程</string>
+    <string name="dsh_wf_picker_var_empty">这份流程还没有变量。点下面的按钮加一个。</string>
+    <string name="dsh_wf_picker_var_desc">把这一步的取值存进这个变量</string>
+    <string name="dsh_wf_picker_var_edit">管理流程内变量</string>
 </resources>
