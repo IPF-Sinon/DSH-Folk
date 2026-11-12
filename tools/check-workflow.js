@@ -823,6 +823,15 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
   ok(/wireRejectColor/.test(cvSrc) &&
     /val wireRejectColor = MaterialTheme\.colorScheme\.error\.copy/.test(cvSrc),
     "接不上时的提示色在组合期取值（Canvas 的 draw lambda 不是 @Composable）");
+  // ── 折线方向必须跟着针脚方向 ──
+  //
+  // 参考实现是 calculateLinkPath(..., pin.isVertical())：控制流（垂直）走"上下为主"，
+  // 数据（水平）走"左右为主"。这里一直用默认 true，于是数据线被当垂直连接排布，
+  // 从右边中点出发先往下拐再横回来 —— 画出来就是贴一圈的大弯，还常与卡片重叠。
+  ok(/vertical = !isData,/.test(cvSrc),
+    "数据边用水平走法（vertical = !isData），不是一律垂直");
+  ok(/vertical = sourceVertical,/.test(cvSrc),
+    "拉线预览也按源针脚方向选走法（否则松手瞬间线形突变）");
   // 造临时节点探测针脚表：针脚本身就依赖 config（trigger 的 requireDsh、原生动作的 bridge）。
   ok(/val probe = WorkflowNode\(/.test(e) && /WorkflowSchema\.defaultPinsFor\(probe\)/.test(e),
     "用该 kind 的默认 config 造临时节点取针脚表（否则筛选与真实针脚对不上）");

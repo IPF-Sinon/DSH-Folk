@@ -372,7 +372,13 @@ internal fun WorkflowBlueprintCanvas(
                 // 松手那一下的"变形"会让人以为连错了对象。
                 // 走廊取 LINK_CORRIDOR_DP（12dp），**不是**画布网格步长（24dp）。
                 // 见 WorkflowLinkPath 的说明：把网格步长当走廊会让绕行半径翻倍、把卡片包住。
-                val path = orthogonalLinkPath(a, b, corridor = LINK_CORRIDOR_DP.dp.toPx())
+                // 预览线也要按源针脚方向选走法，否则松手那一下线的形状会突变。
+                val sourceVertical = wireFromPin.startsWith("EXEC") || wireFromPin.isBlank()
+                val path = orthogonalLinkPath(
+                    a, b,
+                    corridor = LINK_CORRIDOR_DP.dp.toPx(),
+                    vertical = sourceVertical,
+                )
                 // 预览线的颜色说明此刻"松手会怎样"：
                 //  - 命中可接针脚：primary（与落点高亮同色，读作"就落这儿"）；
                 //  - 压在卡片上但接不上：error 的低饱和版（明确但不用告警红，那不是错误操作）；
@@ -566,10 +572,19 @@ private fun DrawScope.drawBlueprintEdges(
             (to.y * density) + WorkflowNodeCardAnchorY * density
         }
         // 折线（不是贝塞尔）：见 WorkflowLinkPath 的说明。
+        //
+        // `vertical` 必须跟着**针脚方向**走（参考实现是 calculateLinkPath(..., pin.isVertical())）：
+        // 控制流针脚是垂直的（顶进底出），走"上下为主"的那套走法；
+        // 数据针脚是水平的（右出左进），必须走"左右为主"的那套。
+        //
+        // 这里一直用默认值 true，于是数据线被当成垂直连接来排布：从右边中点出发后先往下拐，
+        // 再横过去接左边中点 —— 画出来就是贴着一圈绕的大弯，还常与卡片重叠。
+        // 用户截图里那条横穿卡片的数据线就是这个。
         val path = orthogonalLinkPath(
             start = Offset(startX, startY),
             end = Offset(endX, endY),
             corridor = LINK_CORRIDOR_DP.dp.toPx(),
+            vertical = !isData,
         )
         // ── 颜色：取**这条边插在哪个针脚上**，而不是取边的种类 ──
         //
