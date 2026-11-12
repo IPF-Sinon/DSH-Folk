@@ -146,13 +146,10 @@ fun WorkflowNodePicker(
     //
     // 判定复用 WorkflowPinSpec.canLinkFrom：那正是参考实现 Pin.linkAble 的等价物
     // （输入端单线、控制流只接控制流、数据只看类型互通）。这里**不重写**一份规则。
+    // filterPin 传的是**针脚种类名**（字符串），因为 WorkflowPinKind 是 internal，
+    // 不能出现在这个 public 组件的公开签名里。名字的合法性由宿主侧保证（它传的就是枚举名）。
     val acceptFilter: ((NodePickerEntry) -> Boolean)? = filterPin?.let { pinKindName ->
-        val sourceKind = WorkflowPinKind.entries.firstOrNull { it.name == pinKindName }
-        if (sourceKind == null) {
-            null
-        } else {
-            { entry -> entry.acceptsPin?.invoke(sourceKind) ?: true }
-        }
+        { entry -> entry.acceptsPin?.invoke(pinKindName) ?: true }
     }
 
     val group = groups.getOrNull(groupIndex)
@@ -237,6 +234,7 @@ fun WorkflowNodePicker(
                         groups = groups,
                         groupIndex = groupIndex,
                         visible = visible,
+                        searching = query.isNotBlank(),
                         onSelectGroup = { i ->
                             groupIndex = i
                             query = ""
@@ -304,6 +302,8 @@ private fun ColumnScope.PresetTab(
     groups: List<NodePickerGroup>,
     groupIndex: Int,
     visible: List<NodePickerEntry>,
+    /** 当前是否处于搜索态。空态文案要据此区分「没搜到」与「这颗针脚没有能接的节点」。 */
+    searching: Boolean,
     onSelectGroup: (Int) -> Unit,
     onPick: (NodePickerEntry) -> Unit,
 ) {
@@ -336,7 +336,7 @@ private fun ColumnScope.PresetTab(
             // 搜索后为空是「没搜到」。混成一句会把用户引到错误的动作上（去改搜索词）。
             PickerEmpty(
                 stringResource(
-                    if (query.isNotBlank()) R.string.dsh_wf_picker_empty
+                    if (searching) R.string.dsh_wf_picker_empty
                     else R.string.dsh_wf_picker_no_compatible
                 ),
                 Modifier.weight(1f),
@@ -624,7 +624,7 @@ data class NodePickerEntry(
      * 判定本身放在宿主侧（见 `editorPickerGroups`）：面板不认识节点模型，也不该认识 ——
      * 它只负责"拿这个闭包筛"。这样针脚规则仍然只有 `WorkflowPinSpec.canLinkFrom` 一处。
      */
-    val acceptsPin: ((sourceKind: WorkflowPinKind) -> Boolean)? = null,
+    val acceptsPin: ((sourceKind: String) -> Boolean)? = null,
     /** 动态标题（任务页/变量页）；非空时优先于 [titleRes]。 */
     val title: String? = null,
     /** 动态说明；非空时优先于 [descRes]。 */

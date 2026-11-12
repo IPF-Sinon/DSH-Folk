@@ -190,17 +190,23 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
     // `withActionDefaults` 是 WorkflowEditorSurface **内部**的局部函数，这个顶层函数调不到它，
     // 所以这里自己拼 config：默认参数 + 名字。名字不影响针脚表（针脚只看参数键），
     // 但它必须存在，否则原生动作的 `p_*` 参数会用空默认值，针脚 id 仍然一致。
-    fun accepts(kind: EditorNodeKind): (WorkflowPinKind) -> Boolean = { sourceKind ->
-        val probe = WorkflowNode(
-            id = "probe",
-            type = kind.type,
-            name = "",
-            posX = 0,
-            posY = 0,
-            config = kind.defaults,
-        )
-        val source = WorkflowPinSpec("probe", "", sourceKind)
-        WorkflowSchema.defaultPinsFor(probe).any { target -> target.canLinkFrom(source) }
+    fun accepts(kind: EditorNodeKind): (String) -> Boolean = { sourceKindName ->
+        // 认不出的种类名 = 不过滤（宁可多给一条，也不要因为参数拼错而把整个列表清空）。
+        val sourceKind = WorkflowPinKind.entries.firstOrNull { it.name == sourceKindName }
+        if (sourceKind == null) {
+            true
+        } else {
+            val probe = WorkflowNode(
+                id = "probe",
+                type = kind.type,
+                name = "",
+                posX = 0,
+                posY = 0,
+                config = kind.defaults,
+            )
+            val source = WorkflowPinSpec("probe", "", sourceKind)
+            WorkflowSchema.defaultPinsFor(probe).any { target -> target.canLinkFrom(source) }
+        }
     }
 
     fun entry(key: String, kind: EditorNodeKind): NodePickerEntry = NodePickerEntry(
