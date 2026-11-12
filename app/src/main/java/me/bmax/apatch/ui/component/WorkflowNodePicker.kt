@@ -594,7 +594,7 @@ data class NodePickerEntry(
  * 「一个已经配好的节点」。把两者压成同一个类型会逼面板去认识编辑器内部结构，所以这里只描述
  * 结果（类型 + 名字 + config），由调用方翻译成一次 addNode。
  */
-data class PickerInsert(
+internal data class PickerInsert(
     val type: WorkflowNodeType,
     val name: String,
     val config: Map<String, String>,

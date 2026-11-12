@@ -468,24 +468,12 @@ internal fun WorkflowEditorSurface(
         kind.defaults + ("name" to defaultNodeName(action))
 
     /**
-     * 面板选中一项后怎么落节点。
-     *
-     * 面板里有两类载荷：预设页给的是 [EditorNodeKind]（要建哪种节点），任务页/变量页给的是
-     * [PickerInsert]（已经配好的节点：类型 + 名字 + config）。把两类在**调用点**分开，
-     * 面板就不用认识编辑器内部类型 —— 否则面板会和 EDITOR_NODE_CATALOG 焊死。
-     */
-    fun pickEntry(entry: NodePickerEntry, build: (EditorNodeKind) -> Unit) {
-        when (val payload = entry.payload) {
-            is EditorNodeKind -> build(payload)
-            is PickerInsert -> addInsertedNode(payload)
-        }
-    }
-
-    /**
      * 建一个「已经配好」的节点（任务页的跑流程 shell、变量页的取值 EXTRACT）。
      *
      * 落点和普通新节点一致：视野中心。名字进 config["name"]，与 [withActionDefaults] 同一约定 ——
      * 参数编辑器改的是 config，两处各存一份的话改完名字卡片上还是旧的。
+     *
+     * 必须先于 [pickEntry] 声明：局部函数不支持前向引用（Unresolved reference）。
      */
     fun addInsertedNode(insert: PickerInsert) {
         val centerWindow = Offset(
@@ -506,6 +494,20 @@ internal fun WorkflowEditorSurface(
                 config = insert.config,
             ),
         )
+    }
+
+    /**
+     * 面板选中一项后怎么落节点。
+     *
+     * 面板里有两类载荷：预设页给的是 [EditorNodeKind]（要建哪种节点），任务页/变量页给的是
+     * [PickerInsert]（已经配好的节点：类型 + 名字 + config）。把两类在**调用点**分开，
+     * 面板就不用认识编辑器内部类型 —— 否则面板会和 EDITOR_NODE_CATALOG 焊死。
+     */
+    fun pickEntry(entry: NodePickerEntry, build: (EditorNodeKind) -> Unit) {
+        when (val payload = entry.payload) {
+            is EditorNodeKind -> build(payload)
+            is PickerInsert -> addInsertedNode(payload)
+        }
     }
 
     /**

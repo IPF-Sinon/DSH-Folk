@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -68,7 +69,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.GenericShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -575,7 +575,7 @@ private fun PinDot(pin: WorkflowPinSpec) {
     val shape = remember(density) {
         val r = with(density) { topCorner.toPx() }
         val c = with(density) { cutCorner.toPx() }
-        GenericShape { size, _ ->
+        GenericShape { size ->
             // 用实际尺寸而不是常量：针脚被放进不同的父容器时也能保持同样的比例。
             val sw = size.width
             val sh = size.height
