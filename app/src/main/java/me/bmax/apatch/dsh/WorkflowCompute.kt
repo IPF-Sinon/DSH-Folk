@@ -177,125 +177,128 @@ internal object WorkflowCompute {
             "num_add", "num_sub", "num_mul", "num_div", "num_mod", "num_max", "num_min" -> {
                 val a = num("a")
                 val b = num("b")
-                if (a == null || b == null) return "" to "bad_number"
+                if (a == null || b == null) return Pair("", "bad_number")
                 val v = when (action.id) {
                     "num_add" -> a + b
                     "num_sub" -> a - b
                     "num_mul" -> a * b
                     // 除零单独判：IEEE 的 Infinity 会被下游当成一个可用的数字。
-                    "num_div" -> if (b == 0.0) return "" to "div_by_zero" else a / b
-                    "num_mod" -> if (b == 0.0) return "" to "div_by_zero" else a % b
+                    "num_div" -> if (b == 0.0) return Pair("", "div_by_zero") else a / b
+                    "num_mod" -> if (b == 0.0) return Pair("", "div_by_zero") else a % b
                     "num_max" -> maxOf(a, b)
                     else -> minOf(a, b)
                 }
-                fmt(v) to null
+                Pair(fmt(v), null)
             }
-            "num_abs" -> fmt(abs(num("a") ?: return "" to "bad_number")) to null
+            "num_abs" -> Pair(fmt(abs(num("a") ?: return Pair("", "bad_number"))), null)
             // 取整按"四舍五入到整数"：用户说"取整"时想的多半不是截断。
-            "num_round" -> (num("a") ?: return "" to "bad_number").roundToLong().toString() to null
+            "num_round" -> Pair((num("a") ?: return Pair("", "bad_number")).roundToLong().toString(), null)
             "num_random" -> {
                 val lo = num("a")?.roundToLong() ?: 0L
                 val hi = num("b")?.roundToLong() ?: 100L
-                if (hi < lo) return "" to "bad_range"
-                (lo + (Math.random() * (hi - lo + 1)).toLong()).toString() to null
+                if (hi < lo) return Pair("", "bad_range")
+                Pair((lo + (Math.random() * (hi - lo + 1)).toLong()).toString(), null)
             }
             "num_eq", "num_lt", "num_gt" -> {
                 val a = num("a")
                 val b = num("b")
-                if (a == null || b == null) return "" to "bad_number"
+                if (a == null || b == null) return Pair("", "bad_number")
                 val ok = when (action.id) {
                     "num_eq" -> a == b
                     "num_lt" -> a < b
                     else -> a > b
                 }
-                if (ok) "1" else "0" to null
+                Pair(if (ok) "1" else "0", null)
             }
 
             // ── 文本 ──
-            "str_append" -> raw("a") + raw("b") to null
+            "str_append" -> Pair(raw("a") + raw("b"), null)
             "str_substring" -> {
                 val s = raw("a")
                 val start = (num("start")?.toInt() ?: 0).coerceIn(0, s.length)
                 val len = num("len")?.toInt() ?: 0
                 // len <= 0 表示"取到末尾"：让用户不必先知道长度。
                 val end = if (len <= 0) s.length else (start + len).coerceIn(start, s.length)
-                s.substring(start, end) to null
+                Pair(s.substring(start, end), null)
             }
-            "str_replace" -> raw("a").replace(raw("from"), raw("to")) to null
+            "str_replace" -> Pair(raw("a").replace(raw("from"), raw("to")), null)
             "str_split" -> {
                 val sep = raw("sep").ifEmpty { "," }
                 val arr = JSONArray()
                 for (part in raw("a").split(sep)) arr.put(part)
-                arr.toString() to null
+                Pair(arr.toString(), null)
             }
-            "str_regex" -> runCatching {
-                Regex(raw("pattern")).find(raw("a"))?.groupValues?.lastOrNull() ?: ""
-            }.getOrElse { return "" to "bad_regex" } to null
-            "str_trim" -> raw("a").trim() to null
-            "str_len" -> raw("a").length.toString() to null
-            "str_upper" -> raw("a").uppercase() to null
-            "str_lower" -> raw("a").lowercase() to null
-            "str_equal" -> (if (raw("a") == raw("b")) "1" else "0") to null
-            "str_contains" -> (if (raw("a").contains(raw("b"))) "1" else "0") to null
-            "str_encode" -> runCatching { URLEncoder.encode(raw("a"), "UTF-8") }.getOrElse { return "" to "bad_encode" } to null
-            "str_decode" -> runCatching { URLDecoder.decode(raw("a"), "UTF-8") }.getOrElse { return "" to "bad_decode" } to null
+            "str_regex" -> Pair(
+                runCatching {
+                    Regex(raw("pattern")).find(raw("a"))?.groupValues?.lastOrNull() ?: ""
+                }.getOrElse { return Pair("", "bad_regex") },
+                null,
+            )
+            "str_trim" -> Pair(raw("a").trim(), null)
+            "str_len" -> Pair(raw("a").length.toString(), null)
+            "str_upper" -> Pair(raw("a").uppercase(), null)
+            "str_lower" -> Pair(raw("a").lowercase(), null)
+            "str_equal" -> Pair((if (raw("a") == raw("b")) "1" else "0"), null)
+            "str_contains" -> Pair((if (raw("a").contains(raw("b"))) "1" else "0"), null)
+            "str_encode" -> Pair(runCatching { URLEncoder.encode(raw("a"), "UTF-8") }.getOrElse { return Pair("", "bad_encode") }, null)
+            "str_decode" -> Pair(runCatching { URLDecoder.decode(raw("a"), "UTF-8") }.getOrElse { return Pair("", "bad_decode") }, null)
 
             // ── 布尔 ──
-            "bool_and" -> (if (bool("a") && bool("b")) "1" else "0") to null
-            "bool_or" -> (if (bool("a") || bool("b")) "1" else "0") to null
-            "bool_not" -> (if (!bool("a")) "1" else "0") to null
+            "bool_and" -> Pair((if (bool("a") && bool("b")) "1" else "0"), null)
+            "bool_or" -> Pair((if (bool("a") || bool("b")) "1" else "0"), null)
+            "bool_not" -> Pair((if (!bool("a")) "1" else "0"), null)
 
             // ── JSON ──
             "json_get" -> {
                 val obj = runCatching { JSONObject(raw("a")) }.getOrNull()
-                    ?: return "" to "bad_json"
+                    ?: return Pair("", "bad_json")
                 var cur: Any = obj
                 for (seg in raw("path").split('.').filter { it.isNotEmpty() }) {
                     cur = when (val c = cur) {
-                        is JSONObject -> c.opt(seg) ?: return "" to "json_path_missing"
-                        else -> return "" to "json_path_missing"
+                        is JSONObject -> c.opt(seg) ?: return Pair("", "json_path_missing")
+                        else -> return Pair("", "json_path_missing")
                     }
                 }
-                cur.toString() to null
+                Pair(cur.toString(), null)
             }
             "json_keys" -> {
                 val obj = runCatching { JSONObject(raw("a")) }.getOrNull()
-                    ?: return "" to "bad_json"
+                    ?: return Pair("", "bad_json")
                 val arr = JSONArray()
                 val it = obj.keys()
                 while (it.hasNext()) arr.put(it.next())
-                arr.toString() to null
+                Pair(arr.toString(), null)
             }
 
             // ── 列表（JSON 数组字符串）──
-            "list_make" -> JSONArray().put(raw("a")).put(raw("b")).toString() to null
-            "list_size" -> (listOf("a")?.length() ?: return "" to "bad_list").toString() to null
+            "list_make" -> Pair(JSONArray().put(raw("a")).put(raw("b")).toString(), null)
+            "list_size" -> Pair((listOf("a")?.length() ?: return Pair("", "bad_list")).toString(), null)
             "list_get" -> {
-                val arr = listOf("a") ?: return "" to "bad_list"
+                val arr = listOf("a") ?: return Pair("", "bad_list")
                 val i = num("index")?.toInt() ?: 0
-                if (i < 0 || i >= arr.length()) return "" to "index_out_of_range"
-                arr.optString(i) to null
+                if (i < 0 || i >= arr.length()) return Pair("", "index_out_of_range")
+                Pair(arr.optString(i), null)
             }
             "list_add" -> {
-                val arr = listOf("a") ?: return "" to "bad_list"
+                val arr = listOf("a") ?: return Pair("", "bad_list")
                 arr.put(raw("b"))
-                arr.toString() to null
+                Pair(arr.toString(), null)
             }
             "list_contains" -> {
-                val arr = listOf("a") ?: return "" to "bad_list"
+                val arr = listOf("a") ?: return Pair("", "bad_list")
                 var found = false
                 for (i in 0 until arr.length()) {
                     if (arr.optString(i) == raw("b")) { found = true; break }
                 }
-                (if (found) "1" else "0") to null
+                Pair((if (found) "1" else "0"), null)
             }
             "list_join" -> {
-                val arr = listOf("a") ?: return "" to "bad_list"
+                val arr = listOf("a") ?: return Pair("", "bad_list")
                 val sep = raw("sep").ifEmpty { "," }
-                (0 until arr.length()).joinToString(sep) { arr.optString(it) } to null
+                Pair((0 until arr.length()).joinToString(sep) { arr.optString(it) }, null)
             }
 
-            else -> "" to "unknown_compute"
+            else -> Pair("", "unknown_compute")
         }
     }
 
