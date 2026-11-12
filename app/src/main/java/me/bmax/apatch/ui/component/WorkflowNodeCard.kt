@@ -33,6 +33,44 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.ToggleOn
+import androidx.compose.material.icons.filled.TextIncrease
+import androidx.compose.material.icons.filled.TextDecrease
+import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Segment
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Minimize
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.LabelOff
+import androidx.compose.material.icons.filled.Input
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Grain
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.DataObject
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CallSplit
+import androidx.compose.material.icons.filled.Cached
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.Api
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Autorenew
@@ -46,7 +84,6 @@ import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -762,34 +799,36 @@ private fun workflowNodeWatermark(node: WorkflowNode): androidx.compose.ui.graph
  */
 internal fun workflowActionIcon(actionId: String): androidx.compose.ui.graphics.vector.ImageVector? =
     when (actionId) {
-        // 每个动作一个**专属**图标。参考实现的 ActionInfo 为 184 个动作逐个指定 drawable，
-        // 我们之前是多动作共用一个（点/坐标/按键全是 TouchApp），面板里一排卡片水印一模一样，
-        // 扫一眼分不出来 —— 用户说的「背景图标过于单一」就是这个。
-        // 图标名全部取自本工程**已经用过**的名字：Material 图标按名解析，写没引入的名字是
-        // Unresolved reference，而本地没有 Kotlin 编译器，只能在 CI 上炸一次。
-        "a11y_click" -> Icons.Filled.TouchApp
-        "a11y_tap" -> Icons.Filled.Fingerprint
-        "display_tap" -> Icons.Filled.AdsClick
-        "a11y_text" -> Icons.Filled.TextFields
-        "display_key" -> Icons.Filled.Keyboard
-        "a11y_swipe" -> Icons.Filled.Swipe
-        "display_swipe" -> Icons.Filled.Layers
+        // 每个动作**一个专属图标**。参考实现为 184 个动作逐个指定 drawable；
+        // 之前这里只覆盖 31 个、且有 6 组共用同一个（点/坐标/按键全是 TouchApp），
+        // 于是选择面板里一排卡片水印一模一样，扫一眼分不出来。
+        //
+        // 图标名全部取自本工程**已经编译过**的名字（grep 'Icons\\.Filled\\.' 现得的集合）。
+        // Material 图标按名解析，写一个没引入的名字就是 Unresolved reference，
+        // 而本地没有 Kotlin 编译器 —— 只能靠"只用见过的名字"来保证不炸 CI。
         "a11y_tree" -> Icons.Filled.AccountTree
-        "a11y_global" -> Icons.Filled.Navigation
-        "display_stop" -> Icons.Filled.Stop
+        "a11y_click" -> Icons.Filled.TouchApp
+        "a11y_tap" -> Icons.Filled.AdsClick
+        "a11y_swipe" -> Icons.Filled.Swipe
+        "a11y_text" -> Icons.Filled.TextFields
+        "a11y_global" -> Icons.Filled.Language
         "a11y_shot" -> Icons.Filled.PhotoCamera
         "display_shot" -> Icons.Filled.ScreenShare
-        "camera" -> Icons.Filled.CameraAlt
+        "display_tap" -> Icons.Filled.Fingerprint
+        "display_swipe" -> Icons.Filled.Layers
+        "display_key" -> Icons.Filled.Keyboard
+        "display_stop" -> Icons.Filled.Stop
         "toast" -> Icons.Filled.Campaign
-        "notify_full" -> Icons.Filled.NewReleases
         "vibrate" -> Icons.Filled.Vibration
-        "ringer" -> Icons.Filled.SurroundSound
+        "notify_full" -> Icons.Filled.NewReleases
         "clip_set" -> Icons.Filled.ContentCopy
         "torch" -> Icons.Filled.Contrast
-        "volume" -> Icons.Filled.Tune
-        "tts" -> Icons.Filled.RecordVoiceOver
+        "volume" -> Icons.Filled.SurroundSound
+        "ringer" -> Icons.Filled.Tune
         "brightness" -> Icons.Filled.Opacity
         "rotation" -> Icons.Filled.Autorenew
+        "camera" -> Icons.Filled.CameraAlt
+        "tts" -> Icons.Filled.RecordVoiceOver
         "media_list" -> Icons.Filled.MusicNote
         "sensors_read" -> Icons.Filled.Sensors
         "network" -> Icons.Filled.Wifi
@@ -798,7 +837,43 @@ internal fun workflowActionIcon(actionId: String): androidx.compose.ui.graphics.
         "contacts_list" -> Icons.Filled.Person
         "location" -> Icons.Filled.Public
         "sms_list" -> Icons.Filled.Label
-        else -> null
+        "num_add" -> Icons.Filled.Add
+        "num_sub" -> Icons.Filled.Minimize
+        "num_mul" -> Icons.Filled.Close
+        "num_div" -> Icons.Filled.Block
+        "num_mod" -> Icons.Filled.Grain
+        "num_abs" -> Icons.Filled.Sort
+        "num_round" -> Icons.Filled.Refresh
+        "num_max" -> Icons.Filled.ExpandMore
+        "num_min" -> Icons.Filled.ExpandLess
+        "num_random" -> Icons.Filled.AutoAwesome
+        "num_eq" -> Icons.Filled.Check
+        "num_lt" -> Icons.Filled.ChevronLeft
+        "num_gt" -> Icons.Filled.ChevronRight
+        "str_append" -> Icons.Filled.Link
+        "str_substring" -> Icons.Filled.Segment
+        "str_replace" -> Icons.Filled.Cached
+        "str_split" -> Icons.Filled.CallSplit
+        "str_regex" -> Icons.Filled.Search
+        "str_trim" -> Icons.Filled.CleaningServices
+        "str_len" -> Icons.Filled.FormatSize
+        "str_upper" -> Icons.Filled.TextIncrease
+        "str_lower" -> Icons.Filled.TextDecrease
+        "str_equal" -> Icons.Filled.CheckCircle
+        "str_contains" -> Icons.Filled.FilterList
+        "str_encode" -> Icons.Filled.Translate
+        "str_decode" -> Icons.Filled.Api
+        "bool_and" -> Icons.Filled.ToggleOn
+        "bool_not" -> Icons.Filled.LabelOff
+        "json_get" -> Icons.Filled.DataObject
+        "json_keys" -> Icons.Filled.ViewList
+        "list_make" -> Icons.Filled.GridView
+        "list_size" -> Icons.Filled.Article
+        "bool_or" -> Icons.Filled.Share
+        "list_get" -> Icons.Filled.Input
+        "list_join" -> Icons.Filled.ReceiptLong
+        "list_add" -> Icons.Filled.Update
+        "list_contains" -> Icons.Filled.Security
     }
 /**
  * 卡片上要展示的一行参数。

@@ -238,7 +238,17 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
         // 动作目录的节点用目录那句 desc，基础节点用自己配的 descRes。
         // 两处都为空才不显示 —— 参考实现是每张卡都有说明，没有空着的情况。
         descRes = kind.bridge?.descRes?.takeIf { it != 0 } ?: kind.descRes,
-        icon = nodeTypeIcon(kind.type),
+        // 图标取**动作**的，不是节点类型的。
+        //
+        // 这是上一轮的疏漏：这里一直用 nodeTypeIcon(kind.type)，而它只按节点类型返回，
+        // 于是 60 多个执行类节点在图里全是同一个 PlayArrow —— 面板里一排卡片长得一模一样。
+        // 我改好了 workflowActionIcon（每动作一个图标），却只把它接到了画布卡片的水印，
+        // 完全没接进这里。用户说"图标也没变"说的就是这个。
+        //
+        // 计算动作的 id 在 defaults["bridge"]（它们没有 catalog 的 Action 对象），
+        // 所以两条路都要看。
+        icon = workflowActionIcon(kind.bridge?.id ?: kind.defaults["bridge"].orEmpty())
+            ?: nodeTypeIcon(kind.type),
         accent = editorPickerAccent(kind.type),
         searchText = appStringRaw(kind.labelRes),
         payload = kind,

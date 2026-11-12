@@ -84,6 +84,28 @@ ok(!/Class\.forName|getDeclaredMethod|ScriptEngine/.test(SRC.models + SRC.valida
   const compute = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowCompute.kt");
   ok(/"compute"/.test(SRC.models), "动作类型含 compute（纯计算）");
   ok(compute.length > 3000, "能读到计算动作册");
+  // ── 面板图标必须按**动作**取，不能按节点类型 ──
+  //
+  // 这条是补漏：上一轮我把 workflowActionIcon 改成每动作一个图标，却只接在了
+  // 画布卡片的水印上；选择面板里一直是 nodeTypeIcon(kind.type) —— 那个函数只按节点类型
+  // 返回，于是 60 多个执行类节点在面板里全是同一个 PlayArrow。用户说"图标也没变"。
+  //
+  // 断言分三层，缺一层都抓不住：
+  //   1. 面板 entry 的 icon 必须经过 workflowActionIcon；
+  //   2. 覆盖的动作数必须 >= 动作总数（只覆盖一部分会留下一排同图标的卡）；
+  //   3. 图标互不重复。
+  ok(/icon = workflowActionIcon\(/.test(SRC.editorSurface),
+    "选择面板的图标按动作取（不是 nodeTypeIcon 的节点类型图标）");
+  {
+    const card = SRC.card;
+    const iconCount = (card.match(/"[a-z0-9_]+" -> Icons\.Filled\.[A-Za-z]+/g) || []).length;
+    const catalogIds = (read("app/src/main/java/me/bmax/apatch/dsh/WorkflowActionCatalog.kt")
+      .match(/^\s{8}"[a-z0-9_]+", /gm) || []).length;
+    const computeIds = (read("app/src/main/java/me/bmax/apatch/dsh/WorkflowCompute.kt")
+      .match(/Compute\("[a-z0-9_]+"/g) || []).length;
+    ok(iconCount >= catalogIds + computeIds,
+      "每个动作都有专属图标（图标 " + iconCount + " >= 动作 " + (catalogIds + computeIds) + "）");
+  }
   // 计算动作绝不允许走桥或读端点 —— 否则「不需要权限」这句话就是假的。
   // 只在**代码**里找：注释里为了说明原因提到了这两个名字（"为什么不塞进目录"）。
   const computeCode = compute.split("\n").filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*") && !l.trim().startsWith("/*")).join("\n");
