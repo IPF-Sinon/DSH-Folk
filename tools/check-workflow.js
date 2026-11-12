@@ -96,6 +96,10 @@ ok(!/Class\.forName|getDeclaredMethod|ScriptEngine/.test(SRC.models + SRC.valida
   //   3. 图标互不重复。
   ok(/icon = workflowActionIcon\(/.test(SRC.editorSurface),
     "选择面板的图标按动作取（不是 nodeTypeIcon 的节点类型图标）");
+  // 图标表是表达式位置的 when 且返回可空类型，必须有 else —— 少了它编译不过。
+  // 重写这张表时漏掉过一次，只在 CI 上炸出来（本地无编译器）。
+  ok(/else -> null\s*\n\s*\}/.test(SRC.card),
+    "动作图标表的 when 有 else -> null 兜底（漏了就编译不过）");
   {
     const card = SRC.card;
     const iconCount = (card.match(/"[a-z0-9_]+" -> Icons\.Filled\.[A-Za-z]+/g) || []).length;

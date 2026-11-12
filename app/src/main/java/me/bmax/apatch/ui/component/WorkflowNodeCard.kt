@@ -874,7 +874,12 @@ internal fun workflowActionIcon(actionId: String): androidx.compose.ui.graphics.
         "list_join" -> Icons.Filled.ReceiptLong
         "list_add" -> Icons.Filled.Update
         "list_contains" -> Icons.Filled.Security
+        // 没列到的（未知动作 / 空 id / 基础节点）返回 null，调用方退回节点类型图标。
+        // 这个 else 不能省：when 用在表达式位置喂给可空返回类型，
+        // 少了它编译器会报 must be exhaustive —— 已在 CI 上炸过一次。
+        else -> null
     }
+
 /**
  * 卡片上要展示的一行参数。
  *
