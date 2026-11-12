@@ -884,9 +884,13 @@ console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回�
     /worldY\(if \(isData\) toPinned\.center\.y else toPinned\.top\)/.test(cv),
     "终点按针脚方向取（控制流顶边中点 / 数据左边中点）");
   // 连线颜色取源针脚色，且与卡片共用同一个函数（两处各写一份色表必然对不上）。
+  // 颜色必须与卡片共用 workflowPinColor，**但只能在组合期调用**：
+  // drawBlueprintEdges 是 DrawScope 扩展而不是 @Composable，绘制期读 MaterialTheme 编译不过。
+  // 所以组合期算成 类型id→颜色 的表，绘制期只查表。
   ok(/internal fun workflowPinColor\(/.test(SRC.card) &&
-    /workflowPinColor\(toSpec\?\.type \?: WorkflowPinType\.ANY\)/.test(cv),
-    "连线颜色取目标针脚的类型色，与卡片共用 workflowPinColor（不是另写一份色表）");
+    /WorkflowPinType\.entries\.associate \{ it\.id to workflowPinColor\(it\) \}/.test(cv) &&
+    /pinColors\[\(toSpec\?\.type \?: WorkflowPinType\.ANY\)\.id\]/.test(cv),
+    "连线颜色取目标针脚的类型色（组合期算表、绘制期查表），与卡片共用 workflowPinColor");
   // 与选中卡相连的线加粗并排到最后画（置顶）。只加粗不置顶会被后画的线盖掉半截。
   ok(/val touchesSelection =/.test(cv) && /sortedBy \{ e ->/.test(cv),
     "选中卡的连线加粗且最后绘制（置顶），不是只加粗");

@@ -37,6 +37,7 @@ import me.bmax.apatch.dsh.WorkflowDefinition
 import me.bmax.apatch.dsh.WorkflowEdgeKind
 import me.bmax.apatch.dsh.WorkflowNodeType
 import me.bmax.apatch.dsh.WorkflowPinKind
+import me.bmax.apatch.dsh.WorkflowPinType
 import me.bmax.apatch.dsh.WorkflowSchema
 import me.bmax.apatch.dsh.WorkflowStepState
 import kotlin.math.abs
@@ -123,6 +124,9 @@ internal fun WorkflowBlueprintCanvas(
     val trueColor = MaterialTheme.colorScheme.tertiary
     val falseColor = MaterialTheme.colorScheme.error
     val wireColor = MaterialTheme.colorScheme.primary
+    // 数据针脚类型 → 颜色，在组合期算一次给绘制层查表（见 drawBlueprintEdges 的 pinColors）。
+    // 只有 5 种类型，重建这点映射可忽略；好处是绘制期不必读主题。
+    val pinColors = WorkflowPinType.entries.associate { it.id to workflowPinColor(it) }
 
     val pan = viewport.pan
     val scale = viewport.scale
@@ -209,6 +213,7 @@ internal fun WorkflowBlueprintCanvas(
                     trueColor = trueColor,
                     falseColor = falseColor,
                     dataColor = edgeColor,
+                    pinColors = pinColors,
                     selectedNodeId = selectedNodeId,
                 )
             }
@@ -414,6 +419,13 @@ private fun DrawScope.drawBlueprintEdges(
     trueColor: Color,
     falseColor: Color,
     dataColor: Color,
+    /**
+     * 数据针脚类型 → 颜色。**在组合期算好**，绘制期只查表。
+     *
+     * 键是 [WorkflowPinType.id]（text/number/bool/choice/any）。
+     * 不能在绘制期调 workflowPinColor —— 它读 MaterialTheme，是 @Composable。
+     */
+    pinColors: Map<String, Color> = emptyMap(),
     /** 当前选中的节点：与它相连的线加粗置顶（参考实现把选中卡的线单独再画一遍）。 */
     selectedNodeId: String? = null,
 ) {
@@ -497,10 +509,15 @@ private fun DrawScope.drawBlueprintEdges(
         //
         // 上一版按"是不是数据边 / whenExpr"上色，于是所有控制流线都是同一个灰、所有数据线
         // 都是同一个 primary，已连的线看不出连到哪 —— 用户说的"已连接的线没有高亮"就是这个。
-        val execColor = MaterialTheme.colorScheme.outline
+        // 颜色在**组合期**就算好了（见调用点的 pinColors），这里只查表。
+        //
+        // 为什么不能在这里读主题：drawBlueprintEdges 是 DrawScope 扩展、不是 @Composable，
+        // 而 workflowPinColor 读 MaterialTheme.colorScheme（@Composable 属性）。
+        // 在绘制阶段读主题既编译不过，也确实不对 —— 主题变了应当触发重组、重新算色，
+        // 而不是等下一帧绘制时才悄悄变。
         val color = if (isData) {
             val toSpec = WorkflowSchema.pinsOf(definition, edge.to).firstOrNull { it.id == edge.toPin }
-            workflowPinColor(toSpec?.type ?: WorkflowPinType.ANY)
+            pinColors[(toSpec?.type ?: WorkflowPinType.ANY).id] ?: dataColor
         } else {
             execColor
         }
