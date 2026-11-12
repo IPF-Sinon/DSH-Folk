@@ -27,13 +27,33 @@ data class Action(
 
 ## 扩容方案（分三批，风险递增）
 
-### 批次 A：纯计算（无端点、无权限）
+### 批次 A：纯计算（无端点、无权限）— **已实现**
 
-做法：在 `WorkflowEngine` 里新增本地求值分支，**不走 bridge**。
-先例已存在：`evaluateCondition` / `evaluateLogic` / `extractValue` 都是纯本地计算。
+做法：`WorkflowActionType.COMPUTE` + 新文件 `dsh/WorkflowCompute.kt`，引擎本地求值，不走 bridge。
 
-需要新增一个不同于 `WorkflowActionType.NATIVE` 的标识，建议 `WorkflowActionType.COMPUTE`，
-并在 `WorkflowEngine` 的 `when (action)` 里加分支。
+落地要点（照这些改，别重犯）：
+
+| 位置 | 改什么 |
+|---|---|
+| `WorkflowModels.kt` 的枚举 | 加 `COMPUTE("compute")` |
+| `WorkflowModels.dataInputKeysOf` | 给计算动作**它自己的**参数键（不是 `else` 落的 `cmd`） |
+| `WorkflowModels.defaultPinsFor` | 按参数生成 DATA_IN 针脚，键不带 `p_` 前缀 |
+| `WorkflowEngine` 的动作分发 | 新分支，`WorkflowCompute.evaluate(...)`，**不调** `DshNativeBridge.handle` |
+| `WorkflowValidator` | 校验 `bridge` 在册、NUMBER 参数可解析（不强制非空） |
+| `WorkflowNodeFields.fieldsFor` | 字段来自计算定义，界面不认识键名 |
+| `WorkflowNodeFields.defaultConfigFor` | 显式给 `COMPUTE` 分支，否则落 `else` 变成 shell |
+| `WorkflowDialogs` 三处 when | `configForAction` / `actionLabelRes` / `editableKeys` |
+| `WorkflowBridge` 摘要 | 给名字，否则落到 `else` 显示成空的 `$ ` |
+| `WorkflowEditorSurface` | `editorKindOfCompute` + `actionKindsOf` 合并两册 + 四个分组 |
+| `workflowActionIcon` | 每个新动作**独立**图标（有防重复断言） |
+| 字符串 | 中英成对，`check-strings.js` 会拦 |
+| import | `tools/check-imports.js` 会抓漏（本轮抓到两处） |
+
+已实现 37 个：数值 13（四则/取余/绝对值/取整/较大/较小/随机/相等/小于/大于）、
+文本 12（拼接/截取/替换/拆分/正则/去空白/长度/大小写/相等/包含/URL 编解码）、
+布尔 3、JSON 2、列表 6。
+
+**刻意没做**：`num_pow`（`kotlin.math.pow` 不在默认导入里，且需要额外 import 才能用）。
 
 | 组 | 动作 | 引擎实现 |
 |---|---|---|

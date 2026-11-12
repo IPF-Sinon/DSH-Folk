@@ -348,6 +348,25 @@ internal object WorkflowValidator {
                         need("text")
                         bounded("text", WorkflowSchema.MAX_VALUE_CHARS)
                     }
+                    WorkflowActionType.COMPUTE -> {
+                        // 计算动作必须在册，且每个参数都要能解析成它声明的类型。
+                        // 这里**不**要求参数非空：计算动作的参数大量是可选/可空串的，
+                        // 真正判不出来的时候由引擎在求值时报明确原因（bad_number 等）。
+                        val spec = WorkflowCompute.byId(n.config("bridge"))
+                        if (spec == null) {
+                            out += "节点 ${n.id} 的计算动作不存在：${n.config("bridge")}"
+                        } else {
+                            for (c in spec.params) {
+                                val v = n.config(c.key)
+                                if (c.kind == WorkflowCompute.Kind.NUMBER && v.isNotBlank() &&
+                                    v.trim().toDoubleOrNull() == null
+                                ) {
+                                    out += "节点 ${n.id} 的参数 ${c.key} 不是数字：$v"
+                                }
+                                bounded(c.key, WorkflowSchema.MAX_VALUE_CHARS)
+                            }
+                        }
+                    }
                 }
             }
 

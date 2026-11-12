@@ -16,6 +16,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.WorkflowActionCatalog
+import me.bmax.apatch.dsh.WorkflowCompute
 import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.WorkflowNode
 import me.bmax.apatch.dsh.WorkflowNodeType
@@ -108,6 +109,28 @@ internal object WorkflowNodeFields {
                                         WorkflowActionCatalog.ParamKind.TEXT -> Kind.TEXT
                                     },
                                     choices = p.choices,
+                                ),
+                            )
+                        }
+                    }
+                }
+                // 计算动作：字段同样完全来自它自己的定义，界面不认识任何键名。
+                // 与 NATIVE 的区别只有一处：这里的键**不带 p_ 前缀**（见 WorkflowCompute）。
+                WorkflowActionType.COMPUTE -> {
+                    val spec = WorkflowCompute.byId(node.config("bridge"))
+                    if (spec == null) {
+                        add(text("bridge", R.string.dsh_wf_field_bridge))
+                    } else {
+                        for (c in spec.params) {
+                            add(
+                                Field(
+                                    key = c.key,
+                                    labelRes = c.labelRes,
+                                    kind = when (c.kind) {
+                                        WorkflowCompute.Kind.NUMBER -> Kind.NUMBER
+                                        WorkflowCompute.Kind.MULTILINE -> Kind.MULTILINE
+                                        WorkflowCompute.Kind.TEXT -> Kind.TEXT
+                                    },
                                 ),
                             )
                         }
@@ -285,6 +308,9 @@ internal fun defaultConfigFor(type: WorkflowNodeType, action: WorkflowActionType
             WorkflowActionType.NATIVE -> mapOf("action" to "native")
             WorkflowActionType.NOTIFY -> mapOf("action" to "notify", "title" to "", "text" to "")
             WorkflowActionType.DSH -> mapOf("action" to "dsh", "cmd" to "dsh --version")
+            // 计算动作不认识具体是哪一条（这里没有 id），只给出类型标记；
+            // 真正的 bridge 与参数默认值由编辑器在选中具体动作时补（见 withComputeDefaults）。
+            WorkflowActionType.COMPUTE -> mapOf("action" to "compute")
             else -> mapOf("action" to "shell", "cmd" to "echo hello")
         }
         WorkflowNodeType.CONDITION -> mapOf("source" to "exitCode", "op" to "equals", "value" to "0")

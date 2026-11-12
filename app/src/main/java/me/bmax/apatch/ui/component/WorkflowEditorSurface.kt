@@ -91,6 +91,7 @@ import kotlinx.coroutines.withContext
 import me.bmax.apatch.R
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.WorkflowActionCatalog
+import me.bmax.apatch.dsh.WorkflowCompute
 import me.bmax.apatch.dsh.WorkflowActionType
 import me.bmax.apatch.dsh.effectiveCaps
 import me.bmax.apatch.dsh.WorkflowExpandType
@@ -160,12 +161,22 @@ private val EDITOR_NODE_CATALOG = listOf(
  * 后者是"什么时候做、做几次"。
  */
 /** 取某一级分组（按标题资源）对应的动作节点。 */
-private fun actionKindsOf(groupTitleRes: Int): List<EditorNodeKind> =
-    WorkflowActionCatalog.byGroup()
+private fun actionKindsOf(groupTitleRes: Int): List<EditorNodeKind> {
+    // 一个分组里的节点来自**两册**：能力动作（要权限、走桥）与计算动作（纯本地算）。
+    // 两册分开是因为能力动作必须绑端点与 Cap，而计算动作没有端点；
+    // 但对用户来说它们都是"执行类节点"，所以在这里合并成同一份列表。
+    val caps = WorkflowActionCatalog.byGroup()
         .firstOrNull { it.first == groupTitleRes }
         ?.second
         ?.map { editorKindOf(it) }
         .orEmpty()
+    val compute = WorkflowCompute.byGroup()
+        .firstOrNull { it.first == groupTitleRes }
+        ?.second
+        ?.map { editorKindOfCompute(it) }
+        .orEmpty()
+    return caps + compute
+}
 
 /**
  * 把编辑器节点目录翻译成 [WorkflowNodePicker] 的分组数据。
@@ -246,7 +257,11 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
         actionKindsOf(groupTitleRes).map { kind ->
             // key 用**动作 id**而不是下标：同一个面板里两类节点混排，
             // 用 labels 或下标都会在两组有同名项时撞键，撞键的后果是选中项串位。
-            entry("act_" + (kind.bridge?.id ?: kind.labelRes.toString()), kind)
+            // key 必须**全局唯一**：计算动作与能力动作混排在同一组里，
+            // 而计算动作没有 bridge，退回 labelRes 就可能与某条能力动作的标题撞键 ——
+            // 撞键的后果是选中项串位（点 A 建出 B）。所以两种来源用不同前缀。
+            val keyId = kind.bridge?.id ?: (kind.defaults["bridge"] ?: kind.labelRes.toString())
+            entry("act_" + keyId, kind)
         }
 
     // 每个分组**直接**就是「左栏一个分类 + 右栏一屏卡片」，不再套一层同名子分类。
@@ -265,6 +280,12 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
         NodePickerGroup(R.string.dsh_wf_grp_data, actionEntries(R.string.dsh_wf_grp_data)),
         NodePickerGroup(R.string.dsh_wf_grp_sense, actionEntries(R.string.dsh_wf_grp_sense)),
         NodePickerGroup(R.string.dsh_wf_grp_screen, actionEntries(R.string.dsh_wf_grp_screen)),
+        // 计算类：不需要权限、不走桥，纯本地算。单列成组是因为用户找它们时的问法不同 ——
+        // "我要把这几个值算一下"，而不是"我要用某个系统能力"。
+        NodePickerGroup(R.string.dsh_wf_cat_number, actionEntries(R.string.dsh_wf_cat_number)),
+        NodePickerGroup(R.string.dsh_wf_cat_text, actionEntries(R.string.dsh_wf_cat_text)),
+        NodePickerGroup(R.string.dsh_wf_cat_bool, actionEntries(R.string.dsh_wf_cat_bool)),
+        NodePickerGroup(R.string.dsh_wf_cat_data_ops, actionEntries(R.string.dsh_wf_cat_data_ops)),
     )
 }
 
@@ -303,6 +324,21 @@ private fun editorKindOf(action: WorkflowActionCatalog.Action): EditorNodeKind =
     defaults = mapOf("action" to "native", "bridge" to action.id) +
         action.params.associate { action.configKey(it) to it.default },
     bridge = action,
+)
+
+/**
+ * 计算动作 → 编辑器节点。
+ *
+ * 与 [editorKindOf] 的区别只有 config 的形状：计算动作的 `bridge` 指向 [WorkflowCompute] 的 id，
+ * 参数键**不带 `p_` 前缀**，也没有系统能力可绑（所以 `bridge` 字段留空）。
+ * 建出来就是一个 COMPUTE 节点，执行时由引擎本地求值。
+ */
+private fun editorKindOfCompute(action: WorkflowCompute.Compute): EditorNodeKind = EditorNodeKind(
+    type = WorkflowNodeType.EXECUTE,
+    labelRes = action.titleRes,
+    defaults = mapOf("action" to "compute", "bridge" to action.id) +
+        action.params.associate { it.key to it.default },
+    descRes = action.descRes,
 )
 
 /**

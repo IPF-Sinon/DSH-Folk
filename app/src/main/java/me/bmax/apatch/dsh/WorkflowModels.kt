@@ -106,6 +106,11 @@ internal object WorkflowSchema {
                     ?.map { "p_" + it.key }
                     .orEmpty()
             WorkflowActionType.NOTIFY -> listOf("title", "text")
+            // 计算动作的入参键来自它自己的定义（不带 p_ 前缀，见 WorkflowCompute 的说明）。
+            // 这里必须单独给：走进下面的 else 会被当成 shell 只给 "cmd"，
+            // 于是计算节点的参数一个都接不上，而且不报错 —— 线拉过去被静默拒绝。
+            WorkflowActionType.COMPUTE ->
+                WorkflowCompute.byId(node.config("bridge"))?.params?.map { it.key }.orEmpty()
             // null = action 写错了，校验器已经会报；这里给 shell 的键让它至少能接上。
             else -> listOf("cmd")
         }
@@ -206,6 +211,18 @@ internal object WorkflowSchema {
                 // validator 用 toPin 去 pinsOf 里找 toSpec，找不到就跳过类型校验；
                 // 画布用 pin id 建 pinRects 索引，边上来找也找不到，线退回估算锚点。
                 // 于是"接一根数据线"看起来成功了，运行期却写进一个没人读的键。
+                // 计算动作的数据入口 = 它自己声明的参数，与字段表同源。
+                WorkflowActionType.COMPUTE ->
+                    WorkflowCompute.byId(node.config("bridge"))?.params?.map { c ->
+                        WorkflowPinSpec(
+                            id = c.key,
+                            label = computeParamLabel(c),
+                            kind = WorkflowPinKind.DATA_IN,
+                            dataType = WorkflowPinType.TEXT.id,
+                            defaultValue = node.config(c.key),
+                        )
+                    }.orEmpty()
+
                 WorkflowActionType.NATIVE -> {
                     val spec = WorkflowActionCatalog.byId(node.config("bridge"))
                     spec?.params?.map { p ->
@@ -290,6 +307,10 @@ internal object WorkflowSchema {
  * 这里不是 @Composable 上下文（引脚规格是纯数据），所以直接读应用资源；
  * 读不到时退回参数键名 —— 引脚只是辅助标记，不该因为少一条翻译就让画布崩掉。
  */
+/** 计算动作参数的显示名（针脚标签与字段标签同源）。 */
+private fun computeParamLabel(p: WorkflowCompute.Param): String =
+    runCatching { me.bmax.apatch.apApp.resources.getString(p.labelRes) }.getOrDefault(p.key)
+
 private fun actionParamLabel(p: WorkflowActionCatalog.Param): String =
     runCatching { me.bmax.apatch.apApp.resources.getString(p.labelRes) }.getOrDefault(p.key)
 
@@ -352,7 +373,21 @@ internal enum class WorkflowActionType(val id: String) {
      *
      * config：`bridge` = 动作 id；`p_<参数名>` = 该动作的参数（见 catalog 的 Param）。
      */
-    NATIVE("native");
+    NATIVE("native"),
+
+    /**
+     * **纯计算**：在引擎里本地算出结果，不调任何端点、不需要任何系统能力。
+     *
+     * 为什么不复用 [SHELL]（让用户写 `expr`）：容器里没保证有 bc/awk，
+     * 而且计算类动作的价值在于**能被接线**——参数是带类型的针脚，输出能接给下游；
+     * 走 shell 的话所有参数都退化成一段字符串，类型与针脚全丢了。
+     *
+     * 为什么不塞进 [NATIVE]：目录里的 Action 强制要求 cap/method/path，且门禁会核对端点
+     * 真实存在。计算类没有端点，硬塞就得编一个假端点，那比没有更糟。
+     *
+     * config：`bridge` = 计算动作 id（见 [WorkflowCompute]）；其余键是该动作的参数。
+     */
+    COMPUTE("compute");
 
     companion object {
         fun of(id: String?): WorkflowActionType? = entries.firstOrNull { it.id == id }

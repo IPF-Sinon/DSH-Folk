@@ -338,6 +338,29 @@ internal object WorkflowEngine {
                             }
                         }
 
+                        WorkflowActionType.COMPUTE -> {
+                            // 纯计算：**本地算**，不碰桥、不碰容器、不需要任何系统能力。
+                            //
+                            // 参数在引擎里已经插值过一次（varsSnapshot），所以这里拿到的是最终值。
+                            val cid = node.config("bridge")
+                            val spec = WorkflowCompute.byId(cid)
+                            if (spec == null) {
+                                state = WorkflowStepState.FAILED
+                                reason = "bad_compute_action"
+                            } else {
+                                val (value, why) = WorkflowCompute.evaluate(spec) { key -> node.config(key) }
+                                if (why != null) {
+                                    // 算不出来就明说原因，不要拿个默认值往下走：
+                                    // 一个算错的数会一路流到下游，最后在别处表现成奇怪行为。
+                                    state = WorkflowStepState.FAILED
+                                    reason = why
+                                } else {
+                                    output = value
+                                    exitCode = 0
+                                }
+                            }
+                        }
+
                         WorkflowActionType.NATIVE -> {
                             // 走宿主桥的真实端点（不是拼一条 shell 去"模拟"）：参数由动作目录
                             // 声明，Cap 由目录绑定 —— 批准弹窗列出的能力与实际调用的是同一份。

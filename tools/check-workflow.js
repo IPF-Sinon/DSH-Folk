@@ -75,6 +75,32 @@ for (const id of ["shell", "dsh", "notify"]) {
 ok(!/\beval\s*\(/.test(SRC.models + SRC.validator + SRC.engine), "定义通路里没有 eval");
 ok(!/Class\.forName|getDeclaredMethod|ScriptEngine/.test(SRC.models + SRC.validator + SRC.engine),
   "没有反射/脚本引擎（否则「批准流程图」就成了摆设）");
+// ── 纯计算动作：本地求值，不碰桥、不需要权限 ──
+//
+// 参考实现把数值/文本/列表/字典放在 bean/action/{number,string,list,map,bool} 下，
+// 同样不需要系统权限。我们单独成册而不是塞进动作目录：目录里的 Action 强制要求
+// cap/method/path 且门禁核对端点存在，计算类没有端点，硬塞就得编假端点。
+{
+  const compute = read("app/src/main/java/me/bmax/apatch/dsh/WorkflowCompute.kt");
+  ok(/"compute"/.test(SRC.models), "动作类型含 compute（纯计算）");
+  ok(compute.length > 3000, "能读到计算动作册");
+  // 计算动作绝不允许走桥或读端点 —— 否则「不需要权限」这句话就是假的。
+  // 只在**代码**里找：注释里为了说明原因提到了这两个名字（"为什么不塞进目录"）。
+  const computeCode = compute.split("\n").filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*") && !l.trim().startsWith("/*")).join("\n");
+  ok(!/DshNativeBridge|WorkflowActionCatalog/.test(computeCode),
+    "计算册不引用动作目录与宿主桥（纯本地算）");
+  // 引擎侧必须有独立分支，且不调 handle。
+  const engineCompute = SRC.engine.slice(SRC.engine.indexOf("WorkflowActionType.COMPUTE ->"));
+  ok(/WorkflowActionType\.COMPUTE ->/.test(SRC.engine), "引擎有 COMPUTE 分支");
+  ok(engineCompute.indexOf("DshNativeBridge.handle") === -1 ||
+    engineCompute.indexOf("DshNativeBridge.handle") > engineCompute.indexOf("WorkflowActionType.NATIVE ->"),
+    "COMPUTE 分支不调宿主桥（在 NATIVE 分支之前就已返回）");
+  // 除零必须显式报错：IEEE 的 Infinity 会被下游当成可用数字。
+  ok(/div_by_zero/.test(compute), "除零返回明确原因，不产生 Infinity");
+  // 参数键不带 p_ 前缀，且 dataInputKeysOf / 字段表 / 针脚表三处同源。
+  ok(/WorkflowActionType\.COMPUTE ->\s*\n\s*WorkflowCompute\.byId\(node\.config\("bridge"\)\)\?\.params\?\.map \{ it\.key \}/.test(SRC.models),
+    "dataInputKeysOf 给计算动作它自己的参数键（不是落回 shell 的 cmd）");
+}
 ok(/fun interpolate\(/.test(SRC.models) && !/\$\{.*\?.*:/.test(SRC.models.split("fun interpolate")[1] || ""),
   "变量插值只做字符串替换，不做表达式求值");
 ok(/if \(v != null\) \{/.test(SRC.models.split("fun interpolate")[1] || ""),

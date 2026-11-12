@@ -74,6 +74,7 @@ import me.bmax.apatch.R
 import me.bmax.apatch.dsh.WorkflowSchema
 import me.bmax.apatch.dsh.DshNativeBridge
 import me.bmax.apatch.dsh.WorkflowActionType
+import me.bmax.apatch.dsh.WorkflowCompute
 import me.bmax.apatch.dsh.WorkflowApprovals
 import me.bmax.apatch.dsh.WorkflowDefinition
 import me.bmax.apatch.dsh.WorkflowEdge
@@ -569,6 +570,8 @@ private fun configForAction(action: WorkflowActionType): Map<String, String> = w
     // NATIVE 的 config 由动作目录给（bridge + p_* 参数）。这里只能给个最小骨架：
     // 这个选择器是旧弹窗留下的入口，选中后仍要用户在参数编辑器里挑动作。
     WorkflowActionType.NATIVE -> mapOf("action" to action.id)
+    // 计算动作同理：具体哪一条由面板点选决定，这里只留类型标记。
+    WorkflowActionType.COMPUTE -> mapOf("action" to action.id)
 }
 
 private fun actionLabelRes(action: WorkflowActionType): Int = when (action) {
@@ -576,6 +579,7 @@ private fun actionLabelRes(action: WorkflowActionType): Int = when (action) {
     WorkflowActionType.DSH -> R.string.dsh_workflow_kind_dsh
     WorkflowActionType.NOTIFY -> R.string.dsh_workflow_kind_notify
     WorkflowActionType.NATIVE -> R.string.dsh_wf_field_bridge
+    WorkflowActionType.COMPUTE -> R.string.dsh_wf_cat_number
 }
 
 /** 这个类型允许编辑的 config 键（与 [WorkflowValidator] 认的键一致）。 */
@@ -585,6 +589,9 @@ private fun editableKeys(node: WorkflowNode): List<String> = when (node.type) {
     WorkflowNodeType.EXECUTE -> when (node.actionType) {
         WorkflowActionType.NATIVE -> emptyList()
         WorkflowActionType.NOTIFY -> listOf("title", "text")
+        // 计算动作的可编辑键来自它自己的定义（不带 p_ 前缀）。
+        WorkflowActionType.COMPUTE ->
+            WorkflowCompute.byId(node.config("bridge"))?.params?.map { it.key }.orEmpty()
         else -> listOf("cmd")
     }
     WorkflowNodeType.CONDITION -> listOf("source", "op", "value")

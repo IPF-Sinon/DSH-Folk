@@ -441,6 +441,12 @@ internal object WorkflowBridge {
             }
             WorkflowActionType.NOTIFY -> str(ctx, R.string.dsh_workflow_kind_notify)
                     WorkflowActionType.DSH -> "dsh: " + n.config("cmd").take(80)
+                    // 计算动作没有 cmd，落到 else 会显示成一句空的 "$ "，
+                    // 审批弹窗里那一步就变成"什么都没做"——必须给它的名字。
+                    WorkflowActionType.COMPUTE -> {
+                        val spec = WorkflowCompute.byId(n.config("bridge"))
+                        if (spec == null) "compute: " + n.config("bridge") else str(ctx, spec.titleRes)
+                    }
                     else -> "$ " + n.config("cmd").take(80)
                 }
             }
