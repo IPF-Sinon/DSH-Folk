@@ -2115,5 +2115,12 @@ DSH-Folk 已在本机页面加载前自动注入一小段兼容脚本：只补�
     <string name="dsh_wf_picker_var_empty">这份流程还没有变量。点下面的按钮加一个。</string>
     <string name="dsh_wf_picker_var_desc">把这一步的取值存进这个变量</string>
     <string name="dsh_wf_picker_var_edit">管理流程内变量</string>
+    <string name="dsh_workflow_kind_shell_desc">在容器里跑一条命令，输出可以接给别的节点</string>
+    <string name="dsh_workflow_kind_dsh_desc">先确认 DSH 在跑，再在它的容器里执行命令</string>
+    <string name="dsh_workflow_kind_notify_desc">发一条通知，标题和正文都能由上游填</string>
+    <string name="dsh_workflow_kind_condition_desc">拿一个值去比较，按结果分成成立与不成立两条路</string>
+    <string name="dsh_workflow_kind_extract_desc">从上一步的输出里取出一个值，存进流程变量</string>
+    <string name="dsh_workflow_kind_wait_desc">等一段时间，或者等 DSH 起来/停掉再继续</string>
+    <string name="dsh_workflow_kind_logic_desc">把几个判断的结论按与/或/非合起来，再决定走哪条路</string>
     <string name="dsh_wf_picker_no_compatible">没有节点的接口能接上这颗针脚</string>
 </resources>

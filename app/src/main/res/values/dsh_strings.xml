@@ -2141,5 +2141,12 @@ If you want to be asked every time, open Settings -> Permissions -> Restriction 
     <string name="dsh_wf_picker_var_empty">This workflow has no variables yet. Add one with the button below.</string>
     <string name="dsh_wf_picker_var_desc">Store the step output into this variable</string>
     <string name="dsh_wf_picker_var_edit">Manage workflow variables</string>
+    <string name="dsh_workflow_kind_shell_desc">Run a command in the container; its output can be wired to other nodes</string>
+    <string name="dsh_workflow_kind_dsh_desc">Check DSH is running first, then run the command inside it</string>
+    <string name="dsh_workflow_kind_notify_desc">Post a notification; both title and body can come from upstream</string>
+    <string name="dsh_workflow_kind_condition_desc">Compare a value and branch into true / false paths</string>
+    <string name="dsh_workflow_kind_extract_desc">Pull one value out of the previous step and store it in a workflow variable</string>
+    <string name="dsh_workflow_kind_wait_desc">Wait for a while, or until DSH starts or stops</string>
+    <string name="dsh_workflow_kind_logic_desc">Combine several branch results with and/or/not, then decide where to go</string>
     <string name="dsh_wf_picker_no_compatible">No node has a port that can connect to this one</string>
 </resources>

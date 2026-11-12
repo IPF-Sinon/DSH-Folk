@@ -733,8 +733,25 @@ console.log("\u2500 #16j 节点选择面板：两个入口共用同一个组件"
     "分类在左侧竖排且可滚动（横向排一排会溢出、裁掉后面的分类）");
   ok(!/LazyRow/.test(picker),
     "分类栏**不再**是横向 chip（八颗横排必然溢出）");
-  ok(/descRes = kind\.bridge\?\.descRes \?: 0/.test(SRC.editorSurface),
-    "卡片带说明文字（只有名字的卡片让用户只能靠猜）");
+  // 说明文字有两个来源：动作目录那条 desc，或基础节点自己的 descRes。
+  // 之前只认前者，于是 shell / 条件 / 等待 / 取值 / 逻辑这几张卡上只有名字没有说明 ——
+  // 参考实现每个 ActionInfo 都有 xxx_action_desc，没有空着的卡。
+  ok(/descRes = kind\.bridge\?\.descRes\?\.takeIf \{ it != 0 \} \?: kind\.descRes/.test(SRC.editorSurface),
+    "卡片带说明文字（动作目录 desc 或基础节点自己的 descRes）");
+  // 七张基础卡必须各自有描述，不能靠默认值 0 蒙过去。
+  ok((SRC.editorSurface.match(/R\.string\.dsh_workflow_kind_[a-z]+_desc\)/g) || []).length >= 7,
+    "七张基础节点卡都配了描述");
+  // ── 动作图标必须互不重复 ──
+  //
+  // 参考实现为 184 个动作逐个指定 drawable。我们之前是多动作共用一个
+  // （a11y_click/a11y_tap/display_tap 全是 TouchApp），面板里一排卡片水印一模一样，
+  // 扫一眼分不出来。这条断言就是防回退：只要有人把两个动作写成同一个图标就红。
+  {
+    const icons = (SRC.card.match(/-> Icons\.Filled\.[A-Za-z]+/g) || []).map((s) => s.replace(/.*\./, ""));
+    ok(icons.length >= 31, "每个动作都有自己的图标条目（当前 " + icons.length + " 条）");
+    const dup = icons.filter((n, i) => icons.indexOf(n) !== i);
+    ok(dup.length === 0, "动作图标互不重复，实际重复：" + (dup.join(",") || "无"));
+  }
   ok(/OutlinedTextField/.test(picker) && /searchText\.contains\(query\.trim\(\), ignoreCase = true\)/.test(picker),
     "带搜索框，且搜索跨整个一级分组（不只当前二级）");
   // ── 面板必须是**整页贴边贴底**，不是居中的浮窗 ──

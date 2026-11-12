@@ -120,6 +120,14 @@ private data class EditorNodeKind(
     val labelRes: Int,
     val defaults: Map<String, String>,
     /**
+     * 基础节点的一句说明。动作目录里的节点用 [bridge] 自带的 descRes，用不到这个。
+     *
+     * 参考实现每个 ActionInfo 都有 `xxx_action_desc`，卡片上因此都有一行说明；
+     * 我们之前基础节点恒为 0，卡片上只剩一个名字，用户看不出这个节点干什么 ——
+     * 这正是用户说的「相关卡片没有描述」。
+     */
+    val descRes: Int = 0,
+    /**
      * 这个节点来自「动作目录」的哪一条（非空 = 建出来就是一个 NATIVE 节点）。
      *
      * 与 [cap] 并存是过渡期的结果：文案目录那批卡片建的是 shell 骨架，动作目录这批建的是
@@ -130,13 +138,13 @@ private data class EditorNodeKind(
 )
 
 private val EDITOR_NODE_CATALOG = listOf(
-    EditorNodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_shell, editorConfigForAction(WorkflowActionType.SHELL)),
-    EditorNodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_dsh, editorConfigForAction(WorkflowActionType.DSH)),
-    EditorNodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_notify, editorConfigForAction(WorkflowActionType.NOTIFY)),
-    EditorNodeKind(WorkflowNodeType.CONDITION, R.string.dsh_workflow_kind_condition, mapOf("source" to "exitCode", "op" to "equals", "value" to "0")),
-    EditorNodeKind(WorkflowNodeType.EXTRACT, R.string.dsh_workflow_kind_extract, mapOf("source" to "lastOutput", "mode" to "text", "var" to "value")),
-    EditorNodeKind(WorkflowNodeType.WAIT, R.string.dsh_workflow_kind_wait, mapOf("ms" to "1000")),
-    EditorNodeKind(WorkflowNodeType.LOGIC, R.string.dsh_workflow_kind_logic, mapOf("op" to "and", "sources" to "")),
+    EditorNodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_shell, editorConfigForAction(WorkflowActionType.SHELL), R.string.dsh_workflow_kind_shell_desc),
+    EditorNodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_dsh, editorConfigForAction(WorkflowActionType.DSH), R.string.dsh_workflow_kind_dsh_desc),
+    EditorNodeKind(WorkflowNodeType.EXECUTE, R.string.dsh_workflow_kind_notify, editorConfigForAction(WorkflowActionType.NOTIFY), R.string.dsh_workflow_kind_notify_desc),
+    EditorNodeKind(WorkflowNodeType.CONDITION, R.string.dsh_workflow_kind_condition, mapOf("source" to "exitCode", "op" to "equals", "value" to "0"), R.string.dsh_workflow_kind_condition_desc),
+    EditorNodeKind(WorkflowNodeType.EXTRACT, R.string.dsh_workflow_kind_extract, mapOf("source" to "lastOutput", "mode" to "text", "var" to "value"), R.string.dsh_workflow_kind_extract_desc),
+    EditorNodeKind(WorkflowNodeType.WAIT, R.string.dsh_workflow_kind_wait, mapOf("ms" to "1000"), R.string.dsh_workflow_kind_wait_desc),
+    EditorNodeKind(WorkflowNodeType.LOGIC, R.string.dsh_workflow_kind_logic, mapOf("op" to "and", "sources" to ""), R.string.dsh_workflow_kind_logic_desc),
 )
 
 /**
@@ -216,7 +224,9 @@ private fun editorPickerGroups(): List<NodePickerGroup> {
         //
         // 上一版这里恒为 0：卡片上只剩一个名字，用户看不出这个节点干什么。
         // 参考实现的每张卡都有说明，靠的就是动作定义里那句 desc。
-        descRes = kind.bridge?.descRes ?: 0,
+        // 动作目录的节点用目录那句 desc，基础节点用自己配的 descRes。
+        // 两处都为空才不显示 —— 参考实现是每张卡都有说明，没有空着的情况。
+        descRes = kind.bridge?.descRes?.takeIf { it != 0 } ?: kind.descRes,
         icon = nodeTypeIcon(kind.type),
         accent = editorPickerAccent(kind.type),
         searchText = appStringRaw(kind.labelRes),

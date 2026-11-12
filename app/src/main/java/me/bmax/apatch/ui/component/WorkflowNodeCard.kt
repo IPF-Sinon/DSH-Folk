@@ -23,6 +23,16 @@ import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AdsClick
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.NewReleases
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.ScreenShare
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Autorenew
@@ -752,17 +762,32 @@ private fun workflowNodeWatermark(node: WorkflowNode): androidx.compose.ui.graph
  */
 internal fun workflowActionIcon(actionId: String): androidx.compose.ui.graphics.vector.ImageVector? =
     when (actionId) {
-        "a11y_click", "a11y_tap", "display_tap" -> Icons.Filled.TouchApp
-        "a11y_text", "display_key" -> Icons.Filled.TextFields
-        "a11y_swipe", "display_swipe" -> Icons.Filled.Swipe
+        // 每个动作一个**专属**图标。参考实现的 ActionInfo 为 184 个动作逐个指定 drawable，
+        // 我们之前是多动作共用一个（点/坐标/按键全是 TouchApp），面板里一排卡片水印一模一样，
+        // 扫一眼分不出来 —— 用户说的「背景图标过于单一」就是这个。
+        // 图标名全部取自本工程**已经用过**的名字：Material 图标按名解析，写没引入的名字是
+        // Unresolved reference，而本地没有 Kotlin 编译器，只能在 CI 上炸一次。
+        "a11y_click" -> Icons.Filled.TouchApp
+        "a11y_tap" -> Icons.Filled.Fingerprint
+        "display_tap" -> Icons.Filled.AdsClick
+        "a11y_text" -> Icons.Filled.TextFields
+        "display_key" -> Icons.Filled.Keyboard
+        "a11y_swipe" -> Icons.Filled.Swipe
+        "display_swipe" -> Icons.Filled.Layers
         "a11y_tree" -> Icons.Filled.AccountTree
-        "a11y_global", "display_stop" -> Icons.Filled.Navigation
-        "a11y_shot", "display_shot", "camera" -> Icons.Filled.PhotoCamera
-        "toast", "notify_full" -> Icons.Filled.Campaign
-        "vibrate", "ringer" -> Icons.Filled.Vibration
+        "a11y_global" -> Icons.Filled.Navigation
+        "display_stop" -> Icons.Filled.Stop
+        "a11y_shot" -> Icons.Filled.PhotoCamera
+        "display_shot" -> Icons.Filled.ScreenShare
+        "camera" -> Icons.Filled.CameraAlt
+        "toast" -> Icons.Filled.Campaign
+        "notify_full" -> Icons.Filled.NewReleases
+        "vibrate" -> Icons.Filled.Vibration
+        "ringer" -> Icons.Filled.SurroundSound
         "clip_set" -> Icons.Filled.ContentCopy
         "torch" -> Icons.Filled.Contrast
-        "volume", "tts" -> Icons.Filled.SurroundSound
+        "volume" -> Icons.Filled.Tune
+        "tts" -> Icons.Filled.RecordVoiceOver
         "brightness" -> Icons.Filled.Opacity
         "rotation" -> Icons.Filled.Autorenew
         "media_list" -> Icons.Filled.MusicNote
