@@ -558,12 +558,12 @@ internal fun WorkflowNodeCard(
  *
  * 未连线时填 `surfaceVariant`、描边仍用针脚色（参考实现 setLinked(false) 的行为），
  * 于是"空针脚"是一枚空心模子而不是一个实心点：连线状态在颜色上一眼可辨。
- * 数据针脚按**类型**着色（[pinColorOf]），于是"这口吃数字还是吃文本"不用读标签。
+ * 数据针脚按**类型**着色（[workflowPinColor]），于是"这口吃数字还是吃文本"不用读标签。
  */
 @Composable
 private fun PinDot(pin: WorkflowPinSpec) {
     val exec = pin.kind != WorkflowPinKind.DATA_IN && pin.kind != WorkflowPinKind.DATA_OUT
-    val color = if (exec) MaterialTheme.colorScheme.outline else pinColorOf(WorkflowPinType.of(pin.dataType))
+    val color = if (exec) MaterialTheme.colorScheme.outline else workflowPinColor(WorkflowPinType.of(pin.dataType))
     if (!exec) {
         Box(Modifier.size(18.dp).border(1.5.dp, color, CircleShape))
         return
@@ -667,9 +667,14 @@ private fun LinkablePinDot(
  *
  * 与 [paramDotColor] 同一套语义：文本=primary、数字=tertiary、布尔=secondary、枚举=errorContainer，
  * 于是"这颗点和那一行是同一个参数"在颜色上也对得上。
+ *
+ * 改成 internal 顶层函数，是因为**画布画连线也要用它**。
+ * 参考实现的连线颜色直接取针脚色（CardLayoutView.dispatchDraw），于是"线是什么色"与
+ * "它插在哪个针脚上"是同一条信息。在这里另写一份色表就会出现线与针脚对不上的情况，
+ * 而那种偏差一眼就能看出来、又极难查 —— 所以两边必须共用同一个函数。
  */
 @Composable
-private fun pinColorOf(type: WorkflowPinType): Color = when (type) {
+internal fun workflowPinColor(type: WorkflowPinType): Color = when (type) {
     WorkflowPinType.TEXT -> MaterialTheme.colorScheme.primary
     WorkflowPinType.NUMBER -> MaterialTheme.colorScheme.tertiary
     WorkflowPinType.BOOL -> MaterialTheme.colorScheme.secondary

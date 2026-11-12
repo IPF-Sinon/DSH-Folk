@@ -487,14 +487,26 @@ console.log("\u2500 #16b 引脚展示模型（阶段 1：纯加法，不改落�
     "WorkflowPinSpec 的两个新字段都有默认值（旧构造点不用改）");
   const pins = SRC.models.slice(SRC.models.indexOf("fun defaultPinsFor("));
   ok(pins.length > 200, "WorkflowSchema 里有 defaultPinsFor");
-  ok(/WorkflowNodeType\.CONDITION, WorkflowNodeType\.LOGIC -> listOf\(execIn, yes, no\)/.test(pins),
-    "条件/逻辑节点给出真、假两条出口");
+  // 真假两条出口：condition 与 logic 各自一条分支路径。断言钉的是「两类节点都给了 yes 与 no」，
+  // 不是钉 listOf 的字面参数表 —— 针脚表按节点逐个设计之后，condition 多了 source/value/result、
+  // logic 多了 sources/result，字面参数表必然会变，但「必须有真假两条出口」这条不能变。
+  ok(/WorkflowNodeType\.CONDITION -> listOf\([\s\S]{0,120}?yes[\s\S]{0,60}?no/.test(pins),
+    "condition 节点给出真、假两条出口");
+  ok(/WorkflowNodeType\.LOGIC -> listOf\([\s\S]{0,120}?yes[\s\S]{0,60}?no/.test(pins),
+    "logic 节点给出真、假两条出口");
+  // 判断节点还要有能接线的比较输入：source/value 不能只有参数行能改。
+  ok(/WorkflowNodeType\.CONDITION -> listOf\([\s\S]{0,700}?WorkflowPinSpec\("source"/.test(pins) &&
+    /WorkflowNodeType\.CONDITION -> listOf\([\s\S]{0,700}?WorkflowPinSpec\("value"/.test(pins),
+    "condition 的 source / value 是可接线的数据入口（要跟别处比就该能连）");
   ok(/WorkflowNodeType\.TRIGGER ->[\s\S]{0,220}?EXEC_FALSE/.test(pins),
     "trigger 要求 DSH 时也有「未就绪」出口（它本来就走假分支）");
   ok(/WorkflowActionType\.SHELL, WorkflowActionType\.DSH -> listOf\([\s\S]{0,160}?"cmd"/.test(pins),
     "shell/dsh 节点的参数引脚是 cmd");
-  ok(/WorkflowNodeType\.EXTRACT -> listOf\([\s\S]{0,200}?DATA_OUT/.test(pins),
+  ok(/WorkflowNodeType\.EXTRACT -> listOf\([\s\S]{0,400}?WorkflowPinSpec\("var"[\s\S]{0,80}?DATA_OUT/.test(pins),
     "extract 节点有变量输出引脚");
+  // extract 的 source 也必须能接线：上一版它只做参数行，等于逼用户手打来源。
+  ok(/WorkflowNodeType\.EXTRACT -> listOf\([\s\S]{0,400}?WorkflowPinSpec\("source"/.test(pins),
+    "extract 的 source 是可接线的数据入口");
   // 「只是展示」的反向证据：引脚不进 JSON 编解码。
   ok(!/pin/i.test(SRC.models.slice(SRC.models.indexOf("fun toJson"), SRC.models.indexOf("fun toJson") + 4000)),
     "引脚不写进 toJson（落盘格式没变）");
@@ -853,11 +865,31 @@ console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回�
   ok(/onPinBounds\?\.invoke\(pin\.kind\.name, coords\.boundsInWindow\(\)\)/.test(c),
     "针脚上报窗口矩形（含引脚类型），已连的线也从真针脚画出去");
   // 从针脚矩形起画，且**先逆变换回世界坐标**（窗口→内容层局部，再除以缩放）。
-  // 数据入口在左缘、其余出口在右缘：写死 pinned.right 会让数据线从参数点往右弹出去再绕回来。
+  //
+  // 锚点要**按针脚方向**取，不能一律取某一条边：
+  //   控制流针脚是垂直的（顶进底出）→ x 取 center、出口落在 bottom；
+  //   数据针脚是水平的（左进右出）→ y 取 center、出口落在 right。
+  // 参考实现 PinView.getSlotPosInLayout 就是这个分支。
+  //
+  // 这条断言原来钉的是 `worldX(if (isData) pinned.left else pinned.right)` —— 那是**错的**：
+  // 控制流针脚取右边中点，线就从五边形右侧弹出、贴着卡右缘走，与底尖错开半个针脚宽。
+  // 用户真机反馈的「连线没对齐」正是它，所以断言必须改成钉正确的行为，而不是钉住那个 bug。
   ok(/val pinned = pinRects\[/.test(cv) &&
-    /worldX\(if \(isData\) pinned\.left else pinned\.right\)/.test(cv) &&
+    /worldX\(if \(startVertical\) pinned\.center\.x else pinned\.right\)/.test(cv) &&
+    /worldY\(if \(startVertical\) pinned\.bottom else pinned\.center\.y\)/.test(cv) &&
     /\(x - origin\.x - pan\.x\) \/ safeScale/.test(cv),
-    "已连线优先从针脚矩形起画（窗口→内容层局部坐标，再除以缩放回到世界坐标）");
+    "已连线从针脚矩形起画，且锚点按针脚方向取（控制流底边中点 / 数据右边中点）");
+  // 终点方向相反：控制流入参在顶边中点，数据入参在左边中点。
+  ok(/worldX\(if \(isData\) toPinned\.left else toPinned\.center\.x\)/.test(cv) &&
+    /worldY\(if \(isData\) toPinned\.center\.y else toPinned\.top\)/.test(cv),
+    "终点按针脚方向取（控制流顶边中点 / 数据左边中点）");
+  // 连线颜色取源针脚色，且与卡片共用同一个函数（两处各写一份色表必然对不上）。
+  ok(/internal fun workflowPinColor\(/.test(SRC.card) &&
+    /workflowPinColor\(toSpec\?\.type \?: WorkflowPinType\.ANY\)/.test(cv),
+    "连线颜色取目标针脚的类型色，与卡片共用 workflowPinColor（不是另写一份色表）");
+  // 与选中卡相连的线加粗并排到最后画（置顶）。只加粗不置顶会被后画的线盖掉半截。
+  ok(/val touchesSelection =/.test(cv) && /sortedBy \{ e ->/.test(cv),
+    "选中卡的连线加粗且最后绘制（置顶），不是只加粗");
   // ③ 面板入口是「点选即建」：落点由 dropPointDp 统一换算，不再有跟随手指的幽灵胶囊。
   //
   // 上一版这里是「幽灵胶囊左上角 = 手指 = 节点左上角」。面板改成点选之后，

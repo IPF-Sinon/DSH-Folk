@@ -119,12 +119,45 @@ internal object WorkflowSchema {
      * 按节点类型推导引脚表（画布 / 节点卡的渲染依据）。
      *
      * **只做展示**：不写回定义、不影响校验与执行、也不改变落盘格式 —— 引脚是「同一份 DSL
-     * 的另一种画法」，不是第二套模型。规则来自 DSL 的既有语义：
-     *  - trigger：只有出口；`requireDsh=1` 时它本来就是「DSH 起不来走假」，所以给真假两条。
-     *  - execute：入口 + 出口 + 参数（shell/dsh 是 `cmd`，notify 是 `text`）。
-     *  - condition / logic：入口 + 真假两条出口。
-     *  - extract：入口 + 出口 + 变量输出。
-     *  - wait：入口 + 出口。
+     * 的另一种画法」，不是第二套模型。
+     *
+     * ## 排布规则（照抄点击助手的 CustomActionCard.addPinView）
+     *
+     * 参考实现按**两个维度**决定针脚在哪：
+     *  - `pin.isOut()` → 出或入；
+     *  - `pin.isVertical()` → 控制流走「顶进底出」，数据走「左进右出」。
+     *
+     * 所以：控制流（EXEC_*）是垂直针脚，入口在卡片**顶边中点**、出口在**底边中点**；
+     * 数据（DATA_*）是水平针脚，入口在**左边中点**、出口在**右边中点**。
+     * 用户看到的就是：执行线从上往下穿、数据线从两侧横向进出。
+     *
+     * ## 每个节点该有哪些针脚（逐个定，不是一套模板）
+     *
+     * 判断依据只有一条：**引擎真的会用这个值**。给一个引擎不读的针脚，等于给用户一个
+     * 接上去却毫无作用的洞。逐条对照引擎：
+     *
+     * - trigger：无入参（它是起点，校验器也禁止它有人连进来）。
+     *   `requireDsh=1` 时它天然有「DSH 起不来」这个否定结论，所以给「就绪/未就绪」两条。
+     * - execute：入口+出口。数据口按动作类型给：
+     *     shell/dsh → `cmd`（引擎读 cmd 并插值）；
+     *     notify    → `title` + `text`（两个都进通知）；
+     *     native    → 目录声明的每个 `p_*` 参数（引擎 applyDataEdges 直接 patch 进 config）。
+     *   每条 execute 都有 `result`：输出是这一步的 stdout/返回值（引擎 outputs[node.id]）。
+     * - condition：入口 + 成立/不成立两条出口 + `result`（判断结论本身，bool）。
+     *   参数 `source`/`value` 也给数据入口 —— 它们是要跟别处比较的值，能接线才有意义；
+     *   `op` 不给：它是枚举，接一根线进来等于让上游决定比较方式，那是数据污染不是连线。
+     * - logic：入口 + 成立/不成立 + `result`。`sources` 给数据入口（多个来源串）；
+     *   `op` 同样不给。
+     * - extract：入口 + 出口 + `var`（提取结果写进哪个变量）+ `result`。
+     *   `source` 给数据入口：要从别处取值就该能接线；`mode`/`path`/`pattern` 是提取方式，
+     *   不给 —— 让上游决定「用正则还是按 json 取」没有任何意义。
+     * - wait：入口 + 出口 + `result`。`ms` 给数据入口（等多久经常要算出来）。
+     *
+     * ## 为什么 `result` 是 ANY
+     *
+     * 一个节点的输出可能是文字（shell stdout）也可能是数字或布尔（condition 的结论）。
+     * 声明成具体类型会逼用户先插一个转换节点；ANY 在 `accepts` 里与任何类型互通，
+     * 是「先把值接走」这条主路径的正确类型。
      */
     /** 按节点 id 取它的针脚表（找不到节点返回空）。 */
     fun pinsOf(def: WorkflowDefinition, nodeId: String): List<WorkflowPinSpec> =
@@ -153,8 +186,12 @@ internal object WorkflowSchema {
                     WorkflowPinSpec("cmd", "命令", WorkflowPinKind.DATA_IN, defaultValue = node.config("cmd")),
                 )
 
+                // notify 的标题与正文**都**能接线：两者都会进最终通知，接一个进来就等于
+                // 由上游决定那句话。上一版只给了 text，标题只能手打 —— 而标题往往正是
+                // 最该由上游填的那一半（例如把某一步的名字当标题）。
                 WorkflowActionType.NOTIFY -> listOf(
-                    WorkflowPinSpec("text", "通知", WorkflowPinKind.DATA_IN, defaultValue = node.config("text")),
+                    WorkflowPinSpec("title", "标题", WorkflowPinKind.DATA_IN, defaultValue = node.config("title")),
+                    WorkflowPinSpec("text", "正文", WorkflowPinKind.DATA_IN, defaultValue = node.config("text")),
                 )
 
                 // 原生动作的数据入口 = 目录声明的参数，与参数编辑器同一份来源。
@@ -185,15 +222,44 @@ internal object WorkflowSchema {
                 null -> emptyList()
             }
 
-            WorkflowNodeType.CONDITION, WorkflowNodeType.LOGIC -> listOf(execIn, yes, no) + resultPin
+            // condition：待比较的 `source` 与比较值 `value` 都能接线 —— 它们本来就是
+            // "拿别处的值来跟这个值比"，不能接线就只能手打常量。
+            // `op` 不给：它是枚举，接一根线进来等于让上游决定比较方式，那不是连线是污染。
+            // result 用 bool：condition 的产出就是判断结论，标成 ANY 会让下游看不出它只给真假。
+            WorkflowNodeType.CONDITION -> listOf(
+                execIn,
+                yes,
+                no,
+                WorkflowPinSpec("source", "来源", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.ANY.id, defaultValue = node.config("source")),
+                WorkflowPinSpec("value", "比较值", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.ANY.id, defaultValue = node.config("value")),
+                WorkflowPinSpec("result", "结论", WorkflowPinKind.DATA_OUT, dataType = WorkflowPinType.BOOL.id),
+            )
 
+            // logic：`sources` 是参与运算的多个来源，天然该能接线；`op` 同上不给。
+            WorkflowNodeType.LOGIC -> listOf(
+                execIn,
+                yes,
+                no,
+                WorkflowPinSpec("sources", "来源", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.ANY.id, defaultValue = node.config("sources")),
+                WorkflowPinSpec("result", "结论", WorkflowPinKind.DATA_OUT, dataType = WorkflowPinType.BOOL.id),
+            )
+
+            // extract：`source` 能接线（要从上一步取值就该能连），`var` 是写出端。
+            // `mode` / `path` / `pattern` 是"怎么提取"，让上游决定用正则还是按 json 取毫无意义，
+            // 所以它们只出现在参数行里，不做针脚。
             WorkflowNodeType.EXTRACT -> listOf(
                 execIn,
                 execOut,
+                WorkflowPinSpec("source", "来源", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.ANY.id, defaultValue = node.config("source")),
                 WorkflowPinSpec("var", "变量", WorkflowPinKind.DATA_OUT, defaultValue = node.config("var")),
             ) + resultPin
 
-            WorkflowNodeType.WAIT -> listOf(execIn, execOut) + resultPin
+            // wait：`ms` 能接线（等多久经常要算出来）。`untilDsh` 是枚举，不给。
+            WorkflowNodeType.WAIT -> listOf(
+                execIn,
+                execOut,
+                WorkflowPinSpec("ms", "时长", WorkflowPinKind.DATA_IN, dataType = WorkflowPinType.NUMBER.id, defaultValue = node.config("ms")),
+            ) + resultPin
         }
     }
 }

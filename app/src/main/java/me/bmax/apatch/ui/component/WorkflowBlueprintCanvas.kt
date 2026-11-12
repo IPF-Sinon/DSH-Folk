@@ -209,6 +209,7 @@ internal fun WorkflowBlueprintCanvas(
                     trueColor = trueColor,
                     falseColor = falseColor,
                     dataColor = edgeColor,
+                    selectedNodeId = selectedNodeId,
                 )
             }
             // 选中/拖动的卡画一圈虚线框。
@@ -413,9 +414,17 @@ private fun DrawScope.drawBlueprintEdges(
     trueColor: Color,
     falseColor: Color,
     dataColor: Color,
+    /** 当前选中的节点：与它相连的线加粗置顶（参考实现把选中卡的线单独再画一遍）。 */
+    selectedNodeId: String? = null,
 ) {
     val density = this.density
-    for (edge in definition.edges) {
+    // 绘制顺序 = 层级。与选中卡相连的边排到最后画，于是它压在别的线上面 ——
+    // 参考实现就是这么做的（先画非选中卡的线，再把选中卡的线用更粗的笔重画一遍）。
+    // 不这样做的话，加粗的线会被后画的普通线盖掉一半，"高亮"就只剩下一段段断口。
+    val orderedEdges = definition.edges.sortedBy { e ->
+        if (selectedNodeId != null && (e.from == selectedNodeId || e.to == selectedNodeId)) 1 else 0
+    }
+    for (edge in orderedEdges) {
         val from = positions[edge.from] ?: continue
         val to = positions[edge.to] ?: continue
         val isData = edge.kind == WorkflowEdgeKind.DATA
@@ -436,26 +445,41 @@ private fun DrawScope.drawBlueprintEdges(
         fun worldX(x: Float) = (x - origin.x - pan.x) / safeScale
         fun worldY(y: Float) = (y - origin.y - pan.y) / safeScale
         val pinned = pinRects["${edge.from}:$pinKey"]
-        // 起点在卡片的哪一侧：数据**入口**在左缘，其余出口在右缘。
+        // 起点锚点：**按针脚方向分开取**，不是一律取某一条边。
         //
-        // 上一版一律取 pinned.right，数据线于是从参数行左缘那颗点上"往右"弹出去再绕回来，
-        // 画出来像卡在卡片里。参考实现的 PinLeftView / PinRightView 正是按方向分开的。
+        // 参考实现的 `PinView.getSlotPosInLayout`：
+        //   垂直针脚（控制流，顶进底出）：x 取水平居中，出口再加一个整高 → 底边中点；
+        //   水平针脚（数据，左进右出）：y 取垂直居中，出口再加一个整宽 → 右边中点。
+        //
+        // 上一版对控制流取的是 `pinned.right`（右边中点）。控制流针脚在卡片里是**垂直**方向的，
+        // 它的底尖在底边中点上 —— 取右边中点，线就从五边形右侧弹出去、贴着卡右缘走，
+        // 与针脚尖错开整整半个针脚宽。用户说的"连线没对齐"就是这一处。
+        val startVertical = !isData
         val startX = if (pinned != null) {
-            worldX(if (isData) pinned.left else pinned.right)
+            worldX(if (startVertical) pinned.center.x else pinned.right)
         } else {
             (from.x * density) + (if (isData) 0f else CARD_W_DP * density)
         }
         val startY = if (pinned != null) {
-            worldY(pinned.center.y)
+            // 出口才落在底边；入口（EXEC_IN 用作源的情况）落在顶边。
+            worldY(if (startVertical) pinned.bottom else pinned.center.y)
         } else {
             (from.y * density) + WorkflowNodeCardAnchorY * density
         }
         // 终点：数据边落在目标**参数那颗点**上，控制流边落在卡片的执行入口上。
         // 取不到真针脚才退回卡片锚点的估算法（旧文件 / 未知键仍画得出线）。
+        //
+        // 与起点同一套规则、方向相反：控制流入口在**顶边中点**，数据入口在**左边中点**。
+        // 目标是接收方，所以控制流取 `top`、数据取 `left`（不是 center）——
+        // 线要停在针脚的外沿，压到针脚身上会把它盖住。
         val toPinned = pinRects["${edge.to}:${if (isData) edge.toPin else WorkflowPinKind.EXEC_IN.name}"]
-        val endX = if (toPinned != null) worldX(toPinned.center.x) else to.x * density
+        val endX = if (toPinned != null) {
+            worldX(if (isData) toPinned.left else toPinned.center.x)
+        } else {
+            to.x * density
+        }
         val endY = if (toPinned != null) {
-            worldY(toPinned.center.y)
+            worldY(if (isData) toPinned.center.y else toPinned.top)
         } else {
             (to.y * density) + WorkflowNodeCardAnchorY * density
         }
@@ -465,19 +489,35 @@ private fun DrawScope.drawBlueprintEdges(
             end = Offset(endX, endY),
             corridor = LINK_CORRIDOR_DP.dp.toPx(),
         )
-        // 数据边用虚线 + 细一点的线：它在执行期不决定"走哪条路"，只决定"参数从哪来"。
-        // 两者画成一模一样的话，用户会以为一条数据边也是分支。
-        val color = when {
-            isData -> dataColor
-            edge.whenExpr == "true" -> trueColor
-            edge.whenExpr == "false" -> falseColor
-            else -> normal
+        // ── 颜色：取**这条边插在哪个针脚上**，而不是取边的种类 ──
+        //
+        // 参考实现的 dispatchDraw 里，连线色就是源针脚自己的颜色；两端针脚同类时纯色，
+        // 不同类才做渐变。这样"线的颜色"与"它插的那个针脚"是同一条信息 —— 一根黄线一眼就
+        // 知道它属于那个黄色针脚。
+        //
+        // 上一版按"是不是数据边 / whenExpr"上色，于是所有控制流线都是同一个灰、所有数据线
+        // 都是同一个 primary，已连的线看不出连到哪 —— 用户说的"已连接的线没有高亮"就是这个。
+        val execColor = MaterialTheme.colorScheme.outline
+        val color = if (isData) {
+            val toSpec = WorkflowSchema.pinsOf(definition, edge.to).firstOrNull { it.id == edge.toPin }
+            workflowPinColor(toSpec?.type ?: WorkflowPinType.ANY)
+        } else {
+            execColor
         }
+        // 选中卡片的连线加粗并置顶：参考实现把"选中卡片相关的线"用更粗的笔单独再画一遍。
+        // 置顶靠第二趟绘制实现（见下方 selected 分支），这里只决定线宽。
+        val touchesSelection = selectedNodeId != null &&
+            (edge.from == selectedNodeId || edge.to == selectedNodeId)
         drawPath(
             path = path,
             color = color,
             style = Stroke(
-                width = if (isData) 1.8.dp.toPx() else if (edge.whenExpr.isBlank()) 2.5.dp.toPx() else 2.dp.toPx(),
+                // 与选中卡片相连的线加粗一档：它是「这条边属于我正看着的那张卡」的提示。
+                width = if (touchesSelection) {
+                    if (isData) 3.dp.toPx() else 4.dp.toPx()
+                } else {
+                    if (isData) 1.8.dp.toPx() else if (edge.whenExpr.isBlank()) 2.5.dp.toPx() else 2.dp.toPx()
+                },
                 cap = StrokeCap.Round,
                 pathEffect = if (isData || edge.whenExpr == "false") {
                     PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))
