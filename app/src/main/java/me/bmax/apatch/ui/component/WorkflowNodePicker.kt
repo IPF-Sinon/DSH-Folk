@@ -271,7 +271,7 @@ private fun PickerTab(
  * 确定高度才能测量，无界会直接抛 infinity maximum height。
  */
 @Composable
-private fun PresetTab(
+private fun ColumnScope.PresetTab(
     groups: List<NodePickerGroup>,
     groupIndex: Int,
     visible: List<NodePickerEntry>,
@@ -279,7 +279,9 @@ private fun PresetTab(
     onPick: (NodePickerEntry) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().fillMaxHeight().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
+        // weight(1f) 而不是 fillMaxHeight：Column 里的子项拿到的是**整列**的最大高度，
+        // fillMaxHeight 会让主体和上面的标签行争满高，把标签挤出可视区。
+        Modifier.weight(1f).fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
     ) {
         Column(
             Modifier
@@ -350,7 +352,7 @@ private fun ColumnScope.TaskTab(
         )
     }
     Row(
-        Modifier.fillMaxWidth().fillMaxHeight().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
+        Modifier.weight(1f).fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
     ) {
         TwoColumnCards(entries, onPick)
     }
@@ -370,7 +372,7 @@ private fun ColumnScope.VariableTab(
     onEditVariables: (() -> Unit)?,
 ) {
     Column(
-        Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 12.dp, vertical = 4.dp),
+        Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
         if (variables.isEmpty()) {
             PickerEmpty(stringResource(R.string.dsh_wf_picker_var_empty))
