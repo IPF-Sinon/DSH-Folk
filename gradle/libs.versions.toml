@@ -1,14 +1,14 @@
 [versions]
-agp = "9.3.1"
-kotlin = "2.4.10"
-ksp = "2.3.10"
+agp = "9.5.1"
+kotlin = "2.4.21"
+ksp = "2.3.13"
 compose-bom = "2026.09.00"
 lifecycle = "2.10.0"
 compose-destination = "2.3.0"
 libsu = "6.0.0"
-biometric = "1.4.0-alpha07"
+biometric = "1.4.0-beta01"
 liquid = "1.1.1"
-material3 = "1.5.0-beta02"
+material3 = "1.5.0-rc01"
 materialKolor = "5.0.1"
 shizuku = "13.1.5"
 termux = "0.118.0"
@@ -18,7 +18,7 @@ agp-app = { id = "com.android.application", version.ref = "agp" }
 agp-lib = { id = "com.android.library", version.ref = "agp" }
 kotlin = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
-lsplugin-apksign = { id = "org.lsposed.lsplugin.apksign", version = "1.4" }
+lsplugin-apksign = { id = "org.lsposed.lsplugin.apksign", version = "1.5" }
 lsplugin-resopt = { id = "org.lsposed.lsplugin.resopt", version = "1.6" }
 kotlin-compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
