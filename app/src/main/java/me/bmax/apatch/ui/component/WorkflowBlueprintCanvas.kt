@@ -210,22 +210,6 @@ internal fun WorkflowBlueprintCanvas(
                 },
         ) {
             Canvas(Modifier.fillMaxSize()) { drawBlueprintDots(dotColor) }
-            Canvas(Modifier.fillMaxSize()) {
-                drawBlueprintEdges(
-                    definition = definition,
-                    positions = positions,
-                    pinRects = pinRects,
-                    origin = origin,
-                    pan = pan,
-                    scale = scale,
-                    normal = edgeColor,
-                    trueColor = trueColor,
-                    falseColor = falseColor,
-                    dataColor = edgeColor,
-                    pinColors = pinColors,
-                    selectedNodeId = selectedNodeId,
-                )
-            }
             // 选中/拖动的卡画一圈虚线框。
             //
             // 为什么要有它：拖动时卡片跟着手指走，但它**是不是被选中了**没有任何视觉反馈 ——
@@ -268,6 +252,27 @@ internal fun WorkflowBlueprintCanvas(
                 .filter { it.kind == WorkflowEdgeKind.DATA }
                 .groupBy { it.to }
                 .mapValues { (_, es) -> es.map { it.toPin }.toSet() }
+            // 每张卡里"已接线的针脚 id"（**含出口**）：卡片据此把针脚填成实色。
+            //
+            // 参考实现的 PinView.refreshPin 调 slotView.setLinked(pin.isLinked())，
+            // isLinked() = !links.isEmpty() —— 一头一连上就填实色，出/入都算。
+            // 我们之前只有数据入口的"已接线"信息（dataLinkedKeys，且只给参数行用），
+            // 出口与控制流针脚永远画成空心，于是"看起来什么都没连上"。
+            //
+            // 必须同时收 from 与 to 两侧：一条边的两端各有一颗针脚，都要变实。
+            val linkedPinIds: Map<String, Set<String>> = buildMap<String, MutableSet<String>> {
+                for (e in definition.edges) {
+                    if (e.kind == WorkflowEdgeKind.DATA) {
+                        getOrPut(e.to) { mutableSetOf() }.add(e.toPin)
+                        getOrPut(e.from) { mutableSetOf() }.add(e.fromPin)
+                    } else {
+                        // 控制流边没有 toPin/fromPin 语义，按端口名记：出口是 EXEC_OUT，
+                        // 入口是 EXEC_IN —— 与 WorkflowPinSpec 的 id 一致。
+                        getOrPut(e.to) { mutableSetOf() }.add(WorkflowPinKind.EXEC_IN.name)
+                        getOrPut(e.from) { mutableSetOf() }.add(WorkflowPinKind.EXEC_OUT.name)
+                    }
+                }
+            }
             for (node in definition.nodes) {
                 val pos = positions[node.id] ?: continue
                 WorkflowNodeCard(
@@ -294,6 +299,7 @@ internal fun WorkflowBlueprintCanvas(
                     // 入口节点不能删：删掉它整张图没有起点，定义立刻不合法（校验器也会报）。
                     canDelete = node.type != WorkflowNodeType.TRIGGER,
                     linkedParamKeys = dataLinkedKeys[node.id].orEmpty(),
+                    linkedPinIds = linkedPinIds[node.id].orEmpty(),
                     // 拖线悬停在哪颗针脚上（key 是 "<nodeId>:<pinId>"，这里只取属于本卡的那部分）。
                     hoveredPinId = wireHoverPin
                         ?.takeIf { it.substringBefore(':') == node.id }
@@ -362,6 +368,34 @@ internal fun WorkflowBlueprintCanvas(
                 )
             }
         }
+
+            // ── 连线层：画在**卡片之上** ──
+            //
+            // 之前它画在卡片之下，于是每条线一进卡片范围就被盖住：
+            // 用户看到的是线从卡片边缘"消失"、又从另一处"冒出"，
+            // 针脚那一段更是完全看不见 —— 这就是"接口边线被卡片压住"。
+            //
+            // 参考实现的连线也画在卡片之上（BlueprintView 的 link 层在 card 层之后），
+            // 所以线始终压着卡片走，两端落在针脚外沿。
+            //
+            // 注意：线端点算的是针脚**外沿**（见上面的 startX/endX），
+            // 所以线不会盖住针脚本体，只是压过卡片表面。
+            Canvas(Modifier.fillMaxSize()) {
+                drawBlueprintEdges(
+                    definition = definition,
+                    positions = positions,
+                    pinRects = pinRects,
+                    origin = origin,
+                    pan = pan,
+                    scale = scale,
+                    normal = edgeColor,
+                    trueColor = trueColor,
+                    falseColor = falseColor,
+                    dataColor = edgeColor,
+                    pinColors = pinColors,
+                    selectedNodeId = selectedNodeId,
+                )
+            }
 
         // 拉线覆盖层：**不随平移**，两端都是「窗口坐标 - 画布原点」，所以始终贴着手指。
         if (wireFrom != null) {

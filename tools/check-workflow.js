@@ -1730,14 +1730,50 @@ async function checkCli() {
   ok(/border\(if \(hovered\) 2\.dp else 1\.dp/.test(card) &&
     /else color, shape\)/.test(card),
     "五边形描边默认 1dp（悬停才加粗，对齐 pin_slot_normal.xml 的 strokeWidth=1dp）");
-  ok(/if \(hovered\) MaterialTheme\.colorScheme\.primary else MaterialTheme\.colorScheme\.surfaceVariant/.test(card),
-    "未连线时填 surfaceVariant（对齐 setLinked(false)），悬停才换 primary");
-  // 数据针脚仍是圆环：参考实现的 NormalPinSlotView 不改 shape，沿用默认。
-  ok(/border\(1\.5\.dp, color, CircleShape\)/.test(card),
-    "数据针脚保持圆环（NormalPinSlotView 不改 shape）");
-  // 尺寸 18dp = 参考实现的 ?attr/halfIconButtonSize。
-  ok(/\.size\(18\.dp\)/.test(card),
-    "针脚 18dp（参考实现 halfIconButtonSize = 18dp）");
+  // ── 已连线必须**填实色**（参考实现 setLinked 的核心行为）──
+  //
+  // ExecutePinSlotView / NormalPinSlotView 的 setLinked 都是同一句：
+  //   setCardBackgroundColor(linked ? getPinColor() : colorSurfaceVariant)
+  // 一头连上就填充成针脚自己的颜色。我们之前**完全没有** linked 状态，
+  // 满屏连线而针脚全是空心 —— 用户看到线连过去了，针脚却像没连上。
+  ok(/linked -> color/.test(card),
+    "已连线的针脚填成自己的颜色（对齐 setLinked(true) 的 setCardBackgroundColor）");
+  ok(/linkedPinIds/.test(card) && /linked = pin\.id in linkedPinIds/.test(card),
+    "针脚的 linked 由边表推出来（卡片自己不认识边表）");
+  // 数据针脚仍是圆环形状：NormalPinSlotView 只改填充与描边，不改 shape。
+  ok(/CircleShape\)/.test(card) && /border\(if \(hovered\) 2\.dp else 1\.5\.dp/.test(card),
+    "数据针脚保持圆环（NormalPinSlotView 不改 shape，只换填充/描边）");
+  // 尺寸 18dp = 参考实现的 ?attr/halfIconButtonSize；悬停放大到 22dp 是命中提示。
+  ok(/\.size\(if \(hovered\) 22\.dp else 18\.dp\)/.test(card),
+    "针脚 18dp（参考实现 halfIconButtonSize），悬停才放大");
+  // ── 上接口必须贴上边 ──
+  //
+  // 参考实现 pin_top.xml 的子元素顺序是 pinSlotBox 在最上、标题在下，
+  // 也就是针脚槽位就是卡片内容的第一层。我们之前把标签放上面、针脚放下面，
+  // 而且两者都在 6dp 内边距里 —— 针脚离上边差了一整个标签的高度。
+  {
+    const card = SRC.card;
+    const slotIdx = card.indexOf("if (execIn != null) {");
+    const padIdx = card.indexOf("Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp))");
+    ok(slotIdx !== -1 && padIdx !== -1 && slotIdx < padIdx,
+      "控制流入口在内容内边距**之前**（针脚贴住卡片上边，对齐 pin_top.xml 的 pinSlotBox）");
+    // 针脚在标签之前 = 槽位在标题之上。
+    const dotIdx = card.indexOf("LinkablePinDot(", slotIdx);
+    const labelIdx = card.indexOf("execIn.label.ifBlank", slotIdx);
+    ok(dotIdx !== -1 && labelIdx !== -1 && dotIdx < labelIdx,
+      "针脚槽位在执行字样之上（pin_top.xml 的顺序）");
+  }
+  // ── 连线层必须画在卡片之上 ──
+  //
+  // 之前它画在卡片之下，每条线一进卡片范围就被盖住：线从卡边缘"消失"又从别处"冒出"，
+  // 针脚那一段完全看不见 —— 用户说的"接口边线被卡片压住"。
+  {
+    const cv = SRC.canvas;
+    const edgeDrawIdx = cv.indexOf("drawBlueprintEdges(");
+    const cardIdx = cv.indexOf("WorkflowNodeCard(");
+    ok(edgeDrawIdx !== -1 && cardIdx !== -1 && edgeDrawIdx > cardIdx,
+      "连线层画在卡片**之后**（否则线会被卡片盖住）");
+  }
 
   // ── 面板载荷分两类：预设给 EditorNodeKind，任务/变量给已配好的 PickerInsert ──
   ok(/data class PickerInsert\(/.test(SRC.nodePicker),

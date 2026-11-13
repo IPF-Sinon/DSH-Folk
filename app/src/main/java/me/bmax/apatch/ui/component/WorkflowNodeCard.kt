@@ -237,6 +237,14 @@ internal fun WorkflowNodeCard(
     /** 这张卡里哪些参数已经接上了线（决定 NONE 档显示什么）。 */
     linkedParamKeys: Set<String> = emptySet(),
     /**
+     * 本卡**已接线的针脚 id**（出/入、控制流/数据都算）。
+     *
+     * 参考实现是 slotView.setLinked(pin.isLinked())：连上就把针脚填成实色。
+     * 我们之前只有数据入口的信息（[linkedParamKeys]，且只喂给参数行），
+     * 出口与控制流针脚永远空心 —— 满屏连线，针脚却一个个都是空的。
+     */
+    linkedPinIds: Set<String> = emptySet(),
+    /**
      * 拖线时**指针下这颗针脚**的 id（`p_x` / `cmd` / `result` …）；null = 没有针脚被悬停。
      *
      * 只影响外观：被悬停且可接的针脚会放大并加描边。
@@ -341,23 +349,30 @@ internal fun WorkflowNodeCard(
             Column {
                 // 参考实现 card_normal.xml 没有顶部色带：类型信息已经由**水印**和**选中描边**
                 // 两处承担，再加一条 4dp 实色带只会让卡片顶部凭空多一截，且与描边撞色。
-                Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-                    // ── 顶部：控制流入口 ──
-                    //
-                    // 参考实现把 EXEC_IN 放在 topBox（top|center）。控制流从上面进来，
-                    // 位置本身就说明了"上一步 → 这一步"。
-                    if (execIn != null) {
-                        // 对齐 pin_top.xml：标题在上，固定槽位里的执行针脚在下。
-                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                execIn.label.ifBlank { "执行" },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                            )
-                            LinkablePinDot(execIn, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop, hovered = hoveredPinId == execIn.id)
-                        }
+                // ── 顶部：控制流入口（贴住卡片上边）──
+                //
+                // 参考实现 pin_top.xml 的子元素顺序是：**pinSlotBox 在最上**，标题在下。
+                // 也就是说针脚槽位是卡片内容的第一层，紧贴上边；"执行"字样在它下方。
+                //
+                // 我们之前正好相反：标签在上、针脚在下，而且两者都在 6dp 内边距里 ——
+                // 于是针脚离上边差了一整个标签的高度，线接到针脚时还要在卡内穿行一段。
+                // 用户说的"上接口应该贴上边"就是这个。
+                if (execIn != null) {
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        LinkablePinDot(
+                            execIn, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop,
+                            hovered = hoveredPinId == execIn.id,
+                            linked = execIn.id in linkedPinIds,
+                        )
+                        Text(
+                            execIn.label.ifBlank { "执行" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
                     }
+                }
+                Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
                     // ── 标题区＝拖动把手 ──
                     //
                     // 只有这里接拖动：它没有输入控件，不会和别的操作打架。
@@ -522,6 +537,7 @@ internal fun WorkflowNodeCard(
                                         onPinDrag = onPinDrag,
                                         onPinDrop = onPinDrop,
                                         hoveredPinId = hoveredPinId,
+                                        linkedPinIds = linkedPinIds,
                                     )
                                 }
                             }
@@ -531,7 +547,11 @@ internal fun WorkflowNodeCard(
                                     for (pin in dataOuts) {
                                         Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
                                             PinLabel(pin)
-                                            LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop, hovered = hoveredPinId == pin.id)
+                                            LinkablePinDot(
+                                                pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop,
+                                                hovered = hoveredPinId == pin.id,
+                                                linked = pin.id in linkedPinIds,
+                                            )
                                         }
                                     }
                                 }
@@ -595,7 +615,11 @@ internal fun WorkflowNodeCard(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                     )
-                                    LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop, hovered = hoveredPinId == pin.id)
+                                    LinkablePinDot(
+                                        pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop,
+                                        hovered = hoveredPinId == pin.id,
+                                        linked = pin.id in linkedPinIds,
+                                    )
                                 }
                             }
                         }
@@ -619,11 +643,34 @@ internal fun WorkflowNodeCard(
  * 数据针脚按**类型**着色（[workflowPinColor]），于是"这口吃数字还是吃文本"不用读标签。
  */
 @Composable
-private fun PinDot(pin: WorkflowPinSpec, hovered: Boolean = false) {
+private fun PinDot(
+    pin: WorkflowPinSpec,
+    hovered: Boolean = false,
+    /**
+     * 这颗针脚是否已接线。参考实现：slotView.setLinked(pin.isLinked())，
+     * 连上就 `setCardBackgroundColor(getPinColor())` —— **填充成它自己的颜色**，不是空心。
+     */
+    linked: Boolean = false,
+) {
     val exec = pin.kind != WorkflowPinKind.DATA_IN && pin.kind != WorkflowPinKind.DATA_OUT
     val color = if (exec) MaterialTheme.colorScheme.outline else workflowPinColor(WorkflowPinType.of(pin.dataType))
     if (!exec) {
-        Box(Modifier.size(18.dp).border(1.5.dp, color, CircleShape))
+        // 数据针脚：已连线填实色，未连线只描边。
+        //
+        // 参考实现里这是同一句 setLinked：linked ? pinColor : colorSurfaceVariant。
+        // 我们之前**没有**这个状态，于是满屏连线而针脚全是空心圈 ——
+        // 用户看线连过去了，针脚却像没连上，这是最直接的"接口没有反应"。
+        val fill = when {
+            hovered -> MaterialTheme.colorScheme.primary
+            linked -> color
+            else -> MaterialTheme.colorScheme.surfaceVariant
+        }
+        Box(
+            Modifier
+                .size(if (hovered) 22.dp else 18.dp)
+                .background(fill, CircleShape)
+                .border(if (hovered) 2.dp else 1.5.dp, if (hovered) MaterialTheme.colorScheme.primary else color, CircleShape),
+        )
         return
     }
     // 圆角 4dp / 切角 8.5dp：8.5 不是整数，dp 换算成 px 后带小数，这里统一走 dp→px。
@@ -662,7 +709,13 @@ private fun PinDot(pin: WorkflowPinSpec, hovered: Boolean = false) {
             // 而预览线是连续的一根，指不出具体是哪颗针脚 —— 只有针脚自己变才能回答。
             .size(if (hovered) 22.dp else 18.dp)
             .background(
-                if (hovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                when {
+                    hovered -> MaterialTheme.colorScheme.primary
+                    // 控制流针脚用 outline 填实：配对 pin_slot_normal.xml 的 stroke 颜色，
+                    // 连线走到哪、哪颗亮起来，是"这一步接上了"最便宜的信号。
+                    linked -> color
+                    else -> MaterialTheme.colorScheme.surfaceVariant
+                },
                 shape,
             )
             .border(if (hovered) 2.dp else 1.dp, if (hovered) MaterialTheme.colorScheme.primary else color, shape),
@@ -684,6 +737,8 @@ private fun LinkablePinDot(
     onPinDrop: ((pointerWindow: Offset) -> Unit)?,
     /** 这颗针脚此刻是否被拉线悬停（命中可接）。只影响外观。 */
     hovered: Boolean = false,
+    /** 这颗针脚是否已接线（决定填充实色还是空心）。 */
+    linked: Boolean = false,
 ) {
     var dotOrigin by remember { mutableStateOf(Offset.Zero) }
     var dotSize by remember { mutableStateOf(IntSize.Zero) }
@@ -723,7 +778,7 @@ private fun LinkablePinDot(
             },
         contentAlignment = Alignment.Center,
     ) {
-        PinDot(pin, hovered = hovered)
+        PinDot(pin, hovered = hovered, linked = linked)
     }
 }
 
@@ -990,13 +1045,21 @@ private fun CardParamRow(
     onPinDrop: ((pointerWindow: Offset) -> Unit)?,
     /** 拉线时被悬停的针脚 id（见 [WorkflowNodeCard] 的 hoveredPinId）。 */
     hoveredPinId: String? = null,
+    /** 已接线的针脚 id（见 [WorkflowNodeCard] 的 linkedPinIds）。 */
+    linkedPinIds: Set<String> = emptySet(),
 ) {
     var choiceOpen by remember(row.key) { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().heightIn(min = 40.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (pin != null) LinkablePinDot(pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop, hovered = hoveredPinId == pin.id)
+        if (pin != null) {
+            LinkablePinDot(
+                pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop,
+                hovered = hoveredPinId == pin.id,
+                linked = pin.id in linkedPinIds,
+            )
+        }
         else Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
             Box(Modifier.size(12.dp).border(1.dp, row.color, CircleShape))
         }

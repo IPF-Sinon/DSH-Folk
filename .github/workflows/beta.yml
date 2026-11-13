@@ -285,6 +285,28 @@ jobs:
             if [ -n "$BETA_NOTES" ]; then
               printf '\n%s\n' "$BETA_NOTES"
             fi
+            # ── 本次改动 ──
+            #
+            # 之前这里只有上面三行固定模板，所以每个 beta 的更新说明长得一模一样，
+            # 用户点开更新日志看不到"这次到底改了什么"。
+            #
+            # 从提交历史自动取：上一个 tag 到 HEAD 之间的提交标题就是最准确的改动清单。
+            # 取不到（首个 beta / 浅克隆没 tag）时静默跳过，不让发布失败。
+            git fetch --tags --depth=200 >/dev/null 2>&1 || true
+            PREV=$(git tag --list 'v*-beta.*' --sort=-v:refname | head -n 1 || true)
+            if [ -n "$PREV" ]; then
+              RANGE="$PREV..HEAD"
+            else
+              RANGE="HEAD"
+            fi
+            COMMITS=$(git log --no-merges --pretty=format:'- %s' "$RANGE" 2>/dev/null | head -n 40 || true)
+            if [ -n "$COMMITS" ]; then
+              printf '\n### 本次改动\n\n%s\n' "$COMMITS"
+            fi
+            FILES=$(git diff --name-only "$RANGE" 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+            if [ -n "$FILES" ] && [ "$FILES" != "0" ]; then
+              printf '\n<sub>%s 个文件改动</sub>\n' "$FILES"
+            fi
           } > notes.md
           gh release create "$TAG" \
             --title "DSH-Folk ${{ steps.v.outputs.name }}" \
