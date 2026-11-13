@@ -266,10 +266,26 @@ internal fun WorkflowBlueprintCanvas(
                         getOrPut(e.to) { mutableSetOf() }.add(e.toPin)
                         getOrPut(e.from) { mutableSetOf() }.add(e.fromPin)
                     } else {
-                        // 控制流边没有 toPin/fromPin 语义，按端口名记：出口是 EXEC_OUT，
-                        // 入口是 EXEC_IN —— 与 WorkflowPinSpec 的 id 一致。
-                        getOrPut(e.to) { mutableSetOf() }.add(WorkflowPinKind.EXEC_IN.name)
-                        getOrPut(e.from) { mutableSetOf() }.add(WorkflowPinKind.EXEC_OUT.name)
+                        // 控制流边没有 toPin/fromPin，要**按卡片的真实针脚 id** 记。
+                        //
+                        // 上一版写的是 WorkflowPinKind.EXEC_IN.name（"EXEC_IN"），而
+                        // WorkflowSchema 造控制流针脚时 id 是 "in" / "out"
+                        // （见 defaultPinsFor：WorkflowPinSpec("in", …) / ("out", …)）。
+                        // 两个字符串永远对不上，于是 linked 恒为 false —— 控制流针脚
+                        // 一直是空心，用户截图里那条线连着的五边形没有填充。
+                        //
+                        // 用 pinsOf 取真实 id 而不是硬编码 "in"/"out"：万一以后改 id，
+                        // 这里跟着走，不会再次静默失配。
+                        getOrPut(e.to) { mutableSetOf() }.addAll(
+                            WorkflowSchema.pinsOf(definition, e.to)
+                                .filter { it.kind == WorkflowPinKind.EXEC_IN }
+                                .map { it.id },
+                        )
+                        getOrPut(e.from) { mutableSetOf() }.addAll(
+                            WorkflowSchema.pinsOf(definition, e.from)
+                                .filter { it.kind == WorkflowPinKind.EXEC_OUT }
+                                .map { it.id },
+                        )
                     }
                 }
             }

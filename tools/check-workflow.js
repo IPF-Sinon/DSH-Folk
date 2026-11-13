@@ -1740,6 +1740,22 @@ async function checkCli() {
     "已连线的针脚填成自己的颜色（对齐 setLinked(true) 的 setCardBackgroundColor）");
   ok(/linkedPinIds/.test(card) && /linked = pin\.id in linkedPinIds/.test(card),
     "针脚的 linked 由边表推出来（卡片自己不认识边表）");
+  // linked 集合里存的必须是**卡片的真实针脚 id**，不能是 WorkflowPinKind 的枚举名。
+  //
+  // 踩过：控制流针脚的 id 是 "in"/"out"（defaultPinsFor 里 WorkflowPinSpec("in", …)），
+  // 而我在画布侧写的是 WorkflowPinKind.EXEC_IN.name（"EXEC_IN"）。
+  // 两个字符串永远对不上 → linked 恒为 false → 控制流针脚一直是空心，
+  // 用户截图里那条线连着的五边形始终没有填充。断言要卡住“用 pinsOf 取真实 id”。
+  ok(/pinsOf\(definition, e\.to\)/.test(SRC.canvas) && /pinsOf\(definition, e\.from\)/.test(SRC.canvas),
+    "linked 集合用 pinsOf 取真实针脚 id（不是 EXEC_IN.name 这种枚举名）");
+  {
+    // 只允许在注释里出现 EXEC_IN.name 的解释；代码里一出现就是又写回去了。
+    const cvCodeNoComments = SRC.canvas.split("\n")
+      .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
+      .join("\n");
+    ok(!/add\(WorkflowPinKind\.EXEC_(IN|OUT)\.name\)/.test(cvCodeNoComments),
+      "没有把枚举名当针脚 id 塞进 linked 集合");
+  }
   // 数据针脚仍是圆环形状：NormalPinSlotView 只改填充与描边，不改 shape。
   ok(/CircleShape\)/.test(card) && /border\(if \(hovered\) 2\.dp else 1\.5\.dp/.test(card),
     "数据针脚保持圆环（NormalPinSlotView 不改 shape，只换填充/描边）");
