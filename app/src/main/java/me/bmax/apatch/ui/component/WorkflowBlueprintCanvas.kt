@@ -367,19 +367,16 @@ internal fun WorkflowBlueprintCanvas(
                     },
                 )
             }
-        }
 
             // ── 连线层：画在**卡片之上** ──
             //
-            // 之前它画在卡片之下，于是每条线一进卡片范围就被盖住：
-            // 用户看到的是线从卡片边缘"消失"、又从另一处"冒出"，
-            // 针脚那一段更是完全看不见 —— 这就是"接口边线被卡片压住"。
+            // 为什么要移到卡片之后：之前它画在卡片之前，每条线一进卡片范围就被盖住 ——
+            // 线从卡片边缘"消失"、又从另一处"冒出"，针脚那一段完全看不见。
+            // 参考实现的连线也画在卡片之上（BlueprintView 的 link 层在 card 层之后）。
             //
-            // 参考实现的连线也画在卡片之上（BlueprintView 的 link 层在 card 层之后），
-            // 所以线始终压着卡片走，两端落在针脚外沿。
-            //
-            // 注意：线端点算的是针脚**外沿**（见上面的 startX/endX），
-            // 所以线不会盖住针脚本体，只是压过卡片表面。
+            // **必须留在内容层内部**（graphicsLayer 那个 Box 里）：
+            // 这一层的坐标是"世界坐标"，靠外层 graphicsLayer 统一做平移+缩放。
+            // 上一版把它挪到了 Box 外面，连线于是完全不受相机变换 —— 一平移就整体飘走。
             Canvas(Modifier.fillMaxSize()) {
                 drawBlueprintEdges(
                     definition = definition,
@@ -396,6 +393,7 @@ internal fun WorkflowBlueprintCanvas(
                     selectedNodeId = selectedNodeId,
                 )
             }
+        }
 
         // 拉线覆盖层：**不随平移**，两端都是「窗口坐标 - 画布原点」，所以始终贴着手指。
         if (wireFrom != null) {

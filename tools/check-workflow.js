@@ -1773,6 +1773,26 @@ async function checkCli() {
     const cardIdx = cv.indexOf("WorkflowNodeCard(");
     ok(edgeDrawIdx !== -1 && cardIdx !== -1 && edgeDrawIdx > cardIdx,
       "连线层画在卡片**之后**（否则线会被卡片盖住）");
+    // 但**不能**顺手挪出内容层：这一层坐标是世界坐标，靠外层 graphicsLayer 做平移+缩放。
+    // 挪到 Box 外面，连线就完全不受相机变换 —— 一平移整体飘走（真机截图见过）。
+    //
+    // 判据（不靠缩进猜）：从 graphicsLayer 那个 Box 的 ( 起算，到 drawBlueprintEdges 之间
+    // 花括号必须**没闭合**，即连线层还在层内。
+    // 锚点要取**内容 Box 的 `) {`**（也就是点阵那行的上一层），不是 `.graphicsLayer {`：
+    // 那个 lambda 自己会先闭合，从它起算必然误判成"已出层"。
+    const dotsIdx = cv.indexOf("Canvas(Modifier.fillMaxSize()) { drawBlueprintDots");
+    const boxOpen = dotsIdx === -1 ? -1 : cv.lastIndexOf(") {", dotsIdx);
+    ok(dotsIdx !== -1 && boxOpen !== -1, "找到内容层的点阵画布与它的父 Box");
+    if (boxOpen !== -1) {
+      let depth = 0;
+      let closed = false;
+      for (let i = boxOpen; i < edgeDrawIdx; i++) {
+        const ch = cv[i];
+        if (ch === "{") depth++;
+        else if (ch === "}") { depth--; if (depth === 0) { closed = true; break; } }
+      }
+      ok(!closed, "连线层在内容层 Box 之内（否则不受相机变换，一平移就整体飘走）");
+    }
   }
 
   // ── 面板载荷分两类：预设给 EditorNodeKind，任务/变量给已配好的 PickerInsert ──
