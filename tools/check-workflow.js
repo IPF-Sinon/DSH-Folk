@@ -1846,6 +1846,18 @@ async function checkCli() {
     // 之前它在 6dp 内边距里，底部对不齐。
     ok(/\.offset\(y = 2\.dp\)/.test(SRC.card),
       "控制流出口针脚向下跨出卡片下边（对齐 pin_bottom.xml）");
+    // ── 出入口针脚靠左，不是居中 ──
+    //
+    // 参考实现 card_normal.xml 的 topBox / bottomBox 都是 orientation=horizontal、
+    // 只有 paddingHorizontal（?attr/defaultPadding = 8dp），**没有 gravity=center**，
+    // 子元素从左依次排开 —— 所以"执行"针脚在卡片左侧。
+    // 我们之前用 CenterHorizontally / Arrangement.Center，画出来是正中（用户对比截图指出）。
+    ok(/horizontalAlignment = Alignment\.Start/.test(SRC.card),
+      "控制流入口针脚靠左（topBox 无 center gravity，只有 padding）");
+    ok(/horizontalArrangement = Arrangement\.Start/.test(SRC.card),
+      "控制流出口针脚靠左（bottomBox 同样左起排开）");
+    ok(!/horizontalArrangement = Arrangement\.Center/.test(SRC.card),
+      "出口行不再居中");
     // 但**不能**顺手挪出内容层：这一层坐标是世界坐标，靠外层 graphicsLayer 做平移+缩放。
     // 挪到 Box 外面，连线就完全不受相机变换 —— 一平移整体飘走（真机截图见过）。
     //

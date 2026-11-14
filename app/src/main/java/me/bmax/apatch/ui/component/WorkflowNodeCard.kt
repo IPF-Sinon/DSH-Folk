@@ -427,9 +427,16 @@ internal fun WorkflowNodeCard(
                     // 我们的命中框是 22dp、视觉 18dp，居中后上边还留 2dp —— 再加卡片 1dp 描边，
                     // 线会在卡内先露出两三 dp 才被压住，观感是"接口没贴住边"。
                     // 上移 2dp 让五边形的上边缘与卡片描边齐平。
+                    // 横向**靠左**，不居中。
+                    //
+                    // 参考实现 card_normal.xml 的 topBox 是 orientation=horizontal、
+                    // 只有 paddingHorizontal、**没有 gravity=center** —— 子元素从左依次排开。
+                    // 所以"执行"针脚在卡片左侧，不是正中间（用户对比截图指出）。
                     Column(
-                        Modifier.fillMaxWidth().offset(y = (-2).dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                        // paddingHorizontal = 8dp 对齐参考实现的 ?attr/defaultPadding，
+                        // 也就是与卡片内其余内容（标题、参数行）同一左基线。
+                        Modifier.fillMaxWidth().offset(y = (-2).dp).padding(horizontal = 8.dp),
+                        horizontalAlignment = Alignment.Start,
                     ) {
                         LinkablePinDot(
                             execIn, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop,
@@ -660,9 +667,11 @@ internal fun WorkflowNodeCard(
                 // （用户说的"下出口也没有对齐底部"）。现在移到内边距之外，并下移 2dp
                 // 让五边形的下尖与卡片描边齐平。
                 if (execOuts.isNotEmpty()) {
+                    // 同样靠左：参考实现 bottomBox 也是 orientation=horizontal + 仅 padding，
+                    // 从左侧依次摆。多条出口（执行/未达成）因此是左起排开，不是居中。
                     Row(
-                        Modifier.fillMaxWidth().offset(y = 2.dp),
-                        horizontalArrangement = Arrangement.Center,
+                        Modifier.fillMaxWidth().offset(y = 2.dp).padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.Start,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         for (pin in execOuts) {
