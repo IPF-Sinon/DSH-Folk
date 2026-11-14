@@ -200,7 +200,7 @@ internal fun WorkflowBlueprintCanvas(
         // 点阵必须铺满整个可见区并跟着 pan 滚动，才是"无限画布"的观感。
         // 它放在内容层里只有一屏大小，内容一平移就露出空白 ——
         // 用户会以为画布到头了、移不过去（实际坐标没限制，只是没画点）。
-        Canvas(Modifier.fillMaxSize()) { drawBlueprintDots(dotColor, pan, scale) }
+        Canvas(Modifier.fillMaxSize()) { drawBlueprintGrid(dotColor, pan, scale) }
         // 内容层：平移只在这里应用一次。
         Box(
             Modifier
@@ -520,32 +520,49 @@ private fun requiredCapsOf(node: WorkflowNode): List<String> {
 }
 
 /**
- * 背景点阵（24dp 网格）。**画在视口层**，靠 [pan]/[scale] 取模铺满整屏。
+ * 画布背景网格。**对齐参考实现的 drawBackground**（CardLayoutView.java:880）。
  *
- * 之前它画在内容层里、尺寸只有一屏：内容一平移，点就被带出屏幕，
- * 露出的空白让人以为"画布到头了" —— 用户说的"无法移到没有点的位置"就是这个。
+ * 参考实现的三条关键做法，这里逐条照做：
+ *  1. 画的是**方格线**，不是点阵；
+ *  2. 网格 = 12dp（`CardLayoutView.GRID_DP_SIZE`），与吸附网格**同一个常量**；
+ *  3. 每 10 格加粗一档，另有坐标轴的两种强调（垂直/水平主轴最粗）。
  *
- * 为什么用取模而不是画一个很大的矩形：大矩形要么撑爆内存，要么在缩小到极限时
- * 仍然有限；取模的大小是**屏幕**，跟画布范围无关，真正无限。
+ * 之前用 24dp 点阵，与吸附的 12dp 网格不是同一套 —— 视觉上看不出吸附落在哪，
+ * 而参考实现的网格线本身就告诉用户"卡片会落在这些线的交点上"。
+ *
+ * 取模铺满的做法也照抄：`offset = start % gridSize`，平移多少都不会画穿屏幕边界，
+ * 因此画布在观感上是无限的（参考实现同样没有平移范围限制）。
  */
-private fun DrawScope.drawBlueprintDots(color: Color, pan: Offset, scale: Float) {
+private fun DrawScope.drawBlueprintGrid(color: Color, pan: Offset, scale: Float) {
     val safeScale = if (scale > 0f) scale else 1f
-    // 步长跟着缩放走：放大时点距变大，与卡片/连线保持一致。
-    val step = 24.dp.toPx() * safeScale
+    // 网格步长跟着缩放走：与卡片、连线保持同一缩放。
+    val step = WorkflowGeometry.GRID_DP.dp.toPx() * safeScale
     if (step <= 0f) return
-    val radius = (1.dp.toPx() * safeScale).coerceAtLeast(0.5f)
-    // 起点 = pan 对步长取模；若为正再减一格，保证从屏幕外一格开始，边缘不留缝。
+    // 起点 = pan 对步长取模（参考实现：canvas.translate(offsetX, offsetY)）。
     var x0 = pan.x % step
-    if (x0 > 0f) x0 -= step
     var y0 = pan.y % step
-    if (y0 > 0f) y0 -= step
+    val bigStep = step * 10f
+    // 竖直网格线
+    var x = x0
+    while (x < size.width) {
+        // 主轴（x0 那一根）在参考实现里用 5px 强调；每 10 格用 2，其余 0.5。
+        val w = when {
+            x == x0 -> 2.4f
+            (x - x0) % bigStep == 0f -> 1.1f
+            else -> 0.6f
+        }
+        drawLine(color = color, start = Offset(x, 0f), end = Offset(x, size.height), strokeWidth = w)
+        x += step
+    }
+    // 水平网格线
     var y = y0
     while (y < size.height) {
-        var x = x0
-        while (x < size.width) {
-            drawCircle(color = color, radius = radius, center = Offset(x, y))
-            x += step
+        val w = when {
+            y == y0 -> 2.4f
+            (y - y0) % bigStep == 0f -> 1.1f
+            else -> 0.6f
         }
+        drawLine(color = color, start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = w)
         y += step
     }
 }

@@ -654,15 +654,21 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   }
   ok(!/WorkflowNodeType\.LOG\b/.test(iconSrc), "nodeTypeIcon 不引用枚举里不存在的 LOG（CI 就是这么炸的）");
   ok(!/else ->/.test(iconSrc), "nodeTypeIcon 不带 else 兜底（这样新增枚举值时编译器会报错提醒）");
-  ok(/drawBlueprintDots/.test(canvas) && /24\.dp/.test(canvas), "画布有点阵网格");
-  // ── 无限画布：点阵必须在视口层并按 pan 取模 ──
+  // ── 背景网格：对齐参考实现的 drawBackground ──
   //
-  // 之前点阵画在内容层里、尺寸只有一屏：一平移点就跟着出屏，露出空白，
-  // 让人以为"画布到头了、移不过去"（实际坐标从来没受限，只是没画点）。
-  ok(/drawBlueprintDots\(dotColor, pan, scale\)/.test(SRC.canvas),
-    "点阵按 pan/scale 取模铺满整屏（无限画布的观感）");
+  // 参考实现（CardLayoutView.java:880）：画**方格线**、网格 12dp（GRID_DP_SIZE）、
+  // 每 10 格加粗，起点 = offset % gridSize 铺满整屏。
+  //
+  // 我们原来用 24dp **点阵**，跟吸附用的 12dp 网格不是同一套 —— 用户看不出吸附落点，
+  // 而且点阵只有一屏，一平移就露出空白，像"画布到头了"。
+  ok(/drawBlueprintGrid\(dotColor, pan, scale\)/.test(SRC.canvas),
+    "背景网格在视口层按 pan/scale 取模铺满（无限画布）");
+  ok(/WorkflowGeometry\.GRID_DP\.dp\.toPx\(\)/.test(SRC.canvas),
+    "网格步长取自 WorkflowGeometry.GRID_DP（与吸附网格同一个常量）");
   ok(/pan\.x % step/.test(SRC.canvas) && /pan\.y % step/.test(SRC.canvas),
-    "点阵起点对步长取模（否则平移会露出无点空白）");
+    "网格起点对步长取模（否则平移会露出空白）");
+  ok(/step \* 10f/.test(SRC.canvas), "每 10 格加粗一档（对齐参考实现的 bigGridSize）");
+  ok(!/drawBlueprintDots/.test(SRC.canvas), "不再用 24dp 点阵（与 12dp 吸附网格不一致）");
   ok(!/fun layoutNodes\(/.test(canvas), "画布不自带布局：坐标由调用方传入（预览与编辑器共用摆位）");
   const preview = SRC.dialogs.slice(SRC.dialogs.indexOf("internal fun WorkflowGraphPreview("));
   ok(/WorkflowBlueprintCanvas\(/.test(preview.slice(0, 700)), "预览内部委托新画布（对外签名没变）");
@@ -1804,9 +1810,11 @@ async function checkCli() {
     // 花括号必须**没闭合**，即连线层还在层内。
     // 锚点要取**内容 Box 的 `) {`**（也就是点阵那行的上一层），不是 `.graphicsLayer {`：
     // 那个 lambda 自己会先闭合，从它起算必然误判成"已出层"。
-    const dotsIdx = cv.indexOf("Canvas(Modifier.fillMaxSize()) { drawBlueprintDots");
-    const boxOpen = dotsIdx === -1 ? -1 : cv.lastIndexOf(") {", dotsIdx);
-    ok(dotsIdx !== -1 && boxOpen !== -1, "找到内容层的点阵画布与它的父 Box");
+    // 锚点取**内容 Box 的 `) {`**：它紧跟在 graphicsLayer 的 lambda 之后，
+    // 是连线层所在的 Box。用 `graphicsLayer {` 起算会误判（那个 lambda 自己先闭合）。
+    const layerIdx = cv.indexOf(".graphicsLayer {");
+    const boxOpen = layerIdx === -1 ? -1 : cv.indexOf(") {", layerIdx);
+    ok(layerIdx !== -1 && boxOpen !== -1, "找到内容层 Box（graphicsLayer 之后那个）");
     if (boxOpen !== -1) {
       let depth = 0;
       let closed = false;
