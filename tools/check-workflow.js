@@ -1112,11 +1112,17 @@ console.log("\u2500 #16m 拉线落空白：菜单选完按松手坐标建节点"
     /WorkflowPinKind\.EXEC_FALSE\.name -> "false"/.test(e),
     "从成立/不成立口拉出的边各自带上 when");
   ok(/addAfterAt = pointer/.test(e) && /dropPointDp\(addAfterAt\)/.test(e) &&
-    /addNodeAt\(kind, x, y, after\)/.test(e),
-    "菜单里选了类型后按松手坐标建节点，并连上源节点");
-  ok(/fun addNodeAt\(kind: EditorNodeKind, xDp: Int, yDp: Int, afterId: String\? = null\)/.test(e) &&
-    /edges = if \(afterId != null\) def\.edges \+ WorkflowEdge\(afterId, id, ""\) else def\.edges/.test(e),
-    "落点建节点时可以顺手连边（from → 新节点）");
+    /addNodeAt\(kind, x, y, after, addAfterPin\)/.test(e),
+    "菜单里选了类型后按松手坐标建节点，并把源针脚一起传下去");
+  // ── 新边的种类必须跟源针脚走 ──
+  //
+  // 踩过：addNodeAt 无条件建控制流边 WorkflowEdge(afterId, id, "")，
+  // 于是从**参数出口**（DATA_OUT）拉出来、落在空白、选一张卡，新卡被接在"执行处"。
+  // 现在必须按 afterPinKind 分流：数据出口 → addDataEdge，其余 → 控制流边。
+  ok(/afterPinKind: String/.test(e) && /val isDataPin = afterPinKind == WorkflowPinKind\.DATA_OUT\.name/.test(e),
+    "addNodeAt 按源针脚种类判断新边是数据边还是控制流边");
+  ok(/isDataPin -> \{[\s\S]{0,400}WorkflowValidator\.addDataEdge\(/.test(e),
+    "数据出口拉出的新边走 addDataEdge（不是控制流边）");
 }
 
 console.log("\u2500 #16n 回环桥的守卫与拆分（阶段 4：DshBridgeGuard / DshBridgeSafRoutes）");
@@ -1196,10 +1202,12 @@ console.log("\u2500 #16q 连边即时防成环（任务 2）");
   // 关键：**连接两张已有卡片**这条路径必须经判据。
   // 另外两处直接拼边在 addNodeAt/addNode 里，连的是本次刚创建的节点（新节点还没有出边，
   // 按构造不可能成环），所以不需要判 —— 断言按这个真实不变量写。
-  const newNodeEdges = (e.match(/edges = if \(afterId != null\) def\.edges \+ WorkflowEdge\(afterId, id, ""\)/g) || []).length;
-  const otherEdges = (e.match(/def\.edges \+ WorkflowEdge\(/g) || []).length - newNodeEdges;
+  // 新建节点时拼控制流边：只有**非数据**源针脚这一条路（数据边走 addDataEdge）。
+  // 连的是本次刚创建的节点，它还没有出边，按构造不可能成环，所以不必经判据。
+  const newNodeEdges = (e.match(/withNode\.edges \+ WorkflowEdge\(afterId, id, ""\)/g) || []).length;
+  const otherEdges = (e.match(/def\.edges \+ WorkflowEdge\(/g) || []).length;
   ok(newNodeEdges === 2 && otherEdges === 0,
-    "仅新建节点的两处直接拼边（按构造无环），其余连边一律经 addEdgeIfAcyclic：新节点 " + newNodeEdges + " / 其它 " + otherEdges);
+    "仅新建节点的控制流边直接拼（按构造无环），其余连边一律经 addEdgeIfAcyclic：新节点 " + newNodeEdges + " / 其它 " + otherEdges);
   // 保存路径仍由 validate 兜底（含环）
   ok(/findCycle\(def\)/.test(v), 'validate 里的环检查仍在（保存/执行前兜底）');
 }

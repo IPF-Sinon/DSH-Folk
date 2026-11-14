@@ -610,10 +610,17 @@ internal fun WorkflowEditorSurface(
      * 在指定 dp 位置新建节点（落点 = 松手位置，已吸附 12dp 网格）。
      * afterId 非空时顺手连一条出边（从针脚拉出来、却落在空白的情况）。
      */
-    fun addNodeAt(kind: EditorNodeKind, xDp: Int, yDp: Int, afterId: String? = null) {
+    fun addNodeAt(
+        kind: EditorNodeKind,
+        xDp: Int,
+        yDp: Int,
+        afterId: String? = null,
+        /** 源针脚种类名（[WorkflowPinKind.name]）。决定新边是**数据边**还是控制流边。 */
+        afterPinKind: String = "",
+    ) {
         val id = newEditorNodeId(def)
         val settled = if (kind.bridge != null) withActionDefaults(kind, kind.bridge) else kind.defaults
-        draft = def.copy(
+        val withNode = def.copy(
             nodes = def.nodes + WorkflowNode(
                 id = id,
                 type = kind.type,
@@ -622,8 +629,30 @@ internal fun WorkflowEditorSurface(
                 posY = yDp,
                 config = settled,
             ),
-            edges = if (afterId != null) def.edges + WorkflowEdge(afterId, id, "") else def.edges,
         )
+        // ── 新边是数据边还是控制流边，取决于**从哪颗针脚拉出来的** ──
+        //
+        // 上一版无条件建控制流边：从参数出口（DATA_OUT）拉出来、落在空白、选一张卡，
+        // 结果新卡被接在**执行处** —— 用户说的"选择卡片后还是连执行处"就是这个。
+        //
+        // 数据出口拉出来的必须是数据边，且落点要选下游一个**数据入口**：
+        // 这里用 dataInputKeysOf 的第一个键，与直接连线时的兜底规则一致。
+        val isDataPin = afterPinKind == WorkflowPinKind.DATA_OUT.name
+        draft = when {
+            afterId == null -> withNode
+            isDataPin -> {
+                val toPin = defaultTargetPin(withNode, id)
+                WorkflowValidator.addDataEdge(
+                    def = withNode,
+                    fromId = afterId,
+                    fromPin = dataSourceFor(withNode, afterId),
+                    toId = id,
+                    toPin = toPin,
+                    dataType = dataTypeFor(afterId),
+                )
+            }
+            else -> withNode.copy(edges = withNode.edges + WorkflowEdge(afterId, id, ""))
+        }
     }
 
     /**
@@ -648,7 +677,12 @@ internal fun WorkflowEditorSurface(
      * 上一版用的是"按序号排格子"：节点一多就会排到视野外，用户点完看不见任何变化，
      * 以为没加上。改成视野中心之后，落点永远在眼前。
      */
-    fun addNode(kind: EditorNodeKind, afterId: String?) {
+    fun addNode(
+        kind: EditorNodeKind,
+        afterId: String?,
+        /** 源针脚种类名。与 [addNodeAt] 同一规则：数据出口建数据边，其余建控制流边。 */
+        afterPinKind: String = "",
+    ) {
         // 视野中心 = 画布中心经视口逆变换回到世界坐标。
         val centerWindow = Offset(
             canvasOrigin.x + canvasSize.width / 2f,
@@ -668,10 +702,22 @@ internal fun WorkflowEditorSurface(
             posY = y,
             config = settled,
         )
-        draft = def.copy(
-            nodes = def.nodes + node,
-            edges = if (afterId != null) def.edges + WorkflowEdge(afterId, id, "") else def.edges,
-        )
+        val withNode = def.copy(nodes = def.nodes + node)
+        // 与 addNodeAt 同一套分流：从参数出口拉出来的必须是数据边，
+        // 否则新卡会被接在"执行处"（用户报过的同一个问题，两个入口都要修）。
+        val isDataPin = afterPinKind == WorkflowPinKind.DATA_OUT.name
+        draft = when {
+            afterId == null -> withNode
+            isDataPin -> WorkflowValidator.addDataEdge(
+                def = withNode,
+                fromId = afterId,
+                fromPin = dataSourceFor(withNode, afterId),
+                toId = id,
+                toPin = defaultTargetPin(withNode, id),
+                dataType = dataTypeFor(afterId),
+            )
+            else -> withNode.copy(edges = withNode.edges + WorkflowEdge(afterId, id, ""))
+        }
     }
 
     Surface(
@@ -1275,7 +1321,9 @@ internal fun WorkflowEditorSurface(
             onPick = { entry ->
                 pickEntry(entry) { kind ->
                     val (x, y) = dropPointDp(addAfterAt)
-                    addNodeAt(kind, x, y, after)
+                    // 把源针脚一路传下去：从数据出口拉出来的要建**数据边**，
+                    // 不是控制流边。漏传的话新卡会被接在"执行处"。
+                    addNodeAt(kind, x, y, after, addAfterPin)
                 }
                 addAfter = null
                 // 源针脚也要清：留着的话，下次从别处拉线落在空白时会用上一次的类型去筛。
