@@ -240,10 +240,11 @@ internal fun WorkflowBlueprintCanvas(
                 if (rect != null) {
                     Canvas(Modifier.fillMaxSize()) {
                         val pad = 8.dp.toPx()
-                        val left = (rect.left - origin.x - pan.x) / (if (scale > 0f) scale else 1f)
-                        val top = (rect.top - origin.y - pan.y) / (if (scale > 0f) scale else 1f)
-                        val right = (rect.right - origin.x - pan.x) / (if (scale > 0f) scale else 1f)
-                        val bottom = (rect.bottom - origin.y - pan.y) / (if (scale > 0f) scale else 1f)
+                        // bounds 里存的已是世界坐标（见 onBounds），这里直接用，不再逆变换。
+                        val left = rect.left
+                        val top = rect.top
+                        val right = rect.right
+                        val bottom = rect.bottom
                         drawRect(
                             color = wireColor,
                             topLeft = Offset(left - pad, top - pad),
@@ -365,11 +366,27 @@ internal fun WorkflowBlueprintCanvas(
                     hoveredPinId = wireHoverPin
                         ?.takeIf { it.substringBefore(':') == node.id }
                         ?.substringAfter(':'),
-                    onBounds = { rect -> bounds = bounds + (node.id to rect) },
-                    onPinBounds = { pinKind, rect -> pinRects = pinRects + ("${node.id}:$pinKind" to rect) },
+                    // 卡片矩形同样**当场**换算成世界坐标：它与 pinRects 是同一个坑 ——
+                    // 平移不重新布局，boundsInWindow 不会刷新，绘制时再用新 pan 逆变换就偏了。
+                    onBounds = { rect -> bounds = bounds + (node.id to toWorldRect(rect, origin, pan, scale)) },
+                    // ── 针脚矩形一律**当场换算成世界坐标**再存 ──
+                    //
+                    // boundsInWindow() 给的是**窗口**坐标，已经含了当前 graphicsLayer 的
+                    // 平移+缩放。存下来再在绘制时用**新的** pan 去逆变换，就错位了：
+                    // 平移画布只改 graphicsLayer，**不会重新布局**，onGloballyPositioned
+                    // 不会再次触发 —— 于是 pinRects 里还是平移前的窗口坐标，
+                    // 而绘制用的是平移后的 pan，线头偏移量正好等于平移距离。
+                    //
+                    // 用户报的"只移动画布、没动卡片，连线却偏了"就是这个。
+                    // 解决办法：在**测到的这一刻**就用当时的 pan/scale 逆变换回世界坐标，
+                    // 之后无论怎么平移缩放，这个值都稳定 —— 与卡片落点用的是同一套坐标。
+                    onPinBounds = { pinKind, rect ->
+                        pinRects = pinRects + ("${node.id}:$pinKind" to toWorldRect(rect, origin, pan, scale))
+                    },
                     // 同时按引脚 id 登记：数据边与落点判定要精确到"哪一颗"。
                     onPinIdBounds = { pinId, pinKind, rect ->
-                        pinRects = pinRects + ("${node.id}:$pinId" to rect) + ("${node.id}:$pinKind" to rect)
+                        val world = toWorldRect(rect, origin, pan, scale)
+                        pinRects = pinRects + ("${node.id}:$pinId" to world) + ("${node.id}:$pinKind" to world)
                     },
                     onPinDrag = { pinKind, anchor, pointer ->
                         wireFrom = node.id
@@ -384,7 +401,9 @@ internal fun WorkflowBlueprintCanvas(
                         //
                         // 判定用 WorkflowPinSpec.canLinkFrom（参考实现 Pin.linkAble 的等价物）：
                         // 控制流只接控制流、数据只看类型互通，规则仍然只有那一处。
-                        val hit = hitPinAt(pointer, node.id, definition, pinRects)
+                        // pointer 是窗口坐标，pinRects 是世界坐标 —— 先换算，否则拖拽中
+                        // 的"可接针脚"判定会随平移整体偏移。
+                        val hit = hitPinAt(toWorldPoint(pointer, origin, pan, scale), node.id, definition, pinRects)
                         val targetSpec = hit?.let { h ->
                             WorkflowSchema.pinsOf(definition, h.nodeId).firstOrNull { it.id == h.pinId }
                         }
@@ -419,10 +438,11 @@ internal fun WorkflowBlueprintCanvas(
                             // 都会被当成"连到下游某个参数"。
                             // 命中判定与拖拽中的高亮**共用同一个函数**：两处各写一遍的话，
                             // 会出现「高亮说能接、松手却接不上」——那比没有高亮更让人困惑。
-                            val hit = hitPinAt(pointer, from, definition, pinRects)
+                            val pointerWorld = toWorldPoint(pointer, origin, pan, scale)
+                            val hit = hitPinAt(pointerWorld, from, definition, pinRects)
                             val targetPin = hit?.pinId
                             val target = hit?.nodeId
-                                ?: bounds.entries.firstOrNull { (id, rect) -> id != from && rect.contains(pointer) }?.key
+                                ?: bounds.entries.firstOrNull { (id, rect) -> id != from && rect.contains(pointerWorld) }?.key
                             wireDropCb.value?.invoke(from, fromPin, target, pointer, targetPin)
                         }
                     },
@@ -463,6 +483,30 @@ internal fun WorkflowBlueprintCanvas(
             }
         }
     }
+}
+
+/**
+ * 窗口坐标的矩形 → **世界坐标**（画布内容坐标，与卡片落点同一套）。
+ *
+ * 必须传入**测量当时**的 pan/scale，不能用调用时的当前值：
+ * 平移只改 graphicsLayer、不重新布局，所以"测量的那一刻"与"绘制的此刻"可能不同。
+ */
+/**
+ * 窗口坐标的点 → 世界坐标。命中判定用（指针是窗口坐标，pinRects/bounds 是世界坐标）。
+ */
+private fun toWorldPoint(point: Offset, origin: Offset, pan: Offset, scale: Float): Offset {
+    val s = if (scale > 0f) scale else 1f
+    return Offset((point.x - origin.x - pan.x) / s, (point.y - origin.y - pan.y) / s)
+}
+
+private fun toWorldRect(rect: Rect, origin: Offset, pan: Offset, scale: Float): Rect {
+    val s = if (scale > 0f) scale else 1f
+    return Rect(
+        left = (rect.left - origin.x - pan.x) / s,
+        top = (rect.top - origin.y - pan.y) / s,
+        right = (rect.right - origin.x - pan.x) / s,
+        bottom = (rect.bottom - origin.y - pan.y) / s,
+    )
 }
 
 /**
@@ -630,8 +674,12 @@ private fun DrawScope.drawBlueprintEdges(
         // 针脚报的是**窗口**矩形，而这一层画在已被 graphicsLayer 缩放+平移过的内容层里 ——
         // 所以要先经逆变换回到世界坐标，否则一旦缩放，线头就会离针脚越来越远。
         val safeScale = if (scale > 0f) scale else 1f
-        fun worldX(x: Float) = (x - origin.x - pan.x) / safeScale
-        fun worldY(y: Float) = (y - origin.y - pan.y) / safeScale
+        // pinRects 里存的**已经是世界坐标**（在 onPinBounds/onPinIdBounds 那一刻换算好的，
+        // 见 toWorldRect 的说明）。这里不能再逆变换一次 —— 那会把偏移算两遍，
+        // 表现就是"平移画布后线头越跑越远"。
+        // 保留 worldX/worldY 两个名字只为可读性：这条绘制链路上的坐标一律是世界坐标。
+        fun worldX(x: Float) = x
+        fun worldY(y: Float) = y
         val pinned = pinRects["${edge.from}:$pinKey"]
         // 起点锚点：**按针脚方向分开取**，不是一律取某一条边。
         //

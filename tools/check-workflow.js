@@ -1056,9 +1056,25 @@ console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回�
   // 用户真机反馈的「连线没对齐」正是它，所以断言必须改成钉正确的行为，而不是钉住那个 bug。
   ok(/val pinned = pinRects\[/.test(cv) &&
     /worldX\(if \(startVertical\) pinned\.center\.x else pinned\.right\)/.test(cv) &&
-    /worldY\(if \(startVertical\) pinned\.bottom else pinned\.center\.y\)/.test(cv) &&
-    /\(x - origin\.x - pan\.x\) \/ safeScale/.test(cv),
+    /worldY\(if \(startVertical\) pinned\.bottom else pinned\.center\.y\)/.test(cv),
     "已连线从针脚矩形起画，且锚点按针脚方向取（控制流底边中点 / 数据右边中点）");
+  // ── 针脚矩形必须**存世界坐标**，不能在绘制时逆变换 ──
+  //
+  // 平移画布只改 graphicsLayer，**不会重新布局**，所以 onGloballyPositioned 不再触发：
+  // pinRects 里还是平移前的窗口坐标，而绘制用的是平移后的 pan，偏移量正好等于平移距离。
+  // 用户报的"只移动画布、没动卡片，连线却偏了"就是这个。
+  ok(/toWorldRect\(rect, origin, pan, scale\)/.test(cv),
+    "针脚矩形在**测量那一刻**就换算成世界坐标（平移后不再错位）");
+  ok(/onBounds = \{ rect -> bounds = bounds \+ \(node\.id to toWorldRect/.test(cv),
+    "卡片矩形同样换算成世界坐标（选中框、落点判定同一套坐标）");
+  // 绘制期不得再逆变换一次：那会把偏移算两遍。
+  ok(!/\(x - origin\.x - pan\.x\) \/ safeScale/.test(cv),
+    "绘制期不再对已是世界坐标的矩形做逆变换（否则偏移算两遍）");
+  ok(/fun worldX\(x: Float\) = x/.test(cv) && /fun worldY\(y: Float\) = y/.test(cv),
+    "worldX/worldY 是恒等映射（世界坐标直接用）");
+  // 命中判定：指针是窗口坐标，容器是世界坐标，必须先换算。
+  ok(/toWorldPoint\(pointer, origin, pan, scale\)/.test(cv),
+    "落点命中前把指针换算成世界坐标");
   // 终点方向相反：控制流入参在顶边中点，数据入参在左边中点。
   ok(/worldX\(if \(isData\) toPinned\.left else toPinned\.center\.x\)/.test(cv) &&
     /worldY\(if \(isData\) toPinned\.center\.y else toPinned\.top\)/.test(cv),
