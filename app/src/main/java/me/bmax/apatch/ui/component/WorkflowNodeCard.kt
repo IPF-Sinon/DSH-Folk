@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -307,10 +309,53 @@ internal fun WorkflowNodeCard(
         }
         .focusable()
         .semantics { contentDescription = node.name.ifBlank { workflowNodeLabel(node) } }
-        // 整卡不再接拖动手势：参数行是可编辑输入框，整卡吃手势会把输入框的点击与光标
-        // 全抢走（真机表现：点输入框没反应、想拖光标反而把卡拖走了）。
-        // 拖动收窄到**标题区**（见下面的 header），参数区留给输入框。
-        .then(if (onTap != null) Modifier.clickable { tapCb.value?.invoke() } else Modifier)
+        // 整卡接拖动，输入框在上层会先消费：Compose 的指针事件从最内层子节点向外冒泡，
+        // 参数行的 BasicTextField 一旦命中就吃掉事件，卡片收不到 —— 所以不会抢输入框。
+        //
+        // 之前只让标题区能拖，结果卡片其余部分滑动会冒泡到画布变成平移
+        // （用户报的"在卡片上滑动没移动卡片反而移动画布"）。
+        // 参考实现里卡片整体可拖（CardLayoutView 是 ViewGroup，卡片自己消费触摸），照做。
+        // 整卡手势：先按拖动判定，没拖动才算点击（单击选中）。
+        //
+        // 用 pointerInput 而不是 clickable + 上层拖动：clickable 会先把按下事件吃掉，
+        // 导致卡片永远拖不动。这里自己判：位移超过阈值算拖动，否则算点击。
+        .pointerInput(node.id) {
+            if (onDrag == null && onTap == null) return@pointerInput
+            // 两种手势二选一，用同一个指针输入：
+            //   - 按下后移超过 touchSlop = 拖动卡片（并**消费**事件，不再冒泡到画布）；
+            //   - 按下即抬起 = 点击选中。
+            // 不能用 clickable + 拖动两层：clickable 会先吃掉按下事件，卡片就永远拖不动。
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val slop = viewConfiguration.touchSlop
+                var pastSlop = false
+                var pointer = down.id
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == pointer } ?: break
+                    if (!change.pressed) {
+                        // 抬起：没越过阈值就是点击。
+                        if (!pastSlop) tapCb.value?.invoke()
+                        change.consume()
+                        break
+                    }
+                    val delta = change.positionChange()
+                    if (!pastSlop) {
+                        if (delta.getDistance() > slop ||
+                            (change.position - down.position).getDistance() > slop
+                        ) {
+                            pastSlop = true
+                            dragStartCb.value?.invoke()
+                        }
+                    }
+                    if (pastSlop) {
+                        change.consume()
+                        dragCb.value?.invoke(delta.x, delta.y)
+                    }
+                }
+                if (pastSlop) dragEndCb.value?.invoke()
+            }
+        }
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -392,30 +437,12 @@ internal fun WorkflowNodeCard(
                     }
                 }
                 Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-                    // ── 标题区＝拖动把手 ──
+                    // ── 标题区 ──
                     //
-                    // 只有这里接拖动：它没有输入控件，不会和别的操作打架。
-                    // 这也是点击助手的做法 —— 卡上能编辑的地方不抢拖动。
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .then(
-                                if (onDrag != null) {
-                                    Modifier.pointerInput(node.id) {
-                                        detectDragGestures(
-                                            onDragStart = { dragStartCb.value?.invoke() },
-                                            onDragEnd = { dragEndCb.value?.invoke() },
-                                            onDragCancel = { dragEndCb.value?.invoke() },
-                                        ) { change, amount ->
-                                            change.consume()
-                                            dragCb.value?.invoke(amount.x, amount.y)
-                                        }
-                                    }
-                                } else {
-                                    Modifier
-                                },
-                            ),
-                    ) {
+                    // 拖动已上移到**整卡**（见 base 的 pointerInput）：参考实现里卡片整体
+                    // 可拖，只在标题区接拖动会让卡面其余部分的滑动冒泡到画布变成平移。
+                    // 这里不再挂拖动，否则同一次手势会被两处消费。
+                    Column(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = node.name.ifBlank { workflowNodeLabel(node) },
@@ -615,31 +642,34 @@ internal fun WorkflowNodeCard(
                             }
                         }
                     }
-                    // ── 底部：控制流出口 ──
-                    //
-                    // 参考实现把 EXEC_OUT / 真假分支放在 bottomBox（bottom|center）。
-                    // 三条并排居中：出口是「下一步去哪」，贴着卡片下缘才读得出方向。
-                    if (execOuts.isNotEmpty()) {
-                        Spacer(Modifier.height(2.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            for (pin in execOuts) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        pin.label.ifBlank { "执行" },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                    )
-                                    LinkablePinDot(
-                                        pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop,
-                                        hovered = hoveredPinId == pin.id,
-                                        linked = pin.id in linkedPinIds,
-                                    )
-                                }
+                }
+                // ── 底部：控制流出口（贴住卡片下边）──
+                //
+                // 参考实现 pin_bottom.xml：pinSlotBox 是**最后一个**子元素、gravity=bottom，
+                // 即针脚槽位紧贴卡片下边，标签在它上方。
+                //
+                // 之前这段在 6dp 内边距里，针脚离下边差 6dp，线接出去时底部对不齐
+                // （用户说的"下出口也没有对齐底部"）。现在移到内边距之外，并下移 2dp
+                // 让五边形的下尖与卡片描边齐平。
+                if (execOuts.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth().offset(y = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        for (pin in execOuts) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    pin.label.ifBlank { "执行" },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
+                                LinkablePinDot(
+                                    pin, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop,
+                                    hovered = hoveredPinId == pin.id,
+                                    linked = pin.id in linkedPinIds,
+                                )
                             }
                         }
                     }

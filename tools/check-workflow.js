@@ -663,6 +663,10 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   // 而且点阵只有一屏，一平移就露出空白，像"画布到头了"。
   ok(/drawBlueprintGrid\(dotColor, pan, scale\)/.test(SRC.canvas),
     "背景网格在视口层按 pan/scale 取模铺满（无限画布）");
+  // 连线颜色不能用 outline（那是"描边用灰"，深色主题下与背景几乎分不开）。
+  // 参考实现的连线取针脚颜色（PinView.getPinColor → PinInfo.getColor），是明显的一族色。
+  ok(/val edgeColor = MaterialTheme\.colorScheme\.onSurfaceVariant/.test(SRC.canvas),
+    "控制流连线用 onSurfaceVariant 而不是 outline（outline 太灰暗）");
   // ── 坐标不得夹紧：画布无限，卡片要能拖到负坐标 ──
   //
   // 踩过：拖动/新建把坐标夹在 [0, 2000] 和 coerceAtLeast(0)，于是往左上拖过头就停住，
@@ -1089,7 +1093,7 @@ console.log("\u2500 #16l 手势回调的闭包新鲜度（第二次拖动跳回�
     /val dragStartCb = rememberUpdatedState\(onDragStart\)/.test(c) &&
     /val dragEndCb = rememberUpdatedState\(onDragEnd\)/.test(c),
     "卡片拖动回调经 rememberUpdatedState（key 不变的手势块不会重启，否则用的是旧闭包）");
-  ok(/dragCb\.value\?\.invoke\(amount\.x, amount\.y\)/.test(c) && /dragStartCb\.value\?\.invoke\(\)/.test(c),
+  ok(/dragCb\.value\?\.invoke\(delta\.x, delta\.y\)/.test(c) && /dragStartCb\.value\?\.invoke\(\)/.test(c),
     "手势块里读的是 .value（最新回调），不是捕获的旧闭包");
   ok(/val pinDragCb = rememberUpdatedState\(onPinDrag\)/.test(c) &&
     /val blankTapCb = rememberUpdatedState\(onBlankTap\)/.test(cv),
@@ -1838,6 +1842,10 @@ async function checkCli() {
     // 补偿 2：控制流入口针脚要跨出卡片上边，线一离开针脚就进入卡下。
     ok(/\.offset\(y = \(-2\)\.dp\)/.test(SRC.card),
       "控制流入口针脚向上跨出卡片上边（线不会在卡内露出）");
+    // 下出口同理：参考实现 pin_bottom.xml 的 pinSlotBox 是最后一个子元素、gravity=bottom。
+    // 之前它在 6dp 内边距里，底部对不齐。
+    ok(/\.offset\(y = 2\.dp\)/.test(SRC.card),
+      "控制流出口针脚向下跨出卡片下边（对齐 pin_bottom.xml）");
     // 但**不能**顺手挪出内容层：这一层坐标是世界坐标，靠外层 graphicsLayer 做平移+缩放。
     // 挪到 Box 外面，连线就完全不受相机变换 —— 一平移整体飘走（真机截图见过）。
     //
@@ -1883,23 +1891,36 @@ console.log("\u2500 #16k 卡片可编辑 / 悬浮层定位 / 虚线框跟着选�
     "参数针脚提供同类型复制/粘贴（对齐 PinView.copyButton）");
   ok(/onParamChange: \(\(key: String, value: String\) -> Unit\)\? = null/.test(card),
     "卡片接受参数回写回调（预览/详情传 null 即只读）");
-  // 拖动必须收窄到标题区：整卡吃手势会把输入框的点击与光标全抢走。
-  ok(/标题区＝拖动把手/.test(card) && /detectDragGestures/.test(card),
-    "拖动只在标题区，参数区留给输入框");
-  // 计数式断言：detectDragGestures 在卡片文件里只能出现**一次**，且在标题区注释之后。
-  // 上一版写成"base 之后 400 字内没有它"，结果注入到别的位置就漏检了。
+  // ── 拖动归**整卡**，不能只收窄到标题区 ──
+  //
+  // 参考实现 CardLayoutView 是 ViewGroup、卡片自己 onTouchEvent 消费触摸，
+  // 所以手指落在卡片任何位置都是"动卡片"，绝不会冒泡成画布平移。
+  //
+  // 我们之前只让标题区可拖，卡面其余部分滑动就冒泡到画布的 detectTransformGestures，
+  // 结果"在卡片上滑动没移动卡片反而移动画布"（用户报的）。
+  //
+  // 输入框不会被抢：Compose 指针事件从最内层子节点向外冒泡，BasicTextField 命中即消费。
   {
-    // 只数**卡片主体**里的手势：import 行、以及 LinkablePinDot 里拉线用掉的那处都不算。
-    // （引脚拉线是必需的，它不抢输入框 —— 命中的是那颗小圆点。）
-    const body = card.slice(0, card.indexOf("private fun PinDot("));
-    const uses = (body.match(/detectDragGestures\(/g) || []).length;
-    ok(uses === 1, "卡片主体只有一处拖动手势（标题区），实际 " + uses + " 处");
-    const head = body.indexOf("标题区＝拖动把手");
-    const drag = body.indexOf("detectDragGestures(");
-    ok(head >= 0 && drag > head, "拖动手势在标题区之内，不在整卡 base 上");
-    // base 链上不许挂拖动：那会连参数行一起吃掉。
+    // 切到 LinkablePinDot 之前：那之后的 detectDragGestures 是拉线用的。
+    const body = card.slice(0, card.indexOf("private fun LinkablePinDot("));
+    // 整卡 base 链上必须有指针输入（自己判拖动/点击）。
     const baseChain = body.slice(body.indexOf("val base = modifier"), body.indexOf("Surface("));
-    ok(!/detectDragGestures/.test(baseChain), "整卡 base 链上没有拖动手势");
+    ok(/pointerInput\(node\.id\)/.test(baseChain),
+      "整卡 base 链上挂指针输入（卡面任意位置都能拖动）");
+    ok(/awaitFirstDown/.test(baseChain) && /touchSlop/.test(baseChain),
+      "自己判拖动阈值：越过 slop 算拖动，按下即抬起算点击");
+    ok(/change\.consume\(\)/.test(baseChain),
+      "拖动时**消费**事件，不再冒泡到画布变成平移");
+    // 标题区不能再挂第二处拖动，否则同一次手势被两处消费、位移翻倍。
+    // 例外：LinkablePinDot 里的 detectDragGestures 是**拉线**用的（命中那颗小圆点），
+    // 必须保留；它不抢输入框，也不参与卡片拖动。所以只检查 PinDot 之前那段主体。
+    const beforePinDot = card.slice(0, card.indexOf("private fun LinkablePinDot("));
+    // 去掉 import 行再数：/detectDragGestures/ 会命中 import 语句本身。
+    const beforePinDotCode = beforePinDot.split("\n")
+      .filter((l) => !l.trim().startsWith("import "))
+      .join("\n");
+    ok(!/detectDragGestures\(/.test(beforePinDotCode),
+      "卡片主体不再有 detectDragGestures（拖动已统一到整卡 pointerInput；拉线那处除外）");
   }
 
   // 悬浮底栏必须铺满再底部对齐：fillMaxWidth 会让它落在**左上角**（真机复现过）。

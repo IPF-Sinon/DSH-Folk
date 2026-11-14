@@ -120,7 +120,16 @@ internal fun WorkflowBlueprintCanvas(
     onViewportChange: ((WorkflowViewport) -> Unit)? = null,
 ) {
     val dotColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-    val edgeColor = MaterialTheme.colorScheme.outline
+    // 控制流主线的颜色。
+    //
+    // 之前用 outline：它是"描边用的灰"，在深色主题下与背景几乎分不开，
+    // 用户说"连线和高亮的颜色太灰暗"就是这个。
+    //
+    // 参考实现里连线取的是**针脚颜色**（PinView.getPinColor → PinInfo.getColor），
+    // 只有不可接线的针脚才退回 Color.GRAY；也就是说连线整体是鲜明的一族色，不是灰。
+    // 这里控制流用 onSurfaceVariant（比 outline 明显更深/更亮，随主题走），
+    // 真/假分支仍由 tertiary / error 区分。
+    val edgeColor = MaterialTheme.colorScheme.onSurfaceVariant
     val trueColor = MaterialTheme.colorScheme.tertiary
     val falseColor = MaterialTheme.colorScheme.error
     val wireColor = MaterialTheme.colorScheme.primary
