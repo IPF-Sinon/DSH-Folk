@@ -174,6 +174,16 @@ internal fun WorkflowBlueprintCanvas(
     // 一张卡上常有好几个同种类的数据针脚，只按种类建索引会互相覆盖，
     // 于是"线从哪颗点出去"和"落在哪个参数上"都只能靠猜。
     var pinRects by remember { mutableStateOf<Map<String, Rect>>(emptyMap()) }
+    // ── 只在**值真的变了**时才写回 ──
+    //
+    // onGloballyPositioned 在每次布局后都会触发，而布局本身会被 pinRects 的变化触发，
+    // 无条件赋值就形成一个反馈循环：布局 → 回调 → 改状态 → 重组 → 布局 …
+    // 真机表现是卡片发抖、拖动不跟手（用户报的）。
+    // 加一道相等判断即可切断：值没变就不写，状态不变就不重组。
+    fun putPinRect(key: String, rect: Rect) {
+        if (pinRects[key] == rect) return
+        pinRects = pinRects + (key to rect)
+    }
 
     Box(
         modifier = modifier
@@ -368,7 +378,11 @@ internal fun WorkflowBlueprintCanvas(
                         ?.substringAfter(':'),
                     // 卡片矩形同样**当场**换算成世界坐标：它与 pinRects 是同一个坑 ——
                     // 平移不重新布局，boundsInWindow 不会刷新，绘制时再用新 pan 逆变换就偏了。
-                    onBounds = { rect -> bounds = bounds + (node.id to toWorldRect(rect, origin, pan, scale)) },
+                    onBounds = { rect ->
+                        // 同样只在变化时写回：否则会与布局形成反馈循环（卡片发抖）。
+                        val world = toWorldRect(rect, origin, pan, scale)
+                        if (bounds[node.id] != world) bounds = bounds + (node.id to world)
+                    },
                     // ── 针脚矩形一律**当场换算成世界坐标**再存 ──
                     //
                     // boundsInWindow() 给的是**窗口**坐标，已经含了当前 graphicsLayer 的
@@ -381,12 +395,13 @@ internal fun WorkflowBlueprintCanvas(
                     // 解决办法：在**测到的这一刻**就用当时的 pan/scale 逆变换回世界坐标，
                     // 之后无论怎么平移缩放，这个值都稳定 —— 与卡片落点用的是同一套坐标。
                     onPinBounds = { pinKind, rect ->
-                        pinRects = pinRects + ("${node.id}:$pinKind" to toWorldRect(rect, origin, pan, scale))
+                        putPinRect("${node.id}:$pinKind", toWorldRect(rect, origin, pan, scale))
                     },
                     // 同时按引脚 id 登记：数据边与落点判定要精确到"哪一颗"。
                     onPinIdBounds = { pinId, pinKind, rect ->
                         val world = toWorldRect(rect, origin, pan, scale)
-                        pinRects = pinRects + ("${node.id}:$pinId" to world) + ("${node.id}:$pinKind" to world)
+                        putPinRect("${node.id}:$pinId", world)
+                        putPinRect("${node.id}:$pinKind", world)
                     },
                     onPinDrag = { pinKind, anchor, pointer ->
                         wireFrom = node.id

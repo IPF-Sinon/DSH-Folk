@@ -1065,8 +1065,16 @@ console.log("\u2500 #16k 拖动手感与拉线坐标（三条真机反馈的回�
   // 用户报的"只移动画布、没动卡片，连线却偏了"就是这个。
   ok(/toWorldRect\(rect, origin, pan, scale\)/.test(cv),
     "针脚矩形在**测量那一刻**就换算成世界坐标（平移后不再错位）");
-  ok(/onBounds = \{ rect -> bounds = bounds \+ \(node\.id to toWorldRect/.test(cv),
+  ok(/val world = toWorldRect\(rect, origin, pan, scale\)[\s\S]{0,120}bounds = bounds \+ \(node\.id to world\)/.test(cv),
     "卡片矩形同样换算成世界坐标（选中框、落点判定同一套坐标）");
+  // ── 状态写回必须判等，否则与布局形成反馈循环 ──
+  //
+  // onGloballyPositioned 每次布局都会触发，而布局又会被 pinRects 的变化触发。
+  // 无条件赋值 = 布局 → 回调 → 改状态 → 重组 → 布局…，真机表现为卡片发抖、拖动不跟手。
+  ok(/if \(pinRects\[key\] == rect\) return/.test(cv),
+    "针脚矩形只在变化时写回（切断布局↔状态的反馈循环）");
+  ok(/if \(bounds\[node\.id\] != world\) bounds = bounds \+ /.test(cv),
+    "卡片矩形同样只在变化时写回");
   // 绘制期不得再逆变换一次：那会把偏移算两遍。
   ok(!/\(x - origin\.x - pan\.x\) \/ safeScale/.test(cv),
     "绘制期不再对已是世界坐标的矩形做逆变换（否则偏移算两遍）");
