@@ -655,6 +655,14 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   ok(!/WorkflowNodeType\.LOG\b/.test(iconSrc), "nodeTypeIcon 不引用枚举里不存在的 LOG（CI 就是这么炸的）");
   ok(!/else ->/.test(iconSrc), "nodeTypeIcon 不带 else 兜底（这样新增枚举值时编译器会报错提醒）");
   ok(/drawBlueprintDots/.test(canvas) && /24\.dp/.test(canvas), "画布有点阵网格");
+  // ── 无限画布：点阵必须在视口层并按 pan 取模 ──
+  //
+  // 之前点阵画在内容层里、尺寸只有一屏：一平移点就跟着出屏，露出空白，
+  // 让人以为"画布到头了、移不过去"（实际坐标从来没受限，只是没画点）。
+  ok(/drawBlueprintDots\(dotColor, pan, scale\)/.test(SRC.canvas),
+    "点阵按 pan/scale 取模铺满整屏（无限画布的观感）");
+  ok(/pan\.x % step/.test(SRC.canvas) && /pan\.y % step/.test(SRC.canvas),
+    "点阵起点对步长取模（否则平移会露出无点空白）");
   ok(!/fun layoutNodes\(/.test(canvas), "画布不自带布局：坐标由调用方传入（预览与编辑器共用摆位）");
   const preview = SRC.dialogs.slice(SRC.dialogs.indexOf("internal fun WorkflowGraphPreview("));
   ok(/WorkflowBlueprintCanvas\(/.test(preview.slice(0, 700)), "预览内部委托新画布（对外签名没变）");

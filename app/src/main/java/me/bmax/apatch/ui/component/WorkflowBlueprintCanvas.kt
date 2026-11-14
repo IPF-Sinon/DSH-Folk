@@ -195,6 +195,12 @@ internal fun WorkflowBlueprintCanvas(
                 },
             ),
     ) {
+        // ── 背景点阵：画在**视口层**（不受内容层变换影响）──
+        //
+        // 点阵必须铺满整个可见区并跟着 pan 滚动，才是"无限画布"的观感。
+        // 它放在内容层里只有一屏大小，内容一平移就露出空白 ——
+        // 用户会以为画布到头了、移不过去（实际坐标没限制，只是没画点）。
+        Canvas(Modifier.fillMaxSize()) { drawBlueprintDots(dotColor, pan, scale) }
         // 内容层：平移只在这里应用一次。
         Box(
             Modifier
@@ -209,7 +215,7 @@ internal fun WorkflowBlueprintCanvas(
                     translationY = pan.y
                 },
         ) {
-            Canvas(Modifier.fillMaxSize()) { drawBlueprintDots(dotColor) }
+            // 点阵已移到视口层（见下面 pan 层），这里不再画。
             // 选中/拖动的卡画一圈虚线框。
             //
             // 为什么要有它：拖动时卡片跟着手指走，但它**是不是被选中了**没有任何视觉反馈 ——
@@ -513,13 +519,29 @@ private fun requiredCapsOf(node: WorkflowNode): List<String> {
     return listOf(cap.id)
 }
 
-/** 点阵网格（24dp）。 */
-private fun DrawScope.drawBlueprintDots(color: Color) {
-    val step = 24.dp.toPx()
-    val radius = 1.dp.toPx()
-    var y = step / 2f
+/**
+ * 背景点阵（24dp 网格）。**画在视口层**，靠 [pan]/[scale] 取模铺满整屏。
+ *
+ * 之前它画在内容层里、尺寸只有一屏：内容一平移，点就被带出屏幕，
+ * 露出的空白让人以为"画布到头了" —— 用户说的"无法移到没有点的位置"就是这个。
+ *
+ * 为什么用取模而不是画一个很大的矩形：大矩形要么撑爆内存，要么在缩小到极限时
+ * 仍然有限；取模的大小是**屏幕**，跟画布范围无关，真正无限。
+ */
+private fun DrawScope.drawBlueprintDots(color: Color, pan: Offset, scale: Float) {
+    val safeScale = if (scale > 0f) scale else 1f
+    // 步长跟着缩放走：放大时点距变大，与卡片/连线保持一致。
+    val step = 24.dp.toPx() * safeScale
+    if (step <= 0f) return
+    val radius = (1.dp.toPx() * safeScale).coerceAtLeast(0.5f)
+    // 起点 = pan 对步长取模；若为正再减一格，保证从屏幕外一格开始，边缘不留缝。
+    var x0 = pan.x % step
+    if (x0 > 0f) x0 -= step
+    var y0 = pan.y % step
+    if (y0 > 0f) y0 -= step
+    var y = y0
     while (y < size.height) {
-        var x = step / 2f
+        var x = x0
         while (x < size.width) {
             drawCircle(color = color, radius = radius, center = Offset(x, y))
             x += step
