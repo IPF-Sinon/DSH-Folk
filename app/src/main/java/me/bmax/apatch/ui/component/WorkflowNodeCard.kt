@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -256,12 +257,19 @@ internal fun WorkflowNodeCard(
     hoveredPinId: String? = null,
 ) {
     val accent = workflowNodeAccent(node.type)
+    // 未选中也必须有**看得见的**描边，不能是 outlineVariant 那种近乎背景色的灰。
+    //
+    // 参考实现 ActionCard 构造里就 setStrokeColor(colorPrimaryVariant) + setStrokeWidth(1)，
+    // 卡片永远有一条高亮边。这条边的实际用途是：两张卡叠在一起时能立刻分出是两张 ——
+    // 连线本来就被卡片压着，若边缘也糊在一起，整块会看成一张卡。
+    //
+    // 之前用 outlineVariant，与 surfaceVariant 卡片底几乎同色，叠卡就分不清了（用户截图）。
     val borderColor = when (status) {
         WorkflowStepState.RUNNING -> MaterialTheme.colorScheme.primary
         WorkflowStepState.OK -> MaterialTheme.colorScheme.tertiary
         WorkflowStepState.FAILED, WorkflowStepState.TIMEOUT -> MaterialTheme.colorScheme.error
         WorkflowStepState.SKIPPED, WorkflowStepState.CANCELED -> MaterialTheme.colorScheme.outline
-        else -> if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+        else -> if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
     }
     // 引脚表与执行器/校验器同一份推导（WorkflowSchema.defaultPinsFor），不在卡上另写一份。
     val pins = WorkflowSchema.defaultPinsFor(node)
@@ -358,7 +366,18 @@ internal fun WorkflowNodeCard(
                 // 于是针脚离上边差了一整个标签的高度，线接到针脚时还要在卡内穿行一段。
                 // 用户说的"上接口应该贴上边"就是这个。
                 if (execIn != null) {
-                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    // 针脚向上**跨出卡片上边**：offset 半个命中框。
+                    //
+                    // 参考实现里针脚槽位是卡片的第一层、紧贴上边，线一离开针脚就立刻
+                    // 进入卡片下方（连线层在卡片之下），所以看不出被截断。
+                    //
+                    // 我们的命中框是 22dp、视觉 18dp，居中后上边还留 2dp —— 再加卡片 1dp 描边，
+                    // 线会在卡内先露出两三 dp 才被压住，观感是"接口没贴住边"。
+                    // 上移 2dp 让五边形的上边缘与卡片描边齐平。
+                    Column(
+                        Modifier.fillMaxWidth().offset(y = (-2).dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                         LinkablePinDot(
                             execIn, onPinBounds, onPinIdBounds, onPinDrag, onPinDrop,
                             hovered = hoveredPinId == execIn.id,

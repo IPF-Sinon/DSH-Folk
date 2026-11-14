@@ -1816,16 +1816,28 @@ async function checkCli() {
     ok(dotIdx !== -1 && labelIdx !== -1 && dotIdx < labelIdx,
       "针脚槽位在执行字样之上（pin_top.xml 的顺序）");
   }
-  // ── 连线层必须画在卡片之上 ──
+  // ── 连线层画在卡片**之下**（对齐参考实现）──
   //
-  // 之前它画在卡片之下，每条线一进卡片范围就被盖住：线从卡边缘"消失"又从别处"冒出"，
-  // 针脚那一段完全看不见 —— 用户说的"接口边线被卡片压住"。
+  // 参考实现 CardLayoutView.dispatchDraw 的顺序是：背景网格 → 连线 → （子 View）卡片，
+  // 所以线本来就被卡片压着。这不是缺陷，靠两点补偿：
+  //   1. 针脚槽位紧贴卡片边缘（pin_top.xml 的 pinSlotBox 是第一层）；
+  //   2. 卡片有 1px 高亮描边（ActionCard 构造里 setStrokeColor(colorPrimaryVariant)）。
+  //
+  // 我曾把连线挪到卡片之上来"修"遮挡，方向错了：线会横穿卡片表面，与参考实现观感不同。
   {
     const cv = SRC.canvas;
     const edgeDrawIdx = cv.indexOf("drawBlueprintEdges(");
     const cardIdx = cv.indexOf("WorkflowNodeCard(");
-    ok(edgeDrawIdx !== -1 && cardIdx !== -1 && edgeDrawIdx > cardIdx,
-      "连线层画在卡片**之后**（否则线会被卡片盖住）");
+    // indexOf 取的是**首次出现**：调用点在 composition 里（靠前），函数定义在后面，
+    // 所以这里比的是调用点与卡片调用的先后，不会误取到 private fun 那段。
+    ok(edgeDrawIdx !== -1 && cardIdx !== -1 && edgeDrawIdx < cardIdx,
+      "连线层画在卡片**之前**（被卡片压着，对齐 Reference 的 dispatchDraw 顺序）");
+    // 补偿 1：卡片必须有看得见的描边，否则叠卡分不清两张。
+    ok(/else MaterialTheme\.colorScheme\.primary\.copy\(alpha = 0\.55f\)/.test(SRC.card),
+      "未选中的卡片也有可见描边（对齐 setStrokeColor(colorPrimaryVariant)，叠卡能分辨）");
+    // 补偿 2：控制流入口针脚要跨出卡片上边，线一离开针脚就进入卡下。
+    ok(/\.offset\(y = \(-2\)\.dp\)/.test(SRC.card),
+      "控制流入口针脚向上跨出卡片上边（线不会在卡内露出）");
     // 但**不能**顺手挪出内容层：这一层坐标是世界坐标，靠外层 graphicsLayer 做平移+缩放。
     // 挪到 Box 外面，连线就完全不受相机变换 —— 一平移整体飘走（真机截图见过）。
     //

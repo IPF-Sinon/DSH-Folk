@@ -295,6 +295,36 @@ internal fun WorkflowBlueprintCanvas(
                     }
                 }
             }
+            // ── 连线层：画在**卡片之下** ──
+            //
+            // 参考实现就是这样：CardLayoutView 的 dispatchDraw 先画背景网格、再画连线，
+            // 卡片是子 View，最后才由系统叠上去 —— 所以线是被卡片**压着**的。
+            //
+            // 这在参考实现里不成问题，靠两点补偿：
+            //   1. 针脚槽位紧贴卡片边缘（pin_top.xml 的 pinSlotBox 是第一层），
+            //      线一离开针脚就立刻进入卡片下方，看不出被截断；
+            //   2. 卡片有 1px 的高亮描边（colorPrimaryVariant），
+            //      两张卡叠在一起时边缘清晰，能看出是两张。
+            //
+            // 我之前把连线挪到卡片之上来"修"遮挡，方向错了：
+            // 那样线会横穿卡片表面，与参考实现的观感完全不同。现在改回下方。
+            Canvas(Modifier.fillMaxSize()) {
+                drawBlueprintEdges(
+                    definition = definition,
+                    positions = positions,
+                    pinRects = pinRects,
+                    origin = origin,
+                    pan = pan,
+                    scale = scale,
+                    normal = edgeColor,
+                    trueColor = trueColor,
+                    falseColor = falseColor,
+                    dataColor = edgeColor,
+                    pinColors = pinColors,
+                    selectedNodeId = selectedNodeId,
+                )
+            }
+
             for (node in definition.nodes) {
                 val pos = positions[node.id] ?: continue
                 WorkflowNodeCard(
@@ -387,32 +417,6 @@ internal fun WorkflowBlueprintCanvas(
                             wireDropCb.value?.invoke(from, fromPin, target, pointer, targetPin)
                         }
                     },
-                )
-            }
-
-            // ── 连线层：画在**卡片之上** ──
-            //
-            // 为什么要移到卡片之后：之前它画在卡片之前，每条线一进卡片范围就被盖住 ——
-            // 线从卡片边缘"消失"、又从另一处"冒出"，针脚那一段完全看不见。
-            // 参考实现的连线也画在卡片之上（BlueprintView 的 link 层在 card 层之后）。
-            //
-            // **必须留在内容层内部**（graphicsLayer 那个 Box 里）：
-            // 这一层的坐标是"世界坐标"，靠外层 graphicsLayer 统一做平移+缩放。
-            // 上一版把它挪到了 Box 外面，连线于是完全不受相机变换 —— 一平移就整体飘走。
-            Canvas(Modifier.fillMaxSize()) {
-                drawBlueprintEdges(
-                    definition = definition,
-                    positions = positions,
-                    pinRects = pinRects,
-                    origin = origin,
-                    pan = pan,
-                    scale = scale,
-                    normal = edgeColor,
-                    trueColor = trueColor,
-                    falseColor = falseColor,
-                    dataColor = edgeColor,
-                    pinColors = pinColors,
-                    selectedNodeId = selectedNodeId,
                 )
             }
         }
