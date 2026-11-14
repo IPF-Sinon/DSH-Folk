@@ -329,7 +329,8 @@ internal fun WorkflowNodeCard(
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val slop = viewConfiguration.touchSlop
                 var pastSlop = false
-                var pointer = down.id
+                val pointer = down.id
+                var lastPosition = down.position
                 while (true) {
                     val event = awaitPointerEvent()
                     val change = event.changes.firstOrNull { it.id == pointer } ?: break
@@ -339,11 +340,18 @@ internal fun WorkflowNodeCard(
                         change.consume()
                         break
                     }
-                    val delta = change.positionChange()
+                    // 位移 = 本帧位置 - 上帧位置。用 position 直接相减，
+                    // 不依赖 positionChange() 那个扩展（它的可见性/重载在各版本间有差异，
+                    // 已在 CI 上报过 'positionChange' of type 'Boolean' cannot be invoked）。
+                    val delta = change.position - lastPosition
+                    lastPosition = change.position
                     if (!pastSlop) {
-                        if (delta.getDistance() > slop ||
-                            (change.position - down.position).getDistance() > slop
-                        ) {
+                        // 判阈值用相对**按下点**的累计位移：单帧位移可能很小（慢速拖动），
+                        // 用单帧判会导致很慢的拖动永远不触发。
+                        val travelled = change.position - down.position
+                        // hypot 收 Double，显式转回去，别让类型推断在 CI 上炸。
+                        val dist = kotlin.math.hypot(travelled.x.toDouble(), travelled.y.toDouble()).toFloat()
+                        if (dist > slop) {
                             pastSlop = true
                             dragStartCb.value?.invoke()
                         }

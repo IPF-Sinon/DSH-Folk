@@ -1911,6 +1911,18 @@ console.log("\u2500 #16k 卡片可编辑 / 悬浮层定位 / 虚线框跟着选�
       "自己判拖动阈值：越过 slop 算拖动，按下即抬起算点击");
     ok(/change\.consume\(\)/.test(baseChain),
       "拖动时**消费**事件，不再冒泡到画布变成平移");
+    // 位移必须用 position 相减，不用 positionChange() 扩展：
+    // 那个扩展在 CI 上报过 "of type Boolean cannot be invoked as a function"。
+    // 只查代码，不查注释：注释里为了说明原因提到了 positionChange()。
+    const bodyCode = body.split("\n")
+      .filter((l) => {
+        const t = l.trim();
+        return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("import ");
+      })
+      .join("\n");
+    ok(/val delta = change\.position - lastPosition/.test(bodyCode) &&
+      !/positionChange\(\)/.test(bodyCode),
+      "位移用 position 相减（positionChange() 那个扩展在 CI 上不可用）");
     // 标题区不能再挂第二处拖动，否则同一次手势被两处消费、位移翻倍。
     // 例外：LinkablePinDot 里的 detectDragGestures 是**拉线**用的（命中那颗小圆点），
     // 必须保留；它不抢输入框，也不参与卡片拖动。所以只检查 PinDot 之前那段主体。
