@@ -577,9 +577,9 @@ internal fun WorkflowEditorSurface(
             canvasOrigin.y + canvasSize.height / 2f,
         )
         val center = viewport.toWorldDp(centerWindow, canvasOrigin, density)
+        // 不限负坐标：视野中心可能就在世界原点左侧。
         val x = WorkflowGeometry.snapToGridDp(center.x - WorkflowNodeCardWidth.value / 2f)
-            .coerceAtLeast(0)
-        val y = WorkflowGeometry.snapToGridDp(center.y - 40f).coerceAtLeast(0)
+        val y = WorkflowGeometry.snapToGridDp(center.y - 40f)
         draft = def.copy(
             nodes = def.nodes + WorkflowNode(
                 id = newEditorNodeId(def),
@@ -634,9 +634,10 @@ internal fun WorkflowEditorSurface(
      */
     fun dropPointDp(pointerWindow: Offset): Pair<Int, Int> {
         val world = viewport.toWorldDp(pointerWindow, canvasOrigin, density)
+        // 不夹到 0：画布无限，视野中心/落点都可能是负坐标（参考实现同样是 Int 直存）。
         return Pair(
-            WorkflowGeometry.snapToGridDp(world.x).coerceAtLeast(0),
-            WorkflowGeometry.snapToGridDp(world.y).coerceAtLeast(0),
+            WorkflowGeometry.snapToGridDp(world.x),
+            WorkflowGeometry.snapToGridDp(world.y),
         )
     }
 
@@ -654,9 +655,9 @@ internal fun WorkflowEditorSurface(
             canvasOrigin.y + canvasSize.height / 2f,
         )
         val center = viewport.toWorldDp(centerWindow, canvasOrigin, density)
+        // 不限负坐标：视野中心可能就在世界原点左侧。
         val x = WorkflowGeometry.snapToGridDp(center.x - WorkflowNodeCardWidth.value / 2f)
-            .coerceAtLeast(0)
-        val y = WorkflowGeometry.snapToGridDp(center.y - 40f).coerceAtLeast(0)
+        val y = WorkflowGeometry.snapToGridDp(center.y - 40f)
         val id = newEditorNodeId(def)
         val settled = if (kind.bridge != null) withActionDefaults(kind, kind.bridge) else kind.defaults
         val node = WorkflowNode(
@@ -879,9 +880,15 @@ internal fun WorkflowEditorSurface(
                                 // 累加**未吸附**位移：拖动过程中 1:1 跟手，松手时再吸附。
                                 // 位移要经视口换算：缩放后手指走 100px，节点只能走 100/(scale·density) dp。
                                 dragAcc += viewport.dragDeltaDp(dxPx, dyPx, density)
+                                // 坐标**不夹紧**：画布是无限网格，卡片要能拖到负坐标。
+                                //
+                                // 上一版夹在 [0, 2000]：一旦手往左/往上拖过头，卡片就停住不动，
+                                // 看起来像"画布左边到头了"。参考实现直接把位置存成 Int
+                                // （setPos((int)((x - offsetX) / gridSize))），负数照存，
+                                // 所以它那边没有这个边界。
                                 dragPreview = id to Offset(
-                                    (from.second + dragAcc.x).coerceIn(0f, 2000f),
-                                    (from.third + dragAcc.y).coerceIn(0f, 2000f),
+                                    from.second + dragAcc.x,
+                                    from.third + dragAcc.y,
                                 )
                             }
                         },
@@ -889,8 +896,9 @@ internal fun WorkflowEditorSurface(
                             val from = dragFrom
                             val preview = dragPreview
                             if (from != null && preview != null && from.first == id) {
-                                val nx = WorkflowGeometry.snapToGridDp(preview.second.x).coerceIn(0, 2000)
-                                val ny = WorkflowGeometry.snapToGridDp(preview.second.y).coerceIn(0, 2000)
+                                // 同样不夹紧：落盘坐标允许负值（参考实现也是 Int 直存）。
+                                val nx = WorkflowGeometry.snapToGridDp(preview.second.x)
+                                val ny = WorkflowGeometry.snapToGridDp(preview.second.y)
                                 draft = def.copy(
                                     nodes = def.nodes.map { if (it.id == id) it.copy(posX = nx, posY = ny) else it },
                                 )

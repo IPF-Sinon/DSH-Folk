@@ -663,6 +663,21 @@ console.log("\u2500 #16d 蓝图节点卡与画布（阶段 2）");
   // 而且点阵只有一屏，一平移就露出空白，像"画布到头了"。
   ok(/drawBlueprintGrid\(dotColor, pan, scale\)/.test(SRC.canvas),
     "背景网格在视口层按 pan/scale 取模铺满（无限画布）");
+  // ── 坐标不得夹紧：画布无限，卡片要能拖到负坐标 ──
+  //
+  // 踩过：拖动/新建把坐标夹在 [0, 2000] 和 coerceAtLeast(0)，于是往左上拖过头就停住，
+  // 看起来像"画布左边到头了"。参考实现是 setPos((int)(…)) 直存，负数照存。
+  {
+    const es = SRC.editorSurface;
+    ok(!/coerceIn\(0f, 2000f\)/.test(es), "拖动预览不把坐标夹在 [0,2000]");
+    ok(!/coerceIn\(0, 2000\)/.test(es), "落盘坐标不夹在 [0,2000]");
+    ok(!/snapToGridDp\([^)]*\)\s*\.coerceAtLeast\(0\)/.test(es),
+      "吸附后的坐标不再 coerceAtLeast(0)（否则无法移到负坐标）");
+    // 存储侧必须是能表示负数的类型，且序列化往返无损。
+    ok(/val posX: Int = 0/.test(SRC.models), "坐标是 Int（可负）");
+    ok(/\.put\("posX", posX\)/.test(SRC.models) && /posX = o\.optInt\("posX"\)/.test(SRC.models),
+      "坐标序列化往返不夹紧（put/optInt 原样存）");
+  }
   ok(/WorkflowGeometry\.GRID_DP\.dp\.toPx\(\)/.test(SRC.canvas),
     "网格步长取自 WorkflowGeometry.GRID_DP（与吸附网格同一个常量）");
   ok(/pan\.x % step/.test(SRC.canvas) && /pan\.y % step/.test(SRC.canvas),
